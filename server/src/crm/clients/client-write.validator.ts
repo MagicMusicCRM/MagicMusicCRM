@@ -115,7 +115,9 @@ export class ClientWriteValidator {
       this.repository.findDefinitionsByIds(entityType, ids),
       this.repository.listRequiredCustomDefinitions(entityType),
     ]);
-    const byId = new Map(definitions.map((definition) => [definition.id, definition]));
+    const byId = new Map(
+      definitions.map((definition) => [definition.id, definition]),
+    );
     for (const definition of required) {
       if (!ids.includes(definition.id)) {
         this.fail(
@@ -162,11 +164,12 @@ export class ClientWriteValidator {
       valueNumber: null,
       valueBoolean: null,
       valueDate: null,
+      valueJson: null,
     };
     const field = `customFields.${definition.field_key}`;
     const type = definition.value_type;
 
-    if (type === "number") {
+    if (type === "number" || type === "money" || type === "duration") {
       if (typeof raw !== "number" || !Number.isFinite(raw)) {
         this.invalidType(field, type);
       }
@@ -175,7 +178,7 @@ export class ClientWriteValidator {
         warnings: [],
       };
     }
-    if (type === "boolean") {
+    if (type === "boolean" || type === "toggle") {
       if (typeof raw !== "boolean") {
         this.invalidType(field, type);
       }
@@ -183,6 +186,26 @@ export class ClientWriteValidator {
         value: { ...empty, valueBoolean: raw },
         warnings: [],
       };
+    }
+
+    if (type === "multi_select" || type === "checkbox_group") {
+      if (!Array.isArray(raw) || raw.some((item) => typeof item !== "string")) {
+        this.invalidType(field, type);
+      }
+      const options = Array.isArray(definition.options)
+        ? definition.options.filter(
+            (option): option is string => typeof option === "string",
+          )
+        : [];
+      const selected = [...new Set(raw as string[])];
+      if (selected.some((item) => !options.includes(item))) {
+        this.fail(
+          field,
+          "OPTION_INACTIVE",
+          `Значение поля «${definition.label}» отсутствует в справочнике.`,
+        );
+      }
+      return { value: { ...empty, valueJson: selected }, warnings: [] };
     }
 
     if (typeof raw !== "string" || !raw.trim()) {
@@ -198,10 +221,13 @@ export class ClientWriteValidator {
         warnings: [],
       };
     }
+    if (type === "datetime" && Number.isNaN(Date.parse(text))) {
+      this.invalidType(field, type);
+    }
     if (type === "email" && !isEmail(text)) {
       this.invalidType(field, type);
     }
-    if (type === "select") {
+    if (type === "select" || type === "radio") {
       const options = Array.isArray(definition.options)
         ? definition.options.filter(
             (option): option is string => typeof option === "string",
@@ -221,6 +247,16 @@ export class ClientWriteValidator {
         value: { ...empty, valueText: phone.value },
         warnings: phone.warnings,
       };
+    }
+    if (type === "url") {
+      try {
+        const parsed = new URL(text);
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+          this.invalidType(field, type);
+        }
+      } catch {
+        this.invalidType(field, type);
+      }
     }
     return {
       value: { ...empty, valueText: text },
@@ -281,11 +317,7 @@ export class ClientWriteValidator {
     );
   }
 
-  private fail(
-    field: string,
-    code: string,
-    message: string,
-  ): never {
+  private fail(field: string, code: string, message: string): never {
     throw new UnprocessableEntityException({
       code,
       field,

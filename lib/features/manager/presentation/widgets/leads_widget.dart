@@ -111,7 +111,7 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget>
           .watch(capabilitySnapshotProvider)
           .asData
           ?.value
-          .allows('system.settings.manage') ==
+          .allows('config.crm.read') ==
       true;
 
   @override

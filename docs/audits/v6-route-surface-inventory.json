@@ -3,14 +3,14 @@
   "task": "V6-001",
   "generated_from": "lib/main.dart import graph + GoRouter + presentation callsites",
   "summary": {
-    "dart_files": 270,
-    "production_reachable_files": 259,
-    "go_routes": 21,
-    "screens": 20,
-    "production_screens": 20,
+    "dart_files": 271,
+    "production_reachable_files": 260,
+    "go_routes": 22,
+    "screens": 21,
+    "production_screens": 21,
     "isolated_screens": 0,
-    "modal_surface_calls": 102,
-    "production_surface_calls": 95,
+    "modal_surface_calls": 103,
+    "production_surface_calls": 96,
     "screen_state_gaps": 0,
     "unowned": 0
   },
@@ -20,147 +20,154 @@
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 236
+      "line": 237
     },
     {
       "path": "/login",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 240
+      "line": 241
     },
     {
       "path": "/register",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 241
+      "line": 242
     },
     {
       "path": "/email-otp",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 245
+      "line": 246
     },
     {
       "path": "/password-reset",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 258
+      "line": 259
     },
     {
       "path": "/onboarding",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 262
+      "line": 263
     },
     {
       "path": "/legal-consent",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 266
+      "line": 267
     },
     {
       "path": "/legal-documents",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 270
+      "line": 271
     },
     {
       "path": "/account-deletion-status",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 275
+      "line": 276
     },
     {
       "path": "/client",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 279
+      "line": 280
     },
     {
       "path": "/admin",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 285
+      "line": 286
     },
     {
       "path": "/teacher",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 290
+      "line": 291
     },
     {
       "path": "/manager",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 295
+      "line": 296
     },
     {
       "path": "/student/:id",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 300
+      "line": 301
     },
     {
       "path": "/admin/profiles/:id",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 309
+      "line": 310
+    },
+    {
+      "path": "/crm/configuration",
+      "owner": "SYS-APP-EXPERIENCE",
+      "status": "production-mounted",
+      "file": "lib/core/router/app_router.dart",
+      "line": 315
     },
     {
       "path": "/students/:id",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 319
+      "line": 324
     },
     {
       "path": "/leads/:id",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 328
+      "line": 333
     },
     {
       "path": "/lessons/:id",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 337
+      "line": 342
     },
     {
       "path": "/profile",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 342
+      "line": 347
     },
     {
       "path": "/auth-methods",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 346
+      "line": 351
     },
     {
       "path": "/delete-account",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 350
+      "line": 355
     }
   ],
   "screens": [
@@ -180,7 +187,7 @@
       "state_contract": "boot-gate",
       "state_na_reason": "The route is itself the loading state; router error/retry owns failure.",
       "file": "lib/core/router/app_router.dart",
-      "line": 380
+      "line": 385
     },
     {
       "name": "AuthMethodsScreen",
@@ -273,6 +280,24 @@
       "line": 9
     },
     {
+      "name": "CrmConfigurationRouteScreen",
+      "owner": "SYS-APP-EXPERIENCE",
+      "production_reachable": true,
+      "status": "production-reachable",
+      "primary_action_evidence": true,
+      "states": {
+        "loading": true,
+        "empty": true,
+        "error": true,
+        "forbidden": false,
+        "retry": true
+      },
+      "state_contract": "data",
+      "state_na_reason": null,
+      "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
+      "line": 12
+    },
+    {
       "name": "ClientCardRouteScreen",
       "owner": "SYS-CRM-WORKSPACE",
       "production_reachable": true,
@@ -309,6 +334,24 @@
       "line": 17
     },
     {
+      "name": "ProfileScreen",
+      "owner": "SYS-PLATFORM-QUALITY",
+      "production_reachable": true,
+      "status": "production-reachable",
+      "primary_action_evidence": true,
+      "states": {
+        "loading": true,
+        "empty": true,
+        "error": true,
+        "forbidden": false,
+        "retry": false
+      },
+      "state_contract": "form",
+      "state_na_reason": "No empty collection state; validation, saving and submit error stay inside the form.",
+      "file": "lib/features/profile/presentation/screens/profile_screen.dart",
+      "line": 16
+    },
+    {
       "name": "ClientDashboardScreen",
       "owner": "SYS-APP-EXPERIENCE",
       "production_reachable": true,
@@ -325,24 +368,6 @@
       "state_na_reason": null,
       "file": "lib/features/client/presentation/screens/client_dashboard_screen.dart",
       "line": 23
-    },
-    {
-      "name": "RegistrationScreen",
-      "owner": "SYS-ACCESS-SCOPE",
-      "production_reachable": true,
-      "status": "production-reachable",
-      "primary_action_evidence": false,
-      "states": {
-        "loading": true,
-        "empty": true,
-        "error": true,
-        "forbidden": false,
-        "retry": false
-      },
-      "state_contract": "form",
-      "state_na_reason": "No empty collection state; validation, saving and submit error stay inside the form.",
-      "file": "lib/features/auth/presentation/screens/registration_screen.dart",
-      "line": 15
     },
     {
       "name": "PasswordResetScreen",
@@ -486,14 +511,14 @@
       "state_contract": "data",
       "state_na_reason": null,
       "file": "lib/core/router/app_router.dart",
-      "line": 567
+      "line": 572
     },
     {
-      "name": "ProfileScreen",
-      "owner": "SYS-PLATFORM-QUALITY",
+      "name": "RegistrationScreen",
+      "owner": "SYS-ACCESS-SCOPE",
       "production_reachable": true,
       "status": "production-reachable",
-      "primary_action_evidence": true,
+      "primary_action_evidence": false,
       "states": {
         "loading": true,
         "empty": true,
@@ -503,8 +528,8 @@
       },
       "state_contract": "form",
       "state_na_reason": "No empty collection state; validation, saving and submit error stay inside the form.",
-      "file": "lib/features/profile/presentation/screens/profile_screen.dart",
-      "line": 16
+      "file": "lib/features/auth/presentation/screens/registration_screen.dart",
+      "line": 15
     },
     {
       "name": "TeacherDashboardScreen",
@@ -673,18 +698,50 @@
     {
       "kind": "dialog",
       "call": "showDialog",
-      "owner": "SYS-CRM-WORKSPACE",
+      "owner": "SYS-APP-EXPERIENCE",
       "production_reachable": true,
       "status": "production-callsite",
       "states": {
         "loading": true,
         "empty": true,
-        "error": false,
+        "error": true,
         "forbidden": false,
         "retry": true
       },
-      "file": "lib/features/crm/presentation/client_forms/client_configuration_dialog.dart",
-      "line": 159
+      "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
+      "line": 313
+    },
+    {
+      "kind": "dialog",
+      "call": "showDialog",
+      "owner": "SYS-APP-EXPERIENCE",
+      "production_reachable": true,
+      "status": "production-callsite",
+      "states": {
+        "loading": true,
+        "empty": true,
+        "error": true,
+        "forbidden": false,
+        "retry": true
+      },
+      "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
+      "line": 227
+    },
+    {
+      "kind": "dialog",
+      "call": "showDialog",
+      "owner": "SYS-PLATFORM-QUALITY",
+      "production_reachable": true,
+      "status": "production-callsite",
+      "states": {
+        "loading": true,
+        "empty": true,
+        "error": true,
+        "forbidden": false,
+        "retry": true
+      },
+      "file": "lib/features/manager/presentation/widgets/notification_preferences_dialog.dart",
+      "line": 20
     },
     {
       "kind": "dialog",
@@ -700,23 +757,7 @@
         "retry": true
       },
       "file": "lib/features/crm/presentation/client_forms/client_configuration_dialog.dart",
-      "line": 115
-    },
-    {
-      "kind": "dialog",
-      "call": "showDialog",
-      "owner": "SYS-CRM-WORKSPACE",
-      "production_reachable": true,
-      "status": "production-callsite",
-      "states": {
-        "loading": true,
-        "empty": true,
-        "error": false,
-        "forbidden": false,
-        "retry": true
-      },
-      "file": "lib/features/crm/presentation/client_forms/client_configuration_dialog.dart",
-      "line": 25
+      "line": 155
     },
     {
       "kind": "magic-sheet",
@@ -881,18 +922,34 @@
     {
       "kind": "dialog",
       "call": "showDialog",
-      "owner": "SYS-PLATFORM-QUALITY",
+      "owner": "SYS-CRM-WORKSPACE",
       "production_reachable": true,
       "status": "production-callsite",
       "states": {
         "loading": true,
         "empty": true,
-        "error": true,
+        "error": false,
         "forbidden": false,
         "retry": true
       },
-      "file": "lib/features/manager/presentation/widgets/notification_preferences_dialog.dart",
-      "line": 20
+      "file": "lib/features/crm/presentation/client_forms/client_configuration_dialog.dart",
+      "line": 111
+    },
+    {
+      "kind": "magic-sheet",
+      "call": "showMagicSheet",
+      "owner": "SYS-CRM-WORKSPACE",
+      "production_reachable": true,
+      "status": "production-callsite",
+      "states": {
+        "loading": false,
+        "empty": true,
+        "error": false,
+        "forbidden": false,
+        "retry": false
+      },
+      "file": "lib/features/crm/presentation/client_card/client_card_dialogs.dart",
+      "line": 188
     },
     {
       "kind": "adaptive-surface",
@@ -909,22 +966,6 @@
       },
       "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
       "line": 447
-    },
-    {
-      "kind": "bottom-sheet",
-      "call": "showModalBottomSheet",
-      "owner": "SYS-OPERATIONS",
-      "production_reachable": true,
-      "status": "production-callsite",
-      "states": {
-        "loading": true,
-        "empty": true,
-        "error": true,
-        "forbidden": true,
-        "retry": true
-      },
-      "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
-      "line": 684
     },
     {
       "kind": "adaptive-surface",
@@ -1103,20 +1144,20 @@
       "line": 283
     },
     {
-      "kind": "magic-sheet",
-      "call": "showMagicSheet",
-      "owner": "SYS-CRM-WORKSPACE",
+      "kind": "bottom-sheet",
+      "call": "showModalBottomSheet",
+      "owner": "SYS-OPERATIONS",
       "production_reachable": true,
       "status": "production-callsite",
       "states": {
-        "loading": false,
+        "loading": true,
         "empty": true,
-        "error": false,
-        "forbidden": false,
-        "retry": false
+        "error": true,
+        "forbidden": true,
+        "retry": true
       },
-      "file": "lib/features/crm/presentation/client_card/client_card_dialogs.dart",
-      "line": 188
+      "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
+      "line": 684
     },
     {
       "kind": "dialog",
@@ -1311,20 +1352,20 @@
       "line": 146
     },
     {
-      "kind": "dialog",
-      "call": "showDialog",
-      "owner": "SYS-CRM-WORKSPACE",
+      "kind": "magic-sheet",
+      "call": "showMagicSheet",
+      "owner": "SYS-SCHEDULE",
       "production_reachable": true,
       "status": "production-callsite",
       "states": {
-        "loading": false,
+        "loading": true,
         "empty": true,
-        "error": false,
+        "error": true,
         "forbidden": false,
-        "retry": false
+        "retry": true
       },
-      "file": "lib/features/crm/presentation/client_card/client_card_dialogs.dart",
-      "line": 77
+      "file": "lib/features/teacher/presentation/widgets/teacher_schedule_widget.dart",
+      "line": 304
     },
     {
       "kind": "dialog",
@@ -1340,7 +1381,7 @@
         "retry": false
       },
       "file": "lib/features/crm/presentation/client_card/client_card_dialogs.dart",
-      "line": 32
+      "line": 77
     },
     {
       "kind": "dialog",
@@ -1727,20 +1768,20 @@
       "line": 494
     },
     {
-      "kind": "magic-sheet",
-      "call": "showMagicSheet",
-      "owner": "SYS-SCHEDULE",
+      "kind": "dialog",
+      "call": "showDialog",
+      "owner": "SYS-CRM-WORKSPACE",
       "production_reachable": true,
       "status": "production-callsite",
       "states": {
-        "loading": true,
+        "loading": false,
         "empty": true,
-        "error": true,
+        "error": false,
         "forbidden": false,
-        "retry": true
+        "retry": false
       },
-      "file": "lib/features/teacher/presentation/widgets/teacher_schedule_widget.dart",
-      "line": 304
+      "file": "lib/features/crm/presentation/client_card/client_card_dialogs.dart",
+      "line": 32
     },
     {
       "kind": "dialog",

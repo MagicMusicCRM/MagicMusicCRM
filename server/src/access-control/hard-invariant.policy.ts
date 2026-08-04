@@ -49,7 +49,9 @@ export interface PackageMutationInvariantInput {
   emergencySurface: boolean;
 }
 
-const ROLE_LEVEL: Readonly<Record<Exclude<AccessRole, "system_admin">, number>> = {
+const ROLE_LEVEL: Readonly<
+  Record<Exclude<AccessRole, "system_admin">, number>
+> = {
   client: 0,
   teacher: 1,
   admin: 2,
@@ -75,6 +77,12 @@ const DIRECTOR_ONLY_CAPABILITIES = new Set<CapabilityKey>([
   "commerce.package.manage",
 ]);
 
+const CONFIG_CAPABILITIES = new Set<CapabilityKey>([
+  "config.crm.read",
+  "config.crm.edit",
+  "config.crm.publish",
+]);
+
 function allow(reason: string): InvariantDecision {
   return { allowed: true, reason };
 }
@@ -98,9 +106,13 @@ export class HardInvariantPolicy {
     }
 
     if (
-      DIRECTOR_ONLY_CAPABILITIES.has(capabilityKey) &&
-      role !== "director"
+      (role === "client" || role === "teacher" || role === "admin") &&
+      CONFIG_CAPABILITIES.has(capabilityKey)
     ) {
+      return deny("config_role_hard_deny");
+    }
+
+    if (DIRECTOR_ONLY_CAPABILITIES.has(capabilityKey) && role !== "director") {
       return deny("director_or_system_admin_required");
     }
 
@@ -210,8 +222,8 @@ export class HardInvariantPolicy {
     }
     if (
       input.effect === "allow" &&
-      this.capabilityDecision(input.subjectRole, input.capabilityKey)?.allowed ===
-        false
+      this.capabilityDecision(input.subjectRole, input.capabilityKey)
+        ?.allowed === false
     ) {
       return deny("hard_deny_cannot_be_overridden");
     }

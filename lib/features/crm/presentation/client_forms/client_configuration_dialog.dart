@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
@@ -20,14 +21,9 @@ class ClientConfigurationButton extends StatelessWidget {
     if (!allowed) return const SizedBox.shrink();
     return OutlinedButton.icon(
       key: const ValueKey('client-configuration-open'),
-      onPressed:
-          onPressed ??
-          () => showDialog<void>(
-            context: context,
-            builder: (_) => const ClientConfigurationDialog(),
-          ),
+      onPressed: onPressed ?? () => context.push('/crm/configuration'),
       icon: const Icon(Icons.tune_rounded, size: 16),
-      label: const Text('Источники и поля'),
+      label: const Text('Конфигурация CRM'),
     );
   }
 }

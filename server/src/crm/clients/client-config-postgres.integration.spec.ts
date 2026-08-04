@@ -19,7 +19,9 @@ const defaultTestDatabaseUrl =
 const testDatabaseUrl =
   process.env.V4_PLATFORM_TEST_DATABASE_URL ?? defaultTestDatabaseUrl;
 const parsedDatabaseUrl = new URL(testDatabaseUrl);
-if (!new Set(["127.0.0.1", "localhost", "[::1]"]).has(parsedDatabaseUrl.hostname)) {
+if (
+  !new Set(["127.0.0.1", "localhost", "[::1]"]).has(parsedDatabaseUrl.hostname)
+) {
   throw new Error("Client config tests require local PostgreSQL.");
 }
 
@@ -94,10 +96,9 @@ describe("Client configuration and strict validators (PostgreSQL)", () => {
         `,
         [entityIds],
       );
-      await database.query(
-        "delete from app.leads where id = any($1::uuid[])",
-        [entityIds],
-      );
+      await database.query("delete from app.leads where id = any($1::uuid[])", [
+        entityIds,
+      ]);
     }
     if (definitionIds.length > 0) {
       await database.query(
@@ -347,6 +348,7 @@ describe("Client configuration and strict validators (PostgreSQL)", () => {
           valueNumber: null,
           valueBoolean: null,
           valueDate: null,
+          valueJson: null,
         },
       ],
     });

@@ -74,7 +74,7 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
       final sources = results[0];
       setState(() {
         _sources = sources;
-        _fields = results[1];
+        _fields = _createPlacementFields(results[1]);
         if (_sourceId != null &&
             !sources.any((source) => source['id']?.toString() == _sourceId)) {
           _sourceId = null;
@@ -109,7 +109,7 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
     for (final field in _fields.where((item) => item['required'] == true)) {
       final id = field['id']?.toString() ?? '';
       final value = _customValues[id];
-      if (value == null || (value is String && value.trim().isEmpty)) {
+      if (_isEmptyFieldValue(value)) {
         errors['customFields.${field['key']}'] = 'Обязательное поле.';
       }
     }
@@ -330,7 +330,7 @@ class _StudentCreateDialogV4State extends ConsumerState<StudentCreateDialogV4> {
       final statuses = funnel.activeStages;
       setState(() {
         _branches = branches;
-        _fields = results[1];
+        _fields = _createPlacementFields(results[1]);
         _branchId = selectedBranch;
         _statuses = statuses;
         if (!statuses.any((stage) => stage.key == _status)) {
@@ -361,7 +361,7 @@ class _StudentCreateDialogV4State extends ConsumerState<StudentCreateDialogV4> {
     for (final field in _fields.where((item) => item['required'] == true)) {
       final id = field['id']?.toString() ?? '';
       final value = _customValues[id];
-      if (value == null || (value is String && value.trim().isEmpty)) {
+      if (_isEmptyFieldValue(value)) {
         errors['customFields.${field['key']}'] = 'Обязательное поле.';
       }
     }
@@ -662,13 +662,37 @@ class _ClientFieldInputs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (fields.isEmpty) return const SizedBox.shrink();
-    return Column(
-      children: [
-        for (final field in fields) ...[
-          const SizedBox(height: AppSpace.sm),
-          _field(field),
+    final groups = <String, List<Map<String, dynamic>>>{};
+    for (final field in fields) {
+      groups
+          .putIfAbsent(
+            field['categoryLabel']?.toString() ?? 'Дополнительные поля',
+            () => [],
+          )
+          .add(field);
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final group in groups.entries) ...[
+            const SizedBox(height: AppSpace.md),
+            Text(group.key, style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: AppSpace.xs),
+            Wrap(
+              spacing: AppSpace.sm,
+              runSpacing: AppSpace.sm,
+              children: [
+                for (final field in group.value)
+                  SizedBox(
+                    width: _fieldWidth(field, constraints.maxWidth),
+                    child: _field(field),
+                  ),
+              ],
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 
@@ -691,10 +715,43 @@ class _ClientFieldInputs extends StatelessWidget {
         onChanged: enabled ? (value) => onChanged(id, value == true) : null,
       );
     }
-    if (type == 'select') {
+    if (type == 'toggle') {
+      return SwitchListTile(
+        key: ValueKey('custom-field-$key'),
+        contentPadding: EdgeInsets.zero,
+        value: values[id] == true,
+        title: Text(label),
+        subtitle: error == null
+            ? null
+            : Text(error, style: const TextStyle(color: AppColor.danger)),
+        onChanged: enabled ? (value) => onChanged(id, value) : null,
+      );
+    }
+    if (type == 'select' || type == 'radio') {
       final options = (field['options'] as List? ?? const [])
           .map((value) => value.toString())
           .toList(growable: false);
+      if (type == 'radio') {
+        return InputDecorator(
+          decoration: InputDecoration(labelText: label, errorText: error),
+          child: Wrap(
+            spacing: AppSpace.xs,
+            runSpacing: AppSpace.xs,
+            children: [
+              for (final option in options)
+                ChoiceChip(
+                  label: Text(option),
+                  selected: values[id]?.toString() == option,
+                  onSelected: enabled
+                      ? (selected) {
+                          if (selected) onChanged(id, option);
+                        }
+                      : null,
+                ),
+            ],
+          ),
+        );
+      }
       return DropdownButtonFormField<String>(
         key: ValueKey('custom-field-$key'),
         initialValue: values[id]?.toString(),
@@ -708,11 +765,41 @@ class _ClientFieldInputs extends StatelessWidget {
         onChanged: enabled ? (value) => onChanged(id, value) : null,
       );
     }
+    if (type == 'multi_select' || type == 'checkbox_group') {
+      final options = (field['options'] as List? ?? const [])
+          .map((value) => value.toString())
+          .toList(growable: false);
+      final selected = (values[id] as List? ?? const [])
+          .map((value) => value.toString())
+          .toSet();
+      return InputDecorator(
+        decoration: InputDecoration(labelText: label, errorText: error),
+        child: Wrap(
+          spacing: AppSpace.xs,
+          children: [
+            for (final option in options)
+              FilterChip(
+                label: Text(option),
+                selected: selected.contains(option),
+                onSelected: enabled
+                    ? (checked) {
+                        final next = {...selected};
+                        checked ? next.add(option) : next.remove(option);
+                        onChanged(id, next.toList(growable: false));
+                      }
+                    : null,
+              ),
+          ],
+        ),
+      );
+    }
+    final numeric = type == 'number' || type == 'money' || type == 'duration';
     return TextFormField(
       key: ValueKey('custom-field-$key'),
       initialValue: values[id]?.toString(),
       enabled: enabled,
-      keyboardType: type == 'number'
+      maxLines: type == 'textarea' ? 4 : 1,
+      keyboardType: numeric
           ? const TextInputType.numberWithOptions(decimal: true)
           : type == 'email'
           ? TextInputType.emailAddress
@@ -721,7 +808,7 @@ class _ClientFieldInputs extends StatelessWidget {
           : TextInputType.text,
       decoration: InputDecoration(labelText: label, errorText: error),
       onChanged: (value) {
-        if (type == 'number') {
+        if (numeric) {
           onChanged(id, num.tryParse(value.replaceAll(',', '.')));
         } else {
           onChanged(id, value);
@@ -730,6 +817,38 @@ class _ClientFieldInputs extends StatelessWidget {
     );
   }
 }
+
+double _fieldWidth(Map<String, dynamic> field, double available) {
+  if (available < 520) return available;
+  return switch (field['width']?.toString()) {
+    'third' => (available - AppSpace.sm * 2) / 3,
+    'half' => (available - AppSpace.sm) / 2,
+    _ => available,
+  };
+}
+
+List<Map<String, dynamic>> _createPlacementFields(Object? raw) {
+  if (raw is! List) return const [];
+  final fields = raw
+      .whereType<Map<String, dynamic>>()
+      .where((field) {
+        if (field['isSystem'] == true) return false;
+        final placements = field['placements'];
+        return placements is! List || placements.contains('create');
+      })
+      .toList(growable: false);
+  fields.sort(
+    (left, right) => ((left['order'] as num?)?.toInt() ?? 0).compareTo(
+      (right['order'] as num?)?.toInt() ?? 0,
+    ),
+  );
+  return fields;
+}
+
+bool _isEmptyFieldValue(Object? value) =>
+    value == null ||
+    (value is String && value.trim().isEmpty) ||
+    (value is Iterable && value.isEmpty);
 
 Widget _textField({
   required Key key,

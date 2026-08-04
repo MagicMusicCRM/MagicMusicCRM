@@ -47,6 +47,7 @@ const requiredMigrations = [
   "0090_commerce_package_aggregate_versions",
   "0091_commerce_issued_subscription_aggregate_versions",
   "0092_shared_tasks_audience_schema",
+  "0097_unified_crm_configuration",
 ];
 
 const invariantSql: ReadonlyArray<{ id: string; sql: string }> = [
@@ -67,11 +68,11 @@ const invariantSql: ReadonlyArray<{ id: string; sql: string }> = [
   {
     id: "access.capability-registry-packages",
     sql: `
-      select 20 as source_count,
+      select 23 as source_count,
              (select count(*) from app.capability_definitions where active) as target_count,
-             greatest(0, 20 - (select count(*) from app.capability_definitions where active))
+             greatest(0, 23 - (select count(*) from app.capability_definitions where active))
              + abs(6 - (select count(*) from app.role_packages where active))
-             + abs(120 - (
+             + abs(138 - (
                select count(*)
                  from app.role_package_capabilities entry
                  join app.role_packages package on package.id = entry.package_id
@@ -200,8 +201,9 @@ const invariantSql: ReadonlyArray<{ id: string; sql: string }> = [
 ];
 
 function loadDatabaseUrl(): string {
-  const direct = process.env.MIGRATION_DATABASE_URL?.trim()
-    || process.env.DATABASE_URL?.trim();
+  const direct =
+    process.env.MIGRATION_DATABASE_URL?.trim() ||
+    process.env.DATABASE_URL?.trim();
   if (direct) return direct;
   const envPath = resolve(serverRoot, ".env");
   if (existsSync(envPath)) {
@@ -230,9 +232,7 @@ async function collectInvariant(
   };
 }
 
-async function runMigrationDryRun(
-  pool: Pool,
-): Promise<MigrationDryRunReport> {
+async function runMigrationDryRun(pool: Pool): Promise<MigrationDryRunReport> {
   const client = await pool.connect();
   try {
     await client.query(
@@ -262,9 +262,9 @@ async function runMigrationDryRun(
         sourceRows: value.sourceRows + invariant.sourceCount,
         targetRows: value.targetRows + invariant.targetCount,
         violations: value.violations + invariant.violations,
-        pendingBatches: value.pendingBatches + (
-          invariant.sourceCount === invariant.targetCount ? 0 : 1
-        ),
+        pendingBatches:
+          value.pendingBatches +
+          (invariant.sourceCount === invariant.targetCount ? 0 : 1),
       }),
       {
         invariants: 0,
@@ -275,7 +275,14 @@ async function runMigrationDryRun(
       },
     );
     const digestSha256 = createHash("sha256")
-      .update(JSON.stringify({ requiredMigrations, missingMigrations, invariants, summary }))
+      .update(
+        JSON.stringify({
+          requiredMigrations,
+          missingMigrations,
+          invariants,
+          summary,
+        }),
+      )
       .digest("hex");
     return {
       schemaVersion: 1,
@@ -317,12 +324,14 @@ async function main(): Promise<void> {
       throw new Error("Repeated migration dry-run changed its logical digest.");
     }
     const path = writeReport(second);
-    process.stdout.write(`${JSON.stringify({
-      task: second.task,
-      summary: second.summary,
-      repeatedDigestStable: true,
-      report: path.replace(`${repoRoot}\\`, "").replace(/\\/g, "/"),
-    })}\n`);
+    process.stdout.write(
+      `${JSON.stringify({
+        task: second.task,
+        summary: second.summary,
+        repeatedDigestStable: true,
+        report: path.replace(`${repoRoot}\\`, "").replace(/\\/g, "/"),
+      })}\n`,
+    );
     if (second.summary.violations > 0 || second.summary.pendingBatches > 0) {
       process.exitCode = 2;
     }

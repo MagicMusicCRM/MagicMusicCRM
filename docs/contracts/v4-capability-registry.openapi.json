@@ -29,6 +29,9 @@
           "workflow.task.write",
           "report.status.read",
           "report.export.xlsx",
+          "config.crm.read",
+          "config.crm.edit",
+          "config.crm.publish",
           "system.settings.manage"
         ]
       },

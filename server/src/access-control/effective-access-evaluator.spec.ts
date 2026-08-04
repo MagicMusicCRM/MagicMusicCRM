@@ -44,24 +44,9 @@ const packageAllows: Readonly<Record<CapabilityKey, readonly AccessRole[]>> = {
     "director",
     "system_admin",
   ],
-  "schedule.lesson.write": [
-    "admin",
-    "manager",
-    "director",
-    "system_admin",
-  ],
-  "schedule.attendance.write": [
-    "admin",
-    "manager",
-    "director",
-    "system_admin",
-  ],
-  "schedule.lesson.complete": [
-    "admin",
-    "manager",
-    "director",
-    "system_admin",
-  ],
+  "schedule.lesson.write": ["admin", "manager", "director", "system_admin"],
+  "schedule.attendance.write": ["admin", "manager", "director", "system_admin"],
+  "schedule.lesson.complete": ["admin", "manager", "director", "system_admin"],
   "commerce.client_finance.read": [
     "client",
     "admin",
@@ -70,12 +55,7 @@ const packageAllows: Readonly<Record<CapabilityKey, readonly AccessRole[]>> = {
     "system_admin",
   ],
   "commerce.school_finance.read": ["director", "system_admin"],
-  "commerce.package.read": [
-    "admin",
-    "manager",
-    "director",
-    "system_admin",
-  ],
+  "commerce.package.read": ["admin", "manager", "director", "system_admin"],
   "commerce.package.manage": ["director", "system_admin"],
   "commerce.subscription.issue": [
     "admin",
@@ -90,14 +70,12 @@ const packageAllows: Readonly<Record<CapabilityKey, readonly AccessRole[]>> = {
     "director",
     "system_admin",
   ],
-  "workflow.task.write": [
-    "admin",
-    "manager",
-    "director",
-    "system_admin",
-  ],
+  "workflow.task.write": ["admin", "manager", "director", "system_admin"],
   "report.status.read": ["manager", "director", "system_admin"],
   "report.export.xlsx": ["manager", "director", "system_admin"],
+  "config.crm.read": ["director", "system_admin"],
+  "config.crm.edit": ["director", "system_admin"],
+  "config.crm.publish": ["director", "system_admin"],
   "system.settings.manage": ["manager", "director", "system_admin"],
 };
 
@@ -257,6 +235,20 @@ describe("EffectiveAccessEvaluator", () => {
       }),
     ).toMatchObject({ allowed: true, source: "override" });
     expect(
+      evaluate("manager", "config.crm.edit", {
+        overrideEffect: "allow",
+      }),
+    ).toMatchObject({ allowed: true, source: "override" });
+    expect(
+      evaluate("admin", "config.crm.edit", {
+        overrideEffect: "allow",
+      }),
+    ).toMatchObject({
+      allowed: false,
+      source: "hard-invariant",
+      reason: "config_role_hard_deny",
+    });
+    expect(
       evaluate("admin", "crm.client.read.contacts", {
         roleEffect: "deny",
         overrideEffect: "allow",
@@ -389,9 +381,9 @@ describe("HardInvariantPolicy access mutations", () => {
       emergencySurface: false,
     };
 
-    expect(
-      hardInvariants.overrideMutationDecision(overrideInput).reason,
-    ).toBe("hard_deny_cannot_be_overridden");
+    expect(hardInvariants.overrideMutationDecision(overrideInput).reason).toBe(
+      "hard_deny_cannot_be_overridden",
+    );
     expect(
       hardInvariants.overrideMutationDecision({
         ...overrideInput,
@@ -413,5 +405,21 @@ describe("HardInvariantPolicy access mutations", () => {
         overrideMode: "allow_deny",
       }).allowed,
     ).toBe(true);
+    expect(
+      hardInvariants.overrideMutationDecision({
+        ...overrideInput,
+        subjectUserId: "manager-1",
+        subjectRole: "manager",
+        capabilityKey: "config.crm.edit",
+      }).allowed,
+    ).toBe(true);
+    expect(
+      hardInvariants.overrideMutationDecision({
+        ...overrideInput,
+        subjectUserId: "admin-1",
+        subjectRole: "admin",
+        capabilityKey: "config.crm.edit",
+      }).reason,
+    ).toBe("hard_deny_cannot_be_overridden");
   });
 });

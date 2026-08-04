@@ -31,6 +31,11 @@ export interface ClientCustomFieldDefinitionRow {
   created_at: Date | string;
   updated_at: Date | string;
   deleted_at: Date | string | null;
+  category_key?: string;
+  category_label?: string;
+  sort_order?: number | string;
+  width?: string;
+  placements?: unknown;
 }
 
 export interface TypedClientCustomValue {
@@ -39,6 +44,7 @@ export interface TypedClientCustomValue {
   valueNumber: number | null;
   valueBoolean: boolean | null;
   valueDate: string | null;
+  valueJson: unknown | null;
 }
 
 export async function saveTypedClientValues(
@@ -58,16 +64,17 @@ export async function saveTypedClientValues(
           value_number,
           value_boolean,
           value_date,
+          value_json,
           validation_state
         )
-        values ($1, $2, $3, $4, $5, $6, $7, 'valid')
+        values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, 'valid')
         on conflict (definition_id, entity_type, entity_id)
         do update set
           value_text = excluded.value_text,
           value_number = excluded.value_number,
           value_boolean = excluded.value_boolean,
           value_date = excluded.value_date,
-          value_json = null,
+          value_json = excluded.value_json,
           validation_state = 'valid',
           updated_at = now()
       `,
@@ -79,6 +86,7 @@ export async function saveTypedClientValues(
         value.valueNumber,
         value.valueBoolean,
         value.valueDate,
+        value.valueJson === null ? null : JSON.stringify(value.valueJson),
       ],
     );
   }
@@ -88,9 +96,7 @@ export async function saveTypedClientValues(
 export class ClientConfigRepository {
   constructor(private readonly database: DatabaseService) {}
 
-  async listSources(
-    includeArchived: boolean,
-  ): Promise<LeadSourceRow[]> {
+  async listSources(includeArchived: boolean): Promise<LeadSourceRow[]> {
     const result = await this.database.query<LeadSourceRow>(
       `
         select id, canonical_name, display_name, is_active, version,
@@ -186,12 +192,11 @@ export class ClientConfigRepository {
     entityType: ClientEntityType | undefined,
     includeArchived: boolean,
   ): Promise<ClientCustomFieldDefinitionRow[]> {
-    const result =
-      await this.database.query<ClientCustomFieldDefinitionRow>(
-        `
+    const result = await this.database.query<ClientCustomFieldDefinitionRow>(
+      `
           select id, entity_type, field_key, label, value_type, is_required,
             is_active, is_system, options, version, created_at, updated_at,
-            deleted_at
+            deleted_at, category_key, category_label, sort_order, width, placements
           from app.client_custom_field_definitions
           where ($1::text is null or entity_type = $1)
             and ($2::boolean or (is_active and deleted_at is null))
@@ -199,11 +204,12 @@ export class ClientConfigRepository {
             entity_type asc,
             is_system desc,
             (deleted_at is not null or not is_active) asc,
+            sort_order asc,
             lower(label) asc,
             id asc
         `,
-        [entityType ?? null, includeArchived],
-      );
+      [entityType ?? null, includeArchived],
+    );
     return result.rows;
   }
 
@@ -212,9 +218,8 @@ export class ClientConfigRepository {
     definitionIds: string[],
   ): Promise<ClientCustomFieldDefinitionRow[]> {
     if (definitionIds.length === 0) return [];
-    const result =
-      await this.database.query<ClientCustomFieldDefinitionRow>(
-        `
+    const result = await this.database.query<ClientCustomFieldDefinitionRow>(
+      `
           select id, entity_type, field_key, label, value_type, is_required,
             is_active, is_system, options, version, created_at, updated_at,
             deleted_at
@@ -222,17 +227,16 @@ export class ClientConfigRepository {
           where entity_type = $1
             and id = any($2::uuid[])
         `,
-        [entityType, definitionIds],
-      );
+      [entityType, definitionIds],
+    );
     return result.rows;
   }
 
   async listRequiredCustomDefinitions(
     entityType: ClientEntityType,
   ): Promise<ClientCustomFieldDefinitionRow[]> {
-    const result =
-      await this.database.query<ClientCustomFieldDefinitionRow>(
-        `
+    const result = await this.database.query<ClientCustomFieldDefinitionRow>(
+      `
           select id, entity_type, field_key, label, value_type, is_required,
             is_active, is_system, options, version, created_at, updated_at,
             deleted_at
@@ -244,8 +248,8 @@ export class ClientConfigRepository {
             and deleted_at is null
           order by field_key asc
         `,
-        [entityType],
-      );
+      [entityType],
+    );
     return result.rows;
   }
 
@@ -260,9 +264,8 @@ export class ClientConfigRepository {
       options: string[];
     },
   ): Promise<ClientCustomFieldDefinitionRow> {
-    const result =
-      await client.query<ClientCustomFieldDefinitionRow>(
-        `
+    const result = await client.query<ClientCustomFieldDefinitionRow>(
+      `
           insert into app.client_custom_field_definitions (
             entity_type,
             field_key,
@@ -276,15 +279,15 @@ export class ClientConfigRepository {
             is_required, is_active, is_system, options, version, created_at,
             updated_at, deleted_at
         `,
-        [
-          input.entityType,
-          input.key,
-          input.label,
-          input.valueType,
-          input.required,
-          JSON.stringify(input.options),
-        ],
-      );
+      [
+        input.entityType,
+        input.key,
+        input.label,
+        input.valueType,
+        input.required,
+        JSON.stringify(input.options),
+      ],
+    );
     return result.rows[0]!;
   }
 
@@ -292,9 +295,8 @@ export class ClientConfigRepository {
     client: PoolClient,
     definitionId: string,
   ): Promise<ClientCustomFieldDefinitionRow | null> {
-    const result =
-      await client.query<ClientCustomFieldDefinitionRow>(
-        `
+    const result = await client.query<ClientCustomFieldDefinitionRow>(
+      `
           select id, entity_type, field_key, label, value_type, is_required,
             is_active, is_system, options, version, created_at, updated_at,
             deleted_at
@@ -302,8 +304,8 @@ export class ClientConfigRepository {
           where id = $1
           for update
         `,
-        [definitionId],
-      );
+      [definitionId],
+    );
     return result.rows[0] ?? null;
   }
 
@@ -334,9 +336,8 @@ export class ClientConfigRepository {
       options?: string[];
     },
   ): Promise<ClientCustomFieldDefinitionRow | null> {
-    const result =
-      await client.query<ClientCustomFieldDefinitionRow>(
-        `
+    const result = await client.query<ClientCustomFieldDefinitionRow>(
+      `
           update app.client_custom_field_definitions
           set label = coalesce($3, label),
             value_type = coalesce($4, value_type),
@@ -356,16 +357,16 @@ export class ClientConfigRepository {
             is_required, is_active, is_system, options, version, created_at,
             updated_at, deleted_at
         `,
-        [
-          definitionId,
-          input.expectedVersion,
-          input.label ?? null,
-          input.valueType ?? null,
-          input.required ?? null,
-          input.isActive ?? null,
-          input.options === undefined ? null : JSON.stringify(input.options),
-        ],
-      );
+      [
+        definitionId,
+        input.expectedVersion,
+        input.label ?? null,
+        input.valueType ?? null,
+        input.required ?? null,
+        input.isActive ?? null,
+        input.options === undefined ? null : JSON.stringify(input.options),
+      ],
+    );
     return result.rows[0] ?? null;
   }
 

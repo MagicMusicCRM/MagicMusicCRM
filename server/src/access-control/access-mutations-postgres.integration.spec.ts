@@ -15,7 +15,7 @@ import { PlatformIntegrityService } from "../platform/platform-integrity.service
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { AccessMutationsRepository } from "./access-mutations.repository";
 import { AccessMutationsService } from "./access-mutations.service";
-import { AccessRole } from "./capability-registry";
+import { AccessRole, CAPABILITY_DEFINITIONS } from "./capability-registry";
 import { HardInvariantPolicy } from "./hard-invariant.policy";
 
 const defaultTestDatabaseUrl =
@@ -23,7 +23,9 @@ const defaultTestDatabaseUrl =
 const testDatabaseUrl =
   process.env.V4_PLATFORM_TEST_DATABASE_URL ?? defaultTestDatabaseUrl;
 const parsedDatabaseUrl = new URL(testDatabaseUrl);
-if (!new Set(["127.0.0.1", "localhost", "[::1]"]).has(parsedDatabaseUrl.hostname)) {
+if (
+  !new Set(["127.0.0.1", "localhost", "[::1]"]).has(parsedDatabaseUrl.hostname)
+) {
   throw new Error("Access mutation tests require local PostgreSQL.");
 }
 
@@ -128,10 +130,9 @@ describe("AccessMutationsService (PostgreSQL)", () => {
         `,
         [fixtureUserIds],
       );
-      await database.query(
-        "delete from app.users where id = any($1::uuid[])",
-        [fixtureUserIds],
-      );
+      await database.query("delete from app.users where id = any($1::uuid[])", [
+        fixtureUserIds,
+      ]);
     }
     fixtureUserIds = [];
   }
@@ -191,10 +192,7 @@ describe("AccessMutationsService (PostgreSQL)", () => {
     const repository = new AccessMutationsRepository(database);
     service = new AccessMutationsService(
       repository,
-      new PlatformIntegrityService(
-        database,
-        new PlatformIntegrityRepository(),
-      ),
+      new PlatformIntegrityService(database, new PlatformIntegrityRepository()),
       new HardInvariantPolicy(),
       {
         emitUserAccessInvalidated: jest.fn(),
@@ -497,7 +495,9 @@ describe("AccessMutationsService (PostgreSQL)", () => {
       },
     });
     const active = await service.getRolePackage(director, "manager");
-    expect(Object.keys(active.effects)).toHaveLength(20);
+    expect(Object.keys(active.effects)).toHaveLength(
+      CAPABILITY_DEFINITIONS.length,
+    );
     expect(active.effects["report.export.xlsx"]).toBe("deny");
 
     await expect(

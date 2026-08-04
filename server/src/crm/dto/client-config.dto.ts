@@ -21,15 +21,23 @@ export type ClientEntityType = (typeof CLIENT_ENTITY_TYPES)[number];
 
 export const CLIENT_CUSTOM_VALUE_TYPES = [
   "text",
+  "textarea",
   "number",
+  "money",
+  "duration",
   "boolean",
+  "toggle",
   "date",
+  "datetime",
   "select",
+  "radio",
+  "multi_select",
+  "checkbox_group",
   "email",
   "phone",
+  "url",
 ] as const;
-export type ClientCustomValueType =
-  (typeof CLIENT_CUSTOM_VALUE_TYPES)[number];
+export type ClientCustomValueType = (typeof CLIENT_CUSTOM_VALUE_TYPES)[number];
 
 export class ClientConfigListQuery {
   @IsOptional()

@@ -1,16 +1,7 @@
-import {
-  AccessRole,
-  CapabilityKey,
-  USER_ROLES,
-} from "./capability-registry";
+import { AccessRole, CapabilityKey, USER_ROLES } from "./capability-registry";
 
 export type CapabilityResourceScope =
-  | "self"
-  | "self_or_assigned"
-  | "branch"
-  | "resource"
-  | "global"
-  | "emergency";
+  "self" | "self_or_assigned" | "branch" | "resource" | "global" | "emergency";
 
 export interface CapabilityRoutePolicy {
   capabilityKey: CapabilityKey;
@@ -47,20 +38,14 @@ export const BASELINE_CAPABILITY_ROLES: Readonly<
   "access.user.role.assign": rootBusinessRoles,
   "access.user.override.manage": rootBusinessRoles,
   "crm.client.read.basic": allRoles,
-  "crm.client.read.contacts": [
-    "client",
-    ...staffRoles,
-  ],
+  "crm.client.read.contacts": ["client", ...staffRoles],
   "crm.client.write": staffRoles,
   "crm.comment.read.shared": teacherAndStaffRoles,
   "schedule.lesson.read.assigned": allRoles,
   "schedule.lesson.write": staffRoles,
   "schedule.attendance.write": staffRoles,
   "schedule.lesson.complete": staffRoles,
-  "commerce.client_finance.read": [
-    "client",
-    ...staffRoles,
-  ],
+  "commerce.client_finance.read": ["client", ...staffRoles],
   "commerce.school_finance.read": rootBusinessRoles,
   "commerce.package.read": staffRoles,
   "commerce.package.manage": rootBusinessRoles,
@@ -69,6 +54,9 @@ export const BASELINE_CAPABILITY_ROLES: Readonly<
   "workflow.task.write": staffRoles,
   "report.status.read": managementRoles,
   "report.export.xlsx": managementRoles,
+  "config.crm.read": rootBusinessRoles,
+  "config.crm.edit": rootBusinessRoles,
+  "config.crm.publish": rootBusinessRoles,
   "system.settings.manage": managementRoles,
 };
 
@@ -120,6 +108,20 @@ export function resolveCapabilityRoutePolicy(
       "emergency",
       rootBusinessRoles,
       "AccessMutationsService hard hierarchy and emergency policy",
+    );
+  }
+
+  if (path.startsWith("/crm/configuration")) {
+    const capabilityKey = read
+      ? "config.crm.read"
+      : path.endsWith("/draft") || path.endsWith("/preview")
+        ? "config.crm.edit"
+        : "config.crm.publish";
+    return policy(
+      capabilityKey,
+      "resource",
+      rootBusinessRoles,
+      "CrmConfigurationService effective scope and revision policy",
     );
   }
 
@@ -216,9 +218,7 @@ export function resolveCapabilityRoutePolicy(
     path.includes("/expected-payments")
   ) {
     return policy(
-      read
-        ? "commerce.client_finance.read"
-        : "commerce.subscription.issue",
+      read ? "commerce.client_finance.read" : "commerce.subscription.issue",
       "self_or_assigned",
       read ? ["client", ...staffRoles] : staffRoles,
       "CrmPolicy student-finance/resource scope",
@@ -238,14 +238,9 @@ export function resolveCapabilityRoutePolicy(
     );
   }
 
-  if (
-    path.includes("/attendance") ||
-    path.includes("/lesson-participation")
-  ) {
+  if (path.includes("/attendance") || path.includes("/lesson-participation")) {
     return policy(
-      read
-        ? "schedule.lesson.read.assigned"
-        : "schedule.attendance.write",
+      read ? "schedule.lesson.read.assigned" : "schedule.attendance.write",
       "self_or_assigned",
       read ? allRoles : staffRoles,
       "Schedule/Attendance repository actor scope",
@@ -263,9 +258,7 @@ export function resolveCapabilityRoutePolicy(
 
   if (path.includes("/schedule-reference")) {
     return policy(
-      read
-        ? "schedule.lesson.read.assigned"
-        : "schedule.lesson.write",
+      read ? "schedule.lesson.read.assigned" : "schedule.lesson.write",
       read ? "self_or_assigned" : "resource",
       read ? teacherAndStaffRoles : staffRoles,
       "AvailabilityService teacher-self read and operational staff write policy",
@@ -280,9 +273,7 @@ export function resolveCapabilityRoutePolicy(
     path.includes("/groups")
   ) {
     return policy(
-      read
-        ? "schedule.lesson.read.assigned"
-        : "schedule.lesson.write",
+      read ? "schedule.lesson.read.assigned" : "schedule.lesson.write",
       "self_or_assigned",
       read ? allRoles : staffRoles,
       "ScheduleService/CRM repository actor scope",

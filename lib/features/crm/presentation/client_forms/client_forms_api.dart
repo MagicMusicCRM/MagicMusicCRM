@@ -43,6 +43,87 @@ class ClientFormsApi {
     return _items(response);
   }
 
+  Future<Map<String, dynamic>> getConfigurationDraft({String? branchId}) {
+    return _api.get<Map<String, dynamic>>(
+      '/crm/configuration/draft',
+      queryParameters: {'branchId': ?branchId},
+    );
+  }
+
+  Future<Map<String, dynamic>> saveConfigurationDraft({
+    String? branchId,
+    required int baseVersion,
+    required Map<String, dynamic> snapshot,
+  }) {
+    return _api.put<Map<String, dynamic>>(
+      '/crm/configuration/draft',
+      data: {
+        'branchId': ?branchId,
+        'baseVersion': baseVersion,
+        'snapshot': snapshot,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> previewConfiguration({
+    String? branchId,
+    required int baseVersion,
+    required Map<String, dynamic> snapshot,
+  }) {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/configuration/preview',
+      data: {
+        'branchId': ?branchId,
+        'baseVersion': baseVersion,
+        'snapshot': snapshot,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> publishConfiguration({
+    String? branchId,
+    required int baseVersion,
+    required String reason,
+    required Map<String, dynamic> snapshot,
+  }) {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/configuration/publish',
+      data: {
+        'branchId': ?branchId,
+        'baseVersion': baseVersion,
+        'reason': reason.trim(),
+        'snapshot': snapshot,
+      },
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> listConfigurationRevisions({
+    String? branchId,
+  }) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/configuration/revisions',
+      queryParameters: {'branchId': ?branchId},
+    );
+    return _items(response);
+  }
+
+  Future<Map<String, dynamic>> rollbackConfiguration({
+    String? branchId,
+    required int expectedVersion,
+    required int targetVersion,
+    required String reason,
+  }) {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/configuration/rollback',
+      data: {
+        'branchId': ?branchId,
+        'expectedVersion': expectedVersion,
+        'targetVersion': targetVersion,
+        'reason': reason.trim(),
+      },
+    );
+  }
+
   Future<Map<String, dynamic>> createLead({
     required String firstName,
     required String lastName,

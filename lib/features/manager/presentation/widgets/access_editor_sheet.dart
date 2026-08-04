@@ -90,6 +90,9 @@ class _AccessEditorSheetState extends ConsumerState<AccessEditorSheet> {
     'workflow.task.write': 'Изменение задач',
     'report.status.read': 'Управленческие отчёты',
     'report.export.xlsx': 'Экспорт отчётов',
+    'config.crm.read': 'Просмотр конфигурации CRM',
+    'config.crm.edit': 'Редактирование черновиков CRM',
+    'config.crm.publish': 'Публикация конфигурации CRM',
     'system.settings.manage': 'Системные настройки',
   };
 

@@ -1,100 +1,102 @@
-import { Module } from '@nestjs/common';
-import { JwtModule } from '@nestjs/jwt';
-import { AuditModule } from '../audit/audit.module';
-import { AccessControlModule } from '../access-control/access-control.module';
-import { LEAD_INTAKE_PORT } from '../common/lead-intake.port';
-import { JwtAuthGuard } from '../common/security/jwt-auth.guard';
-import { DatabaseModule } from '../db/database.module';
-import { NotificationsModule } from '../notifications/notifications.module';
-import { ChatWorkTimelineModule } from '../messenger/chat-work-timeline.module';
-import { PlatformModule } from '../platform/platform.module';
-import { AdminStaffController } from './admin-staff.controller';
-import { CrmStudentsController } from './crm-students.controller';
-import { CrmDashboardController } from './crm-dashboard.controller';
-import { CrmScheduleController } from './crm-schedule.controller';
-import { CrmPeopleController } from './crm-people.controller';
-import { CrmFacilitiesController } from './crm-facilities.controller';
-import { CrmReferenceDataController } from './crm-reference-data.controller';
-import { CrmEngagementController } from './crm-engagement.controller';
-import { CrmFinanceController } from './crm-finance.controller';
-import { CrmLeadsController } from './crm-leads.controller';
-import { CrmContactsController } from './crm-contacts.controller';
+import { Module } from "@nestjs/common";
+import { JwtModule } from "@nestjs/jwt";
+import { AuditModule } from "../audit/audit.module";
+import { AccessControlModule } from "../access-control/access-control.module";
+import { LEAD_INTAKE_PORT } from "../common/lead-intake.port";
+import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
+import { DatabaseModule } from "../db/database.module";
+import { NotificationsModule } from "../notifications/notifications.module";
+import { ChatWorkTimelineModule } from "../messenger/chat-work-timeline.module";
+import { PlatformModule } from "../platform/platform.module";
+import { AdminStaffController } from "./admin-staff.controller";
+import { CrmStudentsController } from "./crm-students.controller";
+import { CrmDashboardController } from "./crm-dashboard.controller";
+import { CrmScheduleController } from "./crm-schedule.controller";
+import { CrmPeopleController } from "./crm-people.controller";
+import { CrmFacilitiesController } from "./crm-facilities.controller";
+import { CrmReferenceDataController } from "./crm-reference-data.controller";
+import { CrmEngagementController } from "./crm-engagement.controller";
+import { CrmFinanceController } from "./crm-finance.controller";
+import { CrmLeadsController } from "./crm-leads.controller";
+import { CrmContactsController } from "./crm-contacts.controller";
 import { HolliHopMetadataService } from "./hollihop-metadata.service";
-import { CrmPolicy } from './crm.policy';
-import { CrmService } from './crm.service';
-import { BlacklistService } from './blacklist.service';
-import { HomeworkService } from './homework.service';
-import { ReferenceDataService } from './reference-data.service';
-import { SubscriptionsService } from './subscriptions.service';
-import { FinanceService } from './finance.service';
-import { TasksService } from './tasks.service';
-import { StaffService } from './staff.service';
-import { TeachersService } from './teachers.service';
-import { ScheduleService } from './schedule.service';
-import { SectionViewsService } from './section-views.service';
-import { TimelineService } from './timeline.service';
-import { DashboardService } from './dashboard.service';
-import { ClientLinkingService } from './client-linking.service';
-import { FamilyService } from './family.service';
-import { DuplicatesService } from './duplicates.service';
-import { MergeService } from './merge.service';
-import { PhoneReviewService } from './phone-review.service';
-import { LeadsService } from './leads.service';
-import { LeadIntakeService } from './lead-intake.service';
-import { RoomsService } from './rooms.service';
-import { BranchesService } from './branches.service';
-import { GroupsService } from './groups.service';
-import { PayrollService } from './payroll.service';
-import { LeadWebhookController } from './lead-webhook.controller';
-import { ScheduleSeriesWorker } from './schedule-series.worker';
-import { CommentSharingService } from './clients/comment-sharing.service';
-import { ClientReferenceService } from './clients/client-reference.service';
-import { CrmClientsController } from './crm-clients.controller';
-import { CrmClientConfigController } from './crm-client-config.controller';
-import { ClientConfigRepository } from './clients/client-config.repository';
-import { ClientConfigService } from './clients/client-config.service';
-import { ClientWriteValidator } from './clients/client-write.validator';
-import { InboundLeadService } from './clients/inbound-lead.service';
-import { ClientConversionService } from './clients/client-conversion.service';
-import { ClientArchiveService } from './clients/client-archive.service';
-import { ClientCardReadService } from './clients/client-card-read.service';
-import { LessonLifecycleRepository } from './schedule/lesson-lifecycle.repository';
-import { AvailabilityController } from './schedule/availability.controller';
-import { AvailabilityRepository } from './schedule/availability.repository';
-import { AvailabilityService } from './schedule/availability.service';
-import { ConstraintEngineRepository } from './schedule/constraint-engine.repository';
-import { ScheduleConstraintEngine } from './schedule/constraint-engine.service';
-import { LessonRequiredFieldValidator } from './schedule/lesson-required-field.validator';
-import { LessonCommandService } from './schedule/lesson-command.service';
-import { LessonSeriesCommandService } from './schedule/lesson-series-command.service';
-import { LessonTransitionFinancialService } from './schedule/lesson-transition-financial.service';
-import { LessonTransitionService } from './schedule/lesson-transition.service';
-import { LESSON_SETTLEMENT_PORT } from './commerce/lesson-settlement.port';
-import { LessonSettlementRepository } from './commerce/lesson-settlement.repository';
-import { LessonSettlementService } from './commerce/lesson-settlement.service';
-import { LessonCompletionWorkerRepository } from './schedule/completion-worker.repository';
-import { LessonCompletionService } from './schedule/lesson-completion.service';
-import { LessonCompletionWorker } from './schedule/lesson-completion.worker';
-import { PackageCatalogRepository } from './commerce/package-catalog.repository';
-import { PackageCatalogService } from './commerce/package-catalog.service';
-import { SubscriptionCommerceController } from './subscription-commerce.controller';
-import { SubscriptionIssueRepository } from './commerce/subscription-issue.repository';
-import { SubscriptionIssueService } from './commerce/subscription-issue.service';
-import { ActualPaymentService } from './commerce/actual-payment.service';
-import { SubscriptionLifecycleRepository } from './commerce/subscription-lifecycle.repository';
-import { SubscriptionLifecycleService } from './commerce/subscription-lifecycle.service';
-import { SubscriptionPreviewTokenService } from './commerce/subscription-preview-token.service';
-import { CommerceProjectionController } from './commerce/commerce-projection.controller';
-import { CommerceProjectionFactory } from './commerce/commerce-projection.factory';
-import { CommerceProjectionRepository } from './commerce/commerce-projection.repository';
-import { CommerceProjectionService } from './commerce/commerce-projection.service';
-import { SubscriptionReservationService } from './commerce/subscription-reservation.service';
-import { SharedTaskController } from './shared-task.controller';
-import { SharedTaskRepository } from './tasks/shared-task.repository';
-import { SharedTaskService } from './tasks/shared-task.service';
-import { SharedTaskReminderWorker } from './tasks/shared-task-reminder.worker';
-import { CrmStudentFunnelController } from './crm-student-funnel.controller';
-import { StudentFunnelService } from './student-funnel.service';
+import { CrmPolicy } from "./crm.policy";
+import { CrmService } from "./crm.service";
+import { BlacklistService } from "./blacklist.service";
+import { HomeworkService } from "./homework.service";
+import { ReferenceDataService } from "./reference-data.service";
+import { SubscriptionsService } from "./subscriptions.service";
+import { FinanceService } from "./finance.service";
+import { TasksService } from "./tasks.service";
+import { StaffService } from "./staff.service";
+import { TeachersService } from "./teachers.service";
+import { ScheduleService } from "./schedule.service";
+import { SectionViewsService } from "./section-views.service";
+import { TimelineService } from "./timeline.service";
+import { DashboardService } from "./dashboard.service";
+import { ClientLinkingService } from "./client-linking.service";
+import { FamilyService } from "./family.service";
+import { DuplicatesService } from "./duplicates.service";
+import { MergeService } from "./merge.service";
+import { PhoneReviewService } from "./phone-review.service";
+import { LeadsService } from "./leads.service";
+import { LeadIntakeService } from "./lead-intake.service";
+import { RoomsService } from "./rooms.service";
+import { BranchesService } from "./branches.service";
+import { GroupsService } from "./groups.service";
+import { PayrollService } from "./payroll.service";
+import { LeadWebhookController } from "./lead-webhook.controller";
+import { ScheduleSeriesWorker } from "./schedule-series.worker";
+import { CommentSharingService } from "./clients/comment-sharing.service";
+import { ClientReferenceService } from "./clients/client-reference.service";
+import { CrmClientsController } from "./crm-clients.controller";
+import { CrmClientConfigController } from "./crm-client-config.controller";
+import { ClientConfigRepository } from "./clients/client-config.repository";
+import { ClientConfigService } from "./clients/client-config.service";
+import { ClientWriteValidator } from "./clients/client-write.validator";
+import { InboundLeadService } from "./clients/inbound-lead.service";
+import { ClientConversionService } from "./clients/client-conversion.service";
+import { ClientArchiveService } from "./clients/client-archive.service";
+import { ClientCardReadService } from "./clients/client-card-read.service";
+import { LessonLifecycleRepository } from "./schedule/lesson-lifecycle.repository";
+import { AvailabilityController } from "./schedule/availability.controller";
+import { AvailabilityRepository } from "./schedule/availability.repository";
+import { AvailabilityService } from "./schedule/availability.service";
+import { ConstraintEngineRepository } from "./schedule/constraint-engine.repository";
+import { ScheduleConstraintEngine } from "./schedule/constraint-engine.service";
+import { LessonRequiredFieldValidator } from "./schedule/lesson-required-field.validator";
+import { LessonCommandService } from "./schedule/lesson-command.service";
+import { LessonSeriesCommandService } from "./schedule/lesson-series-command.service";
+import { LessonTransitionFinancialService } from "./schedule/lesson-transition-financial.service";
+import { LessonTransitionService } from "./schedule/lesson-transition.service";
+import { LESSON_SETTLEMENT_PORT } from "./commerce/lesson-settlement.port";
+import { LessonSettlementRepository } from "./commerce/lesson-settlement.repository";
+import { LessonSettlementService } from "./commerce/lesson-settlement.service";
+import { LessonCompletionWorkerRepository } from "./schedule/completion-worker.repository";
+import { LessonCompletionService } from "./schedule/lesson-completion.service";
+import { LessonCompletionWorker } from "./schedule/lesson-completion.worker";
+import { PackageCatalogRepository } from "./commerce/package-catalog.repository";
+import { PackageCatalogService } from "./commerce/package-catalog.service";
+import { SubscriptionCommerceController } from "./subscription-commerce.controller";
+import { SubscriptionIssueRepository } from "./commerce/subscription-issue.repository";
+import { SubscriptionIssueService } from "./commerce/subscription-issue.service";
+import { ActualPaymentService } from "./commerce/actual-payment.service";
+import { SubscriptionLifecycleRepository } from "./commerce/subscription-lifecycle.repository";
+import { SubscriptionLifecycleService } from "./commerce/subscription-lifecycle.service";
+import { SubscriptionPreviewTokenService } from "./commerce/subscription-preview-token.service";
+import { CommerceProjectionController } from "./commerce/commerce-projection.controller";
+import { CommerceProjectionFactory } from "./commerce/commerce-projection.factory";
+import { CommerceProjectionRepository } from "./commerce/commerce-projection.repository";
+import { CommerceProjectionService } from "./commerce/commerce-projection.service";
+import { SubscriptionReservationService } from "./commerce/subscription-reservation.service";
+import { SharedTaskController } from "./shared-task.controller";
+import { SharedTaskRepository } from "./tasks/shared-task.repository";
+import { SharedTaskService } from "./tasks/shared-task.service";
+import { SharedTaskReminderWorker } from "./tasks/shared-task-reminder.worker";
+import { CrmStudentFunnelController } from "./crm-student-funnel.controller";
+import { StudentFunnelService } from "./student-funnel.service";
+import { CrmConfigurationController } from "./crm-configuration.controller";
+import { CrmConfigurationService } from "./crm-configuration.service";
 
 @Module({
   imports: [
@@ -126,6 +128,7 @@ import { StudentFunnelService } from './student-funnel.service';
     CommerceProjectionController,
     SharedTaskController,
     CrmStudentFunnelController,
+    CrmConfigurationController,
   ],
   providers: [
     CrmService,
@@ -195,6 +198,7 @@ import { StudentFunnelService } from './student-funnel.service';
     SharedTaskService,
     SharedTaskReminderWorker,
     StudentFunnelService,
+    CrmConfigurationService,
     {
       provide: LESSON_SETTLEMENT_PORT,
       useExisting: LessonSettlementService,
@@ -216,6 +220,6 @@ import { StudentFunnelService } from './student-funnel.service';
     LEAD_INTAKE_PORT,
     LESSON_SETTLEMENT_PORT,
     LessonCompletionWorker,
-  ]
+  ],
 })
 export class CrmModule {}

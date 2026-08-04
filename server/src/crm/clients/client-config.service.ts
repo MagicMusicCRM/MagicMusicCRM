@@ -42,9 +42,9 @@ export class ClientConfigService {
   async listSources(actor: ActorContext, query: ClientConfigListQuery) {
     this.policy.assertCanReadOperationalData(actor);
     return {
-      items: (await this.repository.listSources(
-        query.includeArchived ?? false,
-      )).map((row) => this.toSourceDto(row)),
+      items: (
+        await this.repository.listSources(query.includeArchived ?? false)
+      ).map((row) => this.toSourceDto(row)),
     };
   }
 
@@ -147,10 +147,7 @@ export class ClientConfigService {
     };
   }
 
-  async createField(
-    actor: ActorContext,
-    dto: CreateClientCustomFieldDto,
-  ) {
+  async createField(actor: ActorContext, dto: CreateClientCustomFieldDto) {
     this.policy.assertCanManageClientConfiguration(actor);
     const label = this.requiredText(dto.label, "label");
     const options = this.normalizeOptions(dto.valueType, dto.options);
@@ -286,7 +283,13 @@ export class ClientConfigService {
     valueType: string,
     values: string[] | undefined,
   ): string[] {
-    if (valueType !== "select") {
+    const selectionTypes = new Set([
+      "select",
+      "radio",
+      "multi_select",
+      "checkbox_group",
+    ]);
+    if (!selectionTypes.has(valueType)) {
       if (values && values.length > 0) {
         throw new UnprocessableEntityException({
           code: "OPTIONS_ONLY_FOR_SELECT",
@@ -345,6 +348,13 @@ export class ClientConfigService {
       options: Array.isArray(row.options) ? row.options : [],
       version: Number(row.version),
       archivedAt: row.deleted_at,
+      categoryKey: row.category_key ?? "general",
+      categoryLabel: row.category_label ?? "Основная информация",
+      order: Number(row.sort_order ?? 0),
+      width: row.width ?? "full",
+      placements: Array.isArray(row.placements)
+        ? row.placements
+        : ["create", "edit", "card"],
     };
   }
 }
