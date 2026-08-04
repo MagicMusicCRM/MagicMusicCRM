@@ -133,7 +133,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/manager/presentation/widgets/finance_widget.dart",
-      "line": 546
+      "line": 588
     },
     {
       "kind": "Scrollbar",
@@ -210,7 +210,7 @@
       "visible_thumb_evidence": false,
       "status": "explicit-scrollbar",
       "file": "lib/features/manager/presentation/widgets/finance_widget.dart",
-      "line": 540
+      "line": 582
     },
     {
       "kind": "SingleChildScrollView",
@@ -540,7 +540,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
-      "line": 628
+      "line": 630
     },
     {
       "kind": "SingleChildScrollView",
@@ -1916,7 +1916,7 @@
       "ahead_of_time": true,
       "status": "predictive-back-capable",
       "file": "lib/features/manager/presentation/widgets/finance_widget.dart",
-      "line": 236
+      "line": 259
     },
     {
       "kind": "imperative-exit",

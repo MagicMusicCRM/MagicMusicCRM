@@ -54,12 +54,7 @@ class _MagicDesktopScrollbarState extends State<MagicDesktopScrollbar> {
 
   @override
   Widget build(BuildContext context) {
-    // This widget owns its explicit scrollbar; suppress the app-level one for
-    // the nested Scrollable so a desktop user never sees two thumbs.
-    final child = ScrollConfiguration(
-      behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-      child: widget.builder(context, _controller),
-    );
+    final child = widget.builder(context, _controller);
     if (!_usesDesktopPointer(context)) return child;
     return Scrollbar(
       key: ValueKey('magic-desktop-scrollbar-${widget.axis.name}'),
