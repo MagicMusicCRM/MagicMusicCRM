@@ -3,15 +3,15 @@
   "task": "V6-001",
   "generated_from": "lib/main.dart import graph + GoRouter + presentation callsites",
   "summary": {
-    "dart_files": 266,
-    "production_reachable_files": 259,
+    "dart_files": 267,
+    "production_reachable_files": 260,
     "go_routes": 21,
     "screens": 21,
     "production_screens": 21,
     "isolated_screens": 0,
     "modal_surface_calls": 103,
     "production_surface_calls": 103,
-    "screen_state_gaps": 12,
+    "screen_state_gaps": 0,
     "unowned": 0
   },
   "routes": [
@@ -177,6 +177,8 @@
         "forbidden": false,
         "retry": true
       },
+      "state_contract": "boot-gate",
+      "state_na_reason": "The route is itself the loading state; router error/retry owns failure.",
       "file": "lib/core/router/app_router.dart",
       "line": 344
     },
@@ -193,6 +195,8 @@
         "forbidden": false,
         "retry": true
       },
+      "state_contract": "data",
+      "state_na_reason": null,
       "file": "lib/features/profile/presentation/screens/auth_methods_screen.dart",
       "line": 10
     },
@@ -207,10 +211,12 @@
         "empty": false,
         "error": true,
         "forbidden": false,
-        "retry": false
+        "retry": true
       },
+      "state_contract": "data",
+      "state_na_reason": null,
       "file": "lib/features/profile/presentation/screens/account_deletion_status_screen.dart",
-      "line": 7
+      "line": 8
     },
     {
       "name": "AccountDeletionScreen",
@@ -225,6 +231,8 @@
         "forbidden": false,
         "retry": true
       },
+      "state_contract": "form",
+      "state_na_reason": "No empty collection state; validation, saving and submit error stay inside the form.",
       "file": "lib/features/profile/presentation/screens/account_deletion_screen.dart",
       "line": 7
     },
@@ -241,6 +249,8 @@
         "forbidden": false,
         "retry": true
       },
+      "state_contract": "data",
+      "state_na_reason": null,
       "file": "lib/features/messenger/presentation/screens/messenger_screen.dart",
       "line": 76
     },
@@ -257,6 +267,8 @@
         "forbidden": false,
         "retry": false
       },
+      "state_contract": "composition-shell",
+      "state_na_reason": "Mounted sections own loading, empty, error, forbidden and retry states.",
       "file": "lib/features/manager/presentation/screens/manager_dashboard_screen.dart",
       "line": 7
     },
@@ -273,6 +285,8 @@
         "forbidden": false,
         "retry": true
       },
+      "state_contract": "composition-shell",
+      "state_na_reason": "Mounted sections own loading, empty, error, forbidden and retry states.",
       "file": "lib/features/client/presentation/screens/client_portal_screen.dart",
       "line": 17
     },
@@ -289,6 +303,8 @@
         "forbidden": false,
         "retry": true
       },
+      "state_contract": "data",
+      "state_na_reason": null,
       "file": "lib/features/client/presentation/screens/client_dashboard_screen.dart",
       "line": 23
     },
@@ -305,6 +321,8 @@
         "forbidden": false,
         "retry": false
       },
+      "state_contract": "form",
+      "state_na_reason": "No empty collection state; validation, saving and submit error stay inside the form.",
       "file": "lib/features/auth/presentation/screens/registration_screen.dart",
       "line": 15
     },
@@ -321,6 +339,8 @@
         "forbidden": false,
         "retry": false
       },
+      "state_contract": "form",
+      "state_na_reason": "No empty collection state; validation, saving and submit error stay inside the form.",
       "file": "lib/features/profile/presentation/screens/profile_screen.dart",
       "line": 16
     },
@@ -337,6 +357,8 @@
         "forbidden": false,
         "retry": false
       },
+      "state_contract": "form",
+      "state_na_reason": "No empty collection state; validation, saving and submit error stay inside the form.",
       "file": "lib/features/auth/presentation/screens/password_reset_screen.dart",
       "line": 16
     },
@@ -353,6 +375,8 @@
         "forbidden": false,
         "retry": false
       },
+      "state_contract": "form",
+      "state_na_reason": "No empty collection state; validation, saving and submit error stay inside the form.",
       "file": "lib/features/auth/presentation/screens/login_screen.dart",
       "line": 16
     },
@@ -369,6 +393,8 @@
         "forbidden": false,
         "retry": true
       },
+      "state_contract": "data",
+      "state_na_reason": null,
       "file": "lib/features/auth/presentation/screens/legal_consent_screen.dart",
       "line": 12
     },
@@ -385,6 +411,8 @@
         "forbidden": false,
         "retry": false
       },
+      "state_contract": "form",
+      "state_na_reason": "No empty collection state; validation, saving and submit error stay inside the form.",
       "file": "lib/features/auth/presentation/screens/email_otp_screen.dart",
       "line": 23
     },
@@ -401,6 +429,8 @@
         "forbidden": false,
         "retry": true
       },
+      "state_contract": "data",
+      "state_na_reason": null,
       "file": "lib/features/admin/presentation/screens/profile_detail_screen.dart",
       "line": 12
     },
@@ -417,6 +447,8 @@
         "forbidden": false,
         "retry": false
       },
+      "state_contract": "composition-shell",
+      "state_na_reason": "Mounted sections own loading, empty, error, forbidden and retry states.",
       "file": "lib/features/admin/presentation/screens/admin_dashboard_screen.dart",
       "line": 7
     },
@@ -433,6 +465,8 @@
         "forbidden": false,
         "retry": true
       },
+      "state_contract": "data",
+      "state_na_reason": null,
       "file": "lib/core/router/app_router.dart",
       "line": 610
     },
@@ -449,6 +483,8 @@
         "forbidden": false,
         "retry": true
       },
+      "state_contract": "data",
+      "state_na_reason": null,
       "file": "lib/core/router/app_router.dart",
       "line": 570
     },
@@ -465,6 +501,8 @@
         "forbidden": false,
         "retry": true
       },
+      "state_contract": "data",
+      "state_na_reason": null,
       "file": "lib/core/router/app_router.dart",
       "line": 532
     },
@@ -481,6 +519,8 @@
         "forbidden": false,
         "retry": true
       },
+      "state_contract": "form",
+      "state_na_reason": "No empty collection state; validation, saving and submit error stay inside the form.",
       "file": "lib/features/auth/presentation/screens/onboarding_screen.dart",
       "line": 46
     },
@@ -497,6 +537,8 @@
         "forbidden": false,
         "retry": false
       },
+      "state_contract": "composition-shell",
+      "state_na_reason": "Mounted sections own loading, empty, error, forbidden and retry states.",
       "file": "lib/features/teacher/presentation/screens/teacher_dashboard_screen.dart",
       "line": 6
     }
@@ -1252,7 +1294,7 @@
         "retry": true
       },
       "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
-      "line": 431
+      "line": 434
     },
     {
       "kind": "dialog",
@@ -2068,7 +2110,7 @@
         "retry": true
       },
       "file": "lib/features/admin/presentation/widgets/group_detail_dialog.dart",
-      "line": 303
+      "line": 304
     },
     {
       "kind": "dialog",
@@ -2132,7 +2174,7 @@
         "retry": true
       },
       "file": "lib/features/admin/presentation/widgets/manage_entities_widget.dart",
-      "line": 287
+      "line": 288
     },
     {
       "kind": "magic-sheet",
@@ -2151,78 +2193,5 @@
       "line": 321
     }
   ],
-  "gaps": [
-    {
-      "name": null,
-      "file": null,
-      "line": null,
-      "states": null
-    },
-    {
-      "name": null,
-      "file": null,
-      "line": null,
-      "states": null
-    },
-    {
-      "name": null,
-      "file": null,
-      "line": null,
-      "states": null
-    },
-    {
-      "name": null,
-      "file": null,
-      "line": null,
-      "states": null
-    },
-    {
-      "name": null,
-      "file": null,
-      "line": null,
-      "states": null
-    },
-    {
-      "name": null,
-      "file": null,
-      "line": null,
-      "states": null
-    },
-    {
-      "name": null,
-      "file": null,
-      "line": null,
-      "states": null
-    },
-    {
-      "name": null,
-      "file": null,
-      "line": null,
-      "states": null
-    },
-    {
-      "name": null,
-      "file": null,
-      "line": null,
-      "states": null
-    },
-    {
-      "name": null,
-      "file": null,
-      "line": null,
-      "states": null
-    },
-    {
-      "name": null,
-      "file": null,
-      "line": null,
-      "states": null
-    },
-    {
-      "name": null,
-      "file": null,
-      "line": null,
-      "states": null
-    }
-  ]
+  "gaps": []
 }

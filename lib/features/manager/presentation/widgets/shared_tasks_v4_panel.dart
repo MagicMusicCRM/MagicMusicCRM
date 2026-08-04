@@ -8,6 +8,7 @@ import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/widgets/v7/magic_page_state.dart';
 
 abstract class SharedTasksDataSource {
   Future<Map<String, dynamic>> list({String? state});
@@ -288,23 +289,29 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
       },
     );
     if (widget.embedded) return content;
+    final mobile = MediaQuery.sizeOf(context).width < 600;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Общие задачи'),
-        actions: [
-          IconButton(
-            onPressed: () => _openEditor(),
-            tooltip: 'Новая общая задача',
-            icon: const Icon(Icons.add_task_rounded),
-          ),
-        ],
+        actions: mobile
+            ? null
+            : [
+                FilledButton.icon(
+                  onPressed: () => _openEditor(),
+                  icon: const Icon(Icons.add_task_rounded),
+                  label: const Text('Новая задача'),
+                ),
+                const SizedBox(width: AppSpace.sm),
+              ],
       ),
       body: content,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openEditor(),
-        icon: const Icon(Icons.add),
-        label: const Text('Новая задача'),
-      ),
+      floatingActionButton: mobile
+          ? FloatingActionButton.extended(
+              onPressed: () => _openEditor(),
+              icon: const Icon(Icons.add),
+              label: const Text('Новая задача'),
+            )
+          : null,
     );
   }
 
@@ -316,26 +323,22 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
 
   Widget _body() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const MagicPageState.loading();
     }
     if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Не удалось загрузить общие задачи'),
-            const SizedBox(height: AppSpace.md),
-            FilledButton.icon(
-              onPressed: _load,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Повторить'),
-            ),
-          ],
-        ),
+      return MagicPageState(
+        kind: MagicPageStateKind.error,
+        title: 'Не удалось загрузить общие задачи',
+        actionLabel: 'Повторить',
+        onAction: _load,
       );
     }
     if (_items.isEmpty) {
-      return const Center(child: Text('Нет общих задач'));
+      return const MagicPageState(
+        kind: MagicPageStateKind.empty,
+        title: 'Нет общих задач',
+        message: 'Создайте задачу, чтобы она появилась в этом списке.',
+      );
     }
     return RefreshIndicator(
       onRefresh: _load,

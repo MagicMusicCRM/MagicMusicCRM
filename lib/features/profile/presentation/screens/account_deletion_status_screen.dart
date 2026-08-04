@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:magic_music_crm/core/widgets/v7/magic_page_state.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 
@@ -17,10 +18,13 @@ class AccountDeletionStatusScreen extends ConsumerWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),
           child: requestAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, _) => Padding(
-              padding: const EdgeInsets.all(24),
-              child: Text('Не удалось загрузить статус: $error'),
+            loading: () => const MagicPageState.loading(),
+            error: (error, _) => MagicPageState(
+              kind: MagicPageStateKind.error,
+              title: 'Не удалось загрузить статус',
+              message: error.toString(),
+              actionLabel: 'Повторить',
+              onAction: () => ref.invalidate(pendingDeletionRequestProvider),
             ),
             data: (request) {
               if (request == null) {

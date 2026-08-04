@@ -19,7 +19,7 @@ class AppTheme {
 
   // ── Dark Theme (Telegram-inspired) ─────────────────────────────────────
   static ThemeData get dark {
-    return ThemeData.dark(useMaterial3: true).copyWith(
+    final theme = ThemeData.dark(useMaterial3: true).copyWith(
       colorScheme: ColorScheme.dark(
         primary: TelegramColors.brandGold,
         secondary: AppColor.actionBlue,
@@ -202,11 +202,15 @@ class AppTheme {
         elevation: 0,
       ),
     );
+    return theme.copyWith(
+      textTheme: theme.textTheme.apply(fontFamily: 'Inter'),
+      primaryTextTheme: theme.primaryTextTheme.apply(fontFamily: 'Inter'),
+    );
   }
 
   // ── Light Theme (Telegram-inspired) ────────────────────────────────────
   static ThemeData get light {
-    return ThemeData.light(useMaterial3: true).copyWith(
+    final theme = ThemeData.light(useMaterial3: true).copyWith(
       colorScheme: ColorScheme.light(
         primary: TelegramColors.brandGold,
         secondary: AppColor.actionBlue,
@@ -337,6 +341,10 @@ class AppTheme {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         elevation: 0,
       ),
+    );
+    return theme.copyWith(
+      textTheme: theme.textTheme.apply(fontFamily: 'Inter'),
+      primaryTextTheme: theme.primaryTextTheme.apply(fontFamily: 'Inter'),
     );
   }
 

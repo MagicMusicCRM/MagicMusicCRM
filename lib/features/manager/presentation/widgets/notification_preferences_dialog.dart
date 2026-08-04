@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/models/notification_preference.dart';
 import 'package:magic_music_crm/core/services/magic_notifications_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
-import 'package:magic_music_crm/core/widgets/skeletons.dart';
+import 'package:magic_music_crm/core/widgets/v7/magic_page_state.dart';
 
 /// Who gets which notification, per role (spec §4).
 ///
@@ -56,9 +56,7 @@ class _NotificationPreferencesDialogState
     // round-trip. Rolled back below if the server refuses.
     setState(() {
       _saving.add(key);
-      _items = [
-        for (final item in _items) _key(item) == key ? updated : item,
-      ];
+      _items = [for (final item in _items) _key(item) == key ? updated : item];
     });
     try {
       await ref
@@ -127,17 +125,21 @@ class _NotificationPreferencesDialogState
                   future: _future,
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const ListSkeleton(count: 5);
+                      return const MagicPageState.loading();
                     }
                     if (snapshot.hasError) {
-                      return _ErrorState(
-                        error: snapshot.error,
-                        onRetry: () => setState(() => _future = _fetch()),
+                      return MagicPageState(
+                        kind: MagicPageStateKind.error,
+                        title: 'Не удалось загрузить настройки',
+                        message: snapshot.error.toString(),
+                        actionLabel: 'Повторить',
+                        onAction: () => setState(() => _future = _fetch()),
                       );
                     }
                     if (_items.isEmpty) {
-                      return const Center(
-                        child: Text('Настройки не заведены'),
+                      return const MagicPageState(
+                        kind: MagicPageStateKind.empty,
+                        title: 'Настройки не заведены',
                       );
                     }
                     final events = notificationEventLabels.keys
@@ -248,32 +250,6 @@ class _EventSection extends StatelessWidget {
             ),
           ),
       ],
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  final Object? error;
-  final VoidCallback onRetry;
-
-  const _ErrorState({required this.error, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            'Не удалось загрузить настройки',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 8),
-          FilledButton(onPressed: onRetry, child: const Text('Повторить')),
-        ],
-      ),
     );
   }
 }

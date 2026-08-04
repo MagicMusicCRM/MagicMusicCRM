@@ -176,7 +176,7 @@ class _MobileMagicSheetState extends State<_MobileMagicSheet> {
     if (!_controller.isAttached) return;
     await _controller.animateTo(
       target,
-      duration: AppMotion.medium,
+      duration: AppMotion.effective(context, AppMotion.medium),
       curve: AppMotion.ease,
     );
   }
@@ -186,7 +186,7 @@ class _MobileMagicSheetState extends State<_MobileMagicSheet> {
     final media = MediaQuery.of(context);
     final stateLabel = _expanded ? 'развернуто' : 'частично развернуто';
     return AnimatedPadding(
-      duration: AppMotion.medium,
+      duration: AppMotion.effective(context, AppMotion.medium),
       curve: AppMotion.ease,
       padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
       child: SafeArea(

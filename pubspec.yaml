@@ -95,6 +95,13 @@ flutter:
     # the foreground; a backgrounded push uses the system sound instead.
     - assets/sounds/alarm.wav
 
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/InterVariable.ttf
+        - asset: assets/fonts/InterVariable-Italic.ttf
+          style: italic
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

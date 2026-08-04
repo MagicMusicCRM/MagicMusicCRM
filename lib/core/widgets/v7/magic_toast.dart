@@ -121,6 +121,14 @@ class _ToastHostState extends State<_ToastHost>
   )..forward();
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) {
+      _controller.value = 1;
+    }
+  }
+
+  @override
   void dispose() {
     _controller.dispose();
     super.dispose();

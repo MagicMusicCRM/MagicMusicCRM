@@ -68,6 +68,19 @@ function Get-FileStateEvidence([string]$Text) {
   }
 }
 
+function Get-ScreenStateContract([string]$Name) {
+  if ($Name -in @('ManagerDashboardScreen', 'AdminDashboardScreen', 'TeacherDashboardScreen', 'ClientPortalScreen')) {
+    return [ordered]@{ kind = 'composition-shell'; reason = 'Mounted sections own loading, empty, error, forbidden and retry states.' }
+  }
+  if ($Name -in @('RegistrationScreen', 'ProfileScreen', 'PasswordResetScreen', 'LoginScreen', 'EmailOtpScreen', 'OnboardingScreen', 'AccountDeletionScreen')) {
+    return [ordered]@{ kind = 'form'; reason = 'No empty collection state; validation, saving and submit error stay inside the form.' }
+  }
+  if ($Name -eq '_AppGateLoadingScreen') {
+    return [ordered]@{ kind = 'boot-gate'; reason = 'The route is itself the loading state; router error/retry owns failure.' }
+  }
+  return [ordered]@{ kind = 'data'; reason = $null }
+}
+
 function New-Artifact([string]$BaseName, [object]$Value, [string]$Markdown) {
   $jsonPath = Join-Path $auditRoot "$BaseName.json"
   $markdownPath = Join-Path $auditRoot "$BaseName.md"
@@ -123,13 +136,17 @@ foreach ($file in $allDartFiles) {
   $states = Get-FileStateEvidence $text
 
   foreach ($match in [regex]::Matches($text, 'class\s+(?<name>[A-Za-z_][A-Za-z0-9_]*(?:Screen|Page))\s+extends\s+')) {
+    $screenName = $match.Groups['name'].Value
+    $contract = Get-ScreenStateContract $screenName
     $screens.Add([ordered]@{
-      name = $match.Groups['name'].Value
+      name = $screenName
       owner = Get-Owner $relative
       production_reachable = $reachable
       status = if ($reachable) { 'production-reachable' } else { 'isolated-or-dead' }
       primary_action_evidence = [bool]($text -match 'FloatingActionButton|FilledButton|ElevatedButton|primaryAction')
       states = $states
+      state_contract = $contract.kind
+      state_na_reason = $contract.reason
       file = $relative
       line = Get-LineNumber $text $match.Index
     })
@@ -162,6 +179,7 @@ foreach ($file in $allDartFiles) {
 $routeSurfaceGaps = @(
   $screens | Where-Object {
     $_.production_reachable -and
+    $_.state_contract -eq 'data' -and
     (-not $_.states.loading -or -not $_.states.error -or -not $_.states.retry)
   }
 )

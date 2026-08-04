@@ -173,6 +173,11 @@ class AppMotion {
 
   /// `@keyframes shimmer` (`1.15s`).
   static const Duration shimmer = Duration(milliseconds: 1150);
+
+  static Duration effective(BuildContext context, Duration duration) =>
+      MediaQuery.maybeOf(context)?.disableAnimations ?? false
+      ? Duration.zero
+      : duration;
 }
 
 /// v7 elevation tokens (`--sh-1`, `--sh-2`, `--sh-lift`).

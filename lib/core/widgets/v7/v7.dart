@@ -10,6 +10,7 @@ export 'adaptive_surface.dart';
 export 'dirty_form_exit.dart';
 export 'magic_drawer.dart';
 export 'magic_desktop_scrollbar.dart';
+export 'magic_page_state.dart';
 export 'magic_menu.dart';
 export 'magic_sheet.dart';
 export 'magic_shimmer.dart';

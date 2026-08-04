@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tasks_v4_panel.dart';
@@ -86,15 +87,30 @@ class _FakeSharedTasks implements SharedTasksDataSource {
 }
 
 Widget _host(_FakeSharedTasks source, {Size size = const Size(900, 900)}) {
-  return MaterialApp(
-    home: MediaQuery(
-      data: MediaQueryData(size: size),
-      child: SharedTasksV4Panel(dataSource: source),
+  return ProviderScope(
+    child: MaterialApp(
+      home: MediaQuery(
+        data: MediaQueryData(size: size),
+        child: SharedTasksV4Panel(dataSource: source),
+      ),
     ),
   );
 }
 
 void main() {
+  testWidgets('shows exactly one create action per viewport', (tester) async {
+    final source = _FakeSharedTasks();
+    await tester.pumpWidget(_host(source, size: const Size(900, 900)));
+    await tester.pumpAndSettle();
+    expect(find.text('Новая задача'), findsOneWidget);
+    expect(find.byType(FloatingActionButton), findsNothing);
+
+    await tester.pumpWidget(_host(source, size: const Size(390, 800)));
+    await tester.pumpAndSettle();
+    expect(find.text('Новая задача'), findsOneWidget);
+    expect(find.byType(FloatingActionButton), findsOneWidget);
+  });
+
   testWidgets('shows non-modal reminder and explicit close action', (
     tester,
   ) async {

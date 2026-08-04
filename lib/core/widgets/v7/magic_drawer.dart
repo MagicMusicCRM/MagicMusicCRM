@@ -22,7 +22,7 @@ Future<T?> showMagicDrawer<T>(
     barrierDismissible: true,
     barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
     barrierColor: AppColor.scrim,
-    transitionDuration: AppMotion.slow,
+    transitionDuration: AppMotion.effective(context, AppMotion.slow),
     pageBuilder: (context, _, _) {
       return Align(
         alignment: Alignment.centerRight,
@@ -36,6 +36,7 @@ Future<T?> showMagicDrawer<T>(
       );
     },
     transitionBuilder: (context, animation, _, child) {
+      if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) return child;
       return SlideTransition(
         position: Tween<Offset>(
           begin: const Offset(1, 0),

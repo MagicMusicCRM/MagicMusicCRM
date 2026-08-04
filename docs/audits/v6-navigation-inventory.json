@@ -121,7 +121,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/crm/presentation/client_card/teacher_client_card.dart",
-      "line": 116
+      "line": 117
     },
     {
       "kind": "navigator",
@@ -631,7 +631,7 @@
       "definition_only": false,
       "status": "route-navigation-review",
       "file": "lib/features/crm/presentation/client_card/client_card_tabs_a.dart",
-      "line": 902
+      "line": 903
     },
     {
       "kind": "navigator",
@@ -641,7 +641,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/crm/presentation/client_card/client_card_tabs_a.dart",
-      "line": 899
+      "line": 900
     },
     {
       "kind": "navigator",
@@ -651,7 +651,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/crm/presentation/client_card/client_card_tabs_a.dart",
-      "line": 263
+      "line": 264
     },
     {
       "kind": "navigator",
@@ -701,7 +701,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/crm/presentation/client_card/client_card_tabs_a.dart",
-      "line": 900
+      "line": 901
     },
     {
       "kind": "navigator",
@@ -961,7 +961,7 @@
       "definition_only": false,
       "status": "route-navigation-review",
       "file": "lib/features/profile/presentation/screens/account_deletion_status_screen.dart",
-      "line": 37
+      "line": 41
     },
     {
       "kind": "go-router",
@@ -971,7 +971,7 @@
       "definition_only": false,
       "status": "route-navigation-review",
       "file": "lib/features/profile/presentation/screens/account_deletion_status_screen.dart",
-      "line": 69
+      "line": 73
     },
     {
       "kind": "go-router",
@@ -981,7 +981,7 @@
       "definition_only": false,
       "status": "route-navigation-review",
       "file": "lib/features/profile/presentation/screens/profile_screen.dart",
-      "line": 495
+      "line": 497
     },
     {
       "kind": "go-router",
@@ -991,7 +991,7 @@
       "definition_only": false,
       "status": "route-navigation-review",
       "file": "lib/features/profile/presentation/screens/profile_screen.dart",
-      "line": 512
+      "line": 514
     },
     {
       "kind": "go-router",
@@ -1001,7 +1001,7 @@
       "definition_only": false,
       "status": "route-navigation-review",
       "file": "lib/features/profile/presentation/screens/profile_screen.dart",
-      "line": 533
+      "line": 535
     },
     {
       "kind": "navigator",
@@ -1111,7 +1111,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/manager/presentation/widgets/notification_preferences_dialog.dart",
-      "line": 110
+      "line": 109
     },
     {
       "kind": "typed-entity",
@@ -1151,7 +1151,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
-      "line": 437
+      "line": 440
     },
     {
       "kind": "navigator",
@@ -1161,7 +1161,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
-      "line": 847
+      "line": 850
     },
     {
       "kind": "navigator",
@@ -1171,7 +1171,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
-      "line": 886
+      "line": 889
     },
     {
       "kind": "navigator",
@@ -1321,7 +1321,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/manager/presentation/widgets/tasks_widget_sheets.dart",
-      "line": 1074
+      "line": 1076
     },
     {
       "kind": "navigator",
@@ -1331,7 +1331,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/manager/presentation/widgets/tasks_widget_sheets.dart",
-      "line": 795
+      "line": 797
     },
     {
       "kind": "navigator",
@@ -1341,7 +1341,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/manager/presentation/widgets/tasks_widget_sheets.dart",
-      "line": 789
+      "line": 791
     },
     {
       "kind": "navigator",
@@ -1351,7 +1351,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/manager/presentation/widgets/tasks_widget_sheets.dart",
-      "line": 285
+      "line": 287
     },
     {
       "kind": "navigator",
@@ -1361,7 +1361,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/manager/presentation/widgets/tasks_widget_sheets.dart",
-      "line": 182
+      "line": 183
     },
     {
       "kind": "navigator",
@@ -1391,7 +1391,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/manager/presentation/widgets/tasks_widget_sheets.dart",
-      "line": 1068
+      "line": 1070
     },
     {
       "kind": "navigator",
@@ -1431,7 +1431,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/core/widgets/telegram/chat_info_dialog.dart",
-      "line": 647
+      "line": 648
     },
     {
       "kind": "navigator",
@@ -1461,7 +1461,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/core/widgets/telegram/message_bubble.dart",
-      "line": 522
+      "line": 523
     },
     {
       "kind": "navigator",
@@ -1471,7 +1471,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/core/widgets/telegram/message_bubble.dart",
-      "line": 536
+      "line": 537
     },
     {
       "kind": "navigator",
@@ -1481,7 +1481,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/core/widgets/telegram/message_bubble.dart",
-      "line": 554
+      "line": 555
     },
     {
       "kind": "navigator",
@@ -1491,7 +1491,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/core/widgets/telegram/message_bubble.dart",
-      "line": 563
+      "line": 564
     },
     {
       "kind": "navigator",
@@ -1501,7 +1501,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/core/widgets/telegram/message_bubble.dart",
-      "line": 578
+      "line": 579
     },
     {
       "kind": "navigator",
@@ -1511,7 +1511,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/core/widgets/telegram/message_bubble.dart",
-      "line": 587
+      "line": 588
     },
     {
       "kind": "navigator",
@@ -1521,7 +1521,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/core/widgets/telegram/message_bubble.dart",
-      "line": 602
+      "line": 603
     },
     {
       "kind": "navigator",
@@ -1561,7 +1561,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/core/widgets/telegram/send_file_dialog.dart",
-      "line": 143
+      "line": 144
     },
     {
       "kind": "navigator",
@@ -1571,7 +1571,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/core/widgets/telegram/chat_info_dialog.dart",
-      "line": 646
+      "line": 647
     },
     {
       "kind": "navigator",
@@ -1621,7 +1621,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/core/widgets/v7/magic_drawer.dart",
-      "line": 139
+      "line": 140
     },
     {
       "kind": "navigator",
@@ -1641,7 +1641,7 @@
       "definition_only": true,
       "status": "foundation-definition",
       "file": "lib/core/workspace/desktop_workspace_shell.dart",
-      "line": 11
+      "line": 12
     },
     {
       "kind": "typed-entity",
@@ -2031,7 +2031,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/core/widgets/searchable_select.dart",
-      "line": 342
+      "line": 343
     },
     {
       "kind": "navigator",
@@ -2061,7 +2061,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/core/widgets/file_attachment_widget.dart",
-      "line": 433
+      "line": 434
     },
     {
       "kind": "navigator",
@@ -2731,7 +2731,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/admin/presentation/widgets/group_detail_dialog.dart",
-      "line": 274
+      "line": 275
     },
     {
       "kind": "navigator",

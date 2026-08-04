@@ -8,15 +8,15 @@
 
 | Slice | Count |
 |---|---:|
-| Dart files | 266 |
-| Files reachable from main.dart | 259 |
+| Dart files | 267 |
+| Files reachable from main.dart | 260 |
 | GoRouter routes | 21 |
 | Screen/Page classes | 21 |
 | Production-reachable screens | 21 |
 | Isolated/unreachable screens | 0 |
 | Modal/sheet/drawer callsites | 103 |
 | Reachable surface callsites | 103 |
-| Screens missing loading/error/retry evidence | 12 |
+| Screens missing loading/error/retry evidence | 0 |
 | Unowned items | 0 |
 
 production_reachable means the file is reachable through static Dart imports from lib/main.dart; it is stronger than “file exists”, but runtime role/scope acceptance remains a later device gate. Every gap remains explicit in the JSON and is not treated as implemented.

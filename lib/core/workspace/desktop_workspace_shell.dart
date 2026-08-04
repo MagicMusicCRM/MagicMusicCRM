@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 import 'package:magic_music_crm/core/workspace/workspace_state.dart';
 import 'package:magic_music_crm/core/widgets/v7/magic_desktop_scrollbar.dart';
@@ -184,8 +185,8 @@ class _WorkspaceTabStripState extends State<_WorkspaceTabStrip> {
             .clamp(position.minScrollExtent, position.maxScrollExtent);
     await _scrollController.animateTo(
       target,
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOut,
+      duration: AppMotion.effective(context, AppMotion.fast),
+      curve: AppMotion.ease,
     );
   }
 }

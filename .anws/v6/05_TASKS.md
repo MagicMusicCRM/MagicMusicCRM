@@ -195,19 +195,19 @@ flowchart TD
   - **Проверка:** automated semantics/focus checks + Windows keyboard-only UAT.
   - **Оценка:** 6 ч · **Зависимости:** V6-301 · **Приоритет:** P0.
 
-- [ ] **V6-304** `[REQ-UX-001]` — Унифицировать forms/actions/page states на v7.
+- [x] **V6-304** `[REQ-UX-001]` — Унифицировать forms/actions/page states на v7.
   - **Работа:** persistent labels, required/help/error, saving/conflict/retry, one primary action, remove duplicate FAB/header create patterns, loading/empty/error/forbidden components.
   - **Критерий:** route inventory has no unexplained state/action gap; input survives retry; destructive actions labelled and impact-confirmed.
   - **Проверка:** lint/inventory check + representative form/state widget tests + owner visual review.
   - **Оценка:** 7 ч · **Зависимости:** V6-303 · **Приоритет:** P0.
 
-- [ ] **V6-305** `[REQ-UX-001]` — Закрыть typography/responsive/reduced-motion baseline.
+- [x] **V6-305** `[REQ-UX-001]` — Закрыть typography/responsive/reduced-motion baseline.
   - **Работа:** bundle Inter if still missing, verify text scale/long Russian labels, 160/240/300ms token motion and reduced-motion behavior; no invented palette.
   - **Критерий:** 360/600/840/1200 layouts have no clipped critical action; contrast/focus/meaning-without-color checks pass.
   - **Проверка:** golden/widget matrix + accessibility smoke.
   - **Оценка:** 5 ч · **Зависимости:** V6-304 · **Приоритет:** P1.
 
-- [ ] **INT-S3** — Принять desktop input/UI foundation.
+- [x] **INT-S3** — Принять desktop input/UI foundation.
   - **Критерий:** CH-05/07/10 closed; mouse-only + keyboard-only complete; visual/state inventory complete; no new unapproved framework/package.
   - **Проверка:** full Flutter analyze/test, Windows device pass, responsive goldens, `git diff server/` empty.
   - **Оценка:** 4 ч · **Зависимости:** V6-301..305 · **Приоритет:** P0.
