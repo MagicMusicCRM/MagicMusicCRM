@@ -121,8 +121,8 @@
 > **Примечание**: Этот блок автоматически поддерживается процессами `/genesis`, `/blueprint` и `/forge`.
 
 - **Последняя версия архитектуры**: `.anws/v6` (Configurable CRM & Product UX Completion)
-- **Активный список задач**: `.anws/v6/05_TASKS.md` — S4 implementation закрыт, следующий gate INT-S4
-- **Количество задач v6 к выполнению**: 19 (15 implementation + 4 INT)
+- **Активный список задач**: `.anws/v6/05_TASKS.md` — S4 принят, следующая задача V6-501
+- **Количество задач v6 к выполнению**: 18 (15 implementation + 3 INT)
 - **Последнее обновление**: `2026-08-04`
 
 ### 🌊 Wave v6/S0 — Evidence & UX Foundation ✅
@@ -137,8 +137,8 @@ _`V6-201..205` и `INT-S2` закрыты 2026-08-04: adaptive surface/expandabl
 ### 🌊 Wave v6/S3 — Desktop Input & Visual Consistency ✅
 _`V6-301..305` и `INT-S3` закрыты 2026-08-04. Desktop получил явное владение 13 scroll surfaces, mouse wheel/Shift+wheel/edge handoff, keyboard focus/semantic tooltips для всех 91 production IconButton и единые loading/empty/error/forbidden states; duplicate create action в общих задачах удалён. Official Inter 4.1 bundled локально, motion использует 160/240/300 ms tokens и отключается через reduced motion; responsive/text-scale matrix 360/600/840/1000/1200 проходит. CH-05/07/10 закрыты. Gate: Flutter analyze clean, targeted 29/29 и full 538/538; Windows visual 6/6 и physical mouse 1/1, exception=0; inventory routes=21/reachable=260/state gaps=0/unowned=0, wire baseline и зависимости без изменений, server diff empty (`docs/audits/v6-int-s3-desktop-ui-foundation.md`). Следующий шаг `/forge`: `V6-401` canonical client workspace route._
 
-### 🌊 Wave v6/S4 — Client Workspace, Lessons & Payments
-_`V6-401..406` закрыты 2026-08-04: Student/Lead используют canonical full workspace route; preferred schedule и branch-scoped Month/Week/Day calendar живут только в section «Занятия». Section «Оплаты» стал единственным client-finance workflow с immutable ActualPayment и typed discount/surcharge/installments. Student board/create/card используют одну effective school + sparse branch воронку и одну форму создания. Lesson/client contexts получили typed Student/Lead/Teacher/Room/Lesson/Task/Payment/Subscription links, desktop current/new-tab, Android chronological stack, fail-closed unavailable state и точное Back-восстановление date/filter/scroll/section. Gate V6-406: Flutter analyze clean, V6 65/65 и full Flutter 586/586, Windows/Android link matrix PASS, server diff empty (`docs/audits/v6-linked-entity-navigation.md`). Следующий шаг `/forge`: `INT-S4` client workspace acceptance._
+### 🌊 Wave v6/S4 — Client Workspace, Lessons & Payments ✅
+_`V6-401..406` и `INT-S4` закрыты 2026-08-04: canonical Student/Lead workspace, preferred schedule, bounded branch Month/Week/Day calendar, immutable Payments, effective configurable Student funnel и typed linked navigation смонтированы в production routes. CH-06/11 закрыты bounded actor-visible requests и независимыми relation/lifecycle markers с non-color legend. Gate: Flutter analyze clean, V6 65/65 и full 586/586; Windows + Android 15 device 2/2; backend typecheck/build, commerce 38/38 и client/funnel/actor scope 21/21; inventory routes=21/reachable=264/workspaceProduction=2/unowned=0, wire 260/260 owned, server diff empty (`docs/audits/v6-int-s4-client-workspace.md`). Следующий шаг `/forge`: `V6-501` canonical tasks._
 
 ### 🌊 Wave v4/S0 — Baseline & Evidence
 _`INT-S0` закрыт 2026-07-25: detached clean revision прошёл current-state inventory, lock install, backend typecheck/build, explicit platform PostgreSQL 5/5, full backend 103/103 suites и 929/929 tests, два стабильных read-only preflight-run, signed clean/drift reconciliation, Flutter analyze и 400/400 tests; skipped integration suites=0, lock/tracked diff=0._

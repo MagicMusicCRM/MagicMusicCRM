@@ -252,7 +252,7 @@ flowchart TD
   - **Проверка:** full entity-link matrix for allow/missing/archived/forbidden on Windows/Android.
   - **Оценка:** 6 ч · **Зависимости:** V6-401..404, V6-105 · **Приоритет:** P0.
 
-- [ ] **INT-S4** — Принять client workspace.
+- [x] **INT-S4** — Принять client workspace.
   - **Критерий:** CH-06/11 closed; full card, Lessons, Payments, configurable Student entry and linked navigation mounted in production; trace/reconciliation clean.
   - **Проверка:** full Flutter tests + targeted integration, role/scope matrix, Windows/Android device runs, relevant server tests only where approved.
   - **Оценка:** 4 ч · **Зависимости:** V6-401..406 · **Приоритет:** P0.

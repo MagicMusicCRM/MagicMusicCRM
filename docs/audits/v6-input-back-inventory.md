@@ -8,8 +8,8 @@
 | Explicit scrollbar callsites | 13 |
 | Files with visible-thumb evidence | 2 |
 | Scroll sites without file-level controller evidence | 132 |
-| Production Back/exit sites | 206 |
-| Ahead-of-time predictive Back sites | 38 |
+| Production Back/exit sites | 209 |
+| Ahead-of-time predictive Back sites | 42 |
 | Legacy WillPopScope sites | 0 |
 | Unowned | 0 |
 
