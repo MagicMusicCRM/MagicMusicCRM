@@ -19,6 +19,7 @@ import 'package:magic_music_crm/core/providers/chat_providers.dart';
 import 'package:magic_music_crm/core/services/hollihop_service.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
+import 'package:magic_music_crm/core/widgets/v7/magic_desktop_scrollbar.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_forms/client_forms.dart';
 import 'package:magic_music_crm/features/manager/presentation/transfer/lead_transfer_controller.dart';

@@ -50,6 +50,7 @@ class FinanceWidget extends ConsumerStatefulWidget {
 }
 
 class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
+  final _paymentsScrollController = ScrollController();
   List<Payment> _payments = [];
   bool _loading = true;
   Object? _loadError;
@@ -86,6 +87,7 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
   @override
   void dispose() {
     _realtimeDebounce?.cancel();
+    _paymentsScrollController.dispose();
     super.dispose();
   }
 
@@ -535,92 +537,97 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
                       ),
                     ),
                   )
-                : RefreshIndicator(
-                    color: AppTheme.success,
-                    onRefresh: _loadPayments,
-                    child: ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      itemCount: _payments.length,
-                      itemBuilder: (ctx, i) {
-                        final p = _payments[i];
-                        final amount = p.amount.toDouble();
-                        final type = _typeLabel(p.type);
-                        final name = p.hasStudent
-                            ? p.studentName
-                            : 'Неизвестный ученик';
-                        // Show when the payment actually happened
-                        // (payment_date), not when the row was inserted, so
-                        // late-entered payments don't appear in the wrong period.
-                        final rawDate = p.paymentDate ?? p.createdAt;
-                        final dt = rawDate != null
-                            ? DateTime.tryParse(rawDate)
-                            : null;
-                        final dateStr = dt != null
-                            ? DateFormat(
-                                'd MMM yyyy, HH:mm',
-                                'ru',
-                              ).format(dt.toLocal())
-                            : '';
-                        final note = p.note;
-                        final subtitle = [
-                          type,
-                          if (dateStr.isNotEmpty) dateStr,
-                          if (note.isNotEmpty) note,
-                        ].join(' · ');
+                : MagicDesktopScrollbar(
+                    axis: Axis.vertical,
+                    controller: _paymentsScrollController,
+                    builder: (context, controller) => RefreshIndicator(
+                      color: AppTheme.success,
+                      onRefresh: _loadPayments,
+                      child: ListView.builder(
+                        controller: controller,
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        itemCount: _payments.length,
+                        itemBuilder: (ctx, i) {
+                          final p = _payments[i];
+                          final amount = p.amount.toDouble();
+                          final type = _typeLabel(p.type);
+                          final name = p.hasStudent
+                              ? p.studentName
+                              : 'Неизвестный ученик';
+                          // Show when the payment actually happened
+                          // (payment_date), not when the row was inserted, so
+                          // late-entered payments don't appear in the wrong period.
+                          final rawDate = p.paymentDate ?? p.createdAt;
+                          final dt = rawDate != null
+                              ? DateTime.tryParse(rawDate)
+                              : null;
+                          final dateStr = dt != null
+                              ? DateFormat(
+                                  'd MMM yyyy, HH:mm',
+                                  'ru',
+                                ).format(dt.toLocal())
+                              : '';
+                          final note = p.note;
+                          final subtitle = [
+                            type,
+                            if (dateStr.isNotEmpty) dateStr,
+                            if (note.isNotEmpty) note,
+                          ].join(' · ');
 
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          child: ListTile(
-                            onTap: p.hasStudent
-                                ? () async {
-                                    final id = p.studentEntityId;
-                                    if (id == null || id.isEmpty) return;
-                                    await showClientCard(
-                                      context,
-                                      entityType: 'student',
-                                      entityId: id,
-                                    );
-                                    _loadPayments();
-                                  }
-                                : null,
-                            leading: Container(
-                              width: 42,
-                              height: 42,
-                              decoration: BoxDecoration(
-                                color: AppTheme.success.withAlpha(25),
-                                borderRadius: BorderRadius.circular(10),
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: ListTile(
+                              onTap: p.hasStudent
+                                  ? () async {
+                                      final id = p.studentEntityId;
+                                      if (id == null || id.isEmpty) return;
+                                      await showClientCard(
+                                        context,
+                                        entityType: 'student',
+                                        entityId: id,
+                                      );
+                                      _loadPayments();
+                                    }
+                                  : null,
+                              leading: Container(
+                                width: 42,
+                                height: 42,
+                                decoration: BoxDecoration(
+                                  color: AppTheme.success.withAlpha(25),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Icon(
+                                  Icons.payments_rounded,
+                                  color: AppTheme.success,
+                                ),
                               ),
-                              child: Icon(
-                                Icons.payments_rounded,
-                                color: AppTheme.success,
+                              title: Text(
+                                name.isEmpty ? 'Без имени' : name,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              subtitle: Text(
+                                subtitle,
+                                style: TextStyle(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              trailing: Text(
+                                '${fmt.format(amount)} ₽',
+                                style: const TextStyle(
+                                  color: AppTheme.success,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 15,
+                                ),
                               ),
                             ),
-                            title: Text(
-                              name.isEmpty ? 'Без имени' : name,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            subtitle: Text(
-                              subtitle,
-                              style: TextStyle(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                                fontSize: 12,
-                              ),
-                            ),
-                            trailing: Text(
-                              '${fmt.format(amount)} ₽',
-                              style: const TextStyle(
-                                color: AppTheme.success,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 15,
-                              ),
-                            ),
-                          ),
-                        );
-                      },
+                          );
+                        },
+                      ),
                     ),
                   ),
           ),

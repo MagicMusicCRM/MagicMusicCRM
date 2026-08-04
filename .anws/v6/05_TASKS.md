@@ -177,7 +177,7 @@ flowchart TD
 
 ## 7. Sprint S3 — Desktop input & visual consistency
 
-- [ ] **V6-301** `[REQ-DESKTOP-001]` — Ввести explicit desktop scrollbar ownership.
+- [x] **V6-301** `[REQ-DESKTOP-001]` — Ввести explicit desktop scrollbar ownership.
   - **Работа:** global theme only for appearance; explicit controller/bar owners for page, table, board, calendar, tab strip and nested sections; vertical/horizontal tracks visible on overflow.
   - **Критерий:** thumb can be dragged mouse-only start↔end; no controller attaches to multiple positions; mobile persistent bars absent.
   - **Проверка:** widget/controller assertions + Windows mouse-only inventory pass + exception log=0.

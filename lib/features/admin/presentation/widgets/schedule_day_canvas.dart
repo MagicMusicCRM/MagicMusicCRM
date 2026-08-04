@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
+import 'package:magic_music_crm/core/widgets/v7/magic_desktop_scrollbar.dart';
 part 'schedule_day_canvas_logic.dart';
 part 'schedule_day_canvas_widgets.dart';
 
@@ -288,51 +289,66 @@ class _ScheduleDayCanvasState extends State<ScheduleDayCanvas> {
                       onPointerMove: _onPointerMove,
                       child: Stack(
                         children: [
-                          SingleChildScrollView(
+                          MagicDesktopScrollbar(
+                            axis: Axis.vertical,
                             controller: _bodyV,
-                            child: SingleChildScrollView(
-                              controller: _bodyH,
-                              scrollDirection: Axis.horizontal,
-                              child: SizedBox(
-                                key: _bodyKey,
-                                width: contentWidth,
-                                height: _gridHeight,
-                                child: Stack(
-                                  children: [
-                                    // Full-width hour lines.
-                                    for (
-                                      int i = 0;
-                                      i <= kDayEndHour - kDayStartHour;
-                                      i++
-                                    )
-                                      Positioned(
-                                        top: i * kHourHeight,
-                                        left: 0,
-                                        width: contentWidth,
-                                        child: Container(
-                                          height: 1,
-                                          color: cs.onSurfaceVariant.withAlpha(
-                                            16,
+                            builder: (context, verticalController) =>
+                                SingleChildScrollView(
+                                  controller: verticalController,
+                                  child: MagicDesktopScrollbar(
+                                    axis: Axis.horizontal,
+                                    controller: _bodyH,
+                                    builder: (context, horizontalController) =>
+                                        SingleChildScrollView(
+                                          controller: horizontalController,
+                                          scrollDirection: Axis.horizontal,
+                                          child: SizedBox(
+                                            key: _bodyKey,
+                                            width: contentWidth,
+                                            height: _gridHeight,
+                                            child: Stack(
+                                              children: [
+                                                // Full-width hour lines.
+                                                for (
+                                                  int i = 0;
+                                                  i <=
+                                                      kDayEndHour -
+                                                          kDayStartHour;
+                                                  i++
+                                                )
+                                                  Positioned(
+                                                    top: i * kHourHeight,
+                                                    left: 0,
+                                                    width: contentWidth,
+                                                    child: Container(
+                                                      height: 1,
+                                                      color: cs.onSurfaceVariant
+                                                          .withAlpha(16),
+                                                    ),
+                                                  ),
+                                                // Columns.
+                                                for (
+                                                  int i = 0;
+                                                  i < cols.length;
+                                                  i++
+                                                )
+                                                  Positioned(
+                                                    left: i * colWidth,
+                                                    top: 0,
+                                                    width: colWidth,
+                                                    height: _gridHeight,
+                                                    child: _buildColumn(
+                                                      cols[i],
+                                                      i,
+                                                      colWidth,
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                    // Columns.
-                                    for (int i = 0; i < cols.length; i++)
-                                      Positioned(
-                                        left: i * colWidth,
-                                        top: 0,
-                                        width: colWidth,
-                                        height: _gridHeight,
-                                        child: _buildColumn(
-                                          cols[i],
-                                          i,
-                                          colWidth,
-                                        ),
-                                      ),
-                                  ],
+                                  ),
                                 ),
-                              ),
-                            ),
                           ),
                           // Edge autoscroll affordances (visible only while dragging).
                           if (_dragging) ..._edgeZones(),

@@ -1641,7 +1641,7 @@
       "definition_only": true,
       "status": "foundation-definition",
       "file": "lib/core/workspace/desktop_workspace_shell.dart",
-      "line": 10
+      "line": 11
     },
     {
       "kind": "typed-entity",
@@ -2731,7 +2731,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/admin/presentation/widgets/group_detail_dialog.dart",
-      "line": 271
+      "line": 274
     },
     {
       "kind": "navigator",
@@ -2741,7 +2741,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/admin/presentation/widgets/group_detail_dialog.dart",
-      "line": 115
+      "line": 116
     },
     {
       "kind": "navigator",
@@ -2751,7 +2751,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/admin/presentation/widgets/group_detail_dialog.dart",
-      "line": 111
+      "line": 112
     },
     {
       "kind": "navigator",

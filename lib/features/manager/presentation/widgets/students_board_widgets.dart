@@ -147,23 +147,27 @@ class _StatusColumn extends StatelessWidget {
               Expanded(
                 child: column.students.isEmpty
                     ? _buildEmptyColumn(context)
-                    : ListView.builder(
-                        key: PageStorageKey(
-                          'students_col_${column.status ?? 'other'}',
+                    : MagicDesktopScrollbar(
+                        axis: Axis.vertical,
+                        builder: (context, controller) => ListView.builder(
+                          controller: controller,
+                          key: PageStorageKey(
+                            'students_col_${column.status ?? 'other'}',
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          itemCount: column.students.length,
+                          itemBuilder: (context, index) {
+                            final student = column.students[index];
+                            final id = student['id']?.toString() ?? '';
+                            return _StudentCard(
+                              student: student,
+                              isPending: pendingStudentIds.contains(id),
+                              onTap: () => onTap(student),
+                              onDragUpdate: onDragUpdate,
+                              onDragEnd: onDragEnd,
+                            );
+                          },
                         ),
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        itemCount: column.students.length,
-                        itemBuilder: (context, index) {
-                          final student = column.students[index];
-                          final id = student['id']?.toString() ?? '';
-                          return _StudentCard(
-                            student: student,
-                            isPending: pendingStudentIds.contains(id),
-                            onTap: () => onTap(student),
-                            onDragUpdate: onDragUpdate,
-                            onDragEnd: onDragEnd,
-                          );
-                        },
                       ),
               ),
             ],
@@ -243,81 +247,79 @@ class _StudentCard extends StatelessWidget {
     final phone = student['phone']?.toString() ?? '';
 
     final Widget feedback = Transform.rotate(
-        angle: 0.03,
-        child: Material(
-          color: Colors.transparent,
-          child: Builder(
-            builder: (context) {
-              final screenWidth = MediaQuery.of(context).size.width;
-              final feedbackWidth = screenWidth < 360
-                  ? (screenWidth - 24).clamp(220.0, 300.0) - 24
-                  : 276.0;
-              return Container(
-                width: feedbackWidth,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(AppRadius.control),
-                  border: Border.all(color: AppTheme.primaryGold, width: 2),
-                  boxShadow: AppShadow.shLift,
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.school_rounded,
-                      size: 14,
-                      color: AppTheme.primaryGold,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
+      angle: 0.03,
+      child: Material(
+        color: Colors.transparent,
+        child: Builder(
+          builder: (context) {
+            final screenWidth = MediaQuery.of(context).size.width;
+            final feedbackWidth = screenWidth < 360
+                ? (screenWidth - 24).clamp(220.0, 300.0) - 24
+                : 276.0;
+            return Container(
+              width: feedbackWidth,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                border: Border.all(color: AppTheme.primaryGold, width: 2),
+                boxShadow: AppShadow.shLift,
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.school_rounded,
+                    size: 14,
+                    color: AppTheme.primaryGold,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        if (phone.isNotEmpty)
                           Text(
-                            name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
+                            phone,
+                            style: TextStyle(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                              fontSize: 12,
                             ),
                           ),
-                          if (phone.isNotEmpty)
-                            Text(
-                              phone,
-                              style: TextStyle(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                                fontSize: 12,
-                              ),
-                            ),
-                        ],
-                      ),
+                      ],
                     ),
-                    const Icon(Icons.drag_indicator_rounded, size: 18),
-                  ],
-                ),
-              );
-            },
-          ),
+                  ),
+                  const Icon(Icons.drag_indicator_rounded, size: 18),
+                ],
+              ),
+            );
+          },
         ),
-      );
+      ),
+    );
     // Faded placeholder gap in the source column while dragging.
     final Widget childWhenDragging = Opacity(
-        opacity: 0.3,
-        child: Card(
-          margin: const EdgeInsets.only(bottom: 10),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.control),
-            side: BorderSide(
-              color: AppTheme.primaryGold.withAlpha(120),
-            ),
-          ),
-          child: const SizedBox(height: 64, width: double.infinity),
+      opacity: 0.3,
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 10),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.control),
+          side: BorderSide(color: AppTheme.primaryGold.withAlpha(120)),
         ),
-      );
+        child: const SizedBox(height: 64, width: double.infinity),
+      ),
+    );
     final Widget cardChild = Opacity(
       opacity: isPending ? 0.62 : 1,
       child: AbsorbPointer(
@@ -451,10 +453,7 @@ class _CardBody extends StatelessWidget {
             // ── Discipline badge ──────────────────────────────────────────
             if (discipline.isNotEmpty)
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 6,
-                  vertical: 2,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: AppTheme.primaryGold.withAlpha(51),
                   borderRadius: BorderRadius.circular(4),

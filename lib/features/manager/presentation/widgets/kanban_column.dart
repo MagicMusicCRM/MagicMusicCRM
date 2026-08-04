@@ -164,51 +164,56 @@ class _KanbanColumnState extends State<_KanbanColumn> {
               Expanded(
                 child: widget.leads.isEmpty && !hasMore
                     ? _buildEmptyColumn(context)
-                    : ListView.builder(
-                        key: PageStorageKey('leads_col_${widget.status.$1}'),
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        itemCount: widget.leads.length + (hasMore ? 1 : 0),
-                        itemBuilder: (context, index) {
-                          if (index >= widget.leads.length) {
-                            return Padding(
-                              padding: const EdgeInsets.fromLTRB(0, 6, 0, 10),
-                              child: OutlinedButton.icon(
-                                onPressed: widget.loadingMore
-                                    ? null
-                                    : () =>
-                                          widget.onLoadMore(widget.nextCursor),
-                                icon: widget.loadingMore
-                                    ? const SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
+                    : MagicDesktopScrollbar(
+                        axis: Axis.vertical,
+                        builder: (context, controller) => ListView.builder(
+                          controller: controller,
+                          key: PageStorageKey('leads_col_${widget.status.$1}'),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          itemCount: widget.leads.length + (hasMore ? 1 : 0),
+                          itemBuilder: (context, index) {
+                            if (index >= widget.leads.length) {
+                              return Padding(
+                                padding: const EdgeInsets.fromLTRB(0, 6, 0, 10),
+                                child: OutlinedButton.icon(
+                                  onPressed: widget.loadingMore
+                                      ? null
+                                      : () => widget.onLoadMore(
+                                          widget.nextCursor,
                                         ),
-                                      )
-                                    : const Icon(Icons.expand_more_rounded),
-                                label: Text(
-                                  widget.loadingMore
-                                      ? 'Загрузка...'
-                                      : 'Загрузить ещё',
+                                  icon: widget.loadingMore
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Icon(Icons.expand_more_rounded),
+                                  label: Text(
+                                    widget.loadingMore
+                                        ? 'Загрузка...'
+                                        : 'Загрузить ещё',
+                                  ),
                                 ),
-                              ),
+                              );
+                            }
+                            final lead = widget.leads[index];
+                            final leadId = lead['id']?.toString() ?? '';
+                            return _LeadCard(
+                              lead: Lead.fromMap(lead),
+                              statusColor: widget.status.$3,
+                              allStatuses: widget.allStatuses,
+                              onMove: widget.onMove,
+                              onDelete: widget.onDelete,
+                              onTap: () => widget.onTap(lead),
+                              onRefresh: widget.onRefresh,
+                              isPending: widget.pendingLeadIds.contains(leadId),
+                              onDragUpdate: widget.onDragUpdate,
+                              onDragEnd: widget.onDragEnd,
                             );
-                          }
-                          final lead = widget.leads[index];
-                          final leadId = lead['id']?.toString() ?? '';
-                          return _LeadCard(
-                            lead: Lead.fromMap(lead),
-                            statusColor: widget.status.$3,
-                            allStatuses: widget.allStatuses,
-                            onMove: widget.onMove,
-                            onDelete: widget.onDelete,
-                            onTap: () => widget.onTap(lead),
-                            onRefresh: widget.onRefresh,
-                            isPending: widget.pendingLeadIds.contains(leadId),
-                            onDragUpdate: widget.onDragUpdate,
-                            onDragEnd: widget.onDragEnd,
-                          );
-                        },
+                          },
+                        ),
                       ),
               ),
             ],

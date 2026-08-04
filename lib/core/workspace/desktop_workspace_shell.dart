@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 import 'package:magic_music_crm/core/workspace/workspace_state.dart';
+import 'package:magic_music_crm/core/widgets/v7/magic_desktop_scrollbar.dart';
 
 typedef WorkspaceTabBuilder =
     Widget Function(BuildContext context, WorkspaceTabState tab);
@@ -33,35 +34,13 @@ class DesktopWorkspaceShell extends StatelessWidget {
         if (state.loggedOut) return const SizedBox.shrink();
         return Column(
           children: [
-            Material(
-              color: Theme.of(context).colorScheme.surfaceContainer,
-              child: SizedBox(
-                height: 48,
-                child: ReorderableListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  buildDefaultDragHandles: true,
-                  itemCount: state.tabs.length,
-                  onReorder: controller.reorderTab,
-                  itemBuilder: (context, index) {
-                    final tab = state.tabs[index];
-                    return _WorkspaceTabButton(
-                      key: ValueKey('workspace-tab-${tab.tabId}'),
-                      tab: tab,
-                      selected: tab.tabId == state.activeTabId,
-                      onPressed: () => _select(tab.tabId),
-                      onDuplicate: () {
-                        try {
-                          controller.duplicateTab(tab.tabId);
-                        } on WorkspaceLimitReached {
-                          onLimitReached?.call();
-                        }
-                      },
-                      onClose: () => _close(tab.tabId),
-                      onCloseOthers: () => _closeOthers(tab.tabId),
-                    );
-                  },
-                ),
-              ),
+            _WorkspaceTabStrip(
+              state: state,
+              controller: controller,
+              onSelect: _select,
+              onClose: _close,
+              onCloseOthers: _closeOthers,
+              onLimitReached: onLimitReached,
             ),
             Expanded(
               child: KeyedSubtree(
@@ -109,6 +88,76 @@ class DesktopWorkspaceShell extends StatelessWidget {
   ) async => DirtyCloseDecision.cancel;
 
   static Future<void> _noSave(WorkspaceTabState tab) async {}
+}
+
+class _WorkspaceTabStrip extends StatefulWidget {
+  const _WorkspaceTabStrip({
+    required this.state,
+    required this.controller,
+    required this.onSelect,
+    required this.onClose,
+    required this.onCloseOthers,
+    required this.onLimitReached,
+  });
+
+  final WorkspaceState state;
+  final WorkspaceController controller;
+  final ValueChanged<String> onSelect;
+  final ValueChanged<String> onClose;
+  final ValueChanged<String> onCloseOthers;
+  final VoidCallback? onLimitReached;
+
+  @override
+  State<_WorkspaceTabStrip> createState() => _WorkspaceTabStripState();
+}
+
+class _WorkspaceTabStripState extends State<_WorkspaceTabStrip> {
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Theme.of(context).colorScheme.surfaceContainer,
+      child: SizedBox(
+        height: 48,
+        child: MagicDesktopScrollbar(
+          axis: Axis.horizontal,
+          controller: _scrollController,
+          builder: (context, controller) => ReorderableListView.builder(
+            scrollController: controller,
+            scrollDirection: Axis.horizontal,
+            buildDefaultDragHandles: true,
+            itemCount: widget.state.tabs.length,
+            onReorder: widget.controller.reorderTab,
+            itemBuilder: (context, index) {
+              final tab = widget.state.tabs[index];
+              return _WorkspaceTabButton(
+                key: ValueKey('workspace-tab-${tab.tabId}'),
+                tab: tab,
+                selected: tab.tabId == widget.state.activeTabId,
+                onPressed: () => widget.onSelect(tab.tabId),
+                onDuplicate: () {
+                  try {
+                    widget.controller.duplicateTab(tab.tabId);
+                  } on WorkspaceLimitReached {
+                    widget.onLimitReached?.call();
+                  }
+                },
+                onClose: () => widget.onClose(tab.tabId),
+                onCloseOthers: () => widget.onCloseOthers(tab.tabId),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 enum _WorkspaceTabAction { duplicate, close, closeOthers }

@@ -628,12 +628,12 @@ extension _LeadsActions on _LeadsWidgetState {
           Expanded(
             child: showNoResults
                 ? LeadsNoResults(onClear: _clearSearch)
-                : Scrollbar(
+                : MagicDesktopScrollbar(
+                    axis: Axis.horizontal,
                     controller: _boardScrollController,
-                    thumbVisibility: true,
-                    child: SingleChildScrollView(
+                    builder: (context, controller) => SingleChildScrollView(
                       key: const PageStorageKey('leads_board_scroll'),
-                      controller: _boardScrollController,
+                      controller: controller,
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8,

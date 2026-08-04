@@ -8,6 +8,7 @@ import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/no_open_tasks_highlight.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
+import 'package:magic_music_crm/core/widgets/v7/magic_desktop_scrollbar.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/students_board_providers.dart';
 import 'package:magic_music_crm/features/manager/presentation/transfer/lead_transfer_controller.dart';
@@ -135,11 +136,8 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
     double penetration = 0;
     if (globalPosition.dx < _autoScrollEdge) {
       _autoScrollDir = -1;
-      penetration =
-          ((_autoScrollEdge - globalPosition.dx) / _autoScrollEdge).clamp(
-            0.0,
-            1.0,
-          );
+      penetration = ((_autoScrollEdge - globalPosition.dx) / _autoScrollEdge)
+          .clamp(0.0, 1.0);
     } else if (globalPosition.dx > width - _autoScrollEdge) {
       _autoScrollDir = 1;
       penetration =
@@ -184,7 +182,10 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
 
   // ── Status move (optimistic) ──────────────────────────────────────────────
 
-  Future<void> _moveStatus(Map<String, dynamic> student, String newStatus) async {
+  Future<void> _moveStatus(
+    Map<String, dynamic> student,
+    String newStatus,
+  ) async {
     final id = student['id']?.toString() ?? '';
     if (id.isEmpty || _pendingStudentIds.contains(id)) return;
 
@@ -294,31 +295,36 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
 
   Widget _buildBranchSelector() {
     final seen = <String>{};
-    final items = _branches
-        .where((b) => seen.add(b['id']?.toString() ?? ''))
-        .map(
-          (b) => DropdownMenuItem<String>(
-            value: b['id']?.toString() ?? '',
-            child: Text(
-              b['name']?.toString() ?? b['id']?.toString() ?? '',
-              overflow: TextOverflow.ellipsis,
+    final items =
+        _branches
+            .where((b) => seen.add(b['id']?.toString() ?? ''))
+            .map(
+              (b) => DropdownMenuItem<String>(
+                value: b['id']?.toString() ?? '',
+                child: Text(
+                  b['name']?.toString() ?? b['id']?.toString() ?? '',
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            )
+            .toList()
+          // «Без филиала» board — students with no branch assigned.
+          ..add(
+            const DropdownMenuItem<String>(
+              value: kNoBranchBoardId,
+              child: Text('Без филиала'),
             ),
-          ),
-        )
-        .toList()
-      // «Без филиала» board — students with no branch assigned.
-      ..add(
-        const DropdownMenuItem<String>(
-          value: kNoBranchBoardId,
-          child: Text('Без филиала'),
-        ),
-      );
+          );
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       child: Row(
         children: [
-          const Icon(Icons.school_rounded, size: 20, color: AppTheme.primaryGold),
+          const Icon(
+            Icons.school_rounded,
+            size: 20,
+            color: AppTheme.primaryGold,
+          ),
           const SizedBox(width: 10),
           const Text(
             'Ученики',
@@ -391,10 +397,12 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
 
   bool _matchesQuery(Map<String, dynamic> s) {
     if (_query.isEmpty) return true;
-    final hay = [s['name'], s['first_name'], s['last_name'], s['phone']]
-        .whereType<Object>()
-        .map((e) => e.toString().toLowerCase())
-        .join(' ');
+    final hay = [
+      s['name'],
+      s['first_name'],
+      s['last_name'],
+      s['phone'],
+    ].whereType<Object>().map((e) => e.toString().toLowerCase()).join(' ');
     return hay.contains(_query);
   }
 
@@ -443,9 +451,7 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
       return Column(
         children: [
           _buildBranchSelector(),
-          const Expanded(
-            child: Center(child: CircularProgressIndicator()),
-          ),
+          const Expanded(child: Center(child: CircularProgressIndicator())),
         ],
       );
     }
@@ -511,7 +517,11 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.location_off_rounded, size: 42, color: Colors.grey),
+                  Icon(
+                    Icons.location_off_rounded,
+                    size: 42,
+                    color: Colors.grey,
+                  ),
                   SizedBox(height: 10),
                   Text(
                     'Нет филиалов',
@@ -532,7 +542,10 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
 
     if (_selectedBranchId == null) {
       return Column(
-        children: [_buildBranchSelector(), const Expanded(child: KanbanSkeleton())],
+        children: [
+          _buildBranchSelector(),
+          const Expanded(child: KanbanSkeleton()),
+        ],
       );
     }
 
@@ -590,14 +603,14 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
         final filtered = _query.isEmpty
             ? data
             : data
-                .map(
-                  (c) => _StatusColumnData(
-                    status: c.status,
-                    name: c.name,
-                    students: c.students.where(_matchesQuery).toList(),
-                  ),
-                )
-                .toList();
+                  .map(
+                    (c) => _StatusColumnData(
+                      status: c.status,
+                      name: c.name,
+                      students: c.students.where(_matchesQuery).toList(),
+                    ),
+                  )
+                  .toList();
         final total = filtered.fold<int>(
           0,
           (sum, c) => sum + c.students.length,
@@ -615,25 +628,19 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
                 SizedBox(height: 10),
                 Text(
                   'Нет учеников',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                 ),
               ],
             ),
           );
         }
-        return Scrollbar(
+        return MagicDesktopScrollbar(
+          axis: Axis.horizontal,
           controller: _boardScrollController,
-          thumbVisibility: true,
-          child: SingleChildScrollView(
-            controller: _boardScrollController,
+          builder: (context, controller) => SingleChildScrollView(
+            controller: controller,
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(
-              horizontal: 8,
-              vertical: 12,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: filtered.map((column) {
@@ -671,4 +678,3 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
     );
   }
 }
-

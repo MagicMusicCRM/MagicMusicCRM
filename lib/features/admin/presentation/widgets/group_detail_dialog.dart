@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
+import 'package:magic_music_crm/core/widgets/v7/magic_desktop_scrollbar.dart';
 
 class GroupDetailDialog extends ConsumerStatefulWidget {
   final Map<String, dynamic> group;
@@ -190,8 +191,10 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
             )
           : SizedBox(
               width: double.maxFinite,
-              child: Scrollbar(
-                child: SingleChildScrollView(
+              child: MagicDesktopScrollbar(
+                axis: Axis.vertical,
+                builder: (context, controller) => SingleChildScrollView(
+                  controller: controller,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,

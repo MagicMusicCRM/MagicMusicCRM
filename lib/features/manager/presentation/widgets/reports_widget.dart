@@ -11,6 +11,7 @@ import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/widgets/v7/magic_desktop_scrollbar.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/financial_dashboard_widget.dart';
 import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/management_dashboard_widget.dart';
@@ -36,6 +37,7 @@ class ReportsWidget extends ConsumerStatefulWidget {
 class _ReportsWidgetState extends ConsumerState<ReportsWidget>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final _overviewScrollController = ScrollController();
   List<_MonthData> _monthlyData = [];
   bool _loading = true;
   Object? _loadError;
@@ -129,6 +131,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   @override
   void dispose() {
     _realtimeDebounce?.cancel();
+    _overviewScrollController.dispose();
     _tabController.dispose();
     super.dispose();
   }
@@ -320,354 +323,363 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
         ? 1
         : _monthlyData.map((m) => m.lessons).reduce((a, b) => a > b ? a : b);
 
-    return RefreshIndicator(
-      color: AppColor.gold,
-      onRefresh: _loadReports,
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1100),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Отчёты',
-                            style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w800,
+    return MagicDesktopScrollbar(
+      axis: Axis.vertical,
+      controller: _overviewScrollController,
+      builder: (context, controller) => RefreshIndicator(
+        color: AppColor.gold,
+        onRefresh: _loadReports,
+        child: SingleChildScrollView(
+          controller: controller,
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1100),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Отчёты',
+                              style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'За последние $_monthsBack мес.',
-                            style: TextStyle(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurfaceVariant,
+                            const SizedBox(height: 4),
+                            Text(
+                              'За последние $_monthsBack мес.',
+                              style: TextStyle(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
                             ),
-                          ),
+                          ],
+                        ),
+                      ),
+                      SegmentedButton<int>(
+                        segments: const [
+                          ButtonSegment(value: 3, label: Text('3 мес')),
+                          ButtonSegment(value: 6, label: Text('6 мес')),
+                          ButtonSegment(value: 12, label: Text('12 мес')),
                         ],
-                      ),
-                    ),
-                    SegmentedButton<int>(
-                      segments: const [
-                        ButtonSegment(value: 3, label: Text('3 мес')),
-                        ButtonSegment(value: 6, label: Text('6 мес')),
-                        ButtonSegment(value: 12, label: Text('12 мес')),
-                      ],
-                      selected: {_monthsBack},
-                      onSelectionChanged: (s) {
-                        setState(() => _monthsBack = s.first);
-                        _loadReports();
-                      },
-                      style: ButtonStyle(
-                        visualDensity: VisualDensity.compact,
-                        backgroundColor: WidgetStateProperty.resolveWith(
-                          (states) => states.contains(WidgetState.selected)
-                              ? AppColor.goldSoft
-                              : Colors.transparent,
-                        ),
-                        foregroundColor: WidgetStateProperty.resolveWith(
-                          (states) => states.contains(WidgetState.selected)
-                              ? AppColor.gold
-                              : Theme.of(context).colorScheme.onSurfaceVariant,
+                        selected: {_monthsBack},
+                        onSelectionChanged: (s) {
+                          setState(() => _monthsBack = s.first);
+                          _loadReports();
+                        },
+                        style: ButtonStyle(
+                          visualDensity: VisualDensity.compact,
+                          backgroundColor: WidgetStateProperty.resolveWith(
+                            (states) => states.contains(WidgetState.selected)
+                                ? AppColor.goldSoft
+                                : Colors.transparent,
+                          ),
+                          foregroundColor: WidgetStateProperty.resolveWith(
+                            (states) => states.contains(WidgetState.selected)
+                                ? AppColor.gold
+                                : Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
 
-                // KPI Row
-                Row(
-                  children: [
-                    Expanded(
-                      child: _KpiCard(
-                        label: 'Посещаемость',
-                        value:
-                            '${_asDouble(_summary['attendance']).toStringAsFixed(1)}%',
-                        icon: Icons.trending_up_rounded,
-                        color: AppColor.success,
+                  // KPI Row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _KpiCard(
+                          label: 'Посещаемость',
+                          value:
+                              '${_asDouble(_summary['attendance']).toStringAsFixed(1)}%',
+                          icon: Icons.trending_up_rounded,
+                          color: AppColor.success,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _KpiCard(
-                        label: 'Выручка',
-                        value: '${fmt.format(_summary['revenue'] ?? 0)} ₽',
-                        icon: Icons.payments_rounded,
-                        color: AppTheme.secondaryGold,
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _KpiCard(
+                          label: 'Выручка',
+                          value: '${fmt.format(_summary['revenue'] ?? 0)} ₽',
+                          icon: Icons.payments_rounded,
+                          color: AppTheme.secondaryGold,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _KpiCard(
-                        label: 'Занятий',
-                        value: '${_summary['total_lessons'] ?? 0}',
-                        icon: Icons.calendar_month_rounded,
-                        color: AppColor.gold,
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _KpiCard(
+                          label: 'Занятий',
+                          value: '${_summary['total_lessons'] ?? 0}',
+                          icon: Icons.calendar_month_rounded,
+                          color: AppColor.gold,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
 
-                // Lessons Chart
-                const Text(
-                  'Занятия по месяцам',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: 176,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: _monthlyData.map((m) {
-                      final ratio = maxLessons > 0
-                          ? m.lessons / maxLessons
-                          : 0.0;
-                      final completedRatio = m.lessons > 0
-                          ? m.completed / m.lessons
-                          : 0.0;
-                      final plannedHeight = m.lessons > 0
-                          ? math.max(8.0, 116 * ratio)
-                          : 2.0;
-                      return Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 5),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              SizedBox(
-                                height: 18,
-                                child: Text(
-                                  '${m.lessons}',
+                  // Lessons Chart
+                  const Text(
+                    'Занятия по месяцам',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 176,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: _monthlyData.map((m) {
+                        final ratio = maxLessons > 0
+                            ? m.lessons / maxLessons
+                            : 0.0;
+                        final completedRatio = m.lessons > 0
+                            ? m.completed / m.lessons
+                            : 0.0;
+                        final plannedHeight = m.lessons > 0
+                            ? math.max(8.0, 116 * ratio)
+                            : 2.0;
+                        return Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 5),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                SizedBox(
+                                  height: 18,
+                                  child: Text(
+                                    '${m.lessons}',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurface,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Stack(
+                                  alignment: Alignment.bottomCenter,
+                                  children: [
+                                    Container(
+                                      width: double.infinity,
+                                      height: plannedHeight,
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.secondaryGold.withAlpha(
+                                          34,
+                                        ),
+                                        borderRadius: BorderRadius.circular(5),
+                                      ),
+                                    ),
+                                    Container(
+                                      width: double.infinity,
+                                      height: plannedHeight * completedRatio,
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.secondaryGold,
+                                        borderRadius: BorderRadius.circular(5),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  m.month,
                                   style: TextStyle(
                                     fontSize: 10,
-                                    fontWeight: FontWeight.w700,
+                                    fontWeight: FontWeight.w600,
                                     color: Theme.of(
                                       context,
-                                    ).colorScheme.onSurface,
+                                    ).colorScheme.onSurfaceVariant,
                                   ),
                                 ),
-                              ),
-                              const SizedBox(height: 4),
-                              Stack(
-                                alignment: Alignment.bottomCenter,
-                                children: [
-                                  Container(
-                                    width: double.infinity,
-                                    height: plannedHeight,
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.secondaryGold.withAlpha(
-                                        34,
-                                      ),
-                                      borderRadius: BorderRadius.circular(5),
-                                    ),
-                                  ),
-                                  Container(
-                                    width: double.infinity,
-                                    height: plannedHeight * completedRatio,
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.secondaryGold,
-                                      borderRadius: BorderRadius.circular(5),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                m.month,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                      );
-                    }).toList(),
+                        );
+                      }).toList(),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Container(
-                      width: 10,
-                      height: 10,
-                      color: AppTheme.secondaryGold,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Завершено',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontSize: 11,
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Container(
+                        width: 10,
+                        height: 10,
+                        color: AppTheme.secondaryGold,
                       ),
-                    ),
-                    const SizedBox(width: 16),
-                    Container(
-                      width: 10,
-                      height: 10,
-                      color: AppTheme.secondaryGold.withAlpha(34),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Всего запланировано',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontSize: 11,
+                      const SizedBox(width: 6),
+                      Text(
+                        'Завершено',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 11,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
+                      const SizedBox(width: 16),
+                      Container(
+                        width: 10,
+                        height: 10,
+                        color: AppTheme.secondaryGold.withAlpha(34),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Всего запланировано',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
 
-                // Revenue Chart
-                const Text(
-                  'Выручка по месяцам',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: 158,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: _monthlyData.map((m) {
-                      final ratio = maxRevenue > 0
-                          ? m.revenue / maxRevenue
-                          : 0.0;
-                      final barHeight = m.revenue > 0
-                          ? math.max(8.0, 96 * ratio)
-                          : 2.0;
-                      return Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 5),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              SizedBox(
-                                height: 18,
-                                child: Text(
-                                  m.revenue >= 1000
-                                      ? '${(m.revenue / 1000).toStringAsFixed(0)}к'
-                                      : m.revenue.toStringAsFixed(0),
+                  // Revenue Chart
+                  const Text(
+                    'Выручка по месяцам',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 158,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: _monthlyData.map((m) {
+                        final ratio = maxRevenue > 0
+                            ? m.revenue / maxRevenue
+                            : 0.0;
+                        final barHeight = m.revenue > 0
+                            ? math.max(8.0, 96 * ratio)
+                            : 2.0;
+                        return Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 5),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                SizedBox(
+                                  height: 18,
+                                  child: Text(
+                                    m.revenue >= 1000
+                                        ? '${(m.revenue / 1000).toStringAsFixed(0)}к'
+                                        : m.revenue.toStringAsFixed(0),
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w700,
+                                      color: m.revenue > 0
+                                          ? Theme.of(
+                                              context,
+                                            ).colorScheme.onSurface
+                                          : Colors.transparent,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Container(
+                                  width: double.infinity,
+                                  height: barHeight,
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.secondaryGold,
+                                    borderRadius: BorderRadius.circular(5),
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  m.month,
                                   style: TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w700,
-                                    color: m.revenue > 0
-                                        ? Theme.of(
-                                            context,
-                                          ).colorScheme.onSurface
-                                        : Colors.transparent,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
                                   ),
                                 ),
-                              ),
-                              const SizedBox(height: 4),
-                              Container(
-                                width: double.infinity,
-                                height: barHeight,
-                                decoration: BoxDecoration(
-                                  color: AppTheme.secondaryGold,
-                                  borderRadius: BorderRadius.circular(5),
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                m.month,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Monthly table
+                  const Text(
+                    'Детализация',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 8),
+                  ..._monthlyData.reversed.map(
+                    (m) => Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surface,
+                        borderRadius: BorderRadius.circular(AppRadius.card),
+                        border: Border.all(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.outlineVariant.withAlpha(90),
                         ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // Monthly table
-                const Text(
-                  'Детализация',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 8),
-                ..._monthlyData.reversed.map(
-                  (m) => Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surface,
-                      borderRadius: BorderRadius.circular(AppRadius.card),
-                      border: Border.all(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.outlineVariant.withAlpha(90),
                       ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      child: Row(
-                        children: [
-                          Text(
-                            m.month,
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          const Spacer(),
-                          _SmallStat(
-                            label: 'занятий',
-                            value: '${m.lessons}',
-                            color: AppColor.gold,
-                          ),
-                          const SizedBox(width: 16),
-                          _SmallStat(
-                            label: 'новых',
-                            value: '${m.newStudents}',
-                            color: AppColor.success,
-                          ),
-                          const SizedBox(width: 16),
-                          _SmallStat(
-                            label: 'выручка',
-                            value: '${fmt.format(m.revenue)} ₽',
-                            color: AppTheme.secondaryGold,
-                          ),
-                        ],
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        child: Row(
+                          children: [
+                            Text(
+                              m.month,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const Spacer(),
+                            _SmallStat(
+                              label: 'занятий',
+                              value: '${m.lessons}',
+                              color: AppColor.gold,
+                            ),
+                            const SizedBox(width: 16),
+                            _SmallStat(
+                              label: 'новых',
+                              value: '${m.newStudents}',
+                              color: AppColor.success,
+                            ),
+                            const SizedBox(width: 16),
+                            _SmallStat(
+                              label: 'выручка',
+                              value: '${fmt.format(m.revenue)} ₽',
+                              color: AppTheme.secondaryGold,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
 
-                // ── KVA-198: four previously-orphaned analytics endpoints ─────────
-                const SizedBox(height: 24),
-                _buildSourcesCard(),
-                const SizedBox(height: 24),
-                _buildDataQualityCard(),
-                const SizedBox(height: 24),
-                _buildResponsibleCard(),
-                const SizedBox(height: 24),
-                _buildFinanceMonthlyCard(),
-              ],
+                  // ── KVA-198: four previously-orphaned analytics endpoints ─────────
+                  const SizedBox(height: 24),
+                  _buildSourcesCard(),
+                  const SizedBox(height: 24),
+                  _buildDataQualityCard(),
+                  const SizedBox(height: 24),
+                  _buildResponsibleCard(),
+                  const SizedBox(height: 24),
+                  _buildFinanceMonthlyCard(),
+                ],
+              ),
             ),
           ),
         ),

@@ -3,8 +3,8 @@
   "task": "V6-001",
   "generated_from": "lib/main.dart import graph + GoRouter + presentation callsites",
   "summary": {
-    "dart_files": 265,
-    "production_reachable_files": 258,
+    "dart_files": 266,
+    "production_reachable_files": 259,
     "go_routes": 21,
     "screens": 21,
     "production_screens": 21,
@@ -2068,7 +2068,7 @@
         "retry": true
       },
       "file": "lib/features/admin/presentation/widgets/group_detail_dialog.dart",
-      "line": 300
+      "line": 303
     },
     {
       "kind": "dialog",
@@ -2084,7 +2084,7 @@
         "retry": true
       },
       "file": "lib/features/admin/presentation/widgets/group_detail_dialog.dart",
-      "line": 102
+      "line": 103
     },
     {
       "kind": "dialog",
@@ -2100,7 +2100,7 @@
         "retry": true
       },
       "file": "lib/features/admin/presentation/widgets/group_detail_dialog.dart",
-      "line": 13
+      "line": 14
     },
     {
       "kind": "magic-sheet",

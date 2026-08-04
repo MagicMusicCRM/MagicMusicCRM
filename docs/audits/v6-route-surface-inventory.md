@@ -8,8 +8,8 @@
 
 | Slice | Count |
 |---|---:|
-| Dart files | 265 |
-| Files reachable from main.dart | 258 |
+| Dart files | 266 |
+| Files reachable from main.dart | 259 |
 | GoRouter routes | 21 |
 | Screen/Page classes | 21 |
 | Production-reachable screens | 21 |

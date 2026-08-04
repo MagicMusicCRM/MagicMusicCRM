@@ -59,6 +59,10 @@ class AppTheme {
           TargetPlatform.macOS: ZoomPageTransitionsBuilder(),
         },
       ),
+      scrollbarTheme: _scrollbarTheme(
+        thumb: TelegramColors.darkTextSecondary,
+        track: TelegramColors.darkDivider,
+      ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: TelegramColors.darkSurface,
         selectedItemColor: TelegramColors.brandGold,
@@ -234,6 +238,10 @@ class AppTheme {
           letterSpacing: -0.2,
         ),
       ),
+      scrollbarTheme: _scrollbarTheme(
+        thumb: TelegramColors.lightTextSecondary,
+        track: TelegramColors.lightDivider,
+      ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: TelegramColors.lightInputBg,
@@ -329,6 +337,21 @@ class AppTheme {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         elevation: 0,
       ),
+    );
+  }
+
+  static ScrollbarThemeData _scrollbarTheme({
+    required Color thumb,
+    required Color track,
+  }) {
+    return ScrollbarThemeData(
+      thumbColor: WidgetStatePropertyAll(thumb.withValues(alpha: 0.72)),
+      trackColor: WidgetStatePropertyAll(track.withValues(alpha: 0.5)),
+      trackBorderColor: const WidgetStatePropertyAll(Colors.transparent),
+      thickness: const WidgetStatePropertyAll(10),
+      radius: const Radius.circular(AppRadius.pill),
+      crossAxisMargin: 2,
+      mainAxisMargin: 2,
     );
   }
 }
