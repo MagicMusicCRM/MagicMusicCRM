@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -42,6 +44,7 @@ class _FakeApiClient extends MagicApiClient {
 
   Map<String, dynamic>? preview;
   MagicApiException? createError;
+  Completer<void>? createGate;
   final lessonPosts = <Map<String, dynamic>>[];
   final lessonPatches = <Map<String, dynamic>>[];
 
@@ -122,6 +125,7 @@ class _FakeApiClient extends MagicApiClient {
   }) async {
     if (path == '/crm/lessons') {
       lessonPosts.add(Map<String, dynamic>.from(data as Map));
+      await createGate?.future;
       if (createError case final error?) throw error;
       return <String, dynamic>{'id': 'lesson-1', 'version': 1} as T;
     }
@@ -260,6 +264,24 @@ void main() {
     expect(find.textContaining('Мария Занятова'), findsOneWidget);
     expect(find.text('Всё равно назначить'), findsNothing);
     expect(client.lessonPosts, isEmpty);
+  });
+
+  testWidgets('double click creates exactly one lesson mutation', (
+    tester,
+  ) async {
+    final client = _FakeApiClient();
+    client.createGate = Completer<void>();
+    await _pumpDialog(tester, client);
+    await _selectRequiredResources(tester, clientName: 'Анна Лидова');
+
+    await tester.ensureVisible(find.text('Создать'));
+    await tester.tap(find.text('Создать'));
+    await tester.tap(find.text('Создать'));
+    expect(client.lessonPosts, hasLength(1));
+    client.createGate!.complete();
+    await tester.pumpAndSettle();
+
+    expect(client.lessonPosts, hasLength(1));
   });
 
   testWidgets(

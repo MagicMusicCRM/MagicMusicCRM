@@ -296,6 +296,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   }
 
   Future<void> _save() async {
+    if (_saving) return;
     final clientId = _clientId;
     final clientType = _clientType;
     final chargeValue = _parseAmount(_clientChargeController.text);

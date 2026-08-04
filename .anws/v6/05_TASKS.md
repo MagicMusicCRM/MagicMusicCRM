@@ -168,7 +168,7 @@ flowchart TD
   - **Проверка:** Android/Windows flows + screenshot comparison to approved v7 tokens.
   - **Оценка:** 6 ч · **Зависимости:** V6-201..204 · **Приоритет:** P0.
 
-- [ ] **INT-S2** — Принять adaptive surfaces/Back.
+- [x] **INT-S2** — Принять adaptive surfaces/Back.
   - **Критерий:** CH-02/03 closed; 360–839 layouts, keyboard/safe area, predictive Back and dirty policy pass; duplicate mutations=0.
   - **Проверка:** targeted/full Flutter tests, Android device run, trace diff, `git diff server/` empty.
   - **Оценка:** 4 ч · **Зависимости:** V6-201..205 · **Приоритет:** P0.

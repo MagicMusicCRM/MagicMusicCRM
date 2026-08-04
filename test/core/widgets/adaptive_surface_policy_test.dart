@@ -5,7 +5,7 @@ import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 
 void main() {
   test('declarative policy covers 360, 600 and 840 widths', () {
-    for (final width in const [360.0, 600.0]) {
+    for (final width in const [360.0, 600.0, 839.0]) {
       expect(
         AdaptiveSurfacePolicy.containerFor(AppSurfaceKind.primary, width),
         AdaptiveSurfaceContainer.route,
@@ -79,7 +79,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
-    for (final width in const [360.0, 600.0, 840.0]) {
+    for (final width in const [360.0, 600.0, 839.0, 840.0]) {
       tester.view.physicalSize = Size(width, 720);
       var contentBuilds = 0;
       await tester.pumpWidget(
