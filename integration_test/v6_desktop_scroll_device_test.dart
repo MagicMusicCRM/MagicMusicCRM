@@ -1,4 +1,7 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:magic_music_crm/core/widgets/v7/magic_desktop_scrollbar.dart';
@@ -6,7 +9,9 @@ import 'package:magic_music_crm/core/widgets/v7/magic_desktop_scrollbar.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('Windows device drags both owned scrollbar axes', (tester) async {
+  testWidgets('Windows mouse wheel and Shift+wheel traverse owned axes', (
+    tester,
+  ) async {
     final vertical = ScrollController();
     final horizontal = ScrollController();
     addTearDown(() {
@@ -61,9 +66,20 @@ void main() {
 
     expect(vertical.positions, hasLength(1));
     expect(horizontal.positions, hasLength(1));
-    await tester.drag(find.byType(ListView).first, const Offset(0, -200));
-    await tester.drag(find.byType(ListView).last, const Offset(-200, 0));
-    await tester.pumpAndSettle();
+    final pointer = TestPointer(1, PointerDeviceKind.mouse);
+    await tester.sendEventToBinding(
+      pointer.hover(tester.getCenter(find.byType(ListView).first)),
+    );
+    await tester.sendEventToBinding(pointer.scroll(const Offset(0, 200)));
+    await tester.pump();
+
+    await tester.sendEventToBinding(
+      pointer.hover(tester.getCenter(find.byType(ListView).last)),
+    );
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+    await tester.sendEventToBinding(pointer.scroll(const Offset(0, 200)));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+    await tester.pump();
 
     expect(vertical.offset, greaterThan(0));
     expect(horizontal.offset, greaterThan(0));

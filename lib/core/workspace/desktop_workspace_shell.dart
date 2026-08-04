@@ -126,36 +126,66 @@ class _WorkspaceTabStripState extends State<_WorkspaceTabStrip> {
       color: Theme.of(context).colorScheme.surfaceContainer,
       child: SizedBox(
         height: 48,
-        child: MagicDesktopScrollbar(
-          axis: Axis.horizontal,
-          controller: _scrollController,
-          builder: (context, controller) => ReorderableListView.builder(
-            scrollController: controller,
-            scrollDirection: Axis.horizontal,
-            buildDefaultDragHandles: true,
-            itemCount: widget.state.tabs.length,
-            onReorder: widget.controller.reorderTab,
-            itemBuilder: (context, index) {
-              final tab = widget.state.tabs[index];
-              return _WorkspaceTabButton(
-                key: ValueKey('workspace-tab-${tab.tabId}'),
-                tab: tab,
-                selected: tab.tabId == widget.state.activeTabId,
-                onPressed: () => widget.onSelect(tab.tabId),
-                onDuplicate: () {
-                  try {
-                    widget.controller.duplicateTab(tab.tabId);
-                  } on WorkspaceLimitReached {
-                    widget.onLimitReached?.call();
-                  }
-                },
-                onClose: () => widget.onClose(tab.tabId),
-                onCloseOthers: () => widget.onCloseOthers(tab.tabId),
-              );
-            },
-          ),
+        child: Row(
+          children: [
+            IconButton(
+              tooltip: 'Прокрутить вкладки влево',
+              onPressed: () => _scrollBy(-1),
+              icon: const Icon(Icons.chevron_left_rounded),
+            ),
+            Expanded(
+              child: MagicDesktopScrollbar(
+                axis: Axis.horizontal,
+                controller: _scrollController,
+                builder: (context, controller) => ReorderableListView.builder(
+                  scrollController: controller,
+                  scrollDirection: Axis.horizontal,
+                  buildDefaultDragHandles: true,
+                  itemCount: widget.state.tabs.length,
+                  onReorder: widget.controller.reorderTab,
+                  itemBuilder: (context, index) {
+                    final tab = widget.state.tabs[index];
+                    return _WorkspaceTabButton(
+                      key: ValueKey('workspace-tab-${tab.tabId}'),
+                      tab: tab,
+                      selected: tab.tabId == widget.state.activeTabId,
+                      onPressed: () => widget.onSelect(tab.tabId),
+                      onDuplicate: () {
+                        try {
+                          widget.controller.duplicateTab(tab.tabId);
+                        } on WorkspaceLimitReached {
+                          widget.onLimitReached?.call();
+                        }
+                      },
+                      onClose: () => widget.onClose(tab.tabId),
+                      onCloseOthers: () => widget.onCloseOthers(tab.tabId),
+                    );
+                  },
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Прокрутить вкладки вправо',
+              onPressed: () => _scrollBy(1),
+              icon: const Icon(Icons.chevron_right_rounded),
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  Future<void> _scrollBy(int direction) async {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    final target =
+        (_scrollController.offset +
+                position.viewportDimension * 0.8 * direction)
+            .clamp(position.minScrollExtent, position.maxScrollExtent);
+    await _scrollController.animateTo(
+      target,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
     );
   }
 }

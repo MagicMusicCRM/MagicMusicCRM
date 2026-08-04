@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/widgets/v7/magic_desktop_scrollbar.dart';
 
@@ -117,6 +118,98 @@ void main() {
     await tester.drag(find.byType(ListView), const Offset(0, -150));
     await tester.pumpAndSettle();
     expect(controller.offset, greaterThan(0));
+  });
+
+  testWidgets('nested wheel keeps vertical ownership and Shift moves board', (
+    tester,
+  ) async {
+    final page = ScrollController();
+    final board = ScrollController();
+    final column = ScrollController();
+    addTearDown(page.dispose);
+    addTearDown(board.dispose);
+    addTearDown(column.dispose);
+
+    await tester.pumpWidget(
+      _Harness(
+        platform: TargetPlatform.windows,
+        child: MagicDesktopScrollbar(
+          axis: Axis.vertical,
+          controller: page,
+          builder: (context, pageController) => SingleChildScrollView(
+            controller: pageController,
+            child: Column(
+              children: [
+                SizedBox(
+                  height: 200,
+                  child: MagicDesktopScrollbar(
+                    axis: Axis.horizontal,
+                    controller: board,
+                    builder: (context, boardController) =>
+                        SingleChildScrollView(
+                          controller: boardController,
+                          scrollDirection: Axis.horizontal,
+                          child: SizedBox(
+                            width: 1200,
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: SizedBox(
+                                key: const ValueKey('nested-column'),
+                                width: 300,
+                                child: MagicDesktopScrollbar(
+                                  axis: Axis.vertical,
+                                  controller: column,
+                                  builder: (context, columnController) =>
+                                      ListView.builder(
+                                        controller: columnController,
+                                        itemExtent: 40,
+                                        itemCount: 100,
+                                        itemBuilder: (context, index) =>
+                                            Text('Карточка $index'),
+                                      ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                  ),
+                ),
+                const SizedBox(height: 1000),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final pointer = TestPointer(1, PointerDeviceKind.mouse);
+    final columnCenter = tester.getCenter(
+      find.byKey(const ValueKey('nested-column')),
+    );
+    pointer.hover(columnCenter);
+
+    await tester.sendEventToBinding(pointer.scroll(const Offset(0, 80)));
+    await tester.pump();
+    expect(column.offset, greaterThan(0));
+    expect(board.offset, 0);
+    expect(page.offset, 0);
+
+    column.jumpTo(0);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+    await tester.sendEventToBinding(pointer.scroll(const Offset(0, 80)));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+    await tester.pump();
+    expect(column.offset, 0);
+    expect(board.offset, greaterThan(0));
+    expect(page.offset, 0);
+
+    board.jumpTo(0);
+    column.jumpTo(column.position.maxScrollExtent);
+    await tester.sendEventToBinding(pointer.scroll(const Offset(0, 80)));
+    await tester.pump();
+    expect(column.offset, column.position.maxScrollExtent);
+    expect(page.offset, greaterThan(0));
   });
 }
 

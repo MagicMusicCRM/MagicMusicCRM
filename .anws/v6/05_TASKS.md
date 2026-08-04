@@ -183,7 +183,7 @@ flowchart TD
   - **Проверка:** widget/controller assertions + Windows mouse-only inventory pass + exception log=0.
   - **Оценка:** 8 ч · **Зависимости:** INT-S2 · **Приоритет:** P0.
 
-- [ ] **V6-302** `[REQ-DESKTOP-001]` — Нормализовать wheel, Shift+wheel и nested scrolling.
+- [x] **V6-302** `[REQ-DESKTOP-001]` — Нормализовать wheel, Shift+wheel и nested scrolling.
   - **Работа:** define pointer policy for kanban/calendar/tables and avoid stealing parent vertical scroll; expose overflow arrows/menu where scrollbar alone is insufficient.
   - **Критерий:** every two-axis surface is traversable by ordinary mouse; nested column/calendar scroll has deterministic owner.
   - **Проверка:** Windows device scenarios for all inventory rows at narrow/wide window sizes.

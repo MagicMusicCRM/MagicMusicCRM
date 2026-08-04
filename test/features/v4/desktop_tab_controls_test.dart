@@ -113,6 +113,45 @@ void main() {
     expect(workspace.state.activeTabId, clientTab);
   });
 
+  testWidgets('narrow tab strip exposes mouse overflow arrows', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(500, 400);
+    addTearDown(tester.view.reset);
+    final workspace = controller();
+    for (var index = 1; index < WorkspaceController.maxTabs; index++) {
+      workspace.open(
+        link('client-$index'),
+        titleHint: 'Длинная вкладка $index',
+        explicitNew: true,
+      );
+    }
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: DesktopWorkspaceShell(
+            controller: workspace,
+            tabBuilder: (context, tab) => Text(tab.titleHint),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final tabs = tester.widget<ReorderableListView>(
+      find.byType(ReorderableListView),
+    );
+    final scrollController = tabs.scrollController!;
+    expect(scrollController.position.maxScrollExtent, greaterThan(0));
+
+    await tester.tap(find.byTooltip('Прокрутить вкладки вправо'));
+    await tester.pumpAndSettle();
+    expect(scrollController.offset, greaterThan(0));
+
+    await tester.tap(find.byTooltip('Прокрутить вкладки влево'));
+    await tester.pumpAndSettle();
+    expect(scrollController.offset, 0);
+  });
+
   testWidgets('dirty tab switch waits for the shared exit decision', (
     tester,
   ) async {

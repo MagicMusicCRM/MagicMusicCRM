@@ -914,7 +914,7 @@
       "visible_thumb_evidence": false,
       "status": "explicit-scrollbar",
       "file": "lib/core/workspace/desktop_workspace_shell.dart",
-      "line": 129
+      "line": 137
     },
     {
       "kind": "ListView.builder",
@@ -925,7 +925,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/core/workspace/desktop_workspace_shell.dart",
-      "line": 132
+      "line": 140
     },
     {
       "kind": "ListView",
