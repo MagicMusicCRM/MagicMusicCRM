@@ -210,19 +210,6 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   CapabilitySnapshot? get _accessSnapshot =>
       ref.read(capabilitySnapshotProvider).asData?.value;
 
-  /// Operational affordances come from the effective server snapshot. The
-  /// body guards remain a second UI boundary behind the visible tab list.
-  bool get _hasManagerAccess {
-    final access = _accessSnapshot;
-    return access?.allows('crm.client.write') == true ||
-        access?.allows('workflow.task.write') == true ||
-        access?.allows('system.settings.manage') == true ||
-        access?.allows('report.status.read') == true;
-  }
-
-  bool get _hasSchoolFinanceAccess =>
-      _accessSnapshot?.allows('commerce.school_finance.read') == true;
-
   bool get _isStaffRole => _isManagerOrAdminRole || widget.role == 'teacher';
   String _currentUserDisplayName = 'Пользователь';
   String? _openingNavigationPartnerId;

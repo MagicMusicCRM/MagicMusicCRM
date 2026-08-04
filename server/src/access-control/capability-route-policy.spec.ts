@@ -20,11 +20,7 @@ describe("capability route policy", () => {
     ["PATCH", "/crm/tasks/id", "workflow.task.write"],
     ["GET", "/crm/lessons", "schedule.lesson.read.assigned"],
     ["PATCH", "/crm/lessons/id", "schedule.lesson.write"],
-    [
-      "GET",
-      "/crm/schedule-reference",
-      "schedule.lesson.read.assigned",
-    ],
+    ["GET", "/crm/schedule-reference", "schedule.lesson.read.assigned"],
     [
       "PUT",
       "/crm/schedule-reference/branches/id/hours",
@@ -33,11 +29,7 @@ describe("capability route policy", () => {
     ["POST", "/crm/lessons/id/attendance", "schedule.attendance.write"],
     ["POST", "/crm/lessons/id/complete", "schedule.lesson.complete"],
     ["GET", "/crm/me/commerce", "commerce.client_finance.read"],
-    [
-      "GET",
-      "/crm/students/id/commerce",
-      "commerce.client_finance.read",
-    ],
+    ["GET", "/crm/students/id/commerce", "commerce.client_finance.read"],
     ["GET", "/crm/payments", "commerce.school_finance.read"],
     ["GET", "/crm/subscriptions", "commerce.school_finance.read"],
     ["GET", "/crm/student-balances", "commerce.school_finance.read"],
@@ -68,12 +60,12 @@ describe("capability route policy", () => {
   });
 
   it("separates client commerce resources from global school finance", () => {
-    expect(resolveCapabilityRoutePolicy("GET", "/crm/me/commerce")).toMatchObject(
-      {
-        capabilityKey: "commerce.client_finance.read",
-        scope: "self",
-      },
-    );
+    expect(
+      resolveCapabilityRoutePolicy("GET", "/crm/me/commerce"),
+    ).toMatchObject({
+      capabilityKey: "commerce.client_finance.read",
+      scope: "self",
+    });
     expect(
       resolveCapabilityRoutePolicy(
         "GET",
@@ -89,6 +81,21 @@ describe("capability route policy", () => {
       capabilityKey: "commerce.school_finance.read",
       scope: "global",
       legacyAllowedRoles: ["director", "system_admin"],
+    });
+  });
+
+  it("keeps shared tasks outside the Administrator persona", () => {
+    expect(
+      resolveCapabilityRoutePolicy("GET", "/crm/shared-tasks"),
+    ).toMatchObject({
+      capabilityKey: "workflow.task.read",
+      legacyAllowedRoles: ["teacher", "manager", "director", "system_admin"],
+    });
+    expect(
+      resolveCapabilityRoutePolicy("POST", "/crm/shared-tasks"),
+    ).toMatchObject({
+      capabilityKey: "workflow.task.write",
+      legacyAllowedRoles: ["manager", "director", "system_admin"],
     });
   });
 

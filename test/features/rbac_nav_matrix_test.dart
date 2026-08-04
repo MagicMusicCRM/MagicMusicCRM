@@ -87,10 +87,9 @@ void main() {
       expect(crmVisibleTabs('client', isDesktop: false), isEmpty);
     });
 
-    test('Администратор (#17): «Задачи» (6) вместо «Обзора» (1) сразу после '
-        'Чата, без лишних разделов', () {
-      expect(crmVisibleTabs('admin', isDesktop: true), [0, 6, 2, 3]);
-      expect(crmVisibleTabs('admin', isDesktop: false), [0, 6, 2, 3]);
+    test('Администратор: только Чат, Расписание и Клиенты', () {
+      expect(crmVisibleTabs('admin', isDesktop: true), [0, 2, 3]);
+      expect(crmVisibleTabs('admin', isDesktop: false), [0, 2, 3]);
     });
 
     test('Управляющий: operational CRM без раздела «Финансы» (5)', () {
@@ -142,22 +141,23 @@ void main() {
       },
     );
 
-    test('«Задачи» (6) доступны admin и manager+ на телефоне', () {
-      for (final role in ['admin', 'manager', 'director', 'system_admin']) {
+    test('«Задачи» (6) доступны только manager+ на телефоне', () {
+      for (final role in ['manager', 'director', 'system_admin']) {
         expect(
           crmVisibleTabs(role, isDesktop: false),
           contains(6),
           reason: '$role must be able to operate tasks on mobile',
         );
       }
+      expect(crmVisibleTabs('admin', isDesktop: false), isNot(contains(6)));
       expect(crmVisibleTabs('teacher', isDesktop: false), isNot(contains(6)));
     });
 
-    test('«Обзор» (1) скрыт у admin на любой ширине, «Задачи» (6) видны', () {
+    test('управленческие вкладки скрыты у admin на любой ширине', () {
       expect(crmVisibleTabs('admin', isDesktop: true), isNot(contains(1)));
       expect(crmVisibleTabs('admin', isDesktop: false), isNot(contains(1)));
-      expect(crmVisibleTabs('admin', isDesktop: true), contains(6));
-      expect(crmVisibleTabs('admin', isDesktop: false), contains(6));
+      expect(crmVisibleTabs('admin', isDesktop: true), isNot(contains(6)));
+      expect(crmVisibleTabs('admin', isDesktop: false), isNot(contains(6)));
     });
 
     test(
@@ -203,7 +203,7 @@ void main() {
       },
     );
 
-    test('sparse admin tabs do not numerically clamp Tasks to Clients', () {
+    test('sparse admin tabs reject hidden management targets', () {
       final visible = crmVisibleTabs('admin', isDesktop: false);
       expect(
         crmResolveVisibleTab(
@@ -211,15 +211,15 @@ void main() {
           requestedTab: 6,
           currentTab: 0,
         ),
-        6,
+        0,
       );
       expect(
         crmResolveVisibleTab(
           visibleTabs: visible,
           requestedTab: 4,
-          currentTab: 6,
+          currentTab: 2,
         ),
-        6,
+        2,
       );
     });
   });

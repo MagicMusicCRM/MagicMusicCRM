@@ -540,7 +540,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
-      "line": 623
+      "line": 628
     },
     {
       "kind": "SingleChildScrollView",
@@ -2429,7 +2429,7 @@
       "ahead_of_time": true,
       "status": "predictive-back-capable",
       "file": "lib/features/messenger/presentation/screens/messenger_screen.dart",
-      "line": 312
+      "line": 299
     },
     {
       "kind": "AppBackScope",
@@ -2438,7 +2438,7 @@
       "ahead_of_time": true,
       "status": "predictive-back-capable",
       "file": "lib/features/messenger/presentation/screens/messenger_screen.dart",
-      "line": 425
+      "line": 412
     },
     {
       "kind": "Form",

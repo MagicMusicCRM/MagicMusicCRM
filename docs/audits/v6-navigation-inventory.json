@@ -771,7 +771,7 @@
       "definition_only": false,
       "status": "route-navigation-review",
       "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
-      "line": 477
+      "line": 482
     },
     {
       "kind": "go-router",
@@ -781,7 +781,7 @@
       "definition_only": false,
       "status": "route-navigation-review",
       "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
-      "line": 465
+      "line": 470
     },
     {
       "kind": "navigator",
@@ -831,7 +831,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
-      "line": 493
+      "line": 498
     },
     {
       "kind": "navigator",
@@ -1041,7 +1041,7 @@
       "definition_only": false,
       "status": "typed-context",
       "file": "lib/features/messenger/presentation/screens/messenger_screen.dart",
-      "line": 359
+      "line": 346
     },
     {
       "kind": "typed-entity",
@@ -1051,7 +1051,7 @@
       "definition_only": false,
       "status": "typed-context",
       "file": "lib/features/messenger/presentation/screens/messenger_screen.dart",
-      "line": 350
+      "line": 337
     },
     {
       "kind": "navigator",

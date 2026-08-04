@@ -5,7 +5,7 @@ import 'package:magic_music_crm/core/security/capability_shell.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
 
-const _adminSnapshot = CapabilitySnapshot(
+const _managerSnapshot = CapabilitySnapshot(
   accountId: '11111111-1111-4111-8111-111111111111',
   role: 'manager',
   accessVersion: 1,
@@ -30,7 +30,7 @@ const _revokedSnapshot = CapabilitySnapshot(
 
 class _LiveSnapshotNotifier extends Notifier<CapabilitySnapshot> {
   @override
-  CapabilitySnapshot build() => _adminSnapshot;
+  CapabilitySnapshot build() => _managerSnapshot;
 
   void replace(CapabilitySnapshot value) => state = value;
 }
@@ -55,16 +55,16 @@ void main() {
     expect(snapshot.allows('commerce.school_finance.read'), isFalse);
   });
 
-  test('navigation follows capabilities rather than the role label', () {
-    expect(crmVisibleTabsForCapabilities(_adminSnapshot, isDesktop: true), [
+  test('navigation intersects persona ceiling with effective capabilities', () {
+    expect(crmVisibleTabsForCapabilities(_managerSnapshot, isDesktop: true), [
       0,
       6,
       2,
       3,
     ]);
 
-    final directorCapabilities = CapabilitySnapshot(
-      accountId: _adminSnapshot.accountId,
+    final overPrivilegedAdmin = CapabilitySnapshot(
+      accountId: _managerSnapshot.accountId,
       role: 'admin',
       accessVersion: 3,
       capabilities: const {
@@ -78,9 +78,27 @@ void main() {
       scopes: const {'client': 'allBranches', 'schedule': 'allBranches'},
     );
     expect(
-      crmVisibleTabsForCapabilities(directorCapabilities, isDesktop: true),
-      [0, 1, 2, 3, 4, 5, 6, 7],
+      crmVisibleTabsForCapabilities(overPrivilegedAdmin, isDesktop: true),
+      [0, 2, 3],
     );
+
+    final director = CapabilitySnapshot(
+      accountId: _managerSnapshot.accountId,
+      role: 'director',
+      accessVersion: 4,
+      capabilities: overPrivilegedAdmin.capabilities,
+      scopes: const {'client': 'allBranches', 'schedule': 'allBranches'},
+    );
+    expect(crmVisibleTabsForCapabilities(director, isDesktop: true), [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+    ]);
   });
 
   testWidgets('new accessVersion recreates shell and removes sensitive UI', (

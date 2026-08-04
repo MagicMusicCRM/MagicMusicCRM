@@ -32,7 +32,7 @@ CapabilitySnapshot _staffSnapshot(String role) {
   );
 }
 
-Future<void> _pumpStaffMessenger(
+Future<RecordingFakeApiClient> _pumpStaffMessenger(
   WidgetTester tester, {
   required String role,
 }) async {
@@ -40,12 +40,11 @@ Future<void> _pumpStaffMessenger(
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
 
+  final api = RecordingFakeApiClient(profileRole: role);
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        magicApiClientProvider.overrideWithValue(
-          RecordingFakeApiClient(profileRole: role),
-        ),
+        magicApiClientProvider.overrideWithValue(api),
         capabilitySnapshotProvider.overrideWith(
           (ref) async => _staffSnapshot(role),
         ),
@@ -55,6 +54,7 @@ Future<void> _pumpStaffMessenger(
   );
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 150));
+  return api;
 }
 
 void main() {
@@ -100,17 +100,14 @@ void main() {
     expect(find.byType(ClientsWidget), findsNothing);
   });
 
-  testWidgets('admin keeps the direct mobile Tasks destination', (
+  testWidgets('admin never mounts or requests the Tasks destination', (
     tester,
   ) async {
-    await _pumpStaffMessenger(tester, role: 'admin');
+    final api = await _pumpStaffMessenger(tester, role: 'admin');
 
-    expect(find.text('Задачи'), findsOneWidget);
-    await tester.tap(find.text('Задачи'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 150));
-
-    expect(find.byType(SharedTasksV4Panel), findsOneWidget);
+    expect(find.text('Задачи'), findsNothing);
+    expect(find.byType(SharedTasksV4Panel), findsNothing);
+    expect(api.calls.where((call) => call.path.contains('task')), isEmpty);
   });
 
   testWidgets('manager Overview KPI callbacks use canonical destinations', (

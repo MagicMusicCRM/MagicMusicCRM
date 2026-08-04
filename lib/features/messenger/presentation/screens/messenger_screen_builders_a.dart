@@ -240,10 +240,11 @@ extension _MessengerBuildersA on _MessengerScreenState {
       };
     }
 
-    // Operational destinations are gated on `_hasManagerAccess`; role mutation
-    // controls live inside the user/profile widgets and backend policy.
+    final access = _accessSnapshot;
     return switch (selectedTab) {
-      1 when _hasManagerAccess =>
+      1
+          when access?.allows('report.status.read') == true ||
+              access?.allows('system.settings.manage') == true =>
         _isAdminRole
             ? AdminOverviewWidget(
                 onTabChange: (index, subIndex) => _handleOverviewTabChange(
@@ -260,30 +261,34 @@ extension _MessengerBuildersA on _MessengerScreenState {
                   isDesktop: isDesktop,
                 ),
               ),
-      2 => ScheduleWidget(
-        initialLink: widget.initialLink,
-        initialViewState: widget.initialViewState,
-      ),
-      3 => const ClientsWidget(),
-      4 when _hasManagerAccess => UserRolesWidget(
-        currentRole: widget.role,
-        initialSearch: _userRolesInitialSearch,
-      ),
-      5 when isDesktop && _hasSchoolFinanceAccess => const FinanceWidget(),
-      // Не desktop-only: у Администратора «Задачи» — основная вкладка и на
-      // телефоне (#17). Роли без 6 в crmVisibleTabs сюда не попадут — выбор
-      // нормализуется по видимому списку в messenger_screen.dart.
-      6 when _hasManagerAccess => SharedTasksV4Panel(
+      2 when access?.allows('schedule.lesson.read.assigned') == true =>
+        ScheduleWidget(
+          initialLink: widget.initialLink,
+          initialViewState: widget.initialViewState,
+        ),
+      3 when access?.allows('crm.client.read.basic') == true =>
+        const ClientsWidget(),
+      4 when access?.allows('system.settings.manage') == true =>
+        UserRolesWidget(
+          currentRole: widget.role,
+          initialSearch: _userRolesInitialSearch,
+        ),
+      5
+          when isDesktop &&
+              access?.allows('commerce.school_finance.read') == true =>
+        const FinanceWidget(),
+      6 when access?.allows('workflow.task.read') == true => SharedTasksV4Panel(
         initialLink: widget.initialLink,
         canWrite: _accessSnapshot?.allows('workflow.task.write') == true,
       ),
-      7 when isDesktop && _hasManagerAccess => ReportsWidget(
-        role: widget.role,
-        initialTab: _selectedReportsTab,
-        initialLink: widget.initialLink,
-        initialViewState: widget.initialViewState,
-        accessSnapshot: _accessSnapshot,
-      ),
+      7 when isDesktop && access?.allows('report.status.read') == true =>
+        ReportsWidget(
+          role: widget.role,
+          initialTab: _selectedReportsTab,
+          initialLink: widget.initialLink,
+          initialViewState: widget.initialViewState,
+          accessSnapshot: _accessSnapshot,
+        ),
       _ => _buildMessengerShell(context),
     };
   }

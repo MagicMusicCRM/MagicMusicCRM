@@ -31,6 +31,10 @@ const teacherAndStaffRoles = [
   "teacher",
   ...staffRoles,
 ] as const satisfies readonly AccessRole[];
+const taskReaders = [
+  "teacher",
+  ...managementRoles,
+] as const satisfies readonly AccessRole[];
 
 export const BASELINE_CAPABILITY_ROLES: Readonly<
   Record<CapabilityKey, readonly AccessRole[]>
@@ -50,8 +54,8 @@ export const BASELINE_CAPABILITY_ROLES: Readonly<
   "commerce.package.read": staffRoles,
   "commerce.package.manage": rootBusinessRoles,
   "commerce.subscription.issue": staffRoles,
-  "workflow.task.read": teacherAndStaffRoles,
-  "workflow.task.write": staffRoles,
+  "workflow.task.read": taskReaders,
+  "workflow.task.write": managementRoles,
   "report.status.read": managementRoles,
   "report.export.xlsx": managementRoles,
   "config.crm.read": rootBusinessRoles,
@@ -231,7 +235,7 @@ export function resolveCapabilityRoutePolicy(
     return policy(
       read || sharedTaskClose ? "workflow.task.read" : "workflow.task.write",
       "resource",
-      read || sharedTaskClose ? teacherAndStaffRoles : staffRoles,
+      read || sharedTaskClose ? taskReaders : managementRoles,
       path.includes("/shared-tasks")
         ? "SharedTaskService dynamic audience scope"
         : "TasksService actor/assignee scope",

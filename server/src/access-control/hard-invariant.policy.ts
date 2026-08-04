@@ -83,6 +83,11 @@ const CONFIG_CAPABILITIES = new Set<CapabilityKey>([
   "config.crm.publish",
 ]);
 
+const ADMIN_PERSONA_DENIED_CAPABILITIES = new Set<CapabilityKey>([
+  "workflow.task.read",
+  "workflow.task.write",
+]);
+
 function allow(reason: string): InvariantDecision {
   return { allowed: true, reason };
 }
@@ -110,6 +115,13 @@ export class HardInvariantPolicy {
       CONFIG_CAPABILITIES.has(capabilityKey)
     ) {
       return deny("config_role_hard_deny");
+    }
+
+    if (
+      role === "admin" &&
+      ADMIN_PERSONA_DENIED_CAPABILITIES.has(capabilityKey)
+    ) {
+      return deny("admin_persona_hard_deny");
     }
 
     if (DIRECTOR_ONLY_CAPABILITIES.has(capabilityKey) && role !== "director") {

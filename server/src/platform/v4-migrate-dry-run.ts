@@ -48,6 +48,7 @@ const requiredMigrations = [
   "0091_commerce_issued_subscription_aggregate_versions",
   "0092_shared_tasks_audience_schema",
   "0097_unified_crm_configuration",
+  "0098_admin_persona_boundary",
 ];
 
 const invariantSql: ReadonlyArray<{ id: string; sql: string }> = [

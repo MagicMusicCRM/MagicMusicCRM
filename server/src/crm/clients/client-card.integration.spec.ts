@@ -5,10 +5,7 @@ import { Pool } from "pg";
 import { AccessMutationsRepository } from "../../access-control/access-mutations.repository";
 import { EffectiveAccessEvaluator } from "../../access-control/effective-access-evaluator";
 import { HardInvariantPolicy } from "../../access-control/hard-invariant.policy";
-import {
-  ActorContext,
-  UserRole,
-} from "../../common/security/actor-context";
+import { ActorContext, UserRole } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
 import { MigrationRunner } from "../../db/migration-runner";
 import { ClientCardReadService } from "./client-card-read.service";
@@ -19,7 +16,9 @@ const defaultTestDatabaseUrl =
 const testDatabaseUrl =
   process.env.V4_PLATFORM_TEST_DATABASE_URL ?? defaultTestDatabaseUrl;
 const parsedDatabaseUrl = new URL(testDatabaseUrl);
-if (!new Set(["127.0.0.1", "localhost", "[::1]"]).has(parsedDatabaseUrl.hostname)) {
+if (
+  !new Set(["127.0.0.1", "localhost", "[::1]"]).has(parsedDatabaseUrl.hostname)
+) {
   throw new Error("Client Card tests require local PostgreSQL.");
 }
 
@@ -39,6 +38,7 @@ describe("ClientCardReadService (PostgreSQL)", () => {
   const comments: string[] = [];
   const subscriptions: string[] = [];
   let admin: ActorContext;
+  let manager: ActorContext;
   let client: ActorContext;
   let assignedTeacher: ActorContext;
   let unrelatedTeacher: ActorContext;
@@ -110,6 +110,7 @@ describe("ClientCardReadService (PostgreSQL)", () => {
     `);
 
     admin = await createActor("admin", "Админ", "Карточки");
+    manager = await createActor("manager", "Управляющий", "Карточки");
     client = await createActor("client", "Анна", "Клиент");
     assignedTeacher = await createActor("teacher", "Пётр", "Назначенный");
     unrelatedTeacher = await createActor("teacher", "Олег", "Посторонний");
@@ -133,10 +134,7 @@ describe("ClientCardReadService (PostgreSQL)", () => {
         values ($1, 'active', $2)
         returning id
       `,
-      [
-        (client as ActorContext & { profileId: string }).profileId,
-        branchId,
-      ],
+      [(client as ActorContext & { profileId: string }).profileId, branchId],
     );
     studentId = student.rows[0]!.id;
     students.push(studentId);
@@ -158,13 +156,7 @@ describe("ClientCardReadService (PostgreSQL)", () => {
           ($1, $5, $3, now() + interval '2 days', $4)
         returning id
       `,
-      [
-        studentId,
-        assignedTeacherId,
-        branchId,
-        admin.userId,
-        otherTeacherId,
-      ],
+      [studentId, assignedTeacherId, branchId, admin.userId, otherTeacherId],
     );
     [assignedLessonId, otherLessonId] = lessonResult.rows.map((row) => row.id);
     lessons.push(assignedLessonId!, otherLessonId!);
@@ -257,14 +249,12 @@ describe("ClientCardReadService (PostgreSQL)", () => {
       "delete from app.lesson_homeworks where id = any($1::uuid[])",
       [homework],
     );
-    await database.query(
-      "delete from app.tasks where id = any($1::uuid[])",
-      [tasks],
-    );
-    await database.query(
-      "delete from app.lessons where id = any($1::uuid[])",
-      [lessons],
-    );
+    await database.query("delete from app.tasks where id = any($1::uuid[])", [
+      tasks,
+    ]);
+    await database.query("delete from app.lessons where id = any($1::uuid[])", [
+      lessons,
+    ]);
     await database.query(
       "delete from app.students where id = any($1::uuid[])",
       [students],
@@ -285,16 +275,17 @@ describe("ClientCardReadService (PostgreSQL)", () => {
       `,
       [users],
     );
-    await database.query(
-      "delete from app.users where id = any($1::uuid[])",
-      [users],
-    );
+    await database.query("delete from app.users where id = any($1::uuid[])", [
+      users,
+    ]);
     await database.onModuleDestroy();
   });
 
-  it("composes the full staff card in three bounded queries", async () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it("composes the full Manager card in three bounded queries", async () => {
     const query = jest.spyOn(database, "query");
-    const result = await service.load(admin, {
+    const result = await service.load(manager, {
       type: "student",
       id: studentId,
     });
@@ -320,7 +311,16 @@ describe("ClientCardReadService (PostgreSQL)", () => {
         finance: { balanceMinor: 12345 },
       },
     });
-    query.mockRestore();
+  });
+
+  it("keeps client Tasks out of the Admin projection", async () => {
+    const result = await service.load(admin, {
+      type: "student",
+      id: studentId,
+    });
+
+    expect(result.sections).toMatchObject({ tasks: { count: 0 } });
+    expect(result.tasks).toEqual([]);
   });
 
   it("returns only assigned learning context and shared comments to Teacher", async () => {
@@ -349,7 +349,6 @@ describe("ClientCardReadService (PostgreSQL)", () => {
     );
     expect(serialized).not.toContain("Внутренний");
     expect(serialized).not.toContain(otherLessonId);
-    query.mockRestore();
   });
 
   it("returns own finance and progress-only comments to Client", async () => {
