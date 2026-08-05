@@ -73,10 +73,12 @@ void main() {
     binding.dispose();
   });
 
-  testWidgets('hover menu duplicates and closes other tabs', (tester) async {
+  testWidgets('tabs expose a trailing plus and permanent close buttons', (
+    tester,
+  ) async {
     final workspace = controller();
     final clientTab = workspace.open(link('client-1'), titleHint: 'Клиент');
-    workspace.open(link('client-2'), titleHint: 'Другой');
+    final lastTab = workspace.open(link('client-2'), titleHint: 'Другой');
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -88,32 +90,32 @@ void main() {
       ),
     );
 
-    final select = find.byKey(ValueKey('workspace-tab-select-$clientTab'));
-    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-    await mouse.addPointer(location: Offset.zero);
-    await mouse.moveTo(tester.getCenter(select));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(ValueKey('workspace-tab-menu-$clientTab')));
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(ValueKey('workspace-tab-duplicate-$clientTab')),
+    final plus = find.byKey(const ValueKey('workspace-new-tab'));
+    final lastClose = find.byKey(ValueKey('workspace-tab-close-$lastTab'));
+    expect(plus, findsOneWidget);
+    expect(lastClose, findsOneWidget);
+    expect(find.byIcon(Icons.more_horiz), findsNothing);
+    expect(find.byIcon(Icons.drag_handle), findsNothing);
+    expect(find.byTooltip('Прокрутить вкладки влево'), findsNothing);
+    expect(find.byTooltip('Прокрутить вкладки вправо'), findsNothing);
+    expect(
+      tester.getCenter(plus).dx,
+      greaterThan(tester.getCenter(lastClose).dx),
     );
+
+    await tester.tap(plus);
     await tester.pumpAndSettle();
     expect(workspace.state.tabs, hasLength(4));
 
-    await mouse.moveTo(tester.getCenter(select));
+    await tester.tap(find.byKey(ValueKey('workspace-tab-close-$clientTab')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(ValueKey('workspace-tab-menu-$clientTab')));
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(ValueKey('workspace-tab-close-others-$clientTab')),
-    );
-    await tester.pumpAndSettle();
-    expect(workspace.state.tabs, hasLength(1));
-    expect(workspace.state.activeTabId, clientTab);
+    expect(workspace.state.tabs, hasLength(3));
+    expect(workspace.state.tabs.any((tab) => tab.tabId == clientTab), isFalse);
   });
 
-  testWidgets('narrow tab strip exposes mouse overflow arrows', (tester) async {
+  testWidgets('narrow tab strip scrolls without arrows or a visible bar', (
+    tester,
+  ) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(500, 400);
     addTearDown(tester.view.reset);
@@ -142,14 +144,18 @@ void main() {
     );
     final scrollController = tabs.scrollController!;
     expect(scrollController.position.maxScrollExtent, greaterThan(0));
+    expect(find.byType(Scrollbar), findsNothing);
+    expect(find.byTooltip('Прокрутить вкладки влево'), findsNothing);
+    expect(find.byTooltip('Прокрутить вкладки вправо'), findsNothing);
 
-    await tester.tap(find.byTooltip('Прокрутить вкладки вправо'));
-    await tester.pumpAndSettle();
+    await tester.sendEventToBinding(
+      PointerScrollEvent(
+        position: tester.getCenter(find.byType(ReorderableListView)),
+        scrollDelta: const Offset(200, 0),
+      ),
+    );
+    await tester.pump();
     expect(scrollController.offset, greaterThan(0));
-
-    await tester.tap(find.byTooltip('Прокрутить вкладки влево'));
-    await tester.pumpAndSettle();
-    expect(scrollController.offset, 0);
   });
 
   testWidgets('dirty tab switch waits for the shared exit decision', (

@@ -3,7 +3,6 @@ import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 import 'package:magic_music_crm/core/workspace/workspace_state.dart';
-import 'package:magic_music_crm/core/widgets/v7/magic_desktop_scrollbar.dart';
 
 typedef WorkspaceTabBuilder =
     Widget Function(BuildContext context, WorkspaceTabState tab);
@@ -40,7 +39,6 @@ class DesktopWorkspaceShell extends StatelessWidget {
               controller: controller,
               onSelect: _select,
               onClose: _close,
-              onCloseOthers: _closeOthers,
               onLimitReached: onLimitReached,
             ),
             Expanded(
@@ -57,15 +55,6 @@ class DesktopWorkspaceShell extends StatelessWidget {
 
   Future<void> _close(String tabId) {
     return controller.closeTab(
-      tabId,
-      resolveDirty: resolveDirty ?? _cancelDirtyClose,
-      saveDirty: saveDirty ?? _noSave,
-      discardDirty: discardDirty,
-    );
-  }
-
-  Future<void> _closeOthers(String tabId) {
-    return controller.closeOtherTabs(
       tabId,
       resolveDirty: resolveDirty ?? _cancelDirtyClose,
       saveDirty: saveDirty ?? _noSave,
@@ -97,7 +86,6 @@ class _WorkspaceTabStrip extends StatefulWidget {
     required this.controller,
     required this.onSelect,
     required this.onClose,
-    required this.onCloseOthers,
     required this.onLimitReached,
   });
 
@@ -105,7 +93,6 @@ class _WorkspaceTabStrip extends StatefulWidget {
   final WorkspaceController controller;
   final ValueChanged<String> onSelect;
   final ValueChanged<String> onClose;
-  final ValueChanged<String> onCloseOthers;
   final VoidCallback? onLimitReached;
 
   @override
@@ -127,50 +114,15 @@ class _WorkspaceTabStripState extends State<_WorkspaceTabStrip> {
       color: Theme.of(context).colorScheme.surfaceContainer,
       child: SizedBox(
         height: 48,
-        child: Row(
-          children: [
-            IconButton(
-              tooltip: 'Прокрутить вкладки влево',
-              onPressed: () => _scrollBy(-1),
-              icon: const Icon(Icons.chevron_left_rounded),
-            ),
-            Expanded(
-              child: MagicDesktopScrollbar(
-                axis: Axis.horizontal,
-                controller: _scrollController,
-                builder: (context, controller) => ReorderableListView.builder(
-                  scrollController: controller,
-                  scrollDirection: Axis.horizontal,
-                  buildDefaultDragHandles: true,
-                  itemCount: widget.state.tabs.length,
-                  onReorder: widget.controller.reorderTab,
-                  itemBuilder: (context, index) {
-                    final tab = widget.state.tabs[index];
-                    return _WorkspaceTabButton(
-                      key: ValueKey('workspace-tab-${tab.tabId}'),
-                      tab: tab,
-                      selected: tab.tabId == widget.state.activeTabId,
-                      onPressed: () => widget.onSelect(tab.tabId),
-                      onDuplicate: () {
-                        try {
-                          widget.controller.duplicateTab(tab.tabId);
-                        } on WorkspaceLimitReached {
-                          widget.onLimitReached?.call();
-                        }
-                      },
-                      onClose: () => widget.onClose(tab.tabId),
-                      onCloseOthers: () => widget.onCloseOthers(tab.tabId),
-                    );
-                  },
-                ),
-              ),
-            ),
-            IconButton(
-              tooltip: 'Прокрутить вкладки вправо',
-              onPressed: () => _scrollBy(1),
-              icon: const Icon(Icons.chevron_right_rounded),
-            ),
-            IconButton(
+        child: ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+          child: ReorderableListView.builder(
+            scrollController: _scrollController,
+            scrollDirection: Axis.horizontal,
+            buildDefaultDragHandles: false,
+            itemCount: widget.state.tabs.length,
+            onReorder: widget.controller.reorderTab,
+            footer: IconButton(
               key: const ValueKey('workspace-new-tab'),
               tooltip: 'Новая вкладка',
               onPressed: () {
@@ -182,125 +134,67 @@ class _WorkspaceTabStripState extends State<_WorkspaceTabStrip> {
               },
               icon: const Icon(Icons.add_rounded),
             ),
-          ],
+            itemBuilder: (context, index) {
+              final tab = widget.state.tabs[index];
+              return _WorkspaceTabButton(
+                key: ValueKey('workspace-tab-${tab.tabId}'),
+                index: index,
+                tab: tab,
+                selected: tab.tabId == widget.state.activeTabId,
+                onPressed: () => widget.onSelect(tab.tabId),
+                onClose: () => widget.onClose(tab.tabId),
+              );
+            },
+          ),
         ),
       ),
     );
   }
-
-  Future<void> _scrollBy(int direction) async {
-    if (!_scrollController.hasClients) return;
-    final position = _scrollController.position;
-    final target =
-        (_scrollController.offset +
-                position.viewportDimension * 0.8 * direction)
-            .clamp(position.minScrollExtent, position.maxScrollExtent);
-    await _scrollController.animateTo(
-      target,
-      duration: AppMotion.effective(context, AppMotion.fast),
-      curve: AppMotion.ease,
-    );
-  }
 }
 
-enum _WorkspaceTabAction { duplicate, close, closeOthers }
-
-class _WorkspaceTabButton extends StatefulWidget {
+class _WorkspaceTabButton extends StatelessWidget {
   const _WorkspaceTabButton({
     super.key,
+    required this.index,
     required this.tab,
     required this.selected,
     required this.onPressed,
-    required this.onDuplicate,
     required this.onClose,
-    required this.onCloseOthers,
   });
 
+  final int index;
   final WorkspaceTabState tab;
   final bool selected;
   final VoidCallback onPressed;
-  final VoidCallback onDuplicate;
   final VoidCallback onClose;
-  final VoidCallback onCloseOthers;
-
-  @override
-  State<_WorkspaceTabButton> createState() => _WorkspaceTabButtonState();
-}
-
-class _WorkspaceTabButtonState extends State<_WorkspaceTabButton> {
-  var _hovering = false;
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovering = true),
-      onExit: (_) => setState(() => _hovering = false),
-      child: Semantics(
-        selected: widget.selected,
-        button: true,
+    return Semantics(
+      selected: selected,
+      button: true,
+      child: Container(
+        color: selected
+            ? AppColor.gold.withValues(alpha: 0.12)
+            : Colors.transparent,
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              decoration: BoxDecoration(
-                color: widget.selected
-                    ? AppColor.gold.withValues(alpha: 0.12)
-                    : Colors.transparent,
-                border: Border(
-                  bottom: BorderSide(
-                    color: widget.selected ? AppColor.gold : Colors.transparent,
-                    width: 2,
-                  ),
-                ),
-              ),
+            ReorderableDragStartListener(
+              index: index,
               child: TextButton(
-                key: ValueKey('workspace-tab-select-${widget.tab.tabId}'),
-                onPressed: widget.onPressed,
-                child: Text(widget.tab.titleHint),
+                key: ValueKey('workspace-tab-select-${tab.tabId}'),
+                onPressed: onPressed,
+                child: Text(tab.titleHint),
               ),
             ),
-            AnimatedOpacity(
-              opacity: _hovering ? 1 : 0,
-              duration: const Duration(milliseconds: 100),
-              child: IgnorePointer(
-                ignoring: !_hovering,
-                child: PopupMenuButton<_WorkspaceTabAction>(
-                  key: ValueKey('workspace-tab-menu-${widget.tab.tabId}'),
-                  tooltip: 'Действия вкладки',
-                  icon: const Icon(Icons.more_horiz),
-                  onSelected: (action) {
-                    switch (action) {
-                      case _WorkspaceTabAction.duplicate:
-                        widget.onDuplicate();
-                      case _WorkspaceTabAction.close:
-                        widget.onClose();
-                      case _WorkspaceTabAction.closeOthers:
-                        widget.onCloseOthers();
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                      key: ValueKey(
-                        'workspace-tab-duplicate-${widget.tab.tabId}',
-                      ),
-                      value: _WorkspaceTabAction.duplicate,
-                      child: const Text('Открыть в новой вкладке'),
-                    ),
-                    PopupMenuItem(
-                      key: ValueKey('workspace-tab-close-${widget.tab.tabId}'),
-                      value: _WorkspaceTabAction.close,
-                      child: const Text('Закрыть'),
-                    ),
-                    PopupMenuItem(
-                      key: ValueKey(
-                        'workspace-tab-close-others-${widget.tab.tabId}',
-                      ),
-                      value: _WorkspaceTabAction.closeOthers,
-                      child: const Text('Закрыть другие'),
-                    ),
-                  ],
-                ),
-              ),
+            IconButton(
+              key: ValueKey('workspace-tab-close-${tab.tabId}'),
+              tooltip: 'Закрыть вкладку',
+              visualDensity: VisualDensity.compact,
+              iconSize: 17,
+              onPressed: onClose,
+              icon: const Icon(Icons.close_rounded),
             ),
           ],
         ),
