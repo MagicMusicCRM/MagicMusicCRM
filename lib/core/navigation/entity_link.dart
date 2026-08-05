@@ -119,6 +119,7 @@ class EntityLink {
       'client_status_list' ||
       'lesson_list' ||
       'school_finance_month' => EntityLinkType.report,
+      'configuration' => EntityLinkType.report,
       'teacher' => EntityLinkType.teacher,
       'group' => EntityLinkType.group,
       'room' => EntityLinkType.room,

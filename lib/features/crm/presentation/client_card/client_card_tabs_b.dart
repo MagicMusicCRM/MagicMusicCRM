@@ -179,6 +179,22 @@ extension _ClientCardTabsB on _ClientCardState {
       ? _nonEmpty(_student?['last_name'])
       : _nonEmpty(_leadData['last_name']);
 
+  void _syncWorkspaceTitle() {
+    final name = [
+      _clientLastName,
+      _clientFirstName,
+    ].whereType<String>().join(' ').trim();
+    if (name.isEmpty) return;
+    WorkspaceNavigationScope.maybeOf(context)?.controller.updateEntityTitle(
+      EntityLink.typed(
+        entityType: EntityLinkType.client,
+        entityId: _entityId,
+        variant: widget.entityType,
+      ),
+      '${_isStudent ? 'Ученик' : 'Лид'} · $name',
+    );
+  }
+
   String? get _clientPhone => _isStudent
       ? _nonEmpty(_student?['phone'])
       : _nonEmpty(_leadData['phone']);
@@ -250,6 +266,7 @@ extension _ClientCardTabsB on _ClientCardState {
   void _refreshLedger() {
     _fetchStudentData();
   }
+
   /// «Остаток: 7 астр.ч. / 14 000 ₽» — денежная часть считается по цене пакета
   /// пропорционально оставшимся часам; без пакета показываем только часы.
 

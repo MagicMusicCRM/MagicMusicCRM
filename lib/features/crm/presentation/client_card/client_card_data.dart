@@ -234,6 +234,7 @@ extension _ClientCardData on _ClientCardState {
         );
         _loadingStudent = false;
       });
+      _syncWorkspaceTitle();
       then?.call();
     } catch (e) {
       debugPrint('Error loading student card: $e');
@@ -288,6 +289,7 @@ extension _ClientCardData on _ClientCardState {
         }
         _loadingCard = false;
       });
+      _syncWorkspaceTitle();
       then?.call();
     } catch (e) {
       debugPrint('Lead card load failed: $e');

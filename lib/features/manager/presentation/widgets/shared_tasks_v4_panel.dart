@@ -330,8 +330,7 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
             : const {'open': 0, 'overdue': 0};
         _loading = false;
       });
-      if (!_focusConsumed &&
-          widget.initialLink?.entityType == EntityLinkType.task) {
+      if (!_focusConsumed && focusedTask) {
         _focusConsumed = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;

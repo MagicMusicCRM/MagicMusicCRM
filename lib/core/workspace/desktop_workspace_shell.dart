@@ -170,6 +170,18 @@ class _WorkspaceTabStripState extends State<_WorkspaceTabStrip> {
               onPressed: () => _scrollBy(1),
               icon: const Icon(Icons.chevron_right_rounded),
             ),
+            IconButton(
+              key: const ValueKey('workspace-new-tab'),
+              tooltip: 'Новая вкладка',
+              onPressed: () {
+                try {
+                  widget.controller.duplicateTab(widget.state.activeTabId);
+                } on WorkspaceLimitReached {
+                  widget.onLimitReached?.call();
+                }
+              },
+              icon: const Icon(Icons.add_rounded),
+            ),
           ],
         ),
       ),
@@ -229,10 +241,23 @@ class _WorkspaceTabButtonState extends State<_WorkspaceTabButton> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextButton(
-              key: ValueKey('workspace-tab-select-${widget.tab.tabId}'),
-              onPressed: widget.onPressed,
-              child: Text(widget.tab.titleHint),
+            Container(
+              decoration: BoxDecoration(
+                color: widget.selected
+                    ? AppColor.gold.withValues(alpha: 0.12)
+                    : Colors.transparent,
+                border: Border(
+                  bottom: BorderSide(
+                    color: widget.selected ? AppColor.gold : Colors.transparent,
+                    width: 2,
+                  ),
+                ),
+              ),
+              child: TextButton(
+                key: ValueKey('workspace-tab-select-${widget.tab.tabId}'),
+                onPressed: widget.onPressed,
+                child: Text(widget.tab.titleHint),
+              ),
             ),
             AnimatedOpacity(
               opacity: _hovering ? 1 : 0,

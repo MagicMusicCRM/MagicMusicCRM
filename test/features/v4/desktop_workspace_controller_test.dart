@@ -73,6 +73,31 @@ void main() {
     );
   });
 
+  test(
+    'tab title follows its current route and accepts a loaded entity name',
+    () {
+      final workspace = WorkspaceController(
+        accountId: 'account-1',
+        initialLink: link('home'),
+        titleResolver: (route) => 'Клиент · ${route.entityId}',
+        sharedScope: WorkspaceSharedScope(
+          session: Object(),
+          cache: Object(),
+          realtime: Object(),
+        ),
+      );
+
+      workspace.push('tab-1', link('client-1'));
+      expect(workspace.state.activeTab.titleHint, 'Клиент · client-1');
+
+      workspace.updateEntityTitle(link('client-1'), 'Ученик · Иванов Иван');
+      expect(workspace.state.activeTab.titleHint, 'Ученик · Иванов Иван');
+
+      workspace.back('tab-1');
+      expect(workspace.state.activeTab.titleHint, 'Клиент · home');
+    },
+  );
+
   test('lateral section replacement becomes the Back source for drilldown', () {
     final workspace = controller();
     final schedule = EntityLink.typed(
@@ -129,6 +154,8 @@ void main() {
         ),
       ),
     );
+
+    expect(find.byKey(const ValueKey('workspace-new-tab')), findsOneWidget);
 
     expect(find.text('client-1:true'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('workspace-tab-tab-1')));

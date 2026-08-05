@@ -291,6 +291,8 @@ extension _MessengerBuildersA on _MessengerScreenState {
           initialViewState: widget.initialViewState,
           accessSnapshot: _accessSnapshot,
         ),
+      8 when access?.allows('config.crm.read') == true =>
+        const CrmConfigurationWorkspace(),
       _ => _buildMessengerShell(context),
     };
   }
@@ -360,6 +362,12 @@ extension _MessengerBuildersA on _MessengerScreenState {
           icon: Icons.insert_chart_outlined_rounded,
           selectedIcon: Icons.insert_chart_rounded,
           label: 'Аналитика',
+        );
+      case 8:
+        return const V7NavDestination(
+          icon: Icons.tune_outlined,
+          selectedIcon: Icons.tune_rounded,
+          label: 'Настройки',
         );
       default:
         return const V7NavDestination(

@@ -130,6 +130,28 @@ void main() {
     );
   });
 
+  test('CRM configuration has a director destination and capability guard', () {
+    const director = CapabilitySnapshot(
+      accountId: 'director-1',
+      role: 'director',
+      accessVersion: 1,
+      capabilities: {'config.crm.read'},
+      scopes: {},
+    );
+    final link = EntityRouteRegistry.sectionRootLink('configuration');
+    final resolution = EntityRouteRegistry().resolve(link, director);
+
+    expect(resolution.state, EntityRouteState.resolved);
+    expect(resolution.canonicalLocation?.title, 'Настройки');
+    expect(resolution.canonicalLocation?.requiredCapabilities, {
+      'config.crm.read',
+    });
+    expect(
+      EntityRouteRegistry().resolve(link, snapshot).state,
+      EntityRouteState.forbidden,
+    );
+  });
+
   test('view state has a fail-closed schema version', () {
     final encoded = ContextViewState(
       filters: const {'branch': 'branch-1'},

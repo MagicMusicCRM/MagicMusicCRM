@@ -314,6 +314,12 @@ class EntityRouteRegistry {
         optionalFocus: focus,
         variant: 'overview',
       ),
+      'configuration' => EntityLink.typed(
+        entityType: EntityLinkType.report,
+        entityId: '__section__',
+        optionalFocus: focus,
+        variant: 'configuration',
+      ),
       _ => EntityLink.typed(
         entityType: EntityLinkType.chat,
         entityId: 'home',
@@ -333,6 +339,8 @@ class EntityRouteRegistry {
             }.contains(link.optionalFocus?.focus) =>
       'schedule',
     EntityLinkType.report when link.rawEntityType == 'overview' => 'overview',
+    EntityLinkType.report when link.rawEntityType == 'configuration' =>
+      'configuration',
     EntityLinkType.client ||
     EntityLinkType.subscription ||
     EntityLinkType.comment ||
@@ -364,6 +372,7 @@ class EntityRouteRegistry {
     'chat' => 'Чат',
     'reports' => 'Аналитика',
     'overview' => 'Обзор',
+    'configuration' => 'Настройки',
     _ => 'Главная',
   };
 
@@ -390,6 +399,10 @@ class EntityRouteRegistry {
   };
 
   static Set<String> _requiredCapabilitiesFor(EntityLink link) {
+    if (link.entityType == EntityLinkType.report &&
+        link.rawEntityType == 'configuration') {
+      return const {'config.crm.read'};
+    }
     if (link.entityType == EntityLinkType.report &&
         link.rawEntityType == 'lesson_list' &&
         const {
@@ -537,6 +550,9 @@ class EntityRouteRegistry {
     ),
     EntityLinkType.report: EntityRouteRegistration(
       isAllowed: (link, snapshot) {
+        if (link.rawEntityType == 'configuration') {
+          return snapshot.allows('config.crm.read');
+        }
         if (link.rawEntityType == 'school_finance_month') {
           return snapshot.allows('commerce.school_finance.read');
         }
@@ -567,7 +583,9 @@ class EntityRouteRegistry {
         return _staffRoute(
           link,
           snapshot,
-          isSchedule
+          link.rawEntityType == 'configuration'
+              ? 'configuration'
+              : isSchedule
               ? 'schedule'
               : link.rawEntityType == 'overview'
               ? 'overview'

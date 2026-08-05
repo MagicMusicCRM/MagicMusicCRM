@@ -29,6 +29,7 @@ typedef DirtyCloseResolver =
 typedef DirtyTabSaver = Future<void> Function(WorkspaceTabState tab);
 typedef DirtyTabDiscarder = Future<void> Function(WorkspaceTabState tab);
 typedef WorkspaceFormSaver = Future<bool> Function();
+typedef WorkspaceTitleResolver = String Function(EntityLink link);
 
 class _WorkspaceFormActions {
   const _WorkspaceFormActions({required this.save, required this.discard});
@@ -43,6 +44,7 @@ class WorkspaceController extends ChangeNotifier {
     required EntityLink initialLink,
     required this.sharedScope,
     String initialTitle = 'Главная',
+    WorkspaceTitleResolver? titleResolver,
   }) : _state = WorkspaceState(
          accountId: accountId,
          activeTabId: 'tab-1',
@@ -58,11 +60,13 @@ class WorkspaceController extends ChangeNotifier {
              ],
            ),
          ],
-       );
+       ),
+       _titleResolver = titleResolver;
 
   static const maxTabs = 10;
 
   final WorkspaceSharedScope sharedScope;
+  final WorkspaceTitleResolver? _titleResolver;
   final Map<String, _WorkspaceFormActions> _formActions = {};
   WorkspaceState _state;
   var _nextTabNumber = 2;
@@ -74,7 +78,12 @@ class WorkspaceController extends ChangeNotifier {
       throw StateError('Cannot restore another account workspace.');
     }
     _formActions.clear();
-    _state = restored;
+    _state = restored.copyWith(
+      tabs: [
+        for (final tab in restored.tabs)
+          tab.copyWith(titleHint: _titleFor(tab.currentRoute.link)),
+      ],
+    );
     _nextTabNumber = _nextAvailableTabNumber(restored.tabs);
     notifyListeners();
   }
@@ -114,7 +123,7 @@ class WorkspaceController extends ChangeNotifier {
     final tabId = 'tab-${_nextTabNumber++}';
     final next = WorkspaceTabState(
       tabId: tabId,
-      titleHint: titleHint ?? _defaultTitle(link),
+      titleHint: titleHint ?? _titleFor(link),
       routeStack: [
         ContextRouteState(link: link, viewState: ContextViewState()),
       ],
@@ -138,7 +147,11 @@ class WorkspaceController extends ChangeNotifier {
         );
       }
       routes.add(ContextRouteState(link: link, viewState: ContextViewState()));
-      return tab.copyWith(routeStack: routes, forwardStack: const []);
+      return tab.copyWith(
+        titleHint: _titleFor(link),
+        routeStack: routes,
+        forwardStack: const [],
+      );
     });
   }
 
@@ -148,6 +161,7 @@ class WorkspaceController extends ChangeNotifier {
       if (tab.routeStack.length == 1) return tab;
       removed = tab.routeStack.last;
       return tab.copyWith(
+        titleHint: _titleFor(tab.routeStack[tab.routeStack.length - 2].link),
         routeStack: tab.routeStack.sublist(0, tab.routeStack.length - 1),
         forwardStack: [...tab.forwardStack, removed!],
       );
@@ -161,6 +175,7 @@ class WorkspaceController extends ChangeNotifier {
       if (tab.forwardStack.isEmpty) return tab;
       restored = tab.forwardStack.last;
       return tab.copyWith(
+        titleHint: _titleFor(restored!.link),
         routeStack: [...tab.routeStack, restored!],
         forwardStack: tab.forwardStack.sublist(0, tab.forwardStack.length - 1),
       );
@@ -293,8 +308,26 @@ class WorkspaceController extends ChangeNotifier {
         link: link,
         viewState: viewState ?? ContextViewState(),
       );
-      return tab.copyWith(routeStack: routes, forwardStack: const []);
+      return tab.copyWith(
+        titleHint: _titleFor(link),
+        routeStack: routes,
+        forwardStack: const [],
+      );
     });
+  }
+
+  void updateEntityTitle(EntityLink link, String title) {
+    final normalized = title.trim();
+    if (normalized.isEmpty) return;
+    final tabs = [
+      for (final tab in _state.tabs)
+        _sameEntity(tab.currentRoute.link, link)
+            ? tab.copyWith(titleHint: normalized)
+            : tab,
+    ];
+    if (listEquals(tabs, _state.tabs)) return;
+    _state = _state.copyWith(tabs: tabs);
+    notifyListeners();
   }
 
   void registerForm(
@@ -492,6 +525,9 @@ class WorkspaceController extends ChangeNotifier {
   static String _defaultTitle(EntityLink link) {
     return '${link.rawEntityType}: ${link.entityId}';
   }
+
+  String _titleFor(EntityLink link) =>
+      _titleResolver?.call(link) ?? _defaultTitle(link);
 
   static void _requireSupported(EntityLink link) {
     if (!link.isSupported) {

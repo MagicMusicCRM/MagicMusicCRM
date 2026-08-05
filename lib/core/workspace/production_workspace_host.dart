@@ -97,6 +97,9 @@ class _ProductionWorkspaceHostState
         cache: store,
         realtime: ref.read(magicRealtimeServiceProvider),
       ),
+      titleResolver: (link) =>
+          registry.resolve(link, widget.snapshot).canonicalLocation?.title ??
+          'Главная',
     );
     _logoutCoordinator.attach(_controller);
     _persistence = WorkspacePersistenceBinding(
@@ -204,6 +207,7 @@ class _ProductionWorkspaceHostState
                     controller: _controller,
                     tab: tab,
                     location: location,
+                    currentTitle: tab.titleHint,
                     onBack: () => unawaited(_back(tab)),
                     onNavigate: (node) => unawaited(_navigate(tab, node)),
                   ),

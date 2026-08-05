@@ -10,7 +10,8 @@
 ///
 /// Canonical (non-teacher) tab index meaning:
 ///   0 Чат · 1 Обзор · 2 Расписание · 3 Клиенты ·
-///   4 Пользователи · 5 Финансы (legacy deep link) · 6 Задачи · 7 Аналитика.
+///   4 Пользователи · 5 Финансы (legacy deep link) · 6 Задачи ·
+///   7 Аналитика · 8 Настройки CRM.
 /// Teacher reuses 0/1/2 for Чат/Расписание/Ученики.
 ///
 /// The numbers are CANONICAL (alert_policy.dart's CrmSection and the unseen
@@ -120,6 +121,9 @@ List<int> crmVisibleTabsForCapabilities(
   if (snapshot.allows('system.settings.manage')) tabs.add(4);
   if (canReadTasks && !tabs.contains(6)) tabs.add(6);
   if (isDesktop && snapshot.allows('report.status.read')) tabs.add(7);
+  if (snapshot.role != 'admin' && snapshot.allows('config.crm.read')) {
+    tabs.add(8);
+  }
   return tabs;
 }
 

@@ -74,6 +74,7 @@ void main() {
         'report.status.read',
         'system.settings.manage',
         'commerce.school_finance.read',
+        'config.crm.read',
       },
       scopes: const {'client': 'allBranches', 'schedule': 'allBranches'},
     );
@@ -97,6 +98,7 @@ void main() {
       4,
       6,
       7,
+      8,
     ]);
   });
 

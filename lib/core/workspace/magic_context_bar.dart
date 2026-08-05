@@ -21,6 +21,7 @@ class MagicContextBar extends StatelessWidget {
     required this.controller,
     required this.tab,
     required this.location,
+    this.currentTitle,
     this.actions = const [],
     this.onBack,
     this.onNavigate,
@@ -30,6 +31,7 @@ class MagicContextBar extends StatelessWidget {
   final WorkspaceController controller;
   final WorkspaceTabState tab;
   final CanonicalAppLocation location;
+  final String? currentTitle;
   final List<MagicContextAction> actions;
   final VoidCallback? onBack;
   final ValueChanged<AppBreadcrumbNode>? onNavigate;
@@ -67,6 +69,7 @@ class MagicContextBar extends StatelessWidget {
               child: LayoutBuilder(
                 builder: (context, constraints) => _BreadcrumbTrail(
                   location: location,
+                  currentTitle: currentTitle,
                   availableWidth: constraints.maxWidth,
                   onNavigate:
                       onNavigate ??
@@ -114,16 +117,21 @@ class _HistoryButton extends StatelessWidget {
 class _BreadcrumbTrail extends StatelessWidget {
   const _BreadcrumbTrail({
     required this.location,
+    required this.currentTitle,
     required this.availableWidth,
     required this.onNavigate,
   });
 
   final CanonicalAppLocation location;
+  final String? currentTitle;
   final double availableWidth;
   final ValueChanged<AppBreadcrumbNode> onNavigate;
 
   @override
   Widget build(BuildContext context) {
+    final title = currentTitle?.trim().isNotEmpty == true
+        ? currentTitle!.trim()
+        : location.title;
     final ancestors = location.ancestors;
     final visibleLimit = availableWidth >= 1050
         ? 3
@@ -174,9 +182,9 @@ class _BreadcrumbTrail extends StatelessWidget {
         Expanded(
           child: Semantics(
             header: true,
-            label: 'Текущая страница: ${location.title}',
+            label: 'Текущая страница: $title',
             child: Text(
-              location.title,
+              title,
               key: const ValueKey('context-current'),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,

@@ -55,6 +55,7 @@ import 'package:magic_music_crm/features/teacher/presentation/widgets/teacher_st
 import 'package:magic_music_crm/core/providers/chat_providers.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_forms/crm_configuration_workspace.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:mime/mime.dart';
 import 'package:magic_music_crm/features/messenger/data/chat_archive_api.dart';
@@ -254,6 +255,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       (_, 5) => 'finance',
       (_, 6) => 'tasks',
       (_, 7) => 'reports',
+      (_, 8) => 'configuration',
       _ => null,
     };
     final workspace = WorkspaceNavigationScope.maybeOf(context);

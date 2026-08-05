@@ -194,6 +194,25 @@ Widget _host(
 }
 
 void main() {
+  testWidgets('section root is not treated as a missing linked task', (
+    tester,
+  ) async {
+    final source = _FakeSharedTasks()..closed = true;
+    await tester.pumpWidget(
+      _host(
+        source,
+        initialLink: EntityLink.typed(
+          entityType: EntityLinkType.task,
+          entityId: '__section__',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(source.listedTaskId, isNull);
+    expect(find.text('Связанная запись недоступна.'), findsNothing);
+  });
+
   testWidgets('shows exactly one create action per viewport', (tester) async {
     final source = _FakeSharedTasks();
     await tester.pumpWidget(_host(source, size: const Size(900, 900)));
