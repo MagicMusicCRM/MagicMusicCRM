@@ -6,14 +6,17 @@
 
 **Статус пакета:** READY FOR OWNER EXECUTION
 
-## Engineering UAT candidate — 2026-08-04
+## Engineering UAT candidate — 2026-08-05
 
-- App: `1.2.2+149`
-- Git: `bc59053d4be9f3d87acc34037867ded73cc959c6`
+- App: `1.2.2+150`
+- Git: `d6368eebfd4bd1b163e9a19883fbabb3adf13677`
 - Windows release: `build/windows/x64/runner/Release/magic_music_crm.exe`
-- Windows ZIP SHA-256: `6969195125FB4D1F94D49823473DBF71804E5C25B5359297873E3C4FD98202E7`
-- Android APK SHA-256: `2896F0EEEF909FA7BFAAAB0A1A9E3193EDCD49D7468D88B197E14C321D23823F`
-- Preflight: `flutter analyze` PASS, Flutter `604/604` PASS,
+- Windows ZIP SHA-256: `CECFBE98691A921D74B3E4C81FF7EBCC8E082C6983D291E97A59419D4F9CB2B5`
+- Android APK SHA-256: `547D270B5F57B338A2BFF4F6C57512F36C4F4DF022EB70202915212C1EAFB6BF`
+- Production API: migrations `0095..0098` applied, health PASS; Student
+  funnel and CRM configuration routes resolve behind authentication.
+- Preflight: `flutter analyze` PASS, Flutter `607/607` PASS, backend
+  typecheck/build PASS and targeted configuration/route-policy `46/46` PASS,
   v6 inventory PASS (`routes=22`, `reachable=260`, `unowned=0`).
 - Owner must still record device and backend versions for every executed row;
   this engineering candidate does not replace the required real-account
