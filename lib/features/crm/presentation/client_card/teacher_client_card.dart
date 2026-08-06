@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
 import 'client_card_v4_api.dart';
@@ -109,7 +110,7 @@ class _TeacherClientCardState extends ConsumerState<TeacherClientCard> {
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     Text(
-                      '${header['status'] ?? '—'}'
+                      '${_teacherCardStatusLabel(header['status'])}'
                       '${header['branchName'] == null ? '' : ' · ${header['branchName']}'}',
                       style: TextStyle(color: cs.onSurfaceVariant),
                     ),
@@ -191,22 +192,52 @@ class _TeacherSection extends StatelessWidget {
       separatorBuilder: (_, _) => const Divider(),
       itemBuilder: (_, index) {
         final item = items[index];
-        final title =
+        final rawTitle =
             item['title'] ??
             item['body'] ??
             item['scheduledAt'] ??
             item['createdAt'] ??
             'Запись';
-        final subtitle =
+        final rawSubtitle =
             item['status'] ?? item['lifecycleState'] ?? item['dueAt'];
         return ListTile(
           contentPadding: EdgeInsets.zero,
-          title: Text('$title'),
-          subtitle: subtitle == null ? null : Text('$subtitle'),
+          title: Text(_teacherCardValue(rawTitle)),
+          subtitle: rawSubtitle == null
+              ? null
+              : Text(_teacherCardValue(rawSubtitle, status: true)),
         );
       },
     );
   }
+}
+
+String _teacherCardStatusLabel(Object? raw) {
+  final status = raw?.toString() ?? '';
+  return switch (status) {
+    'active' => 'Активен',
+    'inactive' => 'Неактивен',
+    'archived' => 'В архиве',
+    'scheduled' => 'Запланировано',
+    'completed' || 'done' => 'Завершено',
+    'cancelled' => 'Отменено',
+    'assigned' => 'Назначено',
+    'submitted' => 'Сдано',
+    'reviewed' => 'Проверено',
+    'pending' => 'Ожидает',
+    'overdue' => 'Просрочено',
+    'draft' => 'Черновик',
+    _ => status.isEmpty ? '—' : status,
+  };
+}
+
+String _teacherCardValue(Object? raw, {bool status = false}) {
+  if (status) return _teacherCardStatusLabel(raw);
+  final value = raw?.toString() ?? '';
+  final date = DateTime.tryParse(value);
+  return date == null
+      ? value
+      : DateFormat('dd.MM.yyyy HH:mm', 'ru').format(date.toLocal());
 }
 
 class _TeacherCardError extends StatelessWidget {

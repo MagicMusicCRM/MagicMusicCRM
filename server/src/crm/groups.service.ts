@@ -22,6 +22,7 @@ interface GroupRow {
   teacher_name: string | null;
   branch_name: string | null;
   room_name: string | null;
+  students_count?: string | number | null;
   created_at: Date | string;
 }
 
@@ -61,6 +62,7 @@ export class GroupsService {
       teacherName: row.teacher_name || null,
       branchName: row.branch_name,
       roomName: row.room_name,
+      studentsCount: Number(row.students_count ?? 0),
       createdAt: row.created_at,
     };
   }
@@ -76,6 +78,9 @@ export class GroupsService {
           trim(coalesce(tp.first_name, '') || ' ' || coalesce(tp.last_name, '')) as teacher_name,
           b.name as branch_name,
           r.name as room_name,
+          (select count(*) from app.group_students membership
+            where membership.group_id = g.id and membership.left_at is null
+          ) as students_count,
           g.created_at
         from app.groups g
         left join app.teachers t on t.id = g.teacher_id and t.deleted_at is null

@@ -377,6 +377,7 @@ Map<String, dynamic> _legacyGroup(Map<String, dynamic> item) {
     },
     'branches': {'id': item['branchId'], 'name': item['branchName']},
     'rooms': {'id': item['roomId'], 'name': item['roomName']},
+    'students_count': item['studentsCount'] ?? 0,
   };
 }
 

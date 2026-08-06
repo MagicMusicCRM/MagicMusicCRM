@@ -292,6 +292,7 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
   Widget _buildColumn(ScheduleColumn col, int colIndex, double colWidth) {
     final cs = Theme.of(context).colorScheme;
     final entries = widget.entries.where((e) => e.columnId == col.id).toList();
+    final lanes = _layoutOverlappingEntries(entries);
     final selecting =
         _selArmed &&
         _selColumnId == col.id &&
@@ -366,7 +367,7 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
               // Forbidden horizontal hint (dashed red — flow-02).
               if (showForbidden) _forbiddenBlock(),
               // Lesson cards (on top — own their tap/drag/resize).
-              for (final e in entries) _entryBlock(e, colWidth),
+              for (final e in entries) _entryBlock(e, colWidth, lane: lanes[e]),
             ],
           );
         },
@@ -437,7 +438,7 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
     );
   }
 
-  Widget _entryBlock(ScheduleEntry e, double colWidth) {
+  Widget _entryBlock(ScheduleEntry e, double colWidth, {_EntryLane? lane}) {
     var top = _yForTime(e.startLocal);
     var height = (e.durationMinutes / 60.0) * kHourHeight;
 
@@ -459,6 +460,10 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
         platform == TargetPlatform.macOS;
 
     final selected = _selectedId == e.id;
+    const gap = 3.0;
+    final laneCount = lane?.count ?? 1;
+    final cardWidth = (colWidth - 6 - (laneCount - 1) * gap) / laneCount;
+    final cardLeft = 3 + (lane?.index ?? 0) * (cardWidth + gap);
 
     // Desktop: click opens — hover already reveals the handles, so there is
     // nothing to select and no reason to make the user click twice.
@@ -489,7 +494,7 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
         onDragStarted: _startDrag,
         onDragEnd: (_) => _endDrag(),
         onDraggableCanceled: (_, _) => _endDrag(),
-        feedback: _dragFeedback(e, colWidth, height),
+        feedback: _dragFeedback(e, cardWidth, height),
         childWhenDragging: _LessonCard(entry: e, ghost: true),
         child: tappable,
       );
@@ -499,7 +504,7 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
         onDragStarted: _startDrag,
         onDragEnd: (_) => _endDrag(),
         onDraggableCanceled: (_, _) => _endDrag(),
-        feedback: _dragFeedback(e, colWidth, height),
+        feedback: _dragFeedback(e, cardWidth, height),
         childWhenDragging: _LessonCard(entry: e, ghost: true),
         child: tappable,
       );
@@ -523,8 +528,8 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
     final stripH = (height / 3).clamp(8.0, desktop ? 16.0 : 22.0);
 
     return Positioned(
-      left: 3,
-      right: 3,
+      left: cardLeft,
+      width: cardWidth,
       top: top,
       height: height,
       child: MouseRegion(
@@ -548,11 +553,11 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
     );
   }
 
-  Widget _dragFeedback(ScheduleEntry e, double colWidth, double height) {
+  Widget _dragFeedback(ScheduleEntry e, double width, double height) {
     return Material(
       color: Colors.transparent,
       child: SizedBox(
-        width: colWidth - 6,
+        width: width,
         height: height,
         child: _LessonCard(entry: e, inHand: true),
       ),

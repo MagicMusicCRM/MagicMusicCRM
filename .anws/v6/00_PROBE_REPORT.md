@@ -1,182 +1,100 @@
-# 🔎 MagicMusicCRM v6 — Probe & UX Claim-Gap Report
+# 🔎 MagicMusicCRM v6 — Deep Probe перед полным feature/UAT loop
 
 | Поле | Значение |
 |---|---|
-| Дата | 2026-08-04 |
-| Режим | Deep Probe + Product UX audit |
-| Основание | Текущее приложение, v4 evidence/inventory, ТЗ владельца и 4 референсных скриншота HolliHop |
-| Вывод | **v4 нельзя считать выполненным на 100%; product acceptance не пройдена** |
-
----
+| Дата | 2026-08-06 |
+| Режим | Deep PROFILE → REASON → OBJECT → BENCHMARK → EMIT |
+| Объём | Flutter + NestJS + PostgreSQL + Windows/Android runtime boundaries |
+| Источники | свежий AST/Git probe, production inventories, route/service/runtime tracing |
+| Решение | **кодовая поверхность покрыта; user-story acceptance ещё не завершена** |
 
 ## 1. Executive conclusion
 
-Техническая работа v4 значительна: реализованы access-control, integrity, schedule constraints, commerce snapshots, client-card tabs и отдельные компоненты desktop workspace. Но утверждение «правки выполнены на 100%» не подтверждается самим репозиторием.
+Предыдущий probe устарел: перечисленные там разрывы production mounting были закрыты в v6/S1–S6. В текущем коде подключены desktop workspace, adaptive surfaces, явные scroll/input contracts, канонические Client/Lesson/Task routes, bounded client calendar, единый Dashboard и единая CRM Configuration с reusable field option sets.
 
-Главная причина расхождения — проверялись изолированные классы, contracts и widget harness, а не production route × real account × Windows mouse workflow. В результате часть функций существует в коде, но пользователь её не видит; часть реализована в другом месте или в урезанном виде; часть оставлена рядом с legacy-сценарием.
+Структурная полнота подтверждена: все production routes, surfaces, navigation sites и service calls имеют владельца. Однако зелёные инженерные suites не означают, что каждая функция реально пройдена пользователем. Текущий незакрытый риск — отсутствие единого story-level журнала `код → ожидаемое поведение → реальное исполнение → ошибка → исправление → повторный прогон`.
 
-### Verdict
+## 2. Свежая карта
 
-| Класс | Итог |
+| Метрика | Результат |
 |---|---:|
-| Реализовано и подключено | Часть backend/integrity и отдельных UI-сценариев |
-| Реализовано частично | Карточка клиента, оплаты, расписание клиента, deep links, задачи, аналитика |
-| Реализовано, но не подключено | Desktop workspace tabs/persistence/logout coordination |
-| Не реализовано системно | Persistent desktop scrollbars/mouse UX, full workflow acceptance, единая configurable CRM |
-| Release | **NOT APPROVED** до закрытия High/security/UAT и v6 acceptance |
+| AST files / parse errors | 1,202 / 0 |
+| Flutter production routes / screens | 22 / 22 |
+| Production-reachable Flutter files | 253 |
+| Production modal/surface calls | 93 |
+| Production navigation sites | 263 |
+| Production wire calls | 264 |
+| Unowned entries | 0 |
+| Git commits / authors (180 дней) | 723 / 5 |
 
----
+Единственный inventory false-positive — conditional `runtime_env_io.dart`; это platform selection, не потерянная feature surface.
 
-## 2. Evidence that v4 is not 100% complete
+## 3. Production systems
 
-### P0 — Desktop workspace is dead infrastructure
+| Система | Проверенное назначение | Главный acceptance-риск |
+|---|---|---|
+| Session & Account | login/signup/OTP/MFA/recovery/onboarding/legal/profile/deletion | реальная смена аккаунтов и очистка старой session/realtime state |
+| App Experience | RBAC nav, typed links, tabs, Back, adaptive surfaces | role/deep-link/Back/restart matrix |
+| Messenger | direct/group/channel chat, files, reactions, pins, read/presence | reconnect, late events и роль/room scope |
+| CRM Clients | Lead/Student search, funnels, cards, conversion/archive | ввод поиска без rebuild/reset; correct actor projection |
+| Schedule | Month/Week/Day, conflicts, lesson lifecycle, attendance | search highlighting, branch/timezone and concurrency |
+| Commerce | catalog, subscription snapshot, payment, ledger, replacement/cancel | immutable history and permission scope |
+| Shared Tasks | audience preview, links, reminders, history, close | preview reconciliation and linked navigation |
+| Dashboard | one filter state, sections, drilldowns, exports | school-finance non-request for forbidden actors |
+| Configuration | organization/schedule/CRM/options/catalog/access/data | effective school/branch revisions and fail-closed capabilities |
+| Platform Quality | health, notifications, realtime invalidation, Windows update | lifecycle recovery and release artifact provenance |
 
-- `AccountWorkspaceStore`, `WorkspacePersistenceBinding`, `WorkspaceLogoutCoordinator` and `DesktopWorkspaceShell` exist under `lib/core/workspace/`.
-- Production search outside that directory returns **zero imports/usages** of the shell, persistence binding, logout coordinator and workspace entity-link button.
-- `lib/main.dart` mounts `MaterialApp.router` directly and does not wrap routed role surfaces in the workspace shell.
-- `docs/audits/v4-current-state-inventory.json` still contains **327** entries with `status = workspace-migration-pending`.
+## 4. Runtime inspector
 
-**Impact:** tests can prove the isolated controller/store, but no account receives persistent tabs in the actual application. This exactly explains why the owner cannot see the feature.
+### Process roots
 
-### P0 — Desktop scrolling is not system-wide
+1. `lib/main.dart` запускает Flutter/Riverpod/GoRouter, health warmup, push, session-gated realtime and Windows update check.
+2. `server/src/main.ts` запускает NestJS with strict validation, safe exception/logging boundary, shutdown hooks, `/api`, CORS and HTTP/Socket.IO.
 
-- Global `NoGlowScrollBehavior` only removes the overscroll indicator.
-- Across 259 Flutter source files, explicit `Scrollbar` usage was found in only four call sites; only two set `thumbVisibility: true`.
-- No app-wide `ScrollbarThemeData`, `trackVisibility`, desktop axis policy or scrollable inventory exists.
+### Spawn chains
 
-**Impact:** mouse users depend on wheel/trackpad behavior and cannot reliably grab a visible vertical or horizontal thumb.
+| Parent | Child | Проверка | Contract |
+|---|---|---|---|
+| Windows updater | PowerShell broker | encoded command, timeout/kill, captured output/exit, hash + PID + receipt validation | Strong |
+| Security gate | local CLI | `shell: false`, synchronous exit/stdout/stderr capture | Strong |
 
-### P0 — Client card layout and schedule placement diverge from the specification
+### IPC / trust boundaries
 
-- Desktop `ClientCard` is a centered dialog capped at **600 px** and 85% height, not a full-screen/large desktop workspace.
-- `StudentScheduleSection` is rendered inside the Info tab.
-- The Lessons tab is explicitly a **flat upcoming/past list** and routes out to the global schedule.
-- No embedded client Month/Week/Day calendar with selected-client green and other lessons gray was found.
+- REST is **mixed-strength**: server DTO/policy/DB boundary is strong; several Flutter responses remain map-decoded.
+- Realtime is **mixed-strength**: client events are DTO/rate/policy checked and server event names are explicitly allowlisted; Flutter payloads are still maps.
+- Account replacement is explicitly guarded: realtime transport is reset before tokens change, subject mismatch disposes the old socket, reconnect obtains a fresh token.
+- CRM/finance/access events are invalidation hints; values are refetched through authorized projections.
+- Production realtime CORS fails closed without an allowlist.
 
-**Impact:** individual pieces exist, but the standard desktop workflow still requires context switching and does not match the supplied HolliHop reference.
+## 5. Risk matrix
 
-### P0 — Payments exist but the add-payment workflow is incomplete
+| ID | Риск | Вероятность | Влияние | Проверка в UAT loop |
+|---|---|---:|---:|---|
+| R1 | сохранённая сессия/сокет мешает повторному входу или переносит старый аккаунт | medium | critical | последовательный login/logout/same+other account/restart for all personas |
+| R2 | search field теряет focus/value из-за rebuild/refetch | medium | high | ввод ФИО посимвольно в Leads/Students/Chat/Schedule |
+| R3 | calendar search не даёт устойчивой зелёной/серой иерархии | medium | high | Month/Week/Day exact/non-match/clear filter |
+| R4 | map-shaped payload drift проявится только runtime | medium | high | реальный backend for every service-backed story |
+| R5 | forbidden role создаёт скрытый finance/config request | low | critical | network/log assertion for Client/Teacher/Admin/Manager |
+| R6 | high-churn CRM/client/schedule seams regress | high | high | prioritize cross-navigation and mutations, then full retest |
+| R7 | owner acceptance mistakenly inferred from green tests | high | high | separate Implementation Status from Test Status in canonical XLSX |
 
-- Student card already has a separate `Оплаты` tab and personal-account ledger.
-- `TopUpDialog` accepts only amount and comment; it hardcodes current date and `method: other`.
-- Branch, payment method selector, payment status, accepted-by employee/date and invoice are not part of create flow.
-- Discount and installments exist in subscription issue contracts, not as one coherent direct-payment/client-account UX; surcharge is not surfaced in the form.
+## 6. Git forensics
 
-**Impact:** this is not the requested operational cashier flow shown in the reference screenshot.
+Самые изменяемые продуктовые seams за 180 дней: `crm.service.ts` (106), `client_card.dart` (67), `messenger_screen.dart` (60), `leads_widget.dart` (56), `schedule_widget.dart` (47), `crm.module.ts` (45), Flutter CRM service (41), tasks (35), reports (29) and router (28). Coupling `crm.service.ts ↔ spec` = 0.968, `crm.service.ts ↔ controller` = 0.960.
 
-### P0 — Deep linking is infrastructure-first, adoption-second
+Это не основание переписывать систему. Это порядок тестирования: auth switching → typed search → calendar filtering → client workspace links → finance/subscription mutations → realtime reconnect → scoped dashboard/config.
 
-- Typed `EntityLink`/registry/navigator already exist and should be reused.
-- Lesson detail receives display names instead of typed entity IDs, so Student/Lead, Teacher and Room remain text.
-- Client Lessons can jump to schedule, but that is one directional special-case, not system-wide connected navigation.
+## 7. Decision and next gate
 
-**Impact:** “связанная запись везде кликабельна и Back возвращает контекст” is not yet a product invariant.
+### PASS
 
-### P1 — Parallel product paths remain
+- production surface ownership;
+- current architecture/runtime map;
+- engineering regression evidence already recorded for v6/S6.
 
-- `TasksWidget` and `SharedTasksV4Panel` remain neighboring experiences.
-- Shared Tasks itself has both a header add button and a FAB.
-- `ReportsWidget` still exposes separate Reports, Finance and Summary tabs with distinct loaders.
+### OPEN
 
-**Impact:** v4 improved components without completing canonical cutover.
+- story-level execution on real accounts and target platforms;
+- error inventory, root-cause fixes and complete post-fix retest.
 
----
-
-## 3. UX audit by core workflow
-
-| Workflow | Current implementation | Gap | Priority |
-|---|---|---|---:|
-| Open 2–10 records in desktop tabs | Isolated workspace classes/tests | Not mounted; no real restart/logout proof | P0 |
-| Work only with a mouse | A few local scrollbars | No visible draggable bars on most scrollables/axes | P0 |
-| Find/create Student | Board exists; create form elsewhere | Main Students has no canonical create action; stages hardcoded | P0 |
-| Open client and work quickly | 600 px modal with horizontal tab strip | Not full-screen/large desktop; high context density in Info | P0 |
-| Set preferred schedule | Recurring series editor exists in Info | Wrong information architecture; no dedicated Lessons/calendar workspace | P0 |
-| Inspect client lessons | Flat past/upcoming list | No Month/Week/Day, branch default, own-green/others-gray context | P0 |
-| Add client payment | Ledger and minimal top-up | Missing operational payment attributes and commercial controls | P0 |
-| Follow related records | Partial typed navigation infrastructure | Lesson and many entity refs not clickable; context restoration inconsistent | P0 |
-| Create/close shared task | Legacy + shared task panels | Duplicate create actions and two mental models | P0 |
-| Review business state | Multiple reporting tabs | No single filter contract/dashboard/drilldown parity | P1 |
-| Recover from errors | Implemented inconsistently per screen | No route-wide loading/empty/error/forbidden/retry acceptance | P1 |
-
----
-
-## 4. Mapping of the supplied 26-point specification
-
-Statuses are based on source/evidence. `Runtime UAT` means the code may exist, but the real-account/device workflow was not proven.
-
-| № | Requirement | Status | Required v6 action |
-|---:|---|---|---|
-| 1 | 2–10 persistent PC tabs; clear on logout | **Not connected** | Mount existing workspace at production shell; account-scoped restore/logout/device gate |
-| 2 | Required Lead name/phone/source | Partial / runtime UAT | Effective field schema + backend/UI parity |
-| 3 | Source only from dictionary | Partial | Move to published dictionary; no free-text fallback |
-| 4 | Notify only for inbound lead | Backend evidence exists / runtime UAT | Real-account notification acceptance |
-| 5 | Director manages sources/fields; safe archive | Partial | Unified config lifecycle, usage impact and archive rules |
-| 6 | Horizontal client-card tabs | Exists | Add desktop overflow/scrollbar/keyboard acceptance |
-| 7 | Director manages subscription catalog | Exists partially | Canonical settings location + role/device UAT |
-| 8 | Change assigned package for allowed staff | Commerce replacement exists | Confirm all allowed roles and client-card affordance |
-| 9 | Discount | Subscription contract exists | Expose coherent client commercial/payment UX |
-| 10 | Installments and cash/non-cash | Subscription contract exists | Expose in canonical forms; define direct-payment semantics |
-| 11 | Required Student fields | Partial | Effective school/branch metadata and backend parity |
-| 12 | Clear “Create schedule” action | Partial | Move/create in canonical Lessons tab |
-| 13 | Clear global schedule creation | Partial | Typed ClientRef selector and unambiguous labels |
-| 14 | Schedule → client; client weekly calendar | **Partial/missing** | System-wide links + embedded Month/Week/Day client calendar |
-| 15 | Back returns to prior schedule context | Partial | One route-stack/context preservation contract |
-| 16 | Required room/teacher/hours constraints | Backend largely exists | UI explanation + seeded device acceptance |
-| 17 | Teacher availability and branch assignment | Backend largely exists | Canonical UI and branch-aware UAT |
-| 18 | Student/teacher/room/branch conflicts | Backend largely exists | Matrix UX and concurrency acceptance |
-| 19 | Valid Excel export | Unverified | File-open contract and real exported artifact gate |
-| 20 | Student status counts; Director access control | Partial | Configurable funnel + delegated capability matrix |
-| 21 | Remaining active-subscription lessons | Partial | Canonical client summary + mouse horizontal-scroll acceptance |
-| 22 | Client tasks, all-day/interval/reminder/audience | Partial | One shared-task UX with branch/all-school scope |
-| 23 | Close task in client tab | Exists partially | Canonical close lifecycle + runtime UAT |
-| 24 | Teacher calendar Day/Week | Read-only Day/Week exists | Validate requested interaction vs protected teacher permissions |
-| 25 | Director-only client deletion + linked-impact warning | Archive/preview exists | Confirm role matrix and payment/conversion preservation |
-| 26 | Lesson auto-completes after time | Worker exists | Production worker/retry/poison readiness acceptance |
-
----
-
-## 5. HolliHop benchmark: what to adopt, not clone
-
-The reference is useful for information architecture: client context, preferred schedule, calendar, personal account and history are adjacent and operational actions are explicit. The official HolliHop materials also describe a calendar with rooms/teachers, client preferences/history, tasks/reminders and financial operations.
-
-Adopt:
-
-- client-centric navigation and one-screen operational context;
-- explicit labels and visible table/scroll affordances;
-- preferred schedule separated from generic profile information;
-- personal-account ledger plus a complete add-payment form;
-- linked entities as navigation, not inert text.
-
-Do not adopt blindly:
-
-- visual style inconsistent with the approved MagicMusic v7 tokens;
-- role behavior that conflicts with MagicMusic capability/resource-scope rules;
-- mutable financial history or unsafe deletes;
-- one-school assumptions where MagicMusic requires school default + branch override.
-
----
-
-## 6. Runtime inspection limitation
-
-The existing Windows Release executable was detected and its window was targeted. Windows Graphics Capture failed with `0x80004002 (interface not supported)` for this Flutter window, so no trustworthy live screenshots or mouse interactions could be captured in this probe. Authentication was not automated and no account data was mutated.
-
-Therefore this report is a deep source/evidence audit plus inspection of the supplied DOCX/screenshots, **not** final real-account UAT. Final acceptance must still run on the seeded Windows build and Android device with role/branch accounts.
-
----
-
-## 7. Recommended delivery order
-
-1. Mount/reuse desktop workspace and prove account persistence/logout.
-2. Add one global desktop scrollbar/mouse policy, then inventory exceptions.
-3. Recompose client card for desktop: full/large workspace, canonical tabs and preserved context.
-4. Move preferred schedule into Lessons and add client Month/Week/Day calendar with branch default and own/other visual hierarchy.
-5. Complete Payments tab by reusing existing ledger/commerce APIs; add only missing server contract fields that are product-authoritative.
-6. Enforce typed entity links in shared display components and lesson details.
-7. Complete Students/Tasks/Reporting canonical cutovers.
-8. Run route × role × branch × school × device workflow audit, then security/release gate.
-
----
-
-## 8. Probe decision
-
-**The v4 claim is rejected as a product-completion claim.** It is valid only as evidence that many underlying domain and integrity components were implemented. v6 must define completion by production mounting, visible workflow behavior and real-account UAT—not by isolated class/test existence.
+Следующий обязательный артефакт — один канонический XLSX. Он является единственным реестром user stories, expected behavior, execution evidence and errors. Release acceptance запрещено выводить только из source presence или aggregate green suites.

@@ -45,6 +45,7 @@ class _GroupsList extends ConsumerWidget {
               final branchName =
                   item['branches']?['name'] as String? ?? 'Без филиала';
               final teacher = item['teachers'];
+              final students = _asInt(item['students_count']);
 
               var teacherName = 'Без преподавателя';
               if (teacher != null) {
@@ -81,7 +82,7 @@ class _GroupsList extends ConsumerWidget {
                   ),
                   title: Text(name),
                   subtitle: Text(
-                    'Преп.: $teacherName • Фил.: $branchName',
+                    'Учеников: $students • Преп.: $teacherName • Фил.: $branchName',
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                       fontSize: 12,

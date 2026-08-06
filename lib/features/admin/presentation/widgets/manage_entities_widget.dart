@@ -333,7 +333,7 @@ class _ScheduleSettingsState extends State<_ScheduleSettings> {
                     decoration: const InputDecoration(
                       isDense: true,
                       prefixIcon: Icon(Icons.search_rounded),
-                      hintText: 'Поиск группы',
+                      labelText: 'Поиск группы',
                     ),
                   ),
                 ),
@@ -455,7 +455,7 @@ class _UsersSettingsState extends State<_UsersSettings> {
                     decoration: const InputDecoration(
                       isDense: true,
                       prefixIcon: Icon(Icons.search_rounded),
-                      hintText: 'Поиск',
+                      labelText: 'Поиск',
                     ),
                   ),
                 ),
@@ -553,7 +553,7 @@ class _OrganizationSettingsState extends ConsumerState<_OrganizationSettings> {
                   decoration: const InputDecoration(
                     isDense: true,
                     prefixIcon: Icon(Icons.search_rounded),
-                    hintText: 'Поиск по названию',
+                    labelText: 'Поиск по названию',
                   ),
                 ),
               ),

@@ -75,10 +75,9 @@ List<int> crmVisibleTabs(String role, {required bool isDesktop}) {
   if (role == 'client') return const [];
   if (role == 'teacher') return const [0, 1, 2];
   if (role == 'admin') return const [0, 2, 3];
-  // School-wide finance/reports remain desktop-only. Tasks are operational
-  // work, however, so manager-tier roles must be able to open them on a phone
-  // too (directly from Overview or through the nav shell's «Ещё» menu).
-  if (!isDesktop) return const [0, 1, 2, 3, 6, 8];
+  // The compact shell keeps secondary destinations in «Ещё»; Analytics must
+  // remain reachable because Overview KPI cards deep-link into it.
+  if (!isDesktop) return const [0, 1, 2, 3, 6, 7, 8];
   return const [0, 1, 2, 3, 6, 7, 8];
 }
 
@@ -119,7 +118,7 @@ List<int> crmVisibleTabsForCapabilities(
   if (snapshot.allows('schedule.lesson.read.assigned')) tabs.add(2);
   if (snapshot.allows('crm.client.read.basic')) tabs.add(3);
   if (canReadTasks && !tabs.contains(6)) tabs.add(6);
-  if (isDesktop && snapshot.allows('report.status.read')) tabs.add(7);
+  if (snapshot.allows('report.status.read')) tabs.add(7);
   if (snapshot.role != 'admin' &&
       (snapshot.allows('system.settings.manage') ||
           snapshot.allows('config.crm.read'))) {

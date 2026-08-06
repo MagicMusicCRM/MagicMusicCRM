@@ -94,7 +94,15 @@ void main() {
 
     test('Управляющий: operational CRM без раздела «Финансы» (5)', () {
       expect(crmVisibleTabs('manager', isDesktop: true), [0, 1, 2, 3, 6, 7, 8]);
-      expect(crmVisibleTabs('manager', isDesktop: false), [0, 1, 2, 3, 6, 8]);
+      expect(crmVisibleTabs('manager', isDesktop: false), [
+        0,
+        1,
+        2,
+        3,
+        6,
+        7,
+        8,
+      ]);
     });
 
     test('Директор: единая «Аналитика» без дублирующей вкладки 5', () {
@@ -107,7 +115,15 @@ void main() {
         7,
         8,
       ]);
-      expect(crmVisibleTabs('director', isDesktop: false), [0, 1, 2, 3, 6, 8]);
+      expect(crmVisibleTabs('director', isDesktop: false), [
+        0,
+        1,
+        2,
+        3,
+        6,
+        7,
+        8,
+      ]);
     });
 
     test('Администратор системы == Директор (superuser keeps full access)', () {
@@ -192,36 +208,33 @@ void main() {
         7,
       );
     });
-    test(
-      'manager mobile opens Tasks and keeps Overview for hidden Finance',
-      () {
-        final visible = crmVisibleTabs('manager', isDesktop: false);
-        expect(
-          crmResolveVisibleTab(
-            visibleTabs: visible,
-            requestedTab: 6,
-            currentTab: 1,
-          ),
-          6,
-        );
-        expect(
-          crmResolveVisibleTab(
-            visibleTabs: visible,
-            requestedTab: 5,
-            currentTab: 1,
-          ),
-          1,
-        );
-        expect(
-          crmResolveVisibleTab(
-            visibleTabs: visible,
-            requestedTab: 7,
-            currentTab: 1,
-          ),
-          1,
-        );
-      },
-    );
+    test('manager mobile opens Tasks and Analytics without school finance', () {
+      final visible = crmVisibleTabs('manager', isDesktop: false);
+      expect(
+        crmResolveVisibleTab(
+          visibleTabs: visible,
+          requestedTab: 6,
+          currentTab: 1,
+        ),
+        6,
+      );
+      expect(
+        crmResolveVisibleTab(
+          visibleTabs: visible,
+          requestedTab: 5,
+          currentTab: 1,
+        ),
+        7,
+      );
+      expect(
+        crmResolveVisibleTab(
+          visibleTabs: visible,
+          requestedTab: 7,
+          currentTab: 1,
+        ),
+        7,
+      );
+    });
 
     test('sparse admin tabs reject hidden management targets', () {
       final visible = crmVisibleTabs('admin', isDesktop: false);

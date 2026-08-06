@@ -475,4 +475,29 @@ describe("StaffService", () => {
       "u.role <> 'system_admin'::app.user_role",
     );
   });
+
+  it("hides imported placeholder email in staff projections", async () => {
+    const { service } = createService([
+      {
+        id: "staff-imported",
+        role: "teacher",
+        position: null,
+        status: "working",
+        custom_data: {},
+        profile_id: "profile-imported",
+        profile_user_id: "user-imported",
+        app_role: "teacher",
+        is_app_account: false,
+        first_name: "Импортный",
+        last_name: "Сотрудник",
+        email: "hollihop-staff-1@migration.invalid",
+        phone: null,
+        branches: [],
+        created_at: "2026-06-13T00:00:00.000Z",
+      },
+    ]);
+
+    const result = await service.listStaff(actor, {});
+    expect(result.items[0]?.email).toBeNull();
+  });
 });

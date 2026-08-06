@@ -567,6 +567,9 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
   }
 
   Widget _buildScheduleSearchBanner() {
+    final matchCount = _lessonsInCurrentView()
+        .where(_matchesScheduleSearch)
+        .length;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
       child: Wrap(
@@ -585,9 +588,11 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
               child: CircularProgressIndicator(strokeWidth: 2),
             ),
           _clientContextLegend(
-            Icons.person_search_rounded,
-            AppColor.success,
-            'Совпадения',
+            matchCount == 0
+                ? Icons.search_off_rounded
+                : Icons.person_search_rounded,
+            matchCount == 0 ? AppColor.warning : AppColor.success,
+            'Совпадений: $matchCount',
           ),
           _clientContextLegend(
             Icons.people_outline_rounded,

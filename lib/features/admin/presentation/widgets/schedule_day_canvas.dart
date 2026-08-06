@@ -83,6 +83,55 @@ class ScheduleEntry {
   });
 }
 
+class _EntryLane {
+  const _EntryLane(this.index, this.count);
+
+  final int index;
+  final int count;
+}
+
+Map<ScheduleEntry, _EntryLane> _layoutOverlappingEntries(
+  List<ScheduleEntry> entries,
+) {
+  final sorted = [...entries]
+    ..sort((left, right) {
+      final byStart = left.startLocal.compareTo(right.startLocal);
+      return byStart != 0
+          ? byStart
+          : right.durationMinutes.compareTo(left.durationMinutes);
+    });
+  final result = <ScheduleEntry, _EntryLane>{};
+  final cluster = <(ScheduleEntry, int)>[];
+  final laneEnds = <DateTime>[];
+  DateTime? clusterEnd;
+
+  void flush() {
+    final count = laneEnds.length;
+    for (final item in cluster) {
+      result[item.$1] = _EntryLane(item.$2, count);
+    }
+    cluster.clear();
+    laneEnds.clear();
+    clusterEnd = null;
+  }
+
+  for (final entry in sorted) {
+    if (clusterEnd != null && !entry.startLocal.isBefore(clusterEnd!)) flush();
+    var lane = laneEnds.indexWhere((end) => !entry.startLocal.isBefore(end));
+    final end = entry.startLocal.add(Duration(minutes: entry.durationMinutes));
+    if (lane < 0) {
+      lane = laneEnds.length;
+      laneEnds.add(end);
+    } else {
+      laneEnds[lane] = end;
+    }
+    cluster.add((entry, lane));
+    if (clusterEnd == null || end.isAfter(clusterEnd!)) clusterEnd = end;
+  }
+  if (cluster.isNotEmpty) flush();
+  return result;
+}
+
 /// The day-view canvas: a 2-axis scrollable time grid with a sticky time gutter
 /// (left) and sticky room headers (top), block-drag move, hover/focus resize
 /// handles and drag-edge autoscroll. It owns NO data — every mutation is routed

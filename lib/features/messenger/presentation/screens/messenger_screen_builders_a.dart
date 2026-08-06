@@ -212,7 +212,7 @@ extension _MessengerBuildersA on _MessengerScreenState {
       ),
     );
     _emitState(() {
-      if (isDesktop && targetTab == 7 && reportsTab != null) {
+      if (targetTab == 7 && reportsTab != null) {
         _selectedReportsTab = reportsTab.clamp(0, 5);
       }
     });
@@ -279,14 +279,13 @@ extension _MessengerBuildersA on _MessengerScreenState {
         initialLink: widget.initialLink,
         canWrite: _accessSnapshot?.allows('workflow.task.write') == true,
       ),
-      7 when isDesktop && access?.allows('report.status.read') == true =>
-        ReportsWidget(
-          role: widget.role,
-          initialTab: _selectedReportsTab,
-          initialLink: widget.initialLink,
-          initialViewState: widget.initialViewState,
-          accessSnapshot: _accessSnapshot,
-        ),
+      7 when access?.allows('report.status.read') == true => ReportsWidget(
+        role: widget.role,
+        initialTab: _selectedReportsTab,
+        initialLink: widget.initialLink,
+        initialViewState: widget.initialViewState,
+        accessSnapshot: _accessSnapshot,
+      ),
       8
           when access?.allows('system.settings.manage') == true ||
               access?.allows('config.crm.read') == true =>

@@ -25,6 +25,7 @@ import {
   sanitizeJsonObject,
   trimOptional,
 } from "./crm-util";
+import { presentableEmail } from "./crm-mappers";
 
 interface StaffRow {
   id: string;
@@ -103,7 +104,7 @@ export class StaffService {
       isAppAccount: row.is_app_account ?? false,
       firstName: row.first_name,
       lastName: row.last_name,
-      email: row.email,
+      email: presentableEmail(row.email),
       phone: row.phone,
       branches: row.branches ?? [],
       createdAt: row.created_at,

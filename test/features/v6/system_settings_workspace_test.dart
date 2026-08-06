@@ -7,11 +7,17 @@ import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/manage_entities_widget.dart';
 
 class _SettingsApi extends MagicApiClient {
-  _SettingsApi({required this.role, required this.capabilities})
-    : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
+  _SettingsApi({
+    required this.role,
+    required this.capabilities,
+    this.groups = const [],
+    this.staff = const [],
+  }) : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   final String role;
   final List<String> capabilities;
+  final List<Map<String, dynamic>> groups;
+  final List<Map<String, dynamic>> staff;
   final mutations = <String, Object?>{};
 
   @override
@@ -54,7 +60,9 @@ class _SettingsApi extends MagicApiClient {
           }
           as T;
     }
-    if (path == '/crm/staff' || path == '/crm/groups' || path == '/crm/rooms') {
+    if (path == '/crm/staff') return <String, dynamic>{'items': staff} as T;
+    if (path == '/crm/groups') return <String, dynamic>{'items': groups} as T;
+    if (path == '/crm/rooms') {
       return <String, dynamic>{'items': const <Map<String, dynamic>>[]} as T;
     }
     if (path == '/crm/schedule-reference') {
@@ -218,6 +226,8 @@ void main() {
       findsOneWidget,
     );
     expect(find.widgetWithText(FilledButton, 'Сохранить'), findsNothing);
+    final mondaySwitch = find.bySemanticsLabel('Понедельник: включено');
+    expect(mondaySwitch, findsOneWidget);
   });
 
   testWidgets('manager creates staff from the mounted users workspace', (
@@ -299,5 +309,45 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(api.mutations, contains('/crm/groups'));
+  });
+
+  testWidgets('settings lists localized staff status and group size', (
+    tester,
+  ) async {
+    final api = _SettingsApi(
+      role: 'director',
+      capabilities: const ['system.settings.manage', 'schedule.lesson.write'],
+      staff: const [
+        {
+          'id': 'staff-1',
+          'role': 'manager',
+          'status': 'working',
+          'firstName': 'Ольга',
+          'lastName': 'Смирнова',
+          'isAppAccount': false,
+        },
+      ],
+      groups: const [
+        {
+          'id': 'group-1',
+          'name': 'Вокал',
+          'teacherName': 'Мария Петрова',
+          'branchName': 'Сокол',
+          'studentsCount': 7,
+        },
+      ],
+    );
+    await _pump(tester, api, initialArea: 'users');
+
+    await tester.tap(find.text('Сотрудники').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Работает'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(ListTile, 'Расписание'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Группы'));
+    await tester.pumpAndSettle();
+    expect(find.bySemanticsLabel('Поиск группы'), findsOneWidget);
+    expect(find.textContaining('Учеников: 7'), findsOneWidget);
   });
 }

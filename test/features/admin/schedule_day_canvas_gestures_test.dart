@@ -16,12 +16,12 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_day
 
 final _day = DateTime(2026, 7, 9);
 
-ScheduleEntry _entry({String id = 'l1', bool movable = true}) {
+ScheduleEntry _entry({String id = 'l1', bool movable = true, DateTime? start}) {
   return ScheduleEntry(
     lesson: {'id': id},
     id: id,
     columnId: 'room-1',
-    startLocal: DateTime(2026, 7, 9, 12),
+    startLocal: start ?? DateTime(2026, 7, 9, 12),
     durationMinutes: 60,
     title: 'Степан Белоусов',
     subtitle: 'Антон Кондрашов',
@@ -65,9 +65,7 @@ ScrollPosition _verticalBody(WidgetTester tester) {
   final states = tester.stateList<ScrollableState>(find.byType(Scrollable));
   return states
       .map((s) => s.position)
-      .firstWhere(
-        (p) => p.axis == Axis.vertical && p.maxScrollExtent > 0,
-      );
+      .firstWhere((p) => p.axis == Axis.vertical && p.maxScrollExtent > 0);
 }
 
 void main() {
@@ -79,9 +77,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     final rec = _Recorder();
-    await tester.pumpWidget(
-      _host(platform: TargetPlatform.windows, rec: rec),
-    );
+    await tester.pumpWidget(_host(platform: TargetPlatform.windows, rec: rec));
     await tester.pumpAndSettle();
 
     final before = _verticalBody(tester).pixels;
@@ -108,7 +104,8 @@ void main() {
     expect(
       _verticalBody(tester).pixels,
       greaterThan(before),
-      reason: 'the gesture must reach the scroll view instead of being '
+      reason:
+          'the gesture must reach the scroll view instead of being '
           'swallowed by the column pan recognizer',
     );
   });
@@ -122,11 +119,7 @@ void main() {
 
     final rec = _Recorder();
     await tester.pumpWidget(
-      _host(
-        platform: TargetPlatform.android,
-        rec: rec,
-        entries: [_entry()],
-      ),
+      _host(platform: TargetPlatform.android, rec: rec, entries: [_entry()]),
     );
     await tester.pumpAndSettle();
 
@@ -152,9 +145,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     final rec = _Recorder();
-    await tester.pumpWidget(
-      _host(platform: TargetPlatform.windows, rec: rec),
-    );
+    await tester.pumpWidget(_host(platform: TargetPlatform.windows, rec: rec));
     await tester.pumpAndSettle();
 
     final centre = tester.getCenter(find.byType(ScheduleDayCanvas));
@@ -179,9 +170,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     final rec = _Recorder();
-    await tester.pumpWidget(
-      _host(platform: TargetPlatform.windows, rec: rec),
-    );
+    await tester.pumpWidget(_host(platform: TargetPlatform.windows, rec: rec));
     await tester.pumpAndSettle();
 
     final centre = tester.getCenter(find.byType(ScheduleDayCanvas));
@@ -211,11 +200,7 @@ void main() {
 
     final rec = _Recorder();
     await tester.pumpWidget(
-      _host(
-        platform: TargetPlatform.windows,
-        rec: rec,
-        entries: [_entry()],
-      ),
+      _host(platform: TargetPlatform.windows, rec: rec, entries: [_entry()]),
     );
     await tester.pumpAndSettle();
 
@@ -224,5 +209,35 @@ void main() {
     await tester.tap(find.text('Степан Белоусов'));
     await tester.pumpAndSettle();
     expect(rec.opened, ['l1']);
+  });
+
+  testWidgets('overlapping lessons share the column side by side', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _host(
+        platform: TargetPlatform.windows,
+        rec: _Recorder(),
+        entries: [
+          _entry(id: 'l1'),
+          _entry(id: 'l2', start: DateTime(2026, 7, 9, 12, 30)),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final first = tester.getRect(
+      find.byKey(const ValueKey('schedule-lesson-l1')),
+    );
+    final second = tester.getRect(
+      find.byKey(const ValueKey('schedule-lesson-l2')),
+    );
+    expect(first.overlaps(second), isFalse);
+    expect(first.width, closeTo(second.width, 1));
+    expect(first.left, isNot(second.left));
   });
 }

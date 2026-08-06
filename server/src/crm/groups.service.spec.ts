@@ -83,6 +83,7 @@ describe("GroupsService", () => {
         teacher_name: "Иван Петров",
         branch_name: "Центр",
         room_name: "101",
+        students_count: "7",
         created_at: "2026-06-12T00:00:00.000Z",
       },
     ]);
@@ -100,6 +101,7 @@ describe("GroupsService", () => {
           teacherName: "Иван Петров",
           branchName: "Центр",
           roomName: "101",
+          studentsCount: 7,
           createdAt: "2026-06-12T00:00:00.000Z",
         },
       ],

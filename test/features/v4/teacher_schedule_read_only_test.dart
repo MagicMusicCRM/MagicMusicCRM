@@ -180,6 +180,9 @@ void main() {
       expect(find.text('Неделя'), findsOneWidget);
       expect(find.text('Месяц'), findsNothing);
       expect(find.text('Создать занятие'), findsNothing);
+      expect(find.textContaining('Зажать и тянуть'), findsNothing);
+      expect(find.textContaining('Перетащить'), findsNothing);
+      expect(find.textContaining('Край — растянуть'), findsNothing);
       expect(find.byType(ScheduleDayCanvas), findsOneWidget);
       expect(
         find.byKey(const ValueKey('schedule-lesson-lesson-1')),

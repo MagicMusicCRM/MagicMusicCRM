@@ -244,6 +244,13 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, 'Очистить'));
     await tester.pump();
     expect(find.text('Поиск: анна смирнова'), findsNothing);
+
+    await tester.tap(find.byTooltip('Найти занятие'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'НетСовпадений');
+    await tester.tap(find.widgetWithText(FilledButton, 'Найти'));
+    await tester.pumpAndSettle();
+    expect(find.text('Совпадений: 0'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

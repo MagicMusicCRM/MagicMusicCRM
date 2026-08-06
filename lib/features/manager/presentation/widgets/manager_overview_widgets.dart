@@ -15,7 +15,7 @@ class _DashboardHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Сводка менеджера',
+                'Сводка',
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 4),
@@ -118,7 +118,8 @@ class _DashboardFilters extends StatelessWidget {
 class _AttentionPanel extends StatelessWidget {
   final num overdueTasks;
   final num scheduleIssues;
-  final num debtStudents;
+  final num? debtStudents;
+
   /// null — у роли нет доступа к общешкольным финансам (KVA-239): строка
   /// «Ожидаемые платежи» скрывается.
   final num? expectedPayments;
@@ -153,13 +154,14 @@ class _AttentionPanel extends StatelessWidget {
         accent: scheduleIssues > 0 ? AppTheme.danger : AppTheme.success,
         onTap: onScheduleTap,
       ),
-      _AttentionRowData(
-        icon: Icons.priority_high_rounded,
-        label: 'Ученики с долгом',
-        value: _count(debtStudents),
-        accent: debtStudents > 0 ? AppTheme.warning : AppTheme.success,
-        onTap: onDebtsTap,
-      ),
+      if (debtStudents != null)
+        _AttentionRowData(
+          icon: Icons.priority_high_rounded,
+          label: 'Ученики с долгом',
+          value: _count(debtStudents!),
+          accent: debtStudents! > 0 ? AppTheme.warning : AppTheme.success,
+          onTap: onDebtsTap,
+        ),
       if (expectedPayments != null)
         _AttentionRowData(
           icon: Icons.event_available_rounded,

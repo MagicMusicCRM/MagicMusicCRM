@@ -398,7 +398,9 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
           if (!firstLoad && widget.clientId != null)
             _buildClientContextBanner(),
           if (!firstLoad && _hasScheduleSearch) _buildScheduleSearchBanner(),
-          if (!firstLoad && _currentView != ScheduleView.month) ...[
+          if (!firstLoad &&
+              widget.canWrite &&
+              _currentView != ScheduleView.month) ...[
             ScheduleDayLegend(week: _currentView == ScheduleView.week),
           ],
           if (!firstLoad && _currentView == ScheduleView.day) ...[

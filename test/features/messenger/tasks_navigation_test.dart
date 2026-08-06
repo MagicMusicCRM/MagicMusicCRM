@@ -6,6 +6,7 @@ import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/clients_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/manager_overview_widget.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/reports_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tasks_v4_panel.dart';
 import 'package:magic_music_crm/features/messenger/presentation/screens/messenger_screen.dart';
 
@@ -20,9 +21,10 @@ CapabilitySnapshot _staffSnapshot(String role) {
     'workflow.task.read',
     'workflow.task.write',
   };
-  if (role == 'manager') {
+  if (role == 'manager' || role == 'director') {
     capabilities.addAll({'report.status.read', 'system.settings.manage'});
   }
+  if (role == 'director') capabilities.add('commerce.school_finance.read');
   return CapabilitySnapshot(
     accountId: 'test-$role',
     role: role,
@@ -100,6 +102,20 @@ void main() {
     expect(find.byType(ClientsWidget), findsNothing);
   });
 
+  testWidgets('director can open Analytics from compact navigation', (
+    tester,
+  ) async {
+    await _pumpStaffMessenger(tester, role: 'director');
+
+    await tester.tap(find.text('Ещё'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Аналитика'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 150));
+
+    expect(find.byType(ReportsWidget), findsOneWidget);
+  });
+
   testWidgets('admin never mounts or requests the Tasks destination', (
     tester,
   ) async {
@@ -161,7 +177,7 @@ void main() {
       );
     }
 
-    await expectTarget('Ученики с долгом', 3);
+    expect(find.text('Ученики с долгом'), findsNothing);
     await expectTarget('Активные ученики', 3);
     await expectTarget('Новые лиды', 3);
     await expectTarget('Открытые задачи', 6);

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
@@ -159,6 +160,8 @@ Future<void> _pump(
 }
 
 void main() {
+  setUpAll(() => initializeDateFormatting('ru'));
+
   testWidgets('Teacher card renders only learning sections on narrow layout', (
     tester,
   ) async {
@@ -172,6 +175,9 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('Анна Клиент'), findsOneWidget);
+    expect(find.text('Активен · Центр'), findsOneWidget);
+    expect(find.textContaining('01.08.2026'), findsOneWidget);
+    expect(find.text('Запланировано'), findsOneWidget);
     expect(find.text('+79990000000'), findsNothing);
     expect(find.text('Финансовый секрет'), findsNothing);
     expect(find.text('Оплаты'), findsNothing);

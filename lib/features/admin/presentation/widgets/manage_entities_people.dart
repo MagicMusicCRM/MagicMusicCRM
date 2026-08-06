@@ -84,6 +84,7 @@ String _staffRoleLabel(String role) {
 
 String _staffStatusLabel(String status) {
   return switch (status) {
+    'working' => 'Работает',
     'active' => 'Активен',
     'inactive' => 'Неактивен',
     'archived' => 'В архиве',

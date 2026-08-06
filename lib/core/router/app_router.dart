@@ -105,14 +105,28 @@ final _routeGateStateProvider = Provider<_RouteGateState>((ref) {
   // the loader.
   return gateState.when(
     skipLoadingOnReload: true,
-    data: _RouteGateState.ready,
-    error: (error, _) => _RouteGateState.gateError(error),
+    data: (status) {
+      final requestToken = status.sessionAccessToken;
+      return requestToken == null || requestToken == currentSession.accessToken
+          ? _RouteGateState.ready(status)
+          : const _RouteGateState.gateLoading();
+    },
+    error: (error, _) {
+      if (!releaseGateErrorBelongsToSession(
+        error,
+        currentSession.accessToken,
+      )) {
+        return const _RouteGateState.gateLoading();
+      }
+      return _RouteGateState.gateError(error);
+    },
     loading: () => const _RouteGateState.gateLoading(),
   );
 });
 
 bool _isUnauthorizedRouteError(Object? error) {
-  return error is MagicApiException && error.isUnauthorized;
+  final cause = error is SessionBoundReleaseGateError ? error.error : error;
+  return cause is MagicApiException && cause.isUnauthorized;
 }
 
 // ── Router ───────────────────────────────────────────────────────────────────

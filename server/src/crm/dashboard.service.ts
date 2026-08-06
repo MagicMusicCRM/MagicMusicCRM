@@ -21,7 +21,7 @@ interface OverviewRow {
 interface ManagerDashboardRow {
   revenue: string | number | null;
   expected_payments: string | number | null;
-  debt_students: string | number;
+  debt_students: string | number | null;
   active_students: string | number;
   new_leads: string | number;
   open_tasks: string | number;
@@ -155,10 +155,11 @@ export class DashboardService {
   async getManagerDashboard(actor: ActorContext, query: ManagerDashboardQuery) {
     this.policy.assertManagerOnly(actor);
     const bounds = this.dashboardBounds(query);
+    const canReadSchoolFinance = this.policy.canReadSchoolFinance(actor);
     const result = await this.database.query<ManagerDashboardRow>(
       `
         select
-          (
+          case when $5::boolean then (
             select coalesce(sum(p.amount), 0)
             from app.payments p
             join app.students s on s.id = p.student_id and s.deleted_at is null
@@ -166,16 +167,16 @@ export class DashboardService {
               and p.payment_date >= $1::timestamptz
               and p.payment_date < $2::timestamptz
               and ($3::uuid is null or ${branchIdExpr("s")} = $3::text)
-          ) as revenue,
-          (
+          ) else null end as revenue,
+          case when $5::boolean then (
             select coalesce(sum(ep.amount), 0)
             from app.expected_payments ep
             join app.students s on s.id = ep.student_id and s.deleted_at is null
             where ep.status in ('pending', 'open')
               and (ep.due_date is null or ep.due_date < $2::date)
               and ($3::uuid is null or ${branchIdExpr("s")} = $3::text)
-          ) as expected_payments,
-          (
+          ) else null end as expected_payments,
+          case when $5::boolean then (
             -- Live balance (paid − lesson costs + adjustments), mirroring
             -- FinanceService.listStudentBalances. The app.student_balances
             -- table is written by nothing, so counting it always showed
@@ -244,7 +245,7 @@ export class DashboardService {
                 and ($3::uuid is null or ${branchIdExpr("st")} = $3::text)
             ) b
             where b.balance < 0
-          ) as debt_students,
+          ) else null end as debt_students,
           (
             select count(*)
             from app.students s
@@ -340,7 +341,13 @@ export class DashboardService {
               and audit.action like 'crm.%'
           ) as staff_activity
       `,
-      [bounds.from, bounds.to, query.branchId ?? null, actor.userId],
+      [
+        bounds.from,
+        bounds.to,
+        query.branchId ?? null,
+        actor.userId,
+        canReadSchoolFinance,
+      ],
     );
     const row = result.rows[0];
     return {
@@ -349,13 +356,15 @@ export class DashboardService {
       branchId: query.branchId ?? null,
       kpis: {
         // KVA-239: общешкольные денежные суммы видят только director/system_admin.
-        revenue: this.policy.canReadSchoolFinance(actor)
+        revenue: canReadSchoolFinance
           ? this.toNumericStat(row?.revenue)
           : null,
-        expectedPayments: this.policy.canReadSchoolFinance(actor)
+        expectedPayments: canReadSchoolFinance
           ? this.toNumericStat(row?.expected_payments)
           : null,
-        debtStudents: this.toNumericStat(row?.debt_students),
+        debtStudents: canReadSchoolFinance
+          ? this.toNumericStat(row?.debt_students)
+          : null,
         activeStudents: this.toNumericStat(row?.active_students),
         newLeads: this.toNumericStat(row?.new_leads),
         openTasks: this.toNumericStat(row?.open_tasks),
@@ -366,9 +375,13 @@ export class DashboardService {
         staffActivity: this.toNumericStat(row?.staff_activity),
       },
       sources: {
-        revenue: "/crm/reports/finance",
-        expectedPayments: "/crm/expected-payments",
-        debtStudents: "/crm/student-balances?debtOnly=true",
+        ...(canReadSchoolFinance
+          ? {
+              revenue: "/crm/reports/finance",
+              expectedPayments: "/crm/expected-payments",
+              debtStudents: "/crm/student-balances?debtOnly=true",
+            }
+          : {}),
         newLeads: "/crm/leads/board",
         tasks: "/crm/shared-tasks?state=open",
         schedule: "/crm/schedule/matrix",

@@ -3,12 +3,14 @@ class ReleaseGateStatus {
   final bool profileComplete;
   final bool legalAccepted;
   final bool deletionPending;
+  final String? sessionAccessToken;
 
   const ReleaseGateStatus({
     required this.role,
     required this.profileComplete,
     required this.legalAccepted,
     required this.deletionPending,
+    this.sessionAccessToken,
   });
 
   factory ReleaseGateStatus.fromJson(Map<String, dynamic> json) {

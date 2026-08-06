@@ -99,6 +99,15 @@ void main() {
       7,
       8,
     ]);
+    expect(crmVisibleTabsForCapabilities(director, isDesktop: false), [
+      0,
+      1,
+      2,
+      3,
+      6,
+      7,
+      8,
+    ]);
   });
 
   testWidgets('new accessVersion recreates shell and removes sensitive UI', (

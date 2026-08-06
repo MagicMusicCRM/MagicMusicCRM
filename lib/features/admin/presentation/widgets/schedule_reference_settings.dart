@@ -572,7 +572,16 @@ class _ScheduleReferenceSettingsState
     final canEdit = editable ?? widget.canEdit;
     return Row(
       children: [
-        Switch(value: enabled, onChanged: canEdit ? onEnabled : null),
+        Semantics(
+          label: '$label: ${enabled ? 'включено' : 'выключено'}',
+          toggled: enabled,
+          child: ExcludeSemantics(
+            child: Switch(
+              value: enabled,
+              onChanged: canEdit ? onEnabled : null,
+            ),
+          ),
+        ),
         Expanded(child: Text(label)),
         if (enabled) ...[
           TextButton(

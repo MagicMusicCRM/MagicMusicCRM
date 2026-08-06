@@ -212,7 +212,9 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
                     _AttentionPanel(
                       overdueTasks: _asNum(kpis['overdue_tasks']),
                       scheduleIssues: _asNum(kpis['schedule_issues']),
-                      debtStudents: _asNum(kpis['debt_students']),
+                      debtStudents: _canSeeFinance
+                          ? _asNum(kpis['debt_students'])
+                          : null,
                       expectedPayments: _canSeeFinance
                           ? _asNum(kpis['expected_payments'])
                           : null,
@@ -280,7 +282,7 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
           accent: AppTheme.success,
           sourceLabel: _sourceLabel(sources['revenue'], 'Финансы'),
           format: _money,
-          onTap: () => widget.onTabChange?.call(7, null),
+          onTap: () => widget.onTabChange?.call(5, null),
         ),
       if (_canSeeFinance)
         _KpiSpec(
@@ -292,17 +294,16 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
           format: _money,
           onTap: () => widget.onTabChange?.call(5, null),
         ),
-      _KpiSpec(
-        key: 'debt_students',
-        label: 'Ученики с долгом',
-        icon: Icons.priority_high_rounded,
-        accent: AppTheme.danger,
-        sourceLabel: _sourceLabel(sources['debtStudents'], 'Балансы'),
-        format: _count,
-        // Managers retain per-student balances in Clients, but do not have
-        // access to the school-wide Finance destination.
-        onTap: () => widget.onTabChange?.call(_canSeeFinance ? 5 : 3, null),
-      ),
+      if (_canSeeFinance)
+        _KpiSpec(
+          key: 'debt_students',
+          label: 'Ученики с долгом',
+          icon: Icons.priority_high_rounded,
+          accent: AppTheme.danger,
+          sourceLabel: _sourceLabel(sources['debtStudents'], 'Балансы'),
+          format: _count,
+          onTap: () => widget.onTabChange?.call(5, null),
+        ),
       _KpiSpec(
         key: 'active_students',
         label: 'Активные ученики',

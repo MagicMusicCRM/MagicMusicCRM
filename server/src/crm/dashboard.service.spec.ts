@@ -5,16 +5,19 @@ import { DashboardService } from "./dashboard.service";
 describe("DashboardService", () => {
   const actor = { userId: "manager-a", role: "manager" as const };
 
-  const buildPolicy = () => ({
+  const buildPolicy = (canReadSchoolFinance = true) => ({
     assertManagerOnly: jest.fn(),
     assertCanReadSchoolFinance: jest.fn(),
-    canReadSchoolFinance: jest.fn().mockReturnValue(true),
+    canReadSchoolFinance: jest.fn().mockReturnValue(canReadSchoolFinance),
     assertCanWriteCrm: jest.fn(),
   });
 
-  const createService = (rows: Record<string, unknown>[] = []) => {
+  const createService = (
+    rows: Record<string, unknown>[] = [],
+    canReadSchoolFinance = true,
+  ) => {
     const query = jest.fn().mockResolvedValue({ rows });
-    const policy = buildPolicy();
+    const policy = buildPolicy(canReadSchoolFinance);
     const service = new DashboardService(
       { query } as unknown as DatabaseService,
       policy as unknown as CrmPolicy,
@@ -122,6 +125,7 @@ describe("DashboardService", () => {
       "2026-07-01T00:00:00.000Z",
       "branch-a",
       "manager-a",
+      true,
     ]);
     expect(String(query.mock.calls[0][0])).toContain("l.is_trial = false");
     expect(String(query.mock.calls[0][0])).toContain(
@@ -133,6 +137,37 @@ describe("DashboardService", () => {
     expect(overviewSql).toContain("* lp.charged_hours");
     expect(overviewSql).toContain(
       "group by coalesce(sub.student_id, l.student_id, lp.student_id)",
+    );
+  });
+
+  it("redacts and skips school finance for a manager", async () => {
+    const { service, query } = createService(
+      [
+        {
+          revenue: "120000.50",
+          expected_payments: "35000.00",
+          debt_students: "4",
+        },
+      ],
+      false,
+    );
+
+    const result = await service.getManagerDashboard(actor, {
+      from: "2026-06-01T00:00:00.000Z",
+      to: "2026-07-01T00:00:00.000Z",
+    });
+
+    expect(result.kpis).toMatchObject({
+      revenue: null,
+      expectedPayments: null,
+      debtStudents: null,
+    });
+    expect(result.sources).not.toHaveProperty("revenue");
+    expect(result.sources).not.toHaveProperty("expectedPayments");
+    expect(result.sources).not.toHaveProperty("debtStudents");
+    expect(query.mock.calls[0][1][4]).toBe(false);
+    expect(String(query.mock.calls[0][0])).toContain(
+      "case when $5::boolean then",
     );
   });
 
