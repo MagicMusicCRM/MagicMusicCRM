@@ -43,6 +43,34 @@ List<Map<String, dynamic>> chatsInFolder(
 List<Map<String, dynamic>> nonInboxChats(List<Map<String, dynamic>> chats) =>
     chats.where((c) => folderOf(c) == null).toList();
 
+List<Map<String, dynamic>> filterChatsByQuery(
+  Iterable<Map<String, dynamic>> chats,
+  String query,
+) {
+  final normalized = query.trim().toLowerCase();
+  if (normalized.isEmpty) return List<Map<String, dynamic>>.from(chats);
+  return chats.where((chat) {
+    final name = (chat['_display_name'] ?? chat['display_name'] ?? '')
+        .toString()
+        .toLowerCase();
+    return name.contains(normalized);
+  }).toList();
+}
+
+/// Stable inbox order: pinned chats first, newest activity inside each group.
+List<Map<String, dynamic>> sortChatsPinnedFirst(
+  Iterable<Map<String, dynamic>> chats,
+  Set<String> pinnedIds,
+) => List<Map<String, dynamic>>.from(chats)
+  ..sort((a, b) {
+    final pinnedA = pinnedIds.contains(a['id']?.toString());
+    final pinnedB = pinnedIds.contains(b['id']?.toString());
+    if (pinnedA != pinnedB) return pinnedA ? -1 : 1;
+    return (b['_last_message_time']?.toString() ?? '').compareTo(
+      a['_last_message_time']?.toString() ?? '',
+    );
+  });
+
 /// Sum of unread for the administration chats in a folder.
 int unreadForFolder(
   List<Map<String, dynamic>> chats,

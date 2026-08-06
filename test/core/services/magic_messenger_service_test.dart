@@ -222,6 +222,36 @@ void main() {
       expect(adapter.requests.last.body['lastReadMessageId'], 'msg-b');
     });
 
+    test('sends a reply with the selected source message id', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/messenger/chats/chat-a/messages',
+          statusCode: 201,
+          body: {
+            'id': 'msg-reply',
+            'chatId': 'chat-a',
+            'senderId': 'teacher-a',
+            'content': 'Ответ',
+            'messageType': 'text',
+            'replyToId': 'msg-source',
+            'createdAt': '2026-06-12T10:01:00.000Z',
+            'updatedAt': '2026-06-12T10:01:00.000Z',
+            'deletedAt': null,
+          },
+        ),
+      ]);
+      final service = MagicMessengerService(_client(adapter));
+
+      final message = await service.sendMessage(
+        'chat-a',
+        content: 'Ответ',
+        replyToId: 'msg-source',
+      );
+
+      expect(adapter.requests.single.body['replyToId'], 'msg-source');
+      expect(message['reply_to_id'], 'msg-source');
+    });
+
     test(
       'keeps voice message type when sending file object attachment',
       () async {

@@ -158,6 +158,42 @@ void main() {
     );
   });
 
+  test('pinned chats sort first and keep newest activity order', () {
+    final chats = [
+      {'id': 'old', '_last_message_time': '2026-01-01T10:00:00Z'},
+      {'id': 'pinned-old', '_last_message_time': '2026-01-01T09:00:00Z'},
+      {'id': 'new', '_last_message_time': '2026-01-01T12:00:00Z'},
+      {'id': 'pinned-new', '_last_message_time': '2026-01-01T11:00:00Z'},
+    ];
+
+    expect(
+      sortChatsPinnedFirst(chats, {
+        'pinned-old',
+        'pinned-new',
+      }).map((chat) => chat['id']),
+      ['pinned-new', 'pinned-old', 'new', 'old'],
+    );
+  });
+
+  test('chat search filters each typed prefix without mutating the source', () {
+    final chats = [
+      {'id': 'admin', '_display_name': 'Администрация'},
+      {'id': 'teacher', '_display_name': 'Иван Петров'},
+    ];
+
+    expect(filterChatsByQuery(chats, 'а').map((chat) => chat['id']), [
+      'admin',
+      'teacher',
+    ]);
+    expect(filterChatsByQuery(chats, 'ад').map((chat) => chat['id']), [
+      'admin',
+    ]);
+    expect(filterChatsByQuery(chats, 'адм').map((chat) => chat['id']), [
+      'admin',
+    ]);
+    expect(chats, hasLength(2));
+  });
+
   // ── showInboxFolders ──────────────────────────────────────────────────────
 
   test('showInboxFolders: true for manager, admin, system_admin', () {

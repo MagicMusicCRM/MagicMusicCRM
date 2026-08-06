@@ -10,28 +10,106 @@ import 'package:magic_music_crm/features/auth/data/services/magic_release_gate_s
 
 void main() {
   group('MagicReleaseGateService', () {
-    test('loads release gate status through a single v3 gate request', () async {
+    test(
+      'loads release gate status through a single v3 gate request',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/legal/gate',
+            statusCode: 200,
+            body: {
+              'role': 'manager',
+              'profileComplete': true,
+              'legalAccepted': true,
+              'deletionPending': false,
+            },
+          ),
+        ]);
+        final service = _service(adapter);
+
+        final status = await service.getGateStatus();
+
+        expect(status.role, 'manager');
+        expect(status.profileComplete, isTrue);
+        expect(status.legalAccepted, isTrue);
+        expect(status.deletionPending, isFalse);
+        expect(adapter.requests.single.method, 'GET');
+      },
+    );
+
+    test('completes onboarding with trimmed required profile fields', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(path: '/profile/me', statusCode: 200, body: const {}),
+      ]);
+      final service = _service(adapter);
+
+      await service.completeOnboarding(
+        firstName: '  Анна ',
+        lastName: '  Иванова ',
+        phone: ' +79991234567 ',
+      );
+
+      expect(adapter.requests.single.method, 'PATCH');
+      expect(adapter.requests.single.body, {
+        'firstName': 'Анна',
+        'lastName': 'Иванова',
+        'phone': '+79991234567',
+      });
+    });
+
+    test('loads current legal documents and accepts their exact ids', () async {
       final adapter = _FakeAdapter([
         _FakeResponse(
-          path: '/legal/gate',
+          path: '/legal/documents/current',
           statusCode: 200,
-          body: {
-            'role': 'manager',
-            'profileComplete': true,
-            'legalAccepted': true,
-            'deletionPending': false,
-          },
+          body: [
+            {
+              'id': 'terms-v1',
+              'type': 'terms_of_use',
+              'version': '1',
+              'title': 'Условия',
+              'contentHash': 'terms-hash',
+            },
+            {
+              'id': 'privacy-v2',
+              'type': 'privacy_policy',
+              'version': '2',
+              'title': 'Политика',
+              'contentHash': 'privacy-hash',
+            },
+          ],
+        ),
+        _FakeResponse(
+          path: '/legal/documents/current',
+          statusCode: 200,
+          body: [
+            {'id': 'terms-v1'},
+            {'id': 'privacy-v2'},
+          ],
+        ),
+        _FakeResponse(
+          path: '/legal/consents/current',
+          statusCode: 200,
+          body: const {},
         ),
       ]);
       final service = _service(adapter);
 
-      final status = await service.getGateStatus();
+      final documents = await service.getCurrentLegalDocuments();
+      await service.acceptCurrentLegalDocuments();
 
-      expect(status.role, 'manager');
-      expect(status.profileComplete, isTrue);
-      expect(status.legalAccepted, isTrue);
-      expect(status.deletionPending, isFalse);
-      expect(adapter.requests.single.method, 'GET');
+      expect(documents.map((document) => document.id), [
+        'terms-v1',
+        'privacy-v2',
+      ]);
+      expect(
+        documents.first.publicUrl,
+        'https://magicmusiccrm-legal.vercel.app/terms/',
+      );
+      expect(adapter.requests.last.method, 'POST');
+      expect(adapter.requests.last.body, {
+        'documentIds': ['terms-v1', 'privacy-v2'],
+      });
     });
 
     test('requests account deletion with required acknowledgement', () async {

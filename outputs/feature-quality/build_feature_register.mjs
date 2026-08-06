@@ -5,6 +5,9 @@ import { SpreadsheetFile, Workbook } from "@oai/artifact-tool";
 const outputDir = path.resolve("outputs/feature-quality");
 const outputFile = path.join(outputDir, "MagicMusicCRM-Canonical-Feature-Register.xlsx");
 const previewDir = path.join(outputDir, "previews");
+const storyEvidence = JSON.parse(
+  await fs.readFile(path.join(outputDir, "story-evidence-audit.json"), "utf8"),
+);
 
 const stories = [];
 function addGroup(prefix, system, defaults, items) {
@@ -62,7 +65,7 @@ addGroup("AUTH", "Session & Account", {
   ["Confirm password reset", "пользователь", "задать новый пароль по коду", "Валидный code+password меняет пароль; старый пароль больше не создаёт session.", "self", "P0"],
   ["Set password", "вошедший пользователь без пароля", "добавить password method", "Пароль сохраняется только после проверки политики; session остаётся активной.", "self", "P1"],
   ["Auth methods", "вошедший пользователь", "просмотреть и изменить способы входа", "Экран показывает фактические identities/MFA; недоступные действия disabled или отсутствуют.", "self", "P1"],
-  ["Google identity", "вошедший пользователь", "связать Google identity", "Link flow не создаёт второй профиль и после успеха отражается в identities.", "self", "P2"],
+  ["Google identity (disabled)", "пользователь", "понять доступность Google-входа", "Все Google sign-in/link endpoints явно возвращают 410 Gone с предложением использовать почту/OTP; импортированная identity может отображаться только для чтения.", "public/self", "P2"],
   ["Onboarding", "новый вошедший пользователь", "завершить обязательные начальные данные", "До submit рабочий workspace закрыт; успешный submit выполняется один раз и gate исчезает.", "self", "P1"],
   ["Legal gate", "вошедший пользователь", "принять актуальные документы", "Непринятые версии блокируют рабочий route; consent сохраняет версии и время.", "self", "P0"],
   ["Legal document view", "пользователь", "прочитать документ перед согласием", "Открывается выбранная актуальная версия; возврат сохраняет состояние consent screen.", "self", "P2"],
@@ -233,7 +236,7 @@ addGroup("SCH", "Schedule", {
   ["Cancel preview", "разрешённый staff", "увидеть последствия отмены", "Preview объясняет lifecycle/financial result и требует явного подтверждения.", "schedule.lesson.write", "P0"],
   ["Cancel lesson", "разрешённый staff", "отменить занятие", "Terminal transition выполняется один раз; settlement/reservation state не дублируется.", "schedule.lesson.write", "P0"],
   ["Delete lesson", "разрешённый actor", "удалить допустимое занятие", "Delete доступен только lifecycle/policy-совместимой записи и требует concise confirmation.", "schedule.lesson.write", "P1"],
-  ["Attendance", "разрешённый staff/teacher", "отметить посещаемость", "Допустимый lifecycle transition сохраняет attendance один раз и обновляет settlement projection.", "lesson transition policy", "P0"],
+  ["Attendance (derived read-only)", "разрешённый staff/teacher", "видеть факт проведённого занятия", "Ручной attendance mutation отсутствует; UI показывает только derived count/status из terminal Lesson lifecycle, а manual completion отклоняется.", "lesson read / server lifecycle", "P0"],
   ["Auto completion", "system", "автоматически завершать прошедшие занятия", "Worker переводит eligible Lessons один раз, retries safe, poison/failure observable.", "server worker", "P0"],
   ["Teacher rate", "разрешённый staff", "назначить ставку занятиям", "Rate mutation применяет scope/version rules и возвращает точное число изменённых Lessons.", "teacher rate capability", "P1"],
   ["Series create", "разрешённый staff", "создать повторяющуюся серию", "Правило создаёт bounded future lessons с conflict handling; duplicate generation предотвращена.", "schedule.lesson.write", "P0"],
@@ -383,7 +386,7 @@ addGroup("PLT", "Platform Quality", {
   automated: "test/core; integration_test; server/src/**/*.spec.ts; docs/audits/v6-role-workspace-acceptance.md",
   platforms: "Windows, Android, Server",
 }, [
-  ["API health warmup", "пользователь", "получить понятный startup при недоступном backend", "Warmup/health failure показывает recoverable state; приложение не зависает и не принимает unsafe mutations.", "public health", "P0"],
+  ["API health warmup", "пользователь", "запустить приложение при холодном или недоступном backend", "Best-effort /health warmup выполняется fire-and-forget; его ошибка не блокирует первый кадр, а защищённые mutations по-прежнему требуют обычную session/policy.", "public health", "P0"],
   ["Strict server validation", "system", "отклонять неизвестные/невалидные поля", "Global pipe whitelist+forbid+transform returns actor-safe structured error and no partial write.", "trust boundary", "P0"],
   ["Safe logging", "system", "не записывать секретные данные", "Tokens, finance/subscription/debt/private comment/contact fields masked; errors remain diagnosable.", "security", "P0"],
   ["Single realtime socket", "вошедший пользователь", "не создавать двойные connections", "Messenger/CRM/access consumers share one ref-counted socket; it closes after last view.", "current account", "P0"],
@@ -460,51 +463,49 @@ const baselineRuns = [
   ["RUN-A-055", "NAV-018", "BASELINE", "1.2.2+155", "Director / magic5", "Android API 35", "accessibility", "2026-08-06", "FAIL", "Settings contained multiple accessibility nodes without labels: empty EditText search fields and day switches exposed only as generic Switch controls.", "evidence/android/settings-schedule2-ui.xml", "ERR-011", "Codex", "UIAutomator accessibility tree is the evidence."],
 ];
 
-// Every story keeps its own executable baseline row. Device runs above take
-// precedence; the remaining code-backed contracts are covered by the fresh
-// full Flutter/Jest suites recorded on the same release candidate.
-const explicitlyTestedStoryIds = new Set(baselineRuns.map((run) => run[1]));
-let suiteRunNumber = 1;
-for (const story of stories) {
-  if (explicitlyTestedStoryIds.has(story.id)) continue;
-  baselineRuns.push([
-    `RUN-S-${String(suiteRunNumber++).padStart(3, "0")}`,
-    story.id,
-    "BASELINE",
-    "1.2.2+155",
-    story.personas,
-    "Flutter full + Nest/Jest full",
-    story.permission,
-    "2026-08-06",
-    "PASS",
-    `Fresh full suites passed on this revision (Flutter 601/601; backend 1155/1155) against the declared ${story.feature} contract and its code/test ownership paths.`,
-    "evidence/flutter-test-full.txt; evidence/server-test-full.txt",
-    "",
-    "Codex",
-    "Automated contract baseline; explicit device/persona runs supersede generic suite evidence for UX and runtime races.",
-  ]);
+const evidenceByStory = new Map(storyEvidence.map((item) => [item.id, item]));
+if (evidenceByStory.size !== stories.length) {
+  throw new Error(`Story evidence count mismatch: ${evidenceByStory.size}/${stories.length}`);
 }
 
-// The full post-fix suites exercise every code-backed story again. UX/runtime
-// defects additionally receive explicit RETEST rows below, so the latest story
-// state is traceable without erasing the original failures.
+// Every final regression row is backed by a named, passing test from the
+// machine reports. Historical persona/device baselines remain above; they do
+// not substitute for post-fix story execution.
 let regressionRunNumber = 1;
 for (const story of stories) {
+  const evidence = evidenceByStory.get(story.id);
+  if (!evidence?.verified || !evidence.selectors?.length) {
+    throw new Error(`Missing final executable evidence for ${story.id}`);
+  }
+  const tests = evidence.selectors.map((selector) => {
+    const test = selector.tests?.[0];
+    if (!selector.matched || !test) {
+      throw new Error(`Unmatched evidence selector for ${story.id}: ${selector.selector}`);
+    }
+    return test;
+  });
+  const platforms = [...new Set(tests.map((test) => test.platform))];
+  const platform = platforms.length === 1 ? platforms[0] : "Flutter + Server";
+  const artifact = platforms.length === 1
+    ? platforms[0] === "Flutter"
+      ? "evidence/flutter-test-machine-final-156.ndjson"
+      : "evidence/server-test-json-final-156.json"
+    : "evidence/flutter-test-machine-final-156.ndjson; evidence/server-test-json-final-156.json";
   baselineRuns.push([
     `RUN-G-${String(regressionRunNumber++).padStart(3, "0")}`,
     story.id,
     "REGRESSION",
     "1.2.3+156",
     story.personas,
-    "Flutter full + Nest/Jest full",
-    story.permission,
+    platform,
+    story.scope,
     "2026-08-06",
     "PASS",
-    `Post-fix regression passed on the final candidate (Flutter 605/605; backend 1157/1157) for the declared ${story.feature} contract and its owned production paths.`,
-    "evidence/flutter-test-full-final-156.txt; evidence/server-test-full-postfix.txt",
+    `Post-fix acceptance passed for ${story.feature}: ${tests.length} exact named test(s) matched and passed on build 1.2.3+156.`,
+    artifact,
     "",
     "Codex",
-    "Automated full-regression evidence; affected UX/runtime stories also have a persona/device RETEST row.",
+    tests.map((test) => `${test.platform}: ${test.file} :: ${test.name}`).join("\n"),
   ]);
 }
 
@@ -563,6 +564,7 @@ const systems = [...new Set(stories.map((story) => story.system))];
 const workbook = Workbook.create();
 const dashboard = workbook.worksheets.add("Coverage");
 const storySheet = workbook.worksheets.add("User Stories");
+const evidenceSheet = workbook.worksheets.add("Evidence Audit");
 const runsSheet = workbook.worksheets.add("Test Runs");
 const errorsSheet = workbook.worksheets.add("Errors");
 const listsSheet = workbook.worksheets.add("Lists");
@@ -623,6 +625,42 @@ storySheet.getRange(`O2:O${storyRows.length + 1}`).conditionalFormats.addCustom(
 storySheet.getRange(`O2:O${storyRows.length + 1}`).conditionalFormats.addCustom('=$O2="RETEST FAIL"', { fill: colors.red, font: { color: colors.redInk, bold: true } });
 storySheet.getRange(`O2:O${storyRows.length + 1}`).conditionalFormats.addCustom('=$O2="BLOCKED"', { fill: colors.amber, font: { color: colors.amberInk, bold: true } });
 
+const evidenceHeaders = ["Story ID", "System", "Feature", "Final Acceptance", "Evidence Type", "Baseline Device", "Selector", "Platform", "Test File", "Exact Test Name", "Result", "Evidence Artifact"];
+const evidenceRows = stories.flatMap((story) => {
+  const evidence = evidenceByStory.get(story.id);
+  return evidence.selectors.map((selector) => {
+    const test = selector.tests[0];
+    const artifact = test.platform === "Flutter"
+      ? "evidence/flutter-test-machine-final-156.ndjson"
+      : "evidence/server-test-json-final-156.json";
+    return [
+      story.id,
+      story.system,
+      story.feature,
+      evidence.verified ? "PASS" : "FAIL",
+      evidence.evidence_type,
+      evidence.baseline_device_pass ? evidence.latest_device_run?.run_id ?? "PASS" : "—",
+      selector.selector,
+      test.platform,
+      test.file,
+      test.name,
+      test.result === "success" ? "PASS" : test.result.toUpperCase(),
+      artifact,
+    ];
+  });
+});
+evidenceSheet.getRange(`A1:L${evidenceRows.length + 1}`).values = [evidenceHeaders, ...evidenceRows];
+styleHeader(evidenceSheet.getRange("A1:L1"));
+styleGrid(evidenceSheet.getRange(`A2:L${evidenceRows.length + 1}`));
+evidenceSheet.freezePanes.freezeRows(1);
+evidenceSheet.freezePanes.freezeColumns(3);
+evidenceSheet.tables.add(`A1:L${evidenceRows.length + 1}`, true, "EvidenceAuditTable").style = "TableStyleMedium4";
+[12, 22, 25, 16, 20, 16, 48, 12, 42, 58, 12, 38].forEach((width, index) => {
+  evidenceSheet.getRangeByIndexes(0, index, evidenceRows.length + 1, 1).format.columnWidth = width;
+});
+evidenceSheet.getRange(`D2:D${evidenceRows.length + 1}`).conditionalFormats.addCustom('=$D2="PASS"', { fill: colors.green, font: { color: colors.greenInk, bold: true } });
+evidenceSheet.getRange(`K2:K${evidenceRows.length + 1}`).conditionalFormats.addCustom('=$K2="PASS"', { fill: colors.green, font: { color: colors.greenInk, bold: true } });
+
 const runHeaders = ["Run ID", "Story ID", "Phase", "Build", "Persona / Account", "Platform", "Branch / Scope", "Started At", "Result", "Observed Behavior", "Evidence Link", "Error IDs", "Tester", "Notes"];
 runsSheet.getRange(`A1:N${baselineRuns.length + 1}`).values = [runHeaders, ...baselineRuns];
 styleHeader(runsSheet.getRange("A1:N1"));
@@ -631,7 +669,7 @@ runsSheet.freezePanes.freezeRows(1);
 runsSheet.tables.add(`A1:N${baselineRuns.length + 1}`, true, "TestRunsTable").style = "TableStyleMedium2";
 [12, 12, 12, 14, 22, 14, 20, 20, 14, 50, 28, 18, 16, 35].forEach((w, i) => { runsSheet.getRangeByIndexes(0, i, 700, 1).format.columnWidth = w; });
 runsSheet.getRange("C2:C700").dataValidation = { rule: { type: "list", values: ["BASELINE", "RETEST", "REGRESSION"] } };
-runsSheet.getRange("F2:F700").dataValidation = { rule: { type: "list", values: ["Windows", "Android", "Server", "Flutter full + Nest/Jest full", "Android API 35", "Android API 35 + Flutter widget", "Android API 35 + Nest/Jest", "Android API 35 + Flutter semantics", "Flutter router test + Android API 35"] } };
+runsSheet.getRange("F2:F700").dataValidation = { rule: { type: "list", values: ["Windows", "Android", "Flutter", "Server", "Flutter + Server", "Android API 35", "Android API 35 + Flutter widget", "Android API 35 + Nest/Jest", "Android API 35 + Flutter semantics", "Flutter router test + Android API 35"] } };
 runsSheet.getRange("I2:I700").dataValidation = { rule: { type: "list", values: ["PASS", "FAIL", "BLOCKED"] } };
 
 const errorHeaders = ["Error ID", "Story ID", "System", "Category", "Severity", "Status", "Summary", "Expected", "Actual", "Root Cause", "Fix Commit", "Retest Run", "Evidence Link", "Owner", "Notes"];
@@ -662,9 +700,9 @@ listsSheet.getRange("A1:F16").values = [
   ["Production routes / screens", "22 / 22", "", "", "", ""],
   ["Surfaces / navigation / wire / unowned", "93 / 263 / 264 / 0", "", "", "", ""],
   ["Final candidate", "1.2.3+156", "", "", "", ""],
-  ["Flutter / backend tests", "605 / 605 · 1157 / 1157", "", "", "", ""],
-  ["Android SHA-256", "BCDBC45EBFFE949D3E6CD96BCB5C4C6909EF5EE6846A0CC462131EF7D1F69801", "", "", "", ""],
-  ["Windows SHA-256", "DC19C129BC312F4051CE054D8CD432463EFAD93B6EC2A8DF36F9A078A92C6D66", "", "", "", ""],
+  ["Flutter / backend tests", "615 / 615 · 1159 / 1159", "", "", "", ""],
+  ["Android SHA-256", "36BE9B929C17D4E4E232667B9537F214272FF1B8F78BECBA8884ED17FC4EEE7A", "", "", "", ""],
+  ["Windows SHA-256", "14D8E76916621176EAD7B7B2E32C73EE836103AF73EEBE1D56D8488E4A23E86C", "", "", "", ""],
 ];
 styleHeader(listsSheet.getRange("A1:F1"));
 styleGrid(listsSheet.getRange("A2:F16"));
@@ -672,12 +710,12 @@ listsSheet.getRange("A10:B10").format = { fill: colors.purple, font: { color: co
 listsSheet.getRange("A1:F16").format.columnWidth = 22;
 listsSheet.showGridLines = false;
 
-titleBand(dashboard, "MagicMusicCRM — Canonical Feature Quality Register", `Единый источник истины на 2026-08-06. ${stories.length} code-backed user stories; acceptance считается только по Test Runs + Errors.`, "J");
+titleBand(dashboard, "MagicMusicCRM — Canonical Feature Quality Register", `Единый источник истины на 2026-08-06. ${stories.length} code-backed user stories; у каждой есть точное post-fix test evidence.`, "J");
 dashboard.getRange("A5:J6").merge();
-dashboard.getRange("A5").values = [["Правило: сначала BASELINE по каждой story, затем все FAIL/BLOCKED → Errors, исправление root cause, RETEST каждой story и полный REGRESSION. Общие зелёные suites не заменяют story execution."]];
+dashboard.getRange("A5").values = [["Правило: исторический BASELINE фиксирует поведение, FAIL/BLOCKED попадает в Errors, root cause получает RETEST. Финальный PASS разрешён только при совпавшем точном тесте из machine report; общие итоги suites не заменяют story execution."]];
 dashboard.getRange("A5").format = { fill: colors.blue, font: { color: colors.ink, bold: true }, wrapText: true, verticalAlignment: "center", rowHeight: 40 };
 
-const totalEnd = 501;
+const totalEnd = stories.length + 1;
 const cards = [
   ["A8:B8", "A9:B10", "Всего stories", `=COUNTA('User Stories'!$A$2:$A$${totalEnd})`, colors.purple],
   ["D8:E8", "D9:E10", "Не выполнено", `=COUNTIF('User Stories'!$O$2:$O$${totalEnd},"NOT EXECUTED")`, colors.amberInk],
@@ -717,11 +755,11 @@ dashboard.getRange("I13:J13").values = [["Gate", "Definition"]];
 styleHeader(dashboard.getRange("I13:J13"));
 dashboard.getRange("I14:J19").values = [
   ["CODE-BACKED", "Есть production UI/API/runtime evidence; это не acceptance."],
-  ["PASS", "Baseline story выполнена на указанном build/persona/platform."],
+  ["PASS", "Точный named test истории выполнен на final build; строка есть в Evidence Audit."],
   ["FAIL", "Expected behavior не совпал; обязателен Error ID."],
   ["BLOCKED", "Story нельзя выполнить из-за среды/данных/доступа."],
   ["RETEST PASS", "Подтверждён fix на той же story."],
-  ["Release", "Все stories = RETEST PASS/PASS, open errors = 0, regression green."],
+  ["Release", "256/256 stories = PASS/RETEST PASS, open errors = 0, exact regression green."],
 ];
 styleGrid(dashboard.getRange("I14:J19"));
 dashboard.getRange("A13:J24").format.rowHeight = 28;
@@ -735,6 +773,7 @@ await exported.save(outputFile);
 const renderRanges = {
   "Coverage": "A1:J24",
   "User Stories": "A1:U18",
+  "Evidence Audit": "A1:L18",
   "Test Runs": "A1:N10",
   "Errors": "A1:O10",
   "Lists": "A1:F16",
@@ -746,7 +785,8 @@ for (const [sheetName, range] of Object.entries(renderRanges)) {
 
 const summary = await workbook.inspect({ kind: "workbook,sheet,table", maxChars: 8000, tableMaxRows: 4, tableMaxCols: 5, tableMaxCellChars: 80 });
 const dashboardInspect = await workbook.inspect({ kind: "region", sheetId: "Coverage", range: "A1:J24", maxChars: 12000 });
+const evidenceInspect = await workbook.inspect({ kind: "region", sheetId: "Evidence Audit", range: "A1:L12", maxChars: 12000 });
 const formulaInspect = await workbook.inspect({ kind: "formula", sheetId: "Coverage", range: "A1:J24", maxChars: 12000, options: { maxResults: 100 } });
-await fs.writeFile(path.join(outputDir, "inspection-summary.txt"), `${summary.ndjson}\n\n${dashboardInspect.ndjson}\n\n${formulaInspect.ndjson}\n`, "utf8");
+await fs.writeFile(path.join(outputDir, "inspection-summary.txt"), `${summary.ndjson}\n\n${dashboardInspect.ndjson}\n\n${evidenceInspect.ndjson}\n\n${formulaInspect.ndjson}\n`, "utf8");
 
-console.log(JSON.stringify({ outputFile, storyCount: stories.length, systems: systems.length, previews: Object.keys(renderRanges) }, null, 2));
+console.log(JSON.stringify({ outputFile, storyCount: stories.length, evidenceRows: evidenceRows.length, systems: systems.length, previews: Object.keys(renderRanges) }, null, 2));

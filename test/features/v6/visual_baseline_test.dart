@@ -20,7 +20,7 @@ void main() {
     expect(AppMotion.slow, const Duration(milliseconds: 300));
   });
 
-  for (final width in [360.0, 600.0, 840.0, 1000.0, 1200.0]) {
+  for (final width in [360.0, 600.0, 839.0, 840.0, 1000.0, 1200.0]) {
     testWidgets('critical state fits width ${width.toInt()} at 200% text', (
       tester,
     ) async {

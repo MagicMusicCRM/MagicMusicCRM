@@ -62,13 +62,14 @@ Future<void> _bootstrap() async {
   // server can be slow on a cold network path; firing a throwaway /health hit
   // now (fire-and-forget) means that cost overlaps app startup instead of
   // stalling the first data screen the user opens (e.g. Расписание).
-  unawaited(_warmApiConnection());
+  unawaited(warmApiConnection());
 
   runApp(const ProviderScope(child: MagicMusicApp()));
 }
 
-Future<void> _warmApiConnection() async {
+Future<void> warmApiConnection([Future<void> Function()? probe]) async {
   try {
+    if (probe != null) return await probe();
     final dio = Dio(
       BaseOptions(
         connectTimeout: const Duration(seconds: 20),

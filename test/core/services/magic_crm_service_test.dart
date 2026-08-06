@@ -1824,6 +1824,42 @@ void main() {
       expect(lesson['branches']['name'], 'Центр');
     });
 
+    test('maps schedule month summary counts and room ids', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/crm/schedule/month-summary',
+          statusCode: 200,
+          body: {
+            'items': [
+              {
+                'day': '2026-08-06',
+                'count': '3',
+                'roomIds': ['room-a', 'room-b'],
+              },
+            ],
+          },
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      final summary = await service.getScheduleMonthSummary(
+        from: '2026-08-01T00:00:00Z',
+        to: '2026-09-01T00:00:00Z',
+        branchId: 'branch-a',
+      );
+
+      expect(summary.single, {
+        'day': '2026-08-06',
+        'count': 3,
+        'room_ids': ['room-a', 'room-b'],
+      });
+      expect(adapter.requests.single.queryParameters, {
+        'from': '2026-08-01T00:00:00Z',
+        'to': '2026-09-01T00:00:00Z',
+        'branchId': 'branch-a',
+      });
+    });
+
     test('creates trial lessons for leads', () async {
       final adapter = _FakeAdapter([
         _FakeResponse(

@@ -391,30 +391,9 @@ extension _MessengerBuildersA on _MessengerScreenState {
         : TelegramColors.lightTextSecondary;
     final canCreateGroups = _isManagerOrAdminRole;
 
-    final filteredItems = _searchQuery.isEmpty
-        ? _chatItems
-        : _chatItems.where((item) {
-            final name = (item['_display_name'] ?? item['display_name'] ?? '')
-                .toString()
-                .toLowerCase();
-            return name.contains(_searchQuery.toLowerCase());
-          }).toList();
+    final filteredItems = filterChatsByQuery(_chatItems, _searchQuery);
 
-    // Sorting: Pinned first, then by last message time
-    final sortedItems = List<Map<String, dynamic>>.from(filteredItems)
-      ..sort((a, b) {
-        final idA = (a['id'] ?? '').toString();
-        final idB = (b['id'] ?? '').toString();
-        final isPinnedA = _pinnedChatIds.contains(idA);
-        final isPinnedB = _pinnedChatIds.contains(idB);
-
-        if (isPinnedA && !isPinnedB) return -1;
-        if (!isPinnedA && isPinnedB) return 1;
-
-        final timeA = a['_last_message_time'] as String? ?? '';
-        final timeB = b['_last_message_time'] as String? ?? '';
-        return timeB.compareTo(timeA);
-      });
+    final sortedItems = sortChatsPinnedFirst(filteredItems, _pinnedChatIds);
 
     return Column(
       children: [

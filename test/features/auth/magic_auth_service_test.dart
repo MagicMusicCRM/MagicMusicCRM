@@ -365,6 +365,82 @@ void main() {
         'Bearer access-token',
       );
     });
+
+    test(
+      'loads and updates email OTP MFA through the current profile',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/profile/me',
+            statusCode: 200,
+            body: {
+              'userId': 'user-a',
+              'email': 'user@example.com',
+              'role': 'client',
+              'emailOtp2faEnabled': true,
+            },
+          ),
+          _FakeResponse(path: '/profile/me', statusCode: 200, body: const {}),
+        ]);
+        final store = MemoryMagicTokenStore(
+          const MagicApiTokens(
+            accessToken: 'access-token',
+            refreshToken: 'refresh-token',
+            tokenType: 'Bearer',
+            expiresIn: 900,
+          ),
+        );
+        final service = MagicAuthService(_client(adapter, store));
+
+        expect(await service.isEmailOtpMfaEnabledForCurrentUser(), isTrue);
+        await service.setEmailOtpMfaEnabled(false);
+
+        expect(adapter.requests.map((request) => request.method), [
+          'GET',
+          'PATCH',
+        ]);
+        expect(adapter.requests.last.body, {'emailOtp2faEnabled': false});
+      },
+    );
+
+    test('updates only allowlisted current profile fields', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/profile/me',
+          statusCode: 200,
+          body: {
+            'userId': 'user-a',
+            'email': 'user@example.com',
+            'role': 'client',
+            'firstName': 'Анна',
+            'lastName': 'Иванова',
+            'phone': '+79991234567',
+            'emailOtp2faEnabled': false,
+          },
+        ),
+      ]);
+      final service = MagicAuthService(
+        _client(adapter, MemoryMagicTokenStore()),
+      );
+
+      final profile = await service.updateCurrentProfile(
+        firstName: 'Анна',
+        lastName: 'Иванова',
+        phone: '+79991234567',
+      );
+
+      expect(profile.firstName, 'Анна');
+      expect(adapter.requests.single.method, 'PATCH');
+      expect(adapter.requests.single.body.keys, {
+        'firstName',
+        'lastName',
+        'phone',
+        'dob',
+        'avatarFileId',
+      });
+      expect(adapter.requests.single.body.containsKey('role'), isFalse);
+      expect(adapter.requests.single.body.containsKey('email'), isFalse);
+    });
   });
 }
 

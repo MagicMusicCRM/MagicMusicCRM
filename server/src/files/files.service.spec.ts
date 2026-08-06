@@ -18,17 +18,19 @@ const tokenRow = {
 
 function build(queryImpl: jest.Mock) {
   const database = { query: queryImpl } as unknown as DatabaseService;
+  const audit = { record: jest.fn() };
+  const policy = { assertCanDelete: jest.fn() };
   const storage = {
     createReadStream: jest.fn(() => Readable.from([Buffer.from('0123456789')]))
   } as unknown as LocalStorageDriver;
   const service = new FilesService(
     database,
-    { record: jest.fn() } as unknown as AuditService,
+    audit as unknown as AuditService,
     {} as FileValidator,
-    {} as FilesPolicy,
+    policy as unknown as FilesPolicy,
     storage
   );
-  return { service, database, storage };
+  return { service, database, storage, audit, policy };
 }
 
 describe('FilesService.downloadByToken', () => {
@@ -95,5 +97,42 @@ describe('FilesService.downloadByToken', () => {
       start: 0,
       end: 3
     });
+  });
+});
+
+describe('FilesService.delete', () => {
+  it('checks delete policy and soft-deletes the file without erasing storage history', async () => {
+    const file = {
+      id: 'file-1',
+      owner_user_id: 'user-1',
+      owner_type: 'chat',
+      owner_id: 'chat-1',
+      purpose: 'chat_attachment',
+      original_name: 'document.pdf',
+      mime_type: 'application/pdf',
+      size_bytes: '10',
+      storage_key: tokenRow.storage_key,
+      sha256: 'hash',
+      created_by: 'user-1',
+      created_at: new Date('2026-08-06T10:00:00Z'),
+      deleted_at: null
+    };
+    const query = jest
+      .fn()
+      .mockResolvedValueOnce({ rows: [file] })
+      .mockResolvedValueOnce({ rows: [{ ...file, deleted_at: new Date() }] });
+    const { service, policy, audit, storage } = build(query);
+    const actor = { userId: 'user-1', role: 'client' as const };
+
+    await expect(service.delete(actor, file.id)).resolves.toMatchObject({
+      id: file.id
+    });
+
+    expect(policy.assertCanDelete).toHaveBeenCalledWith(actor, file);
+    expect(String(query.mock.calls[1][0])).toContain('set deleted_at = now()');
+    expect(storage.delete).toBeUndefined();
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'files.deleted', entityId: file.id })
+    );
   });
 });
