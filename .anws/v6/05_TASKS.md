@@ -342,10 +342,16 @@ flowchart TD
   - **Проверка/evidence:** `docs/audits/v6-user-workflow-acceptance.md` + linked artifacts.
   - **Оценка:** 6 ч · **Зависимости:** V6-604 · **Приоритет:** P0.
 
+- [x] **V6-606** `[REQ-NAV-001..003, REQ-UX-001, REQ-WORKSPACE-001]` — Канонизировать все production-окна под основными разделами.
+  - **Работа:** закрепить role navigation rail на уровне общего workspace shell; привязать primary/long-lived окна Chat, Schedule, Clients, Tasks, Analytics, Settings/Users и Profile к одному `EntityRouteRegistry`; добавить actor-safe route tails/breadcrumb parents и redirect старых standalone URL. Selection, quick-view и confirmation остаются adaptive overlays.
+  - **Критерий:** каждый allow-переход открывает целевое содержимое, а не только нужную вкладку; desktop rail не демонтируется; Back/direct URL/restart восстанавливают section, entity/focus и safe view state; primary/long-lived `MaterialPageRoute`/standalone bypass = 0; forbidden путь не префетчит данные.
+  - **Проверка:** actual-surface mount matrix для всех `ContextTransitionRegistry` edges × 5 personas; direct/legacy URL, breadcrumb, Back/Forward, new-tab/restore и role-deny tests; navigation inventory не имеет unclassified direct sites.
+  - **Оценка:** 10 ч · **Зависимости:** V6-601..605, V6-407 · **Приоритет:** P0.
+
 - [ ] **INT-S6** — Принять role/UX coverage.
   - **Критерий:** CH-04/09 closed; 5 personas and school/branch scopes pass; route UX coverage=100%; 26-point pack ready for owner execution.
   - **Проверка:** actor/network matrix, Flutter/server gates, Windows/Android rehearsals, no open UX P0 defect.
-  - **Оценка:** 4 ч · **Зависимости:** V6-601..605 · **Приоритет:** P0.
+  - **Оценка:** 4 ч · **Зависимости:** V6-601..606 · **Приоритет:** P0.
 
 ---
 
@@ -395,11 +401,11 @@ flowchart TD
 | `REQ-STUDENT-002` | V6-405 | INT-S4 |
 | `REQ-TASK-001` | V6-501 | INT-S5 |
 | `REQ-TASK-002` | V6-502, V6-701 | INT-S7 |
-| `REQ-NAV-001` | V6-105, V6-403, V6-406 | INT-S4 |
-| `REQ-NAV-002` | V6-101, V6-105, V6-401, V6-406 | INT-S6 |
-| `REQ-NAV-003` | V6-101, V6-104 | INT-S1 |
+| `REQ-NAV-001` | V6-105, V6-403, V6-406, V6-606 | INT-S6 |
+| `REQ-NAV-002` | V6-101, V6-105, V6-401, V6-406, V6-606 | INT-S6 |
+| `REQ-NAV-003` | V6-101, V6-104, V6-606 | INT-S6 |
 | `REQ-REPORT-001` | V6-503, V6-504 | INT-S5 |
-| `REQ-UX-001` | V6-001, V6-304, V6-604 | INT-S6 |
+| `REQ-UX-001` | V6-001, V6-304, V6-604, V6-606 | INT-S6 |
 | `REQ-UX-002` | V6-005, V6-605, V6-701 | INT-S7 |
 | `REQ-SEC-001` | V6-103, V6-504, V6-601, V6-702 | INT-S7 |
 | `REQ-REL-001` | V6-703, V6-704 | INT-S7 |

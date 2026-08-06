@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
-import 'package:magic_music_crm/core/navigation/app_back_policy.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/services/access_invalidation_provider.dart';
 import 'package:magic_music_crm/core/security/capability_shell.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
@@ -226,13 +226,41 @@ final routerProvider = Provider<GoRouter>((ref) {
         return roleRoute;
       }
 
-      // Proactive role-path enforcement.
-      // `/admin/profiles/:id` (the shared user card) is opened from the
-      // manager CRM (user-roles + tasks widgets), so it is exempt from the
-      // admin-dashboard gate — managers reach it legitimately. The server
-      // still authorizes the underlying profile fetch.
+      if (loc == '/crm/configuration') {
+        return _staffEntityLocation(
+          roleRoute,
+          section: 'configuration',
+          entityType: 'configuration',
+          entityId: '__section__',
+          focus: 'section',
+        );
+      }
+
+      if (loc.startsWith('/admin/profiles/')) {
+        return _staffEntityLocation(
+          roleRoute,
+          section: 'configuration',
+          entityType: 'user',
+          entityId: state.uri.pathSegments.last,
+          focus: 'profile',
+        );
+      }
+
+      if (loc.startsWith('/lessons/')) {
+        return role == 'client'
+            ? roleRoute
+            : _staffEntityLocation(
+                roleRoute,
+                section: 'schedule',
+                entityType: 'lesson',
+                entityId: state.uri.pathSegments.last,
+                focus: 'lesson',
+              );
+      }
+
+      // Proactive role-path enforcement. Legacy shared paths were already
+      // normalized above, so only the canonical role shells reach this gate.
       if (loc.startsWith('/admin') &&
-          !loc.startsWith('/admin/profiles/') &&
           role != 'admin' &&
           role != 'system_admin') {
         return roleRoute;
@@ -377,8 +405,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/lessons/:id',
-        builder: (context, state) =>
-            _LessonDeepLinkScreen(lessonId: state.pathParameters['id']!),
+        builder: (context, state) => const _DeepLinkScaffold(),
       ),
       GoRoute(
         path: '/profile',
@@ -399,7 +426,11 @@ final routerProvider = Provider<GoRouter>((ref) {
 EntityLink? _dashboardEntityLink(GoRouterState state) {
   final type = state.uri.queryParameters['entityType'];
   final id = state.uri.queryParameters['entityId'];
-  if (type == null || id == null || id.isEmpty) return null;
+  if (type == null || id == null || id.isEmpty) {
+    final section = state.uri.queryParameters['section'];
+    if (section == null || section.isEmpty) return null;
+    return EntityRouteRegistry.sectionRootLink(section);
+  }
   final link = EntityLink.fromJson({
     'version': EntityLink.schemaVersion,
     'entityType': type,
@@ -423,6 +454,24 @@ EntityLink? _dashboardEntityLink(GoRouterState state) {
       },
   });
   return link.isSupported ? link : null;
+}
+
+String _staffEntityLocation(
+  String roleRoute, {
+  required String section,
+  required String entityType,
+  required String entityId,
+  String? focus,
+}) {
+  return Uri(
+    path: roleRoute,
+    queryParameters: {
+      'section': section,
+      'entityType': entityType,
+      'entityId': entityId,
+      'focus': ?focus,
+    },
+  ).toString();
 }
 
 class _AppGateLoadingScreen extends ConsumerStatefulWidget {
@@ -601,49 +650,7 @@ class _AppGateLoadingScreenState extends ConsumerState<_AppGateLoadingScreen> {
   }
 }
 
-/// Destination to return to once a deep-linked dialog closes — the active
-/// role dashboard, derived from the (already-loaded) release-gate status so the
-/// back stack lands on a real screen instead of the boot loader.
-String _deepLinkHomeRoute(WidgetRef ref) {
-  final gate = ref.read(_routeGateStateProvider).gateStatus;
-  final role = (gate == null || gate.role.isEmpty) ? 'client' : gate.role;
-  return _roleToRoute(role);
-}
-
-/// Compatibility host for old lesson deep links. Lifecycle details are opened
-/// from the role schedule; attendance no longer has a business UI.
-class _LessonDeepLinkScreen extends ConsumerStatefulWidget {
-  const _LessonDeepLinkScreen({required this.lessonId});
-
-  final String lessonId;
-
-  @override
-  ConsumerState<_LessonDeepLinkScreen> createState() =>
-      _LessonDeepLinkScreenState();
-}
-
-class _LessonDeepLinkScreenState extends ConsumerState<_LessonDeepLinkScreen> {
-  bool _opened = false;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _open());
-  }
-
-  void _open() {
-    if (_opened || !mounted) return;
-    _opened = true;
-    if (widget.lessonId.isEmpty) return;
-    returnFromDeepLink(context, fallbackLocation: _deepLinkHomeRoute(ref));
-  }
-
-  @override
-  Widget build(BuildContext context) => const _DeepLinkScaffold();
-}
-
-/// Theme-aware placeholder shown behind a deep-linked dialog while it resolves.
-/// Surfaces follow the app theme; the boot affordance is a v7 skeleton row.
+/// Unreachable safety placeholder while a legacy URL redirect resolves.
 class _DeepLinkScaffold extends StatelessWidget {
   const _DeepLinkScaffold();
 

@@ -15,7 +15,7 @@ import 'package:magic_music_crm/core/services/section_unseen_service.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
-import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
+import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_messenger_shell.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7_nav_shell.dart';
 import 'package:magic_music_crm/core/widgets/v7/dirty_form_exit.dart';
@@ -85,7 +85,10 @@ class MessengerScreen extends ConsumerStatefulWidget {
     required this.role,
     this.initialLink,
     this.initialViewState,
+    this.workspaceOwned = false,
   });
+
+  final bool workspaceOwned;
 
   @override
   ConsumerState<MessengerScreen> createState() => _MessengerScreenState();
@@ -186,7 +189,10 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   /// терпит: запрос идемпотентный (`on conflict do update`).
   void _markSectionSeen(int tab) {
     final key = sectionKeyForTab(tab);
-    if (key == null) return;
+    if (key == null) {
+      _lastMarkedSection = null;
+      return;
+    }
     if (_lastMarkedSection == key) return;
     _lastMarkedSection = key;
     unawaited(
@@ -243,22 +249,9 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       _selectedCrmTab = tab;
       if (resetReports && tab == 7) _selectedReportsTab = 0;
     });
-    final section = switch ((widget.role, tab)) {
-      ('teacher', 1) => 'schedule',
-      ('teacher', 2) => 'clients',
-      (_, 0) => 'chat',
-      (_, 1) => 'overview',
-      (_, 2) => 'schedule',
-      (_, 3) => 'clients',
-      (_, 4) => 'users',
-      (_, 5) => 'finance',
-      (_, 6) => 'tasks',
-      (_, 7) => 'reports',
-      (_, 8) => 'configuration',
-      _ => null,
-    };
+    final section = crmSectionForTab(widget.role, tab);
     final workspace = WorkspaceNavigationScope.maybeOf(context);
-    if (section == null || workspace == null) return;
+    if (workspace == null) return;
     final controller = workspace.controller;
     final link = EntityRouteRegistry.sectionRootLink(section);
     final current = controller.state.activeTab.currentRoute.link;
@@ -320,44 +313,46 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     //
     // Опрос-фолбэк (isFallbackPoll) пропускаем: он приходит по таймеру, а не
     // потому, что что-то случилось, и дёргал бы сервер вхолостую.
-    ref.listen(crmRealtimeProvider, (previous, next) {
-      final event = next.value;
-      if (event == null || !mounted || event.isFallbackPoll) return;
-      if (sectionForEntity(event.entity) == null) return;
-      ref.invalidate(sectionUnseenProvider);
-    });
+    if (!widget.workspaceOwned) {
+      ref.listen(crmRealtimeProvider, (previous, next) {
+        final event = next.value;
+        if (event == null || !mounted || event.isFallbackPoll) return;
+        if (sectionForEntity(event.entity) == null) return;
+        ref.invalidate(sectionUnseenProvider);
+      });
 
-    ref.listen<CrmNavigationRequest?>(crmNavigationRequestProvider, (
-      previous,
-      next,
-    ) {
-      if (next == null || !mounted) return;
-      final snapshot = _accessSnapshot;
-      unawaited(
-        snapshot == null
-            ? openEntityLink(
-                context,
-                ref,
-                next.link,
-                target: next.openInNewTab
-                    ? EntityOpenTarget.newTab
-                    : EntityOpenTarget.current,
-                sourceViewState: next.sourceState,
-              )
-            : navigateEntityLink(
-                context,
-                snapshot,
-                next.link,
-                target: next.openInNewTab
-                    ? EntityOpenTarget.newTab
-                    : EntityOpenTarget.current,
-                sourceViewState: next.sourceState,
-              ),
-      );
-      Future.microtask(
-        () => ref.read(crmNavigationRequestProvider.notifier).clear(),
-      );
-    });
+      ref.listen<CrmNavigationRequest?>(crmNavigationRequestProvider, (
+        previous,
+        next,
+      ) {
+        if (next == null || !mounted) return;
+        final snapshot = _accessSnapshot;
+        unawaited(
+          snapshot == null
+              ? openEntityLink(
+                  context,
+                  ref,
+                  next.link,
+                  target: next.openInNewTab
+                      ? EntityOpenTarget.newTab
+                      : EntityOpenTarget.current,
+                  sourceViewState: next.sourceState,
+                )
+              : navigateEntityLink(
+                  context,
+                  snapshot,
+                  next.link,
+                  target: next.openInNewTab
+                      ? EntityOpenTarget.newTab
+                      : EntityOpenTarget.current,
+                  sourceViewState: next.sourceState,
+                ),
+        );
+        Future.microtask(
+          () => ref.read(crmNavigationRequestProvider.notifier).clear(),
+        );
+      });
+    }
 
     final visibleCrmTabs = _visibleCrmTabs(isDesktop);
     // Normalise to a tab the current role can actually see, so a stale or
@@ -380,7 +375,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       ref
           .read(activeViewProvider.notifier)
           .set(crmTab: selectedCrmTab, chatId: openChatId);
-      _markSectionSeen(selectedCrmTab);
+      if (!widget.workspaceOwned) _markSectionSeen(selectedCrmTab);
     });
     final bodyContent = _buildCrmBody(
       context,
@@ -388,7 +383,8 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       selectedTab: selectedCrmTab,
     );
 
-    if (isDesktop) {
+    if (isDesktop &&
+        !(widget.workspaceOwned && MediaQuery.sizeOf(context).width >= 840)) {
       return Scaffold(
         body: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -77,10 +77,8 @@ void main() {
         tabId: 'tab-1',
       );
 
-      expect(surface, isA<ClientWorkspaceWithNavigation>());
-      final card =
-          (surface! as ClientWorkspaceWithNavigation).child
-              as ClientCardRouteSurface;
+      expect(surface, isA<ClientCardRouteSurface>());
+      final card = surface! as ClientCardRouteSurface;
       expect(card.entityId, 'student-1');
       expect(card.initialSection, entry.section);
       expect(card.viewState?.filters[entry.idKey], 'commerce-1');

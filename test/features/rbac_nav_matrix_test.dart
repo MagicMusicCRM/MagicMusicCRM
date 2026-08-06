@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
+import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
 
 /// 6-role RBAC matrix for CRM navigation (KVA-239):
 /// client < teacher < admin < manager < director < system_admin.

@@ -8,9 +8,7 @@ import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/security/capability_shell.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/widgets/v7/magic_page_state.dart';
-import 'package:magic_music_crm/core/widgets/v7/v7_nav_shell.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
-import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
 
 import 'client_card.dart';
 import 'teacher_client_card.dart';
@@ -37,84 +35,19 @@ Widget? buildClientWorkspaceSurface({
           : link.entityType == EntityLinkType.subscription
           ? 'subscriptions'
           : 'overview');
-  return ClientWorkspaceWithNavigation(
+  return ClientCardRouteSurface(
+    key: ValueKey('workspace-client-$tabId'),
     snapshot: snapshot,
-    child: ClientCardRouteSurface(
-      key: ValueKey('workspace-client-$tabId'),
-      snapshot: snapshot,
-      entityType: isClient && link.rawEntityType == 'lead' ? 'lead' : 'student',
-      entityId: isClient ? link.entityId : studentId!,
-      initialSection: section,
-      viewState: ContextViewState(
-        filters: filter,
-        date: route.viewState.date,
-        scrollOffset: route.viewState.scrollOffset,
-        selectedColumn: route.viewState.selectedColumn,
-      ),
+    entityType: isClient && link.rawEntityType == 'lead' ? 'lead' : 'student',
+    entityId: isClient ? link.entityId : studentId!,
+    initialSection: section,
+    viewState: ContextViewState(
+      filters: filter,
+      date: route.viewState.date,
+      scrollOffset: route.viewState.scrollOffset,
+      selectedColumn: route.viewState.selectedColumn,
     ),
   );
-}
-
-class ClientWorkspaceWithNavigation extends StatelessWidget {
-  const ClientWorkspaceWithNavigation({
-    super.key,
-    required this.snapshot,
-    required this.child,
-  });
-
-  final CapabilitySnapshot snapshot;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth < 840) return child;
-        final tabs = crmVisibleTabsForCapabilities(snapshot, isDesktop: true);
-        final clientTab = snapshot.role == 'teacher' ? 2 : 3;
-        return Row(
-          children: [
-            Material(
-              child: V7NavShell(
-                isDesktop: true,
-                destinations: [
-                  for (final tab in tabs)
-                    crmV7DestinationForTab(snapshot.role, tab),
-                ],
-                selectedIndex: tabs.indexOf(clientTab),
-                onSelected: (index) => _openSection(context, tabs[index]),
-              ),
-            ),
-            Expanded(child: child),
-          ],
-        );
-      },
-    );
-  }
-
-  void _openSection(BuildContext context, int tab) {
-    final workspace = WorkspaceNavigationScope.maybeOf(context);
-    if (workspace == null) return;
-    final section = snapshot.role == 'teacher'
-        ? switch (tab) {
-            1 => 'schedule',
-            2 => 'clients',
-            _ => 'chat',
-          }
-        : switch (tab) {
-            1 => 'overview',
-            2 => 'schedule',
-            3 => 'clients',
-            6 => 'tasks',
-            7 => 'reports',
-            8 => 'configuration',
-            _ => 'chat',
-          };
-    workspace.controller.push(
-      workspace.controller.state.activeTabId,
-      EntityRouteRegistry.sectionRootLink(section),
-    );
-  }
 }
 
 /// Compatibility launcher retained for existing list/board callers. It now

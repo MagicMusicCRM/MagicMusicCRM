@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/security/capability_shell.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
-import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
+import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
 
 const _managerSnapshot = CapabilitySnapshot(
   accountId: '11111111-1111-4111-8111-111111111111',

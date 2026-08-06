@@ -142,6 +142,11 @@ void main() {
               : null,
         );
         expect(resolution.state, EntityRouteState.resolved);
+        expect(
+          resolution.location,
+          startsWith('/manager?'),
+          reason: links[index].rawEntityType,
+        );
         expect(workspace.state.activeTab.currentRoute.link, same(links[index]));
       }
 

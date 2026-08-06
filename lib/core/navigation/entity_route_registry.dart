@@ -413,6 +413,10 @@ class EntityRouteRegistry {
     EntityLinkType.branch ||
     EntityLinkType.scheduleSeries => 'schedule',
     EntityLinkType.task => 'tasks',
+    EntityLinkType.payment
+        when link.optionalFocus?.filter['studentId']?.toString().isNotEmpty ==
+            true =>
+      'clients',
     EntityLinkType.payment => 'finance',
     EntityLinkType.user => 'configuration',
     EntityLinkType.homework => 'homework',
@@ -557,13 +561,18 @@ class EntityRouteRegistry {
     EntityLinkType.payment: EntityRouteRegistration(
       isAllowed: (_, snapshot) =>
           snapshot.allows('commerce.client_finance.read'),
-      buildLocation: (link, snapshot) => _staffRoute(link, snapshot, 'finance'),
+      buildLocation: (link, snapshot) => _staffRoute(
+        link,
+        snapshot,
+        link.optionalFocus?.filter['studentId']?.toString().isNotEmpty == true
+            ? 'clients'
+            : 'finance',
+      ),
     ),
     EntityLinkType.user: EntityRouteRegistration(
       isAllowed: (_, snapshot) => snapshot.allows('system.settings.manage'),
-      buildLocation: (link, snapshot) => link.entityId == '__section__'
-          ? _staffRoute(link, snapshot, 'configuration')
-          : '/admin/profiles/${Uri.encodeComponent(link.entityId)}',
+      buildLocation: (link, snapshot) =>
+          _staffRoute(link, snapshot, 'configuration'),
     ),
     EntityLinkType.homework: EntityRouteRegistration(
       isAllowed: (_, snapshot) => snapshot.allows('crm.client.read.basic'),

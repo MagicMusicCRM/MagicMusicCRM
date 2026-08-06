@@ -697,9 +697,5 @@ extension _ClientCardTabsA on _ClientCardState {
             clientId: clientId,
           ),
         );
-    if (Navigator.of(context).canPop()) {
-      Navigator.of(context).pop(_dirty ? true : null);
-    }
-    context.go('/admin');
   }
 }

@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/security/access_management.dart';
+import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
 class AccessEditorSheet extends ConsumerStatefulWidget {
@@ -13,6 +16,7 @@ class AccessEditorSheet extends ConsumerStatefulWidget {
     required this.userLabel,
     this.dataSource,
     this.onChanged,
+    this.embedded = false,
   });
 
   final String actorRole;
@@ -20,6 +24,7 @@ class AccessEditorSheet extends ConsumerStatefulWidget {
   final String userLabel;
   final AccessManagementDataSource? dataSource;
   final VoidCallback? onChanged;
+  final bool embedded;
 
   static Future<void> show(
     BuildContext context, {
@@ -27,18 +32,17 @@ class AccessEditorSheet extends ConsumerStatefulWidget {
     required String userId,
     required String userLabel,
     VoidCallback? onChanged,
-  }) {
-    return Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (_) => AccessEditorSheet(
-          actorRole: actorRole,
-          userId: userId,
-          userLabel: userLabel,
-          onChanged: onChanged,
-        ),
-      ),
+  }) async {
+    final link = EntityLink.typed(
+      entityType: EntityLinkType.user,
+      entityId: userId,
+      optionalFocus: EntityLinkFocus(focus: 'permissions'),
+      presentation: EntityPresentationReference(primary: userLabel),
     );
+    final container = ProviderScope.containerOf(context, listen: false);
+    final snapshot = await container.read(capabilitySnapshotProvider.future);
+    if (!context.mounted) return;
+    await navigateEntityLink(context, snapshot, link);
   }
 
   @override
@@ -284,11 +288,12 @@ class _AccessEditorSheetState extends ConsumerState<AccessEditorSheet> {
                       ],
                     ),
                   ),
-                  IconButton(
-                    tooltip: 'Закрыть',
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close),
-                  ),
+                  if (!widget.embedded)
+                    IconButton(
+                      tooltip: 'Закрыть',
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close),
+                    ),
                 ],
               ),
             ),

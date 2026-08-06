@@ -77,6 +77,30 @@ extension _MessengerActions on _MessengerScreenState {
           // DON'T clear — _loadChatList will call _checkDeepLink again after loading
         }
       }
+      return;
+    }
+
+    final link = widget.initialLink;
+    if (!mounted ||
+        link?.entityType != EntityLinkType.chat ||
+        link!.entityId == 'home' ||
+        link.entityId == '__section__' ||
+        _chatItems.isEmpty) {
+      return;
+    }
+    final partnerId = link.optionalFocus?.filter['partnerId']?.toString();
+    final item = _chatItems
+        .where(
+          (chat) =>
+              chat['id']?.toString() == link.entityId ||
+              (partnerId != null &&
+                  chat['_partner_id']?.toString() == partnerId),
+        )
+        .firstOrNull;
+    if (item != null) {
+      _selectChat(item);
+    } else if (partnerId?.isNotEmpty == true) {
+      unawaited(_openDirectChatFromNavigation(partnerId!));
     }
   }
 

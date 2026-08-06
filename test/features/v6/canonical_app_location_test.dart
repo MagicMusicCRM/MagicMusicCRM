@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
+import 'package:magic_music_crm/core/providers/crm_navigation_provider.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 
 void main() {
@@ -88,6 +89,48 @@ void main() {
     expect(resolution.link.entityType, EntityLinkType.task);
     expect(resolution.canonicalLocation?.routeName, 'entity:task');
     expect(resolution.canonicalLocation?.ancestors.single.title, 'Задачи');
+  });
+
+  test('linked client payment stays under Clients in route and rail', () {
+    final resolution = EntityRouteRegistry().resolve(
+      EntityLink.typed(
+        entityType: EntityLinkType.payment,
+        entityId: 'payment-1',
+        optionalFocus: EntityLinkFocus(
+          focus: 'payment',
+          filter: const {'studentId': 'student-1'},
+        ),
+      ),
+      snapshot,
+    );
+
+    expect(resolution.state, EntityRouteState.resolved);
+    expect(
+      Uri.parse(resolution.location!).queryParameters['section'],
+      'clients',
+    );
+    expect(resolution.canonicalLocation?.ancestors.single.title, 'Клиенты');
+    expect(crmTabForEntityLink(resolution.link, snapshot.role), 3);
+  });
+
+  test('user card and permissions never bypass the role workspace', () {
+    for (final focus in ['profile', 'permissions']) {
+      final resolution = EntityRouteRegistry().resolve(
+        EntityLink.typed(
+          entityType: EntityLinkType.user,
+          entityId: 'user-1',
+          optionalFocus: EntityLinkFocus(focus: focus),
+        ),
+        snapshot,
+      );
+
+      expect(resolution.location, startsWith('/manager?'));
+      expect(
+        Uri.parse(resolution.location!).queryParameters['section'],
+        'configuration',
+      );
+      expect(resolution.canonicalLocation?.ancestors.single.title, 'Настройки');
+    }
   });
 
   test(

@@ -14,7 +14,7 @@ import 'package:magic_music_crm/features/client/presentation/screens/client_dash
 import 'package:magic_music_crm/features/client/presentation/widgets/subscription_status_card.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/finance_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/reports_widget.dart';
-import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
+import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
 
 import '../crm/client_card/card_fake_api.dart';
 

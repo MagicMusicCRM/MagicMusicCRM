@@ -9,6 +9,7 @@ import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
+import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_conflicts_api.dart';
 import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
 
@@ -61,6 +62,24 @@ class CreateLessonDialog extends ConsumerStatefulWidget {
     String? clientName,
     bool initialIsTrial = false,
   }) {
+    if (WorkspaceNavigationScope.maybeOf(context)?.isDesktop == true) {
+      return showDialog<bool>(
+        context: context,
+        builder: (_) => CreateLessonDialog(
+          initialDate: initialDate,
+          initialRoomId: initialRoomId,
+          initialBranchId: initialBranchId,
+          initialDurationMinutes: initialDurationMinutes,
+          lesson: lesson,
+          leadId: leadId,
+          leadName: leadName,
+          clientType: clientType,
+          clientId: clientId,
+          clientName: clientName,
+          initialIsTrial: initialIsTrial,
+        ),
+      );
+    }
     return Navigator.of(context).push<bool>(
       MaterialPageRoute(
         fullscreenDialog: true,

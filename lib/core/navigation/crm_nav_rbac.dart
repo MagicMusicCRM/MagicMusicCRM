@@ -217,3 +217,20 @@ int crmResolveVisibleTab({
   if (visibleTabs.contains(currentTab)) return currentTab;
   return visibleTabs.first;
 }
+
+String crmSectionForTab(String role, int tab) => role == 'teacher'
+    ? switch (tab) {
+        1 => 'schedule',
+        2 => 'clients',
+        _ => 'chat',
+      }
+    : switch (tab) {
+        1 => 'overview',
+        2 => 'schedule',
+        3 => 'clients',
+        5 => 'finance',
+        6 => 'tasks',
+        7 => 'reports',
+        8 => 'configuration',
+        _ => 'chat',
+      };

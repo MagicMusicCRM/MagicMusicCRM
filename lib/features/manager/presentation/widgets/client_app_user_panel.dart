@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/providers/chat_providers.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -73,11 +72,6 @@ class _ClientAppUserPanelState extends ConsumerState<ClientAppUserPanel> {
     ref
         .read(messengerNavigationProvider.notifier)
         .navigateTo(MessengerNavigationState(partnerId: userId));
-    if (context.canPop()) {
-      context.pop();
-    } else {
-      context.go('/');
-    }
   }
 
   Future<void> _startLinkByPhone() async {

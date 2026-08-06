@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
@@ -47,9 +48,7 @@ class CrmConfigurationRouteScreen extends ConsumerWidget {
 }
 
 Future<void> showCrmConfigurationWorkspace(BuildContext context) async {
-  await Navigator.of(context).push<void>(
-    MaterialPageRoute(builder: (_) => const CrmConfigurationRouteScreen()),
-  );
+  await context.push<void>('/crm/configuration');
 }
 
 class CrmConfigurationWorkspace extends ConsumerStatefulWidget {

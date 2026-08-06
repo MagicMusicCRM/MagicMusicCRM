@@ -4,7 +4,7 @@ import 'package:magic_music_crm/core/navigation/entity_link.dart'
 import 'package:magic_music_crm/core/security/capability_shell.dart';
 import 'package:magic_music_crm/features/messenger/presentation/screens/messenger_screen.dart';
 import 'package:magic_music_crm/core/workspace/production_workspace_host.dart';
-import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
+import 'package:magic_music_crm/features/crm/presentation/workspace_entity_surface.dart';
 
 class AdminDashboardScreen extends StatelessWidget {
   const AdminDashboardScreen({super.key, this.initialLink});
@@ -19,12 +19,12 @@ class AdminDashboardScreen extends StatelessWidget {
         initialLink: initialLink,
         tabBuilder: (_, tab) {
           final route = tab.currentRoute;
-          final client = buildClientWorkspaceSurface(
+          final surface = buildStaffWorkspaceSurface(
             snapshot: snapshot,
             route: route,
             tabId: tab.tabId,
           );
-          if (client != null) return client;
+          if (surface != null) return surface;
           return MessengerScreen(
             key: ValueKey(
               'workspace-${tab.tabId}-${route.link.rawEntityType}-'
@@ -33,6 +33,7 @@ class AdminDashboardScreen extends StatelessWidget {
             role: snapshot.role,
             initialLink: route.link,
             initialViewState: route.viewState,
+            workspaceOwned: true,
           );
         },
       ),

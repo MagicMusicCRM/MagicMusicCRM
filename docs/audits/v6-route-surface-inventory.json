@@ -3,14 +3,14 @@
   "task": "V6-001",
   "generated_from": "lib/main.dart import graph + GoRouter + presentation callsites",
   "summary": {
-    "dart_files": 254,
-    "production_reachable_files": 253,
+    "dart_files": 255,
+    "production_reachable_files": 254,
     "go_routes": 22,
-    "screens": 22,
-    "production_screens": 22,
+    "screens": 21,
+    "production_screens": 21,
     "isolated_screens": 0,
-    "modal_surface_calls": 93,
-    "production_surface_calls": 93,
+    "modal_surface_calls": 94,
+    "production_surface_calls": 94,
     "screen_state_gaps": 0,
     "unowned": 0
   },
@@ -20,154 +20,154 @@
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 272
+      "line": 300
     },
     {
       "path": "/login",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 276
+      "line": 304
     },
     {
       "path": "/register",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 277
+      "line": 305
     },
     {
       "path": "/email-otp",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 281
+      "line": 309
     },
     {
       "path": "/password-reset",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 294
+      "line": 322
     },
     {
       "path": "/onboarding",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 298
+      "line": 326
     },
     {
       "path": "/legal-consent",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 302
+      "line": 330
     },
     {
       "path": "/legal-documents",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 306
+      "line": 334
     },
     {
       "path": "/account-deletion-status",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 311
+      "line": 339
     },
     {
       "path": "/client",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 315
+      "line": 343
     },
     {
       "path": "/admin",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 321
+      "line": 349
     },
     {
       "path": "/teacher",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 326
+      "line": 354
     },
     {
       "path": "/manager",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 331
+      "line": 359
     },
     {
       "path": "/student/:id",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 336
+      "line": 364
     },
     {
       "path": "/admin/profiles/:id",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 345
+      "line": 373
     },
     {
       "path": "/crm/configuration",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 350
+      "line": 378
     },
     {
       "path": "/students/:id",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 360
+      "line": 388
     },
     {
       "path": "/leads/:id",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 369
+      "line": 397
     },
     {
       "path": "/lessons/:id",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 378
+      "line": 406
     },
     {
       "path": "/profile",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 383
+      "line": 410
     },
     {
       "path": "/auth-methods",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 387
+      "line": 414
     },
     {
       "path": "/delete-account",
       "owner": "SYS-APP-EXPERIENCE",
       "status": "production-mounted",
       "file": "lib/core/router/app_router.dart",
-      "line": 391
+      "line": 418
     }
   ],
   "screens": [
@@ -187,7 +187,7 @@
       "state_contract": "boot-gate",
       "state_na_reason": "The route is itself the loading state; router error/retry owns failure.",
       "file": "lib/core/router/app_router.dart",
-      "line": 428
+      "line": 477
     },
     {
       "name": "AuthMethodsScreen",
@@ -295,7 +295,7 @@
       "state_contract": "data",
       "state_na_reason": null,
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 24
+      "line": 25
     },
     {
       "name": "ClientCardRouteScreen",
@@ -313,7 +313,7 @@
       "state_contract": "composition-shell",
       "state_na_reason": "Mounted sections own loading, empty, error, forbidden and retry states.",
       "file": "lib/features/crm/presentation/client_card/show_client_card.dart",
-      "line": 176
+      "line": 109
     },
     {
       "name": "ClientPortalScreen",
@@ -334,6 +334,24 @@
       "line": 17
     },
     {
+      "name": "ProfileScreen",
+      "owner": "SYS-PLATFORM-QUALITY",
+      "production_reachable": true,
+      "status": "production-reachable",
+      "primary_action_evidence": true,
+      "states": {
+        "loading": true,
+        "empty": true,
+        "error": true,
+        "forbidden": false,
+        "retry": false
+      },
+      "state_contract": "form",
+      "state_na_reason": "No empty collection state; validation, saving and submit error stay inside the form.",
+      "file": "lib/features/profile/presentation/screens/profile_screen.dart",
+      "line": 16
+    },
+    {
       "name": "ClientDashboardScreen",
       "owner": "SYS-APP-EXPERIENCE",
       "production_reachable": true,
@@ -350,24 +368,6 @@
       "state_na_reason": null,
       "file": "lib/features/client/presentation/screens/client_dashboard_screen.dart",
       "line": 23
-    },
-    {
-      "name": "RegistrationScreen",
-      "owner": "SYS-ACCESS-SCOPE",
-      "production_reachable": true,
-      "status": "production-reachable",
-      "primary_action_evidence": false,
-      "states": {
-        "loading": true,
-        "empty": true,
-        "error": true,
-        "forbidden": false,
-        "retry": false
-      },
-      "state_contract": "form",
-      "state_na_reason": "No empty collection state; validation, saving and submit error stay inside the form.",
-      "file": "lib/features/auth/presentation/screens/registration_screen.dart",
-      "line": 15
     },
     {
       "name": "PasswordResetScreen",
@@ -514,29 +514,11 @@
       "line": 9
     },
     {
-      "name": "_LessonDeepLinkScreen",
-      "owner": "SYS-APP-EXPERIENCE",
+      "name": "RegistrationScreen",
+      "owner": "SYS-ACCESS-SCOPE",
       "production_reachable": true,
       "status": "production-reachable",
       "primary_action_evidence": false,
-      "states": {
-        "loading": true,
-        "empty": true,
-        "error": true,
-        "forbidden": false,
-        "retry": true
-      },
-      "state_contract": "data",
-      "state_na_reason": null,
-      "file": "lib/core/router/app_router.dart",
-      "line": 615
-    },
-    {
-      "name": "ProfileScreen",
-      "owner": "SYS-PLATFORM-QUALITY",
-      "production_reachable": true,
-      "status": "production-reachable",
-      "primary_action_evidence": true,
       "states": {
         "loading": true,
         "empty": true,
@@ -546,8 +528,8 @@
       },
       "state_contract": "form",
       "state_na_reason": "No empty collection state; validation, saving and submit error stay inside the form.",
-      "file": "lib/features/profile/presentation/screens/profile_screen.dart",
-      "line": 16
+      "file": "lib/features/auth/presentation/screens/registration_screen.dart",
+      "line": 15
     },
     {
       "name": "TeacherDashboardScreen",
@@ -599,7 +581,7 @@
         "retry": true
       },
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 242
+      "line": 241
     },
     {
       "kind": "dialog",
@@ -727,7 +709,7 @@
         "retry": false
       },
       "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 266
+      "line": 265
     },
     {
       "kind": "magic-sheet",
@@ -903,7 +885,7 @@
         "retry": true
       },
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 328
+      "line": 327
     },
     {
       "kind": "dialog",
@@ -919,7 +901,7 @@
         "retry": true
       },
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 852
+      "line": 851
     },
     {
       "kind": "drawer",
@@ -1015,7 +997,7 @@
         "retry": true
       },
       "file": "lib/features/messenger/presentation/screens/messenger_screen_actions.dart",
-      "line": 324
+      "line": 348
     },
     {
       "kind": "dialog",
@@ -1292,22 +1274,6 @@
     {
       "kind": "dialog",
       "call": "showDialog",
-      "owner": "SYS-APP-EXPERIENCE",
-      "production_reachable": true,
-      "status": "production-callsite",
-      "states": {
-        "loading": true,
-        "empty": true,
-        "error": true,
-        "forbidden": false,
-        "retry": false
-      },
-      "file": "lib/features/messenger/presentation/screens/messenger_screen_messaging.dart",
-      "line": 176
-    },
-    {
-      "kind": "dialog",
-      "call": "showDialog",
       "owner": "SYS-SCHEDULE",
       "production_reachable": true,
       "status": "production-callsite",
@@ -1324,6 +1290,22 @@
     {
       "kind": "dialog",
       "call": "showDialog",
+      "owner": "SYS-PLATFORM-QUALITY",
+      "production_reachable": true,
+      "status": "production-callsite",
+      "states": {
+        "loading": true,
+        "empty": true,
+        "error": false,
+        "forbidden": false,
+        "retry": false
+      },
+      "file": "lib/features/admin/presentation/widgets/staff_detail_dialog.dart",
+      "line": 14
+    },
+    {
+      "kind": "dialog",
+      "call": "showDialog",
       "owner": "SYS-SCHEDULE",
       "production_reachable": true,
       "status": "production-callsite",
@@ -1336,6 +1318,22 @@
       },
       "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
       "line": 380
+    },
+    {
+      "kind": "magic-sheet",
+      "call": "showMagicSheet",
+      "owner": "SYS-UI-FOUNDATION",
+      "production_reachable": true,
+      "status": "production-callsite",
+      "states": {
+        "loading": false,
+        "empty": false,
+        "error": false,
+        "forbidden": false,
+        "retry": false
+      },
+      "file": "lib/core/widgets/v7/magic_sheet.dart",
+      "line": 12
     },
     {
       "kind": "dialog",
@@ -1466,6 +1464,22 @@
       "line": 137
     },
     {
+      "kind": "bottom-sheet",
+      "call": "showModalBottomSheet",
+      "owner": "SYS-UI-FOUNDATION",
+      "production_reachable": true,
+      "status": "production-callsite",
+      "states": {
+        "loading": false,
+        "empty": false,
+        "error": false,
+        "forbidden": false,
+        "retry": false
+      },
+      "file": "lib/core/widgets/v7/magic_sheet.dart",
+      "line": 20
+    },
+    {
       "kind": "magic-sheet",
       "call": "showMagicSheet",
       "owner": "SYS-PLATFORM-QUALITY",
@@ -1480,22 +1494,6 @@
       },
       "file": "lib/core/widgets/telegram/message_bubble.dart",
       "line": 495
-    },
-    {
-      "kind": "dialog",
-      "call": "showDialog",
-      "owner": "SYS-PLATFORM-QUALITY",
-      "production_reachable": true,
-      "status": "production-callsite",
-      "states": {
-        "loading": true,
-        "empty": true,
-        "error": true,
-        "forbidden": false,
-        "retry": false
-      },
-      "file": "lib/core/widgets/telegram/create_group_dialog.dart",
-      "line": 14
     },
     {
       "kind": "dialog",
@@ -1642,36 +1640,36 @@
       "line": 123
     },
     {
-      "kind": "magic-sheet",
-      "call": "showMagicSheet",
-      "owner": "SYS-UI-FOUNDATION",
+      "kind": "dialog",
+      "call": "showDialog",
+      "owner": "SYS-PLATFORM-QUALITY",
       "production_reachable": true,
       "status": "production-callsite",
       "states": {
-        "loading": false,
-        "empty": false,
-        "error": false,
+        "loading": true,
+        "empty": true,
+        "error": true,
         "forbidden": false,
         "retry": false
       },
-      "file": "lib/core/widgets/v7/magic_sheet.dart",
-      "line": 12
+      "file": "lib/core/widgets/telegram/create_group_dialog.dart",
+      "line": 14
     },
     {
-      "kind": "bottom-sheet",
-      "call": "showModalBottomSheet",
-      "owner": "SYS-UI-FOUNDATION",
+      "kind": "dialog",
+      "call": "showDialog",
+      "owner": "SYS-APP-EXPERIENCE",
       "production_reachable": true,
       "status": "production-callsite",
       "states": {
-        "loading": false,
-        "empty": false,
-        "error": false,
+        "loading": true,
+        "empty": true,
+        "error": true,
         "forbidden": false,
         "retry": false
       },
-      "file": "lib/core/widgets/v7/magic_sheet.dart",
-      "line": 20
+      "file": "lib/features/messenger/presentation/screens/messenger_screen_messaging.dart",
+      "line": 176
     },
     {
       "kind": "draggable-sheet",
@@ -1700,10 +1698,10 @@
         "empty": true,
         "error": true,
         "forbidden": false,
-        "retry": false
+        "retry": true
       },
-      "file": "lib/features/admin/presentation/widgets/create_employee_dialog.dart",
-      "line": 12
+      "file": "lib/features/admin/presentation/widgets/create_group_dialog.dart",
+      "line": 11
     },
     {
       "kind": "dialog",
@@ -1850,20 +1848,20 @@
       "line": 311
     },
     {
-      "kind": "dialog",
-      "call": "showDialog",
+      "kind": "adaptive-surface",
+      "call": "showMagicAdaptiveSurface",
       "owner": "SYS-PLATFORM-QUALITY",
       "production_reachable": true,
       "status": "production-callsite",
       "states": {
         "loading": true,
         "empty": true,
-        "error": false,
+        "error": true,
         "forbidden": false,
         "retry": false
       },
-      "file": "lib/features/admin/presentation/widgets/staff_detail_dialog.dart",
-      "line": 14
+      "file": "lib/features/admin/presentation/widgets/create_employee_dialog.dart",
+      "line": 12
     },
     {
       "kind": "dialog",
@@ -2007,12 +2005,12 @@
         "retry": false
       },
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 469
+      "line": 488
     },
     {
-      "kind": "adaptive-surface",
-      "call": "showMagicAdaptiveSurface",
-      "owner": "SYS-PLATFORM-QUALITY",
+      "kind": "dialog",
+      "call": "showDialog",
+      "owner": "SYS-SCHEDULE",
       "production_reachable": true,
       "status": "production-callsite",
       "states": {
@@ -2020,10 +2018,10 @@
         "empty": true,
         "error": true,
         "forbidden": false,
-        "retry": true
+        "retry": false
       },
-      "file": "lib/features/admin/presentation/widgets/create_group_dialog.dart",
-      "line": 11
+      "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
+      "line": 66
     },
     {
       "kind": "adaptive-surface",

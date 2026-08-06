@@ -2,10 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/workspace/desktop_workspace_shell.dart';
 import 'package:magic_music_crm/core/workspace/production_workspace_host.dart';
 import 'package:magic_music_crm/core/workspace/workspace_store.dart';
+import 'package:magic_music_crm/core/widgets/v7/v7_nav_shell.dart';
+import 'package:magic_music_crm/features/admin/presentation/screens/profile_detail_screen.dart';
+import 'package:magic_music_crm/features/crm/presentation/workspace_entity_surface.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/access_editor_sheet.dart';
 
 void main() {
   const snapshot = CapabilitySnapshot(
@@ -130,7 +135,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Клиенты'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('context-ancestor-section:clients')),
+        matching: find.text('Клиенты'),
+      ),
+      findsOneWidget,
+    );
     expect(
       tester.widget<Text>(find.byKey(const ValueKey('context-current'))).data,
       'Ученик · Иванов Иван',
@@ -305,4 +316,69 @@ void main() {
     expect(shell.controller.state.tabs, hasLength(1));
     expect(shell.controller.state.activeTab.currentRoute.link.entityId, 'home');
   });
+
+  testWidgets('desktop rail owns section changes for every workspace surface', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 800);
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          accountWorkspaceStoreProvider.overrideWithValue(
+            AccountWorkspaceStore(InMemoryWorkspaceKeyValueStore()),
+          ),
+        ],
+        child: MaterialApp(
+          home: ProductionWorkspaceHost(
+            snapshot: snapshot,
+            tabBuilder: (_, tab) => Text(
+              '${tab.currentRoute.link.rawEntityType}:'
+              '${tab.currentRoute.link.entityId}',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(V7NavShell), findsOneWidget);
+    await tester.tap(find.text('Клиенты'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('client_status:__section__'), findsOneWidget);
+    expect(find.byType(V7NavShell), findsOneWidget);
+  });
+
+  test(
+    'user links mount profile and permissions inside the same workspace',
+    () {
+      const settingsSnapshot = CapabilitySnapshot(
+        accountId: 'account-1',
+        role: 'director',
+        accessVersion: 1,
+        capabilities: {'system.settings.manage'},
+        scopes: {},
+      );
+      for (final entry in const [
+        (focus: 'profile', type: ProfileDetailScreen),
+        (focus: 'permissions', type: AccessEditorSheet),
+      ]) {
+        final surface = buildStaffWorkspaceSurface(
+          snapshot: settingsSnapshot,
+          route: ContextRouteState(
+            link: EntityLink.typed(
+              entityType: EntityLinkType.user,
+              entityId: 'user-1',
+              optionalFocus: EntityLinkFocus(focus: entry.focus),
+            ),
+            viewState: ContextViewState(),
+          ),
+          tabId: 'tab-1',
+        );
+        expect(surface.runtimeType, entry.type);
+      }
+    },
+  );
 }

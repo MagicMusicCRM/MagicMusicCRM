@@ -114,6 +114,10 @@ int? crmTabForEntityLink(EntityLink link, String role) {
     EntityLinkType.room ||
     EntityLinkType.branch ||
     EntityLinkType.scheduleSeries => 2,
+    EntityLinkType.payment
+        when link.optionalFocus?.filter['studentId']?.toString().isNotEmpty ==
+            true =>
+      3,
     EntityLinkType.client ||
     EntityLinkType.subscription ||
     EntityLinkType.homework ||

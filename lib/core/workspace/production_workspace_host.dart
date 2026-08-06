@@ -3,9 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
+import 'package:magic_music_crm/core/providers/crm_navigation_provider.dart';
+import 'package:magic_music_crm/core/providers/chat_providers.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
+import 'package:magic_music_crm/core/services/alert_policy.dart';
+import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_realtime_service.dart';
+import 'package:magic_music_crm/core/services/section_unseen_service.dart';
 import 'package:magic_music_crm/core/workspace/desktop_workspace_shell.dart';
 import 'package:magic_music_crm/core/workspace/magic_context_bar.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
@@ -13,6 +19,8 @@ import 'package:magic_music_crm/core/workspace/workspace_state.dart';
 import 'package:magic_music_crm/core/workspace/workspace_store.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:magic_music_crm/core/widgets/v7/dirty_form_exit.dart';
+import 'package:magic_music_crm/core/widgets/v7/v7_nav_shell.dart';
+import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
 
 class ProductionWorkspaceHost extends ConsumerStatefulWidget {
   const ProductionWorkspaceHost({
@@ -37,6 +45,7 @@ class _ProductionWorkspaceHostState
   late WorkspacePersistenceBinding _persistence;
   late WorkspaceLogoutCoordinator _logoutCoordinator;
   var _generation = 0;
+  String? _lastMarkedSection;
 
   @override
   void initState() {
@@ -172,8 +181,124 @@ class _ProductionWorkspaceHostState
     }
   }
 
+  void _syncActiveSection(WorkspaceTabState tab) {
+    final visible = crmVisibleTabsForCapabilities(
+      widget.snapshot,
+      isDesktop: true,
+    );
+    final requested =
+        crmTabForEntityLink(tab.currentRoute.link, widget.snapshot.role) ??
+        visible.first;
+    final selected = crmResolveVisibleTab(
+      visibleTabs: visible,
+      requestedTab: requested,
+      currentTab: visible.first,
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(activeViewProvider.notifier).set(crmTab: selected, chatId: null);
+      final section = sectionKeyForTab(selected);
+      if (section == null) {
+        _lastMarkedSection = null;
+        return;
+      }
+      if (section == _lastMarkedSection) return;
+      _lastMarkedSection = section;
+      unawaited(
+        ref
+            .read(sectionUnseenServiceProvider)
+            .markSeen(section)
+            .then((_) => ref.invalidate(sectionUnseenProvider))
+            .catchError((_) {}),
+      );
+    });
+  }
+
+  Widget _desktopContent(BuildContext context, WorkspaceTabState tab) {
+    final visible = crmVisibleTabsForCapabilities(
+      widget.snapshot,
+      isDesktop: true,
+    );
+    final requested =
+        crmTabForEntityLink(tab.currentRoute.link, widget.snapshot.role) ??
+        visible.first;
+    final selected = crmResolveVisibleTab(
+      visibleTabs: visible,
+      requestedTab: requested,
+      currentTab: visible.first,
+    );
+    final unseen = ref.watch(sectionUnseenProvider).asData?.value ?? const {};
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Material(
+          child: V7NavShell(
+            isDesktop: true,
+            destinations: [
+              for (final tab in visible)
+                crmV7DestinationForTab(
+                  widget.snapshot.role,
+                  tab,
+                  badgeCount: unseen[sectionKeyForTab(tab)] ?? 0,
+                ),
+            ],
+            selectedIndex: visible.indexOf(selected),
+            onSelected: (index) {
+              final link = EntityRouteRegistry.sectionRootLink(
+                crmSectionForTab(widget.snapshot.role, visible[index]),
+              );
+              _controller.replaceCurrentLink(
+                _controller.state.activeTabId,
+                link,
+              );
+            },
+          ),
+        ),
+        Expanded(child: widget.tabBuilder(context, tab)),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    ref.listen(crmRealtimeProvider, (previous, next) {
+      final event = next.value;
+      if (event == null || !mounted || event.isFallbackPoll) return;
+      if (sectionForEntity(event.entity) != null) {
+        ref.invalidate(sectionUnseenProvider);
+      }
+    });
+    ref.listen<CrmNavigationRequest?>(crmNavigationRequestProvider, (
+      previous,
+      next,
+    ) {
+      if (next == null || !mounted) return;
+      unawaited(
+        navigateEntityLink(
+          context,
+          widget.snapshot,
+          next.link,
+          target: next.openInNewTab
+              ? EntityOpenTarget.newTab
+              : EntityOpenTarget.current,
+          sourceViewState: next.sourceState,
+        ),
+      );
+      Future.microtask(
+        () => ref.read(crmNavigationRequestProvider.notifier).clear(),
+      );
+    });
+    ref.listen<MessengerNavigationState?>(messengerNavigationProvider, (
+      previous,
+      next,
+    ) {
+      if (next == null || !mounted) return;
+      final link = EntityRouteRegistry.sectionRootLink('chat');
+      final current = _controller.state.activeTab.currentRoute.link;
+      if (current.entityType != EntityLinkType.chat) {
+        _controller.replaceCurrentLink(_controller.state.activeTabId, link);
+      }
+    });
     return LayoutBuilder(
       builder: (context, constraints) {
         if (constraints.maxWidth < 840) {
@@ -186,7 +311,9 @@ class _ProductionWorkspaceHostState
                 if (_controller.state.loggedOut) {
                   return const SizedBox.shrink();
                 }
-                return widget.tabBuilder(context, _controller.state.activeTab);
+                final tab = _controller.state.activeTab;
+                _syncActiveSection(tab);
+                return widget.tabBuilder(context, tab);
               },
             ),
           );
@@ -197,10 +324,11 @@ class _ProductionWorkspaceHostState
           child: DesktopWorkspaceShell(
             controller: _controller,
             tabBuilder: (context, tab) {
+              _syncActiveSection(tab);
               final location = EntityRouteRegistry()
                   .resolve(tab.currentRoute.link, widget.snapshot)
                   .canonicalLocation;
-              if (location == null) return widget.tabBuilder(context, tab);
+              if (location == null) return _desktopContent(context, tab);
               return Column(
                 children: [
                   MagicContextBar(
@@ -211,7 +339,7 @@ class _ProductionWorkspaceHostState
                     onBack: () => unawaited(_back(tab)),
                     onNavigate: (node) => unawaited(_navigate(tab, node)),
                   ),
-                  Expanded(child: widget.tabBuilder(context, tab)),
+                  Expanded(child: _desktopContent(context, tab)),
                 ],
               );
             },

@@ -10,9 +10,14 @@ import 'package:magic_music_crm/features/crm/presentation/client_card/show_clien
 /// CRM-сущностей ([MagicProfileAdminService.getProfileLinks]). Сбои секций
 /// изолированы: падение/пустота привязок не мешает показать шапку.
 class ProfileDetailScreen extends ConsumerStatefulWidget {
-  const ProfileDetailScreen({super.key, required this.profileId});
+  const ProfileDetailScreen({
+    super.key,
+    required this.profileId,
+    this.embedded = false,
+  });
 
   final String profileId;
+  final bool embedded;
 
   @override
   ConsumerState<ProfileDetailScreen> createState() =>
@@ -100,6 +105,7 @@ class _ProfileDetailScreenState extends ConsumerState<ProfileDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.embedded) return _buildBody(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Карточка пользователя')),
       body: _buildBody(context),

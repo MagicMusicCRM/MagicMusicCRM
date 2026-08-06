@@ -11,6 +11,7 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_api_tokens.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
+import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/services/magic_messenger_service.dart';
 import 'package:magic_music_crm/core/services/magic_realtime_service.dart';
 import 'package:magic_music_crm/features/messenger/data/chat_archive_api.dart';
@@ -39,6 +40,7 @@ Future<RecordingFakeApiClient> _pumpAdminMessenger(
   Map<String, dynamic> contactByUser = const {},
   RecordingFakeApiClient? api,
   _TestRealtimeTransport? realtimeTransport,
+  EntityLink? initialLink,
 }) async {
   tester.view.physicalSize = const Size(1400, 900);
   tester.view.devicePixelRatio = 1.0;
@@ -75,7 +77,9 @@ Future<RecordingFakeApiClient> _pumpAdminMessenger(
   await tester.pumpWidget(
     ProviderScope(
       overrides: overrides,
-      child: const MaterialApp(home: MessengerScreen(role: 'admin')),
+      child: MaterialApp(
+        home: MessengerScreen(role: 'admin', initialLink: initialLink),
+      ),
     ),
   );
   await tester.pump();
@@ -101,6 +105,25 @@ void main() {
       expect((api.calls[1].data as Map)['archived'], isFalse);
     },
   );
+
+  testWidgets('typed chat link mounts the requested chat content', (
+    tester,
+  ) async {
+    final api = await _pumpAdminMessenger(
+      tester,
+      initialLink: EntityLink.typed(
+        entityType: EntityLinkType.chat,
+        entityId: 'c1',
+      ),
+    );
+
+    expect(
+      api.calls.any(
+        (call) => call.path.contains('c1') && call.path.endsWith('/messages'),
+      ),
+      isTrue,
+    );
+  });
 
   test('listChats(archived:true) sends the archive query and branch', () async {
     final api = RecordingFakeApiClient(chats: [_adminChatJson(archived: true)]);
