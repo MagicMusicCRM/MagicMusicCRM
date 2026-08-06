@@ -118,6 +118,9 @@ void main() {
                 entityType: EntityLinkType.client,
                 entityId: 'student-direct',
                 variant: 'student',
+                presentation: const EntityPresentationReference(
+                  primary: 'Иванов Иван',
+                ),
               ),
               tabBuilder: (_, tab) => Text(tab.currentRoute.link.entityId),
             ),
@@ -130,7 +133,7 @@ void main() {
     expect(find.text('Клиенты'), findsOneWidget);
     expect(
       tester.widget<Text>(find.byKey(const ValueKey('context-current'))).data,
-      'Ученик · student-direct',
+      'Ученик · Иванов Иван',
     );
   });
 

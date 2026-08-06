@@ -137,11 +137,17 @@ describe("Client archive preview and tombstone (PostgreSQL)", () => {
     lessonId = lesson.rows[0]!.id;
     const task = await database.query<{ id: string }>(
       `
-        insert into app.tasks (
-          entity_type, entity_id, title, status, assigned_to, created_by
+        with task as (
+          insert into app.shared_tasks (
+            title, all_day, start_at, linked_entity_type,
+            linked_entity_id, created_by
+          )
+          values ('Не потерять', true, now(), 'student', $1, $2)
+          returning id
         )
-        values ('student', $1, 'Не потерять', 'open', $2, $2)
-        returning id
+        insert into app.task_audiences (task_id, audience_type, target_id)
+        select id, 'user', $2 from task
+        returning task_id as id
       `,
       [studentId, directorId],
     );
@@ -235,7 +241,8 @@ describe("Client archive preview and tombstone (PostgreSQL)", () => {
       await client.query("set local session_replication_role = replica");
       await client.query("delete from app.payments where id = $1", [paymentId]);
     });
-    await database.query("delete from app.tasks where id = $1", [taskId]);
+    await database.query("delete from app.task_audiences where task_id = $1", [taskId]);
+    await database.query("delete from app.shared_tasks where id = $1", [taskId]);
     await database.query("delete from app.lessons where id = $1", [lessonId]);
     await database.query(
       "delete from app.user_crm_links where entity_type = 'student' and entity_id = $1",
@@ -369,7 +376,7 @@ describe("Client archive preview and tombstone (PostgreSQL)", () => {
       `
         select
           (select count(*)::text from app.lessons where id = $2) as lessons,
-          (select count(*)::text from app.tasks where id = $3) as tasks,
+          (select count(*)::text from app.shared_tasks where id = $3) as tasks,
           (select count(*)::text from app.subscriptions where id = $4)
             as subscriptions,
           (select count(*)::text from app.payments where id = $5) as payments,

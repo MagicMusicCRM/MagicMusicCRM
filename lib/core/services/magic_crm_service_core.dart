@@ -2,37 +2,58 @@ part of 'magic_crm_service.dart';
 
 /// Core: current-user summary, students, teachers, staff, activity log.
 extension MagicCrmCore on MagicCrmService {
-  Future<StudentFunnelConfiguration> getStudentFunnel({
+  Future<StudentFunnelConfiguration> getClientPipeline({
+    required String clientType,
     String? branchId,
   }) async {
     final response = await _api.get<Map<String, dynamic>>(
-      '/crm/student-funnel',
-      queryParameters: {'branchId': ?branchId},
+      '/crm/client-pipelines',
+      queryParameters: {'clientType': clientType, 'branchId': ?branchId},
     );
     return StudentFunnelConfiguration.fromJson(response);
   }
 
-  Future<List<Map<String, dynamic>>> listStudentFunnelRevisions({
+  Future<List<Map<String, dynamic>>> listClientPipelineRevisions({
+    required String clientType,
     String? branchId,
   }) async {
     final response = await _api.get<Map<String, dynamic>>(
-      '/crm/student-funnel/revisions',
-      queryParameters: {'branchId': ?branchId},
+      '/crm/client-pipelines/revisions',
+      queryParameters: {'clientType': clientType, 'branchId': ?branchId},
     );
     return (response['items'] as List? ?? const [])
         .whereType<Map<String, dynamic>>()
         .toList(growable: false);
   }
 
-  Future<Map<String, dynamic>> publishStudentFunnel({
+  Future<Map<String, dynamic>> previewClientPipeline({
+    required String clientType,
+    String? branchId,
+    required int expectedVersion,
+    required List<StudentFunnelStage> stages,
+  }) {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/client-pipelines/preview',
+      data: {
+        'clientType': clientType,
+        'branchId': ?branchId,
+        'expectedVersion': expectedVersion,
+        'stages': stages.map((stage) => stage.toJson()).toList(growable: false),
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> publishClientPipeline({
+    required String clientType,
     String? branchId,
     required int expectedVersion,
     required String reason,
     required List<StudentFunnelStage> stages,
   }) {
     return _api.post<Map<String, dynamic>>(
-      '/crm/student-funnel/publish',
+      '/crm/client-pipelines/publish',
       data: {
+        'clientType': clientType,
         'branchId': ?branchId,
         'expectedVersion': expectedVersion,
         'reason': reason.trim(),
@@ -41,15 +62,17 @@ extension MagicCrmCore on MagicCrmService {
     );
   }
 
-  Future<Map<String, dynamic>> rollbackStudentFunnel({
+  Future<Map<String, dynamic>> rollbackClientPipeline({
+    required String clientType,
     String? branchId,
     required int expectedVersion,
     required int targetVersion,
     required String reason,
   }) {
     return _api.post<Map<String, dynamic>>(
-      '/crm/student-funnel/rollback',
+      '/crm/client-pipelines/rollback',
       data: {
+        'clientType': clientType,
         'branchId': ?branchId,
         'expectedVersion': expectedVersion,
         'targetVersion': targetVersion,
@@ -220,10 +243,6 @@ extension MagicCrmCore on MagicCrmService {
       'payments': _mapList(response['payments'], _legacyPayment),
       'tasks': _mapList(response['tasks'], _legacyTask),
       'comments': _mapList(response['comments'], _legacyComment),
-      'expected_payments': _mapList(
-        response['expectedPayments'],
-        _legacyExpectedPayment,
-      ),
       'balance': response['balance'] is Map<String, dynamic>
           ? _legacyStudentBalance(response['balance'] as Map<String, dynamic>)
           : null,

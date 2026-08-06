@@ -217,7 +217,7 @@ export class ClientStatusReadService {
             nullif(btrim(concat_ws(' ', lead.first_name, lead.last_name)), ''),
             'Без имени'
           ) as display_name,
-          coalesce(lead_status.id::text, 'new') as status_key,
+          coalesce(lead_status.stage_key, 'new') as status_key,
           coalesce(lead_status.name, 'Новые') as status_label,
           ${leadBranch} as branch_id,
           lead.created_at
@@ -228,7 +228,7 @@ export class ClientStatusReadService {
           and ($3::text is null or $3 = 'lead')
           and (
             $4::text is null
-            or coalesce(lead_status.id::text, 'new') = $4
+            or coalesce(lead_status.stage_key, 'new') = $4
           )
           and ($5::uuid is null or ${leadBranch} = $5::text)
           and ($6::timestamptz is null or lead.created_at >= $6)

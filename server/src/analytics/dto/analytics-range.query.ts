@@ -35,4 +35,17 @@ export class AnalyticsRangeQuery {
   @Min(1)
   @Max(365)
   inactiveDays?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  limit?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  offset?: number;
 }

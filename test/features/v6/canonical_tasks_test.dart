@@ -22,5 +22,22 @@ void main() {
       'messenger_screen_builders_a.dart',
     ).readAsStringSync();
     expect(route, contains('SharedTasksV4Panel('));
+
+    final backendRuntime = [
+      Directory('server/src/crm'),
+      Directory('server/src/notifications'),
+      Directory('server/src/migration'),
+    ]
+        .expand((directory) => directory.listSync(recursive: true))
+        .whereType<File>()
+        .where(
+          (file) =>
+              file.path.endsWith('.ts') && !file.path.endsWith('.spec.ts'),
+        )
+        .map((file) => file.readAsStringSync())
+        .join('\n');
+    expect(backendRuntime, isNot(contains('app.tasks')));
+    expect(backendRuntime, isNot(contains('app.task_history')));
+    expect(backendRuntime, isNot(contains('/crm/tasks')));
   });
 }

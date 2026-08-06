@@ -15,7 +15,6 @@ import 'package:magic_music_crm/features/crm/presentation/client_forms/client_fo
 import 'package:magic_music_crm/features/manager/presentation/providers/students_board_providers.dart';
 import 'package:magic_music_crm/features/manager/presentation/transfer/lead_transfer_controller.dart';
 import 'package:magic_music_crm/features/manager/presentation/transfer/lead_transfer_widgets.dart';
-import 'package:magic_music_crm/features/manager/presentation/widgets/student_funnel_editor.dart';
 
 part 'students_board_widgets.dart';
 
@@ -262,18 +261,6 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
     await _openStudent(student);
   }
 
-  Future<void> _configureFunnel() async {
-    final changed = await showStudentFunnelEditor(
-      context,
-      branches: _branches,
-      initialBranchId: _selectedBranchId == kNoBranchBoardId
-          ? null
-          : _selectedBranchId,
-      onPublished: _refreshBoard,
-    );
-    if (changed == true) _refreshBoard();
-  }
-
   /// Re-bucket the board's columns honoring any in-flight optimistic moves so
   /// the dragged card appears in its target column immediately.
   List<_StatusColumnData> _applyOptimistic(List<Map<String, dynamic>> columns) {
@@ -330,8 +317,6 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
   Widget _buildBranchSelector() {
     final access = ref.watch(capabilitySnapshotProvider).asData?.value;
     final canWrite = access?.allows('crm.client.write') == true;
-    final canConfigure =
-        access?.role == 'director' || access?.role == 'system_admin';
     final seen = <String>{};
     final items =
         _branches
@@ -367,6 +352,7 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
       },
     );
     final searchField = TextField(
+      key: const ValueKey('students-search'),
       controller: _searchCtrl,
       decoration: InputDecoration(
         isDense: true,
@@ -411,12 +397,6 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
                       ),
                     ),
                   ),
-                  if (canConfigure)
-                    IconButton(
-                      tooltip: 'Настроить воронку',
-                      onPressed: _configureFunnel,
-                      icon: const Icon(Icons.view_kanban_outlined),
-                    ),
                   IconButton(
                     tooltip: 'Обновить',
                     icon: const Icon(Icons.refresh_rounded),

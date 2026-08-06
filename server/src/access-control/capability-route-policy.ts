@@ -129,21 +129,21 @@ export function resolveCapabilityRoutePolicy(
     );
   }
 
-  if (path === "/crm/student-funnel" && read) {
+  if (path === "/crm/client-pipelines" && read) {
     return policy(
       "crm.client.read.basic",
       "branch",
       teacherAndStaffRoles,
-      "StudentFunnelService operational effective configuration",
+      "Client pipeline operational effective configuration",
     );
   }
 
-  if (path.startsWith("/crm/student-funnel")) {
+  if (path.startsWith("/crm/client-pipelines")) {
     return policy(
       "system.settings.manage",
       "global",
       rootBusinessRoles,
-      "StudentFunnelService director-only revision configuration",
+      "Client pipeline director-only revision configuration",
     );
   }
 
@@ -217,6 +217,7 @@ export function resolveCapabilityRoutePolicy(
   if (
     path.includes("/subscriptions") ||
     path.includes("/subscription-payments") ||
+    path.includes("/adjustments") ||
     path.includes("/payments") ||
     path.includes("/student-balances") ||
     path.includes("/expected-payments")
@@ -229,16 +230,14 @@ export function resolveCapabilityRoutePolicy(
     );
   }
 
-  if (path.includes("/shared-tasks") || path.includes("/tasks")) {
+  if (path.includes("/shared-tasks")) {
     const sharedTaskClose =
       path.includes("/shared-tasks/") && path.endsWith("/close");
     return policy(
       read || sharedTaskClose ? "workflow.task.read" : "workflow.task.write",
       "resource",
       read || sharedTaskClose ? taskReaders : managementRoles,
-      path.includes("/shared-tasks")
-        ? "SharedTaskService dynamic audience scope"
-        : "TasksService actor/assignee scope",
+      "SharedTaskService dynamic audience scope",
     );
   }
 
@@ -262,10 +261,25 @@ export function resolveCapabilityRoutePolicy(
 
   if (path.includes("/schedule-reference")) {
     return policy(
-      read ? "schedule.lesson.read.assigned" : "schedule.lesson.write",
+      read ? "schedule.lesson.read.assigned" : "config.crm.edit",
       read ? "self_or_assigned" : "resource",
-      read ? teacherAndStaffRoles : staffRoles,
-      "AvailabilityService teacher-self read and operational staff write policy",
+      read ? teacherAndStaffRoles : rootBusinessRoles,
+      "AvailabilityService teacher-self read and delegated settings write policy",
+    );
+  }
+
+  if (
+    !read &&
+    (path === "/crm/branches" ||
+      path.startsWith("/crm/branches/") ||
+      path === "/crm/rooms" ||
+      path.startsWith("/crm/rooms/"))
+  ) {
+    return policy(
+      "config.crm.edit",
+      "branch",
+      rootBusinessRoles,
+      "Facilities settings write intersected with assigned branch scope",
     );
   }
 

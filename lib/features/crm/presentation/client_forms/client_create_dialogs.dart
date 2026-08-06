@@ -38,7 +38,11 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
   final _customValues = <String, Object?>{};
   String _phone = '';
   String? _sourceId;
+  String? _branchId;
+  String? _status;
   List<Map<String, dynamic>> _sources = const [];
+  List<Map<String, dynamic>> _branches = const [];
+  List<StudentFunnelStage> _statuses = const [];
   List<Map<String, dynamic>> _fields = const [];
   Map<String, String> _fieldErrors = const {};
   String? _loadError;
@@ -69,11 +73,33 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
       final results = await Future.wait([
         api.listSources(),
         api.listFields(entityType: 'lead'),
+        api.listBranches(),
       ]);
       if (!mounted) return;
       final sources = results[0];
+      final branches = results[2];
+      final branchIds = branches
+          .map((branch) => branch['id']?.toString())
+          .whereType<String>()
+          .toSet();
+      final selectedBranch = branchIds.contains(_branchId)
+          ? _branchId
+          : branches.length == 1
+          ? branches.first['id']?.toString()
+          : null;
+      final funnel = await ref
+          .read(magicCrmServiceProvider)
+          .getClientPipeline(clientType: 'lead', branchId: selectedBranch);
+      if (!mounted) return;
+      final statuses = funnel.activeStages;
       setState(() {
         _sources = sources;
+        _branches = branches;
+        _branchId = selectedBranch;
+        _statuses = statuses;
+        if (!statuses.any((stage) => stage.key == _status)) {
+          _status = statuses.firstOrNull?.key;
+        }
         _fields = _createPlacementFields(results[1]);
         if (_sourceId != null &&
             !sources.any((source) => source['id']?.toString() == _sourceId)) {
@@ -106,6 +132,8 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
     }
     if (_phone.isEmpty) errors['phone'] = 'Укажите корректный телефон.';
     if (_sourceId == null) errors['sourceId'] = 'Выберите источник.';
+    if (_branchId == null) errors['branchId'] = 'Выберите филиал.';
+    if (_status == null) errors['status'] = 'Выберите этап воронки.';
     for (final field in _fields.where((item) => item['required'] == true)) {
       final id = field['id']?.toString() ?? '';
       final value = _customValues[id];
@@ -135,6 +163,8 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
             lastName: _lastName.text,
             phone: _phone,
             sourceId: _sourceId!,
+            branchId: _branchId!,
+            status: _status!,
             customFields: _serializedCustomFields(_fields, _customValues),
           );
       if (!mounted) return;
@@ -158,6 +188,35 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
     }
   }
 
+  Future<void> _selectBranch(String? branchId) async {
+    if (branchId == null || branchId == _branchId) return;
+    setState(() {
+      _branchId = branchId;
+      _saving = true;
+      _submitError = null;
+    });
+    try {
+      final funnel = await ref
+          .read(magicCrmServiceProvider)
+          .getClientPipeline(clientType: 'lead', branchId: branchId);
+      if (!mounted) return;
+      final statuses = funnel.activeStages;
+      setState(() {
+        _statuses = statuses;
+        if (!statuses.any((stage) => stage.key == _status)) {
+          _status = statuses.firstOrNull?.key;
+        }
+        _saving = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _submitError = 'Не удалось загрузить воронку филиала: $error';
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return _AdaptiveClientDialog(
@@ -173,7 +232,14 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
         ),
         FilledButton(
           key: const ValueKey('lead-submit'),
-          onPressed: _saving || _loading || _sources.isEmpty ? null : _save,
+          onPressed:
+              _saving ||
+                  _loading ||
+                  _sources.isEmpty ||
+                  _branches.isEmpty ||
+                  _statuses.isEmpty
+              ? null
+              : _save,
           child: _saving
               ? const SizedBox.square(
                   dimension: 18,
@@ -207,6 +273,60 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
                     errorText: _fieldErrors['phone'],
                   ),
                 ),
+                const SizedBox(height: AppSpace.sm),
+                if (_branches.isEmpty)
+                  const _EmptyMetadata(
+                    message:
+                        'Нет доступных филиалов. Создание лида недоступно.',
+                  )
+                else
+                  DropdownButtonFormField<String>(
+                    key: const ValueKey('lead-branch'),
+                    initialValue: _branchId,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: 'Филиал *',
+                      errorText: _fieldErrors['branchId'],
+                    ),
+                    items: _branches
+                        .map(
+                          (branch) => DropdownMenuItem(
+                            value: branch['id']?.toString(),
+                            child: Text(branch['name']?.toString() ?? '—'),
+                          ),
+                        )
+                        .toList(growable: false),
+                    onChanged: _saving ? null : _selectBranch,
+                  ),
+                const SizedBox(height: AppSpace.sm),
+                if (_statuses.isEmpty)
+                  const _EmptyMetadata(
+                    message:
+                        'В воронке нет активных этапов. Директор должен обновить настройку.',
+                  )
+                else
+                  DropdownButtonFormField<String>(
+                    key: ValueKey(
+                      'lead-status-${_branchId ?? 'school'}-${_statuses.map((stage) => stage.key).join('-')}',
+                    ),
+                    initialValue: _status,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: 'Этап воронки *',
+                      errorText: _fieldErrors['status'],
+                    ),
+                    items: _statuses
+                        .map(
+                          (stage) => DropdownMenuItem(
+                            value: stage.key,
+                            child: Text(stage.label),
+                          ),
+                        )
+                        .toList(growable: false),
+                    onChanged: _saving
+                        ? null
+                        : (value) => setState(() => _status = value),
+                  ),
                 const SizedBox(height: AppSpace.sm),
                 if (_sources.isEmpty)
                   const _EmptyMetadata(
@@ -325,7 +445,7 @@ class _StudentCreateDialogV4State extends ConsumerState<StudentCreateDialogV4> {
           : null;
       final funnel = await ref
           .read(magicCrmServiceProvider)
-          .getStudentFunnel(branchId: selectedBranch);
+          .getClientPipeline(clientType: 'student', branchId: selectedBranch);
       if (!mounted) return;
       final statuses = funnel.activeStages;
       setState(() {
@@ -418,7 +538,7 @@ class _StudentCreateDialogV4State extends ConsumerState<StudentCreateDialogV4> {
     try {
       final funnel = await ref
           .read(magicCrmServiceProvider)
-          .getStudentFunnel(branchId: branchId);
+          .getClientPipeline(clientType: 'student', branchId: branchId);
       if (!mounted) return;
       final statuses = funnel.activeStages;
       setState(() {

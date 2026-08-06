@@ -941,6 +941,7 @@ extension _ClientCardEditors on _ClientCardState {
       // Default the linked record to this card's own entity (lead or student).
       defaultEntityType: widget.entityType,
       defaultEntityId: selfId,
+      defaultEntityLabel: _clientPresentationLabel,
     );
     if (input == null) return;
     final role = input.role;
@@ -951,7 +952,7 @@ extension _ClientCardEditors on _ClientCardState {
       if (mounted) {
         MagicToast.show(
           context,
-          'Укажите ID записи',
+          'Выберите запись',
           type: MagicToastType.danger,
         );
       }

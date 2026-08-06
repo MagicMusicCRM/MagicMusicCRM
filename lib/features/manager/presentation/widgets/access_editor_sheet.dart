@@ -28,15 +28,15 @@ class AccessEditorSheet extends ConsumerStatefulWidget {
     required String userLabel,
     VoidCallback? onChanged,
   }) {
-    return showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (_) => AccessEditorSheet(
-        actorRole: actorRole,
-        userId: userId,
-        userLabel: userLabel,
-        onChanged: onChanged,
+    return Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => AccessEditorSheet(
+          actorRole: actorRole,
+          userId: userId,
+          userLabel: userLabel,
+          onChanged: onChanged,
+        ),
       ),
     );
   }
@@ -259,8 +259,8 @@ class _AccessEditorSheetState extends ConsumerState<AccessEditorSheet> {
     }
     final access = _access;
     return Material(
-      child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * 0.9,
+      key: const Key('access-editor-surface'),
+      child: SafeArea(
         child: Column(
           children: [
             Padding(

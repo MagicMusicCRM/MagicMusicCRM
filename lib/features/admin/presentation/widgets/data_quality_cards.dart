@@ -55,7 +55,9 @@ class _SectionHeader extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: badge! > 0 ? AppColor.goldSoft : cs.surfaceContainerHighest,
+              color: badge! > 0
+                  ? AppColor.goldSoft
+                  : cs.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(AppRadius.pill),
               border: Border.all(
                 color: badge! > 0 ? AppColor.goldLine : cs.outlineVariant,
@@ -95,9 +97,12 @@ class _PhoneReviewCard extends StatelessWidget {
     final normalized = _readString(item, ['normalizedPhone', 'normalized']);
     final reason = _readString(item, ['reason']);
     final entityType = _readString(item, ['entityType', 'entity_type', 'lead']);
-    final entityId = _readString(item, ['entityId', 'entity_id', 'leadId', 'lead_id']);
-    final id = _readString(item, ['id']);
-    final name = _readString(item, ['name', 'entityName', 'entity_name', 'leadName']);
+    final name = _readString(item, [
+      'name',
+      'entityName',
+      'entity_name',
+      'leadName',
+    ]);
 
     final phoneLabel = rawPhone.isNotEmpty
         ? rawPhone
@@ -179,18 +184,6 @@ class _PhoneReviewCard extends StatelessWidget {
                           label: entityType,
                           color: cs.onSurfaceVariant,
                         ),
-                      if (entityId.isNotEmpty)
-                        _Chip(
-                          icon: Icons.tag_rounded,
-                          label: _shortId(entityId),
-                          color: cs.onSurfaceVariant,
-                        ),
-                      if (entityId.isEmpty && id.isNotEmpty)
-                        _Chip(
-                          icon: Icons.tag_rounded,
-                          label: _shortId(id),
-                          color: cs.onSurfaceVariant,
-                        ),
                     ],
                   ),
                 ],
@@ -228,8 +221,6 @@ class _MergeCandidateCard extends StatelessWidget {
       'phoneNormalized',
       'phone_normalized',
     ]);
-    final winnerId = _readString(item, ['winnerId', 'winner_id']);
-    final loserId = _readString(item, ['loserId', 'loser_id']);
     final displayName = name.isEmpty ? 'Без имени' : name;
 
     return Card(
@@ -287,9 +278,9 @@ class _MergeCandidateCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: AppSpace.md),
-            _LeadRow(label: 'Основной', id: winnerId, color: AppColor.success),
+            const _LeadRow(label: 'Основной', color: AppColor.success),
             const SizedBox(height: 6),
-            _LeadRow(label: 'Дубликат', id: loserId, color: cs.onSurfaceVariant),
+            _LeadRow(label: 'Дубликат', color: cs.onSurfaceVariant),
             const SizedBox(height: AppSpace.md),
             SizedBox(
               width: double.infinity,
@@ -329,10 +320,9 @@ class _MergeCandidateCard extends StatelessWidget {
 
 class _LeadRow extends StatelessWidget {
   final String label;
-  final String id;
   final Color color;
 
-  const _LeadRow({required this.label, required this.id, required this.color});
+  const _LeadRow({required this.label, required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -346,23 +336,11 @@ class _LeadRow extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         Text(
-          '$label: ',
+          label,
           style: TextStyle(
             color: cs.onSurfaceVariant,
             fontSize: 12,
             fontWeight: FontWeight.w600,
-          ),
-        ),
-        Expanded(
-          child: Text(
-            id.isEmpty ? '—' : id,
-            style: TextStyle(
-              color: cs.onSurface,
-              fontSize: 12,
-              fontFamily: 'monospace',
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],
@@ -410,16 +388,14 @@ class _MergeConfirmDialogState extends State<_MergeConfirmDialog> {
           ),
           const SizedBox(height: AppSpace.md),
           _WinnerOption(
-            id: widget.primaryId,
             selected: _winnerId == widget.primaryId,
-            label: 'Лид 1 (по умолчанию)',
+            label: 'Основной (по умолчанию)',
             onTap: () => setState(() => _winnerId = widget.primaryId),
           ),
           const SizedBox(height: 8),
           _WinnerOption(
-            id: widget.secondaryId,
             selected: _winnerId == widget.secondaryId,
-            label: 'Лид 2',
+            label: 'Дубликат',
             onTap: () => setState(() => _winnerId = widget.secondaryId),
           ),
         ],
@@ -433,10 +409,7 @@ class _MergeConfirmDialogState extends State<_MergeConfirmDialog> {
           onPressed: () => Navigator.pop(context, _winnerId),
           child: const Text(
             'Объединить',
-            style: TextStyle(
-              color: AppColor.gold,
-              fontWeight: FontWeight.w700,
-            ),
+            style: TextStyle(color: AppColor.gold, fontWeight: FontWeight.w700),
           ),
         ),
       ],
@@ -445,13 +418,11 @@ class _MergeConfirmDialogState extends State<_MergeConfirmDialog> {
 }
 
 class _WinnerOption extends StatelessWidget {
-  final String id;
   final bool selected;
   final String label;
   final VoidCallback onTap;
 
   const _WinnerOption({
-    required this.id,
     required this.selected,
     required this.label,
     required this.onTap,
@@ -483,28 +454,13 @@ class _WinnerOption extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: cs.onSurface,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  Text(
-                    id.isEmpty ? '—' : id,
-                    style: TextStyle(
-                      color: cs.onSurfaceVariant,
-                      fontSize: 11,
-                      fontFamily: 'monospace',
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: cs.onSurface,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],

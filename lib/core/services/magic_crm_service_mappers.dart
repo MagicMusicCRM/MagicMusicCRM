@@ -302,6 +302,8 @@ Map<String, dynamic> _legacyBranch(Map<String, dynamic> item) {
     'name': item['name'],
     'address': item['address'],
     'utc_offset_minutes': item['utcOffsetMinutes'] ?? 180,
+    'timezone': item['timezone'] ?? 'Europe/Moscow',
+    'schedule_reference_version': item['scheduleReferenceVersion'] ?? 1,
     'created_at': item['createdAt'],
   };
 }
@@ -380,10 +382,12 @@ Map<String, dynamic> _legacyGroup(Map<String, dynamic> item) {
 
 Map<String, dynamic> _legacyLeadStatus(Map<String, dynamic> item) {
   final id = item['id'];
+  final stageKey = item['stageKey'] ?? item['key'] ?? id;
   final name = item['name'] ?? item['label'] ?? 'Без названия';
   return {
     'id': id,
     'key': id,
+    'stage_key': stageKey,
     'name': name,
     'label': name,
     'color': item['color'] ?? '8B5CF6',
@@ -397,12 +401,14 @@ Map<String, dynamic> _legacyLead(Map<String, dynamic> item) {
   final lastName = item['lastName'];
   final statusId = item['statusId'];
   final statusName = item['statusName'];
+  final statusKey = item['statusKey'];
   final customData = item['customData'] is Map<String, dynamic>
       ? item['customData'] as Map<String, dynamic>
       : const <String, dynamic>{};
   return {
     'id': item['id'],
     'status_id': statusId,
+    'status_key': statusKey,
     'status': statusId ?? statusName ?? 'new',
     'status_label': statusName,
     'name': firstName,
@@ -509,8 +515,20 @@ Map<String, dynamic> _legacyLesson(Map<String, dynamic> item) {
 }
 
 Map<String, dynamic> _legacyTask(Map<String, dynamic> item) {
-  final entityType = item['entityType'];
-  final entityId = item['entityId'];
+  final linked = item['linkedEntity'];
+  final linkedMap = linked is Map<String, dynamic> ? linked : null;
+  final entityType = item['entityType'] ?? linkedMap?['type'];
+  final entityId = item['entityId'] ?? linkedMap?['id'];
+  final audiences = item['audiences'];
+  var assignedTo = item['assignedTo'];
+  if (assignedTo == null && audiences is List) {
+    for (final audience in audiences.whereType<Map<String, dynamic>>()) {
+      if (audience['type'] == 'user') {
+        assignedTo = audience['targetId'];
+        break;
+      }
+    }
+  }
   final entityName = item['entityName'];
   final assignedName = item['assignedName'];
   final entityParts = _splitName(entityName?.toString() ?? '');
@@ -520,25 +538,25 @@ Map<String, dynamic> _legacyTask(Map<String, dynamic> item) {
     'entity_type': entityType,
     'entity_id': entityId,
     'student_id': entityType == 'student' ? entityId : null,
-    'assigned_to': item['assignedTo'],
+    'assigned_to': assignedTo,
     'assigned_profile_id': item['assignedProfileId'],
     'creator_profile_id': item['creatorProfileId'],
     'assigned_name': assignedName,
     'entity_name': entityName,
     'title': item['title'],
-    'description': item['description'],
-    'status': item['status'],
+    'description': item['description'] ?? item['body'],
+    'status': item['status'] ?? item['state'],
     'priority': item['priority'] ?? 'medium',
-    'due_at': item['dueAt'],
-    'due_date': item['dueAt'],
-    'due_all_day': item['dueAllDay'] ?? false,
+    'due_at': item['dueAt'] ?? item['startAt'],
+    'due_date': item['dueAt'] ?? item['startAt'],
+    'due_all_day': item['dueAllDay'] ?? item['allDay'] ?? false,
     'created_by': item['createdBy'],
     'creator_name': item['creatorName'],
     'branch_id': item['branchId'],
     'branch_name': item['branchName'],
     'created_at': item['createdAt'],
     'profiles': {
-      'id': item['assignedTo'],
+      'id': assignedTo,
       'first_name': assignedParts.$1,
       'last_name': assignedParts.$2,
     },
@@ -600,29 +618,6 @@ Map<String, dynamic> _legacyStatusHistoryItem(Map<String, dynamic> item) {
     'changed_at': item['changedAt'],
     'reason_id': item['reasonId'],
     'comment': item['comment'],
-  };
-}
-
-Map<String, dynamic> _legacyTaskHistoryItem(Map<String, dynamic> item) {
-  return {
-    'id': item['id'],
-    'field': item['field'],
-    'old_value': item['oldValue'],
-    'new_value': item['newValue'],
-    'changed_at': item['changedAt'],
-    'source': item['source'],
-    'changed_by': item['changedBy'],
-    'author_profile_id': item['authorProfileId'],
-    'author_name': item['authorName'],
-    'old_user_id': item['oldUserId'],
-    'old_user_name': item['oldUserName'],
-    'new_user_id': item['newUserId'],
-    'new_user_name': item['newUserName'],
-    // Only present in the cross-task supervisor feed.
-    'task_id': item['taskId'],
-    'task_title': item['taskTitle'],
-    'task_entity_type': item['taskEntityType'],
-    'task_entity_id': item['taskEntityId'],
   };
 }
 
@@ -735,26 +730,6 @@ Map<String, dynamic> _legacyPayment(Map<String, dynamic> item) {
     'description': item['notes'] ?? item['description'],
     'created_by': item['createdBy'],
     'created_at': item['createdAt'],
-    'students': {
-      'id': item['studentId'],
-      'first_name': studentParts.$1,
-      'last_name': studentParts.$2,
-    },
-  };
-}
-
-Map<String, dynamic> _legacyExpectedPayment(Map<String, dynamic> item) {
-  final studentName = item['studentName']?.toString() ?? '';
-  final studentParts = _splitName(studentName);
-  return {
-    'id': item['id'],
-    'student_id': item['studentId'],
-    'amount': item['amount'],
-    'due_date': item['dueDate'],
-    'status': item['status'],
-    'description': item['description'],
-    'created_at': item['createdAt'],
-    'updated_at': item['updatedAt'],
     'students': {
       'id': item['studentId'],
       'first_name': studentParts.$1,

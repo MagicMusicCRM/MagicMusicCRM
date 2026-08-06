@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/workspace/workspace_state.dart';
 
 class WorkspaceSharedScope {
@@ -316,18 +317,44 @@ class WorkspaceController extends ChangeNotifier {
     });
   }
 
-  void updateEntityTitle(EntityLink link, String title) {
-    final normalized = title.trim();
-    if (normalized.isEmpty) return;
+  void updateEntityPresentation(
+    EntityLink link,
+    EntityPresentationReference presentation,
+  ) {
+    if (!presentation.isUsable) return;
+    final normalized = EntityPresentationReference(
+      primary: presentation.primary.trim(),
+      context: presentation.context?.trim(),
+    );
     final tabs = [
       for (final tab in _state.tabs)
-        _sameEntity(tab.currentRoute.link, link)
-            ? tab.copyWith(titleHint: normalized)
-            : tab,
+        _updateEntityPresentationInTab(tab, link, normalized),
     ];
     if (listEquals(tabs, _state.tabs)) return;
     _state = _state.copyWith(tabs: tabs);
     notifyListeners();
+  }
+
+  WorkspaceTabState _updateEntityPresentationInTab(
+    WorkspaceTabState tab,
+    EntityLink target,
+    EntityPresentationReference presentation,
+  ) {
+    var changed = false;
+    ContextRouteState update(ContextRouteState route) {
+      if (!_sameEntity(route.link, target)) return route;
+      changed = true;
+      return route.copyWith(link: route.link.withPresentation(presentation));
+    }
+
+    final routeStack = [for (final route in tab.routeStack) update(route)];
+    final forwardStack = [for (final route in tab.forwardStack) update(route)];
+    if (!changed) return tab;
+    return tab.copyWith(
+      titleHint: _titleFor(routeStack.last.link),
+      routeStack: routeStack,
+      forwardStack: forwardStack,
+    );
   }
 
   void registerForm(
@@ -522,9 +549,8 @@ class WorkspaceController extends ChangeNotifier {
         left.entityId == right.entityId;
   }
 
-  static String _defaultTitle(EntityLink link) {
-    return '${link.rawEntityType}: ${link.entityId}';
-  }
+  static String _defaultTitle(EntityLink link) =>
+      const EntityPresentationResolver().pageTitle(link);
 
   String _titleFor(EntityLink link) =>
       _titleResolver?.call(link) ?? _defaultTitle(link);

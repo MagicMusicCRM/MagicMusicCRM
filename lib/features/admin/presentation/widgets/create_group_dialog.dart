@@ -1,10 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
-import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/core/widgets/teacher_rate_selector.dart';
+import 'package:magic_music_crm/core/widgets/v7/adaptive_surface.dart';
+
+Future<bool?> showCreateGroupSurface(BuildContext context) {
+  return showMagicAdaptiveSurface<bool>(
+    context,
+    kind: AppSurfaceKind.selection,
+    title: 'Новая учебная группа',
+    subtitle: 'Преподаватель, филиал и аудитория',
+    icon: Icons.groups_2_outlined,
+    builder: (_) => const CreateGroupDialog(),
+  );
+}
 
 class CreateGroupDialog extends ConsumerStatefulWidget {
   const CreateGroupDialog({super.key});
@@ -20,13 +32,13 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
 
   bool _loading = true;
   bool _saving = false;
+  String? _loadError;
   List<Map<String, dynamic>> _teachers = [];
   List<Map<String, dynamic>> _branches = [];
   List<Map<String, dynamic>> _rooms = [];
   String? _teacherId;
   String? _branchId;
   String? _roomId;
-  // KVA-238: переопределение ставки педагога; null = брать ставку педагога.
   num? _teacherRate;
 
   @override
@@ -43,6 +55,10 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
   }
 
   Future<void> _loadReferences() async {
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
     try {
       final crm = ref.read(magicCrmServiceProvider);
       final results = await Future.wait([
@@ -59,10 +75,10 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _loading = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Ошибка загрузки: $e')));
+      setState(() {
+        _loading = false;
+        _loadError = '$e';
+      });
     }
   }
 
@@ -95,187 +111,172 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
   }
 
   String? _selectedTeacherName() {
-    if (_teacherId == null) return null;
     for (final teacher in _teachers) {
-      if (teacher['id']?.toString() == _teacherId) {
-        return _personName(teacher);
-      }
+      if (teacher['id']?.toString() == _teacherId) return _personName(teacher);
     }
     return null;
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return const SizedBox(
+        height: 220,
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_loadError != null) {
+      return Column(
+        key: const ValueKey('create-group-load-error'),
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('Не удалось загрузить данные для создания группы.'),
+          const SizedBox(height: 12),
+          FilledButton.tonal(
+            onPressed: _loadReferences,
+            child: const Text('Повторить'),
+          ),
+        ],
+      );
+    }
+
     final visibleRooms = _branchId == null
         ? _rooms
         : _rooms
               .where((room) => room['branch_id']?.toString() == _branchId)
               .toList();
-
-    return AlertDialog(
-      title: const Text('Новая группа'),
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      content: _loading
-          ? const SizedBox(
-              width: 320,
-              height: 180,
-              child: Center(child: CircularProgressIndicator()),
-            )
-          : ConstrainedBox(
-              // maxWidth (not fixed width) so the dialog shrinks on narrow phones
-              // instead of overflowing.
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Form(
-                key: _formKey,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextFormField(
-                        controller: _nameController,
-                        decoration: const InputDecoration(
-                          labelText: 'Название группы *',
-                        ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Введите название группы';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      InkWell(
-                        borderRadius: BorderRadius.circular(8),
-                        onTap: () => SearchableSelect.show(
-                          context: context,
-                          title: 'Преподаватель',
-                          hintText: 'Поиск по имени…',
-                          selectedId: _teacherId,
-                          items: [
-                            for (final teacher in _teachers)
-                              SearchableSelectItem(
-                                id: teacher['id']?.toString() ?? '',
-                                label: _personName(teacher),
-                              ),
-                          ],
-                          onSelected: (item) =>
-                              setState(() => _teacherId = item?.id),
-                        ),
-                        child: InputDecorator(
-                          decoration: const InputDecoration(
-                            labelText: 'Преподаватель',
-                          ),
-                          child: Text(
-                            _selectedTeacherName() ?? 'Без преподавателя',
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        key: ValueKey('branch-$_branchId'),
-                        initialValue: _branchId,
-                        decoration: const InputDecoration(labelText: 'Филиал'),
-                        items: [
-                          const DropdownMenuItem<String>(
-                            value: null,
-                            child: Text('Без филиала'),
-                          ),
-                          ..._branches.map(
-                            (branch) => DropdownMenuItem<String>(
-                              value: branch['id']?.toString(),
-                              child: Text(
-                                branch['name']?.toString() ?? 'Филиал',
-                              ),
-                            ),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          final nextRooms = value == null
-                              ? _rooms
-                              : _rooms
-                                    .where(
-                                      (room) =>
-                                          room['branch_id']?.toString() ==
-                                          value,
-                                    )
-                                    .toList();
-                          setState(() {
-                            _branchId = value;
-                            if (_roomId != null &&
-                                !nextRooms.any(
-                                  (room) => room['id']?.toString() == _roomId,
-                                )) {
-                              _roomId = null;
-                            }
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      SearchablePickerField(
-                        label: 'Аудитория',
-                        placeholder: 'Без аудитории',
-                        selectedId: _roomId,
-                        items: [
-                          for (final room in visibleRooms)
-                            SearchableSelectItem(
-                              id: room['id'].toString(),
-                              label: room['name']?.toString() ?? 'Аудитория',
-                            ),
-                        ],
-                        onSelected: (item) =>
-                            setState(() => _roomId = item?.id),
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: _priceController,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        decoration: const InputDecoration(
-                          labelText: 'Цена за занятие',
-                        ),
-                        validator: (value) {
-                          final text = value?.trim().replaceAll(',', '.') ?? '';
-                          if (text.isEmpty) return null;
-                          final parsed = num.tryParse(text);
-                          if (parsed == null || parsed < 0) {
-                            return 'Введите корректную цену';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      // KVA-238: ставка педагога по группе (переопределение).
-                      TeacherRateSelector(
-                        allowInherit: true,
-                        label: 'Ставка педагога по группе',
-                        onChanged: (rate) => _teacherRate = rate,
-                      ),
-                    ],
+    return Form(
+      key: _formKey,
+      child: Column(
+        key: const ValueKey('create-group-form'),
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextFormField(
+            controller: _nameController,
+            decoration: const InputDecoration(labelText: 'Название группы *'),
+            validator: (value) => value == null || value.trim().isEmpty
+                ? 'Введите название группы'
+                : null,
+          ),
+          const SizedBox(height: 12),
+          InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: () => SearchableSelect.show(
+              context: context,
+              title: 'Преподаватель',
+              hintText: 'Поиск по имени…',
+              selectedId: _teacherId,
+              items: [
+                for (final teacher in _teachers)
+                  SearchableSelectItem(
+                    id: teacher['id']?.toString() ?? '',
+                    label: _personName(teacher),
                   ),
-                ),
+              ],
+              onSelected: (item) => setState(() => _teacherId = item?.id),
+            ),
+            child: InputDecorator(
+              decoration: const InputDecoration(labelText: 'Преподаватель'),
+              child: Text(
+                _selectedTeacherName() ?? 'Без преподавателя',
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.pop(context),
-          child: const Text('Отмена'),
-        ),
-        FilledButton(
-          onPressed: _loading || _saving ? null : _save,
-          style: FilledButton.styleFrom(
-            backgroundColor: AppTheme.primaryGold,
           ),
-          child: _saving
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Создать'),
-        ),
-      ],
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            key: ValueKey('group-branch-$_branchId'),
+            initialValue: _branchId,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Филиал'),
+            items: [
+              const DropdownMenuItem<String>(
+                value: null,
+                child: Text('Без филиала'),
+              ),
+              for (final branch in _branches)
+                DropdownMenuItem<String>(
+                  value: branch['id']?.toString(),
+                  child: Text(branch['name']?.toString() ?? 'Филиал'),
+                ),
+            ],
+            onChanged: (value) {
+              final nextRooms = value == null
+                  ? _rooms
+                  : _rooms
+                        .where((room) => room['branch_id']?.toString() == value)
+                        .toList();
+              setState(() {
+                _branchId = value;
+                if (_roomId != null &&
+                    !nextRooms.any(
+                      (room) => room['id']?.toString() == _roomId,
+                    )) {
+                  _roomId = null;
+                }
+              });
+            },
+          ),
+          const SizedBox(height: 12),
+          SearchablePickerField(
+            label: 'Аудитория',
+            placeholder: 'Без аудитории',
+            selectedId: _roomId,
+            items: [
+              for (final room in visibleRooms)
+                SearchableSelectItem(
+                  id: room['id'].toString(),
+                  label: room['name']?.toString() ?? 'Аудитория',
+                ),
+            ],
+            onSelected: (item) => setState(() => _roomId = item?.id),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _priceController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Цена за занятие'),
+            validator: (value) {
+              final text = value?.trim().replaceAll(',', '.') ?? '';
+              if (text.isEmpty) return null;
+              final parsed = num.tryParse(text);
+              return parsed == null || parsed < 0
+                  ? 'Введите корректную цену'
+                  : null;
+            },
+          ),
+          const SizedBox(height: 12),
+          TeacherRateSelector(
+            allowInherit: true,
+            label: 'Ставка педагога по группе',
+            onChanged: (rate) => _teacherRate = rate,
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _saving ? null : () => Navigator.pop(context),
+                  child: const Text('Отмена'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(
+                  onPressed: _saving ? null : _save,
+                  child: _saving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Создать группу'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 

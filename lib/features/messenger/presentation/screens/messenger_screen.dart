@@ -40,10 +40,10 @@ import 'package:magic_music_crm/features/profile/presentation/screens/profile_sc
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:magic_music_crm/core/widgets/telegram/send_file_dialog.dart';
 import 'package:magic_music_crm/core/widgets/telegram/avatar_widget.dart';
-import 'package:magic_music_crm/features/manager/presentation/widgets/user_roles_widget.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/features/client/presentation/screens/client_portal_screen.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/admin_overview_widget.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/manage_entities_widget.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/manager_overview_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/clients_widget.dart';
@@ -55,7 +55,6 @@ import 'package:magic_music_crm/features/teacher/presentation/widgets/teacher_st
 import 'package:magic_music_crm/core/providers/chat_providers.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
-import 'package:magic_music_crm/features/crm/presentation/client_forms/crm_configuration_workspace.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:mime/mime.dart';
 import 'package:magic_music_crm/features/messenger/data/chat_archive_api.dart';

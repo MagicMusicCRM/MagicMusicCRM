@@ -139,9 +139,7 @@ class _DataQualityWidgetState extends ConsumerState<DataQualityWidget> {
       );
     }
     return Column(
-      children: [
-        for (final item in _phoneItems) _PhoneReviewCard(item: item),
-      ],
+      children: [for (final item in _phoneItems) _PhoneReviewCard(item: item)],
     );
   }
 
@@ -190,7 +188,11 @@ class _DataQualityWidgetState extends ConsumerState<DataQualityWidget> {
     }
 
     final name = _readString(item, ['name']);
-    final phone = _readString(item, ['phone', 'phoneNormalized', 'phone_normalized']);
+    final phone = _readString(item, [
+      'phone',
+      'phoneNormalized',
+      'phone_normalized',
+    ]);
 
     // Let the operator pick the winner (default = the primary, idA).
     final winnerId = await showDialog<String>(
@@ -273,10 +275,3 @@ String _readString(Map<String, dynamic> map, List<String> keys) {
   }
   return '';
 }
-
-/// A short, readable identifier for a lead/entity row (id can be a long UUID).
-String _shortId(String id) {
-  if (id.length <= 10) return id;
-  return '${id.substring(0, 8)}…';
-}
-

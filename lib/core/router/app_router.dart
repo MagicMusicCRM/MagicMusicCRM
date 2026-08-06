@@ -25,8 +25,8 @@ import 'package:magic_music_crm/features/admin/presentation/screens/admin_dashbo
 import 'package:magic_music_crm/features/teacher/presentation/screens/teacher_dashboard_screen.dart';
 import 'package:magic_music_crm/features/manager/presentation/screens/manager_dashboard_screen.dart';
 import 'package:magic_music_crm/features/admin/presentation/screens/profile_detail_screen.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/manage_entities_widget.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
-import 'package:magic_music_crm/features/crm/presentation/client_forms/crm_configuration_workspace.dart';
 import 'package:magic_music_crm/features/profile/presentation/screens/profile_screen.dart';
 import 'package:magic_music_crm/features/profile/presentation/screens/account_deletion_screen.dart';
 import 'package:magic_music_crm/features/profile/presentation/screens/account_deletion_status_screen.dart';
@@ -314,7 +314,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/crm/configuration',
-        builder: (context, state) => const CrmConfigurationRouteScreen(),
+        builder: (context, state) =>
+            const SystemSettingsRouteScreen(initialArea: 'crm'),
       ),
       // ── Deep links (KVA-196) ────────────────────────────────────────────────
       // Open a lead/student/lesson directly by id. Each presents the unified

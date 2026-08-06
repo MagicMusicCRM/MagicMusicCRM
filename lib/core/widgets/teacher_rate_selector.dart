@@ -84,6 +84,7 @@ class _TeacherRateSelectorState extends State<TeacherRateSelector> {
         DropdownButtonFormField<String>(
           key: ValueKey('rate-mode-$_mode'),
           initialValue: _mode,
+          isExpanded: true,
           decoration: InputDecoration(labelText: widget.label),
           items: [
             if (widget.allowInherit)

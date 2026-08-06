@@ -390,12 +390,14 @@ class _LinkTile extends StatelessWidget {
                   context,
                   entityType: 'student',
                   entityId: entityId,
+                  presentationLabel: name,
                 );
               } else {
                 await showClientCard(
                   context,
                   entityType: 'lead',
                   entityId: entityId,
+                  presentationLabel: name,
                 );
               }
             },

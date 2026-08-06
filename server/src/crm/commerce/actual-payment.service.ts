@@ -12,6 +12,7 @@ import { PlatformAuditInput } from "../../platform/platform-integrity.types";
 import { fingerprintPayload } from "../../platform/platform-integrity.util";
 import { CrmPolicy } from "../crm.policy";
 import { RecordActualPaymentDto } from "../dto/record-actual-payment.dto";
+import { RecordPaymentAdjustmentDto } from "../dto/create-adjustment.dto";
 import { CommerceProjectionRepository } from "./commerce-projection.repository";
 import { CommerceMutationMetadata } from "./subscription-issue.service";
 import { SubscriptionIssueRepository } from "./subscription-issue.repository";
@@ -87,7 +88,7 @@ export class ActualPaymentService {
     const invoiceIdentifier = this.optionalText(dto.invoiceIdentifier);
     const normalizedPayload = {
       studentId,
-      issuedSubscriptionId: dto.issuedSubscriptionId ?? null,
+      issuedSubscriptionId: dto.issuedSubscriptionId,
       branchId: scope.branchId,
       amountMinor,
       method: dto.method,
@@ -102,7 +103,7 @@ export class ActualPaymentService {
       entityId: paymentId,
       metadata: {
         studentId,
-        issuedSubscriptionId: dto.issuedSubscriptionId ?? null,
+        issuedSubscriptionId: dto.issuedSubscriptionId,
         method: dto.method,
         branchId: scope.branchId,
       },
@@ -130,36 +131,33 @@ export class ActualPaymentService {
           if (!(await this.repository.lockStudent(client, studentId))) {
             throw new NotFoundException("Ученик не найден.");
           }
-          let currencyCode = dto.currencyCode ?? "RUB";
-          if (dto.issuedSubscriptionId) {
-            const target =
-              await this.repository.findIssuedPaymentTargetForShare(
-                client,
-                dto.issuedSubscriptionId,
-                studentId,
-              );
-            if (!target) {
-              throw new NotFoundException(
-                "Выданный абонемент этого ученика не найден.",
-              );
-            }
-            if (
-              dto.currencyCode !== undefined &&
-              dto.currencyCode !== target.currency_code
-            ) {
-              throw new UnprocessableEntityException({
-                code: "PAYMENT_CURRENCY_MISMATCH",
-                field: "currencyCode",
-                message:
-                  "Валюта платежа должна совпадать с валютой выданного абонемента.",
-              });
-            }
-            currencyCode = target.currency_code;
+          const target =
+            await this.repository.findIssuedPaymentTargetForShare(
+              client,
+              dto.issuedSubscriptionId,
+              studentId,
+            );
+          if (!target) {
+            throw new NotFoundException(
+              "Выданный абонемент этого ученика не найден.",
+            );
           }
+          if (
+            dto.currencyCode !== undefined &&
+            dto.currencyCode !== target.currency_code
+          ) {
+            throw new UnprocessableEntityException({
+              code: "PAYMENT_CURRENCY_MISMATCH",
+              field: "currencyCode",
+              message:
+                "Валюта платежа должна совпадать с валютой выданного абонемента.",
+            });
+          }
+          const currencyCode = target.currency_code;
           const payment = await this.repository.createActualPayment(client, {
             id: paymentId,
             studentId,
-            issuedSubscriptionId: dto.issuedSubscriptionId ?? null,
+            issuedSubscriptionId: dto.issuedSubscriptionId,
             amountMinor,
             currencyCode,
             method: dto.method,
@@ -191,6 +189,179 @@ export class ActualPaymentService {
       result.resultRef.entityId,
       result.resultRef.version,
     );
+  }
+
+  async recordAdjustment(
+    actor: ActorContext,
+    studentId: string,
+    dto: RecordPaymentAdjustmentDto,
+    metadata: CommerceMutationMetadata,
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    this.assertMetadata(metadata);
+    await this.commerce.resolveStudentScope(actor, studentId);
+    if (dto.kind === "correction" && dto.direction === undefined) {
+      throw new UnprocessableEntityException({
+        code: "PAYMENT_CORRECTION_DIRECTION_REQUIRED",
+        field: "direction",
+        message: "Для корректировки укажите приход или расход.",
+      });
+    }
+    if (dto.kind === "refund" && dto.direction === "income") {
+      throw new UnprocessableEntityException({
+        code: "PAYMENT_REFUND_DIRECTION_INVALID",
+        field: "direction",
+        message: "Возврат может быть только расходом.",
+      });
+    }
+    const absoluteMinor = this.normalizeAmount(dto.amountMinor);
+    const outcome = dto.kind === "refund" || dto.direction === "outcome";
+    const amountMinor = `${outcome ? "-" : ""}${absoluteMinor}`;
+    const occurredAt = new Date(dto.occurredAt);
+    if (Number.isNaN(occurredAt.getTime())) {
+      throw new UnprocessableEntityException({
+        code: "PAYMENT_ADJUSTMENT_DATE_INVALID",
+        field: "occurredAt",
+        message: "Укажите корректную дату возврата или корректировки.",
+      });
+    }
+    const reason = dto.reason.trim();
+    if (!reason) {
+      throw new UnprocessableEntityException({
+        code: "PAYMENT_ADJUSTMENT_REASON_REQUIRED",
+        field: "reason",
+        message: "Укажите причину возврата или корректировки.",
+      });
+    }
+    const adjustmentId = this.deterministicId(
+      actor.userId,
+      metadata.idempotencyKey,
+      "crm.payment-adjustment.record",
+    );
+    const normalizedPayload = {
+      studentId,
+      sourcePaymentId: dto.sourcePaymentId,
+      kind: dto.kind,
+      amountMinor,
+      occurredAt: occurredAt.toISOString(),
+      reason,
+    };
+    const audit: PlatformAuditInput = {
+      action: "crm.payment_adjustment_recorded",
+      entityType: "account_adjustment",
+      entityId: adjustmentId,
+      metadata: normalizedPayload,
+    };
+    const result =
+      await this.integrity.executeVersionedMutation<PaymentMutationResult>({
+        actorKey: actor.userId,
+        actorUserId: actor.userId,
+        operation: "crm.payment-adjustment.record",
+        idempotencyKey: metadata.idempotencyKey,
+        requestId: metadata.requestId,
+        aggregateType: "commerce:payment-adjustment",
+        aggregateId: adjustmentId,
+        expectedVersion: 0,
+        payload: normalizedPayload,
+        audit,
+        outbox: {
+          type: "commerce.payment.adjusted",
+          payload: {
+            entityId: adjustmentId,
+            invalidates: ["student-finance", "revenue"],
+          },
+        },
+        mutate: async (client, nextVersion) => {
+          if (!(await this.repository.lockStudent(client, studentId))) {
+            throw new NotFoundException("Ученик не найден.");
+          }
+          const source =
+            await this.repository.findPaymentAdjustmentSourceForShare(
+              client,
+              dto.sourcePaymentId,
+              studentId,
+            );
+          if (!source) {
+            throw new NotFoundException("Исходная оплата не найдена.");
+          }
+          const refundable =
+            BigInt(source.amount_minor) + BigInt(source.adjusted_minor);
+          if (outcome && BigInt(absoluteMinor) > refundable) {
+            throw new UnprocessableEntityException({
+              code: "PAYMENT_REFUND_EXCEEDS_AVAILABLE",
+              field: "amountMinor",
+              message: "Сумма возврата превышает остаток исходной оплаты.",
+            });
+          }
+          const adjustment = await this.repository.createPaymentAdjustment(
+            client,
+            {
+              id: adjustmentId,
+              studentId,
+              sourcePaymentId: source.id,
+              kind: dto.kind === "refund" ? "refund" : "adjustment",
+              amountMinor,
+              currencyCode: source.currency,
+              occurredAt,
+              reason,
+              branchId: source.branch_id,
+              method: source.method,
+              invoiceNumber: source.invoice_number,
+              actorUserId: actor.userId,
+              idempotencyRef: `${actor.userId}:${metadata.idempotencyKey}`,
+              requestFingerprint: fingerprintPayload(normalizedPayload),
+            },
+          );
+          audit.afterRef = {
+            adjustmentId: adjustment.id,
+            adjustmentVersion: nextVersion,
+            sourcePaymentId: source.id,
+          };
+          return { entityId: adjustment.id, version: nextVersion };
+        },
+      });
+    return this.loadStableAdjustment(
+      result.resultRef.entityId,
+      result.resultRef.version,
+    );
+  }
+
+  private async loadStableAdjustment(
+    adjustmentId: string,
+    adjustmentVersion: number,
+  ) {
+    const adjustment =
+      await this.repository.findPaymentAdjustment(adjustmentId);
+    if (!adjustment) {
+      throw new ConflictException({
+        code: "PAYMENT_ADJUSTMENT_RESULT_MISSING",
+        message: "Зафиксированный возврат или корректировка не найдены.",
+        adjustmentId,
+      });
+    }
+    return {
+      adjustment: {
+        id: adjustment.id,
+        studentId: adjustment.student_id,
+        sourcePaymentId: adjustment.source_payment_id,
+        kind: adjustment.kind === "refund" ? "refund" : "correction",
+        amountMinor: adjustment.amount_minor,
+        currencyCode: adjustment.currency_code,
+        occurredAt: adjustment.occurred_at,
+        branchId: adjustment.branch_id,
+        branchName: adjustment.branch_name,
+        method: adjustment.method,
+        invoiceIdentifier: adjustment.invoice_number,
+        reason: adjustment.description,
+        status: "paid",
+        acceptedBy: {
+          userId: adjustment.created_by,
+          name: adjustment.created_by_name,
+        },
+        version: adjustmentVersion,
+        createdAt: adjustment.created_at,
+      },
+    };
   }
 
   private async loadStablePayment(
@@ -275,10 +446,11 @@ export class ActualPaymentService {
   private deterministicId(
     actorUserId: string,
     idempotencyKey: string,
+    operation = "crm.actual-payment.record",
   ): string {
     const hex = createHash("sha256")
       .update(
-        `${actorUserId}\0crm.actual-payment.record\0${idempotencyKey}`,
+        `${actorUserId}\0${operation}\0${idempotencyKey}`,
       )
       .digest("hex")
       .slice(0, 32)

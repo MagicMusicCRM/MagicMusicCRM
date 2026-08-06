@@ -110,7 +110,7 @@ describe("DashboardService", () => {
         expectedPayments: "/crm/expected-payments",
         debtStudents: "/crm/student-balances?debtOnly=true",
         newLeads: "/crm/leads/board",
-        tasks: "/crm/tasks",
+        tasks: "/crm/shared-tasks?state=open",
         schedule: "/crm/schedule/matrix",
         activity: "/crm/activity",
       },
@@ -121,6 +121,7 @@ describe("DashboardService", () => {
       "2026-06-01T00:00:00.000Z",
       "2026-07-01T00:00:00.000Z",
       "branch-a",
+      "manager-a",
     ]);
     expect(String(query.mock.calls[0][0])).toContain("l.is_trial = false");
     expect(String(query.mock.calls[0][0])).toContain(

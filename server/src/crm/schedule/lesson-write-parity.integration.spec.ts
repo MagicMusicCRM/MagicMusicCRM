@@ -45,10 +45,7 @@ describe("Unified lesson create/edit/drag writes (PostgreSQL)", () => {
     const availability = new AvailabilityRepository(database);
     commands = new LessonCommandService(
       database,
-      new PlatformIntegrityService(
-        database,
-        new PlatformIntegrityRepository(),
-      ),
+      new PlatformIntegrityService(database, new PlatformIntegrityRepository()),
       new CrmPolicy(),
       new ClientReferenceService(database),
       new LessonRequiredFieldValidator(),
@@ -56,13 +53,10 @@ describe("Unified lesson create/edit/drag writes (PostgreSQL)", () => {
         new ConstraintEngineRepository(database, availability),
       ),
       new LessonLifecycleRepository(database),
-      new SubscriptionReservationService(
-        database,
-        {
-          emitCrmChanged: jest.fn(),
-          emitFinanceChanged: jest.fn(),
-        } as unknown as RealtimeBus,
-      ),
+      new SubscriptionReservationService(database, {
+        emitCrmChanged: jest.fn(),
+        emitFinanceChanged: jest.fn(),
+      } as unknown as RealtimeBus),
     );
   });
 
@@ -118,6 +112,14 @@ describe("Unified lesson create/edit/drag writes (PostgreSQL)", () => {
           key("invalid-create"),
         ),
       );
+      const preview = await commands.previewConstraints(actor, {
+        clientRef: base.clientRef,
+        teacherId: base.teacherId,
+        branchId: base.branchId,
+        roomId: base.roomId,
+        scheduledAt: "2026-07-27T07:30:00.000Z",
+        durationMinutes: base.durationMinutes,
+      });
       const invalidEdit = await violationResponse(() =>
         commands.update(
           actor,
@@ -143,6 +145,7 @@ describe("Unified lesson create/edit/drag writes (PostgreSQL)", () => {
       );
       expect(invalidCreate).toEqual(invalidEdit);
       expect(invalidEdit).toEqual(invalidDrag);
+      expect(preview.violations).toEqual(invalidCreate.violations);
       expect(invalidCreate).toEqual({
         code: "LESSON_CONSTRAINT_VIOLATIONS",
         violations: [
@@ -315,7 +318,9 @@ describe("Unified lesson create/edit/drag writes (PostgreSQL)", () => {
         ),
       ]);
       const acceptedCreate = concurrentCreates.filter(
-        (result): result is PromiseFulfilledResult<
+        (
+          result,
+        ): result is PromiseFulfilledResult<
           Awaited<ReturnType<LessonCommandService["create"]>>
         > => result.status === "fulfilled",
       );
@@ -570,10 +575,9 @@ async function cleanupFixture(
       "delete from app.lesson_snapshots where lesson_id = any($1::uuid[])",
       [fixture.lessonIds],
     );
-    await client.query(
-      "delete from app.lessons where id = any($1::uuid[])",
-      [fixture.lessonIds],
-    );
+    await client.query("delete from app.lessons where id = any($1::uuid[])", [
+      fixture.lessonIds,
+    ]);
     await client.query("delete from app.students where id = $1", [
       fixture.studentId,
     ]);
@@ -588,16 +592,13 @@ async function cleanupFixture(
     await client.query("delete from app.teachers where id = $1", [
       fixture.teacherId,
     ]);
-    await client.query("delete from app.rooms where id = $1", [
-      fixture.roomId,
-    ]);
+    await client.query("delete from app.rooms where id = $1", [fixture.roomId]);
     await client.query("delete from app.profiles where id = any($1::uuid[])", [
       fixture.profileIds,
     ]);
-    await client.query(
-      "delete from app.users where id = any($1::uuid[])",
-      [[fixture.managerId, fixture.teacherUserId, fixture.clientUserId]],
-    );
+    await client.query("delete from app.users where id = any($1::uuid[])", [
+      [fixture.managerId, fixture.teacherUserId, fixture.clientUserId],
+    ]);
     await client.query("delete from app.branch_hours where branch_id = $1", [
       fixture.branchId,
     ]);

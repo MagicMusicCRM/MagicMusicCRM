@@ -66,10 +66,7 @@ describe("Availability reference data (PostgreSQL)", () => {
           values ($1), ($2)
           returning id
         `,
-        [
-          `Berlin ${randomUUID()}`,
-          `Moscow ${randomUUID()}`,
-        ],
+        [`Berlin ${randomUUID()}`, `Moscow ${randomUUID()}`],
       );
       const user = await client.query<{ id: string }>(
         `
@@ -149,37 +146,34 @@ describe("Availability reference data (PostgreSQL)", () => {
       );
       expect(branchAssignments?.version).toBe(2);
 
-      const availability = await repository.replaceTeacherAvailability(
-        client,
-        {
-          teacherId,
-          expectedVersion: 2,
-          rules: [
-            {
-              kind: "recurring",
-              available: true,
-              timezone: "Europe/Berlin",
-              weekday: 7,
-              localStart: "01:00",
-              localEnd: "04:00",
-              validFrom: "2026-01-01",
-            },
-            {
-              kind: "interval",
-              available: false,
-              startsAt: "2026-03-29T01:00:00Z",
-              endsAt: "2026-03-29T01:15:00Z",
-              reason: "break",
-            },
-            {
-              kind: "interval",
-              available: false,
-              startsAt: "2026-12-01T00:00:00Z",
-              reason: "indefinite",
-            },
-          ],
-        },
-      );
+      const availability = await repository.replaceTeacherAvailability(client, {
+        teacherId,
+        expectedVersion: 2,
+        rules: [
+          {
+            kind: "recurring",
+            available: true,
+            timezone: "Europe/Berlin",
+            weekday: 7,
+            localStart: "01:00",
+            localEnd: "04:00",
+            validFrom: "2026-01-01",
+          },
+          {
+            kind: "interval",
+            available: false,
+            startsAt: "2026-03-29T01:00:00Z",
+            endsAt: "2026-03-29T01:15:00Z",
+            reason: "break",
+          },
+          {
+            kind: "interval",
+            available: false,
+            startsAt: "2026-12-01T00:00:00Z",
+            reason: "indefinite",
+          },
+        ],
+      });
       expect(availability?.version).toBe(3);
 
       const resolved = await repository.resolve(
@@ -191,11 +185,23 @@ describe("Availability reference data (PostgreSQL)", () => {
       );
       expect(resolved).not.toBeNull();
       expect(resolved!.teacherBranchAssigned).toBe(true);
-      expect(resolved!.branch).toEqual({
+      expect(resolved!.branch).toMatchObject({
         id: branchId,
         timezone: "Europe/Berlin",
         version: 2,
+        weekly: [{ weekday: 7, open: "01:30", close: "03:30" }],
+        exceptions: [
+          {
+            date: "2026-03-30",
+            closed: false,
+            open: "10:00",
+            close: "12:00",
+            reason: "extended",
+          },
+        ],
       });
+      expect(resolved!.teacher.assignments).toHaveLength(2);
+      expect(resolved!.teacher.availability).toHaveLength(3);
       expect(
         resolved!.branchWindows.map((row) => ({
           date: row.localDate,

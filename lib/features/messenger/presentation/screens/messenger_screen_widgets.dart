@@ -3,7 +3,6 @@ part of 'messenger_screen.dart';
 // Message list view (date separators, pagination) and presence banner.
 // Part-of keeps these private widgets in the messenger_screen library.
 
-
 class _MessageListView extends StatefulWidget {
   final List<Map<String, dynamic>> messages;
   final String currentUserId;
@@ -343,6 +342,7 @@ class _MessageListViewState extends State<_MessageListView> {
               children: [
                 FloatingActionButton.small(
                   heroTag: 'scroll_to_bottom',
+                  tooltip: 'К новым сообщениям',
                   onPressed: () {
                     setState(() => _unreadCount = 0);
                     if (_scrollController.hasClients) {

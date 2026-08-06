@@ -169,9 +169,11 @@ export class ClientConversionService {
       );
       await client.query(
         `
-          update app.tasks
-          set entity_type = 'student', entity_id = $2, updated_at = now()
-          where entity_type = 'lead' and entity_id = $1 and deleted_at is null
+          update app.shared_tasks
+          set linked_entity_type = 'student', linked_entity_id = $2,
+              version = version + 1, updated_at = now()
+          where linked_entity_type = 'lead'
+            and linked_entity_id = $1 and deleted_at is null
         `,
         [leadId, studentId],
       );

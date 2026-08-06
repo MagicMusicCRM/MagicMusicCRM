@@ -202,7 +202,8 @@ extension _ClientCardData on _ClientCardState {
       StudentFunnelConfiguration? funnel;
       String? funnelError;
       try {
-        funnel = await crm.getStudentFunnel(
+        funnel = await crm.getClientPipeline(
+          clientType: 'student',
           branchId: student['branch_id']?.toString(),
         );
       } catch (error) {

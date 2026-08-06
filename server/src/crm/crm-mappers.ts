@@ -3,7 +3,7 @@
  *
  * Before this module the same `LessonRow`/`toLessonDto`, `TaskRow`/`toTaskDto`,
  * `TimelineRow`/`toTimelineDto` and `PaymentRow`/`toPaymentDto` lived byte-for-byte
- * in 2–3 services each (CrmService, LeadsService, ScheduleService, TasksService,
+ * in 2–3 services each (CrmService, LeadsService, ScheduleService,
  * TimelineService, FinanceService), so a change to a DTO shape meant editing every
  * copy. They are pure functions (no `this`), so the extraction is behaviour-preserving:
  * every service now imports the single definition here.
@@ -98,14 +98,14 @@ export interface TaskHistoryRow {
   new_user_id: string | null;
   new_user_first_name: string | null;
   new_user_last_name: string | null;
-  // Present only in the cross-task supervisor feed, which joins app.tasks.
+  // Present only in the retained legacy-history projection.
   task_id?: string;
   task_title?: string | null;
   task_entity_type?: string | null;
   task_entity_id?: string | null;
 }
 
-/** One field-level change, ready to be inserted into app.task_history. */
+/** One field-level change from the legacy task import payload. */
 export interface TaskChange {
   field: string;
   oldValue: string | null;

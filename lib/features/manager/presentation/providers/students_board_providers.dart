@@ -17,7 +17,8 @@ final studentFunnelProvider =
     FutureProvider.family<StudentFunnelConfiguration, String>((ref, branchId) {
       return ref
           .watch(magicCrmServiceProvider)
-          .getStudentFunnel(
+          .getClientPipeline(
+            clientType: 'student',
             branchId: branchId == kNoBranchBoardId ? null : branchId,
           );
     });

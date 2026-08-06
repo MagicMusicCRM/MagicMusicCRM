@@ -187,10 +187,12 @@ export class ClientReferenceService {
           and (
             exists (
               select 1
-              from app.tasks assigned_task
+              from app.canonical_tasks assigned_task
+              join app.shared_task_visibility visibility
+                on visibility.task_id = assigned_task.id
+               and visibility.user_id = $2::uuid
               where assigned_task.entity_type::text = ${alias}.type
                 and assigned_task.entity_id = ${alias}.id
-                and assigned_task.assigned_to = $2::uuid
                 and assigned_task.deleted_at is null
             )
             or (

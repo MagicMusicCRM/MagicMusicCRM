@@ -59,6 +59,9 @@ extension _ClientCardStudent on _ClientCardState {
           entityType: EntityLinkType.client,
           entityId: _studentId,
           variant: 'student',
+          presentation: EntityPresentationReference(
+            primary: _clientPresentationLabel,
+          ),
         ),
         scrollController: _taskScrollController,
         canWrite:
@@ -100,6 +103,20 @@ extension _ClientCardStudent on _ClientCardState {
       return ListView(
         padding: const EdgeInsets.all(AppSpace.xl),
         children: [
+          if (_commerceStudent != null) ...[
+            _lessonBalanceSummary(
+              _commerceStudent!.lessonBalance,
+              onSubscriptions: () {
+                _emitState(() => _selectedSection = 'subscriptions');
+                widget.onSectionChanged?.call('subscriptions');
+              },
+              onPayments: () {
+                _emitState(() => _selectedSection = 'payments');
+                widget.onSectionChanged?.call('payments');
+              },
+            ),
+            const SizedBox(height: AppSpace.xl),
+          ],
           StudentScheduleSection(
             clientType: 'student',
             clientId: _studentId,
@@ -113,20 +130,30 @@ extension _ClientCardStudent on _ClientCardState {
             onChanged: _fetchStudentData,
           ),
           const SizedBox(height: AppSpace.xl),
-          ClientScheduleCalendar(
-            clientType: 'student',
-            clientId: _studentId,
-            clientName: [
-              _clientFirstName,
-              _clientLastName,
-            ].whereType<String>().join(' '),
-            branches: _branches,
-            defaultBranchId: _clientBranchId,
-            canRead: canReadSchedule,
-            active: _selectedSection == 'lessons',
-            initialViewState: widget.initialViewState,
-            onViewStateChanged: widget.onViewStateChanged,
-          ),
+          if (!canReadSchedule)
+            const MagicPageState(
+              kind: MagicPageStateKind.forbidden,
+              title: 'Календарь недоступен',
+              message: 'У вашей роли нет доступа к расписанию.',
+            )
+          else
+            SizedBox(
+              height: 760,
+              child: ScheduleWidget(
+                title: 'Календарь занятий',
+                clientType: 'student',
+                clientId: _studentId,
+                clientName: [
+                  _clientFirstName,
+                  _clientLastName,
+                ].whereType<String>().join(' '),
+                initialBranchId: _clientBranchId,
+                canWrite: canWriteSchedule,
+                active: _selectedSection == 'lessons',
+                initialViewState: widget.initialViewState,
+                onViewStateChanged: widget.onViewStateChanged,
+              ),
+            ),
           const SizedBox(height: AppSpace.xl),
           _sectionTitle('Фактические занятия'),
           if (_lessons.isEmpty)
@@ -194,30 +221,36 @@ extension _ClientCardStudent on _ClientCardState {
         commerce: _commerceStudent,
         fallbackPayments: _payments,
         creating: _creatingPayment,
+        adjustingPayment: _adjustingPayment,
         branchId: _clientBranchId,
         branchName: _nonEmpty(_student?['branch_name']) ?? 'Филиал не указан',
         onCreate: () => _emitState(() => _creatingPayment = true),
         onCancel: () => _emitState(() => _creatingPayment = false),
         onSubmit: _recordClientPayment,
+        onAdjust: (payment) => _emitState(() => _adjustingPayment = payment),
+        onCancelAdjustment: () => _emitState(() => _adjustingPayment = null),
+        onSubmitAdjustment: _recordPaymentAdjustment,
         scrollController: _paymentScrollController,
         highlightedPaymentId: widget.initialViewState?.filters['paymentId']
             ?.toString(),
-        onOpenPayment: (sourceContext, paymentId, target) => _openLinkedRecord(
-          sourceContext,
-          EntityLink.typed(
-            entityType: EntityLinkType.payment,
-            entityId: paymentId,
-            optionalFocus: EntityLinkFocus(
-              focus: 'payment',
-              filter: {
-                'studentId': _studentId,
-                'section': 'payments',
-                'paymentId': paymentId,
-              },
+        onOpenPayment: (sourceContext, paymentId, presentation, target) =>
+            _openLinkedRecord(
+              sourceContext,
+              EntityLink.typed(
+                entityType: EntityLinkType.payment,
+                entityId: paymentId,
+                presentation: presentation,
+                optionalFocus: EntityLinkFocus(
+                  focus: 'payment',
+                  filter: {
+                    'studentId': _studentId,
+                    'section': 'payments',
+                    'paymentId': paymentId,
+                  },
+                ),
+              ),
+              target,
             ),
-          ),
-          target,
-        ),
       ),
     );
   }
@@ -235,6 +268,26 @@ extension _ClientCardStudent on _ClientCardState {
     _refreshLedger();
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Оплата проведена и добавлена в историю')),
+    );
+  }
+
+  Future<void> _recordPaymentAdjustment(
+    ClientPaymentAdjustmentSubmission submission,
+  ) async {
+    await ref
+        .read(magicCrmServiceProvider)
+        .recordPaymentAdjustment(
+          _studentId,
+          input: submission.input,
+          identity: submission.identity,
+        );
+    if (!mounted) return;
+    _emitState(() => _adjustingPayment = null);
+    _refreshLedger();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Исправление добавлено отдельной операцией'),
+      ),
     );
   }
 

@@ -74,14 +74,14 @@ describe("SharedTask API domain (PostgreSQL)", () => {
     const replay = await tasks.create(fixture.director, dto, metadata);
     expect(replay).toEqual(first);
     expect(first.recipientSummary).toMatchObject({
-      totalRecipients: 1,
+      totalRecipients: 2,
       hasDynamicMembership: true,
       selectors: [
         expect.objectContaining({
           type: "branch",
           label: fixture.branchName,
           mode: "dynamic",
-          currentRecipientCount: 1,
+          currentRecipientCount: 2,
         }),
       ],
     });
@@ -165,7 +165,7 @@ describe("SharedTask API domain (PostgreSQL)", () => {
           type: "branch",
           label: fixture.branchName,
           mode: "dynamic",
-          currentRecipientCount: 1,
+          currentRecipientCount: 2,
         }),
         expect.objectContaining({
           type: "allBranches",
@@ -184,6 +184,101 @@ describe("SharedTask API domain (PostgreSQL)", () => {
         { type: "user", targetId: fixture.client.userId },
       ]),
     ).rejects.toBeInstanceOf(UnprocessableEntityException);
+  });
+
+  it("filters, groups by day and lets another manager reassign an open task", async () => {
+    const created = await tasks.create(
+      fixture.manager,
+      {
+        title: "Priority rehearsal",
+        body: "Call the client",
+        allDay: true,
+        priority: "high",
+        startAt: "2026-08-12T00:00:00.000Z",
+        audiences: [{ type: "allBranches" }],
+      },
+      {
+        idempotencyKey: `create-${randomUUID()}`,
+        requestId: `request-${randomUUID()}`,
+      },
+    );
+
+    const filtered = await tasks.list(fixture.director, {
+      q: "rehearsal",
+      priority: "high",
+      from: "2026-08-01T00:00:00.000Z",
+      to: "2026-09-01T00:00:00.000Z",
+    });
+    expect(filtered.items.map((item) => item.id)).toEqual([created.id]);
+    const calendar = await tasks.calendar(fixture.director, {
+      from: "2026-08-01T00:00:00.000Z",
+      to: "2026-09-01T00:00:00.000Z",
+    });
+    expect(calendar.items).toContainEqual({ day: "2026-08-12", count: 1 });
+
+    const updated = await tasks.update(
+      fixture.director,
+      created.id,
+      {
+        expectedVersion: created.version,
+        title: created.title,
+        body: created.body ?? undefined,
+        allDay: true,
+        priority: "low",
+        startAt: "2026-08-13T00:00:00.000Z",
+        audiences: [{ type: "user", targetId: fixture.manager.userId }],
+      },
+      {
+        idempotencyKey: `update-${randomUUID()}`,
+        requestId: `request-${randomUUID()}`,
+      },
+    );
+    expect(updated.priority).toBe("low");
+    expect(new Date(updated.startAt!).toISOString()).toBe(
+      "2026-08-13T00:00:00.000Z",
+    );
+    expect(updated.audiences).toEqual([
+      expect.objectContaining({ type: "user", targetId: fixture.manager.userId }),
+    ]);
+  });
+
+  it("projects direct work into the manager branch without making it personal", async () => {
+    const created = await tasks.create(
+      fixture.director,
+      {
+        title: "Branch-visible direct task",
+        allDay: true,
+        startAt: "2026-08-14T00:00:00.000Z",
+        audiences: [{ type: "user", targetId: fixture.admin.userId }],
+        linkedEntity: { type: "student", id: fixture.studentId },
+      },
+      {
+        idempotencyKey: `create-${randomUUID()}`,
+        requestId: `request-${randomUUID()}`,
+      },
+    );
+
+    const mine = await tasks.list(fixture.manager, { scope: "mine" });
+    const branch = await tasks.list(fixture.manager, { scope: "branch" });
+    expect(mine.items.map((item) => item.id)).not.toContain(created.id);
+    expect(branch.items.map((item) => item.id)).toContain(created.id);
+  });
+
+  it("uses the dashboard predicate for the open-task detail", async () => {
+    const detail = await tasks.list(fixture.manager, { state: "open" });
+    const dashboard = await pool.query<{ count: number }>(
+      `
+        select count(*)::int as count
+        from app.shared_tasks task
+        where task.deleted_at is null and task.state = 'open'
+          and exists (
+            select 1 from app.shared_task_visibility visibility
+            where visibility.task_id = task.id and visibility.user_id = $1
+          )
+      `,
+      [fixture.manager.userId],
+    );
+    expect(detail.items).toHaveLength(dashboard.rows[0]!.count);
   });
 
   it("resolves allBranches dynamically for every task-capable role", async () => {
@@ -347,6 +442,24 @@ async function createFixture(pool: Pool) {
       returning id
     `,
     [staff.rows[0]!.id, branch.rows[0]!.id],
+  );
+  const managerProfile = await pool.query<{ id: string }>(
+    `insert into app.profiles (user_id, first_name) values ($1, $2) returning id`,
+    [managerRow!.id, `${marker}-manager`],
+  );
+  const managerStaff = await pool.query<{ id: string }>(
+    `insert into app.staff_members (profile_id, role) values ($1, 'manager') returning id`,
+    [managerProfile.rows[0]!.id],
+  );
+  await pool.query(
+    `insert into app.user_crm_links (user_id, entity_type, entity_id, link_source)
+     values ($1, 'staff', $2, 'manual_email')`,
+    [managerRow!.id, managerStaff.rows[0]!.id],
+  );
+  await pool.query(
+    `insert into app.staff_branch_assignments (staff_member_id, branch_id)
+     values ($1, $2)`,
+    [managerStaff.rows[0]!.id, branch.rows[0]!.id],
   );
   const studentProfile = await pool.query<{ id: string }>(
     `

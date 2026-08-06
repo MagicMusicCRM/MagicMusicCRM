@@ -1,13 +1,10 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
-import 'package:magic_music_crm/core/navigation/mobile_context_stack.dart';
-import 'package:magic_music_crm/core/workspace/shared_entity_cache.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 import 'package:magic_music_crm/core/workspace/workspace_store.dart';
 import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
@@ -32,7 +29,7 @@ void main() {
   }
 
   testWidgets(
-    'device workspace keeps tabs, conflicts, restart, accounts and logout safe',
+    'device workspace keeps tabs, restart, accounts and logout safe',
     (tester) async {
       final backend = InMemoryWorkspaceKeyValueStore();
       final store = AccountWorkspaceStore(backend);
@@ -58,38 +55,6 @@ void main() {
       );
       expect(restored.activeTabId, reorderedActive);
       expect(restored.tabs.first.currentRoute.link.entityId, 'client-9');
-
-      final conflictWorkspace = controller('account-1');
-      final cleanTab = conflictWorkspace.open(link('shared-client'));
-      final dirtyTab = conflictWorkspace.open(
-        link('shared-client'),
-        explicitNew: true,
-      );
-      conflictWorkspace.registerForm(
-        dirtyTab,
-        'client-form',
-        expectedVersion: 4,
-        draft: const {'name': 'local draft'},
-      );
-      conflictWorkspace.updateForm(dirtyTab, 'client-form', dirty: true);
-      final refetched = <String>[];
-      await WorkspaceInvalidationCoordinator(
-        workspace: conflictWorkspace,
-        cache: SharedEntityCache(),
-        refetch: (tabId, _, _) async => refetched.add(tabId),
-      ).handle(
-        EntityInvalidationEvent(
-          eventId: 'device-event',
-          link: link('shared-client'),
-          version: 5,
-        ),
-      );
-      expect(refetched, [cleanTab]);
-      final dirtyForm = conflictWorkspace.state.tabs
-          .firstWhere((tab) => tab.tabId == dirtyTab)
-          .forms['client-form']!;
-      expect(dirtyForm.draft['name'], 'local draft');
-      expect(dirtyForm.conflict?.serverVersion, 5);
 
       final otherAccount = await store.restore(
         accountId: 'account-2',
@@ -151,9 +116,9 @@ void main() {
 
     expect(desktopTabs['client'], isEmpty);
     expect(desktopTabs['teacher'], [0, 1, 2]);
-    expect(desktopTabs['admin'], [0, 6, 2, 3]);
+    expect(desktopTabs['admin'], [0, 2, 3]);
     expect(desktopTabs['manager'], isNot(contains(5)));
-    expect(desktopTabs['director'], contains(5));
+    expect(desktopTabs['director'], isNot(contains(5)));
     expect(desktopTabs['system_admin'], desktopTabs['director']);
     expect(mobileTabs['manager'], contains(6));
     expect(mobileTabs['manager'], isNot(contains(5)));
@@ -169,57 +134,39 @@ void main() {
     expect(find.text('six-role-device-pass'), findsOneWidget);
   });
 
-  testWidgets(
-    'device mobile stack restores a four-level chain and authenticated link',
-    (tester) async {
-      final container = ProviderContainer();
-      addTearDown(container.dispose);
-      final stack = container.read(mobileContextStackProvider.notifier);
-      stack.start(link('student-1'));
-      stack.push(
-        link('lesson-1', type: EntityLinkType.lesson),
-        currentViewState: ContextViewState(
-          filters: const {'status': 'active'},
-          date: DateTime.utc(2026, 7, 30),
-          scrollOffset: 144,
-          selectedColumn: 'students',
-        ),
-      );
-      stack.push(link('homework-1', type: EntityLinkType.homework));
-      stack.push(link('task-1', type: EntityLinkType.task));
-      expect(container.read(mobileContextStackProvider).entries, hasLength(4));
+  testWidgets('device route stack restores a four-level context chain', (
+    tester,
+  ) async {
+    final workspace = controller('account-1');
+    workspace.replaceCurrentLink(
+      'tab-1',
+      link('student-1'),
+      viewState: ContextViewState(
+        filters: const {'status': 'active'},
+        date: DateTime.utc(2026, 7, 30),
+        scrollOffset: 144,
+        selectedColumn: 'students',
+      ),
+    );
+    workspace.push('tab-1', link('lesson-1', type: EntityLinkType.lesson));
+    workspace.push('tab-1', link('homework-1', type: EntityLinkType.homework));
+    workspace.push('tab-1', link('task-1', type: EntityLinkType.task));
+    expect(workspace.state.activeTab.routeStack, hasLength(4));
 
-      final serialized = container.read(mobileContextStackProvider).serialize();
-      stack.clear();
-      stack.restore(serialized);
-      expect(
-        container.read(mobileContextStackProvider).current?.link.entityId,
-        'task-1',
-      );
-      stack.pop();
-      stack.pop();
-      stack.pop();
-      final root = container.read(mobileContextStackProvider).current!;
-      expect(root.viewState.filters['status'], 'active');
-      expect(root.viewState.date, DateTime.utc(2026, 7, 30));
-      expect(root.viewState.scrollOffset, 144);
-      expect(root.viewState.selectedColumn, 'students');
-
-      stack.openAuthenticatedDeepLink(
-        home: link('home'),
-        target: link('lesson-deep', type: EntityLinkType.lesson),
-        authenticated: false,
-      );
-      expect(
-        container.read(mobileContextStackProvider).awaitingAuthentication,
-        isTrue,
-      );
-      stack.completeAuthentication(link('home'));
-      final authenticated = container.read(mobileContextStackProvider);
-      expect(authenticated.entries, hasLength(2));
-      expect(authenticated.current?.link.entityId, 'lesson-deep');
-
-      await tester.pumpWidget(const SizedBox.shrink());
-    },
-  );
+    final backend = InMemoryWorkspaceKeyValueStore();
+    final store = AccountWorkspaceStore(backend);
+    await store.save(workspace.state);
+    final restored = await store.restore(
+      accountId: 'account-1',
+      fallback: controller('account-1').state,
+      routeAllowed: (_) => true,
+    );
+    expect(restored.activeTab.currentRoute.link.entityId, 'task-1');
+    expect(
+      restored.activeTab.routeStack.first.viewState.filters['status'],
+      'active',
+    );
+    expect(restored.activeTab.routeStack.first.viewState.scrollOffset, 144);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }

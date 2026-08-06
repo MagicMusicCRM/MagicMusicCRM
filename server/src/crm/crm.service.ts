@@ -60,7 +60,7 @@ import { CrmListQuery } from "./dto/crm-list.query";
 import { StudentSearchQuery } from "./dto/student-search.query";
 import { UpdateStudentDto } from "./dto/update-student.dto";
 import { CrmPolicy } from "./crm.policy";
-import { TasksService } from "./tasks.service";
+import { SharedTaskService } from "./tasks/shared-task.service";
 import { ScheduleService } from "./schedule.service";
 import { TimelineService } from "./timeline.service";
 import { StudentFunnelService } from "./student-funnel.service";
@@ -101,7 +101,7 @@ export class CrmService {
     private readonly database: DatabaseService,
     private readonly audit: AuditService,
     private readonly policy: CrmPolicy,
-    private readonly tasks: TasksService,
+    private readonly tasks: SharedTaskService,
     private readonly schedule: ScheduleService,
     private readonly timeline: TimelineService,
     private readonly notifications: NotificationsService,
@@ -135,7 +135,18 @@ export class CrmService {
     if (studentIds.length) {
       [upcomingLessons, openTasks] = await Promise.all([
         this.schedule.listUpcomingLessonsForStudents(studentIds).catch(() => []),
-        this.tasks.listOpenTasksForStudents(studentIds).catch(() => []),
+        Promise.all(
+          studentIds.map((studentId) =>
+            this.tasks.list(actor, {
+              state: "open",
+              linkedEntityType: "student",
+              linkedEntityId: studentId,
+              limit: 20,
+            }),
+          ),
+        )
+          .then((results) => results.flatMap((result) => result.items))
+          .catch(() => []),
       ]);
     }
 
@@ -201,11 +212,16 @@ export class CrmService {
           ) as groups_count,
           (
             select count(*)
-            from app.tasks open_task
+          from app.canonical_tasks open_task
             where open_task.entity_type = 'student'
               and open_task.entity_id = s.id
               and open_task.deleted_at is null
               and open_task.status in ('open', 'in_progress')
+              and exists (
+                select 1 from app.shared_task_visibility visibility
+                where visibility.task_id = open_task.id
+                  and visibility.user_id = $2::uuid
+              )
           ) as open_tasks_count,
           (
             select count(*)
@@ -483,7 +499,11 @@ export class CrmService {
     ] = await Promise.all([
       this.listStudentGroups(actor, studentId, { limit: 100 }),
       this.schedule.listLessons(actor, { studentId, limit: 100 }),
-      this.tasks.listTasks(actor, { studentId, limit: 100 }),
+      this.tasks.list(actor, {
+        linkedEntityType: "student",
+        linkedEntityId: studentId,
+        limit: 100,
+      }),
       this.timeline.listComments(actor, {
         entityType: "student",
         entityId: studentId,
@@ -512,8 +532,8 @@ export class CrmService {
         id: task.id,
         type: "task",
         title: task.title,
-        body: task.description,
-        status: task.status,
+        body: task.body,
+        status: task.state,
         occurredAt: task.createdAt,
       })),
       ...lessons.items.map((lesson) => ({
@@ -1151,11 +1171,16 @@ export class CrmService {
       filters.push(`
         not exists (
           select 1
-          from app.tasks task_filter
+          from app.canonical_tasks task_filter
           where task_filter.entity_type = 'student'
             and task_filter.entity_id = s.id
             and task_filter.deleted_at is null
             and task_filter.status in ('open', 'in_progress')
+            and exists (
+              select 1 from app.shared_task_visibility visibility
+              where visibility.task_id = task_filter.id
+                and visibility.user_id = ${userId}::uuid
+            )
         )
       `);
     }
@@ -1225,7 +1250,7 @@ export class CrmService {
     return rows.map((row) => toTimelineDto(row));
   }
 
-  // The self-view lesson/task reads live in ScheduleService / TasksService.
+  // The self-view lesson/task reads live in ScheduleService / SharedTaskService.
   // Commerce is intentionally served through its separate projection boundary.
 
   private async listClientStudents(userId: string): Promise<StudentRow[]> {

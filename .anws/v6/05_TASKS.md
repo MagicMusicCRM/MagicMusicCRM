@@ -285,10 +285,10 @@ flowchart TD
   - **Проверка:** negative network assertions + backend direct denial + role navigation matrix.
   - **Оценка:** 5 ч · **Зависимости:** V6-503 · **Приоритет:** P0.
 
-- [ ] **V6-505** `[REQ-CFG-001..004]` — Реализовать unified CRM configuration workspace.
-  - **Работа:** object/category/field/options/layout/business number/selection configuration, school defaults + sparse branch overrides, draft → validate/impact preview → publish → rollback revision.
-  - **Критерий:** supported forms/boards consume effective config; invalid publish atomicity preserved; rollback never rewrites history.
-  - **Проверка:** config type matrix, preview/publish/rollback, concurrent version conflict and affected-screen trace.
+- [x] **V6-505** `[REQ-CFG-001..004]` — Реализовать unified CRM configuration workspace.
+  - **Работа:** object/category/field/options/layout/business number/selection configuration, school defaults + sparse branch overrides, draft → validate/impact preview → publish → rollback revision. Для select-полей `Варианты для полей` являются единственным пользовательским источником значений: редактор поля выбирает или создаёт именованный набор, а существующие inline-варианты losslessly преобразуются в наборы.
+  - **Критерий:** supported forms/boards consume effective config; в UI отсутствует второй inline-редактор вариантов; миграция сохраняет существующие labels/values и привязки; invalid publish atomicity preserved; rollback never rewrites history.
+  - **Проверка:** config type matrix, inline→option-set migration, create/select set from field editor, preview/publish/rollback, concurrent version conflict and affected-screen trace.
   - **Оценка:** 8 ч · **Зависимости:** V6-405, config backend readiness · **Приоритет:** P0.
 
 - [ ] **V6-506** `[REQ-CFG-005]` — Добавить config access delegation UX.

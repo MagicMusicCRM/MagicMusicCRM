@@ -6,6 +6,30 @@
 
 **Статус пакета:** READY FOR OWNER EXECUTION
 
+## Stage 9 production engineering release — 2026-08-06
+
+- App: `1.2.2+151`; current working-tree candidate on base
+  `532bf1eb8e500dfcd5e55a510a470e5e4545fc46`.
+- Windows x64 ZIP SHA-256:
+  `48C3D0CDCF43C7BD2EB8D5846461E2161289DCA9A5EAAE2FE072706D2BD4F8B5`.
+- Android APK SHA-256:
+  `D6DFC5392D1E153BE8340B29E9630AB6AA6775E7CB8AE181ABD61E0D853C3271`.
+- Production login and role shell: Client/Teacher/Admin/Manager/Director `5/5`
+  on Windows and Android 15/API 35 — ENGINEERING PASS.
+- `flutter analyze` PASS; Flutter `607/607` PASS; signed APK v2 verified.
+- Production backup/restore/up/down/up drill PASS; backend image deployed
+  healthy with migrations `0099..0101`.
+- Post-release API/RBAC matrix `27/27 PASS`; `/crm/client-pipelines` now returns
+  `200` for permitted Manager/Director actors while Admin tasks and Manager
+  school finance remain `403`.
+- Post-release Windows and Android device-check: `1/1 PASS` each, all five
+  real accounts.
+- **PENDING:** owner must still execute and sign the 26 mutation-, recipient-,
+  ledger- and worker-backed rows below. Engineering release is not OWNER UAT
+  PASS; client update manifest/public distribution was not changed.
+- Full evidence and artifact links:
+  [stage9-release-uat.md](stage9-release-uat.md).
+
 ## Engineering UAT candidate — 2026-08-05
 
 - App: `1.2.2+150`

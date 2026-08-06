@@ -351,8 +351,12 @@ void main() {
     addTearDown(tester.view.reset);
     final api = FakeCardApiClient(role: 'manager', student: _student);
     final router = GoRouter(
-      initialLocation: '/students/student-1?section=overview',
+      initialLocation: '/manager',
       routes: [
+        GoRoute(
+          path: '/manager',
+          builder: (context, state) => const Scaffold(body: Text('Manager')),
+        ),
         GoRoute(
           path: '/students/:id',
           builder: (context, state) => Scaffold(
@@ -389,14 +393,14 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    router.push('/students/student-1?section=overview');
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('Оплаты'));
     await tester.pumpAndSettle();
 
-    expect(
-      router.routeInformationProvider.value.uri.queryParameters['section'],
-      'payments',
-    );
+    expect(router.state.uri.queryParameters['section'], 'payments');
+    expect(find.byType(ClientCardRouteSurface), findsOneWidget);
     expect(find.byKey(const Key('client-payments-tab')), findsOneWidget);
     expect(api.studentCardLoadCount, 1);
   });

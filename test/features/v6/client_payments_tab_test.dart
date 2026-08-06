@@ -13,6 +13,60 @@ const _student = <String, dynamic>{
 };
 
 void main() {
+  testWidgets('lesson tab shows the reconciled server balance and its links', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = FakeCardApiClient(
+      role: 'manager',
+      student: _student,
+      studentSubscriptions: const [
+        {
+          'id': 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+          'status': 'active',
+          'packageName': 'Абонемент на август',
+          'packagePrice': 5000,
+          'lessonsTotal': 10,
+          'lessonsUsed': 2,
+          'lessonsReserved': 1,
+          'lessonsPaid': 5,
+          'paidMinor': '250000',
+          'debtMinor': '250000',
+          'expiresAt': '2026-09-01T00:00:00.000Z',
+        },
+      ],
+      studentAccounts: const [
+        {
+          'currencyCode': 'RUB',
+          'actualPaymentsMinor': '250000',
+          'adjustmentsMinor': '0',
+          'obligationDebitsMinor': '500000',
+          'obligationCreditsMinor': '0',
+          'writeOffsMinor': '0',
+          'balanceMinor': '-250000',
+          'debtMinor': '250000',
+        },
+      ],
+    );
+    await pumpClientCard(
+      tester,
+      api: api,
+      seed: _student,
+      entityType: 'student',
+    );
+
+    await tester.tap(find.text('Занятия'));
+    await tester.pumpAndSettle();
+    expect(find.text('Остаток занятий · 1 активный'), findsOneWidget);
+    expect(find.text('3'), findsWidgets);
+    await tester.tap(find.byKey(const Key('lesson-balance-subscriptions')));
+    await tester.pumpAndSettle();
+    expect(find.text('Выданные абонементы'), findsOneWidget);
+  });
+
   testWidgets(
     'manager records a branch-scoped immutable payment from the tab',
     (tester) async {
@@ -23,10 +77,21 @@ void main() {
       final api = FakeCardApiClient(
         role: 'manager',
         student: _student,
+        studentSubscriptions: const [
+          {
+            'id': 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+            'status': 'active',
+            'packageName': 'Абонемент на август',
+            'packagePrice': 5000,
+            'lessonsTotal': 10,
+            'lessonsUsed': 0,
+          },
+        ],
         studentAccounts: const [
           {
             'currencyCode': 'RUB',
             'actualPaymentsMinor': '300000',
+            'adjustmentsMinor': '0',
             'obligationDebitsMinor': '500000',
             'obligationCreditsMinor': '0',
             'writeOffsMinor': '0',
@@ -51,6 +116,9 @@ void main() {
             'invoiceIdentifier': 'ЧЕК-1',
             'status': 'paid',
             'acceptedByName': 'Мария Управляющая',
+            'issuedSubscriptionId': 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+            'subscriptionName': 'Абонемент на август',
+            'sourcePaymentId': null,
           },
         ],
       );
@@ -108,6 +176,13 @@ void main() {
       expect(call.data, containsPair('amountMinor', '150050'));
       expect(
         call.data,
+        containsPair(
+          'issuedSubscriptionId',
+          'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+        ),
+      );
+      expect(
+        call.data,
         containsPair('branchId', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'),
       );
       expect(call.data, containsPair('comment', 'Доплата за август'));
@@ -115,6 +190,40 @@ void main() {
         api.requests.where((item) => item == 'POST /crm/payments'),
         isEmpty,
       );
+
+      await tester.scrollUntilVisible(
+        find.byKey(
+          const ValueKey('adjust-payment-cccccccc-cccc-4ccc-8ccc-cccccccccccc'),
+        ),
+        160,
+        scrollable: find.descendant(
+          of: find.byKey(const Key('client-payments-tab')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      await tester.tap(
+        find.byKey(
+          const ValueKey('adjust-payment-cccccccc-cccc-4ccc-8ccc-cccccccccccc'),
+        ),
+      );
+      await tester.pump();
+      await tester.enterText(find.byKey(const Key('adjustment-amount')), '500');
+      await tester.enterText(
+        find.byKey(const Key('adjustment-reason')),
+        'Частичный возврат',
+      );
+      await tester.tap(find.byKey(const Key('adjustment-submit')));
+      await tester.pumpAndSettle();
+      final adjustment = api.idempotentRequests.singleWhere(
+        (item) => item.path.endsWith('/adjustments'),
+      );
+      expect(adjustment.data, {
+        'sourcePaymentId': 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        'kind': 'refund',
+        'amountMinor': '50000',
+        'occurredAt': isA<String>(),
+        'reason': 'Частичный возврат',
+      });
     },
   );
 

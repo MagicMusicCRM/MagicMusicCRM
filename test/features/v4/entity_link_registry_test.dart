@@ -85,6 +85,108 @@ void main() {
     );
   });
 
+  test('human presentation survives serialization and replaces raw ids', () {
+    final registry = EntityRouteRegistry();
+    final links = <EntityLink>[
+      EntityLink.typed(
+        entityType: EntityLinkType.client,
+        entityId: '8db5cf78-535d-4cbf-9689-c146a816e46a',
+        variant: 'student',
+        presentation: const EntityPresentationReference(
+          primary: 'Иванов Иван',
+          context: 'Сокол',
+        ),
+      ),
+      EntityLink.typed(
+        entityType: EntityLinkType.teacher,
+        entityId: 'teacher-id',
+        presentation: const EntityPresentationReference(primary: 'Петров Пётр'),
+      ),
+      EntityLink.typed(
+        entityType: EntityLinkType.branch,
+        entityId: 'branch-id',
+        presentation: const EntityPresentationReference(primary: 'Сокол'),
+      ),
+      EntityLink.typed(
+        entityType: EntityLinkType.room,
+        entityId: 'room-id',
+        presentation: const EntityPresentationReference(
+          primary: 'Аудитория 3',
+          context: 'Сокол',
+        ),
+      ),
+      EntityLink.typed(
+        entityType: EntityLinkType.lesson,
+        entityId: 'lesson-id',
+        presentation: const EntityPresentationReference(
+          primary: '05.08.2026 12:00 · Иванов Иван',
+        ),
+      ),
+      EntityLink.typed(
+        entityType: EntityLinkType.payment,
+        entityId: 'payment-id',
+        presentation: const EntityPresentationReference(primary: '№ MM-42'),
+      ),
+      EntityLink.typed(
+        entityType: EntityLinkType.subscription,
+        entityId: 'subscription-id',
+        presentation: const EntityPresentationReference(
+          primary: 'Вокал · 8 занятий',
+        ),
+      ),
+      EntityLink.typed(
+        entityType: EntityLinkType.task,
+        entityId: 'task-id',
+        presentation: const EntityPresentationReference(
+          primary: 'Позвонить клиенту',
+        ),
+      ),
+      EntityLink.typed(
+        entityType: EntityLinkType.user,
+        entityId: 'user-id',
+        presentation: const EntityPresentationReference(
+          primary: 'Сидорова Анна',
+        ),
+      ),
+    ];
+
+    for (final link in links) {
+      final restored = EntityLink.fromJson(link.toJson());
+      final title = registry
+          .resolve(restored, snapshot())
+          .canonicalLocation!
+          .title;
+      expect(restored.presentation?.primary, link.presentation?.primary);
+      expect(title, contains(link.presentation!.primary));
+      expect(title, isNot(contains(link.entityId)));
+    }
+  });
+
+  test('missing, forbidden and deleted references never expose raw ids', () {
+    final link = EntityLink.typed(
+      entityType: EntityLinkType.payment,
+      entityId: 'f890877f-ef34-4fe6-9584-a3ec66783e21',
+      presentation: const EntityPresentationReference(
+        primary: '№ MM-42',
+        context: 'Иванов Иван · Сокол',
+      ),
+    );
+    const resolver = EntityPresentationResolver();
+
+    expect(resolver.pageTitle(link), 'Оплата · № MM-42');
+    expect(
+      resolver.resolve(link, state: EntityRouteState.forbidden).primary,
+      'Связанная запись недоступна',
+    );
+    final deleted = resolver.resolve(link, state: EntityRouteState.deleted);
+    expect(deleted.primary, 'Удалённая запись');
+    expect(deleted.context, '№ MM-42 · Иванов Иван · Сокол');
+    expect(
+      '${deleted.primary} ${deleted.context}',
+      isNot(contains(link.entityId)),
+    );
+  });
+
   test(
     'client section deep links round-trip through the canonical registry',
     () {

@@ -47,6 +47,7 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
     ScheduleFocusState focus,
     DateTime day,
   ) async {
+    if (!widget.canWrite) return;
     await Future<void>.delayed(Duration.zero);
     if (!mounted) return;
     final created = await CreateLessonDialog.show(
@@ -86,6 +87,7 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
     DateTime startLocal,
     int durationMinutes,
   ) async {
+    if (!widget.canWrite) return;
     final roomId = (columnId == kUnassignedColumnId || columnId.isEmpty)
         ? null
         : columnId;
@@ -95,6 +97,9 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
       initialRoomId: roomId,
       initialBranchId: _selectedBranchId,
       initialDurationMinutes: durationMinutes,
+      clientType: widget.clientType,
+      clientId: widget.clientId,
+      clientName: widget.clientName,
     );
     if (created == true && mounted) {
       _fetchDayLessons(_selectedDate);
@@ -102,11 +107,15 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
   }
 
   Future<void> _openWeekCreate(DateTime startLocal, int durationMinutes) async {
+    if (!widget.canWrite) return;
     final created = await CreateLessonDialog.show(
       context,
       initialDate: startLocal,
       initialBranchId: _selectedBranchId,
       initialDurationMinutes: durationMinutes,
+      clientType: widget.clientType,
+      clientId: widget.clientId,
+      clientName: widget.clientName,
     );
     if (created == true && mounted) await _fetchAll();
   }
@@ -115,6 +124,48 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
     return _currentView == ScheduleView.week
         ? _fetchAll()
         : _fetchDayLessons(_selectedDate);
+  }
+
+  Future<bool> _previewLessonChange(
+    Map<String, dynamic> lesson, {
+    required String scheduledAt,
+    String? teacherId,
+    String? roomId,
+    int? durationMinutes,
+  }) async {
+    final studentId = lesson['student_id']?.toString();
+    final leadId = lesson['lead_id']?.toString();
+    final clientId = leadId?.isNotEmpty == true ? leadId : studentId;
+    final clientType = leadId?.isNotEmpty == true ? 'lead' : 'student';
+    final resolvedTeacherId = teacherId ?? lesson['teacher_id']?.toString();
+    final branchId = lesson['branch_id']?.toString();
+    final resolvedRoomId = roomId ?? lesson['room_id']?.toString();
+    if (clientId == null ||
+        resolvedTeacherId == null ||
+        branchId == null ||
+        resolvedRoomId == null) {
+      return true;
+    }
+    try {
+      final violations = await ref
+          .read(magicApiClientProvider)
+          .previewLessonConstraints(
+            clientType: clientType,
+            clientId: clientId,
+            teacherId: resolvedTeacherId,
+            branchId: branchId,
+            roomId: resolvedRoomId,
+            scheduledAt: scheduledAt,
+            durationMinutes: durationMinutes ?? _durationMinutes(lesson),
+            excludeLessonId: lesson['id']?.toString(),
+          );
+      if (violations.isEmpty) return true;
+      if (mounted) await _showScheduleViolations(violations);
+      return false;
+    } catch (error) {
+      debugPrint('Schedule constraints preview failed: $error');
+      return true;
+    }
   }
 
   // ── Optimistic move + rollback + undo (KVA-195) ────────────────────────────
@@ -127,12 +178,15 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
     DateTime newStartLocal,
     String? newColumnId, {
     bool preserveRoom = false,
+    bool teacherColumns = false,
   }) async {
     final lessonId = lesson['id']?.toString();
     if (lessonId == null || _movingLesson) return;
 
     final currentRoomId = lesson['room_id']?.toString();
-    final targetRoomId = preserveRoom
+    final currentTeacherId = lesson['teacher_id']?.toString();
+    final targetTeacherId = teacherColumns ? newColumnId : currentTeacherId;
+    final targetRoomId = preserveRoom || teacherColumns
         ? currentRoomId
         : (newColumnId == null ||
               newColumnId == kUnassignedColumnId ||
@@ -146,7 +200,8 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
         DateUtils.isSameDay(currentStart, newStartLocal) &&
         currentStart.hour == newStartLocal.hour &&
         currentStart.minute == newStartLocal.minute &&
-        (targetRoomId ?? '') == (currentRoomId ?? '')) {
+        (targetRoomId ?? '') == (currentRoomId ?? '') &&
+        (targetTeacherId ?? '') == (currentTeacherId ?? '')) {
       return;
     }
 
@@ -159,13 +214,26 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
       newStartLocal.minute,
     ).subtract(Duration(minutes: offset));
     final newScheduledAtIso = utc.toIso8601String();
+    final canMove = await _previewLessonChange(
+      lesson,
+      scheduledAt: newScheduledAtIso,
+      teacherId: targetTeacherId,
+      roomId: targetRoomId,
+    );
+    if (!canMove || !mounted) return;
 
     // Snapshot for rollback / undo BEFORE the in-place patch.
     final prevScheduledAt = lesson['scheduled_at'];
     final prevRoomId = lesson['room_id'];
+    final prevTeacherId = lesson['teacher_id'];
+    final prevTeacherName = lesson['teacher_name'];
     final prevConflicts = lesson['conflict_types'];
     final roomChanged =
         !preserveRoom && targetRoomId != null && targetRoomId != currentRoomId;
+    final teacherChanged =
+        teacherColumns &&
+        targetTeacherId != null &&
+        targetTeacherId != currentTeacherId;
 
     _emitState(() {
       _movingLesson = true;
@@ -178,6 +246,10 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
         lesson['room_id'] = targetRoomId;
         lesson['room_name'] = _roomNames[targetRoomId];
       }
+      if (teacherChanged) {
+        lesson['teacher_id'] = targetTeacherId;
+        lesson['teacher_name'] = _teacherNames[targetTeacherId];
+      }
     });
 
     try {
@@ -188,6 +260,7 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
             expectedVersion: (lesson['version'] as num?)?.toInt() ?? 1,
             scheduledAt: newScheduledAtIso,
             roomId: roomChanged ? targetRoomId : null,
+            teacherId: teacherChanged ? targetTeacherId : null,
           );
       if (!mounted) return;
       await _refreshEditedSchedule(); // server re-derives conflicts
@@ -204,11 +277,12 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
           detail: conflicts.map(conflictLabel).join(', '),
           type: MagicToastType.danger,
         );
-      } else if (prevRoomId != null || !roomChanged) {
+      } else if ((prevRoomId != null || !roomChanged) &&
+          (prevTeacherId != null || !teacherChanged)) {
         // Undo restores time + room. Clearing a room back to «Без аудитории»
         // isn't expressible via the PATCH contract, so only offer undo when the
         // previous room is reversible (a real room, or the room didn't change).
-        _showUndoableMove(lessonId, prevScheduledAt, prevRoomId);
+        _showUndoableMove(lessonId, prevScheduledAt, prevRoomId, prevTeacherId);
       } else {
         MagicToast.show(
           context,
@@ -224,6 +298,8 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
         lesson['room_name'] = prevRoomId == null
             ? null
             : _roomNames[prevRoomId.toString()];
+        lesson['teacher_id'] = prevTeacherId;
+        lesson['teacher_name'] = prevTeacherName;
         lesson['conflict_types'] = prevConflicts;
       });
       final violations = lessonConstraintViolations(e);
@@ -248,6 +324,8 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
           lesson['room_name'] = prevRoomId == null
               ? null
               : _roomNames[prevRoomId.toString()];
+          lesson['teacher_id'] = prevTeacherId;
+          lesson['teacher_name'] = prevTeacherName;
           lesson['conflict_types'] = prevConflicts;
         });
         MagicToast.show(
@@ -333,6 +411,7 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
     String lessonId,
     dynamic prevScheduledAt,
     dynamic prevRoomId,
+    dynamic prevTeacherId,
   ) {
     final messenger = ScaffoldMessenger.of(context);
     messenger.clearSnackBars();
@@ -345,7 +424,8 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
         action: SnackBarAction(
           label: 'Отменить',
           textColor: Colors.white,
-          onPressed: () => _undoMove(lessonId, prevScheduledAt, prevRoomId),
+          onPressed: () =>
+              _undoMove(lessonId, prevScheduledAt, prevRoomId, prevTeacherId),
         ),
       ),
     );
@@ -355,7 +435,9 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
     String lessonId,
     dynamic prevScheduledAt,
     dynamic prevRoomId,
+    dynamic prevTeacherId,
   ) async {
+    if (!widget.canWrite) return;
     if (prevScheduledAt == null) return;
     try {
       await ref
@@ -372,6 +454,7 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
                 1,
             scheduledAt: prevScheduledAt.toString(),
             roomId: prevRoomId?.toString(),
+            teacherId: prevTeacherId?.toString(),
           );
       if (mounted) await _refreshEditedSchedule();
     } catch (e) {
@@ -393,6 +476,7 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
     DateTime newStartLocal,
     int newDurationMinutes,
   ) async {
+    if (!widget.canWrite) return;
     final lessonId = lesson['id']?.toString();
     if (lessonId == null || _movingLesson) return;
 
@@ -405,6 +489,12 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
       newStartLocal.minute,
     ).subtract(Duration(minutes: offset));
     final newScheduledAtIso = utc.toIso8601String();
+    final canResize = await _previewLessonChange(
+      lesson,
+      scheduledAt: newScheduledAtIso,
+      durationMinutes: newDurationMinutes,
+    );
+    if (!canResize || !mounted) return;
 
     final prevScheduledAt = lesson['scheduled_at'];
     final prevDuration = lesson['duration_minutes'];
@@ -477,203 +567,106 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
   // ── Day view by Teacher ───────────────────────────────────────────────────
   Widget _buildDayViewByTeacher() {
     final dayLessons = _lessonsForDate(_selectedDate);
-
-    // Get unique teacher IDs for this day
-    final teacherIds = dayLessons
-        .map((l) => l['teacher_id']?.toString())
-        .where((id) => id != null)
-        .toSet()
-        .toList();
-    teacherIds.sort(
-      (a, b) => (_teacherNames[a] ?? '').compareTo(_teacherNames[b] ?? ''),
-    );
-
-    if (_selectedTeacherId == null && teacherIds.isNotEmpty) {
-      _selectedTeacherId = teacherIds.first;
+    final teacherIds =
+        dayLessons
+            .map((lesson) => lesson['teacher_id']?.toString())
+            .whereType<String>()
+            .toSet()
+            .toList()
+          ..sort(
+            (left, right) => (_teacherNames[left] ?? '').compareTo(
+              _teacherNames[right] ?? '',
+            ),
+          );
+    if (teacherIds.isEmpty) {
+      return Center(
+        child: Text(
+          'Нет занятий на этот день',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
     }
 
-    // Filter lessons for selected teacher
-    final teacherLessons = dayLessons
-        .where((l) => l['teacher_id']?.toString() == _selectedTeacherId)
-        .toList();
-    teacherLessons.sort((a, b) {
-      final aTime = _parseLessonTime(a);
-      final bTime = _parseLessonTime(b);
-      if (aTime == null || bTime == null) return 0;
-      return aTime.compareTo(bTime);
-    });
-
-    // All teachers from the data (not just today)
-    final allTeachers = _teachers.where((t) {
-      // Only show teachers that have lessons in this branch
-      return true;
-    }).toList();
-
-    return Column(
-      children: [
-        // Teacher selector
-        if (allTeachers.isNotEmpty)
-          SizedBox(
-            height: 80,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: allTeachers.length,
-              itemBuilder: (context, i) {
-                final t = allTeachers[i];
-                final tid = t['id'].toString();
-                final isSelected = _selectedTeacherId == tid;
-                final name = _teacherNames[tid] ?? 'Без имени';
-                final initials = name
-                    .split(' ')
-                    .map((w) => w.isNotEmpty ? w[0] : '')
-                    .take(2)
-                    .join('')
-                    .toUpperCase();
-                final lessonsCount = dayLessons
-                    .where((l) => l['teacher_id']?.toString() == tid)
-                    .length;
-
-                return GestureDetector(
-                  onTap: () => _emitState(() => _selectedTeacherId = tid),
-                  child: Container(
-                    width: 160,
-                    margin: const EdgeInsets.only(right: 8),
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? AppColor.gold.withAlpha(30)
-                          : Theme.of(context).colorScheme.surface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isSelected ? AppColor.gold : Colors.transparent,
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: AppColor.gold.withAlpha(50),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            initials,
-                            style: const TextStyle(
-                              color: AppColor.gold,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ),
-                        SizedBox(width: 8),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                name,
-                                style: TextStyle(
-                                  color: isSelected
-                                      ? Theme.of(context).colorScheme.onSurface
-                                      : Theme.of(
-                                          context,
-                                        ).colorScheme.onSurfaceVariant,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              Text(
-                                '$lessonsCount зан.',
-                                style: TextStyle(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant.withAlpha(150),
-                                  fontSize: 10,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
+    final columns = [
+      for (var i = 0; i < teacherIds.length; i++)
+        ScheduleColumn(
+          id: teacherIds[i],
+          name: _teacherNames[teacherIds[i]] ?? 'Педагог',
+          color: _roomColors[i % _roomColors.length],
+          hasConflict: dayLessons.any(
+            (lesson) =>
+                lesson['teacher_id']?.toString() == teacherIds[i] &&
+                conflictTypes(lesson['conflict_types']).isNotEmpty,
           ),
-        SizedBox(height: 8),
-        // Teacher lessons list
-        Expanded(
-          child: teacherLessons.isEmpty
-              ? Center(
-                  child: Text(
-                    _selectedTeacherId == null
-                        ? 'Выберите педагога'
-                        : 'Нет занятий на этот день',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: teacherLessons.length,
-                  itemBuilder: (context, i) =>
-                      _buildTeacherLessonCard(teacherLessons[i]),
-                ),
         ),
-      ],
-    );
-  }
+    ];
+    final entries = <ScheduleEntry>[];
+    for (final lesson in dayLessons) {
+      final start = _parseLessonTime(lesson);
+      final teacherId = lesson['teacher_id']?.toString();
+      if (start == null || teacherId == null) continue;
+      final group = lesson['group_name']?.toString().trim() ?? '';
+      final student = _studentNames[lesson['student_id']?.toString()] ?? '';
+      final lead = lesson['lead_name']?.toString().trim() ?? '';
+      final branch = lesson['branch_name']?.toString().trim() ?? '';
+      final room = lesson['room_name']?.toString().trim() ?? '';
+      entries.add(
+        ScheduleEntry(
+          lesson: lesson,
+          id: lesson['id']?.toString() ?? '',
+          columnId: teacherId,
+          startLocal: start,
+          durationMinutes: _durationMinutes(lesson),
+          title: group.isNotEmpty
+              ? group
+              : student.isNotEmpty
+              ? student
+              : lead.isNotEmpty
+              ? lead
+              : 'Занятие',
+          subtitle: [
+            branch.isEmpty ? 'Филиал' : branch,
+            room.isEmpty ? 'Без аудитории' : room,
+          ].join(' · '),
+          isTrial: lesson['is_trial'] == true,
+          conflicts: conflictTypes(lesson['conflict_types']),
+          movable:
+              widget.canWrite &&
+              lesson['id'] != null &&
+              lesson['status'] != 'cancelled',
+          highlighted:
+              _highlightLessonId != null &&
+              lesson['id']?.toString() == _highlightLessonId,
+          clientContext: widget.clientId != null,
+          searchContext: _hasScheduleSearch,
+          relatedClient: _isRelatedLesson(lesson),
+        ),
+      );
+    }
 
-  Widget _buildTeacherLessonCard(Map<String, dynamic> lesson) {
-    final start = _parseLessonTime(lesson);
-    if (start == null) return const SizedBox.shrink();
-
-    final duration = _durationMinutes(lesson);
-    final end = start.add(Duration(minutes: duration));
-
-    final timeStr =
-        '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')} – '
-        '${end.hour.toString().padLeft(2, '0')}:${end.minute.toString().padLeft(2, '0')}';
-
-    // Пробное по лиду: student_id пуст, имя приходит в lead_name — карточка
-    // не должна падать в безликое «Ученик».
-    final leadName = lesson['lead_name']?.toString().trim() ?? '';
-    final studentName =
-        _studentNames[lesson['student_id']?.toString()] ??
-        (leadName.isNotEmpty ? '$leadName (лид)' : 'Ученик');
-    final roomId = lesson['room_id']?.toString();
-    final roomName = roomId != null
-        ? (_roomNames[roomId] ?? 'Аудитория')
-        : 'Без аудитории';
-    final roomColor = roomId != null
-        ? (_roomColorMap[roomId] ??
-              Theme.of(context).colorScheme.onSurfaceVariant)
-        : Theme.of(context).colorScheme.onSurfaceVariant;
-    final conflicts = conflictTypes(lesson['conflict_types']);
-
-    return TeacherLessonCard(
-      timeStr: timeStr,
-      studentName: studentName,
-      roomName: roomName,
-      roomColor: roomColor,
-      stateProjection: LessonStateProjection.fromMap(lesson),
-      isTrial: lesson['is_trial'] == true,
-      hasConflict: conflicts.isNotEmpty,
-      onTap: () => _showLessonDetails(lesson),
+    return ScheduleDayCanvas(
+      key: ValueKey(
+        'teacher-day-${dateOnly(_selectedDate)}-'
+        '${_selectedBranchId ?? ''}-${columns.length}',
+      ),
+      date: _selectedDate,
+      columns: columns,
+      entries: entries,
+      allowCreate: widget.canWrite,
+      onCreateSlot: (_, start, duration) => _openWeekCreate(start, duration),
+      onMove: (lesson, start, teacherId) =>
+          _moveLessonOptimistic(lesson, start, teacherId, teacherColumns: true),
+      onResize: _resizeLesson,
+      onOpenLesson: _showLessonDetails,
+      initialVerticalOffset: _dayScrollOffset,
+      onVerticalOffsetChanged: _updateDayScrollOffset,
     );
   }
 
   // ── Lesson details dialog ─────────────────────────────────────────────────
-  void _showLessonDetails(Map<String, dynamic> lesson) {
+  Future<void> _showLessonDetails(Map<String, dynamic> lesson) async {
     final start = _parseLessonTime(lesson);
     if (start == null) return;
 
@@ -695,7 +688,13 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
     final conflicts = conflictTypes(lesson['conflict_types']);
     final lessonId = lesson['id']?.toString();
     final currentStatus = lesson['status']?.toString() ?? 'scheduled';
-    final snapshot = ref.read(capabilitySnapshotProvider).asData?.value;
+    CapabilitySnapshot? snapshot;
+    try {
+      snapshot = await ref.read(capabilitySnapshotProvider.future);
+    } catch (_) {
+      // Linked rows fail closed below; lesson details themselves remain useful.
+    }
+    if (!mounted) return;
     final registry = EntityRouteRegistry();
     LessonEntityReference reference({
       required IconData icon,
@@ -724,6 +723,31 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
       start.day,
     ).toIso8601String();
     final references = [
+      if (lessonId?.isNotEmpty == true)
+        reference(
+          icon: Icons.event_note_rounded,
+          label: 'Занятие',
+          value: studentName,
+          link: EntityLink.typed(
+            entityType: EntityLinkType.lesson,
+            entityId: lessonId!,
+            presentation: EntityPresentationReference(
+              primary: studentName,
+              context: branchName,
+            ),
+            optionalFocus: EntityLinkFocus(
+              focus: 'lesson',
+              filter: {
+                'date': dateFilter,
+                if (branchId?.isNotEmpty == true) 'branchId': branchId,
+                if (studentId?.isNotEmpty == true) 'clientType': 'student',
+                if (leadId?.isNotEmpty == true) 'clientType': 'lead',
+                if (studentId?.isNotEmpty == true) 'clientId': studentId,
+                if (leadId?.isNotEmpty == true) 'clientId': leadId,
+              },
+            ),
+          ),
+        ),
       reference(
         icon: Icons.person_rounded,
         label: leadId?.isNotEmpty == true ? 'Лид' : 'Ученик',
@@ -733,6 +757,10 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
                 entityType: EntityLinkType.client,
                 entityId: leadId?.isNotEmpty == true ? leadId! : studentId!,
                 variant: leadId?.isNotEmpty == true ? 'lead' : 'student',
+                presentation: EntityPresentationReference(
+                  primary: studentName,
+                  context: branchName,
+                ),
               )
             : null,
       ),
@@ -744,6 +772,10 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
             ? EntityLink.typed(
                 entityType: EntityLinkType.teacher,
                 entityId: teacherId!,
+                presentation: EntityPresentationReference(
+                  primary: teacherName,
+                  context: branchName,
+                ),
                 optionalFocus: EntityLinkFocus(
                   focus: 'schedule',
                   filter: {'teacherId': teacherId, 'date': dateFilter},
@@ -759,6 +791,10 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
             ? EntityLink.typed(
                 entityType: EntityLinkType.room,
                 entityId: roomId!,
+                presentation: EntityPresentationReference(
+                  primary: roomName,
+                  context: branchName,
+                ),
                 optionalFocus: EntityLinkFocus(
                   focus: 'schedule',
                   filter: {'roomId': roomId, 'date': dateFilter},
@@ -774,6 +810,10 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
           link: EntityLink.typed(
             entityType: EntityLinkType.group,
             entityId: groupId!,
+            presentation: EntityPresentationReference(
+              primary: groupName,
+              context: branchName,
+            ),
             optionalFocus: EntityLinkFocus(
               focus: 'schedule',
               filter: {'date': dateFilter},
@@ -788,6 +828,7 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
           link: EntityLink.typed(
             entityType: EntityLinkType.branch,
             entityId: branchId!,
+            presentation: EntityPresentationReference(primary: branchName),
             optionalFocus: EntityLinkFocus(
               focus: 'schedule',
               filter: {'branchId': branchId, 'date': dateFilter},
@@ -799,7 +840,7 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
     final timeRange =
         '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')} – '
         '${end.hour.toString().padLeft(2, '0')}:${end.minute.toString().padLeft(2, '0')}';
-    showLessonDetailsSheet(
+    await showLessonDetailsSheet(
       context,
       teacherName: teacherName,
       studentName: studentName,
@@ -824,18 +865,20 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
       timeRange: timeRange,
       currentStatus: currentStatus,
       conflicts: conflicts,
-      lessonId: lessonId,
+      lessonId: widget.canWrite ? lessonId : null,
       onEdit: () => _editLesson(lesson),
       onDelete: () => _deleteLesson(lessonId!),
     );
   }
 
   Future<void> _editLesson(Map<String, dynamic> lesson) async {
+    if (!widget.canWrite) return;
     final changed = await CreateLessonDialog.show(context, lesson: lesson);
     if (changed == true) _fetchAll();
   }
 
   Future<void> _deleteLesson(String lessonId) async {
+    if (!widget.canWrite) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(magicCrmServiceProvider).deleteLesson(lessonId);

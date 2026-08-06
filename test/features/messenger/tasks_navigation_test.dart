@@ -110,6 +110,15 @@ void main() {
     expect(api.calls.where((call) => call.path.contains('task')), isEmpty);
   });
 
+  testWidgets(
+    'teacher chat does not request the privileged profile directory',
+    (tester) async {
+      final api = await _pumpStaffMessenger(tester, role: 'teacher');
+
+      expect(api.callsWhere('GET', '/admin/profiles'), isEmpty);
+    },
+  );
+
   testWidgets('manager Overview KPI callbacks use canonical destinations', (
     tester,
   ) async {

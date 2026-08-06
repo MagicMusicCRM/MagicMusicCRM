@@ -10,6 +10,8 @@ export interface SharedTaskRow {
   start_at: Date | string | null;
   end_at: Date | string | null;
   state: SharedTaskState;
+  priority: "low" | "medium" | "high";
+  branch_id: string | null;
   linked_entity_type: string | null;
   linked_entity_id: string | null;
   version: number | string;

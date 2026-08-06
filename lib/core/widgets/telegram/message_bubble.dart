@@ -6,6 +6,7 @@ import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'package:magic_music_crm/core/widgets/voice_player_widget.dart';
 import 'package:magic_music_crm/core/widgets/file_attachment_widget.dart';
 import 'package:magic_music_crm/core/widgets/telegram/avatar_widget.dart';
+import 'package:magic_music_crm/core/widgets/v7/magic_sheet.dart';
 
 /// Telegram-style message bubble.
 class MessageBubble extends StatelessWidget {
@@ -444,15 +445,15 @@ class MessageBubble extends StatelessWidget {
             color: isMine
                 ? accent.withAlpha(38)
                 : (isDark
-                    ? Colors.white.withAlpha(20)
-                    : Colors.black.withAlpha(10)),
+                      ? Colors.white.withAlpha(20)
+                      : Colors.black.withAlpha(10)),
             borderRadius: BorderRadius.circular(AppRadius.chip),
             border: Border.all(
               color: isMine
                   ? accent.withAlpha(160)
                   : (isDark
-                      ? Colors.white.withAlpha(20)
-                      : Colors.black.withAlpha(20)),
+                        ? Colors.white.withAlpha(20)
+                        : Colors.black.withAlpha(20)),
               width: isMine ? 1 : 0.5,
             ),
           ),
@@ -491,122 +492,108 @@ class MessageBubble extends StatelessWidget {
   }
 
   void _showContextMenu(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: const BorderRadius.vertical(
-            top: Radius.circular(AppRadius.sheet),
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Emoji Picker Row
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: ['👍', '❤️', '🔥', '😂', '😮', '😢', '🙏', '💯']
-                        .map((emoji) {
-                          return IconButton(
-                            tooltip: 'Реакция $emoji',
-                            icon: Text(
-                              emoji,
-                              style: const TextStyle(fontSize: 24),
-                            ),
-                            onPressed: () {
-                              Navigator.pop(context);
-                              onReact?.call(emoji);
-                            },
-                          );
-                        })
-                        .toList(),
-                  ),
-                ),
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.copy_rounded),
-                title: const Text('Копировать'),
-                onTap: () {
-                  Navigator.pop(context);
-                  Clipboard.setData(
-                    ClipboardData(text: message['content'] ?? ''),
+    showMagicSheet<void>(
+      context,
+      title: 'Действия с сообщением',
+      icon: Icons.more_horiz_rounded,
+      builder: (context) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Emoji Picker Row
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: ['👍', '❤️', '🔥', '😂', '😮', '😢', '🙏', '💯'].map((
+                  emoji,
+                ) {
+                  return IconButton(
+                    tooltip: 'Реакция $emoji',
+                    icon: Text(emoji, style: const TextStyle(fontSize: 24)),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      onReact?.call(emoji);
+                    },
                   );
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Скопировано в буфер обмена'),
-                      duration: Duration(seconds: 2),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                },
+                }).toList(),
               ),
-              if (onReply != null)
-                ListTile(
-                  leading: const Icon(Icons.reply_rounded),
-                  title: const Text('Ответить'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    onReply!();
-                  },
-                ),
-              if (isMe && onEdit != null && message['message_type'] == 'text')
-                ListTile(
-                  leading: const Icon(Icons.edit_rounded),
-                  title: const Text('Изменить'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    onEdit!();
-                  },
-                ),
-              if (onPin != null)
-                ListTile(
-                  leading: Icon(
-                    message['pinned_at'] != null
-                        ? Icons.push_pin_outlined
-                        : Icons.push_pin_rounded,
-                  ),
-                  title: Text(
-                    message['pinned_at'] != null ? 'Открепить' : 'Закрепить',
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    onPin!();
-                  },
-                ),
-              if (onForward != null)
-                ListTile(
-                  leading: const Icon(Icons.forward_rounded),
-                  title: const Text('Переслать'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    onForward!();
-                  },
-                ),
-              if (onDelete != null && (isMe || canDeleteOthers))
-                ListTile(
-                  leading: const Icon(
-                    Icons.delete_outline_rounded,
-                    color: AppColor.danger,
-                  ),
-                  title: const Text(
-                    'Удалить',
-                    style: TextStyle(color: AppColor.danger),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    onDelete!();
-                  },
-                ),
-            ],
+            ),
           ),
-        ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.copy_rounded),
+            title: const Text('Копировать'),
+            onTap: () {
+              Navigator.pop(context);
+              Clipboard.setData(ClipboardData(text: message['content'] ?? ''));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Скопировано в буфер обмена'),
+                  duration: Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+          ),
+          if (onReply != null)
+            ListTile(
+              leading: const Icon(Icons.reply_rounded),
+              title: const Text('Ответить'),
+              onTap: () {
+                Navigator.pop(context);
+                onReply!();
+              },
+            ),
+          if (isMe && onEdit != null && message['message_type'] == 'text')
+            ListTile(
+              leading: const Icon(Icons.edit_rounded),
+              title: const Text('Изменить'),
+              onTap: () {
+                Navigator.pop(context);
+                onEdit!();
+              },
+            ),
+          if (onPin != null)
+            ListTile(
+              leading: Icon(
+                message['pinned_at'] != null
+                    ? Icons.push_pin_outlined
+                    : Icons.push_pin_rounded,
+              ),
+              title: Text(
+                message['pinned_at'] != null ? 'Открепить' : 'Закрепить',
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                onPin!();
+              },
+            ),
+          if (onForward != null)
+            ListTile(
+              leading: const Icon(Icons.forward_rounded),
+              title: const Text('Переслать'),
+              onTap: () {
+                Navigator.pop(context);
+                onForward!();
+              },
+            ),
+          if (onDelete != null && (isMe || canDeleteOthers))
+            ListTile(
+              leading: const Icon(
+                Icons.delete_outline_rounded,
+                color: AppColor.danger,
+              ),
+              title: const Text(
+                'Удалить',
+                style: TextStyle(color: AppColor.danger),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                onDelete!();
+              },
+            ),
+        ],
       ),
     );
   }

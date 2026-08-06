@@ -93,8 +93,8 @@ void main() {
     });
 
     test('Управляющий: operational CRM без раздела «Финансы» (5)', () {
-      expect(crmVisibleTabs('manager', isDesktop: true), [0, 1, 2, 3, 4, 6, 7]);
-      expect(crmVisibleTabs('manager', isDesktop: false), [0, 1, 2, 3, 4, 6]);
+      expect(crmVisibleTabs('manager', isDesktop: true), [0, 1, 2, 3, 6, 7, 8]);
+      expect(crmVisibleTabs('manager', isDesktop: false), [0, 1, 2, 3, 6, 8]);
     });
 
     test('Директор: единая «Аналитика» без дублирующей вкладки 5', () {
@@ -103,11 +103,11 @@ void main() {
         1,
         2,
         3,
-        4,
         6,
         7,
+        8,
       ]);
-      expect(crmVisibleTabs('director', isDesktop: false), [0, 1, 2, 3, 4, 6]);
+      expect(crmVisibleTabs('director', isDesktop: false), [0, 1, 2, 3, 6, 8]);
     });
 
     test('Администратор системы == Директор (superuser keeps full access)', () {
@@ -163,6 +163,20 @@ void main() {
       for (final role in ['admin', 'manager', 'director', 'system_admin']) {
         expect(crmVisibleTabs(role, isDesktop: true), isNot(contains(5)));
       }
+    });
+
+    test('Пользователи (4) собраны в единственные Настройки (8)', () {
+      final visible = crmVisibleTabs('director', isDesktop: true);
+      expect(visible, isNot(contains(4)));
+      expect(visible, contains(8));
+      expect(
+        crmResolveVisibleTab(
+          visibleTabs: visible,
+          requestedTab: 4,
+          currentTab: 0,
+        ),
+        8,
+      );
     });
   });
 

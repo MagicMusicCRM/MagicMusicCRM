@@ -43,6 +43,14 @@ export class SharedTaskController {
     return this.tasks.history(actor, taskId);
   }
 
+  @Get("calendar")
+  calendar(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: SharedTaskListQuery,
+  ) {
+    return this.tasks.calendar(actor, query);
+  }
+
   @Post("audience-preview")
   audiencePreview(
     @CurrentActor() actor: ActorContext,

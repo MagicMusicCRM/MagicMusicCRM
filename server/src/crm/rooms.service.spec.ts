@@ -5,6 +5,7 @@ import { RoomsService } from "./rooms.service";
 
 describe("RoomsService", () => {
   const actor = { userId: "manager-a", role: "manager" as const };
+  const director = { userId: "director-a", role: "director" as const };
 
   const build = (query: jest.Mock) => {
     const database = { query };
@@ -12,6 +13,7 @@ describe("RoomsService", () => {
     const policy = {
       assertCanReadOperationalData: jest.fn(),
       assertCanWriteCrm: jest.fn(),
+      assertCanManageSystemSettings: jest.fn(),
     };
     const service = new RoomsService(
       database as unknown as DatabaseService,
@@ -59,7 +61,13 @@ describe("RoomsService", () => {
       ],
     });
 
-    expect(query.mock.calls[0][1]).toEqual(["branch-a", null, 5]);
+    expect(query.mock.calls[0][1]).toEqual([
+      "branch-a",
+      null,
+      5,
+      "manager",
+      "manager-a",
+    ]);
   });
 
   it("returns room availability with slot conflicts", async () => {
@@ -152,7 +160,7 @@ describe("RoomsService", () => {
     ]);
 
     await expect(
-      service.createRoom(actor, {
+      service.createRoom(director, {
         branchId: "branch-a",
         name: " 102 ",
         capacity: 6,
@@ -166,7 +174,7 @@ describe("RoomsService", () => {
       createdAt: "2026-06-12T00:00:00.000Z",
     });
 
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(policy.assertCanManageSystemSettings).toHaveBeenCalledWith(director);
     expect(query.mock.calls[0][1]).toEqual(["branch-a", "102", 6]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -195,7 +203,7 @@ describe("RoomsService", () => {
     ]);
 
     await expect(
-      service.updateRoom(actor, "room-a", {
+      service.updateRoom(director, "room-a", {
         branchId: "branch-b",
         name: " 201 ",
         capacity: 8,
@@ -207,11 +215,11 @@ describe("RoomsService", () => {
       name: "201",
       capacity: 8,
     });
-    await expect(service.deleteRoom(actor, "room-a")).resolves.toEqual({
+    await expect(service.deleteRoom(director, "room-a")).resolves.toEqual({
       success: true,
     });
 
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledTimes(2);
+    expect(policy.assertCanManageSystemSettings).toHaveBeenCalledTimes(2);
     expect(query.mock.calls[0][1]).toEqual(["room-a", "branch-b", "201", 8]);
     expect(query.mock.calls[1][1]).toEqual(["room-a"]);
     expect(audit.record).toHaveBeenCalledWith(

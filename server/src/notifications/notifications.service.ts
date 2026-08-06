@@ -68,50 +68,25 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit(): void {
-    // Kill-switches: each scheduler is OFF unless explicitly enabled, so
-    // deploying the code never starts pushing to real users by surprise.
-    // Enable with LESSON_REMINDERS_ENABLED=true / TASK_REMINDERS_ENABLED=true
-    // once the deployment is verified.
+    // The canonical shared-task worker owns task reminders. This timer only
+    // owns lesson reminders.
     const lessonsEnabled = process.env.LESSON_REMINDERS_ENABLED === 'true';
-    const tasksEnabled = process.env.TASK_REMINDERS_ENABLED === 'true';
     if (!lessonsEnabled) {
       this.logger.log(
         'Lesson reminders disabled (set LESSON_REMINDERS_ENABLED=true to enable)'
       );
     }
-    if (!tasksEnabled) {
-      this.logger.log(
-        'Task reminders disabled (set TASK_REMINDERS_ENABLED=true to enable)'
-      );
-    }
-    if (!lessonsEnabled && !tasksEnabled) return;
-    // Scan every minute: the -10m and overdue task reminders are only as
-    // punctual as the tick, so a 5-minute scan would deliver "10 minutes left"
-    // anywhere from 5 to 10 minutes out. Each tick is a bounded (limit 200)
-    // indexed lookup, so the extra frequency is cheap.
+    if (!lessonsEnabled) return;
     this.reminderTimer = setInterval(() => {
-      if (lessonsEnabled) {
-        void this.dispatchLessonReminders()
-          .then(({ sent }) => {
-            if (sent > 0) this.logger.log(`Lesson reminders enqueued: ${sent}`);
-          })
-          .catch((error: unknown) => {
-            this.logger.error(
-              `Lesson reminder tick failed: ${this.errorName(error)}`
-            );
-          });
-      }
-      if (tasksEnabled) {
-        void this.dispatchTaskReminders()
-          .then(({ sent }) => {
-            if (sent > 0) this.logger.log(`Task reminders enqueued: ${sent}`);
-          })
-          .catch((error: unknown) => {
-            this.logger.error(
-              `Task reminder tick failed: ${this.errorName(error)}`
-            );
-          });
-      }
+      void this.dispatchLessonReminders()
+        .then(({ sent }) => {
+          if (sent > 0) this.logger.log(`Lesson reminders enqueued: ${sent}`);
+        })
+        .catch((error: unknown) => {
+          this.logger.error(
+            `Lesson reminder tick failed: ${this.errorName(error)}`
+          );
+        });
     }, 60_000);
     this.reminderTimer.unref?.();
     this.logger.log('Reminder scheduler started (every 1m)');
@@ -235,48 +210,6 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     return sent;
   }
 
-  // Enqueue task due-date reminders. Same idempotency pattern as lesson
-  // reminders: each (task, kind) is claimed in app.task_reminders before
-  // sending, so a reminder is never sent twice even if two ticks overlap.
-  async dispatchTaskReminders(): Promise<{ sent: number }> {
-    let sent = 0;
-    // "За день": fire once the deadline is within 24h but still more than 12h
-    // away (same floor rationale as lesson reminders: no misleading "tomorrow"
-    // for an already-imminent deadline, no first-enable blast).
-    sent += await this.processTaskReminderKind(
-      'day',
-      "t.due_at > now() + interval '12 hours' and t.due_at <= now() + interval '24 hours'",
-      'Задача: срок завтра',
-      (title, when) => `«${title}» — срок ${when} (по Москве).`
-    );
-    // "За час": fire within the last hour before the deadline.
-    sent += await this.processTaskReminderKind(
-      'hour',
-      "t.due_at > now() and t.due_at <= now() + interval '1 hour'",
-      'Задача: срок через час',
-      (title, when) => `«${title}» — срок ${when} (по Москве).`
-    );
-    // "За 10 минут": the last stretch before the deadline. Overlapping the
-    // 'hour' window is intended — they are separate kinds, so both land.
-    sent += await this.processTaskReminderKind(
-      'min10',
-      "t.due_at > now() and t.due_at <= now() + interval '10 minutes'",
-      'Задача: срок через 10 минут',
-      (title, when) => `«${title}» — срок ${when} (по Москве).`
-    );
-    // "Просрочено": one minute past the deadline. The 1-hour floor is what
-    // stops a first-enable blast — without it, every task overdue since the
-    // dawn of the database would fire on the first tick.
-    sent += await this.processTaskReminderKind(
-      'overdue',
-      "t.due_at <= now() - interval '1 minute' and t.due_at > now() - interval '1 hour'",
-      'Задача просрочена',
-      (title, when) => `«${title}» — срок был ${when} (по Москве).`
-    );
-    if (sent > 0) this.schedulePushDispatch();
-    return { sent };
-  }
-
   /**
    * Roles that opted into an event, with the channels each wants. Empty map =
    * nobody subscribed, which is a legitimate configuration (the whole point of
@@ -335,101 +268,6 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       groups.set(key, group);
     }
     return groups;
-  }
-
-  private async processTaskReminderKind(
-    kind: 'day' | 'hour' | 'min10' | 'overdue',
-    windowSql: string,
-    title: string,
-    bodyFor: (taskTitle: string, when: string) => string
-  ): Promise<number> {
-    // Recipients are configuration now (app.notification_preferences), not a
-    // literal in this query — see migration 0062.
-    const roleChannels = await this.loadRoleChannels(`task_reminder_${kind}`);
-    const roles = [...roleChannels.keys()];
-    const due = await this.database.query<{
-      id: string;
-      title: string;
-      when_local: string;
-      assigned_to: string | null;
-      recipients: { id: string; role: string }[];
-    }>(
-      `
-        with due as (
-          select t.id, t.title, t.assigned_to,
-            to_char(t.due_at at time zone 'Europe/Moscow', 'DD.MM HH24:MI') as when_local
-          from app.tasks t
-          where t.deleted_at is null
-            and t.status in ('open', 'in_progress')
-            and ${windowSql}
-            and not exists (
-              select 1 from app.task_reminders tr
-              where tr.task_id = t.id and tr.kind = $1
-            )
-          order by t.due_at asc
-          limit 200
-        )
-        select d.id, d.title, d.when_local, d.assigned_to,
-          (
-            -- Recipients: the assignee (always) plus every role subscribed to
-            -- this event. Roles are compared as text on purpose: 'director' may
-            -- not exist in the app.user_role enum yet and an enum cast would
-            -- make the whole query throw.
-            select coalesce(
-              json_agg(json_build_object('id', u.id, 'role', u.role::text)),
-              '[]'::json
-            )
-            from app.users u
-            where u.deleted_at is null
-              and (u.role::text = any($2::text[]) or u.id = d.assigned_to)
-          ) as recipients
-        from due d
-      `,
-      [kind, roles]
-    );
-
-    let sent = 0;
-    for (const row of due.rows) {
-      // Claim the marker first; only the call that inserts the row sends.
-      const claim = await this.database.query<{ id: string }>(
-        `
-          insert into app.task_reminders (task_id, kind)
-          values ($1, $2)
-          on conflict (task_id, kind) do nothing
-          returning id
-        `,
-        [row.id, kind]
-      );
-      if (claim.rowCount === 0) continue;
-      const groups = this.groupRecipientsByChannels(
-        row.recipients ?? [],
-        row.assigned_to,
-        roleChannels,
-        // Historic behaviour for an assignee whose role opted out: push only.
-        ['push']
-      );
-      if (groups.size === 0) continue; // nobody to notify; marker stays
-      try {
-        for (const group of groups.values()) {
-          await this.createNotification({
-            type: 'task_reminder',
-            title,
-            body: bodyFor(row.title, row.when_local),
-            data: { entityType: 'task', entityId: row.id },
-            userIds: group.userIds,
-            channels: group.channels
-          });
-        }
-        sent += 1;
-      } catch (error: unknown) {
-        // Marker already set — do not retry, to avoid spamming on transient
-        // delivery errors. Surface it so a misfire is observable.
-        this.logger.error(
-          `Failed to enqueue ${kind} reminder for task ${row.id}: ${this.errorName(error)}`
-        );
-      }
-    }
-    return sent;
   }
 
   /**

@@ -12,7 +12,7 @@ import {
 /**
  * Move money from one client's personal account to another's.
  *
- * Deliberately NOT exposed as a kind on CreateAdjustmentDto: a transfer is two
+ * Deliberately NOT exposed as a payment adjustment: a transfer is two
  * rows (transfer_out on the payer, transfer_in on the receiver) and a caller
  * able to post one of them alone could make money appear from nowhere.
  */

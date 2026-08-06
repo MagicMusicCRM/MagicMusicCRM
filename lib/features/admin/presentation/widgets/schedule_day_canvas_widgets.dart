@@ -86,7 +86,13 @@ class _LessonCard extends StatelessWidget {
   });
 
   Color get _accent {
+    if (entry.searchContext) {
+      return entry.relatedClient ? AppColor.success : AppColor.text2;
+    }
     if (entry.conflicts.isNotEmpty) return AppColor.danger;
+    if (entry.clientContext) {
+      return entry.relatedClient ? AppColor.success : AppColor.text2;
+    }
     return LessonStateProjection.fromMap(entry.lesson).token.accent;
   }
 
@@ -103,6 +109,7 @@ class _LessonCard extends StatelessWidget {
         : '${hm(start)}–${hm(end)}';
 
     return Container(
+      key: ValueKey('schedule-lesson-${entry.id}'),
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
       decoration: BoxDecoration(
         // `ghost` is the SOURCE left behind during a move — it stays clearly
@@ -124,6 +131,16 @@ class _LessonCard extends StatelessWidget {
         children: [
           Row(
             children: [
+              if (entry.clientContext || entry.searchContext) ...[
+                Icon(
+                  entry.relatedClient
+                      ? Icons.person_pin_circle_outlined
+                      : Icons.people_outline_rounded,
+                  color: accent,
+                  size: 12,
+                ),
+                const SizedBox(width: 3),
+              ],
               Expanded(
                 child: Text(
                   entry.title,

@@ -25,6 +25,10 @@ void main() {
     final store = AccountWorkspaceStore(backend);
     final workspace = controller('account-1');
     final clientTab = workspace.open(link('client-1'), titleHint: 'Клиент');
+    workspace.updateEntityPresentation(
+      link('client-1'),
+      const EntityPresentationReference(primary: 'Иванов Иван'),
+    );
     workspace.updateCurrentView(
       clientTab,
       ContextViewState(
@@ -55,6 +59,10 @@ void main() {
     expect(restored.tabs, hasLength(2));
     expect(restored.activeTab.currentRoute.viewState.scrollOffset, 88);
     expect(restored.activeTab.currentRoute.viewState.selectedColumn, 'active');
+    expect(
+      restored.activeTab.currentRoute.link.presentation?.primary,
+      'Иванов Иван',
+    );
     expect(restored.activeTab.forms, isEmpty);
   });
 

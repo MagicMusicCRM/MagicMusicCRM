@@ -172,6 +172,15 @@ export class StrictCreateLeadDto {
   sourceId!: string;
 
   @IsOptional()
+  @IsUUID()
+  branchId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  status?: string;
+
+  @IsOptional()
   @IsArray()
   @ArrayMaxSize(100)
   @ValidateNested({ each: true })

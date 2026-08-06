@@ -118,9 +118,13 @@ export class MergeService {
       // UNDO_REPOINT's keys, so old merge_log rows carrying "lead_comments.lead_id"
       // are simply skipped, and nothing reads that table anyway.
       // Polymorphic (no unique constraint).
-      repointed["tasks.entity_id"] = ids(
+      repointed["shared_tasks.linked_entity_id"] = ids(
         (await client.query<{ id: string }>(
-          `update app.tasks set entity_id = $2 where entity_type = 'lead' and entity_id = $1 returning id`,
+          `update app.shared_tasks
+           set linked_entity_id = $2, version = version + 1, updated_at = now()
+           where linked_entity_type = 'lead' and linked_entity_id = $1
+             and deleted_at is null
+           returning id`,
           [loserId, winnerId],
         )).rows,
       );
@@ -168,7 +172,8 @@ export class MergeService {
     "students.lead_id": "update app.students set lead_id = $1, updated_at = now() where id = any($2::uuid[])",
     "lessons.lead_id": "update app.lessons set lead_id = $1 where id = any($2::uuid[])",
     "lead_status_history.lead_id": "update app.lead_status_history set lead_id = $1 where id = any($2::uuid[])",
-    "tasks.entity_id": "update app.tasks set entity_id = $1 where id = any($2::uuid[])",
+    "shared_tasks.linked_entity_id": "update app.shared_tasks set linked_entity_id = $1, version = version + 1, updated_at = now() where id = any($2::uuid[])",
+    "tasks.entity_id": "update app.shared_tasks shared set linked_entity_id = $1, version = version + 1, updated_at = now() from app.shared_task_legacy_links link where link.shared_task_id = shared.id and link.legacy_task_id = any($2::uuid[])",
     "chats.lead_id": "update app.chats set lead_id = $1 where id = any($2::uuid[])",
     "entity_comments.entity_id": "update app.entity_comments set entity_id = $1 where id = any($2::uuid[])",
     "duplicate_candidates.status": "update app.duplicate_candidates set status = 'pending', updated_at = now() where id = any($2::uuid[])",

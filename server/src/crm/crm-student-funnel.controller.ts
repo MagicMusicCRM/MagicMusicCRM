@@ -3,46 +3,55 @@ import { ActorContext } from "../common/security/actor-context";
 import { CurrentActor } from "../common/security/current-actor.decorator";
 import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
 import {
-  PublishStudentFunnelDto,
-  RollbackStudentFunnelDto,
-  StudentFunnelQuery,
+  ClientPipelineQuery,
+  PreviewClientPipelineDto,
+  PublishClientPipelineDto,
+  RollbackClientPipelineDto,
 } from "./dto/student-funnel.dto";
 import { StudentFunnelService } from "./student-funnel.service";
 
 @UseGuards(JwtAuthGuard)
-@Controller("crm/student-funnel")
-export class CrmStudentFunnelController {
-  constructor(private readonly funnel: StudentFunnelService) {}
+@Controller("crm/client-pipelines")
+export class CrmClientPipelineController {
+  constructor(private readonly pipelines: StudentFunnelService) {}
 
   @Get()
   getEffective(
     @CurrentActor() actor: ActorContext,
-    @Query() query: StudentFunnelQuery,
+    @Query() query: ClientPipelineQuery,
   ) {
-    return this.funnel.getEffective(actor, query.branchId);
+    return this.pipelines.getEffective(actor, query.branchId, query.clientType);
   }
 
   @Get("revisions")
   listRevisions(
     @CurrentActor() actor: ActorContext,
-    @Query() query: StudentFunnelQuery,
+    @Query() query: ClientPipelineQuery,
   ) {
-    return this.funnel.listRevisions(actor, query.branchId);
+    return this.pipelines.listRevisions(actor, query.branchId, query.clientType);
+  }
+
+  @Post("preview")
+  preview(
+    @CurrentActor() actor: ActorContext,
+    @Body() dto: PreviewClientPipelineDto,
+  ) {
+    return this.pipelines.preview(actor, dto);
   }
 
   @Post("publish")
   publish(
     @CurrentActor() actor: ActorContext,
-    @Body() dto: PublishStudentFunnelDto,
+    @Body() dto: PublishClientPipelineDto,
   ) {
-    return this.funnel.publish(actor, dto);
+    return this.pipelines.publish(actor, dto);
   }
 
   @Post("rollback")
   rollback(
     @CurrentActor() actor: ActorContext,
-    @Body() dto: RollbackStudentFunnelDto,
+    @Body() dto: RollbackClientPipelineDto,
   ) {
-    return this.funnel.rollback(actor, dto);
+    return this.pipelines.rollback(actor, dto);
   }
 }

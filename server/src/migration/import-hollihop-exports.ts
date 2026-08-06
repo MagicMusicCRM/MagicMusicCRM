@@ -97,7 +97,12 @@ const CONNECTION_STRING =
 
 // Guardrail: this script builds SQL from a table name, so the name may only
 // ever be one of these. Nothing here comes from the export files.
-const ALLOWED_TABLES = ["app.tasks", "app.task_history", "app.entity_comments"];
+const ALLOWED_TABLES = [
+  "app.shared_tasks",
+  "app.task_audiences",
+  "app.audit_events",
+  "app.entity_comments",
+];
 
 /**
  * Раздел выгрузки: `<base>.xlsx` либо `<base>.json`.
@@ -524,23 +529,38 @@ async function importCommunications(options: {
     const key = communicationTaskKey(resolved.entityId, createdIso, parsed);
     const taskId = deterministicUuid("hollihop-comm-task", key);
 
-    const written = await upsert(mode, client, "app.tasks", {
+    const title = taskTitleFromBody(parsed.body);
+    const dueAt =
+      status === "done" || status === "cancelled" ? null : (rowDate?.iso ?? null);
+    const written = await upsert(mode, client, "app.shared_tasks", {
       id: taskId,
-      entity_type: resolved.entityType,
-      entity_id: resolved.entityId,
-      title: taskTitleFromBody(parsed.body),
-      description: parsed.body || null,
-      status,
+      title,
+      body: parsed.body || null,
+      all_day: dueAt === null,
+      start_at: dueAt,
+      end_at: null,
+      state: status === "done" || status === "cancelled" ? "closed" : "open",
+      linked_entity_type: resolved.entityType,
+      linked_entity_id: resolved.entityId,
+      priority: "medium",
+      created_by: createdBy,
+      origin: "legacy_backfill",
+      migration_state: "separate",
+      legacy_origin_key: `hollihop:${taskId}`,
       // Дата строки: у открытой задачи это срок, у закрытой — момент закрытия.
       // Сроком он остаётся только у открытой; у закрытой ставить его в due_at
       // значило бы выдать день закрытия за назначенный срок.
-      due_at: status === "done" || status === "cancelled" ? null : (rowDate?.iso ?? null),
-      assigned_to: createdBy,
-      created_by: createdBy,
       created_at: createdIso ?? undefined,
     });
     if (written) report.written++;
     else if (mode === "apply") report.skippedDuplicate++;
+
+    await upsert(mode, client, "app.task_audiences", {
+      id: deterministicUuid("hollihop-comm-task-audience", taskId),
+      task_id: taskId,
+      audience_type: createdBy ? "user" : "allBranches",
+      target_id: createdBy,
+    });
 
     // История: по событию на каждую смену статуса, с ИСХОДНОЙ датой и актором.
     for (const [index, event] of events.entries()) {
@@ -555,15 +575,16 @@ async function importCommunications(options: {
       if (!changedAt) continue;
       const changedBy = await matcher.userIdByName(event.actor);
       if (event.actor && !changedBy) unmatchedResponsibles.add(event.actor);
-      await upsert(mode, client, "app.task_history", {
+      await upsert(mode, client, "app.audit_events", {
         id: deterministicUuid("hollihop-comm-task-history", `${key}:${index}:${event.status}`),
-        task_id: taskId,
-        field: "status",
-        old_value: null,
-        new_value: taskStatusFromEvents([event]),
-        changed_by: changedBy,
-        changed_at: changedAt,
-        source: "hollihop",
+        actor_user_id: changedBy,
+        action: "workflow.shared_task_legacy_status",
+        entity_type: "shared_task",
+        entity_id: taskId,
+        metadata: { source: "hollihop" },
+        before_ref: { field: "status", value: null },
+        after_ref: { field: "status", value: taskStatusFromEvents([event]) },
+        created_at: changedAt,
       });
     }
   }

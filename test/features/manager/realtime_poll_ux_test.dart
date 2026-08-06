@@ -8,6 +8,7 @@ import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
+import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/finance_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/leads_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/reports_widget.dart';
@@ -73,7 +74,8 @@ class _CountingApiClient extends MagicApiClient {
             'items': <dynamic>[],
             'total_count': 0,
           },
-          '/crm/student-funnel' => <String, dynamic>{
+          '/crm/client-pipelines' => <String, dynamic>{
+            'clientType': queryParameters?['clientType'],
             'branchId': queryParameters?['branchId'],
             'source': 'school',
             'schoolVersion': 1,
@@ -164,6 +166,47 @@ void main() {
     expect(api.count('/crm/leads/board'), beforePoll);
   });
 
+  testWidgets(
+    'lead search keeps focus and board while typing every character',
+    (tester) async {
+      final api = _CountingApiClient();
+      final realtime = StreamController<CrmChangedEvent>.broadcast();
+      addTearDown(realtime.close);
+      await tester.pumpWidget(
+        _host(api: api, realtime: realtime.stream, child: const LeadsWidget()),
+      );
+      await tester.pumpAndSettle();
+
+      const key = ValueKey('leads-search');
+      final initialCalls = api.count('/crm/leads/board');
+      await tester.tap(find.byKey(key));
+      for (final value in const ['А', 'Ан', 'Анн', 'Анна']) {
+        await tester.enterText(find.byKey(key), value);
+        await tester.pump(const Duration(milliseconds: 80));
+        final field = tester.widget<TextField>(find.byKey(key));
+        expect(field.controller!.text, value);
+        expect(
+          tester
+              .widget<EditableText>(
+                find.descendant(
+                  of: find.byKey(key),
+                  matching: find.byType(EditableText),
+                ),
+              )
+              .focusNode
+              .hasFocus,
+          isTrue,
+        );
+        expect(api.count('/crm/leads/board'), initialCalls);
+        expect(find.byType(KanbanSkeleton), findsNothing);
+      }
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(api.count('/crm/leads/board'), initialCalls + 1);
+    await tester.pumpAndSettle();
+    expect(find.byType(KanbanSkeleton), findsNothing);
+    },
+  );
+
   testWidgets('ReportsWidget ignores fallback realtime poll refreshes', (
     tester,
   ) async {
@@ -216,6 +259,46 @@ void main() {
     expect(api.count('/crm/students/search'), initialSearch);
   });
 
+  testWidgets('student search is local and keeps focus while typing', (
+    tester,
+  ) async {
+    final api = _CountingApiClient();
+    final realtime = StreamController<CrmChangedEvent>.broadcast();
+    addTearDown(realtime.close);
+    await tester.pumpWidget(
+      _host(
+        api: api,
+        realtime: realtime.stream,
+        child: const StudentsBoardWidget(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    const key = ValueKey('students-search');
+    final initialCalls = api.count('/crm/students/search');
+    await tester.tap(find.byKey(key));
+    for (final value in const ['И', 'Ив', 'Ива', 'Иван']) {
+      await tester.enterText(find.byKey(key), value);
+      await tester.pump(const Duration(milliseconds: 80));
+      final field = tester.widget<TextField>(find.byKey(key));
+      expect(field.controller!.text, value);
+      expect(
+        tester
+            .widget<EditableText>(
+              find.descendant(
+                of: find.byKey(key),
+                matching: find.byType(EditableText),
+              ),
+            )
+            .focusNode
+            .hasFocus,
+        isTrue,
+      );
+      expect(api.count('/crm/students/search'), initialCalls);
+      expect(find.byType(KanbanSkeleton), findsNothing);
+    }
+  });
+
   testWidgets(
     'student board actions remain usable at phone/tablet/desktop widths',
     (tester) async {
@@ -248,7 +331,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.byKey(const ValueKey('students-create')), findsOneWidget);
-        expect(find.byTooltip('Настроить воронку'), findsOneWidget);
+        expect(find.byTooltip('Настроить воронку'), findsNothing);
         expect(tester.takeException(), isNull, reason: 'viewport $size');
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump();

@@ -9,9 +9,8 @@ import {
 } from "class-validator";
 
 export class RecordActualPaymentDto {
-  @IsOptional()
   @IsUUID()
-  issuedSubscriptionId?: string;
+  issuedSubscriptionId: string;
 
   @IsOptional()
   @IsUUID()

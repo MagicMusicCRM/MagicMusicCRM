@@ -61,6 +61,9 @@ class ScheduleEntry {
   final List<String> conflicts;
   final bool movable;
   final bool highlighted;
+  final bool clientContext;
+  final bool searchContext;
+  final bool relatedClient;
 
   const ScheduleEntry({
     required this.lesson,
@@ -74,6 +77,9 @@ class ScheduleEntry {
     required this.conflicts,
     required this.movable,
     required this.highlighted,
+    this.clientContext = false,
+    this.searchContext = false,
+    this.relatedClient = false,
   });
 }
 
@@ -87,6 +93,7 @@ class ScheduleDayCanvas extends StatefulWidget {
   final DateTime date; // branch-local selected day (date only)
   final List<ScheduleColumn> columns;
   final List<ScheduleEntry> entries;
+  final bool allowCreate;
 
   /// Tap an empty hour → 1h create; vertical drag-select → multi-hour create.
   final void Function(String columnId, DateTime startLocal, int durationMinutes)
@@ -117,6 +124,7 @@ class ScheduleDayCanvas extends StatefulWidget {
     required this.date,
     required this.columns,
     required this.entries,
+    this.allowCreate = true,
     required this.onCreateSlot,
     required this.onMove,
     required this.onResize,

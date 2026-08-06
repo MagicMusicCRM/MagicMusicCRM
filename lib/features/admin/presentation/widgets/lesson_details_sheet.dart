@@ -100,6 +100,7 @@ Widget _referenceRow(
     link: true,
     label: '${reference.label}: ${reference.value}',
     child: InkWell(
+      key: ValueKey('lesson-reference-${reference.label}'),
       borderRadius: BorderRadius.circular(AppRadius.sm),
       onTap: () => onOpen(EntityOpenTarget.current),
       child: Padding(

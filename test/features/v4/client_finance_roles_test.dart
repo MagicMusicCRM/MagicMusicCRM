@@ -27,6 +27,7 @@ const _commerceStudent = <String, dynamic>{
     {
       'currencyCode': 'RUB',
       'actualPaymentsMinor': '500000',
+      'adjustmentsMinor': '0',
       'obligationDebitsMinor': '640000',
       'obligationCreditsMinor': '0',
       'writeOffsMinor': '160000',
@@ -40,7 +41,21 @@ const _commerceStudent = <String, dynamic>{
       'status': 'active',
       'startsAt': '2026-07-01T00:00:00.000Z',
       'expiresAt': '2027-07-01T00:00:00.000Z',
-      'units': {'total': '8', 'used': '2', 'remaining': '6'},
+      'units': {
+        'total': '8',
+        'used': '2',
+        'reserved': '1',
+        'paid': '6.25',
+        'available': '3.25',
+        'remaining': '6',
+      },
+      'financial': {
+        'actualPaidMinor': '500000',
+        'obligationMinor': '640000',
+        'debtMinor': '140000',
+        'overpaymentMinor': '0',
+        'nextPaymentAt': null,
+      },
       'terms': {
         'displayName': 'Вокал — 8 часов',
         'validityDays': 365,
@@ -84,6 +99,19 @@ const _commerceStudent = <String, dynamic>{
       'chargeType': 'subscription',
     },
   ],
+  'lessonBalance': {
+    'activeSubscriptionCount': 1,
+    'total': '8',
+    'used': '2',
+    'reserved': '1',
+    'paid': '6.25',
+    'available': '3.25',
+    'debts': [
+      {'currencyCode': 'RUB', 'amountMinor': '140000'},
+    ],
+    'nextPaymentAt': null,
+    'expiresAt': '2027-07-01T00:00:00.000Z',
+  },
 };
 
 class _CommerceApiClient extends MagicApiClient {

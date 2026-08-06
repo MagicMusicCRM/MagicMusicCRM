@@ -1,18 +1,14 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 import { CrmListQuery } from "./dto/crm-list.query";
-import { UpsertLeadStatusDto } from "./dto/upsert-lead-status.dto";
 import { CrmPolicy } from "./crm.policy";
 import { HolliHopMetadataService } from "./hollihop-metadata.service";
 
 interface LeadStatusRow {
   id: string;
+  stage_key: string;
   name: string;
   color: string | null;
   sort_order: number;
@@ -43,6 +39,7 @@ export class ReferenceDataService {
   private toLeadStatusDto(row: LeadStatusRow) {
     return {
       id: row.id,
+      stageKey: row.stage_key,
       name: row.name,
       color: row.color,
       sortOrder: row.sort_order,
@@ -57,7 +54,7 @@ export class ReferenceDataService {
     const limit = Math.min(query.limit ?? 100, 100);
     const result = await this.database.query<LeadStatusRow>(
       `
-        select id, name, color, sort_order, created_at, requires_reason, is_terminal
+        select id, stage_key, name, color, sort_order, created_at, requires_reason, is_terminal
         from app.lead_statuses
         order by sort_order asc, name asc, id asc
         limit $1
@@ -168,109 +165,6 @@ export class ReferenceDataService {
   async listHolliHopLeadStatuses(actor: ActorContext) {
     this.policy.assertCanWriteCrm(actor);
     return this.hollihop.listLeadStatuses();
-  }
-
-  async createLeadStatus(actor: ActorContext, dto: UpsertLeadStatusDto) {
-    this.policy.assertCanManageSystemSettings(actor);
-    const label = dto.label.trim();
-    if (!label) throw new BadRequestException("Название статуса обязательно.");
-    const result = await this.database.query<LeadStatusRow>(
-      `
-        insert into app.lead_statuses (name, color, sort_order)
-        values ($1, $2, coalesce($3, 0))
-        returning id, name, color, sort_order, created_at
-      `,
-      [label, dto.color?.trim() || null, dto.sortOrder ?? null],
-    );
-    const status = result.rows[0];
-    await this.audit.record({
-      actor,
-      action: "crm.lead_status_created",
-      entityType: "lead",
-      entityId: status.id,
-      metadata: { key: dto.key?.trim() || null },
-    });
-    return this.toLeadStatusDto(status);
-  }
-
-  async deleteLeadStatus(actor: ActorContext, statusId: string) {
-    this.policy.assertCanManageSystemSettings(actor);
-    const result = await this.database.query<{ id: string }>(
-      `
-        delete from app.lead_statuses
-        where id = $1
-        returning id
-      `,
-      [statusId],
-    );
-    const row = result.rows[0];
-    if (!row) throw new NotFoundException("Статус лида не найден.");
-    await this.audit.record({
-      actor,
-      action: "crm.lead_status_deleted",
-      entityType: "lead",
-      entityId: row.id,
-    });
-    return { success: true };
-  }
-
-  async reorderLeadStatuses(actor: ActorContext, dto: { statusIds: string[] }) {
-    // Column config is a system setting → manager/director/system_admin only
-    // (NOT a branch admin), per the owner rule.
-    this.policy.assertCanManageSystemSettings(actor);
-    const statusIds = Array.isArray(dto.statusIds) ? dto.statusIds : [];
-    if (statusIds.length === 0) {
-      throw new BadRequestException("Список статусов воронки пуст.");
-    }
-    // Each column's position in the full list becomes its sort_order. The
-    // synthetic «Без статуса» column ('unassigned') has no lead_status row, so
-    // its position is stored as a setting — that is what lets it sit ANYWHERE
-    // among the real columns instead of being pinned last.
-    const realIds: string[] = [];
-    const realOrders: number[] = [];
-    let unassignedOrder: number | null = null;
-    statusIds.forEach((id, index) => {
-      if (id === "unassigned") {
-        unassignedOrder = index;
-      } else {
-        realIds.push(id);
-        realOrders.push(index);
-      }
-    });
-
-    const updated = await this.database.transaction(async (client) => {
-      let rows = 0;
-      if (realIds.length > 0) {
-        const res = await client.query(
-          `update app.lead_statuses ls
-              set sort_order = t.ord
-             from unnest($1::uuid[], $2::int[]) as t(status_id, ord)
-            where ls.id = t.status_id`,
-          [realIds, realOrders],
-        );
-        rows = res.rowCount ?? 0;
-      }
-      if (unassignedOrder !== null) {
-        await client.query(
-          `insert into app.system_settings (key, value, updated_by)
-           values ('lead_board_unassigned_sort_order', to_jsonb($1::int), $2)
-           on conflict (key) do update
-             set value = excluded.value,
-                 updated_by = excluded.updated_by,
-                 updated_at = now()`,
-          [unassignedOrder, actor.userId],
-        );
-      }
-      return rows;
-    });
-
-    await this.audit.record({
-      actor,
-      action: "crm.lead_statuses_reordered",
-      entityType: "lead",
-      metadata: { order: statusIds },
-    });
-    return { updated };
   }
 
   async createDiscipline(actor: ActorContext, dto: { name: string }) {

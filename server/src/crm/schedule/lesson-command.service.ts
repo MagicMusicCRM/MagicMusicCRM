@@ -12,6 +12,7 @@ import { PlatformIntegrityService } from "../../platform/platform-integrity.serv
 import { CrmPolicy } from "../crm.policy";
 import { LessonRow, toLessonDto } from "../crm-mappers";
 import { UpsertLessonDto } from "../dto/upsert-lesson.dto";
+import { LessonConstraintPreviewDto } from "../dto/lesson-constraint-preview.dto";
 import { ClientReferenceService } from "../clients/client-reference.service";
 import { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
 import {
@@ -42,11 +43,7 @@ interface CurrentLessonRow {
   snapshot_client_type: "lead" | "student" | null;
   snapshot_client_id: string | null;
   completion_type: string | null;
-  client_charge_type:
-    | "subscription"
-    | "personal_account"
-    | "none"
-    | null;
+  client_charge_type: "subscription" | "personal_account" | "none" | null;
   client_charge_value: number | string | null;
   teacher_compensation_type: "fixed" | "hourly" | "none" | null;
   teacher_compensation_value: number | string | null;
@@ -67,6 +64,21 @@ export class LessonCommandService {
     private readonly lifecycle: LessonLifecycleRepository,
     private readonly reservations: SubscriptionReservationService,
   ) {}
+
+  previewConstraints(actor: ActorContext, dto: LessonConstraintPreviewDto) {
+    this.policy.assertCanWriteCrm(actor);
+    const startAt = new Date(dto.scheduledAt);
+    const endAt = new Date(startAt.getTime() + dto.durationMinutes * 60_000);
+    return this.constraints.validate({
+      clientRef: dto.clientRef,
+      teacherId: dto.teacherId,
+      branchId: dto.branchId,
+      roomId: dto.roomId,
+      startAt,
+      endAt,
+      excludeLessonId: dto.excludeLessonId,
+    });
+  }
 
   async create(
     actor: ActorContext,
@@ -428,9 +440,7 @@ export class LessonCommandService {
               clientChargeType: row.client_charge_type,
               clientChargeValue: Number(row.client_charge_value),
               teacherCompensationType: row.teacher_compensation_type,
-              teacherCompensationValue: Number(
-                row.teacher_compensation_value,
-              ),
+              teacherCompensationValue: Number(row.teacher_compensation_value),
               subscriptionId: row.subscription_id,
               trial: row.snapshot_trial,
               validationState: row.validation_state,
@@ -439,11 +449,7 @@ export class LessonCommandService {
     };
   }
 
-  private async response(
-    lessonId: string,
-    version: number,
-    replayed: boolean,
-  ) {
+  private async response(lessonId: string, version: number, replayed: boolean) {
     const result = await this.database.query<LessonRow>(
       `
         select

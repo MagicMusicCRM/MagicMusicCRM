@@ -9,6 +9,18 @@ import 'package:magic_music_crm/features/manager/presentation/widgets/student_fu
 
 import 'client_forms_api.dart';
 
+const _selectionFieldTypes = {
+  'select',
+  'radio',
+  'multi_select',
+  'checkbox_group',
+};
+
+typedef _FieldEditorResult = ({
+  Map<String, dynamic> field,
+  List<Map<String, dynamic>> createdOptionSets,
+});
+
 class CrmConfigurationRouteScreen extends ConsumerWidget {
   const CrmConfigurationRouteScreen({super.key});
 
@@ -52,9 +64,9 @@ class _CrmConfigurationWorkspaceState
     extends ConsumerState<CrmConfigurationWorkspace> {
   static const _areas = <(String, String, IconData)>[
     ('fields', 'Поля и категории', Icons.dynamic_form_outlined),
-    ('options', 'Справочники', Icons.list_alt_outlined),
+    ('options', 'Варианты для полей', Icons.list_alt_outlined),
     ('settings', 'Бизнес-параметры', Icons.tune_rounded),
-    ('funnel', 'Воронка учеников', Icons.view_kanban_outlined),
+    ('funnel', 'Воронки клиентов', Icons.view_kanban_outlined),
     ('history', 'История версий', Icons.history_rounded),
   ];
   static const _fieldTypes = <String, String>{
@@ -125,10 +137,13 @@ class _CrmConfigurationWorkspaceState
       ]);
       final draft = results[0] as Map<String, dynamic>;
       if (!mounted) return;
+      final snapshot = _copyMap(draft['snapshot']);
+      final migratedInlineOptions =
+          _branchId == null && _migrateInlineFieldOptions(snapshot);
       setState(() {
         _baseVersion = (draft['baseVersion'] as num?)?.toInt() ?? 0;
-        _snapshot = _copyMap(draft['snapshot']);
-        _dirty = draft['dirty'] == true;
+        _snapshot = snapshot;
+        _dirty = draft['dirty'] == true || migratedInlineOptions;
         _revisions = results[1] as List<Map<String, dynamic>>;
         _selectedKey = null;
         _loading = false;
@@ -559,20 +574,29 @@ class _CrmConfigurationWorkspaceState
   Widget _optionSetList() {
     final sets = _items('optionSets');
     return _listPane(
-      title: 'Переиспользуемые справочники',
-      addLabel: 'Добавить справочник',
+      title: 'Наборы вариантов для полей',
+      addLabel: 'Добавить набор',
       onAdd: !_canEdit || _branchId != null ? null : () => _editOptionSet(null),
-      children: sets.map((set) {
-        final key = set['key']?.toString() ?? '';
-        return ListTile(
-          selected: _selectedKey == key,
-          title: Text(set['label']?.toString() ?? key),
+      children: [
+        const ListTile(
+          leading: Icon(Icons.info_outline_rounded),
+          title: Text('Один список — для нескольких полей'),
           subtitle: Text(
-            '${(set['options'] as List? ?? const []).length} вариантов',
+            'Например, общий набор «Направления» можно использовать в карточках лида и ученика.',
           ),
-          onTap: () => setState(() => _selectedKey = key),
-        );
-      }).toList(),
+        ),
+        ...sets.map((set) {
+          final key = set['key']?.toString() ?? '';
+          return ListTile(
+            selected: _selectedKey == key,
+            title: Text(set['label']?.toString() ?? key),
+            subtitle: Text(
+              '${(set['options'] as List? ?? const []).length} вариантов',
+            ),
+            onTap: () => setState(() => _selectedKey = key),
+          );
+        }),
+      ],
     );
   }
 
@@ -596,13 +620,13 @@ class _CrmConfigurationWorkspaceState
       child: Padding(
         padding: const EdgeInsets.all(AppSpace.lg),
         child: FilledButton.icon(
-          onPressed: () => showStudentFunnelEditor(
+          onPressed: () => showClientPipelineEditor(
             context,
             branches: _branches,
             initialBranchId: _branchId,
           ),
           icon: const Icon(Icons.view_kanban_outlined),
-          label: const Text('Открыть редактор воронки'),
+          label: const Text('Настроить воронки лидов и учеников'),
         ),
       ),
     );
@@ -721,6 +745,8 @@ class _CrmConfigurationWorkspaceState
         _property('Стабильный ключ', field['key']),
         _property('Объект', field['entityType'] == 'lead' ? 'Лид' : 'Ученик'),
         _property('Тип', _fieldTypes[field['valueType']] ?? field['valueType']),
+        if (_selectionFieldTypes.contains(field['valueType']))
+          _property('Набор вариантов', field['optionSetKey']),
         _property('Категория', field['categoryKey']),
         _property('Ширина', field['width']),
         _property(
@@ -823,7 +849,7 @@ class _CrmConfigurationWorkspaceState
 
   Future<void> _editField(Map<String, dynamic>? current) async {
     final categories = _items('categories');
-    final draft = await showDialog<Map<String, dynamic>>(
+    final result = await showDialog<_FieldEditorResult>(
       context: context,
       builder: (_) => _FieldEditorDialog(
         field: current,
@@ -832,7 +858,14 @@ class _CrmConfigurationWorkspaceState
         fieldTypes: _fieldTypes,
       ),
     );
-    if (draft == null) return;
+    if (result == null) return;
+    if (result.createdOptionSets.isNotEmpty) {
+      _replaceItems('optionSets', [
+        ..._items('optionSets'),
+        ...result.createdOptionSets,
+      ]);
+    }
+    final draft = result.field;
     final fields = _items('fields');
     final index = current == null
         ? -1
@@ -925,9 +958,10 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
   late final _label = TextEditingController(
     text: widget.field?['label']?.toString() ?? '',
   );
-  late final _options = TextEditingController(
-    text: (widget.field?['options'] as List? ?? const []).join(', '),
-  );
+  late final List<Map<String, dynamic>> _optionSets = widget.optionSets
+      .map((set) => Map<String, dynamic>.from(set))
+      .toList();
+  final List<Map<String, dynamic>> _createdOptionSets = [];
   late String _entity = widget.field?['entityType']?.toString() ?? 'lead';
   late String _type = widget.field?['valueType']?.toString() ?? 'text';
   late String _category =
@@ -938,24 +972,19 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
   late bool _required = widget.field?['required'] == true;
   late bool _active = widget.field?['active'] != false;
   late String? _optionSetKey = widget.field?['optionSetKey']?.toString();
+  String? _optionSetError;
 
   @override
   void dispose() {
     _key.dispose();
     _label.dispose();
-    _options.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final system = widget.field?['system'] == true;
-    final selection = const {
-      'select',
-      'radio',
-      'multi_select',
-      'checkbox_group',
-    }.contains(_type);
+    final selection = _selectionFieldTypes.contains(_type);
     return AlertDialog(
       title: Text(widget.field == null ? 'Новое поле' : 'Настройка поля'),
       content: SizedBox(
@@ -999,6 +1028,7 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       initialValue: _type,
+                      isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Тип'),
                       items: widget.fieldTypes.entries
                           .map(
@@ -1010,7 +1040,13 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
                           .toList(),
                       onChanged: system
                           ? null
-                          : (v) => setState(() => _type = v!),
+                          : (v) => setState(() {
+                              _type = v!;
+                              if (!_selectionFieldTypes.contains(_type)) {
+                                _optionSetKey = null;
+                                _optionSetError = null;
+                              }
+                            }),
                     ),
                   ),
                 ],
@@ -1060,31 +1096,39 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
               if (selection) ...[
                 const SizedBox(height: AppSpace.sm),
                 DropdownButtonFormField<String?>(
+                  key: ValueKey(_optionSetKey),
                   initialValue: _optionSetKey,
-                  decoration: const InputDecoration(
-                    labelText: 'Общий справочник',
-                    helperText: 'Или оставьте пустым и задайте варианты ниже',
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: 'Набор вариантов *',
+                    helperText:
+                        'Состав набора меняется в разделе «Варианты для полей»',
+                    errorText: _optionSetError,
                   ),
                   items: [
                     const DropdownMenuItem<String?>(
                       value: null,
-                      child: Text('Собственные варианты'),
+                      child: Text('Выберите набор'),
                     ),
-                    ...widget.optionSets.map(
+                    ..._optionSets.map(
                       (set) => DropdownMenuItem<String?>(
                         value: set['key']?.toString(),
                         child: Text(set['label']?.toString() ?? ''),
                       ),
                     ),
                   ],
-                  onChanged: (value) => setState(() => _optionSetKey = value),
+                  onChanged: (value) => setState(() {
+                    _optionSetKey = value;
+                    _optionSetError = null;
+                  }),
                 ),
-                const SizedBox(height: AppSpace.sm),
-                TextField(
-                  controller: _options,
-                  enabled: _optionSetKey == null,
-                  decoration: const InputDecoration(
-                    labelText: 'Варианты через запятую *',
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    key: const ValueKey('field-create-option-set'),
+                    onPressed: _createOptionSet,
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Создать новый набор'),
                   ),
                 ),
               ],
@@ -1119,30 +1163,61 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
   void _submit() {
     final key = _key.text.trim();
     final label = _label.text.trim();
-    final options = _options.text
-        .split(',')
-        .map((item) => item.trim())
-        .where((item) => item.isNotEmpty)
-        .toSet()
-        .toList();
     if (!RegExp(r'^[A-Za-z][A-Za-z0-9_-]{0,63}$').hasMatch(key) ||
         label.isEmpty) {
       return;
     }
-    Navigator.pop(context, <String, dynamic>{
-      'entityType': _entity,
-      'key': key,
-      'label': label,
-      'valueType': _type,
-      'required': _required,
-      'active': _active,
-      'system': widget.field?['system'] == true,
-      'categoryKey': _category,
-      'order': widget.field?['order'] ?? 0,
-      'width': _width,
-      'placements': widget.field?['placements'] ?? ['create', 'edit', 'card'],
-      'options': options,
-      if (_optionSetKey != null) 'optionSetKey': _optionSetKey,
+    final selection = _selectionFieldTypes.contains(_type);
+    if (selection && _optionSetKey == null) {
+      setState(() => _optionSetError = 'Выберите или создайте набор');
+      return;
+    }
+    final optionSet = selection
+        ? _optionSets
+              .where((set) => set['key']?.toString() == _optionSetKey)
+              .firstOrNull
+        : null;
+    final options =
+        (optionSet?['options'] as List? ?? const [])
+            .whereType<Map>()
+            .where((option) => option['active'] != false)
+            .toList()
+          ..sort(
+            (left, right) => ((left['order'] as num?)?.toInt() ?? 0).compareTo(
+              (right['order'] as num?)?.toInt() ?? 0,
+            ),
+          );
+    Navigator.pop<_FieldEditorResult>(context, (
+      field: <String, dynamic>{
+        'entityType': _entity,
+        'key': key,
+        'label': label,
+        'valueType': _type,
+        'required': _required,
+        'active': _active,
+        'system': widget.field?['system'] == true,
+        'categoryKey': _category,
+        'order': widget.field?['order'] ?? 0,
+        'width': _width,
+        'placements': widget.field?['placements'] ?? ['create', 'edit', 'card'],
+        'options': options.map((option) => option['label']).toList(),
+        'optionSetKey': selection ? _optionSetKey : null,
+      },
+      createdOptionSets: _createdOptionSets,
+    ));
+  }
+
+  Future<void> _createOptionSet() async {
+    final draft = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => const _OptionSetEditorDialog(optionSet: null),
+    );
+    if (draft == null || !mounted) return;
+    setState(() {
+      _optionSets.add(draft);
+      _createdOptionSets.add(draft);
+      _optionSetKey = draft['key']?.toString();
+      _optionSetError = null;
     });
   }
 }
@@ -1235,7 +1310,9 @@ class _OptionSetEditorDialogState extends State<_OptionSetEditorDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: Text(widget.optionSet == null ? 'Новый справочник' : 'Справочник'),
+    title: Text(
+      widget.optionSet == null ? 'Новый набор вариантов' : 'Набор вариантов',
+    ),
     content: SizedBox(
       width: 480,
       child: Column(
@@ -1311,12 +1388,74 @@ Map<String, dynamic> _copyMap(Object? value) {
   return Map<String, dynamic>.from(jsonDecode(jsonEncode(value)) as Map);
 }
 
+bool _migrateInlineFieldOptions(Map<String, dynamic> snapshot) {
+  final fields = (snapshot['fields'] as List? ?? const [])
+      .whereType<Map>()
+      .map((field) => Map<String, dynamic>.from(field))
+      .toList();
+  final optionSets = (snapshot['optionSets'] as List? ?? const [])
+      .whereType<Map>()
+      .map((set) => Map<String, dynamic>.from(set))
+      .toList();
+  final usedKeys = optionSets
+      .map((set) => set['key']?.toString())
+      .whereType<String>()
+      .toSet();
+  var changed = false;
+  for (final field in fields) {
+    final labels = (field['options'] as List? ?? const [])
+        .whereType<String>()
+        .where((label) => label.trim().isNotEmpty)
+        .toList();
+    if (!_selectionFieldTypes.contains(field['valueType']) ||
+        field['optionSetKey'] != null ||
+        labels.isEmpty) {
+      continue;
+    }
+    final base = '${field['entityType']}_${field['key']}_options';
+    var optionSetKey = base.substring(0, base.length.clamp(0, 64));
+    for (var suffix = 2; usedKeys.contains(optionSetKey); suffix++) {
+      final tail = '_$suffix';
+      optionSetKey =
+          '${base.substring(0, base.length.clamp(0, 64 - tail.length))}$tail';
+    }
+    usedKeys.add(optionSetKey);
+    final rawLabel = '${field['label']}: варианты';
+    optionSets.add({
+      'key': optionSetKey,
+      'label': rawLabel.substring(0, rawLabel.length.clamp(0, 120)),
+      'multiple': const {
+        'multi_select',
+        'checkbox_group',
+      }.contains(field['valueType']),
+      'options': [
+        for (var index = 0; index < labels.length; index++)
+          {
+            'key': _stableOptionKey(labels[index], index),
+            'label': labels[index],
+            'order': index,
+            'active': true,
+          },
+      ],
+    });
+    field['optionSetKey'] = optionSetKey;
+    changed = true;
+  }
+  if (changed) {
+    snapshot['fields'] = fields;
+    snapshot['optionSets'] = optionSets;
+  }
+  return changed;
+}
+
 String _stableOptionKey(String label, int index) {
   final normalized = label
       .toLowerCase()
-      .replaceAll(RegExp(r'[^a-zа-яё0-9]+', unicode: true), '_')
+      .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
       .replaceAll(RegExp(r'^_+|_+$'), '');
-  return normalized.isEmpty ? 'option_$index' : normalized;
+  final suffix = '_${index + 1}';
+  final base = normalized.isEmpty ? 'option' : normalized;
+  return '${base.substring(0, base.length.clamp(0, 64 - suffix.length))}$suffix';
 }
 
 String _message(Object error) {

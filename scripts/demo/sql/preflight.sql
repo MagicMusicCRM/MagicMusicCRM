@@ -236,10 +236,12 @@ with linked_leads as (
      or homework.lesson_id in (select id from target_lessons)
      or nullif(to_jsonb(homework) ->> 'lead_id', '')::uuid in (select id from target_leads)
 ), target_tasks as (
-  select task.id from app.tasks task
-  where (task.entity_type = 'lead' and task.entity_id in (select id from target_leads))
-     or (task.entity_type = 'student' and task.entity_id in (select id from target_students))
-     or (task.entity_type = 'lesson' and task.entity_id in (select id from target_lessons))
+  select task.id from app.shared_tasks task
+  where task.deleted_at is null and (
+       (task.linked_entity_type = 'lead' and task.linked_entity_id in (select id from target_leads))
+    or (task.linked_entity_type = 'student' and task.linked_entity_id in (select id from target_students))
+    or (task.linked_entity_type = 'lesson' and task.linked_entity_id in (select id from target_lessons))
+  )
 ), target_notifications as (
   select notification.id
   from app.notifications notification

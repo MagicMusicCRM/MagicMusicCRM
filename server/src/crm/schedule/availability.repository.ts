@@ -25,10 +25,7 @@ export class AvailabilityRepository {
   constructor(private readonly database: DatabaseService) {}
 
   getTeacherOwner(teacherId: string, client?: PoolClient) {
-    const query = <T extends QueryResultRow>(
-      sql: string,
-      params: unknown[],
-    ) =>
+    const query = <T extends QueryResultRow>(sql: string, params: unknown[]) =>
       client
         ? client.query<T>(sql, params)
         : this.database.query<T>(sql, params);
@@ -52,11 +49,9 @@ export class AvailabilityRepository {
     from: Date,
     to: Date,
     client?: PoolClient,
+    scopeBranchIds?: string[] | null,
   ) {
-    const query = <T extends QueryResultRow>(
-      sql: string,
-      params: unknown[],
-    ) =>
+    const query = <T extends QueryResultRow>(sql: string, params: unknown[]) =>
       client
         ? client.query<T>(sql, params)
         : this.database.query<T>(sql, params);
@@ -203,16 +198,99 @@ export class AvailabilityRepository {
         `,
       [from, to, teacherId],
     );
+    const weekly = await query<{
+      weekday: number;
+      open_local: string;
+      close_local: string;
+    }>(
+      `select weekday, open_local::text, close_local::text
+       from app.branch_hours where branch_id = $1 order by weekday`,
+      [branchId],
+    );
+    const exceptions = await query<{
+      local_date: string;
+      closed: boolean;
+      open_local: string | null;
+      close_local: string | null;
+      reason: string | null;
+    }>(
+      `select local_date::text, closed, open_local::text, close_local::text, reason
+       from app.branch_hour_exceptions
+       where branch_id = $1 order by local_date`,
+      [branchId],
+    );
+    const assignments = await query<{
+      branch_id: string;
+      active_from: string;
+      active_until: string | null;
+    }>(
+      `select branch_id, active_from::text, active_until::text
+       from app.teacher_branches
+       where teacher_id = $1
+         and ($2::uuid[] is null or branch_id = any($2::uuid[]))
+       order by branch_id, active_from`,
+      [teacherId, scopeBranchIds ?? null],
+    );
+    const rawAvailability = await query<{
+      kind: "recurring" | "interval";
+      available: boolean;
+      timezone_name: string;
+      weekday: number | null;
+      local_start: string | null;
+      local_end: string | null;
+      valid_from: string | null;
+      valid_until: string | null;
+      starts_at: Date | string | null;
+      ends_at: Date | string | null;
+      reason: string | null;
+    }>(
+      `select kind, available, timezone_name, weekday,
+         local_start::text, local_end::text, valid_from::text,
+         valid_until::text, starts_at, ends_at, reason
+       from app.teacher_availability_rules
+       where teacher_id = $1 order by kind, weekday, starts_at`,
+      [teacherId],
+    );
 
     return {
       branch: {
         id: branchRow.id,
         timezone: branchRow.timezone_name,
         version: Number(branchRow.schedule_reference_version),
+        weekly: weekly.rows.map((row) => ({
+          weekday: row.weekday,
+          open: row.open_local.slice(0, 5),
+          close: row.close_local.slice(0, 5),
+        })),
+        exceptions: exceptions.rows.map((row) => ({
+          date: row.local_date,
+          closed: row.closed,
+          open: row.open_local?.slice(0, 5),
+          close: row.close_local?.slice(0, 5),
+          reason: row.reason,
+        })),
       },
       teacher: {
         id: teacherRow.id,
         version: Number(teacherRow.schedule_reference_version),
+        assignments: assignments.rows.map((row) => ({
+          branchId: row.branch_id,
+          activeFrom: row.active_from,
+          activeUntil: row.active_until,
+        })),
+        availability: rawAvailability.rows.map((row) => ({
+          kind: row.kind,
+          available: row.available,
+          timezone: row.timezone_name,
+          weekday: row.weekday,
+          localStart: row.local_start?.slice(0, 5),
+          localEnd: row.local_end?.slice(0, 5),
+          validFrom: row.valid_from,
+          validUntil: row.valid_until,
+          startsAt: row.starts_at,
+          endsAt: row.ends_at,
+          reason: row.reason,
+        })),
       },
       teacherBranchAssigned: assignment.rows[0]?.assigned ?? false,
       branchWindows: branchWindows.rows.map((row) => ({
@@ -305,13 +383,16 @@ export class AvailabilityRepository {
       teacherId: string;
       expectedVersion: number;
       assignments: TeacherBranchAssignmentDto[];
+      scopeBranchIds?: string[] | null;
     },
   ) {
     const teacher = await this.bumpTeacher(client, input);
     if (!teacher) return null;
     await client.query(
-      "delete from app.teacher_branches where teacher_id = $1",
-      [input.teacherId],
+      `delete from app.teacher_branches
+       where teacher_id = $1
+         and ($2::uuid[] is null or branch_id = any($2::uuid[]))`,
+      [input.teacherId, input.scopeBranchIds ?? null],
     );
     for (const row of input.assignments) {
       await client.query(
@@ -402,5 +483,22 @@ export class AvailabilityRepository {
       [input.teacherId, input.expectedVersion],
     );
     return teacher.rows[0] ?? null;
+  }
+
+  async teacherAssignmentsWithinScope(
+    teacherId: string,
+    scopeBranchIds: string[],
+  ): Promise<boolean> {
+    const result = await this.database.query<{ allowed: boolean }>(
+      `select exists (
+         select 1 from app.teacher_branches
+         where teacher_id = $1 and branch_id = any($2::uuid[])
+       ) and not exists (
+         select 1 from app.teacher_branches
+         where teacher_id = $1 and not (branch_id = any($2::uuid[]))
+       ) as allowed`,
+      [teacherId, scopeBranchIds],
+    );
+    return result.rows[0]?.allowed === true;
   }
 }

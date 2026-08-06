@@ -118,6 +118,7 @@ describe("TimelineService", () => {
       40,
       ["admin_comment", "teacher_note", "progress"],
       false,
+      "manager-a",
     ]);
   });
 

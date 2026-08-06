@@ -176,7 +176,7 @@ void main() {
     expect(schedule.link.optionalFocus?.filter['lessonId'], 'lesson-1');
     expect(crmTabForEntityLink(schedule.link, 'manager'), 2);
     expect(crmTabForEntityLink(schedule.link, 'teacher'), 1);
-    expect(crmTabForEntityLink(permissions.link, 'manager'), 4);
+    expect(crmTabForEntityLink(permissions.link, 'manager'), 8);
     expect(permissions.link.optionalFocus?.filter['query'], 'user@example.com');
     expect(crmTabForEntityLink(permissions.link, 'teacher'), isNull);
   });

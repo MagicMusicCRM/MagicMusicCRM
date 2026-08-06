@@ -4,21 +4,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
-import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
-import 'package:magic_music_crm/features/messenger/presentation/screens/messenger_screen.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_day_canvas.dart';
 import 'package:magic_music_crm/features/teacher/presentation/widgets/teacher_schedule_widget.dart';
 
 class _TeacherCalendarApiClient extends MagicApiClient {
   _TeacherCalendarApiClient({
     this.lessons = const <Map<String, dynamic>>[],
-    this.failFirstLessonRequest = false,
+    this.failFirstMatrixRequest = false,
   }) : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   final List<Map<String, dynamic>> lessons;
-  final bool failFirstLessonRequest;
-  final List<Map<String, dynamic>> lessonQueries = [];
-  final List<Map<String, dynamic>> homeworkQueries = [];
+  final bool failFirstMatrixRequest;
+  final List<Map<String, dynamic>> matrixQueries = [];
   final List<String> mutationPaths = [];
 
   @override
@@ -48,26 +47,29 @@ class _TeacherCalendarApiClient extends MagicApiClient {
               ],
             }
             as T;
-      case '/crm/lessons':
-        lessonQueries.add(
-          Map<String, dynamic>.from(
-            queryParameters ?? const <String, dynamic>{},
-          ),
-        );
-        if (failFirstLessonRequest && lessonQueries.length == 1) {
+      case '/crm/branches':
+        return <String, dynamic>{
+              'items': const [
+                {'id': 'branch-1', 'name': 'Центр', 'utcOffsetMinutes': 0},
+              ],
+            }
+            as T;
+      case '/crm/rooms':
+        return <String, dynamic>{
+              'items': const [
+                {'id': 'room-1', 'branchId': 'branch-1', 'name': 'Класс 1'},
+              ],
+            }
+            as T;
+      case '/crm/schedule/matrix':
+        matrixQueries.add({...?queryParameters});
+        if (failFirstMatrixRequest && matrixQueries.length == 1) {
           throw StateError('network unavailable');
         }
-        return <String, dynamic>{'items': lessons} as T;
-      case '/crm/homeworks':
-        homeworkQueries.add(
-          Map<String, dynamic>.from(
-            queryParameters ?? const <String, dynamic>{},
-          ),
-        );
         return <String, dynamic>{
-              'items': <Map<String, dynamic>>[
-                {'id': 'homework-1', 'title': 'Этюд № 3', 'status': 'assigned'},
-              ],
+              'items': lessons,
+              'groups': const <dynamic>[],
+              'conflicts': const <dynamic>[],
             }
             as T;
       default:
@@ -100,245 +102,119 @@ class _TeacherCalendarApiClient extends MagicApiClient {
 
 Map<String, dynamic> _assignedLesson() {
   final now = DateTime.now();
-  final scheduledAt = DateTime.utc(
-    now.year,
-    now.month,
-    now.day,
-    9,
-  ).toIso8601String();
   return {
     'id': 'lesson-1',
     'version': 3,
     'studentId': 'student-1',
     'teacherId': 'teacher-1',
-    'scheduledAt': scheduledAt,
+    'branchId': 'branch-1',
+    'roomId': 'room-1',
+    'scheduledAt': DateTime.utc(
+      now.year,
+      now.month,
+      now.day,
+      10,
+    ).toIso8601String(),
     'durationMinutes': 60,
     'status': 'scheduled',
     'lifecycleState': 'scheduled',
-    'reservationState': null,
     'isTrial': true,
     'studentName': 'Анна Ученица',
     'teacherName': 'Мария Педагог',
     'roomName': 'Класс 1',
     'branchName': 'Центр',
-    'notes': 'Гаммы и этюд',
   };
 }
 
 Future<void> _pumpCalendar(
   WidgetTester tester,
-  _TeacherCalendarApiClient api, {
-  Size size = const Size(900, 900),
-}) async {
-  tester.view.physicalSize = size;
+  _TeacherCalendarApiClient api,
+) async {
+  tester.view.physicalSize = const Size(1200, 900);
   tester.view.devicePixelRatio = 1;
-  addTearDown(tester.view.resetPhysicalSize);
-  addTearDown(tester.view.resetDevicePixelRatio);
-
+  addTearDown(tester.view.reset);
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [magicApiClientProvider.overrideWithValue(api)],
-      child: const MaterialApp(home: Scaffold(body: TeacherScheduleWidget())),
+      overrides: [
+        magicApiClientProvider.overrideWithValue(api),
+        capabilitySnapshotProvider.overrideWith(
+          (ref) async => const CapabilitySnapshot(
+            accountId: 'teacher-user',
+            role: 'teacher',
+            accessVersion: 1,
+            capabilities: {
+              'crm.client.read.basic',
+              'schedule.lesson.read.assigned',
+            },
+            scopes: {'client': 'assigned', 'schedule': 'assigned'},
+          ),
+        ),
+      ],
+      child: MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.windows),
+        home: const Scaffold(body: TeacherScheduleWidget()),
+      ),
     ),
   );
-  for (
-    var attempt = 0;
-    attempt < 40 &&
-        find.byKey(const ValueKey('teacher-calendar-grid')).evaluate().isEmpty;
-    attempt++
-  ) {
-    await tester.pump(const Duration(milliseconds: 50));
-  }
-  await tester.pump(const Duration(milliseconds: 300));
+  await tester.pumpAndSettle();
 }
 
 void main() {
   setUpAll(() => initializeDateFormatting('ru'));
 
   testWidgets(
-    'assigned Day/Week calendar exposes only safe read-only client links',
+    'teacher uses canonical assigned-only Day/Week read-only surface',
     (tester) async {
       final api = _TeacherCalendarApiClient(lessons: [_assignedLesson()]);
       await _pumpCalendar(tester, api);
 
       expect(
-        find.byKey(const ValueKey('teacher-calendar-view-segments')),
+        find.byKey(const ValueKey('teacher-calendar-grid')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('schedule-view-switcher')),
         findsOneWidget,
       );
       expect(find.text('День'), findsOneWidget);
       expect(find.text('Неделя'), findsOneWidget);
       expect(find.text('Месяц'), findsNothing);
+      expect(find.text('Создать занятие'), findsNothing);
+      expect(find.byType(ScheduleDayCanvas), findsOneWidget);
       expect(
-        find.byKey(const ValueKey('teacher-lesson-lesson-1')),
+        find.byKey(const ValueKey('schedule-lesson-lesson-1')),
         findsOneWidget,
       );
-      expect(api.lessonQueries.single['teacherId'], 'teacher-1');
-
-      await tester.tap(find.byKey(const ValueKey('teacher-lesson-lesson-1')));
-      await tester.pump(const Duration(milliseconds: 500));
-
+      expect(api.matrixQueries, isNotEmpty);
       expect(
-        find.byKey(const ValueKey('teacher-client-card-title')),
-        findsOneWidget,
+        api.matrixQueries.every((query) => query['teacherId'] == 'teacher-1'),
+        isTrue,
       );
-      expect(find.text('История занятий'), findsOneWidget);
-      expect(find.text('Домашние задания'), findsOneWidget);
-      for (final mutationLabel in const [
-        'Изменить план',
-        'Создать занятие',
-        'Перенести',
-        'Отменить занятие',
-        'Посещаемость',
-        'Сохранить',
-      ]) {
-        expect(find.text(mutationLabel), findsNothing);
-      }
 
-      final historyLink = find.byKey(
-        const ValueKey('teacher-history-lesson-1'),
-      );
-      await tester.ensureVisible(historyLink);
-      await tester.pump(const Duration(milliseconds: 200));
-      await tester.tap(historyLink);
-      await tester.pump(const Duration(milliseconds: 700));
-
-      expect(find.text('История занятий'), findsWidgets);
-      expect(api.lessonQueries, hasLength(2));
-      expect(api.lessonQueries.last['studentId'], 'student-1');
-      expect(api.lessonQueries.last['teacherId'], 'teacher-1');
-      expect(api.lessonQueries.last['order'], 'desc');
+      await tester.tap(find.byKey(const ValueKey('schedule-lesson-lesson-1')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Ученик:'), findsOneWidget);
+      expect(find.textContaining('Педагог:'), findsOneWidget);
+      expect(find.textContaining('Филиал:'), findsOneWidget);
+      expect(find.textContaining('Аудитория:'), findsOneWidget);
+      expect(find.text('Изменить занятие'), findsNothing);
+      expect(find.text('Удалить занятие'), findsNothing);
       expect(api.mutationPaths, isEmpty);
     },
   );
 
-  testWidgets('narrow layout keeps only Day/Week and renders empty state', (
+  testWidgets('teacher schedule exposes the same retryable error state', (
     tester,
   ) async {
-    final api = _TeacherCalendarApiClient();
-    await _pumpCalendar(tester, api, size: const Size(390, 844));
-
-    expect(
-      find.byKey(const ValueKey('teacher-calendar-view-dropdown')),
-      findsOneWidget,
-    );
-    expect(find.byKey(const ValueKey('teacher-calendar-grid')), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('teacher-calendar-empty')),
-      findsOneWidget,
-    );
-    expect(find.text('Занятий пока нет'), findsOneWidget);
-    expect(find.text('Месяц'), findsNothing);
-    expect(find.text('Расписание'), findsNothing);
-    expect(api.mutationPaths, isEmpty);
-  });
-
-  testWidgets('homework link stays actor-scoped and read-only', (tester) async {
-    final api = _TeacherCalendarApiClient(lessons: [_assignedLesson()]);
-    await _pumpCalendar(tester, api);
-
-    await tester.tap(find.byKey(const ValueKey('teacher-lesson-lesson-1')));
-    await tester.pump(const Duration(milliseconds: 500));
-    final homeworkLink = find.byKey(
-      const ValueKey('teacher-homeworks-lesson-1'),
-    );
-    await tester.ensureVisible(homeworkLink);
-    await tester.pump(const Duration(milliseconds: 200));
-    await tester.tap(homeworkLink);
-    for (
-      var attempt = 0;
-      attempt < 30 && api.homeworkQueries.isEmpty;
-      attempt++
-    ) {
-      await tester.pump(const Duration(milliseconds: 50));
-    }
-    await tester.pump(const Duration(milliseconds: 700));
-
-    expect(find.text('Домашние задания'), findsWidgets);
-    expect(api.homeworkQueries, hasLength(1));
-    expect(find.text('Этюд № 3'), findsOneWidget);
-    expect(api.homeworkQueries.single['studentId'], 'student-1');
-    expect(api.homeworkQueries.single['limit'], 50);
-    expect(api.mutationPaths, isEmpty);
-  });
-
-  testWidgets('error state retries the assigned read-only calendar', (
-    tester,
-  ) async {
-    final api = _TeacherCalendarApiClient(failFirstLessonRequest: true);
+    final api = _TeacherCalendarApiClient(failFirstMatrixRequest: true);
     await _pumpCalendar(tester, api);
 
     expect(find.text('Не удалось загрузить расписание'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('teacher-calendar-retry')),
-      findsOneWidget,
-    );
+    await tester.tap(find.text('Повторить'));
+    await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('teacher-calendar-retry')));
-    for (
-      var attempt = 0;
-      attempt < 40 && api.lessonQueries.length < 2;
-      attempt++
-    ) {
-      await tester.pump(const Duration(milliseconds: 50));
-    }
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(api.lessonQueries, hasLength(2));
-    expect(api.lessonQueries.last['teacherId'], 'teacher-1');
+    expect(api.matrixQueries, hasLength(2));
     expect(find.byKey(const ValueKey('teacher-calendar-grid')), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('teacher-calendar-empty')),
-      findsOneWidget,
-    );
-    expect(api.mutationPaths, isEmpty);
-  });
-
-  testWidgets('Teacher CRM route opens the same read-only calendar', (
-    tester,
-  ) async {
-    final api = _TeacherCalendarApiClient();
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          magicApiClientProvider.overrideWithValue(api),
-          capabilitySnapshotProvider.overrideWith(
-            (ref) async => const CapabilitySnapshot(
-              accountId: 'teacher-1',
-              role: 'teacher',
-              accessVersion: 1,
-              capabilities: {'schedule.lesson.read.assigned'},
-              scopes: {'client': 'assigned', 'schedule': 'assigned'},
-            ),
-          ),
-        ],
-        child: const MaterialApp(home: MessengerScreen(role: 'teacher')),
-      ),
-    );
-    await tester.pump(const Duration(milliseconds: 700));
-
-    await tester.tap(find.text('Расписание'));
-    for (
-      var attempt = 0;
-      attempt < 40 &&
-          find
-              .byKey(const ValueKey('teacher-calendar-grid'))
-              .evaluate()
-              .isEmpty;
-      attempt++
-    ) {
-      await tester.pump(const Duration(milliseconds: 50));
-    }
-
-    expect(find.byKey(const ValueKey('teacher-calendar-grid')), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('teacher-calendar-view-dropdown')),
-      findsOneWidget,
-    );
     expect(api.mutationPaths, isEmpty);
   });
 }

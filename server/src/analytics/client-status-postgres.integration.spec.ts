@@ -52,7 +52,7 @@ describe("ClientStatusReadService (PostgreSQL)", () => {
       expect.arrayContaining([
         expect.objectContaining({
           clientType: "lead",
-          status: "new",
+          status: fixture.leadStatusKey,
           count: 1,
         }),
         expect.objectContaining({
@@ -196,15 +196,24 @@ async function createFixture(database: DatabaseService) {
       otherBranch!.id,
     ],
   );
+  const leadStatus = await database.query<{ id: string; stage_key: string }>(
+    `select id, stage_key from app.lead_statuses order by sort_order, id limit 1`,
+  );
   const leads = await database.query<{ id: string }>(
     `
-      insert into app.leads (first_name, last_name, phone, branch_id)
+      insert into app.leads (first_name, last_name, phone, branch_id, status_id)
       values
-        ($1, 'Лид', '+79990000001', $3),
-        ($2, 'Лид', '+79990000002', $4)
+        ($1, 'Лид', '+79990000001', $3, $5),
+        ($2, 'Лид', '+79990000002', $4, $5)
       returning id
     `,
-    [`${marker}-assigned`, `${marker}-other`, assignedBranch!.id, otherBranch!.id],
+    [
+      `${marker}-assigned`,
+      `${marker}-other`,
+      assignedBranch!.id,
+      otherBranch!.id,
+      leadStatus.rows[0]!.id,
+    ],
   );
 
   return {
@@ -221,6 +230,7 @@ async function createFixture(database: DatabaseService) {
     otherBranchId: otherBranch!.id,
     studentIds: students.rows.map((row) => row.id),
     leadIds: leads.rows.map((row) => row.id),
+    leadStatusKey: leadStatus.rows[0]!.stage_key,
   };
 }
 

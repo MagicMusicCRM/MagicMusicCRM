@@ -13,6 +13,7 @@ import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:magic_music_crm/core/widgets/v7/adaptive_surface.dart';
 import 'package:magic_music_crm/core/widgets/v7/magic_page_state.dart';
 
@@ -23,6 +24,58 @@ abstract class SharedTasksDataSource {
     String? linkedEntityType,
     String? linkedEntityId,
   });
+
+  Future<Map<String, dynamic>> listFiltered({
+    String? state,
+    String? taskId,
+    String? linkedEntityType,
+    String? linkedEntityId,
+    String? q,
+    String? priority,
+    String? scope,
+    String? from,
+    String? to,
+  }) => list(
+    state: state,
+    taskId: taskId,
+    linkedEntityType: linkedEntityType,
+    linkedEntityId: linkedEntityId,
+  );
+
+  Future<Map<String, int>> calendar({
+    required String from,
+    required String to,
+    String? state,
+    String? q,
+    String? priority,
+    String? scope,
+    String? linkedEntityType,
+    String? linkedEntityId,
+  }) async {
+    final result = await listFiltered(
+      state: state,
+      q: q,
+      priority: priority,
+      scope: scope,
+      from: from,
+      to: to,
+      linkedEntityType: linkedEntityType,
+      linkedEntityId: linkedEntityId,
+    );
+    final counts = <String, int>{};
+    for (final task in (result['items'] as List? ?? const [])) {
+      if (task is! Map<String, dynamic>) continue;
+      final start = DateTime.tryParse(task['startAt']?.toString() ?? '');
+      if (start == null) continue;
+      final local = start.toLocal();
+      final day =
+          '${local.year.toString().padLeft(4, '0')}-'
+          '${local.month.toString().padLeft(2, '0')}-'
+          '${local.day.toString().padLeft(2, '0')}';
+      counts[day] = (counts[day] ?? 0) + 1;
+    }
+    return counts;
+  }
 
   Future<List<Map<String, dynamic>>> history(String taskId);
 
@@ -82,6 +135,58 @@ class _ServiceSharedTasksDataSource implements SharedTasksDataSource {
         .listSharedTasks(
           state: state,
           taskId: taskId,
+          linkedEntityType: linkedEntityType,
+          linkedEntityId: linkedEntityId,
+        );
+  }
+
+  @override
+  Future<Map<String, dynamic>> listFiltered({
+    String? state,
+    String? taskId,
+    String? linkedEntityType,
+    String? linkedEntityId,
+    String? q,
+    String? priority,
+    String? scope,
+    String? from,
+    String? to,
+  }) {
+    return ref
+        .read(magicCrmServiceProvider)
+        .listSharedTasks(
+          state: state,
+          taskId: taskId,
+          linkedEntityType: linkedEntityType,
+          linkedEntityId: linkedEntityId,
+          q: q,
+          priority: priority,
+          scope: scope,
+          from: from,
+          to: to,
+        );
+  }
+
+  @override
+  Future<Map<String, int>> calendar({
+    required String from,
+    required String to,
+    String? state,
+    String? q,
+    String? priority,
+    String? scope,
+    String? linkedEntityType,
+    String? linkedEntityId,
+  }) {
+    return ref
+        .read(magicCrmServiceProvider)
+        .sharedTaskCalendar(
+          from: from,
+          to: to,
+          state: state,
+          q: q,
+          priority: priority,
+          scope: scope,
           linkedEntityType: linkedEntityType,
           linkedEntityId: linkedEntityId,
         );
@@ -266,6 +371,13 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
   bool _loading = true;
   Object? _error;
   String _filter = 'open';
+  String _priority = 'all';
+  String _scope = 'all';
+  final TextEditingController _search = TextEditingController();
+  bool _calendarMode = false;
+  DateTime _calendarMonth = DateTime(DateTime.now().year, DateTime.now().month);
+  DateTime? _selectedDay;
+  Map<String, int> _calendarCounts = const {};
   Timer? _realtimeDebounce;
   final Set<String> _closing = {};
   final Map<String, Object> _closeErrors = {};
@@ -282,6 +394,7 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
   @override
   void dispose() {
     _realtimeDebounce?.cancel();
+    _search.dispose();
     super.dispose();
   }
 
@@ -296,14 +409,40 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
       final focusedTask =
           widget.initialLink?.entityType == EntityLinkType.task &&
           widget.initialLink?.entityId != '__section__';
-      final result = await _dataSource.list(
+      final day = _selectedDay;
+      final dayFrom = day == null ? null : _moscowInstant(day);
+      final dayTo = day == null
+          ? null
+          : _moscowInstant(day.add(const Duration(days: 1)));
+      final result = await _dataSource.listFiltered(
         state: focusedTask || _filter == 'all' || _filter == 'overdue'
             ? null
             : _filter,
         taskId: focusedTask ? widget.initialLink?.entityId : null,
         linkedEntityType: widget.linkedEntity?.rawEntityType,
         linkedEntityId: widget.linkedEntity?.entityId,
+        q: _search.text.trim().isEmpty ? null : _search.text.trim(),
+        priority: _priority == 'all' ? null : _priority,
+        scope: _scope,
+        from: dayFrom,
+        to: dayTo,
       );
+      if (_calendarMode) {
+        final nextMonth = DateTime(
+          _calendarMonth.year,
+          _calendarMonth.month + 1,
+        );
+        _calendarCounts = await _dataSource.calendar(
+          from: _moscowInstant(_calendarMonth),
+          to: _moscowInstant(nextMonth),
+          state: _filter == 'all' || _filter == 'overdue' ? null : _filter,
+          q: _search.text.trim().isEmpty ? null : _search.text.trim(),
+          priority: _priority == 'all' ? null : _priority,
+          scope: _scope,
+          linkedEntityType: widget.linkedEntity?.rawEntityType,
+          linkedEntityId: widget.linkedEntity?.entityId,
+        );
+      }
       final rawItems = result['items'];
       var items = rawItems is List
           ? rawItems.whereType<Map<String, dynamic>>().toList()
@@ -330,6 +469,17 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
             : const {'open': 0, 'overdue': 0};
         _loading = false;
       });
+      if (focusedTask && items.isNotEmpty) {
+        final title = items.first['title']?.toString().trim() ?? '';
+        if (title.isNotEmpty) {
+          WorkspaceNavigationScope.maybeOf(
+            context,
+          )?.controller.updateEntityPresentation(
+            widget.initialLink!,
+            EntityPresentationReference(primary: title),
+          );
+        }
+      }
       if (!_focusConsumed && focusedTask) {
         _focusConsumed = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -459,10 +609,15 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
   Future<void> _openLinkedEntity(Map<String, dynamic> task) async {
     final raw = task['linkedEntity'];
     if (raw is! Map) return;
-    final link = EntityLink.fromJson({
-      'entityType': raw['type'],
-      'entityId': raw['id'],
-    });
+    final scoped = widget.linkedEntity;
+    final link =
+        scoped?.rawEntityType == raw['type']?.toString() &&
+            scoped?.entityId == raw['id']?.toString()
+        ? scoped!
+        : EntityLink.fromJson({
+            'entityType': raw['type'],
+            'entityId': raw['id'],
+          });
     if (!link.isSupported) return;
     await openEntityLink(
       context,
@@ -511,6 +666,39 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
                         ? () => _openEditor()
                         : null,
                   ),
+            if (widget.linkedEntity == null)
+              _TaskViewToolbar(
+                search: _search,
+                priority: _priority,
+                scope: _scope,
+                calendarMode: _calendarMode,
+                showScopes: canWrite,
+                onSearch: () {
+                  _selectedDay = null;
+                  _load();
+                },
+                onPriorityChanged: (value) {
+                  setState(() {
+                    _priority = value;
+                    _selectedDay = null;
+                  });
+                  _load();
+                },
+                onScopeChanged: (value) {
+                  setState(() {
+                    _scope = value;
+                    _selectedDay = null;
+                  });
+                  _load();
+                },
+                onCalendarChanged: (value) {
+                  setState(() {
+                    _calendarMode = value;
+                    if (value) _selectedDay = null;
+                  });
+                  _load();
+                },
+              ),
             Expanded(child: _body()),
           ],
         );
@@ -561,6 +749,23 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
         onAction: _load,
       );
     }
+    if (_calendarMode) {
+      return _SharedTaskMonthGrid(
+        month: _calendarMonth,
+        counts: _calendarCounts,
+        onMonthChanged: (month) {
+          setState(() => _calendarMonth = month);
+          _load();
+        },
+        onDaySelected: (day) {
+          setState(() {
+            _selectedDay = day;
+            _calendarMode = false;
+          });
+          _load();
+        },
+      );
+    }
     if (_items.isEmpty) {
       return const MagicPageState(
         kind: MagicPageStateKind.empty,
@@ -599,12 +804,240 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
   }
 }
 
+String _moscowInstant(DateTime date) => DateTime.utc(
+  date.year,
+  date.month,
+  date.day,
+).subtract(const Duration(hours: 3)).toIso8601String();
+
 bool _isOverdueSharedTask(Map<String, dynamic> task) {
   final start = DateTime.tryParse(task['startAt']?.toString() ?? '');
   return task['state'] == 'open' &&
       start != null &&
       start.isBefore(DateTime.now());
 }
+
+String _taskPriorityLabel(Object? value) => switch (value?.toString()) {
+  'high' => 'Высокий',
+  'low' => 'Низкий',
+  _ => 'Обычный',
+};
+
+class _TaskViewToolbar extends StatelessWidget {
+  const _TaskViewToolbar({
+    required this.search,
+    required this.priority,
+    required this.scope,
+    required this.calendarMode,
+    required this.showScopes,
+    required this.onSearch,
+    required this.onPriorityChanged,
+    required this.onScopeChanged,
+    required this.onCalendarChanged,
+  });
+
+  final TextEditingController search;
+  final String priority;
+  final String scope;
+  final bool calendarMode;
+  final bool showScopes;
+  final VoidCallback onSearch;
+  final ValueChanged<String> onPriorityChanged;
+  final ValueChanged<String> onScopeChanged;
+  final ValueChanged<bool> onCalendarChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final searchWidth = (MediaQuery.sizeOf(context).width * .45)
+        .clamp(180.0, 280.0)
+        .toDouble();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            SizedBox(
+              width: searchWidth,
+              child: TextField(
+                key: const Key('shared-task-search'),
+                controller: search,
+                textInputAction: TextInputAction.search,
+                onSubmitted: (_) => onSearch(),
+                decoration: InputDecoration(
+                  isDense: true,
+                  labelText: 'Поиск',
+                  suffixIcon: IconButton(
+                    tooltip: 'Найти задачи',
+                    onPressed: onSearch,
+                    icon: const Icon(Icons.search_rounded),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: AppSpace.sm),
+            DropdownButton<String>(
+              key: const Key('shared-task-priority-filter'),
+              value: priority,
+              items: const [
+                DropdownMenuItem(value: 'all', child: Text('Все приоритеты')),
+                DropdownMenuItem(value: 'high', child: Text('Высокий')),
+                DropdownMenuItem(value: 'medium', child: Text('Обычный')),
+                DropdownMenuItem(value: 'low', child: Text('Низкий')),
+              ],
+              onChanged: (value) {
+                if (value != null) onPriorityChanged(value);
+              },
+            ),
+            if (showScopes) ...[
+              const SizedBox(width: AppSpace.sm),
+              DropdownButton<String>(
+                key: const Key('shared-task-scope-filter'),
+                value: scope,
+                items: const [
+                  DropdownMenuItem(value: 'mine', child: Text('Мои')),
+                  DropdownMenuItem(value: 'branch', child: Text('Мой филиал')),
+                  DropdownMenuItem(value: 'school', child: Text('Вся школа')),
+                  DropdownMenuItem(value: 'all', child: Text('Все доступные')),
+                ],
+                onChanged: (value) {
+                  if (value != null) onScopeChanged(value);
+                },
+              ),
+            ],
+            const SizedBox(width: AppSpace.sm),
+            IconButton.filledTonal(
+              key: const Key('shared-task-calendar-toggle'),
+              tooltip: calendarMode ? 'Показать список' : 'Показать календарь',
+              onPressed: () => onCalendarChanged(!calendarMode),
+              icon: Icon(
+                calendarMode ? Icons.view_list_rounded : Icons.calendar_month,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SharedTaskMonthGrid extends StatelessWidget {
+  const _SharedTaskMonthGrid({
+    required this.month,
+    required this.counts,
+    required this.onMonthChanged,
+    required this.onDaySelected,
+  });
+
+  final DateTime month;
+  final Map<String, int> counts;
+  final ValueChanged<DateTime> onMonthChanged;
+  final ValueChanged<DateTime> onDaySelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final first = DateTime(month.year, month.month);
+    final days = DateTime(month.year, month.month + 1, 0).day;
+    final cells = (first.weekday - 1) + days;
+    return Column(
+      key: const Key('shared-task-month-grid'),
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            IconButton(
+              tooltip: 'Предыдущий месяц',
+              onPressed: () =>
+                  onMonthChanged(DateTime(month.year, month.month - 1)),
+              icon: const Icon(Icons.chevron_left),
+            ),
+            Text(
+              '${_russianMonths[month.month - 1]} ${month.year}',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            IconButton(
+              tooltip: 'Следующий месяц',
+              onPressed: () =>
+                  onMonthChanged(DateTime(month.year, month.month + 1)),
+              icon: const Icon(Icons.chevron_right),
+            ),
+          ],
+        ),
+        Row(
+          children: [
+            for (final day in ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'])
+              Expanded(child: Center(child: Text(day))),
+          ],
+        ),
+        Expanded(
+          child: GridView.builder(
+            padding: const EdgeInsets.all(12),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 7,
+              childAspectRatio: 1.25,
+            ),
+            itemCount: ((cells + 6) ~/ 7) * 7,
+            itemBuilder: (context, index) {
+              final dayNumber = index - (first.weekday - 2);
+              if (dayNumber < 1 || dayNumber > days) {
+                return const SizedBox.shrink();
+              }
+              final date = DateTime(month.year, month.month, dayNumber);
+              final key =
+                  '${date.year.toString().padLeft(4, '0')}-'
+                  '${date.month.toString().padLeft(2, '0')}-'
+                  '${date.day.toString().padLeft(2, '0')}';
+              final count = counts[key] ?? 0;
+              return InkWell(
+                key: Key('shared-task-day-$key'),
+                onTap: () => onDaySelected(date),
+                child: Card(
+                  margin: const EdgeInsets.all(2),
+                  child: Padding(
+                    padding: const EdgeInsets.all(6),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('$dayNumber'),
+                        if (count > 0)
+                          Align(
+                            alignment: Alignment.bottomRight,
+                            child: Text(
+                              '$count',
+                              key: Key('shared-task-count-$key'),
+                              style: const TextStyle(
+                                color: AppColor.actionBlue,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+const _russianMonths = [
+  'Январь',
+  'Февраль',
+  'Март',
+  'Апрель',
+  'Май',
+  'Июнь',
+  'Июль',
+  'Август',
+  'Сентябрь',
+  'Октябрь',
+  'Ноябрь',
+  'Декабрь',
+];
 
 class _ReminderBanner extends StatelessWidget {
   const _ReminderBanner({required this.overdue});
@@ -680,9 +1113,11 @@ class _MobileTaskFilter extends StatelessWidget {
             ),
             IconButton(
               tooltip: 'Расширенные фильтры',
-              onPressed: () => showModalBottomSheet<void>(
-                context: context,
-                isScrollControlled: true,
+              onPressed: () => showMagicAdaptiveSurface<void>(
+                context,
+                kind: AppSurfaceKind.selection,
+                title: 'Фильтры задач',
+                icon: Icons.tune_rounded,
                 builder: (context) => _AdvancedFilters(
                   value: value,
                   onChanged: (next) {
@@ -897,6 +1332,8 @@ String _taskHistoryAction(Object? action) => switch (action?.toString()) {
   'workflow.shared_task_created' => 'Задача создана',
   'workflow.shared_task_updated' => 'Задача изменена',
   'workflow.shared_task_closed' => 'Задача закрыта',
+  final String value when value.startsWith('workflow.shared_task_legacy_') =>
+    'Историческое изменение',
   _ => 'Задача обновлена',
 };
 
@@ -972,6 +1409,10 @@ class _SharedTaskCard extends StatelessWidget {
                         : DateFormat(
                             'dd.MM.yyyy HH:mm',
                           ).format(startsAt.toLocal()),
+                  ),
+                  _MetaChip(
+                    icon: Icons.flag_outlined,
+                    label: _taskPriorityLabel(task['priority']),
                   ),
                   _MetaChip(
                     icon: closed
@@ -1083,6 +1524,7 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
   late final TextEditingController _body;
   late bool _allDay;
   late DateTime _start;
+  late String _priority;
   DateTime? _end;
   String _audienceType = 'allBranches';
   String? _targetId;
@@ -1104,6 +1546,7 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
     _start =
         DateTime.tryParse(task?['startAt']?.toString() ?? '')?.toLocal() ??
         DateTime.now().add(const Duration(days: 1));
+    _priority = task?['priority']?.toString() ?? 'medium';
     _end = DateTime.tryParse(task?['endAt']?.toString() ?? '')?.toLocal();
     final existing = task?['audiences'];
     if (existing is List) {
@@ -1148,6 +1591,20 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
               controller: _title,
               decoration: const InputDecoration(labelText: 'Название'),
               onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              key: const Key('shared-task-priority'),
+              initialValue: _priority,
+              decoration: const InputDecoration(labelText: 'Приоритет'),
+              items: const [
+                DropdownMenuItem(value: 'high', child: Text('Высокий')),
+                DropdownMenuItem(value: 'medium', child: Text('Обычный')),
+                DropdownMenuItem(value: 'low', child: Text('Низкий')),
+              ],
+              onChanged: (value) {
+                if (value != null) setState(() => _priority = value);
+              },
             ),
             const SizedBox(height: 10),
             TextField(
@@ -1197,6 +1654,7 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
             if (_audienceType != 'allBranches') ...[
               const SizedBox(height: 10),
               DropdownButtonFormField<String>(
+                key: const Key('shared-task-audience-target'),
                 initialValue: _targetId,
                 decoration: InputDecoration(
                   labelText: _audienceType == 'user' ? 'Сотрудник' : 'Филиал',
@@ -1458,6 +1916,7 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
       'title': _title.text.trim(),
       if (_body.text.trim().isNotEmpty) 'body': _body.text.trim(),
       'allDay': _allDay,
+      'priority': _priority,
       'startAt': _start.toUtc().toIso8601String(),
       if (end != null) 'endAt': end.toUtc().toIso8601String(),
       'audiences': _audiences,

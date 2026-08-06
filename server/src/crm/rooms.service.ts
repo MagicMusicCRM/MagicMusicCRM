@@ -10,6 +10,7 @@ import { CrmListQuery } from "./dto/crm-list.query";
 import { RoomAvailabilityQuery } from "./dto/room-availability.query";
 import { UpsertRoomDto } from "./dto/upsert-room.dto";
 import { CrmPolicy } from "./crm.policy";
+import { assertSettingsBranchScope } from "./settings-branch-scope";
 
 interface RoomRow {
   id: string;
@@ -112,6 +113,20 @@ export class RoomsService {
         from app.rooms r
         left join app.branches b on b.id = r.branch_id and b.deleted_at is null
         where r.deleted_at is null
+          and (
+            $4::text <> 'manager'
+            or exists (
+              select 1
+              from app.user_crm_links link
+              join app.staff_members staff on staff.id = link.entity_id
+                and link.entity_type = 'staff' and link.deleted_at is null
+                and staff.deleted_at is null
+              join app.staff_branch_assignments assignment
+                on assignment.staff_member_id = staff.id
+                and assignment.deleted_at is null
+              where link.user_id = $5 and assignment.branch_id = r.branch_id
+            )
+          )
           and ($1::uuid is null or r.branch_id = $1)
           and (
             $2::text is null
@@ -120,13 +135,16 @@ export class RoomsService {
         order by b.name nulls last, r.name asc, r.id asc
         limit $3
       `,
-      [query.branchId ?? null, q || null, limit],
+      [query.branchId ?? null, q || null, limit, actor.role, actor.userId],
     );
 
     return { items: result.rows.map((row) => this.toRoomDto(row)) };
   }
 
-  async listRoomAvailability(actor: ActorContext, query: RoomAvailabilityQuery) {
+  async listRoomAvailability(
+    actor: ActorContext,
+    query: RoomAvailabilityQuery,
+  ) {
     this.policy.assertCanReadOperationalData(actor);
     const limit = Math.min(query.limit ?? 100, 200);
     const bounds = this.roomAvailabilityBounds(query);
@@ -245,7 +263,11 @@ export class RoomsService {
   }
 
   async createRoom(actor: ActorContext, dto: UpsertRoomDto) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertCanManageSystemSettings(actor);
+    if (!dto.branchId) {
+      throw new BadRequestException("Для аудитории необходимо выбрать филиал.");
+    }
+    await assertSettingsBranchScope(this.database, actor, dto.branchId);
     const name = dto.name?.trim();
     if (!name) {
       throw new BadRequestException("Название аудитории обязательно.");
@@ -275,7 +297,17 @@ export class RoomsService {
   }
 
   async updateRoom(actor: ActorContext, roomId: string, dto: UpsertRoomDto) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertCanManageSystemSettings(actor);
+    if (actor.role === "manager") {
+      await assertSettingsBranchScope(
+        this.database,
+        actor,
+        await this.roomBranch(roomId),
+      );
+      if (dto.branchId) {
+        await assertSettingsBranchScope(this.database, actor, dto.branchId);
+      }
+    }
     const name = dto.name?.trim();
     if (dto.name !== undefined && !name) {
       throw new BadRequestException("Название аудитории обязательно.");
@@ -310,7 +342,14 @@ export class RoomsService {
   }
 
   async deleteRoom(actor: ActorContext, roomId: string) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertCanManageSystemSettings(actor);
+    if (actor.role === "manager") {
+      await assertSettingsBranchScope(
+        this.database,
+        actor,
+        await this.roomBranch(roomId),
+      );
+    }
     const result = await this.database.query<{ id: string }>(
       `
         update app.rooms
@@ -329,5 +368,15 @@ export class RoomsService {
       entityId: room.id,
     });
     return { success: true };
+  }
+
+  private async roomBranch(roomId: string): Promise<string> {
+    const result = await this.database.query<{ branch_id: string | null }>(
+      `select branch_id from app.rooms where id = $1 and deleted_at is null`,
+      [roomId],
+    );
+    const branchId = result.rows[0]?.branch_id;
+    if (!branchId) throw new NotFoundException("Аудитория не найдена.");
+    return branchId;
   }
 }

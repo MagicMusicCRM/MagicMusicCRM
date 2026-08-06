@@ -88,12 +88,14 @@ class CommerceStudent {
     required this.accounts,
     required this.subscriptions,
     required this.movements,
+    required this.lessonBalance,
   });
 
   final String studentId;
   final List<CommerceAccount> accounts;
   final List<CommerceSubscription> subscriptions;
   final List<CommerceMovement> movements;
+  final CommerceLessonBalance lessonBalance;
 
   factory CommerceStudent.fromJson(Map<String, dynamic> json) {
     final studentId = json['studentId']?.toString() ?? '';
@@ -111,6 +113,9 @@ class CommerceStudent {
       movements: _commerceMaps(
         json['movements'],
       ).map(CommerceMovement.fromJson).toList(growable: false),
+      lessonBalance: CommerceLessonBalance.fromJson(
+        _commerceMap(json['lessonBalance'], 'lessonBalance'),
+      ),
     );
   }
 
@@ -143,6 +148,7 @@ class CommerceAccount {
   const CommerceAccount({
     required this.currencyCode,
     required this.actualPaymentsMinor,
+    required this.adjustmentsMinor,
     required this.obligationDebitsMinor,
     required this.obligationCreditsMinor,
     required this.writeOffsMinor,
@@ -152,6 +158,7 @@ class CommerceAccount {
 
   final String currencyCode;
   final BigInt actualPaymentsMinor;
+  final BigInt adjustmentsMinor;
   final BigInt obligationDebitsMinor;
   final BigInt obligationCreditsMinor;
   final BigInt writeOffsMinor;
@@ -164,6 +171,10 @@ class CommerceAccount {
       actualPaymentsMinor: _commerceMinor(
         json['actualPaymentsMinor'],
         'actualPaymentsMinor',
+      ),
+      adjustmentsMinor: _commerceMinor(
+        json['adjustmentsMinor'],
+        'adjustmentsMinor',
       ),
       obligationDebitsMinor: _commerceMinor(
         json['obligationDebitsMinor'],
@@ -194,6 +205,7 @@ class CommerceSubscription {
     required this.startsAt,
     required this.expiresAt,
     required this.units,
+    required this.financial,
     required this.terms,
     required this.installments,
   });
@@ -203,6 +215,7 @@ class CommerceSubscription {
   final DateTime startsAt;
   final DateTime? expiresAt;
   final CommerceSubscriptionUnits units;
+  final CommerceSubscriptionFinancial financial;
   final CommerceSubscriptionTerms terms;
   final List<CommerceInstallment> installments;
 
@@ -216,6 +229,9 @@ class CommerceSubscription {
           : _commerceDate(json['expiresAt'], 'expiresAt'),
       units: CommerceSubscriptionUnits.fromJson(
         _commerceMap(json['units'], 'units'),
+      ),
+      financial: CommerceSubscriptionFinancial.fromJson(
+        _commerceMap(json['financial'], 'financial'),
       ),
       terms: CommerceSubscriptionTerms.fromJson(
         _commerceMap(json['terms'], 'terms'),
@@ -239,6 +255,7 @@ class CommerceSubscription {
     'type': status == 'active' ? 'Абонемент' : status,
     'package_name': terms.displayName,
     'package_price': _commerceMajor(terms.finalPriceMinor),
+    'paid_amount': _commerceMajor(financial.actualPaidMinor),
     'base_price': _commerceMajor(terms.basePriceMinor),
     'currency_code': terms.currencyCode,
   };
@@ -248,18 +265,64 @@ class CommerceSubscriptionUnits {
   const CommerceSubscriptionUnits({
     required this.total,
     required this.used,
+    required this.reserved,
+    required this.paid,
+    required this.available,
     required this.remaining,
   });
 
   final num total;
   final num used;
+  final num reserved;
+  final num paid;
+  final num available;
   final num remaining;
 
   factory CommerceSubscriptionUnits.fromJson(Map<String, dynamic> json) {
     return CommerceSubscriptionUnits(
       total: _commerceNumber(json['total'], 'units.total'),
       used: _commerceNumber(json['used'], 'units.used'),
+      reserved: _commerceNumber(json['reserved'], 'units.reserved'),
+      paid: _commerceNumber(json['paid'], 'units.paid'),
+      available: _commerceNumber(json['available'], 'units.available'),
       remaining: _commerceNumber(json['remaining'], 'units.remaining'),
+    );
+  }
+}
+
+class CommerceSubscriptionFinancial {
+  const CommerceSubscriptionFinancial({
+    required this.actualPaidMinor,
+    required this.obligationMinor,
+    required this.debtMinor,
+    required this.overpaymentMinor,
+    required this.nextPaymentAt,
+  });
+
+  final BigInt actualPaidMinor;
+  final BigInt obligationMinor;
+  final BigInt debtMinor;
+  final BigInt overpaymentMinor;
+  final DateTime? nextPaymentAt;
+
+  factory CommerceSubscriptionFinancial.fromJson(Map<String, dynamic> json) {
+    return CommerceSubscriptionFinancial(
+      actualPaidMinor: _commerceMinor(
+        json['actualPaidMinor'],
+        'financial.actualPaidMinor',
+      ),
+      obligationMinor: _commerceMinor(
+        json['obligationMinor'],
+        'financial.obligationMinor',
+      ),
+      debtMinor: _commerceMinor(json['debtMinor'], 'financial.debtMinor'),
+      overpaymentMinor: _commerceMinor(
+        json['overpaymentMinor'],
+        'financial.overpaymentMinor',
+      ),
+      nextPaymentAt: json['nextPaymentAt'] == null
+          ? null
+          : _commerceDate(json['nextPaymentAt'], 'financial.nextPaymentAt'),
     );
   }
 }
@@ -397,6 +460,8 @@ class CommerceInstallment {
 
 enum CommerceMovementKind {
   payment('payment'),
+  refund('refund'),
+  adjustment('adjustment'),
   obligation('obligation'),
   lessonCharge('lesson_charge');
 
@@ -447,6 +512,9 @@ class CommerceMovement {
     required this.invoiceIdentifier,
     required this.status,
     required this.acceptedByName,
+    required this.issuedSubscriptionId,
+    required this.subscriptionName,
+    required this.sourcePaymentId,
   });
 
   final String id;
@@ -464,6 +532,9 @@ class CommerceMovement {
   final String? invoiceIdentifier;
   final String? status;
   final String? acceptedByName;
+  final String? issuedSubscriptionId;
+  final String? subscriptionName;
+  final String? sourcePaymentId;
 
   factory CommerceMovement.fromJson(Map<String, dynamic> json) {
     return CommerceMovement(
@@ -482,6 +553,9 @@ class CommerceMovement {
       invoiceIdentifier: json['invoiceIdentifier']?.toString(),
       status: json['status']?.toString(),
       acceptedByName: json['acceptedByName']?.toString(),
+      issuedSubscriptionId: json['issuedSubscriptionId']?.toString(),
+      subscriptionName: json['subscriptionName']?.toString(),
+      sourcePaymentId: json['sourcePaymentId']?.toString(),
     );
   }
 
@@ -502,6 +576,70 @@ class CommerceMovement {
     'accepted_by_name': acceptedByName,
     'students': {'id': studentId, 'first_name': '', 'last_name': ''},
   };
+}
+
+class CommerceLessonBalance {
+  const CommerceLessonBalance({
+    required this.activeSubscriptionCount,
+    required this.total,
+    required this.used,
+    required this.reserved,
+    required this.paid,
+    required this.available,
+    required this.debts,
+    required this.nextPaymentAt,
+    required this.expiresAt,
+  });
+
+  final int activeSubscriptionCount;
+  final num total;
+  final num used;
+  final num reserved;
+  final num paid;
+  final num available;
+  final List<CommerceLessonDebt> debts;
+  final DateTime? nextPaymentAt;
+  final DateTime? expiresAt;
+
+  factory CommerceLessonBalance.fromJson(Map<String, dynamic> json) {
+    return CommerceLessonBalance(
+      activeSubscriptionCount: _commerceInt(
+        json['activeSubscriptionCount'],
+        'lessonBalance.activeSubscriptionCount',
+      ),
+      total: _commerceNumber(json['total'], 'lessonBalance.total'),
+      used: _commerceNumber(json['used'], 'lessonBalance.used'),
+      reserved: _commerceNumber(json['reserved'], 'lessonBalance.reserved'),
+      paid: _commerceNumber(json['paid'], 'lessonBalance.paid'),
+      available: _commerceNumber(json['available'], 'lessonBalance.available'),
+      debts: _commerceMaps(
+        json['debts'],
+      ).map(CommerceLessonDebt.fromJson).toList(growable: false),
+      nextPaymentAt: json['nextPaymentAt'] == null
+          ? null
+          : _commerceDate(json['nextPaymentAt'], 'lessonBalance.nextPaymentAt'),
+      expiresAt: json['expiresAt'] == null
+          ? null
+          : _commerceDate(json['expiresAt'], 'lessonBalance.expiresAt'),
+    );
+  }
+}
+
+class CommerceLessonDebt {
+  const CommerceLessonDebt({
+    required this.currencyCode,
+    required this.amountMinor,
+  });
+
+  final String currencyCode;
+  final BigInt amountMinor;
+
+  factory CommerceLessonDebt.fromJson(Map<String, dynamic> json) {
+    return CommerceLessonDebt(
+      currencyCode: _commerceRequiredString(json, 'currencyCode'),
+      amountMinor: _commerceMinor(json['amountMinor'], 'amountMinor'),
+    );
+  }
 }
 
 List<Map<String, dynamic>> _commerceMaps(Object? raw) {

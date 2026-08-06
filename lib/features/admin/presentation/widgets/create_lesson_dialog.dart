@@ -25,6 +25,9 @@ class CreateLessonDialog extends ConsumerStatefulWidget {
   final Map<String, dynamic>? lesson;
   final String? leadId;
   final String? leadName;
+  final String? clientType;
+  final String? clientId;
+  final String? clientName;
   final bool initialIsTrial;
   final bool pageMode;
 
@@ -37,6 +40,9 @@ class CreateLessonDialog extends ConsumerStatefulWidget {
     this.lesson,
     this.leadId,
     this.leadName,
+    this.clientType,
+    this.clientId,
+    this.clientName,
     this.initialIsTrial = false,
     this.pageMode = false,
   });
@@ -50,6 +56,9 @@ class CreateLessonDialog extends ConsumerStatefulWidget {
     Map<String, dynamic>? lesson,
     String? leadId,
     String? leadName,
+    String? clientType,
+    String? clientId,
+    String? clientName,
     bool initialIsTrial = false,
   }) {
     return Navigator.of(context).push<bool>(
@@ -64,6 +73,9 @@ class CreateLessonDialog extends ConsumerStatefulWidget {
           lesson: lesson,
           leadId: leadId,
           leadName: leadName,
+          clientType: clientType,
+          clientId: clientId,
+          clientName: clientName,
           initialIsTrial: initialIsTrial,
           pageMode: true,
         ),
@@ -138,7 +150,13 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
       _durationMinutes = minutes;
     }
 
-    if (widget.leadId != null) {
+    if (widget.clientId != null) {
+      _selectedClient = _clientRow(
+        type: widget.clientType == 'lead' ? 'lead' : 'student',
+        id: widget.clientId!,
+        label: widget.clientName ?? 'Клиент без имени',
+      );
+    } else if (widget.leadId != null) {
       _selectedClient = _clientRow(
         type: 'lead',
         id: widget.leadId!,
@@ -335,7 +353,11 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         _selectedTime.hour - 3,
         _selectedTime.minute,
       );
-      final canSave = await _checkConflictsBeforeSave(startsAt);
+      final canSave = await _previewConstraintsBeforeSave(
+        startsAt,
+        clientType,
+        clientId,
+      );
       if (!canSave || !mounted) return;
 
       final payload = _lessonPayload(
@@ -411,83 +433,34 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     };
   }
 
-  Future<bool> _checkConflictsBeforeSave(DateTime startsAt) async {
+  Future<bool> _previewConstraintsBeforeSave(
+    DateTime startsAt,
+    String clientType,
+    String clientId,
+  ) async {
     try {
-      final check = await ref
+      final violations = await ref
           .read(magicApiClientProvider)
-          .checkScheduleConflicts(
-            teacherId: _selectedTeacherId,
-            roomId: _selectedRoomId,
-            startsAt: startsAt.toIso8601String(),
-            endsAt: startsAt
-                .add(Duration(minutes: _durationMinutes))
-                .toIso8601String(),
+          .previewLessonConstraints(
+            clientType: clientType,
+            clientId: clientId,
+            teacherId: _selectedTeacherId!,
+            branchId: _selectedBranchId!,
+            roomId: _selectedRoomId!,
+            scheduledAt: startsAt.toIso8601String(),
+            durationMinutes: _durationMinutes,
             excludeLessonId: _isEdit ? widget.lesson!['id']?.toString() : null,
           );
-      if (!check.hasConflicts) return true;
+      if (violations.isEmpty) return true;
       if (!mounted) return false;
-      await _showBusySlot(check);
+      await _showConstraintViolations(violations);
       return false;
     } catch (error) {
-      // The authoritative create/edit command still runs the complete v4
-      // engine. A read-only preview outage must not turn into a bypass because
-      // the mutation itself fails closed with structured violations.
-      debugPrint('Schedule conflicts preview failed: $error');
+      // The write repeats the same engine inside its transaction and still
+      // fails closed if this read-only preview is temporarily unavailable.
+      debugPrint('Schedule constraints preview failed: $error');
       return true;
     }
-  }
-
-  Future<void> _showBusySlot(ScheduleConflictCheck check) {
-    final headers = <String>[
-      if (check.teacherBusy) 'Преподаватель занят в это время',
-      if (check.roomBusy) 'Аудитория занята в это время',
-    ];
-    if (headers.isEmpty) headers.add('В выбранное время слот уже занят');
-    return showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        icon: const Icon(Icons.warning_amber_rounded, color: AppColor.danger),
-        title: const Text('Конфликт расписания'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (final header in headers)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Text(
-                    header,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-              for (final conflict in check.conflicts)
-                _legacyConflictCard(ctx, conflict),
-              const SizedBox(height: 8),
-              const Text('Измените время, преподавателя или аудиторию.'),
-            ],
-          ),
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Вернуться к форме'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _legacyConflictCard(
-    BuildContext dialogContext,
-    ScheduleConflictInfo conflict,
-  ) {
-    return _violationCard(
-      title: conflict.label(),
-      resource: 'Занятие в выбранном интервале',
-      lessonIds: [?conflict.lessonId],
-      dialogContext: dialogContext,
-    );
   }
 
   Future<void> _showConstraintViolations(
@@ -564,7 +537,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                       Navigator.pop(context);
                     },
                     icon: const Icon(Icons.open_in_new_rounded, size: 15),
-                    label: Text('Занятие ${_shortId(lessonId)}'),
+                    label: const Text('Открыть конфликтующее занятие'),
                   ),
               ],
             ),
@@ -572,8 +545,6 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
       ),
     );
   }
-
-  String _shortId(String id) => id.length <= 8 ? id : id.substring(0, 8);
 
   @override
   Widget build(BuildContext context) {
@@ -631,7 +602,10 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                 label: 'Клиент *',
                 value: _selectedClient?['label']?.toString() ?? 'Не выбран',
                 badge: _clientType == null ? null : _clientBadge(_clientType!),
-                enabled: !_snapshotLocked && widget.leadId == null,
+                enabled:
+                    !_snapshotLocked &&
+                    widget.leadId == null &&
+                    widget.clientId == null,
                 onTap: _pickClient,
               ),
               const SizedBox(height: 16),

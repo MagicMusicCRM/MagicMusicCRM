@@ -1851,7 +1851,7 @@ async function readStoredCounts(
       (select count(*)::text from app.lessons where deleted_at is null) as lessons,
       (select count(*)::text from app.lesson_participation) as lesson_participation,
       (select count(*)::text from app.payments where deleted_at is null) as payments,
-      (select count(*)::text from app.tasks where deleted_at is null) as tasks,
+      (select count(*)::text from app.shared_tasks where deleted_at is null) as tasks,
       (select count(*)::text from app.entity_comments where deleted_at is null) as entity_comments,
       (select count(*)::text from app.lead_comments where deleted_at is null) as lead_comments,
       (select count(*)::text from app.lead_status_history) as lead_status_history,

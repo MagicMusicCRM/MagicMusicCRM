@@ -40,6 +40,7 @@ void main() {
       cache: Object(),
       realtime: Object(),
     ),
+    titleResolver: const EntityPresentationResolver().pageTitle,
   );
 
   testWidgets(
@@ -64,6 +65,9 @@ void main() {
           entityType: EntityLinkType.client,
           entityId: 'student-1',
           variant: 'student',
+          presentation: const EntityPresentationReference(
+            primary: 'Иванов Иван',
+          ),
         ),
         EntityLink.typed(
           entityType: EntityLinkType.client,
@@ -160,6 +164,7 @@ void main() {
       );
       expect(workspace.state.tabs, hasLength(2));
       expect(workspace.state.activeTab.currentRoute.link, same(links.first));
+      expect(workspace.state.activeTab.titleHint, 'Ученик · Иванов Иван');
     },
   );
 

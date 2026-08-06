@@ -1,9 +1,16 @@
 import { ForbiddenException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { randomUUID } from "crypto";
+import { mkdir, writeFile } from "fs/promises";
+import { dirname, resolve } from "path";
+import * as ExcelJS from "exceljs";
+import { AuditService } from "../audit/audit.service";
 import { ActorContext } from "../common/security/actor-context";
 import { CrmPolicy } from "../crm/crm.policy";
 import { DatabaseService } from "../db/database.service";
+import { ClientStatusReadService } from "./client-status-read.service";
+import { OoxmlWorkbookBuilder } from "./ooxml-workbook.builder";
+import { ReportExportService } from "./report-export.service";
 import { ReportingReadService } from "./reporting-read.service";
 
 const databaseUrl =
@@ -54,12 +61,30 @@ describe("ReportingReadService hard scopes (PostgreSQL)", () => {
       version: 1,
       status: "successfully_completed",
     });
+    const managerLessons = await service.lessonSuccessList(fixture.manager, {
+      ...range,
+      limit: 10,
+      offset: 0,
+    });
+    expect(managerLessons.total).toBe(manager.successfulLessons);
+    expect(managerLessons.items).toEqual([
+      expect.objectContaining({
+        id: fixture.lessonIds[0],
+        lifecycleState: "successfully_completed",
+        entityLink: { entityType: "lesson", entityId: fixture.lessonIds[0] },
+      }),
+    ]);
 
     const director = await service.lessonSuccess(fixture.director, range);
     expect(director).toMatchObject({
       totalLessons: 3,
       successfulLessons: 2,
     });
+    const directorLessons = await service.lessonSuccessList(
+      fixture.director,
+      range,
+    );
+    expect(directorLessons.total).toBe(director.successfulLessons);
     await expect(service.lessonSuccess(fixture.admin, range)).rejects.toBeInstanceOf(
       ForbiddenException,
     );
@@ -89,6 +114,42 @@ describe("ReportingReadService hard scopes (PostgreSQL)", () => {
         }),
       }),
     ]);
+
+    const exports = new ReportExportService(
+      database,
+      {} as ClientStatusReadService,
+      service,
+      new OoxmlWorkbookBuilder(),
+      {} as AuditService,
+    );
+    const buffer = await exports.financeWorkbook(fixture.director, {
+      ...range,
+      branchId: fixture.assignedBranchId,
+    });
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(Uint8Array.from(buffer).buffer);
+    const sheet = workbook.getWorksheet("Финансы")!;
+    const row = director.rows[0]!;
+    expect(sheet.rowCount).toBe(director.rows.length + 1);
+    expect(sheet.getCell("D2").value).toBe(
+      Number(BigInt(row.revenueMinor)) / 100,
+    );
+    expect(sheet.getCell("E2").value).toBe(
+      Number(BigInt(row.expensesMinor)) / 100,
+    );
+    expect(sheet.getCell("F2").value).toEqual({
+      formula: "D2-E2",
+      result:
+        Number(BigInt(row.revenueMinor) - BigInt(row.expensesMinor)) / 100,
+    });
+    const fixturePath = resolve(
+      process.cwd(),
+      "..",
+      "build",
+      "stage7-school-finance.xlsx",
+    );
+    await mkdir(dirname(fixturePath), { recursive: true });
+    await writeFile(fixturePath, buffer);
 
     const root = await service.schoolFinance(fixture.systemAdmin, {
       ...range,

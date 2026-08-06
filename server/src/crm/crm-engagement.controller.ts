@@ -2,7 +2,6 @@ import {
   BadRequestException,
   Body,
   Controller,
-  Delete,
   Get,
   Headers,
   Param,
@@ -16,7 +15,6 @@ import { ActorContext } from "../common/security/actor-context";
 import { CurrentActor } from "../common/security/current-actor.decorator";
 import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
 import { HomeworkService } from "./homework.service";
-import { TasksService } from "./tasks.service";
 import { SectionViewsService } from "./section-views.service";
 import { TimelineService } from "./timeline.service";
 import { CommentQuery } from "./dto/comment.query";
@@ -27,10 +25,7 @@ import { CreateHomeworkDto } from "./dto/create-homework.dto";
 import { UpdateHomeworkDto } from "./dto/update-homework.dto";
 import { HomeworkQuery } from "./dto/homework.query";
 import { AddHomeworkAttachmentDto } from "./dto/add-homework-attachment.dto";
-import { TaskBoardQuery } from "./dto/task-board.query";
-import { TaskHistoryQuery } from "./dto/task-history.query";
 import { TimelineQuery } from "./dto/timeline.query";
-import { UpsertTaskDto } from "./dto/upsert-task.dto";
 import { CommentSharingService } from "./clients/comment-sharing.service";
 
 @UseGuards(JwtAuthGuard)
@@ -38,7 +33,6 @@ import { CommentSharingService } from "./clients/comment-sharing.service";
 export class CrmEngagementController {
   constructor(
     private readonly homework: HomeworkService,
-    private readonly tasks: TasksService,
     private readonly timeline: TimelineService,
     private readonly sectionViews: SectionViewsService,
     private readonly commentSharing: CommentSharingService,
@@ -64,42 +58,6 @@ export class CrmEngagementController {
     @Body() dto: MarkSectionSeenDto,
   ) {
     return this.sectionViews.markSeen(actor, dto.section);
-  }
-
-  @Get("tasks")
-  listTasks(
-    @CurrentActor() actor: ActorContext,
-    @Query() query: TaskBoardQuery,
-  ) {
-    return this.tasks.listTasks(actor, query);
-  }
-
-  // Literal segment, registered before "tasks/:id" so «calendar» is never
-  // parsed as a task id. Per-day counts for the month/year calendar grids.
-  @Get("tasks/calendar")
-  taskCalendar(
-    @CurrentActor() actor: ActorContext,
-    @Query() query: TaskBoardQuery,
-  ) {
-    return this.tasks.taskCalendar(actor, query);
-  }
-
-  // Registered before "tasks/:id/history" so the literal segment wins the match
-  // and "history" is never parsed as a task id.
-  @Get("tasks/history")
-  listTaskHistoryFeed(
-    @CurrentActor() actor: ActorContext,
-    @Query() query: TaskHistoryQuery,
-  ) {
-    return this.tasks.listTaskHistoryFeed(actor, query);
-  }
-
-  @Get("tasks/:id/history")
-  listTaskHistory(
-    @CurrentActor() actor: ActorContext,
-    @Param("id", ParseUUIDPipe) id: string,
-  ) {
-    return this.tasks.listTaskHistory(actor, id);
   }
 
   @Get("timeline")
@@ -150,28 +108,6 @@ export class CrmEngagementController {
       requestId: effectiveRequestId,
       idempotencyKey: idempotencyKey ?? `request:${effectiveRequestId}`,
     });
-  }
-
-  @Post("tasks")
-  createTask(@CurrentActor() actor: ActorContext, @Body() dto: UpsertTaskDto) {
-    return this.tasks.createTask(actor, dto);
-  }
-
-  @Patch("tasks/:id")
-  updateTask(
-    @CurrentActor() actor: ActorContext,
-    @Param("id", ParseUUIDPipe) id: string,
-    @Body() dto: UpsertTaskDto,
-  ) {
-    return this.tasks.updateTask(actor, id, dto);
-  }
-
-  @Delete("tasks/:id")
-  deleteTask(
-    @CurrentActor() actor: ActorContext,
-    @Param("id", ParseUUIDPipe) id: string,
-  ) {
-    return this.tasks.deleteTask(actor, id);
   }
 
   @Get("homeworks")

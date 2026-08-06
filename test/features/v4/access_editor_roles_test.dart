@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
@@ -126,6 +127,43 @@ Future<void> _confirmRoleChange(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('access editor is a fullscreen route and system Back closes it', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final source = _FakeAccessSource();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [accessManagementServiceProvider.overrideWithValue(source)],
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) => FilledButton(
+              onPressed: () => AccessEditorSheet.show(
+                context,
+                actorRole: 'director',
+                userId: '11111111-1111-4111-8111-111111111111',
+                userLabel: 'Анна Петрова',
+              ),
+              child: const Text('Открыть доступ'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Открыть доступ'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.getSize(find.byKey(const Key('access-editor-surface'))).height,
+      900,
+    );
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('Открыть доступ'), findsOneWidget);
+  });
+
   testWidgets('Manager gets zero access controls', (tester) async {
     final source = _FakeAccessSource();
     await tester.pumpWidget(_host('manager', source));

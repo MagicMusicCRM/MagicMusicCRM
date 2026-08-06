@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/widgets/v7/magic_sheet.dart';
+
 import 'schedule_shared.dart';
 
 /// The chosen schedule filters, returned on «Применить» (null on dismiss).
@@ -29,141 +31,123 @@ Future<ScheduleFilterResult?> showScheduleFiltersSheet(
   var onlyTrial = initialOnlyTrial;
   var onlyConflicts = initialOnlyConflicts;
   String? teacherId = initialTeacherId;
-  return showModalBottomSheet<ScheduleFilterResult>(
-    context: context,
-    showDragHandle: true,
-    isScrollControlled: true,
+  return showMagicSheet<ScheduleFilterResult>(
+    context,
+    title: 'Фильтры расписания',
+    icon: Icons.filter_alt_outlined,
     builder: (ctx) => StatefulBuilder(
       builder: (context, setSheetState) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    'Фильтры расписания',
-                    style: Theme.of(context).textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 12),
-                  ListTile(
-                    title: const Text('Все филиалы'),
-                    contentPadding: EdgeInsets.zero,
-                    onTap: () => setSheetState(() => branchId = null),
-                    trailing: branchId == null
-                        ? const Icon(Icons.check_rounded)
-                        : null,
-                  ),
-                  ...branches.map((branch) {
-                    final id = branch['id'].toString();
-                    return ListTile(
-                      title: Text(branch['name']?.toString() ?? 'Филиал'),
-                      contentPadding: EdgeInsets.zero,
-                      onTap: () => setSheetState(() => branchId = id),
-                      trailing: branchId == id
-                          ? const Icon(Icons.check_rounded)
-                          : null,
-                    );
-                  }),
-                  const Divider(),
-                  // Lesson filters.
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Только пробные'),
-                    value: onlyTrial,
-                    onChanged: (v) => setSheetState(() => onlyTrial = v),
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Только с конфликтами'),
-                    value: onlyConflicts,
-                    onChanged: (v) => setSheetState(() => onlyConflicts = v),
-                  ),
-                  if (teacherOptions.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: DropdownButtonFormField<String?>(
-                        initialValue: teacherId,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Педагог',
-                          border: OutlineInputBorder(),
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                        ),
-                        items: [
-                          const DropdownMenuItem<String?>(
-                            value: null,
-                            child: Text('Все педагоги'),
-                          ),
-                          for (final t in teacherOptions)
-                            DropdownMenuItem<String?>(
-                              value: t.id,
-                              child: Text(
-                                t.name,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                        ],
-                        onChanged: (v) => setSheetState(() => teacherId = v),
-                      ),
-                    ),
-                  if (isDayView) ...[
-                    const Divider(),
-                    ListTile(
-                      title: const Text('День по аудиториям'),
-                      contentPadding: EdgeInsets.zero,
-                      onTap: () => setSheetState(
-                        () => dayViewMode = DayViewMode.byRoom,
-                      ),
-                      trailing: dayViewMode == DayViewMode.byRoom
-                          ? const Icon(Icons.check_rounded)
-                          : null,
-                    ),
-                    ListTile(
-                      title: const Text('День по педагогу'),
-                      contentPadding: EdgeInsets.zero,
-                      onTap: () => setSheetState(
-                        () => dayViewMode = DayViewMode.byTeacher,
-                      ),
-                      trailing: dayViewMode == DayViewMode.byTeacher
-                          ? const Icon(Icons.check_rounded)
-                          : null,
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      TextButton(
-                        onPressed: () => setSheetState(() {
-                          onlyTrial = false;
-                          onlyConflicts = false;
-                          teacherId = null;
-                        }),
-                        child: const Text('Сбросить'),
-                      ),
-                      const Spacer(),
-                      FilledButton(
-                        onPressed: () => Navigator.of(ctx).pop((
-                          branchId: branchId,
-                          mode: dayViewMode,
-                          onlyTrial: onlyTrial,
-                          onlyConflicts: onlyConflicts,
-                          teacherId: teacherId,
-                        )),
-                        child: const Text('Применить'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ListTile(
+              title: const Text('Все филиалы'),
+              contentPadding: EdgeInsets.zero,
+              onTap: () => setSheetState(() => branchId = null),
+              trailing: branchId == null
+                  ? const Icon(Icons.check_rounded)
+                  : null,
             ),
-          ),
+            ...branches.map((branch) {
+              final id = branch['id'].toString();
+              return ListTile(
+                title: Text(branch['name']?.toString() ?? 'Филиал'),
+                contentPadding: EdgeInsets.zero,
+                onTap: () => setSheetState(() => branchId = id),
+                trailing: branchId == id
+                    ? const Icon(Icons.check_rounded)
+                    : null,
+              );
+            }),
+            const Divider(),
+            // Lesson filters.
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Только пробные'),
+              value: onlyTrial,
+              onChanged: (v) => setSheetState(() => onlyTrial = v),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Только с конфликтами'),
+              value: onlyConflicts,
+              onChanged: (v) => setSheetState(() => onlyConflicts = v),
+            ),
+            if (teacherOptions.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: DropdownButtonFormField<String?>(
+                  initialValue: teacherId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Педагог',
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                  ),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('Все педагоги'),
+                    ),
+                    for (final t in teacherOptions)
+                      DropdownMenuItem<String?>(
+                        value: t.id,
+                        child: Text(t.name, overflow: TextOverflow.ellipsis),
+                      ),
+                  ],
+                  onChanged: (v) => setSheetState(() => teacherId = v),
+                ),
+              ),
+            if (isDayView) ...[
+              const Divider(),
+              ListTile(
+                title: const Text('День по аудиториям'),
+                contentPadding: EdgeInsets.zero,
+                onTap: () =>
+                    setSheetState(() => dayViewMode = DayViewMode.byRoom),
+                trailing: dayViewMode == DayViewMode.byRoom
+                    ? const Icon(Icons.check_rounded)
+                    : null,
+              ),
+              ListTile(
+                title: const Text('День по педагогу'),
+                contentPadding: EdgeInsets.zero,
+                onTap: () =>
+                    setSheetState(() => dayViewMode = DayViewMode.byTeacher),
+                trailing: dayViewMode == DayViewMode.byTeacher
+                    ? const Icon(Icons.check_rounded)
+                    : null,
+              ),
+            ],
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                TextButton(
+                  onPressed: () => setSheetState(() {
+                    onlyTrial = false;
+                    onlyConflicts = false;
+                    teacherId = null;
+                  }),
+                  child: const Text('Сбросить'),
+                ),
+                const Spacer(),
+                FilledButton(
+                  onPressed: () => Navigator.of(ctx).pop((
+                    branchId: branchId,
+                    mode: dayViewMode,
+                    onlyTrial: onlyTrial,
+                    onlyConflicts: onlyConflicts,
+                    teacherId: teacherId,
+                  )),
+                  child: const Text('Применить'),
+                ),
+              ],
+            ),
+          ],
         );
       },
     ),

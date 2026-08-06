@@ -45,14 +45,16 @@ describe("SectionViewsService", () => {
      * бейдж зовёт именно его. У школы 12 483 задачи: считай мы все, цифра стала
      * бы фоном, на который перестают смотреть.
      */
-    it("задачи считает ТОЛЬКО назначенные этому человеку", async () => {
+    it("задачи считает ТОЛЬКО для канонического получателя", async () => {
       const { service, query } = createService([
         { clients: "0", tasks: "0", schedule: "0", finance: "0" },
       ]);
 
       await service.unseenCounts(manager);
 
-      expect(String(query.mock.calls[0][0])).toContain("t.assigned_to = $1");
+      expect(String(query.mock.calls[0][0])).toContain(
+        "app.shared_task_recipients",
+      );
     });
 
     it.each([["client"], ["teacher"]])(

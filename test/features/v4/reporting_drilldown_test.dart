@@ -61,6 +61,30 @@ void main() {
     expect(find.text('Новые'), findsOneWidget);
   });
 
+  testWidgets('lesson KPI opens source lessons with the same predicate', (
+    tester,
+  ) async {
+    final api = _ReportingApi();
+    EntityLink? opened;
+    await tester.pumpWidget(
+      _app(api, role: 'manager', onOpenEntity: (link) => opened = link),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Успешно завершённые занятия').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Занятия: 8'), findsOneWidget);
+    final summaryFilter = api.queries['/analytics/v4/lesson-success']!;
+    final listFilter = api.queries['/analytics/v4/lesson-success/lessons']!;
+    expect(listFilter['from'], summaryFilter['from']);
+    expect(listFilter['to'], summaryFilter['to']);
+    expect(listFilter['branchId'], summaryFilter['branchId']);
+    await tester.tap(find.text('Урок Алины'));
+    expect(opened?.rawEntityType, 'lesson');
+    expect(opened?.entityId, 'lesson-1');
+  });
+
   testWidgets('director sees finance and completes private async download', (
     tester,
   ) async {
@@ -190,7 +214,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Новые'), findsOneWidget);
-    expect(find.text('Открыто: 3'), findsOneWidget);
+    expect(find.text('Открыто: 3 · Просрочено: 1'), findsOneWidget);
     expect(find.text('Не удалось загрузить раздел'), findsOneWidget);
   });
 
@@ -344,6 +368,30 @@ class _ReportingApi extends MagicApiClient {
             'totalLessons': empty ? 0 : 10,
             'successfulLessons': empty ? 0 : 8,
             'successRate': empty ? 0 : 0.8,
+            'drilldown': {
+              'entityType': 'lesson_list',
+              'entityId': 'successfully_completed',
+              'optionalFocus': {
+                'filter': {
+                  'version': 1,
+                  'status': 'successfully_completed',
+                  ...?queryParameters,
+                },
+              },
+            },
+          }
+          as T;
+    }
+    if (path == '/analytics/v4/lesson-success/lessons') {
+      return <String, dynamic>{
+            'total': 8,
+            'items': [
+              {
+                'displayName': 'Урок Алины',
+                'subtitle': 'Ирина · Центральный',
+                'entityLink': {'entityType': 'lesson', 'entityId': 'lesson-1'},
+              },
+            ],
           }
           as T;
     }

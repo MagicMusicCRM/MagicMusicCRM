@@ -129,6 +129,8 @@ class ClientFormsApi {
     required String lastName,
     required String phone,
     required String sourceId,
+    required String branchId,
+    required String status,
     required List<Map<String, dynamic>> customFields,
   }) {
     return _api.post<Map<String, dynamic>>(
@@ -138,6 +140,8 @@ class ClientFormsApi {
         'lastName': lastName.trim(),
         'phone': phone.trim(),
         'sourceId': sourceId,
+        'branchId': branchId,
+        'status': status.trim(),
         'customFields': customFields,
       },
     );

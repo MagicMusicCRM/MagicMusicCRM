@@ -4,6 +4,8 @@ class StudentFunnelStage {
     required this.label,
     required this.style,
     required this.active,
+    this.terminal = false,
+    this.requiresReason = false,
     required this.allowedTransitions,
   });
 
@@ -13,6 +15,8 @@ class StudentFunnelStage {
       label: json['label']?.toString() ?? '',
       style: json['style']?.toString() ?? 'gray',
       active: json['active'] == true,
+      terminal: json['terminal'] == true,
+      requiresReason: json['requiresReason'] == true,
       allowedTransitions: (json['allowedTransitions'] as List? ?? const [])
           .map((value) => value.toString())
           .toList(growable: false),
@@ -23,18 +27,24 @@ class StudentFunnelStage {
   final String label;
   final String style;
   final bool active;
+  final bool terminal;
+  final bool requiresReason;
   final List<String> allowedTransitions;
 
   StudentFunnelStage copyWith({
     String? label,
     String? style,
     bool? active,
+    bool? terminal,
+    bool? requiresReason,
     List<String>? allowedTransitions,
   }) => StudentFunnelStage(
     key: key,
     label: label ?? this.label,
     style: style ?? this.style,
     active: active ?? this.active,
+    terminal: terminal ?? this.terminal,
+    requiresReason: requiresReason ?? this.requiresReason,
     allowedTransitions: allowedTransitions ?? this.allowedTransitions,
   );
 
@@ -43,12 +53,15 @@ class StudentFunnelStage {
     'label': label.trim(),
     'style': style,
     'active': active,
+    'terminal': terminal,
+    'requiresReason': requiresReason,
     'allowedTransitions': allowedTransitions,
   };
 }
 
 class StudentFunnelConfiguration {
   const StudentFunnelConfiguration({
+    required this.clientType,
     required this.branchId,
     required this.source,
     required this.schoolVersion,
@@ -67,6 +80,7 @@ class StudentFunnelConfiguration {
       throw const FormatException('Student funnel has no configured stages.');
     }
     return StudentFunnelConfiguration(
+      clientType: json['clientType']?.toString() ?? 'student',
       branchId: json['branchId']?.toString(),
       source: json['source']?.toString() ?? 'school',
       schoolVersion: (json['schoolVersion'] as num?)?.toInt() ?? 0,
@@ -79,6 +93,7 @@ class StudentFunnelConfiguration {
   }
 
   final String? branchId;
+  final String clientType;
   final String source;
   final int schoolVersion;
   final int branchVersion;

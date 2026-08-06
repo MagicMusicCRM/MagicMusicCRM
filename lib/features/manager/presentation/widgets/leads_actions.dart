@@ -472,28 +472,6 @@ extension _LeadsActions on _LeadsWidgetState {
                   ),
                 ),
               ),
-              // Column config is a system setting → only управляющий/директор/
-              // сисадмин (NOT a branch admin) sees «Колонки». Mirrors the
-              // server's assertCanManageSystemSettings.
-              if (_canManageColumns)
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final cols = (board['columns'] as List?)
-                        ?.whereType<Map<String, dynamic>>()
-                        .toList();
-                    await ManageStatusesDialog.show(
-                      context,
-                      initialColumns: cols,
-                    );
-                    await _loadStatuses();
-                    _refreshBoard();
-                  },
-                  icon: const Icon(Icons.settings_rounded, size: 16),
-                  label: const Text('Колонки'),
-                ),
-              if (_canManageClientConfiguration)
-                const SizedBox(width: AppSpace.sm),
-              ClientConfigurationButton(allowed: _canManageClientConfiguration),
             ],
           ),
           const SizedBox(height: 10),
@@ -504,6 +482,7 @@ extension _LeadsActions on _LeadsWidgetState {
                 SizedBox(
                   width: 240,
                   child: TextField(
+                    key: const ValueKey('leads-search'),
                     controller: _searchCtrl,
                     decoration: InputDecoration(
                       isDense: true,

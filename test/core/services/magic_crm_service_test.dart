@@ -61,7 +61,7 @@ void main() {
               'roomLoadLessons': 46,
               'staffActivity': 31,
             },
-            'sources': {'tasks': '/crm/tasks'},
+            'sources': {'tasks': '/crm/shared-tasks?state=open'},
           },
         ),
       ]);
@@ -75,8 +75,47 @@ void main() {
 
       expect(dashboard['kpis']['schedule_issues'], 2);
       expect(dashboard['kpis']['staff_activity'], 31);
-      expect(dashboard['sources']['tasks'], '/crm/tasks');
+      expect(dashboard['sources']['tasks'], '/crm/shared-tasks?state=open');
       expect(adapter.requests.single.queryParameters['branchId'], 'branch-a');
+    });
+
+    test('uses canonical task filters and calendar', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/crm/shared-tasks',
+          statusCode: 200,
+          body: {
+            'items': <Map<String, dynamic>>[],
+            'counters': {'open': 0, 'overdue': 0},
+          },
+        ),
+        _FakeResponse(
+          path: '/crm/shared-tasks/calendar',
+          statusCode: 200,
+          body: {
+            'items': [
+              {'day': '2026-08-12', 'count': 2},
+            ],
+          },
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      await service.listSharedTasks(
+        q: 'отчёт',
+        priority: 'high',
+        scope: 'branch',
+      );
+      final calendar = await service.sharedTaskCalendar(
+        from: '2026-08-01T00:00:00.000Z',
+        to: '2026-09-01T00:00:00.000Z',
+        priority: 'high',
+      );
+
+      expect(adapter.requests.first.queryParameters['q'], 'отчёт');
+      expect(adapter.requests.first.queryParameters['priority'], 'high');
+      expect(adapter.requests.first.queryParameters['scope'], 'branch');
+      expect(calendar, {'2026-08-12': 2});
     });
 
     test('maps finance report to report widget legacy keys', () async {
@@ -1199,7 +1238,7 @@ void main() {
       expect(adapter.requests.single.body, isEmpty);
     });
 
-    test('lists student groups and expected payments through v3 API', () async {
+    test('lists student groups through v3 API', () async {
       final adapter = _FakeAdapter([
         _FakeResponse(
           path: '/crm/students/student-a/groups',
@@ -1221,42 +1260,13 @@ void main() {
             ],
           },
         ),
-        _FakeResponse(
-          path: '/crm/expected-payments',
-          statusCode: 200,
-          body: {
-            'items': [
-              {
-                'id': 'expected-a',
-                'studentId': 'student-a',
-                'studentName': 'Анна Иванова',
-                'amount': 5000,
-                'dueDate': '2026-06-30',
-                'status': 'pending',
-                'description': 'Абонемент за июнь',
-                'createdAt': '2026-06-12T00:00:00.000Z',
-                'updatedAt': '2026-06-12T00:00:00.000Z',
-              },
-            ],
-          },
-        ),
       ]);
       final service = MagicCrmService(_client(adapter));
 
       final groups = await service.listStudentGroups('student-a', limit: 10);
-      final expectedPayments = await service.listExpectedPayments(
-        studentId: 'student-a',
-        limit: 10,
-      );
-
       expect(groups.single['teachers']['first_name'], 'Иван');
       expect(groups.single['teachers']['last_name'], 'Петров');
-      expect(expectedPayments.single['due_date'], '2026-06-30');
-      expect(expectedPayments.single['description'], 'Абонемент за июнь');
-      expect(expectedPayments.single['students']['first_name'], 'Анна');
-      expect(adapter.requests[0].queryParameters['limit'], 10);
-      expect(adapter.requests[1].queryParameters['studentId'], 'student-a');
-      expect(adapter.requests[1].queryParameters['limit'], 10);
+      expect(adapter.requests.single.queryParameters['limit'], 10);
     });
 
     test('creates updates and deletes rooms through v3 API', () async {
@@ -1715,22 +1725,6 @@ void main() {
           },
         ),
         _FakeResponse(path: '/crm/leads/lead-a', statusCode: 200, body: {}),
-        _FakeResponse(
-          path: '/crm/lead-statuses',
-          statusCode: 201,
-          body: {
-            'id': 'status-c',
-            'name': 'Думает',
-            'color': '#8B5CF6',
-            'sortOrder': 3,
-            'createdAt': '2026-06-12T00:00:00.000Z',
-          },
-        ),
-        _FakeResponse(
-          path: '/crm/lead-statuses/status-c',
-          statusCode: 200,
-          body: {},
-        ),
       ]);
       final service = MagicCrmService(_client(adapter));
 
@@ -1749,26 +1743,15 @@ void main() {
         customDataPatch: {'level': 'beginner'},
       );
       await service.deleteLead('lead-a');
-      final status = await service.createLeadStatus(
-        key: 'thinking',
-        label: 'Думает',
-        color: '#8B5CF6',
-        sortOrder: 3,
-      );
-      await service.deleteLeadStatus('status-c');
-
       expect(created['name'], 'Петр');
       expect(created['status'], 'status-a');
       expect(updated['last_name'], 'Сидоров');
       expect(updated['custom_data']['level'], 'beginner');
-      expect(status['key'], 'status-c');
-      expect(status['label'], 'Думает');
       expect(
         adapter.requests[0].body['customDataPatch']['discipline'],
         'Гитара',
       );
       expect(adapter.requests[1].body['statusId'], 'status-b');
-      expect(adapter.requests[3].body['label'], 'Думает');
     });
 
     test(
@@ -1901,7 +1884,21 @@ void main() {
                   'status': 'active',
                   'startsAt': '2026-06-01',
                   'expiresAt': '2026-07-01',
-                  'units': {'total': '8', 'used': '3', 'remaining': '5'},
+                  'units': {
+                    'total': '8',
+                    'used': '3',
+                    'reserved': '0',
+                    'paid': '8',
+                    'available': '5',
+                    'remaining': '5',
+                  },
+                  'financial': {
+                    'actualPaidMinor': '640000',
+                    'obligationMinor': '640000',
+                    'debtMinor': '0',
+                    'overpaymentMinor': '0',
+                    'nextPaymentAt': null,
+                  },
                   'terms': {
                     'displayName': 'Вокал — 8 часов',
                     'validityDays': 30,
@@ -1918,6 +1915,17 @@ void main() {
                 },
               ],
               'movements': <dynamic>[],
+              'lessonBalance': {
+                'activeSubscriptionCount': 1,
+                'total': '8',
+                'used': '3',
+                'reserved': '0',
+                'paid': '8',
+                'available': '5',
+                'debts': <dynamic>[],
+                'nextPaymentAt': null,
+                'expiresAt': '2026-07-01',
+              },
             },
           },
         ),
@@ -1939,7 +1947,7 @@ void main() {
       expect(subscriptions.single['valid_until'], '2026-07-01T00:00:00.000');
     });
 
-    test('maps payments and creates payment payload', () async {
+    test('maps payments', () async {
       final adapter = _FakeAdapter([
         _FakeResponse(
           path: '/crm/payments',
@@ -1962,23 +1970,6 @@ void main() {
             ],
           },
         ),
-        _FakeResponse(
-          path: '/crm/payments',
-          statusCode: 201,
-          body: {
-            'id': 'payment-b',
-            'studentId': 'student-a',
-            'studentName': 'Анна Иванова',
-            'amount': 2500,
-            'currency': 'RUB',
-            'paymentDate': '2026-06-12T13:00:00.000Z',
-            'method': 'other',
-            'externalId': null,
-            'notes': null,
-            'createdBy': 'manager-a',
-            'createdAt': '2026-06-12T13:00:00.000Z',
-          },
-        ),
       ]);
       final service = MagicCrmService(_client(adapter));
 
@@ -1986,144 +1977,18 @@ void main() {
         from: '2026-06-01T00:00:00.000Z',
         limit: 10,
       );
-      final created = await service.createPayment(
-        studentId: 'student-a',
-        amount: 2500,
-        paymentDate: '2026-06-12T13:00:00.000Z',
-        method: 'other',
-      );
-
       expect(payments.single.studentFirstName, 'Анна');
       expect(payments.single.type, 'subscription');
       expect(payments.single.notes, 'Оплата абонемента');
       expect(payments.single.description, 'Оплата абонемента');
-      expect(created.amount, 2500);
       expect(
         adapter.requests[0].queryParameters['from'],
         '2026-06-01T00:00:00.000Z',
       );
-      expect(adapter.requests[1].body['studentId'], 'student-a');
-      expect(adapter.requests[1].body['method'], 'other');
     });
 
-    test('maps tasks and creates task payload', () async {
+    test('maps unified timeline', () async {
       final adapter = _FakeAdapter([
-        _FakeResponse(
-          path: '/crm/tasks',
-          statusCode: 200,
-          body: {
-            'items': [
-              {
-                'id': 'task-a',
-                'entityType': 'student',
-                'entityId': 'student-a',
-                'assignedTo': 'manager-a',
-                'assignedName': 'Мария Менеджер',
-                'entityName': 'Анна Иванова',
-                'title': 'Позвонить',
-                'description': null,
-                'status': 'open',
-                'dueAt': '2026-06-13T00:00:00.000Z',
-                'createdBy': 'admin-a',
-                'createdAt': '2026-06-12T00:00:00.000Z',
-              },
-            ],
-          },
-        ),
-        _FakeResponse(
-          path: '/crm/tasks',
-          statusCode: 201,
-          body: {
-            'id': 'task-b',
-            'entityType': 'lead',
-            'entityId': 'lead-a',
-            'assignedTo': null,
-            'assignedName': null,
-            'entityName': 'Петр Лид',
-            'title': 'Назначить пробный урок',
-            'description': 'Позвонить сегодня',
-            'status': 'open',
-            'dueAt': null,
-            'createdBy': 'admin-a',
-            'createdAt': '2026-06-12T00:00:00.000Z',
-          },
-        ),
-        _FakeResponse(
-          path: '/crm/tasks/task-a',
-          statusCode: 200,
-          body: {
-            'id': 'task-a',
-            'entityType': 'student',
-            'entityId': 'student-a',
-            'assignedTo': 'manager-b',
-            'assignedName': 'Новый Менеджер',
-            'entityName': 'Анна Иванова',
-            'title': 'Позвонить',
-            'description': null,
-            'status': 'in_progress',
-            'dueAt': '2026-06-13T00:00:00.000Z',
-            'createdBy': 'admin-a',
-            'createdAt': '2026-06-12T00:00:00.000Z',
-          },
-        ),
-      ]);
-      final service = MagicCrmService(_client(adapter));
-
-      final tasks = await service.listTasks(status: 'open', limit: 15);
-      final created = await service.createTask(
-        entityType: 'lead',
-        entityId: 'lead-a',
-        title: 'Назначить пробный урок',
-        description: 'Позвонить сегодня',
-      );
-      final updated = await service.updateTask(
-        'task-a',
-        assignedTo: 'manager-b',
-        status: 'in_progress',
-      );
-
-      expect(tasks.single['due_date'], '2026-06-13T00:00:00.000Z');
-      expect(tasks.single['entity_name'], 'Анна Иванова');
-      expect(tasks.single['students']['first_name'], 'Анна');
-      expect(created['leads']['name'], 'Петр Лид');
-      expect(updated['assigned_to'], 'manager-b');
-      expect(updated['assigned_name'], 'Новый Менеджер');
-      expect(adapter.requests[0].queryParameters['status'], 'open');
-      expect(adapter.requests[0].queryParameters['limit'], 15);
-      expect(adapter.requests[1].body['entityType'], 'lead');
-      expect(adapter.requests[1].body['entityId'], 'lead-a');
-      expect(adapter.requests[1].body['status'], 'open');
-      expect(adapter.requests[2].body['assignedTo'], 'manager-b');
-      expect(adapter.requests[2].body['status'], 'in_progress');
-    });
-
-    test('maps task board filters and unified timeline', () async {
-      final adapter = _FakeAdapter([
-        _FakeResponse(
-          path: '/crm/tasks',
-          statusCode: 200,
-          body: {
-            'items': [
-              {
-                'id': 'task-a',
-                'entityType': 'lead',
-                'entityId': 'lead-a',
-                'assignedTo': 'manager-a',
-                'assignedName': 'Мария Менеджер',
-                'entityName': 'Анна Иванова',
-                'title': 'Позвонить',
-                'description': 'Приоритет высокий, WhatsApp',
-                'status': 'open',
-                'dueAt': '2026-06-13T00:00:00.000Z',
-                'createdBy': 'admin-a',
-                'creatorName': 'Ольга Админ',
-                'branchId': 'branch-a',
-                'branchName': 'Центр',
-                'createdAt': '2026-06-12T00:00:00.000Z',
-              },
-            ],
-          },
-        ),
         _FakeResponse(
           path: '/crm/timeline',
           statusCode: 200,
@@ -2146,21 +2011,6 @@ void main() {
       ]);
       final service = MagicCrmService(_client(adapter));
 
-      final tasks = await service.listTasks(
-        q: 'анна',
-        entityType: 'lead',
-        entityId: 'lead-a',
-        assignedTo: 'manager-a',
-        createdBy: 'admin-a',
-        branchId: 'branch-a',
-        status: 'open',
-        priority: 'высокий',
-        taskType: 'звонок',
-        communicationMethod: 'WhatsApp',
-        from: '2026-06-01T00:00:00.000Z',
-        to: '2026-07-01T00:00:00.000Z',
-        limit: 25,
-      );
       final timeline = await service.listTimeline(
         entityType: 'student',
         entityId: 'student-a',
@@ -2170,17 +2020,10 @@ void main() {
         limit: 40,
       );
 
-      expect(tasks.single['creator_name'], 'Ольга Админ');
-      expect(tasks.single['branch_name'], 'Центр');
       expect(timeline.single['amount'], 12000);
       expect(timeline.single['actor_name'], 'Мария Менеджер');
-      expect(
-        adapter.requests[0].queryParameters['communicationMethod'],
-        'WhatsApp',
-      );
-      expect(adapter.requests[0].queryParameters['priority'], 'высокий');
-      expect(adapter.requests[1].queryParameters['includeAudit'], true);
-      expect(adapter.requests[1].queryParameters['limit'], 40);
+      expect(adapter.requests[0].queryParameters['includeAudit'], true);
+      expect(adapter.requests[0].queryParameters['limit'], 40);
     });
 
     test('maps student balances to debtor legacy shape', () async {

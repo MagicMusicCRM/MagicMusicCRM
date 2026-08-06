@@ -12,6 +12,7 @@ import { RealtimeBus } from "../../realtime/realtime-bus";
 import { CrmPolicy } from "../crm.policy";
 import { LeadsService } from "../leads.service";
 import { TimelineService } from "../timeline.service";
+import { StudentFunnelService } from "../student-funnel.service";
 import { ClientConfigRepository } from "./client-config.repository";
 import { ClientWriteValidator } from "./client-write.validator";
 import { InboundLeadService } from "./inbound-lead.service";
@@ -74,6 +75,12 @@ describe("manual and inbound Lead commands (PostgreSQL)", () => {
       { listForEntity: jest.fn().mockResolvedValue([]) } as unknown as ChatWorkTimelineService,
       { emitCrmChanged: jest.fn() } as unknown as RealtimeBus,
       { listFieldAudit: jest.fn().mockResolvedValue({ items: [] }) } as unknown as TimelineService,
+      {
+        assertLeadTransition: jest.fn().mockResolvedValue(undefined),
+      } as unknown as StudentFunnelService,
+      {
+        list: jest.fn().mockResolvedValue({ items: [], counters: {} }),
+      } as never,
     );
 
     const source = await database.query<{ id: string }>(

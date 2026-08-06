@@ -6,21 +6,23 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/v7/adaptive_surface.dart';
 
-Future<bool?> showStudentFunnelEditor(
+Future<bool?> showClientPipelineEditor(
   BuildContext context, {
   required List<Map<String, dynamic>> branches,
   String? initialBranchId,
+  String initialClientType = 'student',
   VoidCallback? onPublished,
 }) {
   return showMagicAdaptiveSurface<bool>(
     context,
     kind: AppSurfaceKind.selection,
-    title: 'Воронка учеников',
-    subtitle: 'Общешкольная схема и точечные правки филиала',
+    title: 'Воронки клиентов',
+    subtitle: 'Единые правила лидов и учеников для школы и филиалов',
     icon: Icons.view_kanban_outlined,
     builder: (_) => _StudentFunnelEditor(
       branches: branches,
       initialBranchId: initialBranchId,
+      initialClientType: initialClientType,
       onPublished: onPublished,
     ),
   );
@@ -30,11 +32,13 @@ class _StudentFunnelEditor extends ConsumerStatefulWidget {
   const _StudentFunnelEditor({
     required this.branches,
     required this.initialBranchId,
+    required this.initialClientType,
     required this.onPublished,
   });
 
   final List<Map<String, dynamic>> branches;
   final String? initialBranchId;
+  final String initialClientType;
   final VoidCallback? onPublished;
 
   @override
@@ -53,6 +57,7 @@ class _StudentFunnelEditorState extends ConsumerState<_StudentFunnelEditor> {
   };
 
   final _reason = TextEditingController();
+  late String _clientType;
   String? _branchId;
   StudentFunnelConfiguration? _configuration;
   List<StudentFunnelStage> _stages = const [];
@@ -66,6 +71,7 @@ class _StudentFunnelEditorState extends ConsumerState<_StudentFunnelEditor> {
   @override
   void initState() {
     super.initState();
+    _clientType = widget.initialClientType;
     _branchId = widget.initialBranchId;
     _load();
   }
@@ -84,8 +90,11 @@ class _StudentFunnelEditorState extends ConsumerState<_StudentFunnelEditor> {
     try {
       final service = ref.read(magicCrmServiceProvider);
       final result = await Future.wait([
-        service.getStudentFunnel(branchId: _branchId),
-        service.listStudentFunnelRevisions(branchId: _branchId),
+        service.getClientPipeline(clientType: _clientType, branchId: _branchId),
+        service.listClientPipelineRevisions(
+          clientType: _clientType,
+          branchId: _branchId,
+        ),
       ]);
       if (!mounted) return;
       final configuration = result[0] as StudentFunnelConfiguration;
@@ -136,6 +145,8 @@ class _StudentFunnelEditorState extends ConsumerState<_StudentFunnelEditor> {
           label: 'Новый этап',
           style: 'gray',
           active: true,
+          terminal: false,
+          requiresReason: false,
           allowedTransitions: const [],
         ),
       ];
@@ -158,14 +169,38 @@ class _StudentFunnelEditorState extends ConsumerState<_StudentFunnelEditor> {
       _error = null;
     });
     try {
-      await ref
-          .read(magicCrmServiceProvider)
-          .publishStudentFunnel(
-            branchId: _branchId,
-            expectedVersion: _configuration!.scopeVersion,
-            reason: reason,
-            stages: _stages,
-          );
+      final service = ref.read(magicCrmServiceProvider);
+      final preview = await service.previewClientPipeline(
+        clientType: _clientType,
+        branchId: _branchId,
+        expectedVersion: _configuration!.scopeVersion,
+        stages: _stages,
+      );
+      if (!mounted) return;
+      if (preview['valid'] != true) {
+        setState(() {
+          _saving = false;
+          _error =
+              ((preview['blockingIssues'] as List? ?? const [])
+                      .whereType<Map>()
+                      .map((issue) => issue['message'])
+                      .join('\n'))
+                  .trim();
+        });
+        return;
+      }
+      final confirmed = await _confirmPreview(preview);
+      if (confirmed != true || !mounted) {
+        setState(() => _saving = false);
+        return;
+      }
+      await service.publishClientPipeline(
+        clientType: _clientType,
+        branchId: _branchId,
+        expectedVersion: _configuration!.scopeVersion,
+        reason: reason,
+        stages: _stages,
+      );
       if (!mounted) return;
       _changed = true;
       _draftDirty = false;
@@ -189,7 +224,8 @@ class _StudentFunnelEditorState extends ConsumerState<_StudentFunnelEditor> {
     try {
       await ref
           .read(magicCrmServiceProvider)
-          .rollbackStudentFunnel(
+          .rollbackClientPipeline(
+            clientType: _clientType,
             branchId: _branchId,
             expectedVersion: _configuration!.scopeVersion,
             targetVersion: targetVersion,
@@ -234,6 +270,60 @@ class _StudentFunnelEditorState extends ConsumerState<_StudentFunnelEditor> {
     }
     _branchId = value == '__school__' ? null : value;
     await _load();
+  }
+
+  Future<void> _changeClientType(String? value) async {
+    if (value == null || value == _clientType) return;
+    if (_draftDirty && !await _confirmDiscard()) return;
+    _clientType = value;
+    await _load();
+  }
+
+  Future<bool> _confirmDiscard() async {
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Сбросить изменения?'),
+        content: const Text('Неопубликованные изменения будут потеряны.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Остаться'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Сбросить'),
+          ),
+        ],
+      ),
+    );
+    return discard == true && mounted;
+  }
+
+  Future<bool?> _confirmPreview(Map<String, dynamic> preview) {
+    final changes = preview['changes'] as Map? ?? const {};
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Опубликовать воронку?'),
+        content: Text(
+          'Новых этапов: ${changes['created'] ?? 0} · '
+          'изменено: ${changes['updated'] ?? 0} · '
+          'архивировано: ${changes['archived'] ?? 0}\n'
+          'Затронуто клиентов: ${preview['affectedClients'] ?? 0}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Опубликовать'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _requestRollback(int targetVersion) async {
@@ -299,6 +389,17 @@ class _StudentFunnelEditorState extends ConsumerState<_StudentFunnelEditor> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           DropdownButtonFormField<String>(
+            key: ValueKey('pipeline-type-$_clientType'),
+            initialValue: _clientType,
+            decoration: const InputDecoration(labelText: 'Воронка'),
+            items: const [
+              DropdownMenuItem(value: 'lead', child: Text('Лиды')),
+              DropdownMenuItem(value: 'student', child: Text('Ученики')),
+            ],
+            onChanged: _saving ? null : _changeClientType,
+          ),
+          const SizedBox(height: AppSpace.md),
+          DropdownButtonFormField<String>(
             key: ValueKey('funnel-scope-${_branchId ?? 'school'}'),
             initialValue: _branchId ?? '__school__',
             decoration: const InputDecoration(labelText: 'Область настройки'),
@@ -345,7 +446,7 @@ class _StudentFunnelEditorState extends ConsumerState<_StudentFunnelEditor> {
           ),
           const SizedBox(height: AppSpace.md),
           TextField(
-            key: const ValueKey('student-funnel-reason'),
+            key: const ValueKey('client-pipeline-reason'),
             controller: _reason,
             enabled: !_saving,
             maxLength: 500,
@@ -361,7 +462,7 @@ class _StudentFunnelEditorState extends ConsumerState<_StudentFunnelEditor> {
           ],
           const SizedBox(height: AppSpace.md),
           FilledButton.icon(
-            key: const ValueKey('student-funnel-publish'),
+            key: const ValueKey('client-pipeline-publish'),
             onPressed: _saving ? null : _publish,
             icon: _saving
                 ? const SizedBox.square(
@@ -436,7 +537,7 @@ class _StageEditor extends StatelessWidget {
               children: [
                 Expanded(
                   child: TextFormField(
-                    key: ValueKey('student-funnel-stage-${stage.key}'),
+                    key: ValueKey('client-pipeline-stage-${stage.key}'),
                     initialValue: stage.label,
                     maxLength: 80,
                     decoration: const InputDecoration(
@@ -464,14 +565,22 @@ class _StageEditor extends StatelessWidget {
               initialValue: stage.style,
               isExpanded: true,
               decoration: const InputDecoration(labelText: 'Цвет'),
-              items: styles.entries
-                  .map(
-                    (entry) => DropdownMenuItem(
-                      value: entry.key,
-                      child: Text(entry.value, overflow: TextOverflow.ellipsis),
-                    ),
-                  )
-                  .toList(growable: false),
+              items:
+                  {
+                        if (!styles.containsKey(stage.style))
+                          stage.style: stage.style,
+                        ...styles,
+                      }.entries
+                      .map(
+                        (entry) => DropdownMenuItem(
+                          value: entry.key,
+                          child: Text(
+                            entry.value,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
+                      .toList(growable: false),
               onChanged: (value) {
                 if (value != null) {
                   onChanged(stage.copyWith(style: value));
@@ -483,6 +592,19 @@ class _StageEditor extends StatelessWidget {
               title: const Text('Активен'),
               value: stage.active,
               onChanged: (value) => onChanged(stage.copyWith(active: value)),
+            ),
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Финальный этап'),
+              value: stage.terminal,
+              onChanged: (value) => onChanged(stage.copyWith(terminal: value)),
+            ),
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Требовать причину перехода'),
+              value: stage.requiresReason,
+              onChanged: (value) =>
+                  onChanged(stage.copyWith(requiresReason: value)),
             ),
             const SizedBox(height: AppSpace.sm),
             const Text(

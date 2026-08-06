@@ -230,6 +230,7 @@ export class CommerceProjectionRepository {
             select
               payment.currency as currency_code,
               payment.amount_minor::numeric as actual_payment_minor,
+              0::numeric as adjustment_minor,
               0::numeric as obligation_debit_minor,
               0::numeric as obligation_credit_minor,
               0::numeric as write_off_minor
@@ -240,6 +241,7 @@ export class CommerceProjectionRepository {
             union all
             select
               obligation.currency_code,
+              0::numeric,
               0::numeric,
               case
                 when obligation.direction = 'debit'
@@ -260,15 +262,29 @@ export class CommerceProjectionRepository {
               0::numeric,
               0::numeric,
               0::numeric,
+              0::numeric,
               lesson_charge.amount_minor::numeric
             from app.lesson_client_charge_facts lesson_charge
             where lesson_charge.client_type = 'student'
               and lesson_charge.client_id = selected.student_id
+            union all
+            select
+              adjustment.currency_code,
+              0::numeric,
+              adjustment.amount_minor::numeric,
+              0::numeric,
+              0::numeric,
+              0::numeric
+            from app.account_adjustments adjustment
+            where adjustment.student_id = selected.student_id
+              and adjustment.deleted_at is null
+              and adjustment.status = 'paid'
           ),
           totals as (
             select
               currency_code,
               sum(actual_payment_minor) as actual_payments_minor,
+              sum(adjustment_minor) as adjustments_minor,
               sum(obligation_debit_minor) as obligation_debits_minor,
               sum(obligation_credit_minor) as obligation_credits_minor,
               sum(write_off_minor) as write_offs_minor
@@ -279,11 +295,13 @@ export class CommerceProjectionRepository {
             jsonb_build_object(
               'currencyCode', totals.currency_code,
               'actualPaymentsMinor', totals.actual_payments_minor::text,
+              'adjustmentsMinor', totals.adjustments_minor::text,
               'obligationDebitsMinor', totals.obligation_debits_minor::text,
               'obligationCreditsMinor', totals.obligation_credits_minor::text,
               'writeOffsMinor', totals.write_offs_minor::text,
               'balanceMinor', (
                 totals.actual_payments_minor
+                + totals.adjustments_minor
                 + totals.obligation_credits_minor
                 - totals.obligation_debits_minor
                 - totals.write_offs_minor
@@ -291,6 +309,7 @@ export class CommerceProjectionRepository {
               'debtMinor', greatest(
                 -(
                   totals.actual_payments_minor
+                  + totals.adjustments_minor
                   + totals.obligation_credits_minor
                   - totals.obligation_debits_minor
                   - totals.write_offs_minor
@@ -312,11 +331,32 @@ export class CommerceProjectionRepository {
               'units', jsonb_build_object(
                 'total', issued.commercial_snapshot ->> 'unitCount',
                 'used', usage.used_units::text,
+                'reserved', reservation.reserved_units::text,
+                'paid', financial.paid_units::text,
+                'available', greatest(
+                  financial.paid_units
+                    - usage.used_units
+                    - reservation.reserved_units,
+                  0
+                )::text,
                 'remaining', greatest(
                   (issued.commercial_snapshot ->> 'unitCount')::numeric
                     - usage.used_units,
                   0
                 )::text
+              ),
+              'financial', jsonb_build_object(
+                'actualPaidMinor', financial.actual_paid_minor::text,
+                'obligationMinor', financial.obligation_minor::text,
+                'debtMinor', greatest(
+                  financial.obligation_minor - financial.actual_paid_minor,
+                  0
+                )::text,
+                'overpaymentMinor', greatest(
+                  financial.actual_paid_minor - financial.obligation_minor,
+                  0
+                )::text,
+                'nextPaymentAt', financial.next_payment_at
               ),
               'terms', jsonb_build_object(
                 'displayName',
@@ -346,13 +386,104 @@ export class CommerceProjectionRepository {
           ) as items
           from app.subscriptions issued
           left join lateral (
-            select coalesce(sum(charge.units), 0)::numeric as used_units
+            select
+              coalesce(
+                nullif(
+                  issued.commercial_snapshot
+                    #>> '{commercialRules,carriedUsedUnits}',
+                  ''
+                )::numeric,
+                0
+              ) + coalesce(sum(charge.units), 0)::numeric as used_units
             from app.lesson_client_charge_facts charge
             where charge.subscription_id = issued.id
               and charge.client_type = 'student'
               and charge.client_id = selected.student_id
               and charge.charge_type = 'subscription'
           ) usage on true
+          left join lateral (
+            select coalesce(sum(reservation.units), 0)::numeric
+              as reserved_units
+            from app.lesson_reservations reservation
+            where reservation.subscription_id = issued.id
+              and reservation.state = 'reserved'
+          ) reservation on true
+          left join lateral (
+            with recursive lifecycle_chain(id) as (
+              select issued.id
+              union
+              select event.before_issued_subscription_id
+              from app.subscription_lifecycle_events event
+              join lifecycle_chain current
+                on current.id = event.after_issued_subscription_id
+              where event.event_type = 'replace'
+            ), totals as (
+              select
+                coalesce((
+                  select sum(payment.amount_minor)
+                  from app.payments payment
+                  where payment.issued_subscription_id in (
+                    select id from lifecycle_chain
+                  )
+                    and payment.deleted_at is null
+                ), 0)::numeric
+                + coalesce((
+                  select sum(adjustment.amount_minor)
+                  from app.account_adjustments adjustment
+                  join app.payments source_payment
+                    on source_payment.id = adjustment.source_payment_id
+                  where source_payment.issued_subscription_id in (
+                    select id from lifecycle_chain
+                  )
+                    and adjustment.deleted_at is null
+                    and adjustment.status = 'paid'
+                ), 0)::numeric as actual_paid_minor,
+                coalesce((
+                  select sum(
+                    case
+                      when obligation.direction = 'debit'
+                        then obligation.amount_minor
+                      else -obligation.amount_minor
+                    end
+                  )
+                  from app.subscription_obligation_facts obligation
+                  where obligation.issued_subscription_id in (
+                    select id from lifecycle_chain
+                  )
+                ), 0)::numeric as obligation_minor
+            )
+            select
+              totals.actual_paid_minor,
+              totals.obligation_minor,
+              case
+                when totals.obligation_minor <= 0 then
+                  (issued.commercial_snapshot ->> 'unitCount')::numeric
+                else least(
+                  (issued.commercial_snapshot ->> 'unitCount')::numeric,
+                  greatest(totals.actual_paid_minor, 0)
+                    * (issued.commercial_snapshot ->> 'unitCount')::numeric
+                    / totals.obligation_minor
+                )
+              end as paid_units,
+              (
+                select min(pending.due_at)
+                from (
+                  select
+                    installment.due_at,
+                    sum(
+                      case
+                        when installment.status = 'void' then 0
+                        else installment.amount_minor
+                      end
+                    ) over (order by installment.installment_number)
+                      as cumulative_minor
+                  from app.subscription_installments installment
+                  where installment.issued_subscription_id = issued.id
+                ) pending
+                where pending.cumulative_minor > totals.actual_paid_minor
+              ) as next_payment_at
+            from totals
+          ) financial on true
           left join lateral (
             select jsonb_agg(
               jsonb_build_object(
@@ -362,7 +493,7 @@ export class CommerceProjectionRepository {
                 'currencyCode', installment.currency_code,
                 'status', case
                   when installment.status = 'void' then 'void'
-                  when installment.paid_minor >= installment.cumulative_minor
+                  when financial.actual_paid_minor >= installment.cumulative_minor
                     then 'paid'
                   else 'pending'
                 end
@@ -376,13 +507,7 @@ export class CommerceProjectionRepository {
                   case when item.status = 'void' then 0 else item.amount_minor end
                 ) over (
                   order by item.installment_number
-                ) as cumulative_minor,
-                coalesce((
-                  select sum(payment.amount_minor)
-                  from app.payments payment
-                  where payment.issued_subscription_id = issued.id
-                    and payment.deleted_at is null
-                ), 0) as paid_minor
+                ) as cumulative_minor
               from app.subscription_installments item
               where item.issued_subscription_id = issued.id
             ) installment
@@ -407,7 +532,10 @@ export class CommerceProjectionRepository {
               'comment', movement.comment,
               'invoiceIdentifier', movement.invoice_identifier,
               'status', movement.status,
-              'acceptedByName', movement.accepted_by_name
+              'acceptedByName', movement.accepted_by_name,
+              'issuedSubscriptionId', movement.issued_subscription_id,
+              'subscriptionName', movement.subscription_name,
+              'sourcePaymentId', movement.source_payment_id
             )
             order by movement.occurred_at desc, movement.id desc
           ) as items
@@ -432,9 +560,15 @@ export class CommerceProjectionRepository {
                 nullif(btrim(
                   coalesce(author.first_name, '') || ' ' ||
                   coalesce(author.last_name, '')
-                ), '') as accepted_by_name
+                ), '') as accepted_by_name,
+                payment.issued_subscription_id,
+                subscription.commercial_snapshot ->> 'displayName'
+                  as subscription_name,
+                null::uuid as source_payment_id
               from app.payments payment
               left join app.branches branch on branch.id = payment.branch_id
+              left join app.subscriptions subscription
+                on subscription.id = payment.issued_subscription_id
               left join app.users creator on creator.id = payment.created_by
               left join app.profiles author on author.user_id = creator.id
               where payment.student_id = selected.student_id
@@ -456,8 +590,13 @@ export class CommerceProjectionRepository {
                 null::text,
                 null::text,
                 null::text,
-                null::text
+                null::text,
+                obligation.issued_subscription_id,
+                subscription.commercial_snapshot ->> 'displayName',
+                null::uuid
               from app.subscription_obligation_facts obligation
+              left join app.subscriptions subscription
+                on subscription.id = obligation.issued_subscription_id
               where obligation.student_id = selected.student_id
               union all
               select
@@ -475,10 +614,50 @@ export class CommerceProjectionRepository {
                 null::text,
                 null::text,
                 null::text,
-                null::text
+                null::text,
+                charge.subscription_id,
+                subscription.commercial_snapshot ->> 'displayName',
+                null::uuid
               from app.lesson_client_charge_facts charge
+              left join app.subscriptions subscription
+                on subscription.id = charge.subscription_id
               where charge.client_type = 'student'
                 and charge.client_id = selected.student_id
+              union all
+              select
+                adjustment.id,
+                case when adjustment.kind = 'refund'
+                  then 'refund'::text else 'adjustment'::text end,
+                case when adjustment.amount_minor > 0
+                  then 'credit'::text else 'debit'::text end,
+                abs(adjustment.amount_minor)::text,
+                adjustment.currency_code,
+                adjustment.occurred_at,
+                adjustment.method,
+                null::text,
+                null::text,
+                adjustment.branch_id,
+                branch.name,
+                adjustment.description,
+                adjustment.invoice_number,
+                adjustment.status,
+                nullif(btrim(
+                  coalesce(author.first_name, '') || ' ' ||
+                  coalesce(author.last_name, '')
+                ), ''),
+                source_payment.issued_subscription_id,
+                subscription.commercial_snapshot ->> 'displayName',
+                adjustment.source_payment_id
+              from app.account_adjustments adjustment
+              left join app.payments source_payment
+                on source_payment.id = adjustment.source_payment_id
+              left join app.subscriptions subscription
+                on subscription.id = source_payment.issued_subscription_id
+              left join app.branches branch on branch.id = adjustment.branch_id
+              left join app.users creator on creator.id = adjustment.created_by
+              left join app.profiles author on author.user_id = creator.id
+              where adjustment.student_id = selected.student_id
+                and adjustment.deleted_at is null
             ) all_movements
             order by occurred_at desc, id desc
             limit 200

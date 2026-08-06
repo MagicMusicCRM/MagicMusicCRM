@@ -137,6 +137,123 @@ describe("Student funnel effective configuration (PostgreSQL)", () => {
     expect(stageLabel(other.stages, "paused")).toBe("На паузе");
   });
 
+  it("configures Lead and Student pipelines through the same version contract", async () => {
+    const school = await service.getEffective(director, undefined, "lead");
+    expect(school.clientType).toBe("lead");
+    expect(school.stages.length).toBeGreaterThan(0);
+
+    const first = school.stages[0]!;
+    const renamed = [
+      ...school.stages.map((stage) =>
+        stage.key === first.key
+          ? { ...stage, label: "Первичный контакт" }
+          : stage,
+      ),
+      {
+        key: "follow_up",
+        label: "Повторный контакт",
+        style: "amber",
+        active: true,
+        terminal: false,
+        requiresReason: false,
+        allowedTransitions: [first.key],
+      },
+    ];
+    const preview = await service.preview(director, {
+      clientType: "lead",
+      expectedVersion: school.schoolVersion,
+      stages: renamed,
+    });
+    expect(preview).toMatchObject({
+      valid: true,
+      changes: { created: 1, updated: 1 },
+    });
+    const published = await service.publish(director, {
+      clientType: "lead",
+      expectedVersion: school.schoolVersion,
+      reason: "Единый редактор лидов",
+      stages: renamed,
+    });
+    expect(published).toMatchObject({
+      clientType: "lead",
+      version: school.schoolVersion + 1,
+    });
+    const synced = await client.query<{ name: string }>(
+      "select name from app.lead_statuses where stage_key = $1",
+      [first.key],
+    );
+    expect(synced.rows[0]?.name).toBe("Первичный контакт");
+
+    const swapped = renamed.map((stage) =>
+      stage.key === first.key
+        ? { ...stage, label: "Повторный контакт" }
+        : stage.key === "follow_up"
+          ? { ...stage, label: "Первичный контакт" }
+          : stage,
+    );
+    const swappedRevision = await service.publish(director, {
+      clientType: "lead",
+      expectedVersion: published.version,
+      reason: "Обмен названиями стадий",
+      stages: swapped,
+    });
+    expect(swappedRevision.version).toBe(published.version + 1);
+    await expect(
+      service.preview(director, {
+        clientType: "lead",
+        expectedVersion: swappedRevision.version,
+        stages: swapped.map((stage) => ({
+          ...stage,
+          label: "Одинаковая стадия",
+        })),
+      }),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+
+    const branchStages = swapped.map((stage) =>
+      stage.key === first.key ? { ...stage, label: "Контакт филиала" } : stage,
+    );
+    await service.publish(director, {
+      clientType: "lead",
+      branchId,
+      expectedVersion: 0,
+      reason: "Термин филиала",
+      stages: branchStages,
+    });
+    const effective = await service.getEffective(director, branchId, "lead");
+    expect(effective).toMatchObject({
+      clientType: "lead",
+      source: "branch_override",
+      branchVersion: 1,
+    });
+    expect(stageLabel(effective.stages, first.key)).toBe("Контакт филиала");
+
+    const blocked = await service.preview(director, {
+      clientType: "lead",
+      branchId,
+      expectedVersion: 1,
+      stages: effective.stages.slice(1).map((stage) => ({
+        ...stage,
+        allowedTransitions: [],
+      })),
+    });
+    expect(blocked).toMatchObject({
+      valid: false,
+      blockingIssues: [{ stageKey: first.key }],
+    });
+    const rollback = await service.rollback(director, {
+      clientType: "lead",
+      branchId,
+      expectedVersion: 1,
+      targetVersion: 1,
+      reason: "Проверка отката",
+    });
+    expect(rollback).toMatchObject({
+      clientType: "lead",
+      version: 2,
+      rollbackFromVersion: 1,
+    });
+  });
+
   it("enforces configured transitions and rolls back by publishing a revision", async () => {
     const current = await service.getEffective(director, branchId);
     const restricted = current.stages.map((stage) =>

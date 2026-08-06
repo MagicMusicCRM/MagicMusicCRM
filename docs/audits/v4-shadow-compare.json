@@ -1,15 +1,50 @@
 {
   "schemaVersion": 1,
   "task": "T8.3.3",
-  "generatedAt": "2026-08-01T12:48:39.082Z",
+  "generatedAt": "2026-08-06T09:32:22.185Z",
   "summary": {
-    "accessDecisions": 1650,
+    "accessDecisions": 1680,
     "scheduleDecisions": 2000,
-    "differences": 1,
-    "explainedDifferences": 1,
+    "differences": 6,
+    "explainedDifferences": 6,
     "unexplainedDifferences": 0
   },
   "safeDiffs": [
+    {
+      "domain": "access",
+      "corpusId": "POST /crm/client-pipelines/rollback:manager",
+      "legacyAllowed": false,
+      "v4Allowed": true,
+      "explanation": "legacy_stricter_intersection"
+    },
+    {
+      "domain": "access",
+      "corpusId": "POST /crm/client-pipelines/publish:manager",
+      "legacyAllowed": false,
+      "v4Allowed": true,
+      "explanation": "legacy_stricter_intersection"
+    },
+    {
+      "domain": "access",
+      "corpusId": "POST /crm/client-pipelines/preview:manager",
+      "legacyAllowed": false,
+      "v4Allowed": true,
+      "explanation": "legacy_stricter_intersection"
+    },
+    {
+      "domain": "access",
+      "corpusId": "GET /crm/client-pipelines/revisions:manager",
+      "legacyAllowed": false,
+      "v4Allowed": true,
+      "explanation": "legacy_stricter_intersection"
+    },
+    {
+      "domain": "access",
+      "corpusId": "GET /crm/client-pipelines:client",
+      "legacyAllowed": false,
+      "v4Allowed": true,
+      "explanation": "legacy_stricter_intersection"
+    },
     {
       "domain": "access",
       "corpusId": "GET /crm/schedule-reference:client",
@@ -39,7 +74,7 @@
     }
   ],
   "proof": {
-    "requestCorpusDigestSha256": "a08a3bef3c88d6f105ae58d178967613aa8f09536fc37fb80bd3b6ee5c88141d",
+    "requestCorpusDigestSha256": "1b9cbb4e5684f9e012a6c02d94faa35e1cf7bce81df337f86630c640dbf0e477",
     "safePayload": true
   }
 }

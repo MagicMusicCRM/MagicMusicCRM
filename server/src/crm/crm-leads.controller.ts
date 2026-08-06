@@ -111,6 +111,10 @@ export class CrmLeadsController {
         lastName: validated.lastName,
         phone: validated.phone,
         source: validated.sourceDisplayName,
+        statusId: validated.status,
+        customDataPatch: validated.branchId
+          ? { branchId: validated.branchId }
+          : undefined,
       },
       validated,
     );

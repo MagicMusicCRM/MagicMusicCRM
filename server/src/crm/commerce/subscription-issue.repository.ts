@@ -69,6 +69,34 @@ export interface ActualPaymentRow {
   created_at: Date | string;
 }
 
+export interface PaymentAdjustmentRow {
+  id: string;
+  student_id: string;
+  source_payment_id: string;
+  kind: "refund" | "adjustment";
+  amount_minor: string;
+  currency_code: string;
+  occurred_at: Date | string;
+  description: string;
+  branch_id: string | null;
+  branch_name: string | null;
+  method: string | null;
+  invoice_number: string | null;
+  created_by: string | null;
+  created_by_name: string | null;
+  created_at: Date | string;
+}
+
+export interface PaymentAdjustmentSourceRow {
+  id: string;
+  amount_minor: string;
+  adjusted_minor: string;
+  currency: string;
+  method: "cash" | "cashless";
+  branch_id: string | null;
+  invoice_number: string | null;
+}
+
 interface IssuedPaymentTargetRow {
   id: string;
   currency_code: string;
@@ -590,6 +618,127 @@ export class SubscriptionIssueRepository {
           and payment.idempotency_ref is not null
       `,
       [paymentId],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async findPaymentAdjustmentSourceForShare(
+    client: PoolClient,
+    paymentId: string,
+    studentId: string,
+  ): Promise<PaymentAdjustmentSourceRow | null> {
+    const result = await client.query<PaymentAdjustmentSourceRow>(
+      `
+        with source as (
+          select id, amount_minor, currency, method, branch_id, invoice_number
+          from app.payments
+          where id = $1
+            and student_id = $2
+            and deleted_at is null
+          for share
+        )
+        select
+          source.*,
+          coalesce((
+            select sum(adjustment.amount_minor)
+            from app.account_adjustments adjustment
+            where adjustment.source_payment_id = source.id
+              and adjustment.deleted_at is null
+              and adjustment.status = 'paid'
+          ), 0)::text as adjusted_minor
+        from source
+      `,
+      [paymentId, studentId],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async createPaymentAdjustment(
+    client: PoolClient,
+    input: {
+      id: string;
+      studentId: string;
+      sourcePaymentId: string;
+      kind: "refund" | "adjustment";
+      amountMinor: string;
+      currencyCode: string;
+      occurredAt: Date;
+      reason: string;
+      branchId: string | null;
+      method: string | null;
+      invoiceNumber: string | null;
+      actorUserId: string;
+      idempotencyRef: string;
+      requestFingerprint: string;
+    },
+  ): Promise<PaymentAdjustmentRow> {
+    const result = await client.query<PaymentAdjustmentRow>(
+      `
+        insert into app.account_adjustments (
+          id, student_id, branch_id, kind, amount_minor, currency_code,
+          description, method, occurred_at, created_by, invoice_number,
+          source_payment_id, idempotency_ref, request_fingerprint
+        ) values (
+          $1, $2, $3, $4, $5::bigint, $6, $7, $8, $9, $10, $11, $12, $13, $14
+        )
+        returning
+          id, student_id, source_payment_id, kind, amount_minor,
+          currency_code, occurred_at, description, branch_id,
+          null::text as branch_name, method, invoice_number, created_by,
+          null::text as created_by_name, created_at
+      `,
+      [
+        input.id,
+        input.studentId,
+        input.branchId,
+        input.kind,
+        input.amountMinor,
+        input.currencyCode,
+        input.reason,
+        input.method,
+        input.occurredAt,
+        input.actorUserId,
+        input.invoiceNumber,
+        input.sourcePaymentId,
+        input.idempotencyRef,
+        input.requestFingerprint,
+      ],
+    );
+    return result.rows[0]!;
+  }
+
+  async findPaymentAdjustment(
+    adjustmentId: string,
+  ): Promise<PaymentAdjustmentRow | null> {
+    const result = await this.database.query<PaymentAdjustmentRow>(
+      `
+        select
+          adjustment.id,
+          adjustment.student_id,
+          adjustment.source_payment_id,
+          adjustment.kind,
+          adjustment.amount_minor,
+          adjustment.currency_code,
+          adjustment.occurred_at,
+          adjustment.description,
+          adjustment.branch_id,
+          branch.name as branch_name,
+          adjustment.method,
+          adjustment.invoice_number,
+          adjustment.created_by,
+          nullif(btrim(
+            coalesce(author.first_name, '') || ' ' ||
+            coalesce(author.last_name, '')
+          ), '') as created_by_name,
+          adjustment.created_at
+        from app.account_adjustments adjustment
+        left join app.branches branch on branch.id = adjustment.branch_id
+        left join app.users creator on creator.id = adjustment.created_by
+        left join app.profiles author on author.user_id = creator.id
+        where adjustment.id = $1
+          and adjustment.source_payment_id is not null
+      `,
+      [adjustmentId],
     );
     return result.rows[0] ?? null;
   }

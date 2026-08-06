@@ -222,7 +222,7 @@ extension _MessengerBuildersA on _MessengerScreenState {
     if (index == 5) return 7;
     if (index == 1 && subIndex != null) {
       if (subIndex == 3 || subIndex == 4) return 2;
-      return 4;
+      return 8;
     }
     return index;
   }
@@ -267,14 +267,10 @@ extension _MessengerBuildersA on _MessengerScreenState {
         ScheduleWidget(
           initialLink: widget.initialLink,
           initialViewState: widget.initialViewState,
+          canWrite: access?.allows('schedule.lesson.write') == true,
         ),
       3 when access?.allows('crm.client.read.basic') == true =>
         const ClientsWidget(),
-      4 when access?.allows('system.settings.manage') == true =>
-        UserRolesWidget(
-          currentRole: widget.role,
-          initialSearch: _userRolesInitialSearch,
-        ),
       5
           when isDesktop &&
               access?.allows('commerce.school_finance.read') == true =>
@@ -291,8 +287,20 @@ extension _MessengerBuildersA on _MessengerScreenState {
           initialViewState: widget.initialViewState,
           accessSnapshot: _accessSnapshot,
         ),
-      8 when access?.allows('config.crm.read') == true =>
-        const CrmConfigurationWorkspace(),
+      8
+          when access?.allows('system.settings.manage') == true ||
+              access?.allows('config.crm.read') == true =>
+        SystemSettingsWorkspace(
+          role: widget.role,
+          initialArea: widget.initialLink?.entityType == EntityLinkType.user
+              ? 'users'
+              : widget.initialLink?.optionalFocus?.focus == 'users'
+              ? 'users'
+              : widget.initialLink?.rawEntityType == 'configuration'
+              ? 'crm'
+              : null,
+          initialUserSearch: _userRolesInitialSearch,
+        ),
       _ => _buildMessengerShell(context),
     };
   }
@@ -336,12 +344,6 @@ extension _MessengerBuildersA on _MessengerScreenState {
           selectedIcon: Icons.people_rounded,
           label: 'Клиенты',
           badgeCount: _unseenFor(CrmSection.clients),
-        );
-      case 4:
-        return const V7NavDestination(
-          icon: Icons.manage_accounts_outlined,
-          selectedIcon: Icons.manage_accounts_rounded,
-          label: 'Пользователи',
         );
       case 5:
         return V7NavDestination(

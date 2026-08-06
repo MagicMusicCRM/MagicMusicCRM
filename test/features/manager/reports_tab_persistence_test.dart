@@ -19,12 +19,15 @@ class _FakeApiClient extends MagicApiClient {
   _FakeApiClient()
     : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
+  final Map<String, Map<String, dynamic>> queries = {};
+
   @override
   Future<T> get<T>(
     String path, {
     Map<String, dynamic>? queryParameters,
     bool authenticated = true,
   }) async {
+    queries[path] = Map<String, dynamic>.from(queryParameters ?? const {});
     return <String, dynamic>{
           'items': <dynamic>[],
           'monthly': <dynamic>[],
@@ -94,12 +97,13 @@ void main() {
     final controller = tester.widget<TabBar>(find.byType(TabBar)).controller!;
     expect(controller.index, 0);
 
-    expect(find.text('Финансовые операции'), findsOneWidget);
+    expect(find.text('Обзор'), findsOneWidget);
+    expect(find.text('Журналы'), findsOneWidget);
 
-    // Move to «Управление» (index 3), as a tab tap would.
-    controller.index = 3;
+    // Move to the operational journals, as a tab tap would.
+    controller.index = 1;
     await tester.pump();
-    expect(controller.index, 3);
+    expect(controller.index, 1);
 
     // Force a parent rebuild with the SAME initialTab — the realtime-event
     // scenario that used to yank the tab back.
@@ -108,7 +112,7 @@ void main() {
 
     expect(
       controller.index,
-      3,
+      1,
       reason: 'a rebuild with an unchanged initialTab must not reset the tab',
     );
   });
@@ -120,9 +124,10 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
+    final api = _FakeApiClient();
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [magicApiClientProvider.overrideWithValue(_FakeApiClient())],
+        overrides: [magicApiClientProvider.overrideWithValue(api)],
         child: const MaterialApp(
           home: Scaffold(body: ReportsWidget(role: 'director', initialTab: 1)),
         ),
@@ -131,8 +136,56 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('finance-operations')), findsOneWidget);
-    expect(find.byKey(const ValueKey('add-payment')), findsOneWidget);
-    expect(find.text('Добавить оплату'), findsOneWidget);
+    expect(find.byKey(const ValueKey('add-payment')), findsNothing);
+    expect(
+      find.text('Новая оплата проводится в карточке ученика'),
+      findsOneWidget,
+    );
     expect(find.byType(FloatingActionButton), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('analytics-journal-finance')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Действия').last);
+    await tester.pumpAndSettle();
+
+    final payments = api.queries['/crm/payments']!;
+    final activity = api.queries['/crm/activity']!;
+    expect(activity['from'], payments['from']);
+    expect(activity['to'], payments['to']);
+  });
+
+  testWidgets('analytics fits the system width matrix at 200% text', (
+    tester,
+  ) async {
+    for (final width in const [360.0, 600.0, 840.0, 1000.0, 1200.0]) {
+      tester.view.physicalSize = Size(width, 1600);
+      tester.view.devicePixelRatio = 1;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            magicApiClientProvider.overrideWithValue(_FakeApiClient()),
+          ],
+          child: MaterialApp(
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: const TextScaler.linear(2)),
+              child: child!,
+            ),
+            home: const Scaffold(
+              body: ReportsWidget(role: 'director', initialTab: 0),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'analytics overflowed at width ${width.toInt()}',
+      );
+      expect(find.text('Обзор'), findsOneWidget);
+    }
+    addTearDown(tester.view.reset);
   });
 }

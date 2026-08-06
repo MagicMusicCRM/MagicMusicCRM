@@ -32,6 +32,30 @@ void main() {
     );
   });
 
+  test('every icon-only production FAB has a tooltip', () {
+    final missing = <String>[];
+    final pattern = RegExp(r'FloatingActionButton(?:\.small)?\(');
+    for (final file
+        in Directory('lib')
+            .listSync(recursive: true)
+            .whereType<File>()
+            .where((file) => file.path.endsWith('.dart'))) {
+      final source = file.readAsStringSync();
+      final matches = pattern.allMatches(source).toList();
+      for (var index = 0; index < matches.length; index++) {
+        final start = matches[index].start;
+        final end = index + 1 < matches.length
+            ? matches[index + 1].start
+            : source.length;
+        if (!RegExp(r'\btooltip\s*:').hasMatch(source.substring(start, end))) {
+          final line = '\n'.allMatches(source.substring(0, start)).length + 1;
+          missing.add('${file.path}:$line');
+        }
+      }
+    }
+    expect(missing, isEmpty, reason: 'Icon-only FABs need labels: $missing');
+  });
+
   testWidgets('tooltip supplies semantics and Enter activates focus', (
     tester,
   ) async {

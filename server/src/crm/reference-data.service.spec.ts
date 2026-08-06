@@ -193,68 +193,6 @@ describe("ReferenceDataService", () => {
     expect(query.mock.calls[0][1]).toEqual(["branch-1", ["d2", "d1"]]);
   });
 
-  it("reorders lead statuses, each column's position becoming its sort_order", async () => {
-    const { service, query, audit, policy } = createServiceWithQueryResults([
-      { rows: [], rowCount: 3 } as unknown as {
-        rows: Record<string, unknown>[];
-      },
-    ]);
-    const result = await service.reorderLeadStatuses(actor, {
-      statusIds: ["status-c", "status-a", "status-b"],
-    });
-    expect(result).toEqual({ updated: 3 });
-    // Column config → system-settings gate, not plain CRM write.
-    expect(policy.assertCanManageSystemSettings).toHaveBeenCalledWith(actor);
-    expect(query.mock.calls[0][0]).toContain("app.lead_statuses");
-    expect(query.mock.calls[0][0]).toContain("unnest($1::uuid[], $2::int[])");
-    expect(query.mock.calls[0][0]).toContain("sort_order = t.ord");
-    // Real ids with their positions; no «unassigned» here.
-    expect(query.mock.calls[0][1]).toEqual([
-      ["status-c", "status-a", "status-b"],
-      [0, 1, 2],
-    ]);
-    expect(audit.record).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: "crm.lead_statuses_reordered",
-        entityType: "lead",
-        metadata: { order: ["status-c", "status-a", "status-b"] },
-      }),
-    );
-  });
-
-  it("stores the «Без статуса» position as a setting, keeping real ids in the update", async () => {
-    const { service, query } = createServiceWithQueryResults([
-      { rows: [], rowCount: 2 } as unknown as {
-        rows: Record<string, unknown>[];
-      },
-      { rows: [] }, // system_settings upsert
-    ]);
-    await service.reorderLeadStatuses(actor, {
-      statusIds: ["status-a", "unassigned", "status-b"],
-    });
-    // The lead_statuses UPDATE excludes «unassigned» but keeps its full-list
-    // positions (0 and 2), so it interleaves correctly with the stored one.
-    expect(query.mock.calls[0][1]).toEqual([
-      ["status-a", "status-b"],
-      [0, 2],
-    ]);
-    // The unassigned position (index 1) is written to system_settings.
-    const settingsCall = query.mock.calls.find(([sql]) =>
-      String(sql).includes("lead_board_unassigned_sort_order"),
-    );
-    expect(settingsCall).toBeDefined();
-    expect(settingsCall![1]).toEqual([1, actor.userId]);
-  });
-
-  it("rejects lead status reorder when the id list is empty", async () => {
-    const { service, query, policy } = createServiceWithQueryResults([]);
-    await expect(
-      service.reorderLeadStatuses(actor, { statusIds: [] }),
-    ).rejects.toThrow("Список статусов воронки пуст.");
-    expect(policy.assertCanManageSystemSettings).toHaveBeenCalledWith(actor);
-    expect(query).not.toHaveBeenCalled();
-  });
-
   it("assignBranchDiscipline upserts with conflict preservation and returns DTO", async () => {
     const { service, query, policy } = createServiceWithQueryResults([
       { rows: [{ id: "bd1", discipline_id: "d1", sort_order: 3 }] },

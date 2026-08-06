@@ -145,10 +145,11 @@ void main() {
     expect(resolution.canonicalLocation?.title, 'Настройки');
     expect(resolution.canonicalLocation?.requiredCapabilities, {
       'config.crm.read',
+      'system.settings.manage',
     });
     expect(
       EntityRouteRegistry().resolve(link, snapshot).state,
-      EntityRouteState.forbidden,
+      EntityRouteState.resolved,
     );
   });
 

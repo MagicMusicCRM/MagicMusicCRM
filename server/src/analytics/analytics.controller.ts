@@ -55,6 +55,14 @@ export class AnalyticsController {
     return this.reporting.lessonSuccess(actor, query);
   }
 
+  @Get("v4/lesson-success/lessons")
+  lessonSuccessLessons(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: AnalyticsRangeQuery,
+  ) {
+    return this.reporting.lessonSuccessList(actor, query);
+  }
+
   @Get("v4/school-finance")
   schoolFinance(
     @CurrentActor() actor: ActorContext,

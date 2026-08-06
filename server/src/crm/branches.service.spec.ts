@@ -5,6 +5,7 @@ import { BranchesService } from "./branches.service";
 
 describe("BranchesService", () => {
   const actor = { userId: "manager-a", role: "manager" as const };
+  const director = { userId: "director-a", role: "director" as const };
 
   const createService = (rows: Record<string, unknown>[] = []) => {
     const query = jest.fn().mockResolvedValue({ rows });
@@ -13,6 +14,7 @@ describe("BranchesService", () => {
     const policy = {
       assertCanReadOperationalData: jest.fn(),
       assertCanWriteCrm: jest.fn(),
+      assertCanManageSystemSettings: jest.fn(),
     };
     const service = new BranchesService(
       database as unknown as DatabaseService,
@@ -50,7 +52,12 @@ describe("BranchesService", () => {
     });
 
     expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
-    expect(query.mock.calls[0][1]).toEqual(["центр", 10]);
+    expect(query.mock.calls[0][1]).toEqual([
+      "центр",
+      10,
+      "manager",
+      "manager-a",
+    ]);
   });
 
   it("updates a branch's utc offset and returns the dto", async () => {
@@ -63,7 +70,7 @@ describe("BranchesService", () => {
         created_at: "2026-06-12T00:00:00.000Z",
       },
     ]);
-    const result = await service.updateBranch(actor, "branch-a", {
+    const result = await service.updateBranch(director, "branch-a", {
       utcOffsetMinutes: 240,
     });
     expect(result).toMatchObject({
@@ -71,15 +78,9 @@ describe("BranchesService", () => {
       name: "Сокол",
       utcOffsetMinutes: 240,
     });
-    expect(policy.assertCanWriteCrm).toHaveBeenCalled();
+    expect(policy.assertCanManageSystemSettings).toHaveBeenCalledWith(director);
     expect(query.mock.calls[0][0]).toContain("update app.branches");
-    expect(query.mock.calls[0][1]).toEqual([
-      "branch-a",
-      null,
-      null,
-      240,
-      null,
-    ]);
+    expect(query.mock.calls[0][1]).toEqual(["branch-a", null, null, 240, null]);
   });
 
   it("creates a branch through CRM write policy and audit", async () => {
@@ -94,7 +95,7 @@ describe("BranchesService", () => {
     ]);
 
     await expect(
-      service.createBranch(actor, {
+      service.createBranch(director, {
         name: " Сокол ",
         address: " Москва, Сокол ",
         utcOffsetMinutes: 240,
@@ -109,7 +110,7 @@ describe("BranchesService", () => {
       createdAt: "2026-06-12T00:00:00.000Z",
     });
 
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(policy.assertCanManageSystemSettings).toHaveBeenCalledWith(director);
     expect(query.mock.calls[0][0]).toContain("insert into app.branches");
     expect(query.mock.calls[0][1]).toEqual([
       "Сокол",
@@ -142,7 +143,7 @@ describe("BranchesService", () => {
     ]);
 
     await expect(
-      service.createBranch(actor, { name: "Новый" }),
+      service.createBranch(director, { name: "Новый" }),
     ).resolves.toMatchObject({
       id: "branch-c",
       name: "Новый",
@@ -157,8 +158,16 @@ describe("BranchesService", () => {
     const { service, query } = createService();
 
     await expect(
-      service.createBranch(actor, { name: "   " }),
+      service.createBranch(director, { name: "   " }),
     ).rejects.toThrow("Название филиала обязательно.");
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it("keeps delegated managers from creating unassigned branches", async () => {
+    const { service, query } = createService();
+    await expect(
+      service.createBranch(actor, { name: "Чужой" }),
+    ).rejects.toThrow("Создавать филиалы может только директор.");
     expect(query).not.toHaveBeenCalled();
   });
 });

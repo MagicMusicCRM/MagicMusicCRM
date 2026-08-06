@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -21,6 +22,10 @@ import {
   assertTeacherBranches,
   parseReferenceRange,
 } from "./availability.rules";
+import {
+  assertSettingsBranchScope,
+  settingsBranchIdsForActor,
+} from "../settings-branch-scope";
 
 @Injectable()
 export class AvailabilityService {
@@ -35,11 +40,20 @@ export class AvailabilityService {
     this.policy.assertCanReadOperationalData(actor);
     const { from, to } = parseReferenceRange(query.from, query.to);
     await this.assertTeacherScope(actor, query.teacherId);
+    const scopeBranchIds = await settingsBranchIdsForActor(
+      this.database,
+      actor,
+    );
+    if (scopeBranchIds !== null && !scopeBranchIds.includes(query.branchId)) {
+      throw new NotFoundException("Schedule reference not found.");
+    }
     const reference = await this.repository.resolve(
       query.branchId,
       query.teacherId,
       from,
       to,
+      undefined,
+      scopeBranchIds,
     );
     if (!reference) {
       throw new NotFoundException("Schedule reference not found.");
@@ -52,7 +66,8 @@ export class AvailabilityService {
     branchId: string,
     dto: ReplaceBranchHoursDto,
   ) {
-    this.policy.assertManagerOnly(actor);
+    this.policy.assertCanManageSystemSettings(actor);
+    await assertSettingsBranchScope(this.database, actor, branchId);
     assertBranchHours(dto.weekly, dto.exceptions);
     const result = await this.withScheduleValidation(() =>
       this.database.transaction((client) =>
@@ -87,7 +102,19 @@ export class AvailabilityService {
     teacherId: string,
     dto: ReplaceTeacherBranchesDto,
   ) {
-    this.policy.assertManagerOnly(actor);
+    this.policy.assertCanManageSystemSettings(actor);
+    const scopeBranchIds = await settingsBranchIdsForActor(
+      this.database,
+      actor,
+    );
+    if (
+      scopeBranchIds !== null &&
+      dto.assignments.some(
+        (assignment) => !scopeBranchIds.includes(assignment.branchId),
+      )
+    ) {
+      throw new ForbiddenException("Филиал не входит в область доступа.");
+    }
     assertTeacherBranches(dto.assignments);
     const result = await this.withScheduleValidation(() =>
       this.database.transaction((client) =>
@@ -95,6 +122,7 @@ export class AvailabilityService {
           teacherId,
           expectedVersion: dto.expectedVersion,
           assignments: dto.assignments,
+          scopeBranchIds,
         }),
       ),
     );
@@ -119,7 +147,22 @@ export class AvailabilityService {
     teacherId: string,
     dto: ReplaceTeacherAvailabilityDto,
   ) {
-    this.policy.assertManagerOnly(actor);
+    this.policy.assertCanManageSystemSettings(actor);
+    const scopeBranchIds = await settingsBranchIdsForActor(
+      this.database,
+      actor,
+    );
+    if (
+      scopeBranchIds !== null &&
+      !(await this.repository.teacherAssignmentsWithinScope(
+        teacherId,
+        scopeBranchIds,
+      ))
+    ) {
+      throw new ForbiddenException(
+        "Доступность преподавателя затрагивает другой филиал.",
+      );
+    }
     assertAvailabilityRules(dto.rules);
     const result = await this.withScheduleValidation(() =>
       this.database.transaction((client) =>

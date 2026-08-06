@@ -10,6 +10,7 @@ export interface CommerceProjectionScope {
 export interface CommerceAccountDto {
   currencyCode: string;
   actualPaymentsMinor: string;
+  adjustmentsMinor: string;
   obligationDebitsMinor: string;
   obligationCreditsMinor: string;
   writeOffsMinor: string;
@@ -50,7 +51,17 @@ export interface CommerceSubscriptionDto {
   units: {
     total: string;
     used: string;
+    reserved: string;
+    paid: string;
+    available: string;
     remaining: string;
+  };
+  financial: {
+    actualPaidMinor: string;
+    obligationMinor: string;
+    debtMinor: string;
+    overpaymentMinor: string;
+    nextPaymentAt: string | null;
   };
   terms: {
     displayName: string;
@@ -66,6 +77,8 @@ export interface CommerceSubscriptionDto {
 
 export type CommerceMovementKind =
   | "payment"
+  | "refund"
+  | "adjustment"
   | "obligation"
   | "lesson_charge";
 
@@ -85,6 +98,21 @@ export interface CommerceMovementDto {
   invoiceIdentifier?: string | null;
   status?: "paid" | "pending" | "void" | null;
   acceptedByName?: string | null;
+  issuedSubscriptionId?: string | null;
+  subscriptionName?: string | null;
+  sourcePaymentId?: string | null;
+}
+
+export interface CommerceLessonBalanceDto {
+  activeSubscriptionCount: number;
+  total: string;
+  used: string;
+  reserved: string;
+  paid: string;
+  available: string;
+  debts: { currencyCode: string; amountMinor: string }[];
+  nextPaymentAt: string | null;
+  expiresAt: string | null;
 }
 
 export interface CommerceStudentDto {
@@ -92,9 +120,14 @@ export interface CommerceStudentDto {
   accounts: CommerceAccountDto[];
   subscriptions: CommerceSubscriptionDto[];
   movements: CommerceMovementDto[];
+  lessonBalance: CommerceLessonBalanceDto;
 }
 
-export interface CommerceProjectionSource extends CommerceStudentDto {
+export interface CommerceProjectionSource {
+  studentId: string;
+  accounts: CommerceAccountDto[];
+  subscriptions: CommerceSubscriptionDto[];
+  movements: CommerceMovementDto[];
   scope: CommerceProjectionScope;
 }
 

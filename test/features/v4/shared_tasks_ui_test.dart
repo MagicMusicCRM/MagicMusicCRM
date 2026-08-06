@@ -7,7 +7,7 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tasks_v4_panel.dart';
 
-class _FakeSharedTasks implements SharedTasksDataSource {
+class _FakeSharedTasks extends SharedTasksDataSource {
   bool closed = false;
   bool failNextClose = false;
   int createCalls = 0;
@@ -16,6 +16,11 @@ class _FakeSharedTasks implements SharedTasksDataSource {
   String? listedTaskId;
   String? listedEntityType;
   String? listedEntityId;
+  String? listedQuery;
+  String? listedPriority;
+  String? listedScope;
+  int calendarCalls = 0;
+  Map<String, dynamic>? lastCreateData;
   bool failAudiencePreview = false;
 
   Map<String, dynamic> get task => {
@@ -26,6 +31,7 @@ class _FakeSharedTasks implements SharedTasksDataSource {
     'startAt': '2020-01-01T10:00:00.000Z',
     'endAt': '2020-01-01T11:00:00.000Z',
     'state': closed ? 'closed' : 'open',
+    'priority': 'medium',
     'version': 1,
     'hasReminder': true,
     'audiences': [
@@ -51,6 +57,44 @@ class _FakeSharedTasks implements SharedTasksDataSource {
       'items': visible ? [task] : <Map<String, dynamic>>[],
       'counters': {'open': closed ? 0 : 1, 'overdue': closed ? 0 : 1},
     };
+  }
+
+  @override
+  Future<Map<String, dynamic>> listFiltered({
+    String? state,
+    String? taskId,
+    String? linkedEntityType,
+    String? linkedEntityId,
+    String? q,
+    String? priority,
+    String? scope,
+    String? from,
+    String? to,
+  }) {
+    listedQuery = q;
+    listedPriority = priority;
+    listedScope = scope;
+    return list(
+      state: state,
+      taskId: taskId,
+      linkedEntityType: linkedEntityType,
+      linkedEntityId: linkedEntityId,
+    );
+  }
+
+  @override
+  Future<Map<String, int>> calendar({
+    required String from,
+    required String to,
+    String? state,
+    String? q,
+    String? priority,
+    String? scope,
+    String? linkedEntityType,
+    String? linkedEntityId,
+  }) async {
+    calendarCalls++;
+    return const {};
   }
 
   @override
@@ -125,6 +169,7 @@ class _FakeSharedTasks implements SharedTasksDataSource {
     MagicMutationIdentity identity,
   ) async {
     createCalls++;
+    lastCreateData = data;
     return {
       ...data,
       'recipientSummary': await previewAudience(
@@ -239,11 +284,15 @@ void main() {
       find.byKey(const Key('shared-task-title')),
       'Новая задача',
     );
+    await tester.tap(find.byKey(const Key('shared-task-priority')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Высокий').last);
     await tester.pump();
     await tester.ensureVisible(find.widgetWithText(FilledButton, 'Создать'));
     await tester.tap(find.widgetWithText(FilledButton, 'Создать'));
     await tester.pumpAndSettle();
     expect(source.createCalls, 1);
+    expect(source.lastCreateData?['priority'], 'high');
     expect(find.text('Задача создана. Получателей сейчас: 8.'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Изменить'));
@@ -257,6 +306,40 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Сохранить'));
     await tester.pumpAndSettle();
     expect(source.updateCalls, 1);
+  });
+
+  testWidgets('search, priority and calendar use the canonical query', (
+    tester,
+  ) async {
+    final source = _FakeSharedTasks();
+    await tester.pumpWidget(_host(source));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('shared-task-search')),
+      'отчёт',
+    );
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('shared-task-priority-filter')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Высокий').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('shared-task-scope-filter')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Мой филиал').last);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.byKey(const Key('shared-task-calendar-toggle')),
+    );
+    await tester.tap(find.byKey(const Key('shared-task-calendar-toggle')));
+    await tester.pumpAndSettle();
+
+    expect(source.listedQuery, 'отчёт');
+    expect(source.listedPriority, 'high');
+    expect(source.listedScope, 'branch');
+    expect(source.calendarCalls, 1);
+    expect(find.byKey(const Key('shared-task-month-grid')), findsOneWidget);
   });
 
   testWidgets('read-only role has no task mutation controls', (tester) async {
@@ -318,6 +401,7 @@ void main() {
     expect(tester.getSize(filter).height, 56);
     await tester.tap(find.byTooltip('Расширенные фильтры'));
     await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('magic-sheet-mobile')), findsOneWidget);
     expect(
       find.byKey(const Key('shared-task-advanced-filter-scroll')),
       findsOneWidget,
@@ -404,7 +488,7 @@ void main() {
 
     await tester.tap(find.text('Сотрудники'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.tap(find.byKey(const Key('shared-task-audience-target')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Анна Петрова').last);
     await tester.pumpAndSettle();
@@ -417,7 +501,7 @@ void main() {
       findsNothing,
     );
 
-    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.tap(find.byKey(const Key('shared-task-audience-target')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Олег Сидоров').last);
     await tester.pumpAndSettle();
@@ -427,7 +511,7 @@ void main() {
 
     await tester.tap(find.text('Один филиал'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.tap(find.byKey(const Key('shared-task-audience-target')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Центральный').last);
     await tester.pumpAndSettle();

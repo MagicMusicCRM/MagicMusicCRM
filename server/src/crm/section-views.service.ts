@@ -105,10 +105,14 @@ export class SectionViewsService {
           -- Задачи — ТОЛЬКО свои: чужая задача не требует от человека действия,
           -- а бейдж «сделай что-то» должен звать именно его. Иначе у школы с
           -- 12 483 задачами цифра станет фоном.
-          (select count(*) from app.tasks t, seen
+          (select count(*) from app.canonical_tasks t, seen
             where t.deleted_at is null
               and t.created_at > seen.tasks_at
-              and t.assigned_to = $1) as tasks,
+              and exists (
+                select 1 from app.shared_task_recipients recipient
+                where recipient.task_id = t.id and recipient.user_id = $1
+              )
+          ) as tasks,
           (select count(*) from app.lessons les, seen
             where les.deleted_at is null and les.created_at > seen.schedule_at) as schedule,
           (

@@ -47,9 +47,14 @@ class _FakeApiClient extends MagicApiClient {
               ],
             }
             as T;
-      case '/crm/lessons':
+      case '/crm/schedule/matrix':
         requestedTeacherId = queryParameters?['teacherId']?.toString();
-        return <String, dynamic>{'items': <dynamic>[]} as T;
+        return <String, dynamic>{
+              'items': <dynamic>[],
+              'groups': <dynamic>[],
+              'conflicts': <dynamic>[],
+            }
+            as T;
       default:
         return <String, dynamic>{'items': <dynamic>[]} as T;
     }

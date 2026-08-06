@@ -175,10 +175,12 @@ where homework.student_id in (select id from demo_target_students)
 
 create temp table demo_target_tasks (id uuid primary key) on commit drop;
 insert into demo_target_tasks (id)
-select id from app.tasks
-where (entity_type = 'lead' and entity_id in (select id from demo_target_leads))
-   or (entity_type = 'student' and entity_id in (select id from demo_target_students))
-   or (entity_type = 'lesson' and entity_id in (select id from demo_target_lessons));
+select id from app.shared_tasks
+where deleted_at is null and (
+     (linked_entity_type = 'lead' and linked_entity_id in (select id from demo_target_leads))
+  or (linked_entity_type = 'student' and linked_entity_id in (select id from demo_target_students))
+  or (linked_entity_type = 'lesson' and linked_entity_id in (select id from demo_target_lessons))
+);
 
 create temp table demo_target_notifications (id uuid primary key) on commit drop;
 insert into demo_target_notifications (id)
@@ -398,7 +400,9 @@ where exists (
 delete from app.notifications notification
 where notification.id in (select id from demo_target_notifications);
 
-delete from app.tasks where id in (select id from demo_target_tasks);
+update app.shared_tasks
+set deleted_at = coalesce(deleted_at, now()), updated_at = now()
+where id in (select id from demo_target_tasks);
 delete from app.entity_comments
 where (entity_type = 'lead' and entity_id in (select id from demo_target_leads))
    or (entity_type = 'student' and entity_id in (select id from demo_target_students));

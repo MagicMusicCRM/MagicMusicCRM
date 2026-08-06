@@ -22,6 +22,9 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
         monthDaySummary: _filterClientId == null ? _monthDaySummary : const {},
         lessonsForDate: _lessonsForDate,
         parseLessonTime: _parseLessonTime,
+        clientContext: widget.clientId != null,
+        searchContext: _hasScheduleSearch,
+        isContextClientLesson: _isRelatedLesson,
         onDayTap: _onMonthDayTap,
       ),
       ScheduleView.week => _buildWeekView(),
@@ -80,7 +83,7 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Расписание',
+                          widget.title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -105,8 +108,12 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
                   ),
                   IconButton(
                     icon: const Icon(Icons.search_rounded, size: 21),
-                    color: cs.onSurfaceVariant,
-                    tooltip: 'Найти занятие',
+                    color: _hasScheduleSearch
+                        ? AppColor.gold
+                        : cs.onSurfaceVariant,
+                    tooltip: _hasScheduleSearch
+                        ? 'Поиск: $_scheduleSearchQuery'
+                        : 'Найти занятие',
                     onPressed: firstLoad ? null : _showScheduleSearch,
                   ),
                   IconButton(
@@ -131,13 +138,13 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
                       color: cs.onSurfaceVariant,
                       onPressed: _fetchAll,
                     ),
-                  if (!compact) ...[
+                  if (!compact && widget.canWrite) ...[
                     const SizedBox(width: AppSpace.xs),
                     createButton,
                   ],
                 ],
               ),
-              if (compact) ...[
+              if (compact && widget.canWrite) ...[
                 const SizedBox(height: AppSpace.sm),
                 SizedBox(width: double.infinity, child: createButton),
               ],
@@ -167,6 +174,7 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
   }
 
   void _openLessonCreate() {
+    if (!widget.canWrite) return;
     var date = _selectedDate;
     if (_currentView == ScheduleView.month &&
         (_selectedDate.year != _displayedMonth.year ||
@@ -200,10 +208,14 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
       constraints: const BoxConstraints(minWidth: 280, maxWidth: 340),
       child: SegmentedButton<ScheduleView>(
         key: const ValueKey('schedule-view-switcher'),
-        segments: const [
-          ButtonSegment(value: ScheduleView.month, label: Text('Месяц')),
-          ButtonSegment(value: ScheduleView.week, label: Text('Неделя')),
-          ButtonSegment(value: ScheduleView.day, label: Text('День')),
+        segments: [
+          if (widget.allowMonth)
+            const ButtonSegment(
+              value: ScheduleView.month,
+              label: Text('Месяц'),
+            ),
+          const ButtonSegment(value: ScheduleView.week, label: Text('Неделя')),
+          const ButtonSegment(value: ScheduleView.day, label: Text('День')),
         ],
         selected: {_currentView},
         showSelectedIcon: false,
@@ -233,6 +245,7 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
   }
 
   void _switchView(ScheduleView view) {
+    if (view == ScheduleView.month && !widget.allowMonth) return;
     if (_currentView == view) return;
     _emitState(() {
       _clearHighlight();
@@ -296,7 +309,9 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
           ),
           const SizedBox(width: AppSpace.xs),
           IconButton(
-            onPressed: _selectedBranchId == null ? null : _editBranchTimezone,
+            onPressed: !widget.canWrite || _selectedBranchId == null
+                ? null
+                : _editBranchTimezone,
             tooltip: 'Часовой пояс: ${offsetLabel(_selectedBranchOffset)}',
             icon: const Icon(Icons.schedule_rounded, size: 19),
           ),
@@ -306,6 +321,7 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
   }
 
   Future<void> _editBranchTimezone() async {
+    if (!widget.canWrite) return;
     final branchId = _selectedBranchId;
     if (branchId == null) return;
     final branch = _branches.firstWhere(
@@ -458,6 +474,7 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
           (leadName.isEmpty ? 'Занятие' : leadName);
       final teacher = _teacherNames[lesson['teacher_id']?.toString()] ?? '';
       final room = _roomNames[lesson['room_id']?.toString()] ?? '';
+      final branch = lesson['branch_name']?.toString().trim() ?? '';
       entries.add(
         ScheduleEntry(
           lesson: lesson,
@@ -467,13 +484,24 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
           durationMinutes: _durationMinutes(lesson),
           title: title,
           subtitle: [
-            room,
             teacher,
+            [
+              branch.isEmpty ? 'Филиал' : branch,
+              room.isEmpty ? 'Без аудитории' : room,
+            ].join(' · '),
           ].where((value) => value.isNotEmpty).join(' · '),
           isTrial: lesson['is_trial'] == true,
           conflicts: conflictTypes(lesson['conflict_types']),
-          movable: lesson['id'] != null && lesson['status'] != 'cancelled',
-          highlighted: false,
+          movable:
+              widget.canWrite &&
+              lesson['id'] != null &&
+              lesson['status'] != 'cancelled',
+          highlighted:
+              _highlightLessonId != null &&
+              lesson['id']?.toString() == _highlightLessonId,
+          clientContext: widget.clientId != null,
+          searchContext: _hasScheduleSearch,
+          relatedClient: _isRelatedLesson(lesson),
         ),
       );
     }
@@ -483,13 +511,14 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
       date: monday,
       columns: columns,
       entries: entries,
+      allowCreate: widget.canWrite,
       onCreateSlot: (_, start, duration) => _openWeekCreate(start, duration),
       onMove: (lesson, start, _) =>
           _moveLessonOptimistic(lesson, start, null, preserveRoom: true),
       onResize: _resizeLesson,
       onOpenLesson: _showLessonDetails,
       initialVerticalOffset: _dayScrollOffset,
-      onVerticalOffsetChanged: (value) => _dayScrollOffset = value,
+      onVerticalOffsetChanged: _updateDayScrollOffset,
     );
   }
 
@@ -513,6 +542,76 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
       ),
     );
   }
+
+  Widget _buildClientContextBanner() {
+    final name = widget.clientName?.trim();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+      child: Wrap(
+        spacing: AppSpace.lg,
+        runSpacing: AppSpace.xs,
+        children: [
+          _clientContextLegend(
+            Icons.person_pin_circle_outlined,
+            AppColor.success,
+            name == null || name.isEmpty ? 'Клиент карточки' : name,
+          ),
+          _clientContextLegend(
+            Icons.people_outline_rounded,
+            AppColor.text2,
+            'Другие клиенты',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScheduleSearchBanner() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+      child: Wrap(
+        spacing: AppSpace.lg,
+        runSpacing: AppSpace.xs,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          InputChip(
+            avatar: const Icon(Icons.search_rounded, size: 18),
+            label: Text('Поиск: $_scheduleSearchQuery'),
+            onDeleted: _clearScheduleSearch,
+          ),
+          if (_scheduleSearchLoading)
+            const SizedBox.square(
+              dimension: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          _clientContextLegend(
+            Icons.person_search_rounded,
+            AppColor.success,
+            'Совпадения',
+          ),
+          _clientContextLegend(
+            Icons.people_outline_rounded,
+            AppColor.text2,
+            'Остальные занятия',
+          ),
+          _clientContextLegend(
+            Icons.auto_awesome_rounded,
+            AppColor.gold,
+            'Первое совпадение',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _clientContextLegend(IconData icon, Color color, String label) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(icon, size: 16, color: color),
+      const SizedBox(width: 4),
+      Text(label, style: const TextStyle(fontSize: 12)),
+    ],
+  );
 
   Widget _buildAvailabilitySummary() {
     final availability = _roomAvailability.where((item) {
@@ -711,10 +810,13 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
           // immovable, while tomorrow's moved fine. That status marks «in the
           // past», not «audited»; it must not be a write lock. Fixing a
           // mistyped past lesson is ordinary admin work.
-          movable: l['id'] != null && status != 'cancelled',
+          movable: widget.canWrite && l['id'] != null && status != 'cancelled',
           highlighted:
               _highlightLessonId != null &&
               l['id']?.toString() == _highlightLessonId,
+          clientContext: widget.clientId != null,
+          searchContext: _hasScheduleSearch,
+          relatedClient: _isRelatedLesson(l),
         ),
       );
     }
@@ -731,12 +833,13 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
       ),
       columns: columns,
       entries: entries,
+      allowCreate: widget.canWrite,
       onCreateSlot: _openQuickCreate,
       onMove: _moveLessonOptimistic,
       onResize: _resizeLesson,
       onOpenLesson: _showLessonDetails,
       initialVerticalOffset: _dayScrollOffset,
-      onVerticalOffsetChanged: (value) => _dayScrollOffset = value,
+      onVerticalOffsetChanged: _updateDayScrollOffset,
     );
   }
 

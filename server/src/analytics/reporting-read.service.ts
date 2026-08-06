@@ -14,6 +14,16 @@ interface LessonSuccessRow {
   successful_lessons: string;
 }
 
+interface LessonSuccessItemRow {
+  id: string;
+  scheduled_at: string;
+  lifecycle_state: string;
+  display_name: string;
+  teacher_name: string;
+  branch_name: string | null;
+  total_count: string;
+}
+
 interface SchoolFinanceRow {
   month_start: string;
   total_lessons: string;
@@ -31,48 +41,29 @@ export class ReportingReadService {
 
   async lessonSuccess(actor: ActorContext, query: AnalyticsRangeQuery) {
     this.assertCanReadStatusReport(actor);
-    const range = this.normalizeRange(query);
+    const filter = this.lessonFilter(actor, query);
     const result = await this.database.query<LessonSuccessRow>(
       `
+        with filtered as (
+          select lesson.lifecycle_state
+          from app.lessons lesson
+          ${filter.whereSql}
+        )
         select
           count(*)::text as total_lessons,
           count(*) filter (
-            where lesson.lifecycle_state = 'successfully_completed'
+            where filtered.lifecycle_state = 'successfully_completed'
           )::text as successful_lessons
-        from app.lessons lesson
-        where lesson.deleted_at is null
-          and lesson.scheduled_at >= $1::timestamptz
-          and lesson.scheduled_at < $2::timestamptz
-          and ($3::uuid is null or lesson.branch_id = $3)
-          and (
-            $4::text in ('director', 'system_admin')
-            or (
-              $4::text = 'manager'
-              and lesson.branch_id is not null
-              and exists (
-                select 1
-                from app.staff_members scoped_staff
-                join app.profiles scoped_profile
-                  on scoped_profile.id = scoped_staff.profile_id
-                 and scoped_profile.deleted_at is null
-                join app.staff_branch_assignments scoped_assignment
-                  on scoped_assignment.staff_member_id = scoped_staff.id
-                 and scoped_assignment.deleted_at is null
-                where scoped_staff.deleted_at is null
-                  and scoped_profile.user_id = $5
-                  and scoped_assignment.branch_id = lesson.branch_id
-              )
-            )
-          )
+        from filtered
       `,
-      [range.from, range.to, query.branchId ?? null, actor.role, actor.userId],
+      filter.params,
     );
     const totalLessons = Number(result.rows[0]?.total_lessons ?? 0);
     const successfulLessons = Number(
       result.rows[0]?.successful_lessons ?? 0,
     );
     return {
-      ...range,
+      ...filter.range,
       branchId: query.branchId ?? null,
       totalLessons,
       successfulLessons,
@@ -86,11 +77,81 @@ export class ReportingReadService {
             version: 1,
             status: "successfully_completed",
             branchId: query.branchId,
-            from: range.from,
-            to: range.to,
+            from: filter.range.from,
+            to: filter.range.to,
           },
         },
       } satisfies ReportingEntityLink,
+    };
+  }
+
+  async lessonSuccessList(actor: ActorContext, query: AnalyticsRangeQuery) {
+    this.assertCanReadStatusReport(actor);
+    const filter = this.lessonFilter(actor, query);
+    const limit = Math.min(query.limit ?? 50, 200);
+    const offset = Math.max(query.offset ?? 0, 0);
+    const result = await this.database.query<LessonSuccessItemRow>(
+      `
+        with filtered as (
+          select lesson.*
+          from app.lessons lesson
+          ${filter.whereSql}
+            and lesson.lifecycle_state = 'successfully_completed'
+        )
+        select filtered.id, filtered.scheduled_at,
+          filtered.lifecycle_state,
+          coalesce(
+            nullif(group_row.name, ''),
+            nullif(btrim(concat_ws(' ', student_profile.first_name, student_profile.last_name)), ''),
+            nullif(btrim(concat_ws(' ', lead.first_name, lead.last_name)), ''),
+            'Занятие'
+          ) as display_name,
+          coalesce(
+            nullif(btrim(concat_ws(' ', teacher_profile.first_name, teacher_profile.last_name)), ''),
+            'Без преподавателя'
+          ) as teacher_name,
+          branch.name as branch_name,
+          count(*) over ()::text as total_count
+        from filtered
+        left join app.students student
+          on student.id = filtered.student_id and student.deleted_at is null
+        left join app.profiles student_profile
+          on student_profile.id = student.profile_id and student_profile.deleted_at is null
+        left join app.leads lead
+          on lead.id = filtered.lead_id and lead.deleted_at is null
+        left join app.groups group_row
+          on group_row.id = filtered.group_id and group_row.deleted_at is null
+        left join app.teachers teacher
+          on teacher.id = filtered.teacher_id and teacher.deleted_at is null
+        left join app.profiles teacher_profile
+          on teacher_profile.id = teacher.profile_id and teacher_profile.deleted_at is null
+        left join app.branches branch
+          on branch.id = filtered.branch_id and branch.deleted_at is null
+        order by filtered.scheduled_at desc, filtered.id
+        limit $6 offset $7
+      `,
+      [...filter.params, limit, offset],
+    );
+    return {
+      filter: {
+        version: 1,
+        ...filter.range,
+        branchId: query.branchId ?? null,
+        status: "successfully_completed",
+      },
+      total: Number(result.rows[0]?.total_count ?? 0),
+      limit,
+      offset,
+      items: result.rows.map((row) => ({
+        id: row.id,
+        displayName: row.display_name,
+        subtitle: [row.teacher_name, row.branch_name]
+          .filter(Boolean)
+          .join(" · "),
+        scheduledAt: row.scheduled_at,
+        lifecycleState: row.lifecycle_state,
+        entityLink: { entityType: "lesson", entityId: row.id },
+      })),
     };
   }
 
@@ -173,6 +234,13 @@ export class ReportingReadService {
             version: 1,
             branchId: query.branchId,
             from: `${row.month_start}T00:00:00.000Z`,
+            to: new Date(
+              Date.UTC(
+                Number(row.month_start.slice(0, 4)),
+                Number(row.month_start.slice(5, 7)),
+                1,
+              ),
+            ).toISOString(),
           },
         },
       } satisfies ReportingEntityLink,
@@ -205,6 +273,46 @@ export class ReportingReadService {
     });
   }
 
+  private lessonFilter(actor: ActorContext, query: AnalyticsRangeQuery) {
+    const range = this.normalizeRange(query);
+    return {
+      range,
+      params: [
+        range.from,
+        range.to,
+        query.branchId ?? null,
+        actor.role,
+        actor.userId,
+      ],
+      whereSql: `
+        where lesson.deleted_at is null
+          and lesson.scheduled_at >= $1::timestamptz
+          and lesson.scheduled_at < $2::timestamptz
+          and ($3::uuid is null or lesson.branch_id = $3)
+          and (
+            $4::text in ('director', 'system_admin')
+            or (
+              $4::text = 'manager'
+              and lesson.branch_id is not null
+              and exists (
+                select 1
+                from app.staff_members scoped_staff
+                join app.profiles scoped_profile
+                  on scoped_profile.id = scoped_staff.profile_id
+                 and scoped_profile.deleted_at is null
+                join app.staff_branch_assignments scoped_assignment
+                  on scoped_assignment.staff_member_id = scoped_staff.id
+                 and scoped_assignment.deleted_at is null
+                where scoped_staff.deleted_at is null
+                  and scoped_profile.user_id = $5
+                  and scoped_assignment.branch_id = lesson.branch_id
+              )
+            )
+          )
+      `,
+    };
+  }
+
   private normalizeRange(query: AnalyticsRangeQuery) {
     const now = new Date();
     const to = query.to ? new Date(query.to) : now;
@@ -234,4 +342,3 @@ export class ReportingReadService {
     return { from: from.toISOString(), to: to.toISOString() };
   }
 }
-

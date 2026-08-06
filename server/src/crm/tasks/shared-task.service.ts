@@ -1,6 +1,5 @@
 import {
   ConflictException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
@@ -119,12 +118,6 @@ export class SharedTaskService {
     this.policy.assertCanWriteCrm(actor);
     this.assertMetadata(metadata);
     const current = await this.loadRow(taskId);
-    if (current.created_by !== actor.userId) {
-      throw new ForbiddenException({
-        code: "TASK_WRITER_REQUIRED",
-        message: "Изменить задачу может только её автор.",
-      });
-    }
     if (current.state !== "open") {
       throw new ConflictException({
         code: "TASK_ALREADY_CLOSED",
@@ -155,9 +148,6 @@ export class SharedTaskService {
       mutate: async (client, version) => {
         const locked = (await this.repository.lock(client, taskId)).rows[0];
         if (!locked) throw new NotFoundException("Задача не найдена.");
-        if (locked.created_by !== actor.userId) {
-          throw new ForbiddenException("Изменить задачу может только её автор.");
-        }
         const updated = await this.repository.update(client, taskId, {
           ...values,
           version,
@@ -198,16 +188,70 @@ export class SharedTaskService {
     }
     const result = await this.repository.listResolved(actor.userId, actor.role, {
       state: query.state,
-      limit: query.limit ?? 100,
+      // ponytail: one bounded school work queue; add a cursor if it exceeds 2k.
+      limit: query.limit ?? 2000,
       taskId: query.taskId,
       linkedEntityType: query.linkedEntityType,
       linkedEntityId: query.linkedEntityId,
+      q: query.q?.trim() || undefined,
+      priority: query.priority,
+      scope: query.scope,
+      from: query.from,
+      to: query.to,
     });
     await this.repository.recordListResolutions(result.rows, actor.userId);
     const items = await this.toDtos(result.rows);
     return {
       items,
-      counters: await this.repository.counters(actor.userId, actor.role),
+      counters: await this.repository.counters(actor.userId, actor.role, {
+        q: query.q?.trim() || undefined,
+        priority: query.priority,
+        scope: query.scope,
+        from: query.from,
+        to: query.to,
+      }),
+    };
+  }
+
+  async calendar(actor: ActorContext, query: SharedTaskListQuery) {
+    this.policy.assertCanReadOperationalData(actor);
+    if (!query.from || !query.to) {
+      this.invalid("range", "Для календаря обязательны начало и конец периода.");
+    }
+    const from = new Date(query.from);
+    const to = new Date(query.to);
+    if (to <= from || to.getTime() - from.getTime() > 370 * 86_400_000) {
+      this.invalid("range", "Период календаря должен быть не больше года.");
+    }
+    const rows = (
+      await this.repository.listResolved(actor.userId, actor.role, {
+        state: query.state,
+        limit: 2_147_483_647,
+        linkedEntityType: query.linkedEntityType,
+        linkedEntityId: query.linkedEntityId,
+        q: query.q?.trim() || undefined,
+        priority: query.priority,
+        scope: query.scope,
+        from: query.from,
+        to: query.to,
+      })
+    ).rows;
+    const formatDay = new Intl.DateTimeFormat("sv-SE", {
+      timeZone: "Europe/Moscow",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    const counts = new Map<string, number>();
+    for (const row of rows) {
+      if (!row.start_at) continue;
+      const day = formatDay.format(new Date(row.start_at));
+      counts.set(day, (counts.get(day) ?? 0) + 1);
+    }
+    return {
+      items: [...counts.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([day, count]) => ({ day, count })),
     };
   }
 
@@ -360,6 +404,7 @@ export class SharedTaskService {
       title,
       body: dto.body?.trim() || null,
       allDay: dto.allDay,
+      priority: dto.priority ?? "medium",
       startAt: start.toISOString(),
       endAt: end?.toISOString() ?? null,
       linkedEntityType: dto.linkedEntity?.type ?? null,
@@ -512,6 +557,7 @@ export class SharedTaskService {
       startAt: row.start_at,
       endAt: row.end_at,
       state: row.state,
+      priority: row.priority,
       linkedEntity:
         row.linked_entity_type && row.linked_entity_id
           ? { type: row.linked_entity_type, id: row.linked_entity_id }

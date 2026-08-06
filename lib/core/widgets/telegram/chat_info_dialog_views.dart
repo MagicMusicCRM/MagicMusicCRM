@@ -87,10 +87,7 @@ extension _ChatInfoViews on _ChatInfoDialogState {
               color: TelegramColors.accent.withValues(alpha: 40 / 255),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(
-              Icons.insert_drive_file,
-              color: TelegramColors.accent,
-            ),
+            child: Icon(Icons.insert_drive_file, color: TelegramColors.accent),
           ),
           title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
           subtitle: Text(size),
@@ -151,7 +148,8 @@ extension _ChatInfoViews on _ChatInfoDialogState {
     Color? color,
   }) {
     final iconColor = color ?? (isDark ? Colors.white : Colors.black);
-    final labelColor = color ??
+    final labelColor =
+        color ??
         (isDark
             ? TelegramColors.darkTextSecondary
             : TelegramColors.lightTextSecondary);
@@ -175,13 +173,7 @@ extension _ChatInfoViews on _ChatInfoDialogState {
               child: Icon(icon, color: iconColor),
             ),
             const SizedBox(height: 8),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: labelColor,
-              ),
-            ),
+            Text(label, style: TextStyle(fontSize: 12, color: labelColor)),
           ],
         ),
       ),
@@ -342,6 +334,7 @@ extension _ChatInfoViews on _ChatInfoDialogState {
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton.small(
         onPressed: _addNote,
+        tooltip: 'Добавить заметку',
         backgroundColor: TelegramColors.accent,
         child: const Icon(Icons.add_comment_rounded, color: Colors.white),
       ),

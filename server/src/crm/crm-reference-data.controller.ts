@@ -1,7 +1,6 @@
 import {
   Body,
   Controller,
-  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -15,12 +14,10 @@ import { CurrentActor } from "../common/security/current-actor.decorator";
 import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
 import { ReferenceDataService } from "./reference-data.service";
 import { CrmListQuery } from "./dto/crm-list.query";
-import { UpsertLeadStatusDto } from "./dto/upsert-lead-status.dto";
 import { CreateDisciplineDto } from "./dto/create-discipline.dto";
 import { CreateLossReasonDto } from "./dto/create-loss-reason.dto";
 import { UpsertBranchDisciplineDto } from "./dto/upsert-branch-discipline.dto";
 import { ReorderBranchDisciplinesDto } from "./dto/reorder-branch-disciplines.dto";
-import { ReorderLeadStatusesDto } from "./dto/reorder-lead-statuses.dto";
 
 @UseGuards(JwtAuthGuard)
 @Controller("crm")
@@ -114,27 +111,4 @@ export class CrmReferenceDataController {
     return this.referenceData.listHolliHopLeadStatuses(actor);
   }
 
-  @Post("lead-statuses")
-  createLeadStatus(
-    @CurrentActor() actor: ActorContext,
-    @Body() dto: UpsertLeadStatusDto,
-  ) {
-    return this.referenceData.createLeadStatus(actor, dto);
-  }
-
-  @Patch("lead-statuses/order")
-  reorderLeadStatuses(
-    @CurrentActor() actor: ActorContext,
-    @Body() dto: ReorderLeadStatusesDto,
-  ) {
-    return this.referenceData.reorderLeadStatuses(actor, dto);
-  }
-
-  @Delete("lead-statuses/:id")
-  deleteLeadStatus(
-    @CurrentActor() actor: ActorContext,
-    @Param("id", ParseUUIDPipe) id: string,
-  ) {
-    return this.referenceData.deleteLeadStatus(actor, id);
-  }
 }

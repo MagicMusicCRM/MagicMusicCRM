@@ -3,12 +3,73 @@ part of 'magic_crm_service.dart';
 /// Schedule & lessons: matrix, lessons, tasks, comments,
 /// timeline, progress notes, subscriptions, ledger, schedule series.
 extension MagicCrmSchedule on MagicCrmService {
+  Future<Map<String, dynamic>> getScheduleReference({
+    required String branchId,
+    required String teacherId,
+  }) {
+    final now = DateTime.now().toUtc();
+    return _api.get<Map<String, dynamic>>(
+      '/crm/schedule-reference',
+      queryParameters: {
+        'branchId': branchId,
+        'teacherId': teacherId,
+        'from': now.toIso8601String(),
+        'to': now.add(const Duration(days: 31)).toIso8601String(),
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> replaceBranchHours({
+    required String branchId,
+    required int expectedVersion,
+    required String timezone,
+    required List<Map<String, dynamic>> weekly,
+    required List<Map<String, dynamic>> exceptions,
+  }) {
+    return _api.put<Map<String, dynamic>>(
+      '/crm/schedule-reference/branches/$branchId/hours',
+      data: {
+        'expectedVersion': expectedVersion,
+        'timezone': timezone,
+        'weekly': weekly,
+        'exceptions': exceptions,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> replaceTeacherBranches({
+    required String teacherId,
+    required int expectedVersion,
+    required List<Map<String, dynamic>> assignments,
+  }) {
+    return _api.put<Map<String, dynamic>>(
+      '/crm/schedule-reference/teachers/$teacherId/branches',
+      data: {'expectedVersion': expectedVersion, 'assignments': assignments},
+    );
+  }
+
+  Future<Map<String, dynamic>> replaceTeacherAvailability({
+    required String teacherId,
+    required int expectedVersion,
+    required List<Map<String, dynamic>> rules,
+  }) {
+    return _api.put<Map<String, dynamic>>(
+      '/crm/schedule-reference/teachers/$teacherId/availability',
+      data: {'expectedVersion': expectedVersion, 'rules': rules},
+    );
+  }
+
   Future<Map<String, dynamic>> listSharedTasks({
     String? state,
     String? taskId,
     String? linkedEntityType,
     String? linkedEntityId,
-    int limit = 100,
+    String? q,
+    String? priority,
+    String? scope,
+    String? from,
+    String? to,
+    int limit = 2000,
   }) async {
     final response = await _api.get<Map<String, dynamic>>(
       '/crm/shared-tasks',
@@ -20,6 +81,11 @@ extension MagicCrmSchedule on MagicCrmService {
           'linkedEntityType': linkedEntityType,
         if (linkedEntityId != null && linkedEntityId.isNotEmpty)
           'linkedEntityId': linkedEntityId,
+        if (q != null && q.trim().isNotEmpty) 'q': q.trim(),
+        if (priority != null && priority.isNotEmpty) 'priority': priority,
+        if (scope != null && scope.isNotEmpty) 'scope': scope,
+        if (from != null && from.isNotEmpty) 'from': from,
+        if (to != null && to.isNotEmpty) 'to': to,
       },
     );
     final items = response['items'];
@@ -30,6 +96,38 @@ extension MagicCrmSchedule on MagicCrmService {
       'counters': response['counters'] is Map<String, dynamic>
           ? response['counters']
           : <String, dynamic>{'open': 0, 'overdue': 0},
+    };
+  }
+
+  Future<Map<String, int>> sharedTaskCalendar({
+    required String from,
+    required String to,
+    String? state,
+    String? q,
+    String? priority,
+    String? scope,
+    String? linkedEntityType,
+    String? linkedEntityId,
+  }) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/shared-tasks/calendar',
+      queryParameters: {
+        'from': from,
+        'to': to,
+        if (state != null && state.isNotEmpty) 'state': state,
+        if (q != null && q.trim().isNotEmpty) 'q': q.trim(),
+        if (priority != null && priority.isNotEmpty) 'priority': priority,
+        if (scope != null && scope.isNotEmpty) 'scope': scope,
+        if (linkedEntityType != null && linkedEntityType.isNotEmpty)
+          'linkedEntityType': linkedEntityType,
+        if (linkedEntityId != null && linkedEntityId.isNotEmpty)
+          'linkedEntityId': linkedEntityId,
+      },
+    );
+    return {
+      for (final row in _items(response))
+        if (row['day'] != null && row['count'] is num)
+          row['day'].toString(): (row['count'] as num).toInt(),
     };
   }
 
@@ -311,92 +409,6 @@ extension MagicCrmSchedule on MagicCrmService {
     await _api.delete<Map<String, dynamic>>('/crm/lessons/$id');
   }
 
-  Future<List<Map<String, dynamic>>> listTasks({
-    String? q,
-    String? entityType,
-    String? entityId,
-    String? studentId,
-    String? assignedTo,
-    String? createdBy,
-    String? branchId,
-    String? status,
-    String? priority,
-    String? taskType,
-    String? communicationMethod,
-    String? from,
-    String? to,
-    int limit = 100,
-  }) async {
-    final queryParameters = <String, dynamic>{'limit': limit};
-    void addString(String key, String? value) {
-      final trimmed = value?.trim();
-      if (trimmed != null && trimmed.isNotEmpty) {
-        queryParameters[key] = trimmed;
-      }
-    }
-
-    addString('q', q);
-    addString('entityType', entityType);
-    addString('entityId', entityId);
-    addString('studentId', studentId);
-    addString('assignedTo', assignedTo);
-    addString('createdBy', createdBy);
-    addString('branchId', branchId);
-    addString('status', status);
-    addString('priority', priority);
-    addString('taskType', taskType);
-    addString('communicationMethod', communicationMethod);
-    addString('from', from);
-    addString('to', to);
-
-    final response = await _api.get<Map<String, dynamic>>(
-      '/crm/tasks',
-      queryParameters: queryParameters,
-    );
-    return _items(response).map(_legacyTask).toList();
-  }
-
-  /// Per-day task counts for the calendar grids, keyed by Moscow date
-  /// ('yyyy-MM-dd' → count). Applies the same filters as [listTasks] so a
-  /// day-cell count matches the list you get by opening that day.
-  Future<Map<String, int>> taskCalendar({
-    required String from,
-    required String to,
-    String? q,
-    String? entityType,
-    String? assignedTo,
-    String? branchId,
-    String? status,
-    String? priority,
-  }) async {
-    final queryParameters = <String, dynamic>{'from': from, 'to': to};
-    void addString(String key, String? value) {
-      final trimmed = value?.trim();
-      if (trimmed != null && trimmed.isNotEmpty) {
-        queryParameters[key] = trimmed;
-      }
-    }
-
-    addString('q', q);
-    addString('entityType', entityType);
-    addString('assignedTo', assignedTo);
-    addString('branchId', branchId);
-    addString('status', status);
-    addString('priority', priority);
-
-    final response = await _api.get<Map<String, dynamic>>(
-      '/crm/tasks/calendar',
-      queryParameters: queryParameters,
-    );
-    final result = <String, int>{};
-    for (final row in _items(response)) {
-      final day = row['day']?.toString();
-      final count = row['count'];
-      if (day != null && count is int) result[day] = count;
-    }
-    return result;
-  }
-
   Future<List<Map<String, dynamic>>> listTimeline({
     required String entityType,
     required String entityId,
@@ -422,116 +434,6 @@ extension MagicCrmSchedule on MagicCrmService {
       queryParameters: queryParameters,
     );
     return _items(response).map(_legacyTimelineItem).toList();
-  }
-
-  /// AmoCRM-style change feed for a single task: who changed what, when.
-  Future<List<Map<String, dynamic>>> listTaskHistory(String taskId) async {
-    final response = await _api.get<Map<String, dynamic>>(
-      '/crm/tasks/$taskId/history',
-    );
-    return _items(response).map(_legacyTaskHistoryItem).toList();
-  }
-
-  /// Supervisor control feed: every change of one field across tasks. Defaults
-  /// server-side to due-date moves — the case the director needs to watch.
-  Future<List<Map<String, dynamic>>> listTaskHistoryFeed({
-    String? field,
-    String? changedBy,
-    String? from,
-    String? to,
-    int limit = 50,
-  }) async {
-    final queryParameters = <String, dynamic>{'limit': limit};
-    if (field != null && field.trim().isNotEmpty) {
-      queryParameters['field'] = field.trim();
-    }
-    if (changedBy != null && changedBy.trim().isNotEmpty) {
-      queryParameters['changedBy'] = changedBy.trim();
-    }
-    if (from != null && from.trim().isNotEmpty) {
-      queryParameters['from'] = from.trim();
-    }
-    if (to != null && to.trim().isNotEmpty) {
-      queryParameters['to'] = to.trim();
-    }
-    final response = await _api.get<Map<String, dynamic>>(
-      '/crm/tasks/history',
-      queryParameters: queryParameters,
-    );
-    return _items(response).map(_legacyTaskHistoryItem).toList();
-  }
-
-  Future<Map<String, dynamic>> createTask({
-    required String entityType,
-    required String entityId,
-    required String title,
-    String? description,
-    String status = 'open',
-    String? dueAt,
-    String? assignedTo,
-    String? priority,
-    bool? dueAllDay,
-  }) async {
-    final data = <String, dynamic>{
-      'entityType': entityType,
-      'entityId': entityId,
-      'title': title.trim(),
-      'status': status,
-    };
-    if (description != null && description.trim().isNotEmpty) {
-      data['description'] = description.trim();
-    }
-    if (dueAt != null) data['dueAt'] = dueAt;
-    if (assignedTo != null) data['assignedTo'] = assignedTo;
-    if (priority != null) data['priority'] = priority;
-    if (dueAllDay != null) data['dueAllDay'] = dueAllDay;
-
-    final response = await _api.post<Map<String, dynamic>>(
-      '/crm/tasks',
-      data: data,
-    );
-    return _legacyTask(response);
-  }
-
-  Future<Map<String, dynamic>> updateTask(
-    String id, {
-    String? entityType,
-    String? entityId,
-    String? assignedTo,
-    String? title,
-    String? description,
-    String? status,
-    String? dueAt,
-    String? priority,
-    bool? dueAllDay,
-  }) async {
-    final data = <String, dynamic>{};
-    void addString(String key, String? value) {
-      final trimmed = value?.trim();
-      if (trimmed != null && trimmed.isNotEmpty) {
-        data[key] = trimmed;
-      }
-    }
-
-    addString('entityType', entityType);
-    addString('entityId', entityId);
-    addString('assignedTo', assignedTo);
-    addString('title', title);
-    addString('description', description);
-    addString('status', status);
-    addString('dueAt', dueAt);
-    addString('priority', priority);
-    if (dueAllDay != null) data['dueAllDay'] = dueAllDay;
-
-    final response = await _api.patch<Map<String, dynamic>>(
-      '/crm/tasks/$id',
-      data: data,
-    );
-    return _legacyTask(response);
-  }
-
-  Future<void> deleteTask(String id) async {
-    await _api.delete<Map<String, dynamic>>('/crm/tasks/$id');
   }
 
   Future<List<Map<String, dynamic>>> listComments({

@@ -108,8 +108,12 @@ export class DashboardService {
           ) as month_completed_lessons_count,
           (
             select count(*)
-            from app.tasks t
-            where t.deleted_at is null and t.status in ('open', 'todo')
+            from app.shared_tasks t
+            where t.deleted_at is null and t.state = 'open'
+              and exists (
+                select 1 from app.shared_task_visibility visibility
+                where visibility.task_id = t.id and visibility.user_id = $1
+              )
           ) as open_tasks_count,
           (
             select count(*)
@@ -127,7 +131,7 @@ export class DashboardService {
             where p.deleted_at is null and p.payment_date >= b.month_start
           ) as revenue_month
       `,
-      [],
+      [actor.userId],
     );
     const row = result.rows[0];
     return {
@@ -258,17 +262,24 @@ export class DashboardService {
           ) as new_leads,
           (
             select count(*)
-            from app.tasks t
+            from app.shared_tasks t
             where t.deleted_at is null
-              and t.status in ('open', 'in_progress')
-              and (t.due_at is null or (t.due_at >= $1::timestamptz and t.due_at < $2::timestamptz))
+              and t.state = 'open'
+              and exists (
+                select 1 from app.shared_task_visibility visibility
+                where visibility.task_id = t.id and visibility.user_id = $4
+              )
           ) as open_tasks,
           (
             select count(*)
-            from app.tasks t
+            from app.shared_tasks t
             where t.deleted_at is null
-              and t.status in ('open', 'in_progress')
-              and t.due_at < now()
+              and t.state = 'open'
+              and t.start_at < now()
+              and exists (
+                select 1 from app.shared_task_visibility visibility
+                where visibility.task_id = t.id and visibility.user_id = $4
+              )
           ) as overdue_tasks,
           (
             select count(*)
@@ -329,7 +340,7 @@ export class DashboardService {
               and audit.action like 'crm.%'
           ) as staff_activity
       `,
-      [bounds.from, bounds.to, query.branchId ?? null],
+      [bounds.from, bounds.to, query.branchId ?? null, actor.userId],
     );
     const row = result.rows[0];
     return {
@@ -359,7 +370,7 @@ export class DashboardService {
         expectedPayments: "/crm/expected-payments",
         debtStudents: "/crm/student-balances?debtOnly=true",
         newLeads: "/crm/leads/board",
-        tasks: "/crm/tasks",
+        tasks: "/crm/shared-tasks?state=open",
         schedule: "/crm/schedule/matrix",
         activity: "/crm/activity",
       },

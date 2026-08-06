@@ -168,145 +168,6 @@ describe("FinanceService", () => {
     );
   });
 
-  it("creates a refund adjustment as a negative amount and audits it", async () => {
-    const { service, query, audit, policy } = createServiceWithQueryResults([
-      { rows: [{ id: "student-a", profile_user_id: "client-a" }] }, // findStudent
-      { rows: [{ id: "adj-new" }] }, // insert returning
-    ]);
-
-    await expect(
-      service.createAccountAdjustment(actor, "student-a", {
-        kind: "refund",
-        amount: 2000,
-        description: "Возврат за отменённые занятия",
-      }),
-    ).resolves.toEqual({ id: "adj-new", amount: -2000, kind: "refund" });
-
-    expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
-    // Знак выставлен сервисом: возврат хранится отрицательным.
-    expect(query.mock.calls[1][1]).toEqual([
-      "student-a",
-      "refund",
-      -2000,
-      "Возврат за отменённые занятия",
-      null,
-      null,
-      "manager-a",
-      null, // invoice_number («№ Счёта»)
-      null, // status → coalesce в 'paid'
-    ]);
-    expect(audit.record).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: "crm.account_adjustment_created",
-        entityId: "student-a",
-      }),
-    );
-  });
-
-  it("keeps a positive amount for an income adjustment", async () => {
-    const { service, query } = createServiceWithQueryResults([
-      { rows: [{ id: "student-a" }] },
-      { rows: [{ id: "adj-plus" }] },
-    ]);
-
-    await expect(
-      service.createAccountAdjustment(actor, "student-a", {
-        kind: "adjustment",
-        amount: 300,
-        direction: "income",
-      }),
-    ).resolves.toEqual({ id: "adj-plus", amount: 300, kind: "adjustment" });
-    expect(query.mock.calls[1][1]).toContain(300);
-  });
-
-  describe("editing and voiding a ledger entry", () => {
-    it("keeps a refund negative no matter how it is edited", async () => {
-      const { service, query } = createServiceWithQueryResults([
-        { rows: [{ id: "adj-a", kind: "refund", status: "paid" }] },
-        { rows: [{ id: "adj-a", amount: "-500" }] },
-      ]);
-
-      await expect(
-        service.updateAccountAdjustment(actor, "student-a", "adj-a", {
-          amount: 500,
-        }),
-      ).resolves.toEqual({ id: "adj-a", amount: -500 });
-
-      // Знак пересобирается от kind записи, а не берётся из DTO: возврат,
-      // ставший приходом, нарисовал бы клиенту деньги из воздуха.
-      expect((query.mock.calls[1][1] as unknown[])[2]).toBe(-500);
-    });
-
-    it("leaves untouched fields alone", async () => {
-      const { service, query } = createServiceWithQueryResults([
-        { rows: [{ id: "adj-a", kind: "adjustment", status: "paid" }] },
-        { rows: [{ id: "adj-a", amount: "300" }] },
-      ]);
-
-      await service.updateAccountAdjustment(actor, "student-a", "adj-a", {
-        invoiceNumber: "СЧ-42",
-      });
-
-      const params = query.mock.calls[1][1] as unknown[];
-      expect(params[2]).toBeNull(); // amount не трогали → coalesce оставит своё
-      expect(params[6]).toBe("СЧ-42");
-    });
-
-    it("refuses to edit an entry that was already voided", async () => {
-      const { service } = createServiceWithQueryResults([
-        { rows: [{ id: "adj-a", kind: "refund", status: "void" }] },
-      ]);
-
-      await expect(
-        service.updateAccountAdjustment(actor, "student-a", "adj-a", {
-          amount: 100,
-        }),
-      ).rejects.toBeInstanceOf(BadRequestException);
-    });
-
-    it("voids rather than deletes, recording who did it", async () => {
-      const { service, query, audit } = createServiceWithQueryResults([
-        { rows: [{ id: "adj-a" }] },
-      ]);
-
-      await expect(
-        service.voidAccountAdjustment(actor, "student-a", "adj-a"),
-      ).resolves.toEqual({ id: "adj-a", status: "void" });
-
-      const sql = String(query.mock.calls[0][0]);
-      // Строку личного счёта уже показывали клиенту: удаление не оставило бы
-      // следа, кто и что убрал.
-      expect(sql).toContain("set status = 'void'");
-      expect(sql).toContain("voided_by = $3");
-      expect(sql).not.toContain("delete from");
-      expect(audit.record).toHaveBeenCalledWith(
-        expect.objectContaining({ action: "crm.account_adjustment_voided" }),
-      );
-    });
-
-    it("does not void the same entry twice", async () => {
-      const { service } = createServiceWithQueryResults([{ rows: [] }]);
-
-      await expect(
-        service.voidAccountAdjustment(actor, "student-a", "adj-a"),
-      ).rejects.toBeInstanceOf(NotFoundException);
-    });
-
-    it("refuses to touch an entry belonging to another student", async () => {
-      const { service, query } = createServiceWithQueryResults([{ rows: [] }]);
-
-      await expect(
-        service.updateAccountAdjustment(actor, "student-b", "adj-a", {
-          amount: 1,
-        }),
-      ).rejects.toBeInstanceOf(NotFoundException);
-
-      // student_id стоит в WHERE, а не только в пути запроса — иначе чужую
-      // операцию можно было бы править, зная её id.
-      expect(String(query.mock.calls[0][0])).toContain("student_id = $2");
-    });
-  });
-
   it("keeps a voided entry out of the balance", async () => {
     const { service, query } = createService([]);
 
@@ -344,6 +205,7 @@ describe("FinanceService", () => {
       service.listPayments(schoolActor, {
         from: "2026-06-01T00:00:00.000Z",
         to: "2026-07-01T00:00:00.000Z",
+        branchId: "11111111-1111-4111-8111-111111111111",
         limit: 10,
       }),
     ).resolves.toEqual({
@@ -368,8 +230,10 @@ describe("FinanceService", () => {
       null,
       "2026-06-01T00:00:00.000Z",
       "2026-07-01T00:00:00.000Z",
+      "11111111-1111-4111-8111-111111111111",
       10,
     ]);
+    expect(String(query.mock.calls[0][0])).toContain("pay.branch_id = $6");
   });
 
   it("denies teacher global payments before composing finance rows", async () => {
@@ -719,6 +583,8 @@ describe("FinanceService", () => {
     const result = await service.listExpenses(actor, {
       branchId: "branch-a",
       category: "rent",
+      from: "2026-06-01T00:00:00.000Z",
+      to: "2026-07-01T00:00:00.000Z",
       limit: 50,
     });
 
@@ -736,9 +602,21 @@ describe("FinanceService", () => {
       },
     ]);
     // items query: branch + category filters then the limit param last.
-    expect(query.mock.calls[0][1]).toEqual(["branch-a", "rent", 50]);
+    expect(query.mock.calls[0][1]).toEqual([
+      "branch-a",
+      "rent",
+      "2026-06-01T00:00:00.000Z",
+      "2026-07-01T00:00:00.000Z",
+      50,
+    ]);
+    expect(String(query.mock.calls[0][0])).toContain("e.created_at < $4");
     // total query reuses the filter params WITHOUT the limit.
-    expect(query.mock.calls[1][1]).toEqual(["branch-a", "rent"]);
+    expect(query.mock.calls[1][1]).toEqual([
+      "branch-a",
+      "rent",
+      "2026-06-01T00:00:00.000Z",
+      "2026-07-01T00:00:00.000Z",
+    ]);
   });
 
   it("soft-deletes expenses and 404s when missing (P5-5)", async () => {

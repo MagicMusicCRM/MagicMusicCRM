@@ -22,6 +22,27 @@ enum EntityLinkType {
   unknown,
 }
 
+class EntityPresentationReference {
+  const EntityPresentationReference({required this.primary, this.context});
+
+  factory EntityPresentationReference.fromJson(Map<String, dynamic> json) {
+    return EntityPresentationReference(
+      primary: json['primary']?.toString().trim() ?? '',
+      context: json['context']?.toString().trim(),
+    );
+  }
+
+  final String primary;
+  final String? context;
+
+  bool get isUsable => primary.trim().isNotEmpty;
+
+  Map<String, dynamic> toJson() => {
+    'primary': primary.trim(),
+    if (context?.trim().isNotEmpty == true) 'context': context!.trim(),
+  };
+}
+
 class EntityLinkFocus {
   EntityLinkFocus({this.focus, Map<String, dynamic> filter = const {}})
     : filter = UnmodifiableMapView(Map<String, dynamic>.from(filter));
@@ -51,6 +72,7 @@ class EntityLink {
     required this.entityId,
     required this.rawEntityType,
     this.optionalFocus,
+    this.presentation,
     this.version = schemaVersion,
   });
 
@@ -58,6 +80,7 @@ class EntityLink {
     required EntityLinkType entityType,
     required String entityId,
     EntityLinkFocus? optionalFocus,
+    EntityPresentationReference? presentation,
     String? variant,
   }) {
     return EntityLink(
@@ -65,12 +88,14 @@ class EntityLink {
       entityId: entityId.trim(),
       rawEntityType: variant ?? _canonicalType(entityType),
       optionalFocus: optionalFocus,
+      presentation: presentation,
     );
   }
 
   factory EntityLink.fromJson(Map<String, dynamic> json) {
     final rawType = json['entityType']?.toString().trim() ?? '';
     final rawFocus = json['optionalFocus'];
+    final rawPresentation = json['presentation'];
     return EntityLink(
       version: (json['version'] as num?)?.toInt() ?? schemaVersion,
       entityType: _parseType(rawType),
@@ -79,6 +104,13 @@ class EntityLink {
       optionalFocus: rawFocus is Map
           ? EntityLinkFocus.fromJson(
               rawFocus.map((key, value) => MapEntry(key.toString(), value)),
+            )
+          : null,
+      presentation: rawPresentation is Map
+          ? EntityPresentationReference.fromJson(
+              rawPresentation.map(
+                (key, value) => MapEntry(key.toString(), value),
+              ),
             )
           : null,
     );
@@ -91,6 +123,7 @@ class EntityLink {
   final String rawEntityType;
   final String entityId;
   final EntityLinkFocus? optionalFocus;
+  final EntityPresentationReference? presentation;
 
   bool get isSupported =>
       version == schemaVersion &&
@@ -102,7 +135,19 @@ class EntityLink {
     'entityType': rawEntityType,
     'entityId': entityId,
     if (optionalFocus != null) 'optionalFocus': optionalFocus!.toJson(),
+    if (presentation?.isUsable == true) 'presentation': presentation!.toJson(),
   };
+
+  EntityLink withPresentation(EntityPresentationReference reference) {
+    return EntityLink(
+      version: version,
+      entityType: entityType,
+      rawEntityType: rawEntityType,
+      entityId: entityId,
+      optionalFocus: optionalFocus,
+      presentation: reference,
+    );
+  }
 
   static EntityLinkType _parseType(String value) {
     return switch (value) {

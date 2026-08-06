@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
+import 'package:magic_music_crm/core/models/commerce_projection.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/client_payment_form.dart';
 
 Future<void> _pumpForm(
@@ -19,7 +20,38 @@ Future<void> _pumpForm(
           child: ClientPaymentForm(
             branchId: branchId,
             branchName: branchId == null ? 'Филиал не указан' : 'Сокол',
-            subscriptions: const [],
+            subscriptions: [
+              CommerceSubscription.fromJson({
+                'id': '22222222-2222-4222-8222-222222222222',
+                'status': 'active',
+                'startsAt': '2026-08-01T00:00:00.000Z',
+                'expiresAt': null,
+                'units': {
+                  'total': '10',
+                  'used': '0',
+                  'reserved': '0',
+                  'paid': '5',
+                  'available': '5',
+                  'remaining': '10',
+                },
+                'financial': {
+                  'actualPaidMinor': '250000',
+                  'obligationMinor': '500000',
+                  'debtMinor': '250000',
+                  'overpaymentMinor': '0',
+                  'nextPaymentAt': null,
+                },
+                'terms': {
+                  'displayName': '10 занятий',
+                  'validityDays': 90,
+                  'basePriceMinor': '500000',
+                  'finalPriceMinor': '500000',
+                  'currencyCode': 'RUB',
+                  'discount': {'type': 'none'},
+                },
+                'installments': <dynamic>[],
+              }),
+            ],
             balanceMinor: BigInt.from(-125050),
             now: DateTime(2026, 8, 4),
             onSubmit: onSubmit,
@@ -40,10 +72,10 @@ void main() {
       expect(parsePaymentMinor('0.01'), BigInt.one);
       expect(parsePaymentMinor('-10'), isNull);
       expect(parsePaymentMinor('10.999'), isNull);
-    expect(
-      formatPaymentMinor(BigInt.from(-125050)).replaceAll('\u00a0', ' '),
-      '−1 250,50 ₽',
-    );
+      expect(
+        formatPaymentMinor(BigInt.from(-125050)).replaceAll('\u00a0', ' '),
+        '−1 250,50 ₽',
+      );
     },
   );
 
@@ -98,6 +130,7 @@ void main() {
       submissions.first.identity.requestId,
     );
     expect(submissions.last.input.toJson(), {
+      'issuedSubscriptionId': '22222222-2222-4222-8222-222222222222',
       'amountMinor': '250075',
       'method': 'cashless',
       'occurredAt': '2026-08-04T09:00:00.000Z',

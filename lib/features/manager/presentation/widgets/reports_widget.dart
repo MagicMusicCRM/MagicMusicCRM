@@ -15,10 +15,8 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
-import 'package:magic_music_crm/features/manager/presentation/widgets/management_dashboard_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/finance_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/reporting_v4_panel.dart';
-import 'package:magic_music_crm/features/manager/presentation/widgets/subscription_catalog_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/teacher_stats_widget.dart';
 import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
 
@@ -52,6 +50,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
   Object? _branchesError;
   bool _branchesLoading = true;
   int _dashboardRevision = 0;
+  String _journal = 'activity';
   Timer? _realtimeDebounce;
 
   bool get _canSeeFinance =>
@@ -66,20 +65,16 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
 
   bool get _canSeeTeacherRates => crmHasTeacherRatesAccess(widget.role);
 
-  List<int> get _visibleReportTabs => [
-    if (_canSeeStatus) 0,
-    if (_canSeeFinance) 1,
-    2,
-    3,
-    4,
-    if (_canSeeTeacherRates) 5,
-  ];
+  int _positionForCanonicalTab(int canonical) => switch (canonical) {
+    1 || 2 || 4 || 5 => 1,
+    _ => 0,
+  };
 
-  int _positionForCanonicalTab(int canonical) {
-    if (canonical == 6) canonical = 0;
-    final position = _visibleReportTabs.indexOf(canonical.clamp(0, 6));
-    return position < 0 ? 0 : position;
-  }
+  String _journalForCanonicalTab(int canonical) => switch (canonical) {
+    1 when _canSeeFinance => 'finance',
+    5 when _canSeeTeacherRates => 'teachers',
+    _ => 'activity',
+  };
 
   @override
   void initState() {
@@ -89,10 +84,11 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
       widget.initialLink?.optionalFocus?.filter,
     );
     _tabController = TabController(
-      length: _visibleReportTabs.length,
+      length: 2,
       vsync: this,
       initialIndex: _positionForCanonicalTab(widget.initialTab),
     );
+    _journal = _journalForCanonicalTab(widget.initialTab);
     if (_canSeeStatus) {
       unawaited(_loadBranches());
     } else {
@@ -106,6 +102,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
     if (widget.initialTab != oldWidget.initialTab) {
       final nextTab = _positionForCanonicalTab(widget.initialTab);
       if (nextTab != _tabController.index) _tabController.index = nextTab;
+      _journal = _journalForCanonicalTab(widget.initialTab);
     }
   }
 
@@ -198,25 +195,14 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
           unselectedLabelColor: Theme.of(context).colorScheme.onSurfaceVariant,
           indicatorColor: AppColor.gold,
           tabs: [
-            if (_canSeeStatus) const Tab(text: 'Сводка'),
-            if (_canSeeFinance) const Tab(text: 'Финансовые операции'),
-            const Tab(text: 'Активность'),
-            const Tab(text: 'Управление'),
-            const Tab(text: 'Абонементы'),
-            if (_canSeeTeacherRates) const Tab(text: 'Преподаватели'),
+            const Tab(text: 'Обзор'),
+            const Tab(text: 'Журналы'),
           ],
         ),
         Expanded(
           child: TabBarView(
             controller: _tabController,
-            children: [
-              if (_canSeeStatus) _buildUnifiedDashboard(),
-              if (_canSeeFinance) _buildFinanceOperations(),
-              const _ActivityLogTab(),
-              ManagementDashboardWidget(role: widget.role),
-              SubscriptionCatalogWidget(role: widget.role),
-              if (_canSeeTeacherRates) const TeacherStatsWidget(),
-            ],
+            children: [_buildUnifiedDashboard(), _buildOperationalJournal()],
           ),
         ),
       ],
@@ -225,19 +211,45 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
 
   Widget _buildUnifiedDashboard() {
     return Column(
-      key: const ValueKey('unified-dashboard'),
       children: [
-        _buildDashboardFilterBar(title: 'Обзор школы'),
+        _buildDashboardFilterBar(title: 'Аналитика'),
         Expanded(
           child: ReportingV4Panel(
+            key: const ValueKey('unified-dashboard'),
             role: widget.role,
             filter: _dashboardFilter,
             reloadToken: _dashboardRevision,
             accessSnapshot: widget.accessSnapshot,
+            onOpenEntity: _openDashboardEntity,
           ),
         ),
       ],
     );
+  }
+
+  Future<void> _openDashboardEntity(EntityLink link) async {
+    if (link.rawEntityType == 'school_finance_month' && _canSeeFinance) {
+      final filter = link.optionalFocus?.filter ?? const {};
+      final from = DateTime.tryParse(filter['from']?.toString() ?? '');
+      final to = DateTime.tryParse(filter['to']?.toString() ?? '');
+      setState(() {
+        if (from != null && to != null && from.isBefore(to)) {
+          _dashboardFilter = DashboardFilter(
+            from: DateTime(from.year, from.month, from.day),
+            to: DateTime(
+              to.subtract(const Duration(days: 1)).year,
+              to.subtract(const Duration(days: 1)).month,
+              to.subtract(const Duration(days: 1)).day,
+            ),
+            branchId: filter['branchId']?.toString(),
+          );
+        }
+        _journal = 'finance';
+      });
+      _tabController.animateTo(1);
+      return;
+    }
+    await openEntityLink(context, ref, link);
   }
 
   Widget _buildDashboardFilterBar({required String title}) {
@@ -323,19 +335,69 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
     );
   }
 
-  Widget _buildFinanceOperations() {
+  List<(String, String)> get _journals => [
+    const ('activity', 'Действия'),
+    if (_canSeeFinance) const ('finance', 'Финансовые операции'),
+    if (_canSeeTeacherRates) const ('teachers', 'Расчёты преподавателей'),
+  ];
+
+  Widget _buildOperationalJournal() {
+    final journals = _journals;
+    final selected = journals.any((item) => item.$1 == _journal)
+        ? _journal
+        : journals.first.$1;
     return Column(
-      key: const ValueKey('finance-operations'),
+      key: const ValueKey('operational-journals'),
       children: [
-        _buildDashboardFilterBar(title: 'Финансовые операции'),
-        Expanded(
-          child: FinanceWidget(
-            filterRange: DateTimeRange(
-              start: _dashboardFilter.from,
-              end: _dashboardFilter.to,
+        _buildDashboardFilterBar(title: 'Аналитика'),
+        if (journals.length > 1)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: SizedBox(
+                width: 320,
+                child: DropdownButtonFormField<String>(
+                  key: ValueKey('analytics-journal-$selected'),
+                  initialValue: selected,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Журнал',
+                    isDense: true,
+                  ),
+                  items: [
+                    for (final journal in journals)
+                      DropdownMenuItem(
+                        value: journal.$1,
+                        child: Text(journal.$2),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setState(() => _journal = value);
+                  },
+                ),
+              ),
             ),
-            branchId: _dashboardFilter.branchId,
           ),
+        Expanded(
+          child: switch (selected) {
+            'finance' => FinanceWidget(
+              key: const ValueKey('finance-operations'),
+              filterRange: DateTimeRange(
+                start: _dashboardFilter.from,
+                end: _dashboardFilter.to,
+              ),
+              branchId: _dashboardFilter.branchId,
+            ),
+            'teachers' => TeacherStatsWidget(
+              filterRange: DateTimeRange(
+                start: _dashboardFilter.from,
+                end: _dashboardFilter.to,
+              ),
+              branchId: _dashboardFilter.branchId,
+            ),
+            _ => _ActivityLogTab(filter: _dashboardFilter),
+          },
         ),
       ],
     );

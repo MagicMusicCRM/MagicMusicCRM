@@ -533,6 +533,12 @@ class _LeadCard extends ConsumerWidget {
         entityType: EntityLinkType.client,
         entityId: lead.id,
         variant: 'lead',
+        presentation: EntityPresentationReference(
+          primary: [
+            lead.lastName,
+            lead.name,
+          ].where((value) => value.trim().isNotEmpty).join(' '),
+        ),
       ),
       onSaved: onRefresh,
     );

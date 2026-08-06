@@ -27,6 +27,8 @@ export interface ValidatedLeadCreate {
   sourceId: string;
   sourceCanonicalName: string;
   sourceDisplayName: string;
+  branchId?: string;
+  status?: string;
   customFields: TypedClientCustomValue[];
   warnings: ClientValidationWarning[];
 }
@@ -55,6 +57,10 @@ export class ClientWriteValidator {
     if (!source) {
       this.fail("sourceId", "SOURCE_INACTIVE", "Выберите активный источник.");
     }
+    if (dto.branchId && !(await this.repository.branchExists(dto.branchId))) {
+      this.fail("branchId", "BRANCH_INACTIVE", "Выберите активный филиал.");
+    }
+    const status = dto.status?.trim();
     const custom = await this.validateCustomFields(
       "lead",
       dto.customFields ?? [],
@@ -66,6 +72,8 @@ export class ClientWriteValidator {
       sourceId: source.id,
       sourceCanonicalName: source.canonical_name,
       sourceDisplayName: source.display_name,
+      ...(dto.branchId ? { branchId: dto.branchId } : {}),
+      ...(status ? { status } : {}),
       customFields: custom.values,
       warnings: [...phone.warnings, ...custom.warnings],
     };

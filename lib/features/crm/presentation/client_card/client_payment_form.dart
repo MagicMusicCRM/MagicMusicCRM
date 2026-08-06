@@ -16,6 +16,19 @@ class ClientPaymentSubmission {
 typedef ClientPaymentSubmit =
     Future<void> Function(ClientPaymentSubmission submission);
 
+class ClientPaymentAdjustmentSubmission {
+  const ClientPaymentAdjustmentSubmission({
+    required this.input,
+    required this.identity,
+  });
+
+  final RecordPaymentAdjustmentInput input;
+  final MagicMutationIdentity identity;
+}
+
+typedef ClientPaymentAdjustmentSubmit =
+    Future<void> Function(ClientPaymentAdjustmentSubmission submission);
+
 class ClientPaymentForm extends StatefulWidget {
   const ClientPaymentForm({
     super.key,
@@ -60,6 +73,14 @@ class _ClientPaymentFormState extends State<ClientPaymentForm> {
     final now = widget.now ?? DateTime.now();
     _date = DateTime(now.year, now.month, now.day);
     _identity = MagicMutationIdentity.create('client-payment');
+    if (widget.subscriptions.isNotEmpty) {
+      _subscriptionId = widget.subscriptions
+          .firstWhere(
+            (item) => item.status == 'active',
+            orElse: () => widget.subscriptions.first,
+          )
+          .id;
+    }
   }
 
   @override
@@ -110,7 +131,7 @@ class _ClientPaymentFormState extends State<ClientPaymentForm> {
     final submission = ClientPaymentSubmission(
       identity: _identity,
       input: RecordSubscriptionPaymentInput(
-        issuedSubscriptionId: _subscriptionId,
+        issuedSubscriptionId: _subscriptionId!,
         amountMinor: amount,
         method: _method,
         occurredAt: occurredAt,
@@ -277,35 +298,32 @@ class _ClientPaymentFormState extends State<ClientPaymentForm> {
                   );
                 },
               ),
-              if (widget.subscriptions.isNotEmpty) ...[
-                const SizedBox(height: AppSpace.md),
-                DropdownButtonFormField<String?>(
-                  key: const Key('payment-subscription'),
-                  initialValue: _subscriptionId,
-                  decoration: const InputDecoration(
-                    labelText: 'Назначение',
-                    prefixIcon: Icon(Icons.receipt_long_outlined),
-                  ),
-                  items: [
-                    const DropdownMenuItem<String?>(
-                      value: null,
-                      child: Text('Личный счёт · без привязки'),
-                    ),
-                    ...widget.subscriptions.map(
-                      (subscription) => DropdownMenuItem<String?>(
+              const SizedBox(height: AppSpace.md),
+              DropdownButtonFormField<String>(
+                key: const Key('payment-subscription'),
+                initialValue: _subscriptionId,
+                decoration: const InputDecoration(
+                  labelText: 'Погашаемое обязательство',
+                  prefixIcon: Icon(Icons.receipt_long_outlined),
+                ),
+                validator: (value) => value == null
+                    ? 'Сначала выдайте и выберите абонемент'
+                    : null,
+                items: widget.subscriptions
+                    .map(
+                      (subscription) => DropdownMenuItem<String>(
                         value: subscription.id,
                         child: Text(subscription.terms.displayName),
                       ),
-                    ),
-                  ],
-                  onChanged: _busy
-                      ? null
-                      : (value) {
-                          setState(() => _subscriptionId = value);
-                          _changed();
-                        },
-                ),
-              ],
+                    )
+                    .toList(growable: false),
+                onChanged: _busy
+                    ? null
+                    : (value) {
+                        setState(() => _subscriptionId = value);
+                        _changed();
+                      },
+              ),
               const SizedBox(height: AppSpace.md),
               TextFormField(
                 key: const Key('payment-invoice'),
@@ -417,6 +435,234 @@ class _ReadonlyPaymentField extends StatelessWidget {
     return InputDecorator(
       decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon)),
       child: Text(value),
+    );
+  }
+}
+
+class ClientPaymentAdjustmentForm extends StatefulWidget {
+  const ClientPaymentAdjustmentForm({
+    super.key,
+    required this.payment,
+    required this.onSubmit,
+    required this.onCancel,
+    this.now,
+  });
+
+  final CommerceMovement payment;
+  final ClientPaymentAdjustmentSubmit onSubmit;
+  final VoidCallback onCancel;
+  final DateTime? now;
+
+  @override
+  State<ClientPaymentAdjustmentForm> createState() =>
+      _ClientPaymentAdjustmentFormState();
+}
+
+class _ClientPaymentAdjustmentFormState
+    extends State<ClientPaymentAdjustmentForm> {
+  final _formKey = GlobalKey<FormState>();
+  final _amountController = TextEditingController();
+  final _reasonController = TextEditingController();
+  late MagicMutationIdentity _identity;
+  PaymentAdjustmentKind _kind = PaymentAdjustmentKind.refund;
+  String _direction = 'outcome';
+  bool _busy = false;
+  bool _attempted = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _identity = MagicMutationIdentity.create('payment-adjustment');
+  }
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    _reasonController.dispose();
+    super.dispose();
+  }
+
+  void _changed() {
+    if (_attempted) {
+      _identity = MagicMutationIdentity.create('payment-adjustment');
+      _attempted = false;
+    }
+    if (_error != null) setState(() => _error = null);
+  }
+
+  Future<void> _submit() async {
+    if (_busy || !_formKey.currentState!.validate()) return;
+    final now = widget.now ?? DateTime.now();
+    final input = RecordPaymentAdjustmentInput(
+      sourcePaymentId: widget.payment.id,
+      kind: _kind,
+      amountMinor: parsePaymentMinor(_amountController.text)!,
+      occurredAt: DateTime(now.year, now.month, now.day, 12).toUtc(),
+      reason: _reasonController.text,
+      direction: _kind == PaymentAdjustmentKind.correction ? _direction : null,
+    );
+    setState(() {
+      _busy = true;
+      _attempted = true;
+      _error = null;
+    });
+    try {
+      await widget.onSubmit(
+        ClientPaymentAdjustmentSubmission(input: input, identity: _identity),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = '$error';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sourceDate = DateFormat(
+      'dd.MM.yyyy',
+    ).format(widget.payment.occurredAt.toLocal());
+    return Form(
+      key: _formKey,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          border: Border.all(color: AppColor.divider),
+          borderRadius: BorderRadius.circular(AppRadius.card),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpace.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Исправление оплаты от $sourceDate · '
+                      '${formatPaymentMinor(widget.payment.amountMinor)}',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Закрыть форму исправления',
+                    onPressed: _busy ? null : widget.onCancel,
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              if (widget.payment.subscriptionName?.isNotEmpty == true)
+                Text(
+                  'Назначение: ${widget.payment.subscriptionName}',
+                  style: const TextStyle(color: AppColor.text2),
+                ),
+              const SizedBox(height: AppSpace.md),
+              DropdownButtonFormField<PaymentAdjustmentKind>(
+                key: const Key('adjustment-kind'),
+                initialValue: _kind,
+                decoration: const InputDecoration(labelText: 'Операция'),
+                items: const [
+                  DropdownMenuItem(
+                    value: PaymentAdjustmentKind.refund,
+                    child: Text('Возврат'),
+                  ),
+                  DropdownMenuItem(
+                    value: PaymentAdjustmentKind.correction,
+                    child: Text('Корректировка'),
+                  ),
+                ],
+                onChanged: _busy
+                    ? null
+                    : (value) {
+                        if (value == null) return;
+                        setState(() => _kind = value);
+                        _changed();
+                      },
+              ),
+              if (_kind == PaymentAdjustmentKind.correction) ...[
+                const SizedBox(height: AppSpace.md),
+                DropdownButtonFormField<String>(
+                  key: const Key('adjustment-direction'),
+                  initialValue: _direction,
+                  decoration: const InputDecoration(labelText: 'Направление'),
+                  items: const [
+                    DropdownMenuItem(value: 'outcome', child: Text('Расход')),
+                    DropdownMenuItem(value: 'income', child: Text('Приход')),
+                  ],
+                  onChanged: _busy
+                      ? null
+                      : (value) {
+                          if (value == null) return;
+                          setState(() => _direction = value);
+                          _changed();
+                        },
+                ),
+              ],
+              const SizedBox(height: AppSpace.md),
+              TextFormField(
+                key: const Key('adjustment-amount'),
+                controller: _amountController,
+                enabled: !_busy,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9,.]')),
+                ],
+                validator: (raw) {
+                  final value = parsePaymentMinor(raw ?? '');
+                  return value == null || value <= BigInt.zero
+                      ? 'Введите положительную сумму'
+                      : null;
+                },
+                onChanged: (_) => _changed(),
+                decoration: const InputDecoration(labelText: 'Сумма, ₽'),
+              ),
+              const SizedBox(height: AppSpace.md),
+              TextFormField(
+                key: const Key('adjustment-reason'),
+                controller: _reasonController,
+                enabled: !_busy,
+                maxLength: 1000,
+                minLines: 2,
+                maxLines: 4,
+                validator: (value) =>
+                    value?.trim().isEmpty != false ? 'Укажите причину' : null,
+                onChanged: (_) => _changed(),
+                decoration: const InputDecoration(labelText: 'Причина'),
+              ),
+              if (_error != null)
+                Text(
+                  _error!,
+                  key: const Key('adjustment-error'),
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              const SizedBox(height: AppSpace.md),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: _busy ? null : widget.onCancel,
+                    child: const Text('Отмена'),
+                  ),
+                  const SizedBox(width: AppSpace.sm),
+                  FilledButton(
+                    key: const Key('adjustment-submit'),
+                    onPressed: _busy ? null : _submit,
+                    child: Text(_attempted ? 'Повторить' : 'Провести'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

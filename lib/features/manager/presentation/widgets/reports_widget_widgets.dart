@@ -42,7 +42,9 @@ class _ReportsError extends StatelessWidget {
 }
 
 class _ActivityLogTab extends ConsumerStatefulWidget {
-  const _ActivityLogTab();
+  const _ActivityLogTab({required this.filter});
+
+  final DashboardFilter filter;
 
   @override
   ConsumerState<_ActivityLogTab> createState() => _ActivityLogTabState();
@@ -55,7 +57,6 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
   bool _refreshing = false;
   int _loadSequence = 0;
   Object? _loadError;
-  String _period = 'week';
   String _entityType = 'all';
   List<Map<String, dynamic>> _items = [];
 
@@ -72,6 +73,14 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
     _searchCtrl.removeListener(_onSearchChanged);
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ActivityLogTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.filter != widget.filter) {
+      _loadActivity(preserveContent: true);
+    }
   }
 
   void _onSearchChanged() {
@@ -92,14 +101,15 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
       _loadError = null;
     });
     try {
-      final bounds = _activityBounds(_period);
+      final filter = widget.filter.apiFilter;
       final items = await ref
           .read(magicCrmServiceProvider)
           .listActivityLog(
             q: _searchCtrl.text,
             entityType: _entityType == 'all' ? null : _entityType,
-            from: bounds.$1,
-            to: bounds.$2,
+            branchId: filter['branchId']?.toString(),
+            from: filter['from']?.toString(),
+            to: filter['to']?.toString(),
             limit: 100,
           );
       if (!mounted || sequence != _loadSequence) return;
@@ -139,7 +149,7 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
         entityId: entityId,
         sourceState: ContextViewState(
           filters: {
-            'period': _period,
+            ...widget.filter.toContextViewState().filters,
             'entityType': _entityType,
             'query': _searchCtrl.text,
           },
@@ -191,17 +201,6 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
                     prefixIcon: Icon(Icons.search_rounded),
                   ),
                 ),
-              ),
-              _ReportFilterDropdown(
-                label: 'Период',
-                value: _period,
-                icon: Icons.event_rounded,
-                options: const [
-                  ('week', '7 дней'),
-                  ('month', 'Месяц'),
-                  ('quarter', 'Квартал'),
-                ],
-                onChanged: (value) => _setFilter(() => _period = value),
               ),
               _ReportFilterDropdown(
                 label: 'Объект',
@@ -477,25 +476,6 @@ class _ReportTag extends StatelessWidget {
       ),
     );
   }
-}
-
-(String?, String?) _activityBounds(String period) {
-  final now = DateTime.now();
-  final todayEnd = DateTime(
-    now.year,
-    now.month,
-    now.day,
-  ).add(const Duration(days: 1));
-  final from = switch (period) {
-    'month' => DateTime(now.year, now.month),
-    'quarter' => DateTime(now.year, now.month - 2),
-    _ => DateTime(
-      now.year,
-      now.month,
-      now.day,
-    ).subtract(const Duration(days: 6)),
-  };
-  return (from.toUtc().toIso8601String(), todayEnd.toUtc().toIso8601String());
 }
 
 IconData _activityIcon(String action) {

@@ -17,23 +17,28 @@ const _branchId = '11111111-1111-1111-1111-111111111111';
 const _roomId = '55555555-5555-5555-5555-555555555555';
 const _conflictId = '44444444-4444-4444-4444-444444444444';
 
-Map<String, dynamic> _freePreview() => {
-  'teacherBusy': false,
-  'roomBusy': false,
-  'conflicts': const [],
-};
+Map<String, dynamic> _freePreview() => {'valid': true, 'violations': const []};
 
 Map<String, dynamic> _busyPreview() => {
-  'teacherBusy': true,
-  'roomBusy': false,
-  'conflicts': [
+  'valid': false,
+  'violations': [
     {
-      'lessonId': _conflictId,
-      'title': 'Мария Занятова',
-      'startsAt': '2026-07-18T07:00:00.000Z',
-      'endsAt': '2026-07-18T08:00:00.000Z',
-      'roomName': 'Зал 1',
-      'teacherName': 'Пётр Педагогов',
+      'code': 'TEACHER_UNAVAILABLE',
+      'resource': {'type': 'teacher', 'id': _teacherId},
+      'conflictingLessonIds': const [],
+      'ruleIds': ['teacher-rule-1'],
+    },
+    {
+      'code': 'CLIENT_OVERLAP',
+      'resource': {'type': 'client', 'id': _studentId},
+      'conflictingLessonIds': [_conflictId],
+      'ruleIds': const [],
+    },
+    {
+      'code': 'ROOM_OVERLAP',
+      'resource': {'type': 'room', 'id': _roomId},
+      'conflictingLessonIds': [_conflictId],
+      'ruleIds': const [],
     },
   ],
 };
@@ -109,8 +114,6 @@ class _FakeApiClient extends MagicApiClient {
             as T;
       case '/crm/subscriptions':
         return <String, dynamic>{'items': const []} as T;
-      case '/crm/schedule/conflicts':
-        return (preview ?? _freePreview()) as T;
       default:
         return <String, dynamic>{'items': const []} as T;
     }
@@ -123,6 +126,9 @@ class _FakeApiClient extends MagicApiClient {
     Map<String, dynamic>? queryParameters,
     bool authenticated = true,
   }) async {
+    if (path == '/crm/lessons/constraints/preview') {
+      return (preview ?? _freePreview()) as T;
+    }
     if (path == '/crm/lessons') {
       lessonPosts.add(Map<String, dynamic>.from(data as Map));
       await createGate?.future;
@@ -259,9 +265,10 @@ void main() {
     await _selectRequiredResources(tester, clientName: 'Иван Прилежный');
     await _tapCreate(tester);
 
-    expect(find.text('Конфликт расписания'), findsOneWidget);
-    expect(find.text('Преподаватель занят в это время'), findsOneWidget);
-    expect(find.textContaining('Мария Занятова'), findsOneWidget);
+    expect(find.text('Занятие не сохранено'), findsOneWidget);
+    expect(find.text('Преподаватель недоступен'), findsOneWidget);
+    expect(find.text('У клиента уже есть занятие'), findsOneWidget);
+    expect(find.text('Аудитория уже занята'), findsOneWidget);
     expect(find.text('Всё равно назначить'), findsNothing);
     expect(client.lessonPosts, isEmpty);
   });

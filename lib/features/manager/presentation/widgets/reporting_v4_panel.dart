@@ -147,6 +147,7 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
   Map<String, dynamic>? _schoolFinance;
   EntityLink? _drilldownLink;
   Map<String, dynamic>? _drilldown;
+  bool _lessonDrilldown = false;
   Map<String, dynamic>? _financeDetail;
   bool _drilldownLoading = false;
   Object? _drilldownError;
@@ -311,6 +312,7 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
     int? expectedCount,
   }) async {
     final link = EntityLink.fromJson(rawLink);
+    final lessonDrilldown = link.rawEntityType == 'lesson_list';
     final resolution = EntityRouteRegistry().resolve(link, _snapshot);
     if (!resolution.canOpen) {
       setState(() {
@@ -323,13 +325,15 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
     final filter = {..._filter.apiFilter, ...?link.optionalFocus?.filter};
     setState(() {
       _drilldownLink = link;
+      _lessonDrilldown = lessonDrilldown;
       _drilldownLoading = true;
       _drilldownError = null;
     });
     try {
-      final response = await ref
-          .read(magicCrmServiceProvider)
-          .getV4ClientStatusList(filter: filter);
+      final service = ref.read(magicCrmServiceProvider);
+      final response = lessonDrilldown
+          ? await service.getV4LessonSuccessList(filter: filter)
+          : await service.getV4ClientStatusList(filter: filter);
       if (expectedCount != null && _int(response['total']) != expectedCount) {
         throw StateError('Количество в карточке и детализации не совпадает.');
       }
@@ -585,10 +589,20 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
     final counters = _stringMap(_tasks['counters']);
     final open = _int(counters['open']);
     final overdue = _int(counters['overdue']);
-    return Wrap(
-      spacing: 24,
-      runSpacing: 8,
-      children: [Text('Открыто: $open'), Text('Просрочено: $overdue')],
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text('Открыто: $open · Просрочено: $overdue'),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => _openEntity(
+        EntityLink.typed(
+          entityType: EntityLinkType.task,
+          entityId: '__section__',
+          optionalFocus: EntityLinkFocus(
+            focus: 'section',
+            filter: const {'state': 'open'},
+          ),
+        ),
+      ),
     );
   }
 
@@ -701,12 +715,16 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
     final total = _int(_lessonSuccess['totalLessons']);
     final success = _int(_lessonSuccess['successfulLessons']);
     final rate = ((_lessonSuccess['successRate'] as num?) ?? 0) * 100;
+    final drilldown = _stringMap(_lessonSuccess['drilldown']);
     return Card(
       child: ListTile(
         leading: const Icon(Icons.event_available_outlined),
         title: const Text('Успешно завершённые занятия'),
         subtitle: Text('$success из $total'),
         trailing: Text('${rate.toStringAsFixed(1)}%'),
+        onTap: drilldown.isEmpty
+            ? null
+            : () => _openDrilldown(drilldown, expectedCount: success),
       ),
     );
   }
@@ -797,6 +815,7 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
               setState(() {
                 _drilldownLink = null;
                 _drilldown = null;
+                _lessonDrilldown = false;
                 _drilldownError = null;
               });
             },
@@ -805,7 +824,8 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
           ),
         ),
         Text(
-          'Клиенты: ${_int(_drilldown?['total'])}',
+          '${_lessonDrilldown ? 'Занятия' : 'Клиенты'}: '
+          '${_int(_drilldown?['total'])}',
           style: Theme.of(context).textTheme.titleLarge,
         ),
         if (items.isEmpty)
@@ -814,10 +834,20 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
             child: Center(child: Text('Список пуст')),
           ),
         ...items.map((item) {
-          final link = EntityLink.fromJson(_stringMap(item['entityLink']));
+          final parsed = EntityLink.fromJson(_stringMap(item['entityLink']));
+          final displayName = item['displayName']?.toString().trim() ?? '';
+          final link = displayName.isEmpty
+              ? parsed
+              : parsed.withPresentation(
+                  EntityPresentationReference(primary: displayName),
+                );
           return ListTile(
             title: Text(item['displayName']?.toString() ?? 'Без имени'),
-            subtitle: Text(item['statusLabel']?.toString() ?? ''),
+            subtitle: Text(
+              (_lessonDrilldown ? item['subtitle'] : item['statusLabel'])
+                      ?.toString() ??
+                  '',
+            ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _openEntity(link),
           );

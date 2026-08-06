@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
+import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
@@ -16,7 +17,6 @@ import 'package:magic_music_crm/features/admin/presentation/providers/schedule_n
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_conflicts_api.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
-import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
@@ -30,7 +30,6 @@ import 'schedule_month_view.dart';
 import 'schedule_day_mode_toggle.dart';
 import 'schedule_timezone_dialog.dart';
 import 'schedule_filters_sheet.dart';
-import 'teacher_lesson_card.dart';
 import 'schedule_search_dialog.dart';
 
 part 'schedule_widget_widgets.dart';
@@ -60,10 +59,34 @@ const List<Color> _roomColors = [
 //  Main Widget
 // ═══════════════════════════════════════════════════════════════════════════
 class ScheduleWidget extends ConsumerStatefulWidget {
-  const ScheduleWidget({super.key, this.initialLink, this.initialViewState});
+  const ScheduleWidget({
+    super.key,
+    this.initialLink,
+    this.initialViewState,
+    this.initialBranchId,
+    this.clientType,
+    this.clientId,
+    this.clientName,
+    this.fixedTeacherId,
+    this.canWrite = true,
+    this.allowMonth = true,
+    this.active = true,
+    this.title = 'Расписание',
+    this.onViewStateChanged,
+  });
 
   final EntityLink? initialLink;
   final ContextViewState? initialViewState;
+  final String? initialBranchId;
+  final String? clientType;
+  final String? clientId;
+  final String? clientName;
+  final String? fixedTeacherId;
+  final bool canWrite;
+  final bool allowMonth;
+  final bool active;
+  final String title;
+  final ValueChanged<ContextViewState>? onViewStateChanged;
 
   @override
   ConsumerState<ScheduleWidget> createState() => _ScheduleWidgetState();
@@ -84,7 +107,6 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   List<Map<String, dynamic>> _branches = [];
   List<Map<String, dynamic>> _rooms = [];
   List<Map<String, dynamic>> _lessons = [];
-  List<Map<String, dynamic>> _teachers = [];
   List<Map<String, dynamic>> _scheduleConflicts = [];
   List<Map<String, dynamic>> _roomAvailability = [];
   Map<String, String> _teacherNames = {};
@@ -113,6 +135,8 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   String? _filterClientType;
   String? _filterClientId;
   String? _filterClientName;
+  String _scheduleSearchQuery = '';
+  bool _scheduleSearchLoading = false;
   // The user's own branch (staff assignment), resolved once, used as the
   // default instead of «the first branch in the system».
   String? _homeBranchId;
@@ -159,7 +183,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       if (focus.filters['conflicts'] == '1') _onlyConflicts = true;
       _currentView = ScheduleView.day;
     }
-    _fetchAll();
+    if (widget.active) _fetchAll();
     // The client card sets the focus BEFORE this widget mounts (it sets focus,
     // closes the card and routes here). `ref.listen` in build only catches
     // *changes*, so pick up an already-set focus once on first frame.
@@ -170,25 +194,41 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     });
   }
 
+  @override
+  void didUpdateWidget(covariant ScheduleWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.active && widget.active) _fetchAll();
+  }
+
   void _restoreNavigationState() {
     final state = widget.initialViewState;
     final filters = <String, dynamic>{
       ...?state?.filters,
       ...?widget.initialLink?.optionalFocus?.filter,
     };
-    _selectedBranchId = filters['branchId']?.toString();
-    _filterTeacherId = filters['teacherId']?.toString();
+    _selectedBranchId =
+        filters['branchId']?.toString() ??
+        filters['clientCalendarBranchId']?.toString() ??
+        widget.initialBranchId;
+    _filterTeacherId =
+        widget.fixedTeacherId ?? filters['teacherId']?.toString();
     _filterRoomId = filters['roomId']?.toString();
     _filterClientType = filters['clientType']?.toString();
     _filterClientId = filters['clientId']?.toString();
     _filterClientName = filters['clientName']?.toString();
+    _scheduleSearchQuery = filters['scheduleQuery']?.toString().trim() ?? '';
     _onlyTrial = filters['trial'] == true || filters['trial'] == '1';
     _onlyConflicts =
         filters['conflicts'] == true || filters['conflicts'] == '1';
     _currentView = ScheduleView.values.firstWhere(
-      (value) => value.name == filters['view'],
+      (value) =>
+          value.name ==
+          (filters['view'] ?? filters['clientCalendarMode'])?.toString(),
       orElse: () => _currentView,
     );
+    if (!widget.allowMonth && _currentView == ScheduleView.month) {
+      _currentView = ScheduleView.day;
+    }
     _dayViewMode = DayViewMode.values.firstWhere(
       (value) => value.name == filters['dayMode'],
       orElse: () => _dayViewMode,
@@ -214,12 +254,18 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     filters: {
       'view': _currentView.name,
       'dayMode': _dayViewMode.name,
+      if (widget.clientId != null) 'section': 'lessons',
+      if (widget.clientId != null) 'clientCalendarMode': _currentView.name,
       if (_selectedBranchId != null) 'branchId': _selectedBranchId,
+      if (widget.clientId != null && _selectedBranchId != null)
+        'clientCalendarBranchId': _selectedBranchId,
       if (_filterTeacherId != null) 'teacherId': _filterTeacherId,
       if (_filterRoomId != null) 'roomId': _filterRoomId,
       if (_filterClientType != null) 'clientType': _filterClientType,
       if (_filterClientId != null) 'clientId': _filterClientId,
       if (_filterClientName != null) 'clientName': _filterClientName,
+      if (_scheduleSearchQuery.isNotEmpty)
+        'scheduleQuery': _scheduleSearchQuery,
       if (_onlyTrial) 'trial': true,
       if (_onlyConflicts) 'conflicts': true,
     },
@@ -236,13 +282,58 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   }
 
   void _emitState(void Function() fn) {
-    if (mounted) setState(fn);
+    if (!mounted) return;
+    setState(fn);
+    widget.onViewStateChanged?.call(_scheduleViewState());
+  }
+
+  bool _isContextClientLesson(Map<String, dynamic> lesson) {
+    final clientId = widget.clientId;
+    if (clientId == null || clientId.isEmpty) return false;
+    final key = widget.clientType == 'lead' ? 'lead_id' : 'student_id';
+    return lesson[key]?.toString() == clientId;
+  }
+
+  bool get _hasScheduleSearch => _scheduleSearchQuery.isNotEmpty;
+
+  bool _matchesScheduleSearch(Map<String, dynamic> lesson, [String? query]) {
+    final normalized = (query ?? _scheduleSearchQuery).trim().toLowerCase();
+    if (normalized.isEmpty) return false;
+    final teacherId = lesson['teacher_id']?.toString();
+    final studentId = lesson['student_id']?.toString();
+    final roomId = lesson['room_id']?.toString();
+    final searchable =
+        [
+              if (teacherId != null) _teacherNames[teacherId],
+              if (studentId != null) _studentNames[studentId],
+              if (roomId != null) _roomNames[roomId],
+              lesson['teacher_name'],
+              lesson['student_name'],
+              lesson['room_name'],
+              lesson['lead_name'],
+              lesson['group_name'],
+              lesson['status'],
+            ]
+            .whereType<Object>()
+            .map((value) => value.toString().toLowerCase())
+            .join(' ');
+    return searchable.contains(normalized);
+  }
+
+  bool _isRelatedLesson(Map<String, dynamic> lesson) => _hasScheduleSearch
+      ? _matchesScheduleSearch(lesson)
+      : _isContextClientLesson(lesson);
+
+  void _updateDayScrollOffset(double value) {
+    _dayScrollOffset = value;
+    widget.onViewStateChanged?.call(_scheduleViewState());
   }
 
   //  BUILD
   // ═══════════════════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
+    if (!widget.active) return const SizedBox.shrink();
     // Realtime: refresh when another staff member changes a lesson.
     ref.listen(crmRealtimeProvider, (prev, next) {
       final event = next.value;
@@ -304,6 +395,9 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
               ),
           ],
           if (!firstLoad && _filterClientId != null) _buildClientFilterBanner(),
+          if (!firstLoad && widget.clientId != null)
+            _buildClientContextBanner(),
+          if (!firstLoad && _hasScheduleSearch) _buildScheduleSearchBanner(),
           if (!firstLoad && _currentView != ScheduleView.month) ...[
             ScheduleDayLegend(week: _currentView == ScheduleView.week),
           ],

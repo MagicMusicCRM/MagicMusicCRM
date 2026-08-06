@@ -20,6 +20,8 @@ describe("CrmLeadsController", () => {
         sourceId: "source-a",
         sourceCanonicalName: "site",
         sourceDisplayName: "Сайт",
+        branchId: "branch-a",
+        status: "new",
         customFields: [],
         warnings: [],
       }),
@@ -38,7 +40,9 @@ describe("CrmLeadsController", () => {
       firstName: "Анна",
       lastName: "Иванова",
       phone: "+79990000000",
-      sourceId: "source-a",
+        sourceId: "source-a",
+        branchId: "branch-a",
+        status: "new",
     };
 
     await expect(controller.createLead(actor, dto)).resolves.toEqual({
@@ -52,6 +56,8 @@ describe("CrmLeadsController", () => {
         lastName: "Иванова",
         phone: "+79990000000",
         source: "Сайт",
+        statusId: "new",
+        customDataPatch: { branchId: "branch-a" },
       },
       expect.objectContaining({ sourceId: "source-a" }),
     );

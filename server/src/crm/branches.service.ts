@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -10,6 +11,7 @@ import { CreateBranchDto } from "./dto/create-branch.dto";
 import { CrmListQuery } from "./dto/crm-list.query";
 import { UpdateBranchDto } from "./dto/update-branch.dto";
 import { CrmPolicy } from "./crm.policy";
+import { assertSettingsBranchScope } from "./settings-branch-scope";
 
 interface BranchRow {
   id: string;
@@ -59,20 +61,37 @@ export class BranchesService {
         from app.branches
         where deleted_at is null
           and (
+            $3::text <> 'manager'
+            or exists (
+              select 1
+              from app.user_crm_links link
+              join app.staff_members staff on staff.id = link.entity_id
+                and link.entity_type = 'staff' and link.deleted_at is null
+                and staff.deleted_at is null
+              join app.staff_branch_assignments assignment
+                on assignment.staff_member_id = staff.id
+                and assignment.deleted_at is null
+              where link.user_id = $4 and assignment.branch_id = branches.id
+            )
+          )
+          and (
             $1::text is null
             or lower(coalesce(name, '') || ' ' || coalesce(address, '')) like lower('%' || $1 || '%')
           )
         order by name asc, id asc
         limit $2
       `,
-      [q || null, limit],
+      [q || null, limit, actor.role, actor.userId],
     );
 
     return { items: result.rows.map((row) => this.toBranchDto(row)) };
   }
 
   async createBranch(actor: ActorContext, dto: CreateBranchDto) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertCanManageSystemSettings(actor);
+    if (actor.role === "manager") {
+      throw new ForbiddenException("Создавать филиалы может только директор.");
+    }
     const name = dto.name?.trim();
     if (!name) {
       throw new BadRequestException("Название филиала обязательно.");
@@ -115,7 +134,8 @@ export class BranchesService {
     branchId: string,
     dto: UpdateBranchDto,
   ) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertCanManageSystemSettings(actor);
+    await assertSettingsBranchScope(this.database, actor, branchId);
     this.assertTimezone(dto.timezone);
     const result = await this.database.query<BranchRow>(
       `

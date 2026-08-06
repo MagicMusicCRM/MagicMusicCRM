@@ -411,7 +411,8 @@ extension _MessengerActions on _MessengerScreenState {
     final adminAvatarFuture = ref
         .read(magicSettingsServiceProvider)
         .getAdminChatAvatar();
-    final Future<List<Map<String, dynamic>>> adminProfilesFuture = isStaff
+    final Future<List<Map<String, dynamic>>> adminProfilesFuture =
+        _isManagerOrAdminRole
         ? ref
               .read(magicProfileAdminServiceProvider)
               .listProfiles(limit: 100)
@@ -432,12 +433,13 @@ extension _MessengerActions on _MessengerScreenState {
     // listChats deliberately returns an immutable/fixed-size page aggregate.
     // This screen appends channels and may lazily insert the administration
     // chat, so always take an owned growable copy first.
-    final rawItems = (isStaff && _chatBranchFilter != null
-            ? loadedItems.where(
-                (item) => chatMatchesBranch(item, _chatBranchFilter),
-              )
-            : loadedItems)
-        .toList(growable: true);
+    final rawItems =
+        (isStaff && _chatBranchFilter != null
+                ? loadedItems.where(
+                    (item) => chatMatchesBranch(item, _chatBranchFilter),
+                  )
+                : loadedItems)
+            .toList(growable: true);
     // Ленивое создание чата с администрацией: POST уходит только когда чата
     // действительно нет в списке. Раньше он летел на каждый заход во вкладку
     // «Чат» и на каждый цикл фонового опроса — запись на сервер вхолостую.

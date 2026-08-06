@@ -10,8 +10,8 @@
 ///
 /// Canonical (non-teacher) tab index meaning:
 ///   0 Чат · 1 Обзор · 2 Расписание · 3 Клиенты ·
-///   4 Пользователи · 5 Финансы (legacy deep link) · 6 Задачи ·
-///   7 Аналитика · 8 Настройки CRM.
+///   4 Пользователи (legacy deep link) · 5 Финансы (legacy deep link) ·
+///   6 Задачи · 7 Аналитика · 8 Настройки системы.
 /// Teacher reuses 0/1/2 for Чат/Расписание/Ученики.
 ///
 /// The numbers are CANONICAL (alert_policy.dart's CrmSection and the unseen
@@ -23,7 +23,7 @@ library;
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 
 /// Operational CRM tab indices shared by admin/manager/director/system_admin.
-const List<int> kManagerOnlyCrmTabs = [1, 4, 6, 7];
+const List<int> kManagerOnlyCrmTabs = [1, 6, 7, 8];
 
 /// Whether [role] has access to operational CRM destinations.
 bool crmHasManagerAccess(String role) =>
@@ -78,8 +78,8 @@ List<int> crmVisibleTabs(String role, {required bool isDesktop}) {
   // School-wide finance/reports remain desktop-only. Tasks are operational
   // work, however, so manager-tier roles must be able to open them on a phone
   // too (directly from Overview or through the nav shell's «Ещё» menu).
-  if (!isDesktop) return const [0, 1, 2, 3, 4, 6];
-  return const [0, 1, 2, 3, 4, 6, 7];
+  if (!isDesktop) return const [0, 1, 2, 3, 6, 8];
+  return const [0, 1, 2, 3, 6, 7, 8];
 }
 
 /// Server-sourced destination matrix used by the live shell. Role-based
@@ -118,10 +118,11 @@ List<int> crmVisibleTabsForCapabilities(
   }
   if (snapshot.allows('schedule.lesson.read.assigned')) tabs.add(2);
   if (snapshot.allows('crm.client.read.basic')) tabs.add(3);
-  if (snapshot.allows('system.settings.manage')) tabs.add(4);
   if (canReadTasks && !tabs.contains(6)) tabs.add(6);
   if (isDesktop && snapshot.allows('report.status.read')) tabs.add(7);
-  if (snapshot.role != 'admin' && snapshot.allows('config.crm.read')) {
+  if (snapshot.role != 'admin' &&
+      (snapshot.allows('system.settings.manage') ||
+          snapshot.allows('config.crm.read'))) {
     tabs.add(8);
   }
   return tabs;
@@ -142,6 +143,7 @@ int crmResolveVisibleTab({
   // v7 unified Finance and Reports under Analytics. Keep old tab-5 links
   // useful without exposing a duplicate top-level destination.
   if (requestedTab == 5 && visibleTabs.contains(7)) return 7;
+  if (requestedTab == 4 && visibleTabs.contains(8)) return 8;
   if (visibleTabs.contains(currentTab)) return currentTab;
   return visibleTabs.first;
 }

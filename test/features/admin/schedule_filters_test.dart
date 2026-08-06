@@ -119,13 +119,15 @@ Future<void> _enterTodayDayView(WidgetTester tester) async {
 
 void main() {
   testWidgets('«Только пробные» hides the non-trial lesson', (tester) async {
-    tester.view.physicalSize = const Size(1400, 1600);
+    tester.view.physicalSize = const Size(360, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
     await tester.pumpWidget(_host(const ScheduleWidget()));
     await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'month view at 360px');
     await _enterTodayDayView(tester);
+    expect(tester.takeException(), isNull, reason: 'day view at 360px');
 
     // Both lessons visible before filtering.
     expect(find.text('Анна Обычная'), findsOneWidget);
@@ -134,6 +136,9 @@ void main() {
     // Open the filters sheet, turn on «Только пробные», apply.
     await tester.tap(find.byTooltip('Фильтры расписания'));
     await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'filter sheet at 360px');
+    expect(find.byKey(const ValueKey('magic-sheet-mobile')), findsOneWidget);
+    expect(find.text('Развернуть'), findsOneWidget);
     await tester.tap(find.text('Только пробные'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Применить'));

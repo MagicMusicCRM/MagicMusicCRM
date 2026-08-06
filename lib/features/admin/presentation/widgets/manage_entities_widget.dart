@@ -1,31 +1,60 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
-import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_forms/client_forms.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/user_roles_widget.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/design_tokens.dart';
-import '../../../../core/widgets/lesson_state_badges.dart';
 import '../../../../core/widgets/skeletons.dart';
 import '../../../../core/widgets/v7/v7.dart';
-import 'create_teacher_dialog.dart';
-import 'create_group_dialog.dart';
 import 'teacher_detail_dialog.dart';
 import 'staff_detail_dialog.dart';
 import 'group_detail_dialog.dart';
-import 'create_room_dialog.dart';
 import 'create_employee_dialog.dart';
+import 'create_group_dialog.dart';
+import 'create_room_dialog.dart';
+import 'create_teacher_dialog.dart';
 import 'branch_form_dialog.dart';
 import 'data_quality_widget.dart';
 import 'deletion_requests_widget.dart';
+import 'schedule_reference_settings.dart';
 
 part 'manage_entities_people.dart';
 part 'manage_entities_scheduling.dart';
 part 'manage_entities_facilities.dart';
+
+class SystemSettingsRouteScreen extends ConsumerWidget {
+  const SystemSettingsRouteScreen({super.key, this.initialArea});
+
+  final String? initialArea;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final access = ref.watch(capabilitySnapshotProvider);
+    return Scaffold(
+      appBar: AppBar(
+        leading: const BackButton(),
+        title: const Text('Настройки системы'),
+      ),
+      body: access.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (_, _) =>
+            const Center(child: Text('Не удалось проверить доступ.')),
+        data: (snapshot) =>
+            snapshot.allows('system.settings.manage') ||
+                snapshot.allows('config.crm.read')
+            ? SystemSettingsWorkspace(
+                role: snapshot.role,
+                initialArea: initialArea,
+              )
+            : const Center(child: Text('Недостаточно прав для настроек.')),
+      ),
+    );
+  }
+}
 
 final entitiesProvider =
     FutureProvider.family<List<Map<String, dynamic>>, String>((
@@ -34,17 +63,8 @@ final entitiesProvider =
     ) async {
       final crm = ref.watch(magicCrmServiceProvider);
 
-      if (table == 'students') {
-        final response = await crm.searchStudents(limit: 100);
-        return _studentSearchItems(response);
-      } else if (table == 'teachers') {
+      if (table == 'teachers') {
         return crm.listTeachers(limit: 100);
-      } else if (table == 'lessons') {
-        // Was 50 (the smallest cap on this screen); raised to 100 for parity
-        // with the other tabs. A real fix — "load more" / server keyset
-        // pagination — is tracked as debt: searchStudents/listLessons expose
-        // only `limit`, no offset/cursor, and that query is perf-sensitive.
-        return crm.listLessons(limit: 100);
       } else if (table == 'groups') {
         return crm.listGroups(limit: 100);
       } else if (table == 'rooms') {
@@ -69,23 +89,6 @@ void invalidateSubscriptionPackageCatalog(WidgetRef ref) {
   ref.invalidate(entitiesProvider('subscription_packages:all'));
 }
 
-final studentSearchProvider =
-    FutureProvider.family<List<Map<String, dynamic>>, String>((
-      ref,
-      query,
-    ) async {
-      final response = await ref
-          .watch(magicCrmServiceProvider)
-          .searchStudents(q: query, limit: 100);
-      return _studentSearchItems(response);
-    });
-
-List<Map<String, dynamic>> _studentSearchItems(Map<String, dynamic> response) {
-  final items = response['items'];
-  if (items is! List) return const <Map<String, dynamic>>[];
-  return items.whereType<Map<String, dynamic>>().toList();
-}
-
 final teacherSearchProvider =
     FutureProvider.family<List<Map<String, dynamic>>, String>((
       ref,
@@ -104,218 +107,592 @@ final staffSearchProvider =
       return ref.watch(magicCrmServiceProvider).listStaff(q: query, limit: 100);
     });
 
-class ManageEntitiesWidget extends ConsumerStatefulWidget {
-  const ManageEntitiesWidget({super.key});
+class SystemSettingsWorkspace extends ConsumerStatefulWidget {
+  const SystemSettingsWorkspace({
+    super.key,
+    required this.role,
+    this.initialArea,
+    this.initialUserSearch,
+  });
+
+  final String role;
+  final String? initialArea;
+  final String? initialUserSearch;
 
   @override
-  ConsumerState<ManageEntitiesWidget> createState() =>
-      ManageEntitiesWidgetState();
+  ConsumerState<SystemSettingsWorkspace> createState() =>
+      _SystemSettingsWorkspaceState();
 }
 
-class ManageEntitiesWidgetState extends ConsumerState<ManageEntitiesWidget>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  final TextEditingController _searchController = TextEditingController();
-  String _searchQuery = '';
-  // Debounces the server-backed search providers (students/teachers/staff)
-  // so typing a name doesn't fire one API call per keystroke. Mirrors the
-  // leads-board toolbar (leads_actions.dart).
-  Timer? _searchDebounce;
+class _SystemSettingsWorkspaceState
+    extends ConsumerState<SystemSettingsWorkspace> {
+  static const _areas = <(String, String, IconData)>[
+    ('organization', 'Организация', Icons.apartment_rounded),
+    ('schedule', 'Расписание', Icons.calendar_month_rounded),
+    ('crm', 'CRM', Icons.view_kanban_rounded),
+    ('sales', 'Продажи и оплаты', Icons.payments_rounded),
+    ('users', 'Пользователи и доступы', Icons.manage_accounts_rounded),
+    ('data', 'Данные и обслуживание', Icons.storage_rounded),
+  ];
+
+  late String _area;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 10, vsync: this);
-  }
-
-  void setTab(int index) {
-    if (index >= 0 && index < _tabController.length) {
-      _tabController.animateTo(index);
-    }
-  }
-
-  @override
-  void dispose() {
-    _searchDebounce?.cancel();
-    _tabController.dispose();
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  void _onSearchChanged(String value) {
-    // Refresh the clear button instantly; commit the query (and thus the
-    // provider refetch) only after the user pauses typing.
-    setState(() {});
-    _searchDebounce?.cancel();
-    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
-      if (!mounted) return;
-      setState(() => _searchQuery = value);
-    });
+    _area = _areas.any((area) => area.$1 == widget.initialArea)
+        ? widget.initialArea!
+        : 'organization';
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(110),
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: TextField(
-                controller: _searchController,
-                onChanged: _onSearchChanged,
-                decoration: InputDecoration(
-                  hintText: 'Поиск...',
-                  prefixIcon: Icon(
-                    Icons.search_rounded,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  suffixIcon: _searchController.text.isNotEmpty
-                      ? IconButton(
-                          tooltip: 'Очистить поиск',
-                          icon: Icon(Icons.close_rounded, size: 20),
-                          onPressed: () {
-                            _searchDebounce?.cancel();
-                            _searchController.clear();
-                            setState(() => _searchQuery = '');
-                          },
-                        )
-                      : null,
-                  filled: true,
-                  fillColor: Theme.of(context).colorScheme.surface,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
-            ),
-            TabBar(
-              controller: _tabController,
-              isScrollable: true,
-              tabAlignment: TabAlignment.start,
-              labelPadding: const EdgeInsets.symmetric(horizontal: 16),
-              indicatorColor: AppTheme.primaryGold,
-              labelColor: AppTheme.primaryGold,
-              unselectedLabelColor: Theme.of(
-                context,
-              ).colorScheme.onSurfaceVariant,
-              tabs: [
-                Tab(text: 'Ученики'),
-                Tab(text: 'Преподаватели'),
-                Tab(text: 'Группы'),
-                Tab(text: 'Занятия'),
-                Tab(text: 'Аудитории'),
-                Tab(text: 'Сотрудники'),
-                Tab(text: 'Филиалы'),
-                Tab(text: 'Каталог абонементов'),
-                Tab(text: 'Качество данных'),
-                Tab(text: 'Запросы на удаление'),
-              ],
-            ),
-          ],
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
+    final snapshot = ref.watch(capabilitySnapshotProvider).asData?.value;
+    if (snapshot == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    final compact = MediaQuery.sizeOf(context).width < 900;
+    final content = _content(snapshot);
+    return ColoredBox(
+      color: Theme.of(context).colorScheme.surfaceContainerLowest,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _StudentsList(searchQuery: _searchQuery),
-          _TeachersList(searchQuery: _searchQuery),
-          _GroupsList(searchQuery: _searchQuery),
-          const _LessonsList(),
-          _RoomsList(searchQuery: _searchQuery),
-          _EmployeesList(searchQuery: _searchQuery),
-          _BranchesList(searchQuery: _searchQuery),
-          _PackagesList(searchQuery: _searchQuery),
-          const DataQualityWidget(),
-          const DeletionRequestsWidget(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
+            child: Text(
+              'Настройки системы',
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+            ),
+          ),
+          Expanded(
+            child: compact
+                ? Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: DropdownButtonFormField<String>(
+                          initialValue: _area,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Раздел настроек',
+                          ),
+                          items: [
+                            for (final area in _areas)
+                              DropdownMenuItem(
+                                value: area.$1,
+                                child: Text(area.$2),
+                              ),
+                          ],
+                          onChanged: (value) {
+                            if (value != null) setState(() => _area = value);
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Expanded(child: content),
+                    ],
+                  )
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SizedBox(
+                        width: 248,
+                        child: ListView(
+                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                          children: [
+                            for (final area in _areas)
+                              ListTile(
+                                selected: _area == area.$1,
+                                leading: Icon(area.$3),
+                                title: Text(area.$2),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                onTap: () => setState(() => _area = area.$1),
+                              ),
+                          ],
+                        ),
+                      ),
+                      VerticalDivider(
+                        width: 1,
+                        color: Theme.of(context).colorScheme.outlineVariant,
+                      ),
+                      Expanded(child: content),
+                    ],
+                  ),
+          ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _createNewEntity(context),
-        backgroundColor: AppTheme.primaryGold,
-        child: Icon(Icons.add_rounded, color: Colors.white),
       ),
     );
   }
 
-  void _createNewEntity(BuildContext context) async {
-    // Subscription packages (Каталог) use a v7 sheet, not a Material dialog.
-    if (_tabController.index == 7) {
-      final saved = await showPackageSheet(context, ref);
-      if (saved == true) {
-        invalidateSubscriptionPackageCatalog(ref);
-      }
-      return;
-    }
+  Widget _content(CapabilitySnapshot snapshot) {
+    final canEdit = snapshot.allows('config.crm.edit');
+    return switch (_area) {
+      'organization' => _OrganizationSettings(
+        canEdit: canEdit,
+        canCreateBranch:
+            canEdit &&
+            (snapshot.role == 'director' || snapshot.role == 'system_admin'),
+      ),
+      'schedule' => _ScheduleSettings(
+        canEditReferences: canEdit,
+        canManageGroups: snapshot.allows('schedule.lesson.write'),
+      ),
+      'crm' =>
+        snapshot.allows('config.crm.read')
+            ? const CrmConfigurationWorkspace()
+            : const _SettingsDenied(
+                text:
+                    'Директор может открыть CRM-настройки после выдачи права.',
+              ),
+      'sales' => _SalesSettings(
+        canEdit: snapshot.allows('commerce.package.manage'),
+      ),
+      'users' => _UsersSettings(
+        currentRole: widget.role,
+        initialSearch: widget.initialUserSearch,
+        canCreatePeople: snapshot.allows('crm.client.write'),
+      ),
+      'data' => const _DataSettings(),
+      _ => const SizedBox.shrink(),
+    };
+  }
+}
 
-    if (_tabController.index == 0) {
-      final student = await showStudentCreateSurface(context);
-      if (student != null) {
-        ref.invalidate(entitiesProvider('students'));
-        ref.invalidate(studentSearchProvider(_searchQuery.trim()));
-      }
-      return;
-    }
+class _ScheduleSettings extends StatefulWidget {
+  const _ScheduleSettings({
+    required this.canEditReferences,
+    required this.canManageGroups,
+  });
 
-    Widget? dialog;
-    switch (_tabController.index) {
-      case 1:
-        dialog = const CreateTeacherDialog();
-        break;
-      case 2:
-        dialog = const CreateGroupDialog();
-        break;
-      case 3:
-        // No longer creating lessons from here, redirecting to Schedule
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Для создания занятия используйте раздел "Расписание"',
+  final bool canEditReferences;
+  final bool canManageGroups;
+
+  @override
+  State<_ScheduleSettings> createState() => _ScheduleSettingsState();
+}
+
+class _ScheduleSettingsState extends State<_ScheduleSettings> {
+  final _search = TextEditingController();
+  bool _groups = false;
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  Future<void> _createGroup() async {
+    final saved = await showCreateGroupSurface(context);
+    if (saved == true && mounted) {
+      ProviderScope.containerOf(context).invalidate(entitiesProvider('groups'));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        _SettingsToolbar(
+          title: 'Расписание',
+          subtitle: _groups
+              ? 'Учебные группы и их параметры'
+              : 'Рабочие часы, назначения и доступность',
+          action: _groups && widget.canManageGroups
+              ? FilledButton.icon(
+                  onPressed: _createGroup,
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Новая группа'),
+                )
+              : null,
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Row(
+            children: [
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(value: false, label: Text('Правила')),
+                  ButtonSegment(value: true, label: Text('Группы')),
+                ],
+                selected: {_groups},
+                onSelectionChanged: (value) {
+                  setState(() => _groups = value.first);
+                },
+              ),
+              if (_groups) ...[
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _search,
+                    onChanged: (_) => setState(() {}),
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      prefixIcon: Icon(Icons.search_rounded),
+                      hintText: 'Поиск группы',
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        Expanded(
+          child: _groups
+              ? _GroupsList(searchQuery: _search.text)
+              : ScheduleReferenceSettings(canEdit: widget.canEditReferences),
+        ),
+      ],
+    );
+  }
+}
+
+class _UsersSettings extends StatefulWidget {
+  const _UsersSettings({
+    required this.currentRole,
+    required this.initialSearch,
+    required this.canCreatePeople,
+  });
+
+  final String currentRole;
+  final String? initialSearch;
+  final bool canCreatePeople;
+
+  @override
+  State<_UsersSettings> createState() => _UsersSettingsState();
+}
+
+class _UsersSettingsState extends State<_UsersSettings> {
+  final _search = TextEditingController();
+  String _section = 'access';
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  Future<void> _create() async {
+    bool? saved;
+    if (_section == 'staff') {
+      saved = await showCreateEmployeeSurface(
+        context,
+        currentRole: widget.currentRole,
+      );
+    } else if (_section == 'teachers') {
+      saved = await showCreateTeacherSurface(context);
+    }
+    if (saved != true || !mounted) return;
+    final container = ProviderScope.containerOf(context);
+    final query = _search.text.trim();
+    if (_section == 'staff') {
+      container.invalidate(entitiesProvider('employees'));
+      container.invalidate(staffSearchProvider(query));
+    } else {
+      container.invalidate(entitiesProvider('teachers'));
+      container.invalidate(teacherSearchProvider(query));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final listSection = _section != 'access';
+    return Column(
+      children: [
+        _SettingsToolbar(
+          title: 'Пользователи и доступы',
+          subtitle: switch (_section) {
+            'staff' => 'Сотрудники школы',
+            'teachers' => 'Преподаватели и специализации',
+            _ => 'Аккаунты, роли и персональные права',
+          },
+          action: listSection && widget.canCreatePeople
+              ? FilledButton.icon(
+                  onPressed: _create,
+                  icon: const Icon(Icons.person_add_alt_1_rounded),
+                  label: Text(
+                    _section == 'staff'
+                        ? 'Новый сотрудник'
+                        : 'Новый преподаватель',
+                  ),
+                )
+              : null,
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(value: 'access', label: Text('Доступы')),
+                      ButtonSegment(value: 'staff', label: Text('Сотрудники')),
+                      ButtonSegment(
+                        value: 'teachers',
+                        label: Text('Преподаватели'),
+                      ),
+                    ],
+                    selected: {_section},
+                    onSelectionChanged: (value) {
+                      setState(() => _section = value.first);
+                    },
+                  ),
+                ),
+              ),
+              if (listSection) ...[
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _search,
+                    onChanged: (_) => setState(() {}),
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      prefixIcon: Icon(Icons.search_rounded),
+                      hintText: 'Поиск',
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        Expanded(
+          child: switch (_section) {
+            'staff' => _EmployeesList(searchQuery: _search.text),
+            'teachers' => _TeachersList(searchQuery: _search.text),
+            _ => UserRolesWidget(
+              currentRole: widget.currentRole,
+              initialSearch: widget.initialSearch,
+            ),
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _OrganizationSettings extends ConsumerStatefulWidget {
+  const _OrganizationSettings({
+    required this.canEdit,
+    required this.canCreateBranch,
+  });
+
+  final bool canEdit;
+  final bool canCreateBranch;
+
+  @override
+  ConsumerState<_OrganizationSettings> createState() =>
+      _OrganizationSettingsState();
+}
+
+class _OrganizationSettingsState extends ConsumerState<_OrganizationSettings> {
+  final _search = TextEditingController();
+  bool _rooms = false;
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  Future<void> _create() async {
+    final dialog = _rooms ? const CreateRoomDialog() : const BranchFormDialog();
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => dialog,
+    );
+    if (saved == true) {
+      ref.invalidate(entitiesProvider(_rooms ? 'rooms' : 'branches'));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canCreate = _rooms ? widget.canEdit : widget.canCreateBranch;
+    return Column(
+      children: [
+        _SettingsToolbar(
+          title: 'Организация',
+          subtitle: widget.canEdit
+              ? 'Филиалы и аудитории'
+              : 'Только просмотр назначенных филиалов',
+          action: canCreate
+              ? FilledButton.icon(
+                  onPressed: _create,
+                  icon: const Icon(Icons.add_rounded),
+                  label: Text(_rooms ? 'Новая аудитория' : 'Новый филиал'),
+                )
+              : null,
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Row(
+            children: [
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(value: false, label: Text('Филиалы')),
+                  ButtonSegment(value: true, label: Text('Аудитории')),
+                ],
+                selected: {_rooms},
+                onSelectionChanged: (value) {
+                  setState(() => _rooms = value.first);
+                },
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _search,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    prefixIcon: Icon(Icons.search_rounded),
+                    hintText: 'Поиск по названию',
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: _rooms
+              ? _RoomsList(searchQuery: _search.text, canEdit: widget.canEdit)
+              : _BranchesList(
+                  searchQuery: _search.text,
+                  canEdit: widget.canEdit,
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SalesSettings extends ConsumerWidget {
+  const _SalesSettings({required this.canEdit});
+
+  final bool canEdit;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Column(
+      children: [
+        _SettingsToolbar(
+          title: 'Продажи и оплаты',
+          subtitle: 'Каталог абонементов',
+          action: canEdit
+              ? FilledButton.icon(
+                  onPressed: () async {
+                    if (await showPackageSheet(context, ref) == true) {
+                      invalidateSubscriptionPackageCatalog(ref);
+                    }
+                  },
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Новый абонемент'),
+                )
+              : null,
+        ),
+        Expanded(
+          child: _PackagesList(searchQuery: '', canEdit: canEdit),
+        ),
+      ],
+    );
+  }
+}
+
+class _DataSettings extends StatelessWidget {
+  const _DataSettings();
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        children: const [
+          _SettingsToolbar(
+            title: 'Данные и обслуживание',
+            subtitle: 'Контроль качества и запросы на удаление',
+          ),
+          TabBar(
+            tabs: [
+              Tab(text: 'Качество данных'),
+              Tab(text: 'Запросы на удаление'),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [DataQualityWidget(), DeletionRequestsWidget()],
             ),
           ),
-        );
-        return;
-      case 4:
-        dialog = const CreateRoomDialog();
-        break;
-      case 5:
-        dialog = const CreateEmployeeDialog();
-        break;
-      case 6:
-        dialog = const BranchFormDialog();
-        break;
-    }
+        ],
+      ),
+    );
+  }
+}
 
-    if (dialog != null) {
-      final res = await showDialog(context: context, builder: (ctx) => dialog!);
-      if (res == true) {
-        // Invalidate appropriately based on tab index
-        if (_tabController.index == 4) {
-          ref.invalidate(entitiesProvider('rooms'));
-        }
-        if (_tabController.index == 2) {
-          ref.invalidate(entitiesProvider('groups'));
-        }
-        if (_tabController.index == 1) {
-          ref.invalidate(entitiesProvider('teachers'));
-          ref.invalidate(teacherSearchProvider(_searchQuery.trim()));
-        }
-        if (_tabController.index == 0) {
-          ref.invalidate(entitiesProvider('students'));
-          ref.invalidate(studentSearchProvider(_searchQuery.trim()));
-        }
-        if (_tabController.index == 5) {
-          ref.invalidate(entitiesProvider('employees'));
-          ref.invalidate(staffSearchProvider(_searchQuery.trim()));
-        }
-        if (_tabController.index == 6) {
-          ref.invalidate(entitiesProvider('branches'));
-        }
-      }
-    }
+class _SettingsToolbar extends StatelessWidget {
+  const _SettingsToolbar({
+    required this.title,
+    required this.subtitle,
+    this.action,
+  });
+
+  final String title;
+  final String subtitle;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ?action,
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsDenied extends StatelessWidget {
+  const _SettingsDenied({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.lock_outline_rounded, size: 42),
+            const SizedBox(height: 12),
+            Text(text, textAlign: TextAlign.center),
+          ],
+        ),
+      ),
+    );
   }
 }

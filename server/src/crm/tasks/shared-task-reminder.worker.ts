@@ -22,7 +22,7 @@ export class SharedTaskReminderWorker implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit(): void {
-    if (process.env.V4_SHARED_TASK_REMINDERS_ENABLED !== "true") return;
+    if (process.env.TASK_REMINDERS_ENABLED !== "true") return;
     this.timer = setInterval(() => {
       void this.dispatchDue(this.workerId).catch((error: unknown) => {
         this.logger.error(`Shared task reminder tick failed: ${this.errorName(error)}`);

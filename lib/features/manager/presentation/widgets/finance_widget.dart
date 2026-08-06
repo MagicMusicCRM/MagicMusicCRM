@@ -8,7 +8,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
-import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/models/payment.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -61,7 +60,6 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
   Object? _loadError;
   double _total = 0;
   int _totalCount = 0;
-  bool _addingPayment = false;
   String _period = 'month';
 
   /// When set, overrides [_period] with an explicit user-picked window;
@@ -127,7 +125,8 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
     }
   }
 
-  DateTime _periodEnd() => _customRange?.end ?? DateTime.now();
+  DateTime _periodEnd() =>
+      _customRange?.end.add(const Duration(days: 1)) ?? DateTime.now();
 
   Future<void> _pickRange() async {
     final picked = await showDateRangePicker(
@@ -156,8 +155,9 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
       final result = await ref
           .read(magicCrmServiceProvider)
           .listPaymentsWithTotal(
-            from: from.toIso8601String(),
-            to: _periodEnd().toIso8601String(),
+            from: from.toUtc().toIso8601String(),
+            to: _periodEnd().toUtc().toIso8601String(),
+            branchId: widget.branchId,
             limit: 100,
           );
 
@@ -175,45 +175,6 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
     }
   }
 
-  Future<void> _addPayment() async {
-    if (_addingPayment) return;
-    final result = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (_) => const _PaymentDialog(),
-    );
-    if (result == null || !mounted) return;
-    setState(() => _addingPayment = true);
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await ref
-          .read(magicCrmServiceProvider)
-          .createPayment(
-            studentId: result['student_id'].toString(),
-            amount: result['amount'] as num,
-            paymentDate: DateTime.now().toIso8601String(),
-            method: result['type']?.toString(),
-            lessonId: result['lesson_id']?.toString(),
-          );
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Платёж добавлен'),
-          backgroundColor: AppTheme.success,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      await _loadPayments();
-    } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Не удалось добавить платёж: $e'),
-          backgroundColor: AppTheme.danger,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _addingPayment = false);
-    }
-  }
-
   Future<void> _loadExpenses() async {
     if (mounted) setState(() => _expensesLoading = true);
     try {
@@ -221,8 +182,8 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
           .read(magicCrmServiceProvider)
           .listExpenses(
             branchId: widget.branchId,
-            from: _periodStart().toIso8601String(),
-            to: _periodEnd().toIso8601String(),
+            from: _periodStart().toUtc().toIso8601String(),
+            to: _periodEnd().toUtc().toIso8601String(),
             limit: 50,
           );
       final items = (res['items'] as List? ?? const [])
@@ -310,8 +271,9 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
           .read(magicCrmServiceProvider)
           .exportFinanceMonthly(
             format: ext,
-            from: _periodStart(),
-            to: _periodEnd(),
+            from: _periodStart().toUtc(),
+            to: _periodEnd().toUtc(),
+            branchId: widget.branchId,
           );
 
       final dir = await _exportDirectory();
@@ -396,10 +358,10 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
       if (event.entity != 'finance' && event.entity != 'expense') return;
       // Skip while a load or an add (payment/expense) is in flight — those
       // refetch themselves on completion.
-      if (_loading || _addingPayment || _savingExpense) return;
+      if (_loading || _savingExpense) return;
       _realtimeDebounce?.cancel();
       _realtimeDebounce = Timer(const Duration(milliseconds: 350), () {
-        if (!mounted || _loading || _addingPayment || _savingExpense) return;
+        if (!mounted || _loading || _savingExpense) return;
         _loadPayments();
         _loadExpenses();
       });
@@ -467,16 +429,9 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
                       ],
                     ),
                   ),
-                  FilledButton.icon(
-                    key: const ValueKey('add-payment'),
-                    onPressed: _addingPayment ? null : _addPayment,
-                    icon: _addingPayment
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.add_rounded),
-                    label: const Text('Добавить оплату'),
+                  const Text(
+                    'Новая оплата проводится в карточке ученика',
+                    style: TextStyle(color: AppColor.text2, fontSize: 12),
                   ),
                   if (widget.filterRange == null)
                     IconButton(
@@ -627,6 +582,7 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
                                         context,
                                         entityType: 'student',
                                         entityId: id,
+                                        presentationLabel: name,
                                       );
                                       _loadPayments();
                                     }

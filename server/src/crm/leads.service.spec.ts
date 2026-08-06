@@ -6,6 +6,8 @@ import { CrmPolicy } from "./crm.policy";
 import { LeadsService } from "./leads.service";
 import { ChatWorkTimelineService } from "../messenger/chat-work-timeline.service";
 import { TimelineService } from "./timeline.service";
+import { StudentFunnelService } from "./student-funnel.service";
+import { SharedTaskService } from "./tasks/shared-task.service";
 import {
   ACTIVE_RESPONSIBLE_STAFF_STATUSES,
   RESPONSIBLE_AUTH_ROLES,
@@ -32,6 +34,24 @@ describe("LeadsService", () => {
       chatWork as unknown as ChatWorkTimelineService,
       realtime as unknown as RealtimeBus,
       timeline as unknown as TimelineService,
+      {
+        getEffective: jest.fn().mockResolvedValue({ stages: [] }),
+        assertLeadTransition: jest.fn().mockResolvedValue(undefined),
+      } as unknown as StudentFunnelService,
+      {
+        list: jest.fn().mockResolvedValue({
+          items: [
+            {
+              id: "task-a",
+              title: "Перезвонить",
+              body: null,
+              state: "open",
+              createdAt: "2026-06-12T09:00:00.000Z",
+            },
+          ],
+          counters: {},
+        }),
+      } as unknown as SharedTaskService,
     );
     return { service, audit, policy, timeline };
   };
@@ -332,12 +352,14 @@ describe("LeadsService", () => {
       statusA,
       a1.cursor_created_at,
       a1.id,
+      "manager-a",
       2,
     ]);
     expect(query.mock.calls[11][1]).toEqual([
       statusB,
       b1.cursor_created_at,
       b1.id,
+      "manager-a",
       2,
     ]);
   });
@@ -386,6 +408,7 @@ describe("LeadsService", () => {
     expect(query.mock.calls[7][1]).toEqual([
       firstRow.cursor_created_at,
       firstRow.id,
+      "manager-a",
       2,
     ]);
   });
@@ -509,27 +532,6 @@ describe("LeadsService", () => {
       {
         rows: [
           {
-            id: "task-a",
-            entity_type: "lead",
-            entity_id: "lead-a",
-            assigned_to: "manager-a",
-            assigned_first_name: "Мария",
-            assigned_last_name: "Менеджер",
-            entity_first_name: null,
-            entity_last_name: null,
-            entity_name: null,
-            title: "Перезвонить",
-            description: null,
-            status: "open",
-            due_at: null,
-            created_by: "manager-a",
-            created_at: "2026-06-12T09:00:00.000Z",
-          },
-        ],
-      },
-      {
-        rows: [
-          {
             id: "lesson-a",
             student_id: null,
             group_id: null,
@@ -579,10 +581,8 @@ describe("LeadsService", () => {
     );
 
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
-    // 6 direct db.query calls: lead + linked students + related leads + comments
-    // + tasks + trial lessons. Chat-work timeline is delegated to the injected
-    // ChatWorkTimelineService, so it does not hit db.query.
-    expect(query).toHaveBeenCalledTimes(6);
+    // 5 direct db.query calls: tasks use the canonical SharedTaskService.
+    expect(query).toHaveBeenCalledTimes(5);
   });
 
   it("lists a lead's status history newest-first", async () => {

@@ -88,6 +88,10 @@ int? crmTabForEntityLink(EntityLink link, String role) {
       link.rawEntityType == 'overview') {
     return role == 'teacher' ? null : 1;
   }
+  if (link.entityType == EntityLinkType.report &&
+      link.rawEntityType == 'configuration') {
+    return role == 'teacher' ? null : 8;
+  }
   if (role == 'teacher') {
     return switch (link.entityType) {
       EntityLinkType.lesson ||
@@ -117,7 +121,7 @@ int? crmTabForEntityLink(EntityLink link, String role) {
     EntityLinkType.clientSource ||
     EntityLinkType.clientStatus ||
     EntityLinkType.subscriptionPackage => 3,
-    EntityLinkType.user => 4,
+    EntityLinkType.user => 8,
     EntityLinkType.payment => 5,
     EntityLinkType.task => 6,
     EntityLinkType.report => 7,

@@ -1,229 +1,5 @@
 part of 'manage_entities_widget.dart';
 
-class _LessonsList extends ConsumerWidget {
-  const _LessonsList();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(entitiesProvider('lessons'));
-    return async.when(
-      loading: () =>
-          Padding(padding: EdgeInsets.all(12), child: ListSkeleton()),
-      error: (e, _) => Center(
-        child: Text('Ошибка: $e', style: TextStyle(color: AppTheme.danger)),
-      ),
-      data: (items) {
-        if (items.isEmpty) {
-          return Center(
-            child: Text(
-              'Нет занятий',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          );
-        }
-        return RefreshIndicator(
-          color: AppTheme.primaryGold,
-          onRefresh: () async => ref.invalidate(entitiesProvider('lessons')),
-          child: ListView.builder(
-            padding: const EdgeInsets.all(12),
-            itemCount: items.length,
-            itemBuilder: (ctx, i) {
-              final l = items[i];
-              final dt = DateTime.tryParse(l['scheduled_at'] ?? '');
-              final dateStr = dt != null
-                  ? DateFormat('d MMM yyyy, HH:mm', 'ru').format(dt.toLocal())
-                  : '—';
-
-              String studentName = l['student_name'] as String? ?? '';
-              if (studentName.trim().isEmpty) {
-                final student = l['students'];
-                if (student != null) {
-                  final sf =
-                      student['first_name'] ??
-                      student['profiles']?['first_name'] ??
-                      '';
-                  final sl =
-                      student['last_name'] ??
-                      student['profiles']?['last_name'] ??
-                      '';
-                  studentName = '$sf $sl'.trim();
-                }
-              }
-              if (studentName.trim().isEmpty &&
-                  l['groups'] != null &&
-                  l['groups']['name'] != null) {
-                studentName = 'Группа: ${l['groups']['name']}';
-              } else if (studentName.trim().isEmpty) {
-                studentName = 'Без ученика';
-              }
-
-              String teacherName = l['teacher_name'] as String? ?? '';
-              if (teacherName.trim().isEmpty) {
-                final teacher = l['teachers'];
-                if (teacher != null) {
-                  final tf =
-                      teacher['first_name'] ??
-                      teacher['profiles']?['first_name'] ??
-                      '';
-                  final tl =
-                      teacher['last_name'] ??
-                      teacher['profiles']?['last_name'] ??
-                      '';
-                  teacherName = '$tf $tl'.trim();
-                }
-              }
-              if (teacherName.trim().isEmpty) teacherName = 'Без преподавателя';
-
-              final room =
-                  l['room_name'] as String? ??
-                  l['rooms']?['name'] as String? ??
-                  '—';
-              return Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              dateStr,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 13,
-                              ),
-                            ),
-                            SizedBox(height: 2),
-                            Text(
-                              'Ученик: $studentName',
-                              style: TextStyle(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                                fontSize: 12,
-                              ),
-                            ),
-                            Text(
-                              'Преп.: $teacherName',
-                              style: TextStyle(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                                fontSize: 12,
-                              ),
-                            ),
-                            Text(
-                              'Кабинет: $room',
-                              style: TextStyle(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          if (l['is_trial'] == true) ...[
-                            const LessonTrialBadge(compact: true),
-                            const SizedBox(height: 4),
-                          ],
-                          LessonStateBadge.fromMap(l),
-                        ],
-                      ),
-                      SizedBox(width: 4),
-                      PopupMenuButton<String>(
-                        icon: Icon(
-                          Icons.more_vert_rounded,
-                          size: 20,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                        onSelected: (val) {
-                          if (val == 'reschedule') {
-                            _rescheduleLesson(
-                              context,
-                              ref,
-                              l['id'],
-                              (l['version'] as num?)?.toInt() ?? 1,
-                              dt,
-                            );
-                          }
-                        },
-                        itemBuilder: (ctx) => [
-                          const PopupMenuItem(
-                            value: 'reschedule',
-                            child: Text('Перенести'),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _rescheduleLesson(
-    BuildContext context,
-    WidgetRef ref,
-    String lessonId,
-    int expectedVersion,
-    DateTime? current,
-  ) async {
-    final date = await showDatePicker(
-      context: context,
-      initialDate: current ?? DateTime.now(),
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-    );
-    if (date == null || !context.mounted) return;
-
-    final time = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(current ?? DateTime.now()),
-    );
-    if (time == null || !context.mounted) return;
-
-    final newDateTime = DateTime(
-      date.year,
-      date.month,
-      date.day,
-      time.hour,
-      time.minute,
-    );
-
-    try {
-      await ref
-          .read(magicCrmServiceProvider)
-          .updateLesson(
-            lessonId,
-            expectedVersion: expectedVersion,
-            scheduledAt: newDateTime.toIso8601String(),
-          );
-      ref.invalidate(entitiesProvider('lessons'));
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Не удалось перенести занятие: $e'),
-          backgroundColor: AppTheme.danger,
-        ),
-      );
-    }
-  }
-}
-
 class _GroupsList extends ConsumerWidget {
   final String searchQuery;
   const _GroupsList({required this.searchQuery});
@@ -323,7 +99,8 @@ class _GroupsList extends ConsumerWidget {
 
 class _RoomsList extends ConsumerWidget {
   final String searchQuery;
-  const _RoomsList({required this.searchQuery});
+  final bool canEdit;
+  const _RoomsList({required this.searchQuery, required this.canEdit});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -370,15 +147,17 @@ class _RoomsList extends ConsumerWidget {
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
                 child: ListTile(
-                  onTap: () async {
-                    final res = await showDialog<bool>(
-                      context: context,
-                      builder: (ctx) => CreateRoomDialog(room: item),
-                    );
-                    if (res == true) {
-                      ref.invalidate(entitiesProvider('rooms'));
-                    }
-                  },
+                  onTap: !canEdit
+                      ? null
+                      : () async {
+                          final res = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => CreateRoomDialog(room: item),
+                          );
+                          if (res == true) {
+                            ref.invalidate(entitiesProvider('rooms'));
+                          }
+                        },
                   leading: CircleAvatar(
                     backgroundColor: AppTheme.primaryGold.withAlpha(30),
                     child: Icon(
@@ -395,7 +174,7 @@ class _RoomsList extends ConsumerWidget {
                     ),
                   ),
                   trailing: Icon(
-                    Icons.edit_rounded,
+                    canEdit ? Icons.edit_rounded : Icons.lock_outline_rounded,
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                     size: 18,
                   ),

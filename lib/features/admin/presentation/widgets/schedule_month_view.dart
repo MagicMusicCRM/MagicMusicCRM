@@ -16,6 +16,9 @@ class ScheduleMonthView extends StatelessWidget {
   final Map<String, Map<String, dynamic>> monthDaySummary;
   final List<Map<String, dynamic>> Function(DateTime) lessonsForDate;
   final DateTime? Function(Map<String, dynamic>) parseLessonTime;
+  final bool clientContext;
+  final bool searchContext;
+  final bool Function(Map<String, dynamic>) isContextClientLesson;
   final void Function(DateTime) onDayTap;
 
   const ScheduleMonthView({
@@ -26,6 +29,9 @@ class ScheduleMonthView extends StatelessWidget {
     required this.monthDaySummary,
     required this.lessonsForDate,
     required this.parseLessonTime,
+    this.clientContext = false,
+    this.searchContext = false,
+    required this.isContextClientLesson,
     required this.onDayTap,
   });
 
@@ -170,6 +176,8 @@ class ScheduleMonthView extends StatelessWidget {
         selectedDate.year == date.year &&
         selectedDate.month == date.month &&
         selectedDate.day == date.day;
+    final related =
+        searchContext && lessons.any((lesson) => isContextClientLesson(lesson));
 
     // Up to two preview chips from the in-memory (capped) matrix; the count
     // badge stays authoritative for the full-day total.
@@ -185,20 +193,31 @@ class ScheduleMonthView extends StatelessWidget {
       child: GestureDetector(
         onTap: date != null ? () => onDayTap(date) : null,
         child: Container(
+          key: date == null
+              ? null
+              : ValueKey('schedule-month-day-${dateOnly(date)}'),
           margin: const EdgeInsets.all(2),
           padding: const EdgeInsets.fromLTRB(5, 4, 5, 4),
           decoration: BoxDecoration(
             color: isCurrentMonth
-                ? cs.surface.withAlpha(isSelected ? 220 : 120)
+                ? searchContext
+                      ? (related
+                            ? AppColor.success.withAlpha(28)
+                            : AppColor.text2.withAlpha(12))
+                      : cs.surface.withAlpha(isSelected ? 220 : 120)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: isToday
+              color: searchContext
+                  ? (related ? AppColor.success : AppColor.text2.withAlpha(70))
+                  : isToday
                   ? AppColor.gold
                   : isSelected
                   ? AppColor.goldLine
                   : cs.onSurfaceVariant.withAlpha(14),
-              width: isToday ? 1.5 : 1,
+              width: searchContext && related || !searchContext && isToday
+                  ? 1.5
+                  : 1,
             ),
           ),
           child: Column(
@@ -234,7 +253,11 @@ class ScheduleMonthView extends StatelessWidget {
                     Text(
                       '$count',
                       style: TextStyle(
-                        color: count >= 9 ? AppColor.warning : AppColor.gold,
+                        color: searchContext
+                            ? (related ? AppColor.success : AppColor.text2)
+                            : count >= 9
+                            ? AppColor.warning
+                            : AppColor.gold,
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
                       ),
@@ -290,8 +313,14 @@ class ScheduleMonthView extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final start = parseLessonTime(lesson);
     final conflicts = conflictTypes(lesson['conflict_types']);
-    final color = conflicts.isNotEmpty
+    final relationContext = clientContext || searchContext;
+    final related = relationContext && isContextClientLesson(lesson);
+    final color = searchContext
+        ? (related ? AppColor.success : AppColor.text2)
+        : conflicts.isNotEmpty
         ? AppColor.danger
+        : clientContext
+        ? (related ? AppColor.success : AppColor.text2)
         : LessonStateProjection.fromMap(lesson).token.accent;
     final time = start == null
         ? ''
@@ -310,21 +339,50 @@ class ScheduleMonthView extends StatelessWidget {
         borderRadius: BorderRadius.circular(4),
         border: Border(left: BorderSide(color: color, width: 2)),
       ),
-      child: Row(
-        children: [
-          if (lesson['is_trial'] == true) ...[
-            const LessonTrialBadge(compact: true),
-            const SizedBox(width: 3),
-          ],
-          Expanded(
-            child: Text(
-              '$time$name',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: cs.onSurface, fontSize: 9.5),
-            ),
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final trial = lesson['is_trial'] == true;
+          final showTrialText =
+              trial && constraints.maxWidth >= (relationContext ? 90 : 70);
+          final showTrialIcon =
+              trial && constraints.maxWidth >= (relationContext ? 38 : 22);
+          return Row(
+            children: [
+              if (relationContext) ...[
+                Icon(
+                  related
+                      ? Icons.person_pin_circle_outlined
+                      : Icons.people_outline_rounded,
+                  size: 10,
+                  color: color,
+                ),
+                const SizedBox(width: 2),
+              ],
+              if (showTrialText) ...[
+                const LessonTrialBadge(compact: true),
+                const SizedBox(width: 3),
+              ] else if (showTrialIcon) ...[
+                const Tooltip(
+                  message: 'Пробный урок',
+                  child: Icon(
+                    Icons.star_rounded,
+                    size: 10,
+                    color: AppColor.gold,
+                  ),
+                ),
+                const SizedBox(width: 2),
+              ],
+              Expanded(
+                child: Text(
+                  '$time$name',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: cs.onSurface, fontSize: 9.5),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

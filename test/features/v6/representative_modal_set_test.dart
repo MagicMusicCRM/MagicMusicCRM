@@ -1,9 +1,35 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_details_sheet.dart';
 
 void main() {
+  test('production bottom sheets route through the v7 surface', () {
+    final directCalls = <String>[];
+    for (final file
+        in Directory('lib')
+            .listSync(recursive: true)
+            .whereType<File>()
+            .where(
+              (file) =>
+                  file.path.endsWith('.dart') &&
+                  !file.path.endsWith('magic_sheet.dart'),
+            )) {
+      if (RegExp(
+        r'showModalBottomSheet(?:<[^>]+>)?\s*\(',
+      ).hasMatch(file.readAsStringSync())) {
+        directCalls.add(file.path);
+      }
+    }
+    expect(
+      directCalls,
+      isEmpty,
+      reason: 'Use the v7 adaptive sheet: $directCalls',
+    );
+  });
+
   testWidgets('lesson quick view expands and confirmation stays concise', (
     tester,
   ) async {

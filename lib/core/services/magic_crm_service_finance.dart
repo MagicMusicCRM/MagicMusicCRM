@@ -129,14 +129,14 @@ class RecordSubscriptionPaymentInput {
     required this.amountMinor,
     required this.method,
     required this.occurredAt,
-    this.issuedSubscriptionId,
+    required this.issuedSubscriptionId,
     this.currencyCode,
     this.branchId,
     this.comment,
     this.invoiceIdentifier,
   });
 
-  final String? issuedSubscriptionId;
+  final String issuedSubscriptionId;
   final BigInt amountMinor;
   final SubscriptionPaymentMethod method;
   final DateTime occurredAt;
@@ -146,8 +146,7 @@ class RecordSubscriptionPaymentInput {
   final String? invoiceIdentifier;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-    if (issuedSubscriptionId != null)
-      'issuedSubscriptionId': issuedSubscriptionId,
+    'issuedSubscriptionId': issuedSubscriptionId,
     'amountMinor': amountMinor.toString(),
     'method': method.apiValue,
     'occurredAt': occurredAt.toUtc().toIso8601String(),
@@ -157,6 +156,35 @@ class RecordSubscriptionPaymentInput {
       'comment': comment!.trim(),
     if (invoiceIdentifier != null && invoiceIdentifier!.trim().isNotEmpty)
       'invoiceIdentifier': invoiceIdentifier!.trim(),
+  };
+}
+
+enum PaymentAdjustmentKind { refund, correction }
+
+class RecordPaymentAdjustmentInput {
+  const RecordPaymentAdjustmentInput({
+    required this.sourcePaymentId,
+    required this.kind,
+    required this.amountMinor,
+    required this.occurredAt,
+    required this.reason,
+    this.direction,
+  });
+
+  final String sourcePaymentId;
+  final PaymentAdjustmentKind kind;
+  final BigInt amountMinor;
+  final DateTime occurredAt;
+  final String reason;
+  final String? direction;
+
+  Map<String, dynamic> toJson() => {
+    'sourcePaymentId': sourcePaymentId,
+    'kind': kind.name,
+    'amountMinor': amountMinor.toString(),
+    'occurredAt': occurredAt.toUtc().toIso8601String(),
+    'reason': reason.trim(),
+    if (direction != null) 'direction': direction,
   };
 }
 
@@ -812,6 +840,25 @@ extension MagicCrmFinance on MagicCrmService {
     );
   }
 
+  Future<Map<String, dynamic>> getV4LessonSuccessList({
+    required Map<String, dynamic> filter,
+    int limit = 50,
+    int offset = 0,
+  }) {
+    return _api.get<Map<String, dynamic>>(
+      '/analytics/v4/lesson-success/lessons',
+      queryParameters: {
+        ..._v4ReportQuery(
+          branchId: filter['branchId']?.toString(),
+          from: filter['from']?.toString(),
+          to: filter['to']?.toString(),
+        ),
+        'limit': limit,
+        'offset': offset,
+      },
+    );
+  }
+
   Future<Map<String, dynamic>> getV4SchoolFinance({
     String? branchId,
     String? from,
@@ -879,12 +926,14 @@ extension MagicCrmFinance on MagicCrmService {
     required String format,
     required DateTime from,
     required DateTime to,
+    String? branchId,
   }) {
     return _api.downloadBytes(
       '/analytics/finance/monthly.$format',
       queryParameters: <String, dynamic>{
         'from': from.toIso8601String(),
         'to': to.toIso8601String(),
+        'branchId': ?branchId,
       },
     );
   }
@@ -973,12 +1022,14 @@ extension MagicCrmFinance on MagicCrmService {
     String? studentId,
     String? from,
     String? to,
+    String? branchId,
     int limit = 100,
   }) async {
     final queryParameters = <String, dynamic>{'limit': limit};
     if (studentId != null) queryParameters['studentId'] = studentId;
     if (from != null) queryParameters['from'] = from;
     if (to != null) queryParameters['to'] = to;
+    if (branchId != null) queryParameters['branchId'] = branchId;
 
     final response = await _api.get<Map<String, dynamic>>(
       '/crm/payments',
@@ -995,12 +1046,14 @@ extension MagicCrmFinance on MagicCrmService {
     String? from,
     String? to,
     String? studentId,
+    String? branchId,
     int limit = 100,
   }) async {
     final queryParameters = <String, dynamic>{'limit': limit};
     if (studentId != null) queryParameters['studentId'] = studentId;
     if (from != null) queryParameters['from'] = from;
     if (to != null) queryParameters['to'] = to;
+    if (branchId != null) queryParameters['branchId'] = branchId;
 
     final response = await _api.get<Map<String, dynamic>>(
       '/crm/payments',
@@ -1022,17 +1075,6 @@ extension MagicCrmFinance on MagicCrmService {
     );
   }
 
-  Future<List<Map<String, dynamic>>> listExpectedPayments({
-    required String studentId,
-    int limit = 50,
-  }) async {
-    final response = await _api.get<Map<String, dynamic>>(
-      '/crm/expected-payments',
-      queryParameters: {'studentId': studentId, 'limit': limit},
-    );
-    return _items(response).map(_legacyExpectedPayment).toList();
-  }
-
   Future<List<Map<String, dynamic>>> listStudentBalances({
     bool debtOnly = false,
     String? studentId,
@@ -1049,45 +1091,6 @@ extension MagicCrmFinance on MagicCrmService {
       queryParameters: queryParameters,
     );
     return _items(response).map(_legacyStudentBalance).toList();
-  }
-
-  Future<Payment> createPayment({
-    required String studentId,
-    required num amount,
-    required String paymentDate,
-    String currency = 'RUB',
-    String? method,
-    String? externalId,
-    String? notes,
-
-    /// Занятие, за которое пришёл платёж (✔ владелец 17.07). Необязательно:
-    /// пополнение счёта авансом ни к какому занятию не относится.
-    String? lessonId,
-  }) async {
-    final data = <String, dynamic>{
-      'studentId': studentId,
-      'amount': amount,
-      'paymentDate': paymentDate,
-      'currency': currency,
-    };
-    if (lessonId != null && lessonId.trim().isNotEmpty) {
-      data['lessonId'] = lessonId.trim();
-    }
-    if (method != null && method.trim().isNotEmpty) {
-      data['method'] = method.trim();
-    }
-    if (externalId != null && externalId.trim().isNotEmpty) {
-      data['externalId'] = externalId.trim();
-    }
-    if (notes != null && notes.trim().isNotEmpty) {
-      data['notes'] = notes.trim();
-    }
-
-    final response = await _api.post<Map<String, dynamic>>(
-      '/crm/payments',
-      data: data,
-    );
-    return Payment.fromMap(_legacyPayment(response));
   }
 
   // ── Expenses (P5-5) ─────────────────────────────────────────────────────
@@ -1226,6 +1229,18 @@ extension MagicCrmFinance on MagicCrmService {
     );
   }
 
+  Future<Map<String, dynamic>> recordPaymentAdjustment(
+    String studentId, {
+    required RecordPaymentAdjustmentInput input,
+    required MagicMutationIdentity identity,
+  }) async {
+    return _api.postIdempotent<Map<String, dynamic>>(
+      '/crm/students/$studentId/adjustments',
+      identity: identity,
+      data: input.toJson(),
+    );
+  }
+
   Future<SubscriptionReplacementPreview> previewSubscriptionReplacement(
     String studentId, {
     required String issuedSubscriptionId,
@@ -1358,10 +1373,6 @@ extension MagicCrmFinance on MagicCrmService {
       '/crm/homeworks/$id/submit',
       data: const <String, dynamic>{},
     );
-  }
-
-  Future<void> updateTaskStatus(String id, String status) async {
-    await updateTask(id, status: status);
   }
 
   // ── Analytics endpoints ───────────────────────────────────────────────

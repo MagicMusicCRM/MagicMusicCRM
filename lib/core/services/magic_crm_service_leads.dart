@@ -415,37 +415,6 @@ extension MagicCrmLeads on MagicCrmService {
     return _items(response);
   }
 
-  Future<Map<String, dynamic>> createLeadStatus({
-    required String key,
-    required String label,
-    required String color,
-    required int sortOrder,
-  }) async {
-    final response = await _api.post<Map<String, dynamic>>(
-      '/crm/lead-statuses',
-      data: {
-        'key': key.trim(),
-        'label': label.trim(),
-        'color': color.trim(),
-        'sortOrder': sortOrder,
-      },
-    );
-    return _legacyLeadStatus(response);
-  }
-
-  Future<void> deleteLeadStatus(String id) async {
-    await _api.delete<Map<String, dynamic>>('/crm/lead-statuses/$id');
-  }
-
-  /// Persists a new funnel column order. [idsInOrder] is the ordered list of
-  /// lead-status ids; the backend writes their sort_order as 0..N accordingly.
-  Future<void> reorderLeadStatuses(List<String> idsInOrder) async {
-    await _api.patch<Map<String, dynamic>>(
-      '/crm/lead-statuses/order',
-      data: {'statusIds': idsInOrder},
-    );
-  }
-
   Future<List<Map<String, dynamic>>> listDuplicateCandidates({
     String status = 'pending',
     String? leadId,

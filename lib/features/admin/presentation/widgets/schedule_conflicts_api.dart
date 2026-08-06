@@ -63,37 +63,6 @@ class ScheduleConflictInfo {
   }
 }
 
-class ScheduleConflictCheck {
-  final bool teacherBusy;
-  final bool roomBusy;
-  final List<ScheduleConflictInfo> conflicts;
-
-  const ScheduleConflictCheck({
-    required this.teacherBusy,
-    required this.roomBusy,
-    required this.conflicts,
-  });
-
-  bool get hasConflicts => teacherBusy || roomBusy || conflicts.isNotEmpty;
-
-  factory ScheduleConflictCheck.fromJson(Map<String, dynamic> json) {
-    final raw = json['conflicts'];
-    return ScheduleConflictCheck(
-      teacherBusy: json['teacherBusy'] == true,
-      roomBusy: json['roomBusy'] == true,
-      conflicts: raw is! List
-          ? const []
-          : [
-              for (final item in raw)
-                if (item is Map)
-                  ScheduleConflictInfo.fromJson(
-                    Map<String, dynamic>.from(item),
-                  ),
-            ],
-    );
-  }
-}
-
 /// Разбирает `conflicts` из тела 409 (контракт 2: занятый педагог/аудитория).
 /// Возвращает null, если это не «наш» 409 — тогда ошибка идёт обычным путём.
 List<ScheduleConflictInfo>? scheduleConflictsFrom409(MagicApiException error) {
@@ -182,29 +151,35 @@ List<LessonConstraintViolation>? lessonConstraintViolations(
 }
 
 extension ScheduleConflictsApi on MagicApiClient {
-  /// GET /crm/schedule/conflicts — занят ли педагог/аудитория в окне
-  /// [startsAt, endsAt). Admin+ only на сервере; читающие ошибки здесь не
-  /// глотаются — вызывающий сам решает, что fail-open (до ребилда сервера
-  /// маршрута нет, и проверка не должна блокировать создание занятий).
-  Future<ScheduleConflictCheck> checkScheduleConflicts({
-    String? teacherId,
-    String? roomId,
-    required String startsAt,
-    required String endsAt,
+  Future<List<LessonConstraintViolation>> previewLessonConstraints({
+    required String clientType,
+    required String clientId,
+    required String teacherId,
+    required String branchId,
+    required String roomId,
+    required String scheduledAt,
+    required int durationMinutes,
     String? excludeLessonId,
   }) async {
-    final response = await get<Map<String, dynamic>>(
-      '/crm/schedule/conflicts',
-      queryParameters: {
-        if (teacherId != null && teacherId.isNotEmpty) 'teacherId': teacherId,
-        if (roomId != null && roomId.isNotEmpty) 'roomId': roomId,
-        'startsAt': startsAt,
-        'endsAt': endsAt,
-        if (excludeLessonId != null && excludeLessonId.isNotEmpty)
-          'excludeLessonId': excludeLessonId,
+    final response = await post<Map<String, dynamic>>(
+      '/crm/lessons/constraints/preview',
+      data: {
+        'clientRef': {'type': clientType, 'id': clientId},
+        'teacherId': teacherId,
+        'branchId': branchId,
+        'roomId': roomId,
+        'scheduledAt': scheduledAt,
+        'durationMinutes': durationMinutes,
+        'excludeLessonId': ?excludeLessonId,
       },
     );
-    return ScheduleConflictCheck.fromJson(response);
+    final raw = response['violations'];
+    if (raw is! List) return const [];
+    return [
+      for (final item in raw)
+        if (item is Map)
+          LessonConstraintViolation.fromJson(Map<String, dynamic>.from(item)),
+    ];
   }
 
   /// POST /crm/lessons with a complete v4 draft. Mutation metadata is attached

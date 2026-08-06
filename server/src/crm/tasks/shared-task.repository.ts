@@ -133,6 +133,7 @@ export class SharedTaskRepository {
       endAt: string | null;
       linkedEntityType: string | null;
       linkedEntityId: string | null;
+      priority: "low" | "medium" | "high";
       version: number;
       createdBy: string;
     },
@@ -141,9 +142,9 @@ export class SharedTaskRepository {
       `
         insert into app.shared_tasks (
           id, title, body, all_day, start_at, end_at,
-          linked_entity_type, linked_entity_id, version, created_by
+          linked_entity_type, linked_entity_id, priority, version, created_by
         )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         returning *
       `,
       [
@@ -155,6 +156,7 @@ export class SharedTaskRepository {
         input.endAt,
         input.linkedEntityType,
         input.linkedEntityId,
+        input.priority,
         input.version,
         input.createdBy,
       ],
@@ -172,6 +174,7 @@ export class SharedTaskRepository {
       endAt: string | null;
       linkedEntityType: string | null;
       linkedEntityId: string | null;
+      priority: "low" | "medium" | "high";
       version: number;
     },
   ) {
@@ -180,7 +183,7 @@ export class SharedTaskRepository {
         update app.shared_tasks
         set title = $2, body = $3, all_day = $4, start_at = $5,
             end_at = $6, linked_entity_type = $7, linked_entity_id = $8,
-            version = $9, updated_at = now()
+            priority = $9, version = $10, updated_at = now()
         where id = $1 and state = 'open' and deleted_at is null
         returning *
       `,
@@ -193,6 +196,7 @@ export class SharedTaskRepository {
         input.endAt,
         input.linkedEntityType,
         input.linkedEntityId,
+        input.priority,
         input.version,
       ],
     );
@@ -270,6 +274,11 @@ export class SharedTaskRepository {
       taskId?: string;
       linkedEntityType?: string;
       linkedEntityId?: string;
+      q?: string;
+      priority?: "low" | "medium" | "high";
+      scope?: "mine" | "branch" | "school" | "all";
+      from?: string;
+      to?: string;
     },
   ) {
     return this.database.query<ResolvedSharedTaskRow>(
@@ -282,8 +291,26 @@ export class SharedTaskRepository {
           close.request_id as close_request_id
         from app.shared_tasks task
         join lateral (
+          select visibility.scope_kind
+          from app.shared_task_visibility visibility
+          where visibility.task_id = task.id
+            and visibility.user_id = $1::uuid
+            and (
+              $14::text is null
+              or $14 = 'all'
+              or visibility.scope_kind = $14
+            )
+          order by case visibility.scope_kind
+            when 'mine' then 1 when 'branch' then 2
+            when 'school' then 3 else 4
+          end
+          limit 1
+        ) visible on true
+        join lateral (
           select audience.*,
             case
+              when visible.scope_kind <> 'mine'
+                then 'scope:' || visible.scope_kind
               when audience.audience_type = 'user'
                 then 'user:' || $1::text
               when audience.audience_type = 'allBranches'
@@ -338,6 +365,7 @@ export class SharedTaskRepository {
                   or $2 = any($4::text[])
                 )
               )
+              or visible.scope_kind <> 'mine'
             )
           order by
             case audience.audience_type
@@ -361,6 +389,14 @@ export class SharedTaskRepository {
           )
           and ($8::text is null or task.linked_entity_type = $8)
           and ($9::uuid is null or task.linked_entity_id = $9)
+          and (
+            $10::text is null
+            or lower(task.title || ' ' || coalesce(task.body, ''))
+              like '%' || lower($10) || '%'
+          )
+          and ($11::text is null or task.priority = $11)
+          and ($12::timestamptz is null or task.start_at >= $12)
+          and ($13::timestamptz is null or task.start_at < $13)
         order by task.start_at, task.id
         limit $6
       `,
@@ -374,6 +410,11 @@ export class SharedTaskRepository {
         input.taskId ?? null,
         input.linkedEntityType ?? null,
         input.linkedEntityId ?? null,
+        input.q ?? null,
+        input.priority ?? null,
+        input.from ?? null,
+        input.to ?? null,
+        input.scope ?? null,
       ],
     );
   }
@@ -479,9 +520,20 @@ export class SharedTaskRepository {
     });
   }
 
-  counters(actorUserId: string, actorRole: string) {
+  counters(
+    actorUserId: string,
+    actorRole: string,
+    filters: {
+      q?: string;
+      priority?: "low" | "medium" | "high";
+      scope?: "mine" | "branch" | "school" | "all";
+      from?: string;
+      to?: string;
+    } = {},
+  ) {
     return this.listResolved(actorUserId, actorRole, {
       limit: 2_147_483_647,
+      ...filters,
     }).then(
       (result) => {
         const now = Date.now();

@@ -301,31 +301,27 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
 
     final crm = ref.read(magicCrmServiceProvider);
     SearchableSelectItem? selected;
-    await showModalBottomSheet(
+    await SearchableSelect.show(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => SearchableSelect(
-        title: 'Добавить ученика',
-        hintText: 'Поиск по ФИО...',
-        // Pre-loaded page (first 100) for the empty query; a real query hits
-        // searchStudents server-side so student #101+ is still reachable.
-        items: items,
-        onSearch: (query) async {
-          final response = await crm.searchStudents(q: query, limit: 50);
-          final rows = response['items'];
-          if (rows is! List) return const <SearchableSelectItem>[];
-          return [
-            for (final row in rows.whereType<Map<String, dynamic>>())
-              if (!existingIds.contains(row['id']?.toString()))
-                SearchableSelectItem(
-                  id: row['id'].toString(),
-                  label: _studentName(row),
-                ),
-          ];
-        },
-        onSelected: (item) => selected = item,
-      ),
+      title: 'Добавить ученика',
+      hintText: 'Поиск по ФИО...',
+      // Pre-loaded page (first 100) for the empty query; a real query hits
+      // searchStudents server-side so student #101+ is still reachable.
+      items: items,
+      onSearch: (query) async {
+        final response = await crm.searchStudents(q: query, limit: 50);
+        final rows = response['items'];
+        if (rows is! List) return const <SearchableSelectItem>[];
+        return [
+          for (final row in rows.whereType<Map<String, dynamic>>())
+            if (!existingIds.contains(row['id']?.toString()))
+              SearchableSelectItem(
+                id: row['id'].toString(),
+                label: _studentName(row),
+              ),
+        ];
+      },
+      onSelected: (item) => selected = item,
     );
     return selected;
   }

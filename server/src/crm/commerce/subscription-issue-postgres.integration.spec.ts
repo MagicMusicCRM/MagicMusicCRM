@@ -190,7 +190,7 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
     });
     expect(await revenueMinor(first.subscription.id)).toBe("0");
 
-    await paymentService.record(
+    const payment = await paymentService.record(
       actors.director,
       studentId,
       {
@@ -214,6 +214,92 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
         (item) => item.status,
       ),
     ).toEqual(["paid", "pending"]);
+    expect(projection[0]!.subscriptions[0]).toMatchObject({
+      units: {
+        total: "10.00",
+        used: "0",
+        reserved: "0",
+        paid: "5.0000000000000000",
+        available: "5.0000000000000000",
+        remaining: "10.00",
+      },
+      financial: {
+        actualPaidMinor: "320000",
+        obligationMinor: "640000",
+        debtMinor: "320000",
+        overpaymentMinor: "0",
+        nextPaymentAt: "2026-09-01T09:00:00+00:00",
+      },
+    });
+
+    const adjustmentMetadata = mutationMetadata("refund-first-installment");
+    const adjustmentInput = {
+      sourcePaymentId: payment.payment.id,
+      kind: "refund" as const,
+      amountMinor: "100000",
+      occurredAt: "2026-08-02T10:00:00.000Z",
+      reason: "Возврат части первого платежа",
+    };
+    const adjustment = await paymentService.recordAdjustment(
+      actors.director,
+      studentId,
+      adjustmentInput,
+      adjustmentMetadata,
+    );
+    expect(
+      await paymentService.recordAdjustment(
+        actors.director,
+        studentId,
+        adjustmentInput,
+        adjustmentMetadata,
+      ),
+    ).toEqual(adjustment);
+    expect(adjustment.adjustment).toMatchObject({
+      sourcePaymentId: payment.payment.id,
+      kind: "refund",
+      amountMinor: "-100000",
+      status: "paid",
+    });
+    await expect(
+      paymentService.recordAdjustment(
+        actors.director,
+        studentId,
+        { ...adjustmentInput, amountMinor: "220001" },
+        mutationMetadata("refund-over-remaining"),
+      ),
+    ).rejects.toMatchObject({
+      response: { code: "PAYMENT_REFUND_EXCEEDS_AVAILABLE" },
+    });
+    await expect(
+      pool.query(
+        "update app.account_adjustments set description = 'rewrite' where id = $1",
+        [adjustment.adjustment.id],
+      ),
+    ).rejects.toThrow("immutable commerce fact");
+
+    const reconciled = await commerceRepository.loadProjection(
+      actors.director,
+      [scope],
+    );
+    const subscription = reconciled[0]!.subscriptions.find(
+      (item) => item.id === first.subscription.id,
+    )!;
+    expect(Number(subscription.units.paid)).toBeCloseTo(3.4375);
+    expect(Number(subscription.units.available)).toBeCloseTo(3.4375);
+    expect(subscription.financial).toMatchObject({
+      actualPaidMinor: "220000",
+      debtMinor: "420000",
+    });
+    expect(reconciled[0]!.movements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: adjustment.adjustment.id,
+          kind: "refund",
+          sourcePaymentId: payment.payment.id,
+          issuedSubscriptionId: first.subscription.id,
+        }),
+      ]),
+    );
   });
 
   it("reconciles a typed surcharge after a fixed discount", async () => {
@@ -496,6 +582,7 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
           actors[role],
           studentId,
           {
+            issuedSubscriptionId: "00000000-0000-4000-8000-000000000001",
             amountMinor: "100",
             method: "cash",
             occurredAt: "2026-08-04T10:00:00.000Z",
@@ -730,7 +817,19 @@ async function cleanupFixture(
         )
       : { rows: [] as { id: string }[] };
     const paymentIds = payments.rows.map((row) => row.id);
-    const aggregateIds = [...subscriptionIds, ...paymentIds];
+    const adjustments = input.studentId
+      ? await client.query<{ id: string }>(
+          `select id from app.account_adjustments
+           where student_id = $1 and idempotency_ref is not null`,
+          [input.studentId],
+        )
+      : { rows: [] as { id: string }[] };
+    const adjustmentIds = adjustments.rows.map((row) => row.id);
+    const aggregateIds = [
+      ...subscriptionIds,
+      ...paymentIds,
+      ...adjustmentIds,
+    ];
 
     await deleteByIds(
       client,
@@ -779,6 +878,13 @@ async function cleanupFixture(
       "app.subscription_installments",
       "issued_subscription_id",
       subscriptionIds,
+      "uuid",
+    );
+    await deleteByIds(
+      client,
+      "app.account_adjustments",
+      "id",
+      adjustmentIds,
       "uuid",
     );
     await deleteByIds(

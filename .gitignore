@@ -79,6 +79,7 @@ app.*.map.json
 /.understand-anything/
 /_archive/
 /installer_output/
+/outputs/stage9-release-*/
 /ast_nodes*.json
 /bugreport-*.zip
 /docs/Supabase_Custom_Domain_Setup_Guide.docx

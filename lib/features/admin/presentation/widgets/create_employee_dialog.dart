@@ -1,11 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
-import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
+import 'package:magic_music_crm/core/widgets/v7/adaptive_surface.dart';
+
+Future<bool?> showCreateEmployeeSurface(
+  BuildContext context, {
+  required String currentRole,
+}) {
+  return showMagicAdaptiveSurface<bool>(
+    context,
+    kind: AppSurfaceKind.selection,
+    title: 'Новый сотрудник',
+    subtitle: 'Контакты и роль в приложении',
+    icon: Icons.person_add_alt_1_rounded,
+    builder: (_) => CreateEmployeeDialog(currentRole: currentRole),
+  );
+}
 
 class CreateEmployeeDialog extends ConsumerStatefulWidget {
-  const CreateEmployeeDialog({super.key});
+  const CreateEmployeeDialog({super.key, required this.currentRole});
+
+  final String currentRole;
 
   @override
   ConsumerState<CreateEmployeeDialog> createState() =>
@@ -13,6 +30,9 @@ class CreateEmployeeDialog extends ConsumerStatefulWidget {
 }
 
 class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
+  static const _adminRole = (value: 'admin', label: 'Администратор');
+  static const _managerRole = (value: 'manager', label: 'Управляющий');
+
   final _formKey = GlobalKey<FormState>();
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
@@ -21,10 +41,10 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
   String _selectedRole = 'admin';
   bool _saving = false;
 
-  static const _roles = [
-    {'value': 'admin', 'label': 'Администратор'},
-    {'value': 'manager', 'label': 'Управляющий'},
-  ];
+  List<({String value, String label})> get _roles =>
+      widget.currentRole == 'manager'
+      ? const [_adminRole]
+      : const [_adminRole, _managerRole];
 
   @override
   void dispose() {
@@ -40,293 +60,127 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
 
     final firstName = _firstNameController.text.trim();
     final lastName = _lastNameController.text.trim();
-    final phone = _canonicalPhone;
-    final email = _emailController.text.trim();
-
     try {
       await ref
           .read(magicCrmServiceProvider)
           .createStaff(
             firstName: firstName,
             lastName: lastName,
-            phone: phone,
-            email: email,
+            phone: _canonicalPhone,
+            email: _emailController.text.trim(),
             role: _selectedRole,
           );
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '$lastName $firstName добавлен как ${_roles.firstWhere((r) => r["value"] == _selectedRole)["label"]}',
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
+          SnackBar(content: Text('$lastName $firstName добавлен')),
         );
         Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка: $e'),
-            backgroundColor: AppTheme.danger,
-          ),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
-  Widget _field({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    bool required = false,
-    TextInputType? keyboardType,
-    String? Function(String?)? validator,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: TextFormField(
-        controller: controller,
-        keyboardType: keyboardType,
-        style: const TextStyle(color: Colors.white),
-        decoration: InputDecoration(
-          labelText: required ? '$label *' : label,
-          prefixIcon: Icon(
-            icon,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-            size: 20,
-          ),
-          filled: true,
-          fillColor: Theme.of(context).colorScheme.surface,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(
-              color: AppTheme.primaryGold,
-              width: 2,
-            ),
-          ),
-          contentPadding: const EdgeInsets.symmetric(
-            vertical: 14,
-            horizontal: 12,
-          ),
-        ),
-        validator:
-            validator ??
-            (v) {
-              if (required && (v == null || v.trim().isEmpty)) {
-                return 'Обязательное поле';
-              }
-              return null;
-            },
-      ),
-    );
-  }
-
-  InputDecoration _phoneDecoration() {
-    return InputDecoration(
-      labelText: 'Телефон',
-      prefixIcon: Icon(
-        Icons.phone_outlined,
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
-        size: 20,
-      ),
-      filled: true,
-      fillColor: Theme.of(context).colorScheme.surface,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide.none,
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppTheme.primaryGold, width: 2),
-      ),
-      contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-    );
-  }
+  String? _required(String? value) =>
+      value == null || value.trim().isEmpty ? 'Обязательное поле' : null;
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: const Color(0xFF1E1A29),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return Form(
+      key: _formKey,
+      child: Column(
+        key: const ValueKey('create-employee-form'),
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Сотрудник сможет зарегистрироваться по указанной почте или телефону.',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _lastNameController,
+            decoration: const InputDecoration(
+              labelText: 'Фамилия *',
+              prefixIcon: Icon(Icons.person_outline_rounded),
+            ),
+            validator: _required,
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _firstNameController,
+            decoration: const InputDecoration(
+              labelText: 'Имя *',
+              prefixIcon: Icon(Icons.person_outline_rounded),
+            ),
+            validator: _required,
+          ),
+          const SizedBox(height: 12),
+          RuPhoneField(onCanonicalChanged: (value) => _canonicalPhone = value),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _emailController,
+            keyboardType: TextInputType.emailAddress,
+            decoration: const InputDecoration(
+              labelText: 'Электронная почта *',
+              prefixIcon: Icon(Icons.email_outlined),
+            ),
+            validator: (value) {
+              final requiredError = _required(value);
+              if (requiredError != null) return requiredError;
+              return value!.trim().contains('@')
+                  ? null
+                  : 'Введите корректный email';
+            },
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: _selectedRole,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Роль'),
+            items: [
+              for (final role in _roles)
+                DropdownMenuItem(value: role.value, child: Text(role.label)),
+            ],
+            onChanged: _saving
+                ? null
+                : (value) {
+                    if (value != null) setState(() => _selectedRole = value);
+                  },
+          ),
+          const SizedBox(height: 20),
+          Row(
             children: [
-              const Text(
-                'Новый сотрудник',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _saving ? null : () => Navigator.pop(context),
+                  child: const Text('Отмена'),
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                'Заполните данные. Сотрудник сможет позже зарегистрироваться по почте или телефону',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  fontSize: 13,
-                  height: 1.4,
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(
+                  onPressed: _saving ? null : _save,
+                  child: _saving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Добавить сотрудника'),
                 ),
-              ),
-              const SizedBox(height: 20),
-              _field(
-                controller: _lastNameController,
-                label: 'Фамилия',
-                icon: Icons.person_outline,
-                required: true,
-              ),
-              _field(
-                controller: _firstNameController,
-                label: 'Имя',
-                icon: Icons.person_outline,
-                required: true,
-              ),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: RuPhoneField(
-                  decoration: _phoneDecoration(),
-                  onCanonicalChanged: (c) => _canonicalPhone = c,
-                ),
-              ),
-              _field(
-                controller: _emailController,
-                label: 'Электронная почта',
-                icon: Icons.email_outlined,
-                required: true,
-                keyboardType: TextInputType.emailAddress,
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) {
-                    return 'Обязательное поле';
-                  }
-                  if (!v.contains('@')) {
-                    return 'Некорректная почта';
-                  }
-                  return null;
-                },
-              ),
-              // Role Selector
-              Padding(
-                padding: const EdgeInsets.only(bottom: 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Роль',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: _roles.map((role) {
-                        final isSelected = _selectedRole == role['value'];
-                        return Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: GestureDetector(
-                              onTap: () => setState(
-                                () => _selectedRole = role['value']!,
-                              ),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 12,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? AppTheme.primaryGold.withAlpha(40)
-                                      : Theme.of(context).colorScheme.surface,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: isSelected
-                                        ? AppTheme.primaryGold
-                                        : Colors.white12,
-                                    width: isSelected ? 2 : 1,
-                                  ),
-                                ),
-                                child: Text(
-                                  role['label']!,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: isSelected
-                                        ? AppTheme.primaryGold
-                                        : Colors.white70,
-                                    fontWeight: isSelected
-                                        ? FontWeight.w700
-                                        : FontWeight.w400,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ],
-                ),
-              ),
-              // Actions
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Отмена'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primaryGold,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      onPressed: _saving ? null : _save,
-                      child: _saving
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text(
-                              'Добавить',
-                              style: TextStyle(fontWeight: FontWeight.w700),
-                            ),
-                    ),
-                  ),
-                ],
               ),
             ],
           ),
-        ),
+        ],
       ),
     );
   }

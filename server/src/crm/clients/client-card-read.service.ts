@@ -79,6 +79,10 @@ export class ClientCardReadService {
               when target.type = 'student' then student.status
               else lead_status.name
             end as status,
+            case
+              when target.type = 'student' then student.status
+              else lead_status.stage_key
+            end as status_key,
             coalesce(student.branch_id, lead.branch_id) as branch_id,
             branch.name as branch_name
           from target
@@ -153,11 +157,16 @@ export class ClientCardReadService {
               'createdAt', task.created_at
             ) as item
           from target
-          join app.tasks task
+          join app.canonical_tasks task
             on task.entity_type::text = target.type
            and task.entity_id = target.id
            and task.deleted_at is null
           where $4::boolean
+            and exists (
+              select 1 from app.shared_task_visibility visibility
+              where visibility.task_id = task.id
+                and visibility.user_id = $12::uuid
+            )
         ),
         homework_rows as (
           select
@@ -259,6 +268,7 @@ export class ClientCardReadService {
                 coalesce(header.last_name, '')
               ), ''),
               'status', header.status,
+              'statusKey', header.status_key,
               'branchId', header.branch_id,
               'branchName', header.branch_name
             )

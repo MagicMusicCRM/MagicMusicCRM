@@ -78,8 +78,9 @@ class _ClientFormsFakeApi extends MagicApiClient {
           }
           as T;
     }
-    if (path == '/crm/student-funnel') {
+    if (path == '/crm/client-pipelines') {
       return <String, dynamic>{
+            'clientType': queryParameters?['clientType'],
             'branchId': queryParameters?['branchId'],
             'source': 'branch_override',
             'schoolVersion': 2,
@@ -216,6 +217,8 @@ void main() {
         'lastName': 'Иванова',
         'phone': '+79991234567',
         'sourceId': '20000000-0000-4000-8000-000000000001',
+        'branchId': '40000000-0000-4000-8000-000000000001',
+        'status': 'consultation',
         'customFields': [
           {
             'definitionId': '30000000-0000-4000-8000-000000000001',

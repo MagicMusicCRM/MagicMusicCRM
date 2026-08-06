@@ -36,17 +36,15 @@ describe("ScheduleService", () => {
     return { audit, notifications, policy };
   };
 
-  const construct = (
-    query: jest.Mock,
-    deps: ReturnType<typeof buildDeps>,
-  ) =>
+  const construct = (query: jest.Mock, deps: ReturnType<typeof buildDeps>) =>
     new ScheduleService(
       {
         query,
         // Transactional writes share the same query mock so call indices in
         // the assertions below stay stable.
-        transaction: (work: (client: { query: jest.Mock }) => Promise<unknown>) =>
-          work({ query }),
+        transaction: (
+          work: (client: { query: jest.Mock }) => Promise<unknown>,
+        ) => work({ query }),
       } as unknown as DatabaseService,
       deps.audit as unknown as AuditService,
       deps.policy as unknown as CrmPolicy,
@@ -123,10 +121,11 @@ describe("ScheduleService", () => {
         keys: string[],
       ): Promise<void>;
     };
-    await locks.acquireScheduleLockKeys(
-      { query },
-      ["teacher:ABC-DEF", "teacher:abc-def", "room:ROOM-A"],
-    );
+    await locks.acquireScheduleLockKeys({ query }, [
+      "teacher:ABC-DEF",
+      "teacher:abc-def",
+      "room:ROOM-A",
+    ]);
     expect(query.mock.calls.map((call) => call[1][0])).toEqual([
       "room:room-a",
       "teacher:abc-def",
@@ -389,7 +388,12 @@ describe("ScheduleService", () => {
       "lead-a",
       true,
       30,
+      "manager",
+      "manager-a",
     ]);
+    expect(String(query.mock.calls[0][0])).toContain(
+      "$10::text <> 'teacher' or tp.user_id = $11::uuid",
+    );
   });
 
   it("counts an overlapping pair once, not twice (KVA-166 dedup)", async () => {
@@ -481,7 +485,9 @@ describe("ScheduleService", () => {
     expect(materializeSql).toContain("generate_series");
     expect(materializeSql).toContain("extract(isodow from d) = s.weekday");
     // Идемпотентность: занятая series_date (вкл. перенесённые/отменённые) не пересоздаётся.
-    expect(materializeSql).toContain("l.series_id = s.id and l.series_date = d::date");
+    expect(materializeSql).toContain(
+      "l.series_id = s.id and l.series_date = d::date",
+    );
     expect(materializeSql).toContain(
       "on conflict (series_id, series_date) where deleted_at is null",
     );
@@ -587,12 +593,10 @@ describe("ScheduleService", () => {
       String(call[0]).includes("set series_id = $2"),
     );
     expect(String(exceptionMove?.[0])).toContain("deleted_at is not null");
-    expect(String(exceptionMove?.[0])).toContain("original_scheduled_at is not null");
-    expect(exceptionMove?.[1]).toEqual([
-      "series-a",
-      "series-b",
-      "2026-08-01",
-    ]);
+    expect(String(exceptionMove?.[0])).toContain(
+      "original_scheduled_at is not null",
+    );
+    expect(exceptionMove?.[1]).toEqual(["series-a", "series-b", "2026-08-01"]);
     expect(query.mock.calls.indexOf(exceptionMove!)).toBeLessThan(
       query.mock.calls.indexOf(removeCall!),
     );
@@ -615,9 +619,7 @@ describe("ScheduleService", () => {
       "manager-a",
     ]);
     expect(
-      query.mock.calls.some((call) =>
-        String(call[0]).includes("for update"),
-      ),
+      query.mock.calls.some((call) => String(call[0]).includes("for update")),
     ).toBe(true);
     expect(
       query.mock.calls.some((call) =>
@@ -726,7 +728,16 @@ describe("ScheduleService", () => {
   it("stamps original_scheduled_at when a series lesson is moved (KVA-236)", async () => {
     const { service, query } = createServiceWithQueryResults([
       { rows: [] }, // assertCanUpdateLesson lookup (manager: no query? see below)
-      { rows: [{ teacher_id: null, room_id: null, scheduled_at: "2026-07-15T15:00:00Z", teacher_user_id: null }] },
+      {
+        rows: [
+          {
+            teacher_id: null,
+            room_id: null,
+            scheduled_at: "2026-07-15T15:00:00Z",
+            teacher_user_id: null,
+          },
+        ],
+      },
       {
         rows: [
           {
@@ -778,29 +789,31 @@ describe("ScheduleService", () => {
   it("creates lessons with branch and room ids", async () => {
     const { service, query, audit, policy } = createServiceWithQueryResults([
       { rows: [] }, // conflict pre-check (teacher+room busy?) — свободно
-      { rows: [
       {
-        id: "lesson-a",
-        student_id: "student-a",
-        group_id: null,
-        teacher_id: "teacher-a",
-        branch_id: "branch-a",
-        room_id: "room-a",
-        scheduled_at: "2026-06-12T12:00:00.000Z",
-        duration_minutes: 60,
-        status: "scheduled",
-        is_trial: false,
-        notes: null,
-        student_user_id: null,
-        teacher_user_id: null,
-        student_name: null,
-        teacher_name: null,
-        branch_name: null,
-        room_name: null,
-        group_name: null,
-        group_price_per_lesson: null,
+        rows: [
+          {
+            id: "lesson-a",
+            student_id: "student-a",
+            group_id: null,
+            teacher_id: "teacher-a",
+            branch_id: "branch-a",
+            room_id: "room-a",
+            scheduled_at: "2026-06-12T12:00:00.000Z",
+            duration_minutes: 60,
+            status: "scheduled",
+            is_trial: false,
+            notes: null,
+            student_user_id: null,
+            teacher_user_id: null,
+            student_name: null,
+            teacher_name: null,
+            branch_name: null,
+            room_name: null,
+            group_name: null,
+            group_price_per_lesson: null,
+          },
+        ],
       },
-    ] },
     ]);
 
     await service.createLesson(actor, {
@@ -1208,34 +1221,37 @@ describe("ScheduleService", () => {
   });
 
   it("creates trial lessons linked to leads", async () => {
-    const { service, query, audit, policy, notifications } = createServiceWithQueryResults([
-      { rows: [] }, // conflict pre-check — свободно
-      { rows: [
-      {
-        id: "lesson-lead-a",
-        student_id: null,
-        group_id: null,
-        lead_id: "lead-a",
-        teacher_id: "teacher-a",
-        branch_id: null,
-        room_id: "room-a",
-        scheduled_at: "2026-06-13T10:00:00.000Z",
-        duration_minutes: 60,
-        status: "scheduled",
-        is_trial: true,
-        notes: "Пробное занятие",
-        student_user_id: null,
-        teacher_user_id: null,
-        student_name: null,
-        teacher_name: null,
-        branch_name: null,
-        room_name: null,
-        group_name: null,
-        group_price_per_lesson: null,
-      },
-    ] },
-      { rows: [{ user_id: "client-linked" }] },
-    ]);
+    const { service, query, audit, policy, notifications } =
+      createServiceWithQueryResults([
+        { rows: [] }, // conflict pre-check — свободно
+        {
+          rows: [
+            {
+              id: "lesson-lead-a",
+              student_id: null,
+              group_id: null,
+              lead_id: "lead-a",
+              teacher_id: "teacher-a",
+              branch_id: null,
+              room_id: "room-a",
+              scheduled_at: "2026-06-13T10:00:00.000Z",
+              duration_minutes: 60,
+              status: "scheduled",
+              is_trial: true,
+              notes: "Пробное занятие",
+              student_user_id: null,
+              teacher_user_id: null,
+              student_name: null,
+              teacher_name: null,
+              branch_name: null,
+              room_name: null,
+              group_name: null,
+              group_price_per_lesson: null,
+            },
+          ],
+        },
+        { rows: [{ user_id: "client-linked" }] },
+      ]);
 
     await expect(
       service.createLesson(actor, {
@@ -1527,7 +1543,11 @@ describe("ScheduleService", () => {
           startsAt: "2026-07-20T10:30:00.000Z",
           endsAt: "2026-07-20T11:30:00.000Z",
         }),
-      ).resolves.toEqual({ teacherBusy: false, roomBusy: false, conflicts: [] });
+      ).resolves.toEqual({
+        teacherBusy: false,
+        roomBusy: false,
+        conflicts: [],
+      });
       expect(query).not.toHaveBeenCalled();
     });
 
@@ -1808,11 +1828,7 @@ describe("ScheduleService", () => {
       expect(String(updateCall?.[0])).toContain(
         "case when $13::boolean then $2::uuid else student_id end",
       );
-      expect(updateCall?.[1]?.slice(1, 4)).toEqual([
-        null,
-        null,
-        "lead-b",
-      ]);
+      expect(updateCall?.[1]?.slice(1, 4)).toEqual([null, null, "lead-b"]);
       expect(updateCall?.[1]?.[12]).toBe(true);
     });
 

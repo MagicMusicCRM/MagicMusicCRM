@@ -49,7 +49,9 @@ extension _ScheduleActions on _ScheduleWidgetState {
       // First open with no branch chosen yet → default to the user's OWN
       // branch (staff assignment), resolved once. Falls back to the first
       // branch only when the user has no assignment or it isn't in the list.
-      if (_selectedBranchId == null && !_homeBranchResolved) {
+      if (_selectedBranchId == null &&
+          widget.fixedTeacherId == null &&
+          !_homeBranchResolved) {
         _homeBranchResolved = true;
         try {
           final me = await ref
@@ -63,7 +65,9 @@ extension _ScheduleActions on _ScheduleWidgetState {
       }
 
       String? defaultBranch = _selectedBranchId;
-      if (defaultBranch == null && branches.isNotEmpty) {
+      if (defaultBranch == null &&
+          widget.fixedTeacherId == null &&
+          branches.isNotEmpty) {
         final home = _homeBranchId;
         final hasHome =
             home != null && branches.any((b) => b['id'].toString() == home);
@@ -98,49 +102,44 @@ extension _ScheduleActions on _ScheduleWidgetState {
       final monthSummary = <String, Map<String, dynamic>>{};
 
       final wave2 = await Future.wait<Object?>([
-        crm
-            .getScheduleMatrix(
-              from: fromIso,
-              to: toIso,
-              branchId: defaultBranch,
-              groupBy: _dayViewMode == DayViewMode.byTeacher
-                  ? 'teacher'
-                  : 'room',
-              studentId: _filterClientType == 'student'
-                  ? _filterClientId
-                  : null,
-              leadId: _filterClientType == 'lead' ? _filterClientId : null,
-              limit:
-                  _currentView == ScheduleView.week || _filterClientId != null
-                  ? 500
-                  : 300,
-            )
-            .catchError((e) {
-              debugPrint('Error fetching schedule matrix: $e');
-              return <String, dynamic>{};
-            }),
-        crm
-            .listRoomAvailability(
-              branchId: defaultBranch,
-              date: dateOnly(_selectedDate),
-              from: _slotIso(_selectedDate, 6),
-              to: _slotIso(_selectedDate, 23),
-              limit: 100,
-            )
-            .catchError((e) {
-              debugPrint('Error fetching room availability: $e');
-              return <String, dynamic>{};
-            }),
-        crm
-            .getScheduleMonthSummary(
-              from: fromIso,
-              to: toIso,
-              branchId: defaultBranch,
-            )
-            .catchError((e) {
-              debugPrint('Error fetching month summary: $e');
-              return <Map<String, dynamic>>[];
-            }),
+        crm.getScheduleMatrix(
+          from: fromIso,
+          to: toIso,
+          branchId: defaultBranch,
+          groupBy: _dayViewMode == DayViewMode.byTeacher ? 'teacher' : 'room',
+          teacherId: widget.fixedTeacherId ?? _filterTeacherId,
+          studentId: _filterClientType == 'student' ? _filterClientId : null,
+          leadId: _filterClientType == 'lead' ? _filterClientId : null,
+          limit: _currentView == ScheduleView.week || _filterClientId != null
+              ? 500
+              : 300,
+        ),
+        defaultBranch == null
+            ? Future.value(<String, dynamic>{})
+            : crm
+                  .listRoomAvailability(
+                    branchId: defaultBranch,
+                    date: dateOnly(_selectedDate),
+                    from: _slotIso(_selectedDate, 6),
+                    to: _slotIso(_selectedDate, 23),
+                    limit: 100,
+                  )
+                  .catchError((e) {
+                    debugPrint('Error fetching room availability: $e');
+                    return <String, dynamic>{};
+                  }),
+        !widget.allowMonth
+            ? Future.value(<Map<String, dynamic>>[])
+            : crm
+                  .getScheduleMonthSummary(
+                    from: fromIso,
+                    to: toIso,
+                    branchId: defaultBranch,
+                  )
+                  .catchError((e) {
+                    debugPrint('Error fetching month summary: $e');
+                    return <Map<String, dynamic>>[];
+                  }),
       ]);
 
       final matrixResult = wave2[0] as Map<String, dynamic>;
@@ -170,16 +169,35 @@ extension _ScheduleActions on _ScheduleWidgetState {
         if (day != null) monthSummary[day] = item;
       }
 
+      var visibleBranches = branches;
+      var visibleRooms = rooms;
+      if (widget.fixedTeacherId != null) {
+        final assignedBranchIds = enrichedLessons
+            .map((lesson) => lesson['branch_id']?.toString())
+            .whereType<String>()
+            .toSet();
+        visibleBranches = branches
+            .where(
+              (branch) => assignedBranchIds.contains(branch['id']?.toString()),
+            )
+            .toList();
+        visibleRooms = rooms
+            .where(
+              (room) =>
+                  assignedBranchIds.contains(room['branch_id']?.toString()),
+            )
+            .toList();
+        defaultBranch ??= enrichedLessons.firstOrNull?['branch_id']?.toString();
+      }
+
       // Build teacher/student name maps from matrix data (no extra API calls).
       final tNames = <String, String>{};
       final sNames = <String, String>{};
-      final teacherSet = <String, Map<String, dynamic>>{};
       for (final lesson in enrichedLessons) {
         final tid = lesson['teacher_id']?.toString();
         if (tid != null && tid.isNotEmpty) {
           final name = lesson['teacher_name']?.toString() ?? '';
           if (name.isNotEmpty) tNames[tid] = name;
-          teacherSet.putIfAbsent(tid, () => {'id': tid, 'name': name});
         }
         final sid = lesson['student_id']?.toString();
         if (sid != null && sid.isNotEmpty) {
@@ -198,8 +216,8 @@ extension _ScheduleActions on _ScheduleWidgetState {
       if (enrichedLessons.isEmpty &&
           _selectedBranchId == null &&
           !_autoBranchRetried &&
-          branches.length > 1) {
-        for (final b in branches) {
+          visibleBranches.length > 1) {
+        for (final b in visibleBranches) {
           final bid = b['id'].toString();
           if (bid != defaultBranch) {
             defaultBranch = bid;
@@ -219,11 +237,10 @@ extension _ScheduleActions on _ScheduleWidgetState {
       }
 
       _emitState(() {
-        _branches = branches;
+        _branches = visibleBranches;
         _branchOffsets = offsets;
-        _rooms = rooms;
+        _rooms = visibleRooms;
         _lessons = enrichedLessons;
-        _teachers = teacherSet.values.toList();
         _scheduleConflicts = scheduleConflicts;
         _roomAvailability = roomAvailability;
         _selectedBranchId = defaultBranch;
@@ -240,6 +257,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
       // view, backfill the selected day so it isn't left empty for dates past the
       // cap (e.g. today mid-month).
       if (_currentView == ScheduleView.day) {
+        _fetchAvailabilityForSelectedDay();
         _fetchDayLessons(_selectedDate);
       }
     } catch (e) {
@@ -303,6 +321,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
             to: dayEndUtc.toIso8601String(),
             branchId: branchId,
             groupBy: _dayViewMode == DayViewMode.byTeacher ? 'teacher' : 'room',
+            teacherId: widget.fixedTeacherId ?? _filterTeacherId,
             studentId: _filterClientType == 'student' ? _filterClientId : null,
             leadId: _filterClientType == 'lead' ? _filterClientId : null,
             limit: 500,
@@ -538,20 +557,31 @@ extension _ScheduleActions on _ScheduleWidgetState {
   }
 
   void _showAddLessonDialog(DateTime date, String? roomId) async {
+    if (!widget.canWrite) return;
     final created = await CreateLessonDialog.show(
       context,
       initialDate: date,
       initialRoomId: roomId,
       initialBranchId: _selectedBranchId,
+      clientType: widget.clientType,
+      clientId: widget.clientId,
+      clientName: widget.clientName,
     );
     if (created == true) _fetchAll();
   }
 
   Future<void> _showScheduleSearch() async {
-    final query = await showScheduleSearchDialog(context);
+    final query = await showScheduleSearchDialog(
+      context,
+      initialValue: _scheduleSearchQuery,
+    );
 
     final normalized = query?.trim().toLowerCase();
-    if (normalized == null || normalized.isEmpty) return;
+    if (normalized == null) return;
+    if (normalized.isEmpty) {
+      _clearScheduleSearch();
+      return;
+    }
 
     final dateMatch = RegExp(
       r'^(\d{1,2})[./-](\d{1,2})(?:[./-](\d{2,4}))?$',
@@ -565,7 +595,12 @@ extension _ScheduleActions on _ScheduleWidgetState {
           : int.tryParse(rawYear.length == 2 ? '20$rawYear' : rawYear);
       if (day != null && month != null && year != null) {
         final date = DateTime(year, month, day);
+        if (date.year != year || date.month != month || date.day != day) {
+          return;
+        }
         _emitState(() {
+          _scheduleSearchQuery = '';
+          _clearHighlight();
           _selectedDate = date;
           _displayedMonth = DateTime(date.year, date.month);
           _currentView = ScheduleView.day;
@@ -577,49 +612,188 @@ extension _ScheduleActions on _ScheduleWidgetState {
       }
     }
 
-    Map<String, dynamic>? foundLesson;
-    String? foundTeacherId;
-    for (final lesson in _filteredLessons) {
-      final teacherId = lesson['teacher_id']?.toString();
-      final studentId = lesson['student_id']?.toString();
-      final roomId = lesson['room_id']?.toString();
-      final searchable = [
-        if (teacherId != null) _teacherNames[teacherId],
-        if (studentId != null) _studentNames[studentId],
-        if (roomId != null) _roomNames[roomId],
-        // Пробные по лидам ищутся по имени лида — ученика у них нет.
-        lesson['lead_name']?.toString(),
-        lesson['status']?.toString(),
-      ].whereType<String>().join(' ').toLowerCase();
+    var matches = _lessonsInCurrentView().where(
+      (lesson) => _matchesScheduleSearch(lesson, normalized),
+    );
+    var foundLesson = matches.firstOrNull;
+    _emitState(() {
+      _scheduleSearchQuery = normalized;
+      _highlightLessonId = foundLesson?['id']?.toString();
+      _scheduleSearchLoading = true;
+    });
+    if (foundLesson != null) _armHighlightClear();
 
-      if (searchable.contains(normalized)) {
-        foundLesson = lesson;
-        foundTeacherId = teacherId;
-        break;
-      }
+    try {
+      await _loadExactScheduleSearchMatches(normalized);
+    } catch (error) {
+      debugPrint('Exact schedule search failed: $error');
     }
-
-    final lessonDate = foundLesson == null
-        ? null
-        : _parseLessonTime(foundLesson);
-    if (lessonDate == null) {
+    if (!mounted) return;
+    matches = _lessonsInCurrentView().where(
+      (lesson) => _matchesScheduleSearch(lesson, normalized),
+    );
+    foundLesson = matches.firstOrNull;
+    _emitState(() {
+      _scheduleSearchLoading = false;
+      _highlightLessonId = foundLesson?['id']?.toString();
+    });
+    if (foundLesson == null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Ничего не найдено в текущем диапазоне')),
       );
-      return;
+    } else {
+      _armHighlightClear();
+    }
+  }
+
+  Future<void> _loadExactScheduleSearchMatches(String query) async {
+    final crm = ref.read(magicCrmServiceProvider);
+    final targets = <String, ({String type, String id})>{};
+    void addTarget(String type, String? id, Object? label) {
+      final normalizedLabel = label?.toString().trim().toLowerCase() ?? '';
+      if (id == null || id.isEmpty || !normalizedLabel.contains(query)) return;
+      targets['$type:$id'] = (type: type, id: id);
     }
 
-    _emitState(() {
-      _selectedDate = lessonDate;
-      _displayedMonth = DateTime(lessonDate.year, lessonDate.month);
-      _currentView = ScheduleView.day;
-      if (foundTeacherId != null) {
-        _dayViewMode = DayViewMode.byTeacher;
-        _selectedTeacherId = foundTeacherId;
+    for (final lesson in _lessonsInCurrentView()) {
+      final studentId = lesson['student_id']?.toString();
+      final leadId = lesson['lead_id']?.toString();
+      final teacherId = lesson['teacher_id']?.toString();
+      final roomId = lesson['room_id']?.toString();
+      addTarget(
+        'student',
+        studentId,
+        _studentNames[studentId] ?? lesson['student_name'],
+      );
+      addTarget('lead', leadId, lesson['lead_name']);
+      addTarget(
+        'teacher',
+        teacherId,
+        _teacherNames[teacherId] ?? lesson['teacher_name'],
+      );
+      addTarget('room', roomId, _roomNames[roomId] ?? lesson['room_name']);
+    }
+
+    final refs = await crm.searchClientRefs(q: query, limit: 10);
+    for (final item in refs) {
+      final clientRef = item['ref'];
+      if (clientRef is! Map) continue;
+      final type = clientRef['type']?.toString();
+      final id = clientRef['id']?.toString();
+      if ((type == 'student' || type == 'lead') && id?.isNotEmpty == true) {
+        targets['$type:$id'] = (type: type!, id: id!);
       }
+    }
+
+    final range = _scheduleSearchRange();
+    final responses = await Future.wait([
+      for (final target in targets.values.take(12))
+        crm.getScheduleMatrix(
+          from: range.$1,
+          to: range.$2,
+          branchId: _selectedBranchId,
+          groupBy: _dayViewMode == DayViewMode.byTeacher ? 'teacher' : 'room',
+          studentId: target.type == 'student' ? target.id : null,
+          leadId: target.type == 'lead' ? target.id : null,
+          teacherId: target.type == 'teacher' ? target.id : null,
+          roomId: target.type == 'room' ? target.id : null,
+          limit: 500,
+        ),
+    ]);
+
+    final byId = <String, Map<String, dynamic>>{
+      for (final lesson in _lessons)
+        if (lesson['id'] != null) lesson['id'].toString(): lesson,
+    };
+    final teacherNames = Map<String, String>.from(_teacherNames);
+    final studentNames = Map<String, String>.from(_studentNames);
+    for (final response in responses) {
+      final items = response['items'];
+      if (items is! List) continue;
+      for (final lesson in items.whereType<Map<String, dynamic>>()) {
+        final id = lesson['id']?.toString();
+        if (id != null) byId[id] = lesson;
+        final teacherId = lesson['teacher_id']?.toString();
+        final teacherName = lesson['teacher_name']?.toString();
+        if (teacherId?.isNotEmpty == true && teacherName?.isNotEmpty == true) {
+          teacherNames[teacherId!] = teacherName!;
+        }
+        final studentId = lesson['student_id']?.toString();
+        final studentName = lesson['student_name']?.toString();
+        if (studentId?.isNotEmpty == true && studentName?.isNotEmpty == true) {
+          studentNames[studentId!] = studentName!;
+        }
+      }
+    }
+    if (!mounted) return;
+    _emitState(() {
+      _lessons = byId.values.toList();
+      _teacherNames = teacherNames;
+      _studentNames = studentNames;
     });
-    _fetchDayLessons(lessonDate);
+  }
+
+  (String, String) _scheduleSearchRange() {
+    late DateTime start;
+    late DateTime end;
+    if (_currentView == ScheduleView.day) {
+      start = DateTime(
+        _selectedDate.year,
+        _selectedDate.month,
+        _selectedDate.day,
+      );
+      end = start.add(const Duration(days: 1));
+    } else if (_currentView == ScheduleView.week) {
+      start = DateTime(
+        _selectedDate.year,
+        _selectedDate.month,
+        _selectedDate.day,
+      ).subtract(Duration(days: _selectedDate.weekday - 1));
+      end = start.add(const Duration(days: 7));
+    } else {
+      start = DateTime(_displayedMonth.year, _displayedMonth.month, 1);
+      end = DateTime(_displayedMonth.year, _displayedMonth.month + 1, 1);
+    }
+    DateTime utc(DateTime local) => DateTime.utc(
+      local.year,
+      local.month,
+      local.day,
+    ).subtract(Duration(minutes: _selectedBranchOffset));
+    return (utc(start).toIso8601String(), utc(end).toIso8601String());
+  }
+
+  Iterable<Map<String, dynamic>> _lessonsInCurrentView() {
+    if (_currentView == ScheduleView.day) {
+      return _lessonsForDate(_selectedDate);
+    }
+    if (_currentView == ScheduleView.week) {
+      final monday = DateTime(
+        _selectedDate.year,
+        _selectedDate.month,
+        _selectedDate.day,
+      ).subtract(Duration(days: _selectedDate.weekday - 1));
+      final end = monday.add(const Duration(days: 7));
+      return _filteredLessons.where((lesson) {
+        final at = _parseLessonTime(lesson);
+        return at != null && !at.isBefore(monday) && at.isBefore(end);
+      });
+    }
+    return _filteredLessons.where((lesson) {
+      final at = _parseLessonTime(lesson);
+      return at != null &&
+          at.year == _displayedMonth.year &&
+          at.month == _displayedMonth.month;
+    });
+  }
+
+  void _clearScheduleSearch() {
+    if (!_hasScheduleSearch && _highlightLessonId == null) return;
+    _emitState(() {
+      _scheduleSearchQuery = '';
+      _scheduleSearchLoading = false;
+      _clearHighlight();
+    });
   }
 
   Future<void> _showScheduleFilters() async {

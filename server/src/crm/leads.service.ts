@@ -23,13 +23,13 @@ import { UpsertLeadDto } from "./dto/upsert-lead.dto";
 import { StudentRow } from "./student-read";
 import { ValidatedLeadCreate } from "./clients/client-write.validator";
 import { saveTypedClientValues } from "./clients/client-config.repository";
+import { StudentFunnelService } from "./student-funnel.service";
+import { SharedTaskService } from "./tasks/shared-task.service";
 import {
   LessonRow,
-  TaskRow,
   diffEntityFields,
   presentableEmail,
   toLessonDto,
-  toTaskDto,
   toTimelineDto,
 } from "./crm-mappers";
 
@@ -51,6 +51,7 @@ const LEAD_AUDITED_FIELDS = [
 interface LeadRow {
   id: string;
   status_id: string | null;
+  status_key?: string | null;
   status_name: string | null;
   first_name: string | null;
   last_name: string | null;
@@ -90,6 +91,7 @@ interface LeadBoardCountRow {
 
 export interface LeadBoardColumnDto {
   id: string;
+  stageKey: string;
   name: string;
   color: string | null;
   sortOrder: number;
@@ -103,6 +105,7 @@ export interface LeadBoardColumnDto {
 
 interface LeadStatusRow {
   id: string;
+  stage_key?: string | null;
   name: string;
   color: string | null;
   sort_order: number;
@@ -145,10 +148,17 @@ export class LeadsService {
     // db/policy/audit/realtime, so this adds no cycle — CrmService injects it
     // the same way for the student card.
     private readonly timeline: TimelineService,
+    private readonly pipelines: StudentFunnelService,
+    private readonly tasks: SharedTaskService,
   ) {}
 
   async listLeadBoard(actor: ActorContext, query: LeadBoardQuery) {
     this.policy.assertCanWriteCrm(actor);
+    const pipeline = await this.pipelines.getEffective(
+      actor,
+      query.branchId,
+      "lead",
+    );
     const limit = Math.min(query.limit ?? 25, 50);
     const requestedColumnId =
       query.unassigned === true ? "unassigned" : (query.statusId ?? null);
@@ -159,14 +169,14 @@ export class LeadsService {
         where key = 'lead_board_unassigned_sort_order'`,
     );
     const unassignedSort = unassignedSortResult.rows[0]?.value ?? null;
-    const filter = this.buildLeadBoardFilter(query);
+    const filter = this.buildLeadBoardFilter(query, actor.userId);
     const countFilter = this.buildLeadBoardFilter({
       ...query,
       cursor: undefined,
-    });
+    }, actor.userId);
     const statusResult = await this.database.query<LeadStatusRow>(
       `
-        select id, name, color, sort_order, created_at, requires_reason, is_terminal
+        select id, stage_key, name, color, sort_order, created_at, requires_reason, is_terminal
         from app.lead_statuses
         order by sort_order asc, name asc, id asc
       `,
@@ -185,7 +195,8 @@ export class LeadsService {
     const leadResult = await this.database.query<LeadBoardRow>(
       `
         with filtered as (
-          select l.id, l.status_id, ls.name as status_name, ls.color as status_color,
+          select l.id, l.status_id, ls.stage_key as status_key,
+            ls.name as status_name, ls.color as status_color,
             ls.sort_order as status_sort_order, l.first_name, l.last_name, l.phone,
             l.email, l.source, l.notes, l.assigned_to, l.blacklisted, l.blacklist_reason, l.custom_data,
             assigned_profile.first_name as assigned_first_name,
@@ -195,11 +206,16 @@ export class LeadsService {
             linked_student.id as linked_student_id,
             (
               select count(*)
-              from app.tasks task
+              from app.canonical_tasks task
               where task.deleted_at is null
                 and task.entity_type = 'lead'
                 and task.entity_id = l.id
                 and task.status in ('open', 'in_progress')
+                and exists (
+                  select 1 from app.shared_task_visibility visibility
+                  where visibility.task_id = task.id
+                    and visibility.user_id = $${filter.params.length + 1}::uuid
+                )
             ) as open_tasks_count,
             (
               select count(*)
@@ -238,12 +254,12 @@ export class LeadsService {
         )
         select *
         from filtered
-        where rn <= $${filter.params.length + 1}
+        where rn <= $${filter.params.length + 2}
         order by status_sort_order nulls last, status_name nulls last, created_at desc, id desc
       `,
       // One look-ahead row per row_number partition proves whether that
       // particular column has another page. It is trimmed before returning.
-      [...filter.params, limit + 1],
+      [...filter.params, actor.userId, limit + 1],
     );
 
     const counts = new Map(
@@ -252,7 +268,31 @@ export class LeadsService {
         this.toNumericStat(row.count),
       ]),
     );
-    const columns: LeadBoardColumnDto[] = statusResult.rows
+    const statusByKey = new Map(
+      statusResult.rows.map((status) => [status.stage_key, status]),
+    );
+    const configuredStatuses = pipeline.stages.length === 0
+      ? statusResult.rows
+      : pipeline.stages.flatMap((stage, sortOrder) => {
+          const status = statusByKey.get(stage.key);
+          if (!status) return [];
+          if (
+            !stage.active &&
+            (counts.get(status.id) ?? 0) === 0 &&
+            requestedColumnId !== status.id
+          ) {
+            return [];
+          }
+          return [{
+            ...status,
+            name: stage.label,
+            color: stage.style,
+            sort_order: sortOrder,
+            requires_reason: stage.requiresReason,
+            is_terminal: stage.terminal,
+          }];
+        });
+    const columns: LeadBoardColumnDto[] = configuredStatuses
       .filter(
         (status) =>
           requestedColumnId === null || requestedColumnId === status.id,
@@ -275,6 +315,7 @@ export class LeadsService {
       if (!byStatus.has(statusKey)) {
         const column = {
           id: statusKey,
+          stageKey: row.status_key ?? statusKey,
           name: row.status_name ?? "Без статуса",
           color: row.status_color ?? null,
           // «Без статуса» takes its stored position if one was set, else last.
@@ -299,6 +340,7 @@ export class LeadsService {
     if (requestedColumnId === "unassigned" && !byStatus.has("unassigned")) {
       const column: LeadBoardColumnDto = {
         id: "unassigned",
+        stageKey: "unassigned",
         name: "Без статуса",
         color: null,
         sortOrder: unassignedSort ?? 9999,
@@ -360,7 +402,8 @@ export class LeadsService {
     this.policy.assertCanWriteCrm(actor);
     const leadResult = await this.database.query<LeadBoardRow>(
       `
-        select l.id, l.status_id, ls.name as status_name, ls.color as status_color,
+        select l.id, l.status_id, ls.stage_key as status_key,
+          ls.name as status_name, ls.color as status_color,
           ls.sort_order as status_sort_order, l.first_name, l.last_name, l.phone,
           l.email, l.source, l.notes, l.assigned_to, l.blacklisted, l.blacklist_reason, l.custom_data,
           assigned_profile.first_name as assigned_first_name,
@@ -370,11 +413,16 @@ export class LeadsService {
           linked_student.id as linked_student_id,
           (
             select count(*)
-            from app.tasks task
+            from app.canonical_tasks task
             where task.deleted_at is null
               and task.entity_type = 'lead'
               and task.entity_id = l.id
               and task.status in ('open', 'in_progress')
+              and exists (
+                select 1 from app.shared_task_visibility visibility
+                where visibility.task_id = task.id
+                  and visibility.user_id = $2::uuid
+              )
           ) as open_tasks_count,
           (
             select count(*)
@@ -404,10 +452,20 @@ export class LeadsService {
         where l.id = $1 and l.deleted_at is null
         limit 1
       `,
-      [leadId],
+      [leadId, actor.userId],
     );
     const lead = leadResult.rows[0];
     if (!lead) throw new NotFoundException("Лид не найден.");
+    const effective = await this.pipelines.getEffective(
+      actor,
+      lead.branch_id ?? undefined,
+      "lead",
+    );
+    const stage = effective.stages.find((item) => item.key === lead.status_key);
+    if (stage) {
+      lead.status_name = stage.label;
+      lead.status_color = stage.style;
+    }
 
     const [
       students,
@@ -421,7 +479,13 @@ export class LeadsService {
       this.listStudentsLinkedToLead(leadId),
       this.listRelatedLeads(lead),
       this.listLeadComments(leadId),
-      this.listLeadTasks(leadId),
+      this.tasks
+        .list(actor, {
+          linkedEntityType: "lead",
+          linkedEntityId: leadId,
+          limit: 100,
+        })
+        .then((result) => result.items),
       this.listLeadTrialLessons(leadId),
       this.listChatWorkTimeline("lead", leadId),
       // Field edits («кто поменял телефон»). Empty for non-staff; caught so a
@@ -444,8 +508,8 @@ export class LeadsService {
         id: task.id,
         type: "task",
         title: task.title,
-        body: task.description,
-        status: task.status,
+        body: task.body,
+        status: task.state,
         occurredAt: task.createdAt,
       })),
       ...trials.map((lesson) => ({
@@ -591,7 +655,8 @@ export class LeadsService {
     const limitParam = add(limit);
     const result = await this.database.query<LeadRow>(
       `
-        select l.id, l.status_id, ls.name as status_name, l.first_name,
+        select l.id, l.status_id, ls.stage_key as status_key,
+          ls.name as status_name, l.first_name,
           l.last_name, l.phone, l.email, l.source, l.notes, l.assigned_to, l.blacklisted, l.blacklist_reason, l.custom_data,
           l.created_by, l.created_at, l.updated_at
         from app.leads l
@@ -675,7 +740,7 @@ export class LeadsService {
     const byName = await this.database.query<{ id: string }>(
       `select min(id::text)::uuid as id
        from app.lead_statuses
-       where lower(btrim(name)) = lower(btrim($1))
+       where stage_key = $1 or lower(btrim(name)) = lower(btrim($1))
        having count(*) = 1`,
       [value],
     );
@@ -692,6 +757,14 @@ export class LeadsService {
     const statusId = await this.resolveStatusId(dto.statusId);
     const initialCustomData = sanitizeJsonObject(dto.customDataPatch);
     const result = await this.database.transaction(async (client) => {
+      if (statusId) {
+        await this.pipelines.assertLeadTransition(
+          client,
+          branchId,
+          null,
+          statusId,
+        );
+      }
       let customData = { ...initialCustomData };
       const assignedTo = dto.clearAssignedTo ? null : (dto.assignedTo ?? null);
       if (assignedTo) {
@@ -798,6 +871,15 @@ export class LeadsService {
         [leadId],
       );
       const beforeRow = beforeRes.rows[0] ?? null;
+      if (beforeRow && statusId) {
+        await this.pipelines.assertLeadTransition(
+          client,
+          branchId ?? beforeRow.branch_id,
+          beforeRow.status_id,
+          statusId,
+          Boolean(dto.reasonId || dto.statusComment?.trim()),
+        );
+      }
       let customData = { ...initialCustomData };
       const assignedTo = dto.clearAssignedTo ? null : (dto.assignedTo ?? null);
       if (beforeRow && assignedTo) {
@@ -957,7 +1039,7 @@ export class LeadsService {
   // so that both the check and the create happen inside a single transaction,
   // preventing duplicate leads from a race between two rapid chat messages.
 
-  private buildLeadBoardFilter(query: LeadBoardQuery) {
+  private buildLeadBoardFilter(query: LeadBoardQuery, actorUserId: string) {
     const params: unknown[] = [];
     const filters = ["l.deleted_at is null"];
     const add = (value: unknown) => {
@@ -1051,11 +1133,16 @@ export class LeadsService {
       filters.push(`
         exists (
           select 1
-          from app.tasks open_task
+          from app.canonical_tasks open_task
           where open_task.deleted_at is null
             and open_task.entity_type = 'lead'
             and open_task.entity_id = l.id
             and open_task.status in ('open', 'in_progress')
+            and exists (
+              select 1 from app.shared_task_visibility visibility
+              where visibility.task_id = open_task.id
+                and visibility.user_id = ${add(actorUserId)}::uuid
+            )
         )
       `);
     }
@@ -1214,31 +1301,6 @@ export class LeadsService {
     return result.rows.map((row) => this.toCommentDto(row));
   }
 
-  private async listLeadTasks(leadId: string) {
-    const result = await this.database.query<TaskRow>(
-      `
-        select task.id, task.entity_type, task.entity_id, task.assigned_to,
-          assigned_profile.first_name as assigned_first_name,
-          assigned_profile.last_name as assigned_last_name,
-          null::text as entity_first_name,
-          null::text as entity_last_name,
-          null::text as entity_name,
-          task.title, task.description, task.status, task.due_at,
-          task.created_by, task.created_at
-        from app.tasks task
-        left join app.users assigned_user on assigned_user.id = task.assigned_to and assigned_user.deleted_at is null
-        left join app.profiles assigned_profile on assigned_profile.user_id = assigned_user.id and assigned_profile.deleted_at is null
-        where task.deleted_at is null
-          and task.entity_type = 'lead'
-          and task.entity_id = $1
-        order by task.due_at nulls last, task.created_at desc, task.id desc
-        limit 50
-      `,
-      [leadId],
-    );
-    return result.rows.map((row) => toTaskDto(row));
-  }
-
   private async listLeadTrialLessons(leadId: string) {
     const result = await this.database.query<LessonRow>(
       `
@@ -1291,6 +1353,7 @@ export class LeadsService {
     return {
       id: row.id,
       statusId: row.status_id,
+      statusKey: row.status_key,
       statusName: row.status_name,
       firstName: row.first_name,
       lastName: row.last_name,
@@ -1335,6 +1398,7 @@ export class LeadsService {
   private toLeadStatusDto(row: LeadStatusRow) {
     return {
       id: row.id,
+      stageKey: row.stage_key ?? row.id,
       name: row.name,
       color: row.color,
       sortOrder: row.sort_order,

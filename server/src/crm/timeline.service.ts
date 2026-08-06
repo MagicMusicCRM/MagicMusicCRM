@@ -139,12 +139,17 @@ export class TimelineService {
             tp.first_name as actor_first_name,
             tp.last_name as actor_last_name,
             coalesce(task.due_at, task.created_at) as occurred_at
-          from app.tasks task
+          from app.canonical_tasks task
           left join app.users tu on tu.id = task.created_by and tu.deleted_at is null
           left join app.profiles tp on tp.user_id = tu.id and tp.deleted_at is null
           where task.deleted_at is null
             and task.entity_type::text = $1
             and task.entity_id = $2::uuid
+            and exists (
+              select 1 from app.shared_task_visibility visibility
+              where visibility.task_id = task.id
+                and visibility.user_id = $9::uuid
+            )
 
           union all
 
@@ -221,6 +226,7 @@ export class TimelineService {
         limit,
         this.allowedCommentKinds(actor.role),
         actor.role === "teacher",
+        actor.userId,
       ],
     );
     return { items: result.rows.map((row) => toTimelineDto(row)) };

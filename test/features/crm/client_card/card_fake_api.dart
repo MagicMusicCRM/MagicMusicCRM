@@ -116,9 +116,34 @@ class FakeCardApiClient extends MagicApiClient {
     if (path == '/crm/schedule-series') {
       return <String, dynamic>{'items': scheduleSeries} as T;
     }
+    if (path == '/crm/clients/search') {
+      final query = queryParameters?['q']?.toString().toLowerCase() ?? '';
+      final refs = <String, Map<String, dynamic>>{};
+      for (final item in scheduleMatrix) {
+        final studentId = item['studentId']?.toString();
+        final studentName = item['studentName']?.toString() ?? '';
+        if (studentId != null && studentName.toLowerCase().contains(query)) {
+          refs['student:$studentId'] = {
+            'ref': {'type': 'student', 'id': studentId},
+            'label': studentName,
+          };
+        }
+        final leadId = item['leadId']?.toString();
+        final leadName = item['leadName']?.toString() ?? '';
+        if (leadId != null && leadName.toLowerCase().contains(query)) {
+          refs['lead:$leadId'] = {
+            'ref': {'type': 'lead', 'id': leadId},
+            'label': leadName,
+          };
+        }
+      }
+      return <String, dynamic>{'items': refs.values.toList()} as T;
+    }
     if (path == '/crm/schedule/matrix') {
       final studentId = queryParameters?['studentId']?.toString();
       final leadId = queryParameters?['leadId']?.toString();
+      final teacherId = queryParameters?['teacherId']?.toString();
+      final roomId = queryParameters?['roomId']?.toString();
       final items = scheduleMatrix
           .where((item) {
             if (studentId != null) {
@@ -126,6 +151,12 @@ class FakeCardApiClient extends MagicApiClient {
             }
             if (leadId != null) {
               return item['leadId']?.toString() == leadId;
+            }
+            if (teacherId != null) {
+              return item['teacherId']?.toString() == teacherId;
+            }
+            if (roomId != null) {
+              return item['roomId']?.toString() == roomId;
             }
             return true;
           })
@@ -171,8 +202,9 @@ class FakeCardApiClient extends MagicApiClient {
     if (path.startsWith('/crm/shared-tasks/') && path.endsWith('/history')) {
       return <String, dynamic>{'items': sharedTaskHistory} as T;
     }
-    if (path == '/crm/student-funnel') {
+    if (path == '/crm/client-pipelines') {
       return <String, dynamic>{
+            'clientType': queryParameters?['clientType'],
             'branchId': queryParameters?['branchId'],
             'source': 'school',
             'schoolVersion': 1,
@@ -220,6 +252,18 @@ class FakeCardApiClient extends MagicApiClient {
           as T;
     }
     if (student != null && path == '/crm/students/${student!['id']}/commerce') {
+      final subscriptions = studentSubscriptions
+          .map(_commerceSubscription)
+          .toList(growable: false);
+      num sumUnits(String key) => subscriptions.fold<num>(
+        0,
+        (sum, item) =>
+            sum + num.parse((item['units'] as Map<String, dynamic>)[key]),
+      );
+      final expiries = subscriptions
+          .map((item) => item['expiresAt'])
+          .whereType<String>()
+          .toList(growable: false);
       return <String, dynamic>{
             'projection': switch (role) {
               'manager' => 'manager_scoped',
@@ -229,11 +273,41 @@ class FakeCardApiClient extends MagicApiClient {
             },
             'student': {
               'studentId': student!['id'],
-              'accounts': studentAccounts,
-              'subscriptions': studentSubscriptions
-                  .map(_commerceSubscription)
+              'accounts': studentAccounts
+                  .map(
+                    (item) => {
+                      ...item,
+                      'adjustmentsMinor': item['adjustmentsMinor'] ?? '0',
+                    },
+                  )
                   .toList(growable: false),
+              'subscriptions': subscriptions,
               'movements': studentMovements,
+              'lessonBalance': {
+                'activeSubscriptionCount': subscriptions
+                    .where((item) => item['status'] == 'active')
+                    .length,
+                'total': sumUnits('total').toString(),
+                'used': sumUnits('used').toString(),
+                'reserved': sumUnits('reserved').toString(),
+                'paid': sumUnits('paid').toString(),
+                'available': sumUnits('available').toString(),
+                'debts': studentAccounts
+                    .where(
+                      (item) =>
+                          BigInt.parse(item['debtMinor']?.toString() ?? '0') >
+                          BigInt.zero,
+                    )
+                    .map(
+                      (item) => {
+                        'currencyCode': item['currencyCode'],
+                        'amountMinor': item['debtMinor'],
+                      },
+                    )
+                    .toList(growable: false),
+                'nextPaymentAt': null,
+                'expiresAt': expiries.isEmpty ? null : expiries.first,
+              },
             },
           }
           as T;
@@ -247,18 +321,29 @@ class FakeCardApiClient extends MagicApiClient {
     final priceMinor = packagePrice is num
         ? (packagePrice * 100).round().toString()
         : '0';
+    final total = item['lessonsTotal'] as num? ?? 0;
+    final used = item['lessonsUsed'] as num? ?? 0;
+    final reserved = item['lessonsReserved'] as num? ?? 0;
+    final paid = item['lessonsPaid'] as num? ?? total;
     return {
       'id': item['id'],
       'status': item['status'] ?? 'active',
       'startsAt': item['startsAt'] ?? '2026-01-01T00:00:00.000Z',
       'expiresAt': item['expiresAt'],
       'units': {
-        'total': item['lessonsTotal']?.toString() ?? '0',
-        'used': item['lessonsUsed']?.toString() ?? '0',
-        'remaining':
-            ((item['lessonsTotal'] as num? ?? 0) -
-                    (item['lessonsUsed'] as num? ?? 0))
-                .toString(),
+        'total': total.toString(),
+        'used': used.toString(),
+        'reserved': reserved.toString(),
+        'paid': paid.toString(),
+        'available': (paid - used - reserved).clamp(0, paid).toString(),
+        'remaining': (total - used).toString(),
+      },
+      'financial': {
+        'actualPaidMinor': item['paidMinor']?.toString() ?? priceMinor,
+        'obligationMinor': priceMinor,
+        'debtMinor': item['debtMinor']?.toString() ?? '0',
+        'overpaymentMinor': '0',
+        'nextPaymentAt': null,
       },
       'terms': {
         'displayName': item['packageName'] ?? 'Абонемент',

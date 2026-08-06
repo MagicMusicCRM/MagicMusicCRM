@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -19,8 +20,7 @@ import { SubscriptionsService } from "./subscriptions.service";
 import { FinanceService } from "./finance.service";
 import { SetBlacklistDto } from "./dto/set-blacklist.dto";
 import {
-  CreateAdjustmentDto,
-  UpdateAdjustmentDto,
+  RecordPaymentAdjustmentDto,
 } from "./dto/create-adjustment.dto";
 import { CreateTransferDto } from "./dto/create-transfer.dto";
 import { CrmListQuery } from "./dto/crm-list.query";
@@ -31,6 +31,7 @@ import { UpdateStudentDto } from "./dto/update-student.dto";
 import { ClientCardReadService } from "./clients/client-card-read.service";
 import { StrictCreateStudentDto } from "./dto/client-config.dto";
 import { ClientWriteValidator } from "./clients/client-write.validator";
+import { ActualPaymentService } from "./commerce/actual-payment.service";
 
 @UseGuards(JwtAuthGuard)
 @Controller("crm")
@@ -42,6 +43,7 @@ export class CrmStudentsController {
     private readonly blacklist: BlacklistService,
     private readonly clientCards: ClientCardReadService,
     private readonly clientWrites: ClientWriteValidator,
+    private readonly actualPayments: ActualPaymentService,
   ) {}
 
   @Get("me")
@@ -125,30 +127,14 @@ export class CrmStudentsController {
   createAccountAdjustment(
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
-    @Body() dto: CreateAdjustmentDto,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+    @Body() dto: RecordPaymentAdjustmentDto,
   ) {
-    return this.finance.createAccountAdjustment(actor, id, dto);
-  }
-
-  @Patch("students/:id/adjustments/:adjustmentId")
-  updateAccountAdjustment(
-    @CurrentActor() actor: ActorContext,
-    @Param("id", ParseUUIDPipe) id: string,
-    @Param("adjustmentId", ParseUUIDPipe) adjustmentId: string,
-    @Body() dto: UpdateAdjustmentDto,
-  ) {
-    return this.finance.updateAccountAdjustment(actor, id, adjustmentId, dto);
-  }
-
-  // DELETE отменяет (сторнирует), а не стирает: строку личного счёта уже
-  // показывали клиенту, и её исчезновение не оставило бы следа.
-  @Delete("students/:id/adjustments/:adjustmentId")
-  voidAccountAdjustment(
-    @CurrentActor() actor: ActorContext,
-    @Param("id", ParseUUIDPipe) id: string,
-    @Param("adjustmentId", ParseUUIDPipe) adjustmentId: string,
-  ) {
-    return this.finance.voidAccountAdjustment(actor, id, adjustmentId);
+    return this.actualPayments.recordAdjustment(actor, id, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
   }
 
   @Post("students/:id/transfer")

@@ -246,15 +246,17 @@ describe("ClientReferenceService (PostgreSQL)", () => {
 
     const task = await database.query<{ id: string }>(
       `
-        insert into app.tasks (
-          entity_type,
-          entity_id,
-          title,
-          assigned_to,
-          created_by
+        with task as (
+          insert into app.shared_tasks (
+            title, all_day, start_at, linked_entity_type,
+            linked_entity_id, created_by
+          )
+          values ('Связаться', true, now(), 'lead', $1, $3)
+          returning id
         )
-        values ('lead', $1, 'Связаться', $2, $3)
-        returning id
+        insert into app.task_audiences (task_id, audience_type, target_id)
+        select id, 'user', $2 from task
+        returning task_id as id
       `,
       [taskLeadId, teacher.userId, admin.userId],
     );
@@ -264,7 +266,11 @@ describe("ClientReferenceService (PostgreSQL)", () => {
   afterAll(async () => {
     if (tasks.length > 0) {
       await database.query(
-        "delete from app.tasks where id = any($1::uuid[])",
+        "delete from app.task_audiences where task_id = any($1::uuid[])",
+        [tasks],
+      );
+      await database.query(
+        "delete from app.shared_tasks where id = any($1::uuid[])",
         [tasks],
       );
     }

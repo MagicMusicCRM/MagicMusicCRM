@@ -57,11 +57,18 @@ Future<bool?> showClientCard(
   required String entityType,
   required String entityId,
   Map<String, dynamic>? seed,
+  String? presentationLabel,
 }) async {
+  final label = presentationLabel?.trim().isNotEmpty == true
+      ? presentationLabel!.trim()
+      : _clientPresentationLabel(seed);
   final link = EntityLink.typed(
     entityType: EntityLinkType.client,
     entityId: entityId,
     variant: entityType == 'lead' ? 'lead' : 'student',
+    presentation: label == null
+        ? null
+        : EntityPresentationReference(primary: label),
   );
   final container = ProviderScope.containerOf(context, listen: false);
   final snapshot = await container.read(capabilitySnapshotProvider.future);
@@ -79,6 +86,24 @@ Future<bool?> showClientCard(
     return null;
   }
   return context.push<bool>(resolution.location!);
+}
+
+String? _clientPresentationLabel(Map<String, dynamic>? seed) {
+  if (seed == null) return null;
+  final display =
+      [
+            seed['displayName'],
+            seed['display_name'],
+            seed['fullName'],
+            seed['full_name'],
+          ]
+          .map((value) => value?.toString().trim() ?? '')
+          .firstWhere((value) => value.isNotEmpty, orElse: () => '');
+  if (display.isNotEmpty) return display;
+  final first = (seed['first_name'] ?? seed['name'])?.toString().trim() ?? '';
+  final last = seed['last_name']?.toString().trim() ?? '';
+  final name = [last, first].where((value) => value.isNotEmpty).join(' ');
+  return name.isEmpty ? null : name;
 }
 
 class ClientCardRouteScreen extends StatelessWidget {
@@ -143,6 +168,10 @@ class ClientCardRouteSurface extends StatelessWidget {
     final workspace = WorkspaceNavigationScope.maybeOf(context);
     final routedSection =
         viewState?.filters['section']?.toString() ?? initialSection;
+    Uri clientUri(Map<String, String> queryParameters) => Uri(
+      pathSegments: ['', entityType == 'lead' ? 'leads' : 'students', entityId],
+      queryParameters: queryParameters,
+    );
     void close(bool? result) {
       if (workspace?.isDesktop == true) {
         final controller = workspace!.controller;
@@ -181,12 +210,9 @@ class ClientCardRouteSurface extends StatelessWidget {
         return;
       }
       final router = GoRouter.of(context);
-      final current = router.routerDelegate.currentConfiguration.uri;
+      final current = GoRouterState.of(context).uri;
       router.replace(
-        Uri(
-          path: current.path,
-          queryParameters: {...current.queryParameters, 'section': section},
-        ).toString(),
+        clientUri({...current.queryParameters, 'section': section}).toString(),
       );
     }
 
@@ -197,21 +223,18 @@ class ClientCardRouteSurface extends StatelessWidget {
         return;
       }
       final router = GoRouter.of(context);
-      final current = router.routerDelegate.currentConfiguration.uri;
+      final current = GoRouterState.of(context).uri;
       router.replace(
-        Uri(
-          path: current.path,
-          queryParameters: {
-            ...current.queryParameters,
-            'section': 'lessons',
-            if (next.filters['clientCalendarMode'] case final String mode)
-              'calendarMode': mode,
-            if (next.filters['clientCalendarBranchId'] case final String branch)
-              'branchId': branch,
-            if (next.date != null)
-              'calendarDate': DateFormat('yyyy-MM-dd').format(next.date!),
-          },
-        ).toString(),
+        clientUri({
+          ...current.queryParameters,
+          'section': 'lessons',
+          if (next.filters['clientCalendarMode'] case final String mode)
+            'calendarMode': mode,
+          if (next.filters['clientCalendarBranchId'] case final String branch)
+            'branchId': branch,
+          if (next.date != null)
+            'calendarDate': DateFormat('yyyy-MM-dd').format(next.date!),
+        }).toString(),
       );
     }
 

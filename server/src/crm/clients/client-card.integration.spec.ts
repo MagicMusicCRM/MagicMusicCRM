@@ -163,13 +163,19 @@ describe("ClientCardReadService (PostgreSQL)", () => {
 
     const task = await database.query<{ id: string }>(
       `
-        insert into app.tasks (
-          entity_type, entity_id, title, status, assigned_to, created_by
+        with task as (
+          insert into app.shared_tasks (
+            title, all_day, start_at, linked_entity_type,
+            linked_entity_id, created_by
+          )
+          values ('Позвонить', true, now(), 'student', $1, $2)
+          returning id
         )
-        values ('student', $1, 'Позвонить', 'open', $2, $2)
-        returning id
+        insert into app.task_audiences (task_id, audience_type, target_id)
+        select id, 'user', $3 from task
+        returning task_id as id
       `,
-      [studentId, admin.userId],
+      [studentId, admin.userId, manager.userId],
     );
     tasks.push(task.rows[0]!.id);
 
@@ -249,9 +255,10 @@ describe("ClientCardReadService (PostgreSQL)", () => {
       "delete from app.lesson_homeworks where id = any($1::uuid[])",
       [homework],
     );
-    await database.query("delete from app.tasks where id = any($1::uuid[])", [
+    await database.query("delete from app.task_audiences where task_id = any($1::uuid[])", [
       tasks,
     ]);
+    await database.query("delete from app.shared_tasks where id = any($1::uuid[])", [tasks]);
     await database.query("delete from app.lessons where id = any($1::uuid[])", [
       lessons,
     ]);

@@ -343,7 +343,7 @@ export class ClientArchiveService {
           ) as future_lesson_count,
           (
             select count(*)
-            from app.tasks task
+            from app.canonical_tasks task
             where task.deleted_at is null
               and task.status in ('open', 'todo', 'in_progress')
               and (

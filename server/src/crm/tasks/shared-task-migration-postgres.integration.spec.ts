@@ -111,6 +111,34 @@ describe("SharedTask conservative migration (PostgreSQL)", () => {
         legacy_links: 4,
       });
 
+      const canonical = await pool.query<{
+        priority: string;
+        branch_id: string;
+        history_action: string;
+        recipient_count: number;
+      }>(
+        `
+          select
+            (select priority from app.canonical_tasks where id = $1) priority,
+            (select branch_id from app.canonical_tasks where id = $1) branch_id,
+            (
+              select action from app.audit_events
+              where metadata ->> 'legacyHistoryId' = $2
+            ) history_action,
+            (
+              select count(*)::int from app.shared_task_recipients
+              where task_id = $1
+            ) recipient_count
+        `,
+        [exact[0]!.shared_task_id, fixture.historyId],
+      );
+      expect(canonical.rows[0]).toEqual({
+        priority: "high",
+        branch_id: fixture.branchId,
+        history_action: "workflow.shared_task_legacy_priority",
+        recipient_count: 2,
+      });
+
       const audit = await pool.query<{ id: string }>(
         `
           insert into app.task_audience_resolution_audits (
@@ -325,6 +353,11 @@ async function createLegacyFixture(pool: Pool) {
     ],
   );
   const userIds = users.rows.map((row) => row.id);
+  const branch = await pool.query<{ id: string }>(
+    "insert into app.branches (name) values ($1) returning id",
+    [`${marker}-branch`],
+  );
+  const branchId = branch.rows[0]!.id;
   const entityId = randomUUID();
   const exact = await pool.query<{ id: string }>(
     `
@@ -338,6 +371,7 @@ async function createLegacyFixture(pool: Pool) {
         due_at,
         due_all_day,
         assigned_to,
+        branch_id,
         created_by,
         created_at,
         updated_at
@@ -345,19 +379,19 @@ async function createLegacyFixture(pool: Pool) {
       values
         (
           'profile', $1, $2, 'same payload', 'open', 'high',
-          '2026-08-01T08:00:00Z', false, $3, $3,
+          '2026-08-01T08:00:00Z', false, $3, $5, $3,
           '2026-07-29T10:00:00.000000Z',
           '2026-07-29T10:00:00.000000Z'
         ),
         (
           'profile', $1, $2, 'same payload', 'open', 'high',
-          '2026-08-01T08:00:00Z', false, $4, $3,
+          '2026-08-01T08:00:00Z', false, $4, $5, $3,
           '2026-07-29T10:00:00.000000Z',
           '2026-07-29T10:00:00.000000Z'
         )
       returning id
     `,
-    [entityId, `${marker}-exact`, userIds[0], userIds[1]],
+    [entityId, `${marker}-exact`, userIds[0], userIds[1], branchId],
   );
   const ambiguous = await pool.query<{ id: string }>(
     `
@@ -371,6 +405,7 @@ async function createLegacyFixture(pool: Pool) {
         due_at,
         due_all_day,
         assigned_to,
+        branch_id,
         created_by,
         created_at,
         updated_at
@@ -378,28 +413,40 @@ async function createLegacyFixture(pool: Pool) {
       values
         (
           'profile', $1, $2, 'ambiguous payload', 'open', 'medium',
-          '2026-08-02T08:00:00Z', false, $3, $3,
+          '2026-08-02T08:00:00Z', false, $3, $5, $3,
           '2026-07-29T11:00:00.000000Z',
           '2026-07-29T11:00:00.000000Z'
         ),
         (
           'profile', $1, $2, 'ambiguous payload', 'open', 'medium',
-          '2026-08-02T08:00:00Z', false, $4, $3,
+          '2026-08-02T08:00:00Z', false, $4, $5, $3,
           '2026-07-29T11:00:00.001000Z',
           '2026-07-29T11:00:00.001000Z'
         )
       returning id
     `,
-    [entityId, `${marker}-ambiguous`, userIds[2], userIds[3]],
+    [entityId, `${marker}-ambiguous`, userIds[2], userIds[3], branchId],
   );
   const exactTaskIds = exact.rows.map((row) => row.id);
   const ambiguousTaskIds = ambiguous.rows.map((row) => row.id);
+  const history = await pool.query<{ id: string }>(
+    `
+      insert into app.task_history (
+        task_id, field, old_value, new_value, changed_by, changed_at, source
+      )
+      values ($1, 'priority', 'medium', 'high', $2, $3, 'app')
+      returning id
+    `,
+    [exactTaskIds[0], userIds[0], "2026-07-30T12:00:00.000Z"],
+  );
   return {
     marker,
     userIds,
     exactTaskIds,
     ambiguousTaskIds,
     taskIds: [...exactTaskIds, ...ambiguousTaskIds],
+    historyId: history.rows[0]!.id,
+    branchId,
   };
 }
 
@@ -435,6 +482,11 @@ async function cleanupFixture(
       [sharedTaskIds],
     );
     await client.query(
+      `delete from app.audit_events
+       where entity_type = 'shared_task' and entity_id = any($1::text[])`,
+      [sharedTaskIds],
+    );
+    await client.query(
       "delete from app.shared_tasks where id = any($1::uuid[])",
       [sharedTaskIds],
     );
@@ -444,6 +496,7 @@ async function cleanupFixture(
     await client.query("delete from app.users where id = any($1::uuid[])", [
       fixture.userIds,
     ]);
+    await client.query("delete from app.branches where id = $1", [fixture.branchId]);
     await client.query("commit");
   } catch (error) {
     await client.query("rollback");
@@ -463,4 +516,5 @@ async function cleanupLegacyFixture(
   await pool.query("delete from app.users where id = any($1::uuid[])", [
     fixture.userIds,
   ]);
+  await pool.query("delete from app.branches where id = $1", [fixture.branchId]);
 }

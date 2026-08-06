@@ -10,6 +10,7 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/client_app_user_panel.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tasks_v4_panel.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
@@ -48,7 +49,6 @@ import 'subscription_cancel_sheet.dart';
 import 'subscription_issue_sheet.dart';
 import 'subscription_replace_sheet.dart';
 import 'student_schedule_section.dart';
-import 'client_schedule_calendar.dart';
 import 'client_payment_form.dart';
 
 part 'client_card_widgets.dart';
@@ -115,6 +115,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
   bool _replacingSubscription = false;
   bool _cancellingSubscription = false;
   bool _creatingPayment = false;
+  CommerceMovement? _adjustingPayment;
   bool _loadingCard = true;
   int _commentsRefreshKey = 0;
   // Bumped after a homework is assigned so the «Прогресс» tab refetches.

@@ -5,6 +5,7 @@ import { FinanceService } from "./finance.service";
 import { SubscriptionsService } from "./subscriptions.service";
 import { ClientCardReadService } from "./clients/client-card-read.service";
 import { ClientWriteValidator } from "./clients/client-write.validator";
+import { ActualPaymentService } from "./commerce/actual-payment.service";
 
 describe("CrmStudentsController", () => {
   it("validates ordinary student creation before delegating", async () => {
@@ -29,6 +30,7 @@ describe("CrmStudentsController", () => {
       {} as BlacklistService,
       {} as ClientCardReadService,
       clientWrites as unknown as ClientWriteValidator,
+      {} as ActualPaymentService,
     );
     const actor = { userId: "admin-a", role: "admin" as const };
     const dto = {

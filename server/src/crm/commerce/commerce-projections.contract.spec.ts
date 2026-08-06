@@ -41,6 +41,7 @@ const source = {
     {
       currencyCode: "RUB",
       actualPaymentsMinor: "640000",
+      adjustmentsMinor: "-160000",
       obligationDebitsMinor: "800000",
       obligationCreditsMinor: "160000",
       writeOffsMinor: "0",
@@ -59,7 +60,17 @@ const source = {
       units: {
         total: "8",
         used: "1",
+        reserved: "1",
+        paid: "6",
+        available: "4",
         remaining: "7",
+      },
+      financial: {
+        actualPaidMinor: "480000",
+        obligationMinor: "640000",
+        debtMinor: "160000",
+        overpaymentMinor: "0",
+        nextPaymentAt: "2026-08-29T10:00:00.000Z",
       },
       terms: {
         displayName: "8 занятий",
@@ -98,6 +109,9 @@ const source = {
       method: "cashless",
       factType: null,
       chargeType: null,
+      issuedSubscriptionId: "33333333-3333-4333-8333-333333333333",
+      subscriptionName: "8 занятий",
+      sourcePaymentId: null,
       sourceRef: "must-not-leak",
     },
   ],
@@ -146,12 +160,58 @@ describe("v4 commerce projections contract", () => {
       percentBasisPoints: 2000,
       reason: "Льгота",
     });
+    expect(clientProjection.lessonBalance).toMatchObject({
+      activeSubscriptionCount: 1,
+      paid: "6",
+      available: "4",
+      debts: [{ currencyCode: "RUB", amountMinor: "160000" }],
+    });
     for (const projection of [clientProjection, staffProjection]) {
       const payload = JSON.stringify(projection);
       expect(payload).not.toMatch(
         /sourceRef|audit|internal|commercialRules|createdBy/,
       );
     }
+  });
+
+  it("aggregates multiple active and free subscriptions without marking debt as paid", () => {
+    const paid = source.subscriptions[0]!;
+    const free = {
+      ...paid,
+      id: "55555555-5555-4555-8555-555555555555",
+      expiresAt: "2026-08-15T00:00:00.000Z",
+      units: {
+        total: "2",
+        used: "0",
+        reserved: "0",
+        paid: "2",
+        available: "2",
+        remaining: "2",
+      },
+      financial: {
+        actualPaidMinor: "0",
+        obligationMinor: "0",
+        debtMinor: "0",
+        overpaymentMinor: "0",
+        nextPaymentAt: null,
+      },
+    };
+    const projection = projectionFactory().projectStudent(actor("manager"), {
+      ...source,
+      subscriptions: [paid, free],
+    });
+
+    expect(projection.lessonBalance).toEqual({
+      activeSubscriptionCount: 2,
+      total: "10",
+      used: "1",
+      reserved: "1",
+      paid: "8",
+      available: "6",
+      debts: [{ currencyCode: "RUB", amountMinor: "160000" }],
+      nextPaymentAt: "2026-08-29T10:00:00.000Z",
+      expiresAt: "2026-08-15T00:00:00.000Z",
+    });
   });
 
   it("denies Teacher in the service before any repository call", async () => {
@@ -315,6 +375,9 @@ describe("v4 commerce projections contract", () => {
     expect(sql).toContain("payment.amount_minor");
     expect(sql).toContain("app.subscription_obligation_facts");
     expect(sql).toContain("app.lesson_client_charge_facts");
+    expect(sql).toContain("app.lesson_reservations");
+    expect(sql).toContain("app.account_adjustments");
+    expect(sql).toContain("app.subscription_lifecycle_events");
     expect(sql).not.toMatch(
       /expected_payments|subscription_packages|lesson_participation|attendance/i,
     );

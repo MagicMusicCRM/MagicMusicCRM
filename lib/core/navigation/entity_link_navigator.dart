@@ -80,7 +80,17 @@ Future<EntityRouteResolution> navigateEntityLink(
     return resolution;
   }
 
-  _showMessage(context, 'Связанная запись недоступна.');
+  final presentation = resolution.presentation;
+  _showMessage(
+    context,
+    resolution.state == EntityRouteState.forbidden ||
+            resolution.state == EntityRouteState.unknown
+        ? '${presentation.primary}.'
+        : [
+            presentation.primary,
+            if (presentation.context?.isNotEmpty == true) presentation.context!,
+          ].join(' · '),
+  );
   return resolution;
 }
 

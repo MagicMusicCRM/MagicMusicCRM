@@ -1,18 +1,131 @@
 part of 'client_card.dart';
 
+Widget _lessonBalanceSummary(
+  CommerceLessonBalance balance, {
+  required VoidCallback onSubscriptions,
+  required VoidCallback onPayments,
+}) {
+  String units(num value) => value == value.truncate()
+      ? value.toInt().toString()
+      : value.toStringAsFixed(1);
+  final debt = balance.debts.isEmpty
+      ? 'Нет'
+      : balance.debts
+            .map(
+              (item) => formatPaymentMinor(
+                item.amountMinor,
+                currencyCode: item.currencyCode,
+              ),
+            )
+            .join(', ');
+  final date = DateFormat('dd.MM.yyyy');
+  final metrics = <(String, String)>[
+    ('Всего', units(balance.total)),
+    ('Использовано', units(balance.used)),
+    ('Зарезервировано', units(balance.reserved)),
+    ('Оплачено', units(balance.paid)),
+    ('Доступно', units(balance.available)),
+    ('Долг', debt),
+    (
+      'Следующий платёж',
+      balance.nextPaymentAt == null
+          ? 'Нет'
+          : date.format(balance.nextPaymentAt!.toLocal()),
+    ),
+    (
+      'Срок',
+      balance.expiresAt == null
+          ? 'Без срока'
+          : date.format(balance.expiresAt!.toLocal()),
+    ),
+  ];
+  return Builder(
+    builder: (context) => DecoratedBox(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border.all(color: AppColor.divider),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpace.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Остаток занятий · ${balance.activeSubscriptionCount} '
+              '${balance.activeSubscriptionCount == 1 ? 'активный' : 'активных'}',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: AppSpace.md),
+            Wrap(
+              spacing: AppSpace.lg,
+              runSpacing: AppSpace.md,
+              children: [
+                for (final metric in metrics)
+                  SizedBox(
+                    width: 150,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          metric.$1,
+                          style: const TextStyle(
+                            color: AppColor.text2,
+                            fontSize: 12,
+                          ),
+                        ),
+                        Text(
+                          metric.$2,
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: AppSpace.md),
+            Wrap(
+              spacing: AppSpace.sm,
+              children: [
+                OutlinedButton.icon(
+                  key: const Key('lesson-balance-subscriptions'),
+                  onPressed: onSubscriptions,
+                  icon: const Icon(Icons.confirmation_number_outlined),
+                  label: const Text('Открыть абонементы'),
+                ),
+                TextButton.icon(
+                  key: const Key('lesson-balance-payments'),
+                  onPressed: onPayments,
+                  icon: const Icon(Icons.receipt_long_outlined),
+                  label: const Text('Финансовая история'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 Widget _paymentsView(
   ColorScheme cs, {
   required CommerceStudent? commerce,
   required List<Payment> fallbackPayments,
   required bool creating,
+  required CommerceMovement? adjustingPayment,
   required String? branchId,
   required String branchName,
   required VoidCallback onCreate,
   required VoidCallback onCancel,
   required ClientPaymentSubmit onSubmit,
+  required ValueChanged<CommerceMovement> onAdjust,
+  required VoidCallback onCancelAdjustment,
+  required ClientPaymentAdjustmentSubmit onSubmitAdjustment,
   required void Function(
     BuildContext context,
     String paymentId,
+    EntityPresentationReference presentation,
     EntityOpenTarget target,
   )
   onOpenPayment,
@@ -88,6 +201,14 @@ Widget _paymentsView(
         ),
         const SizedBox(height: AppSpace.lg),
       ],
+      if (adjustingPayment != null) ...[
+        ClientPaymentAdjustmentForm(
+          payment: adjustingPayment,
+          onSubmit: onSubmitAdjustment,
+          onCancel: onCancelAdjustment,
+        ),
+        const SizedBox(height: AppSpace.lg),
+      ],
       LayoutBuilder(
         builder: (context, constraints) {
           final width = constraints.maxWidth >= 720
@@ -106,9 +227,10 @@ Widget _paymentsView(
               ),
               _PaymentMetric(
                 width: width,
-                label: 'Фактически оплачено',
+                label: 'Оплачено с учётом возвратов',
                 value: formatPaymentMinor(
-                  account?.actualPaymentsMinor ?? BigInt.zero,
+                  (account?.actualPaymentsMinor ?? BigInt.zero) +
+                      (account?.adjustmentsMinor ?? BigInt.zero),
                 ),
                 icon: Icons.payments_outlined,
                 color: AppTheme.success,
@@ -150,8 +272,15 @@ Widget _paymentsView(
           (movement) => _PaymentMovementRow(
             movement: movement,
             highlighted: movement.id == highlightedPaymentId,
-            onOpen: (context, target) =>
-                onOpenPayment(context, movement.id, target),
+            onOpen: (context, target) => onOpenPayment(
+              context,
+              movement.id,
+              _movementPresentation(movement),
+              target,
+            ),
+            onAdjust: movement.kind == CommerceMovementKind.payment
+                ? () => onAdjust(movement)
+                : null,
           ),
         )
       else
@@ -161,8 +290,17 @@ Widget _paymentsView(
             highlighted: payment.id == highlightedPaymentId,
             onOpen: payment.id == null
                 ? null
-                : (context, target) =>
-                      onOpenPayment(context, payment.id!, target),
+                : (context, target) => onOpenPayment(
+                    context,
+                    payment.id!,
+                    EntityPresentationReference(
+                      primary: [
+                        payment.paymentDate,
+                        '${payment.amountRaw} ₽',
+                      ].whereType<String>().join(' · '),
+                    ),
+                    target,
+                  ),
           ),
         ),
       const SizedBox(height: AppSpace.xl),
@@ -184,6 +322,20 @@ Widget _paymentsView(
           ),
         ),
     ],
+  );
+}
+
+EntityPresentationReference _movementPresentation(CommerceMovement movement) {
+  final identifier = movement.invoiceIdentifier?.trim();
+  return EntityPresentationReference(
+    primary: identifier?.isNotEmpty == true
+        ? '№ $identifier'
+        : '${DateFormat('dd.MM.yyyy').format(movement.occurredAt.toLocal())} · '
+              '${formatPaymentMinor(movement.amountMinor)}',
+    context: [
+      movement.branchName,
+      if (movement.status == 'paid') 'Проведён',
+    ].whereType<String>().where((value) => value.isNotEmpty).join(' · '),
   );
 }
 
@@ -265,12 +417,14 @@ class _PaymentMovementRow extends StatelessWidget {
   const _PaymentMovementRow({
     required this.movement,
     required this.onOpen,
+    this.onAdjust,
     this.highlighted = false,
   });
 
   final CommerceMovement movement;
   final void Function(BuildContext context, EntityOpenTarget target) onOpen;
   final bool highlighted;
+  final VoidCallback? onAdjust;
 
   @override
   Widget build(BuildContext context) {
@@ -278,6 +432,8 @@ class _PaymentMovementRow extends StatelessWidget {
     final credit = movement.direction == CommerceMovementDirection.credit;
     final title = switch (movement.kind) {
       CommerceMovementKind.payment => 'Оплата',
+      CommerceMovementKind.refund => 'Возврат',
+      CommerceMovementKind.adjustment => 'Корректировка',
       CommerceMovementKind.obligation => 'Обязательство по абонементу',
       CommerceMovementKind.lessonCharge => 'Списание за занятие',
     };
@@ -293,6 +449,8 @@ class _PaymentMovementRow extends StatelessWidget {
         '№ ${movement.invoiceIdentifier}',
       if (movement.status == 'paid') 'Проведён',
       movement.acceptedByName,
+      if (movement.subscriptionName?.isNotEmpty == true)
+        'Назначение: ${movement.subscriptionName}',
     ].whereType<String>().where((value) => value.isNotEmpty).join(' · ');
     return Semantics(
       key: ValueKey('commerce-movement-${movement.id}'),
@@ -357,6 +515,13 @@ class _PaymentMovementRow extends StatelessWidget {
                       fontWeight: FontWeight.w800,
                     ),
                   ),
+                  if (onAdjust != null)
+                    IconButton(
+                      key: ValueKey('adjust-payment-${movement.id}'),
+                      tooltip: 'Возврат или корректировка',
+                      onPressed: onAdjust,
+                      icon: const Icon(Icons.undo_rounded),
+                    ),
                   _EntityOpenButtons(
                     onOpen: (target) => onOpen(context, target),
                   ),

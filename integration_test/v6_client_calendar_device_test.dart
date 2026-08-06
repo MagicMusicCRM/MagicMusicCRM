@@ -6,7 +6,8 @@ import 'package:integration_test/integration_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
-import 'package:magic_music_crm/features/crm/presentation/client_card/client_schedule_calendar.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_day_canvas.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
 
 import '../test/features/crm/client_card/card_fake_api.dart';
 
@@ -17,12 +18,23 @@ void main() {
     tester,
   ) async {
     final api = FakeCardApiClient(
+      branches: const [
+        {'id': 'branch-a', 'name': 'Сокол', 'utcOffsetMinutes': 180},
+      ],
+      rooms: const [
+        {'id': 'room-a', 'name': 'Класс 1', 'branchId': 'branch-a'},
+      ],
       scheduleMatrix: const [
         {
           'id': 'lesson-device',
           'studentId': 'student-1',
           'studentName': 'Анна Смирнова',
+          'teacherId': 'teacher-1',
+          'teacherName': 'Мария Педагог',
           'branchId': 'branch-a',
+          'branchName': 'Сокол',
+          'roomId': 'room-a',
+          'roomName': 'Класс 1',
           'scheduledAt': '2026-08-04T12:00:00.000Z',
           'durationMinutes': 60,
           'status': 'scheduled',
@@ -38,16 +50,15 @@ void main() {
         GoRoute(
           path: '/students/:id',
           builder: (_, _) => Scaffold(
-            body: SingleChildScrollView(
-              child: ClientScheduleCalendar(
+            body: SizedBox(
+              height: 760,
+              child: ScheduleWidget(
+                title: 'Календарь занятий',
                 clientType: 'student',
                 clientId: 'student-1',
                 clientName: 'Анна Смирнова',
-                branches: const [
-                  {'id': 'branch-a', 'name': 'Сокол', 'utcOffsetMinutes': 180},
-                ],
-                defaultBranchId: 'branch-a',
-                canRead: true,
+                initialBranchId: 'branch-a',
+                canWrite: false,
                 initialViewState: ContextViewState(
                   filters: const {
                     'section': 'lessons',
@@ -86,20 +97,22 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Клиент карточки'), findsOneWidget);
+    expect(find.text('Анна Смирнова'), findsWidgets);
     expect(find.text('Другие клиенты'), findsOneWidget);
-    final lesson = find.byKey(
-      const ValueKey('client-calendar-lesson-lesson-device'),
-    );
+    final lesson = find.byKey(const ValueKey('schedule-lesson-lesson-device'));
     await tester.ensureVisible(lesson);
     await tester.pumpAndSettle();
     await tester.tap(lesson);
+    await tester.pump();
+    await tester.tap(lesson);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('lesson-reference-Занятие')));
     await tester.pumpAndSettle();
     expect(find.text('Расписание host'), findsOneWidget);
 
     router.pop();
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('client-calendar-grid')), findsOneWidget);
+    expect(find.byType(ScheduleDayCanvas), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

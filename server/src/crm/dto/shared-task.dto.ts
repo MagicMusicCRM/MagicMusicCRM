@@ -55,6 +55,10 @@ export class CreateSharedTaskDto {
   @IsBoolean()
   allDay!: boolean;
 
+  @IsOptional()
+  @IsIn(["low", "medium", "high"])
+  priority?: "low" | "medium" | "high";
+
   @IsDateString()
   startAt!: string;
 
@@ -111,7 +115,7 @@ export class SharedTaskListQuery {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(200)
+  @Max(2000)
   limit?: number;
 
   @IsOptional()
@@ -126,4 +130,25 @@ export class SharedTaskListQuery {
   @IsOptional()
   @IsUUID()
   linkedEntityId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(240)
+  q?: string;
+
+  @IsOptional()
+  @IsIn(["low", "medium", "high"])
+  priority?: "low" | "medium" | "high";
+
+  @IsOptional()
+  @IsIn(["mine", "branch", "school", "all"])
+  scope?: "mine" | "branch" | "school" | "all";
+
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  @IsOptional()
+  @IsDateString()
+  to?: string;
 }

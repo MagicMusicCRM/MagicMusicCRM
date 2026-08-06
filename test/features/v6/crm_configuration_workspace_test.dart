@@ -7,13 +7,19 @@ import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_forms/crm_configuration_workspace.dart';
 
 class _ConfigurationApi extends MagicApiClient {
-  _ConfigurationApi({required this.role, required this.capabilities})
-    : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
+  _ConfigurationApi({
+    required this.role,
+    required this.capabilities,
+    Map<String, dynamic>? snapshot,
+  }) : snapshot = snapshot ?? _defaultSnapshot,
+       super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   final String role;
   final List<String> capabilities;
+  final Map<String, dynamic> snapshot;
   int configurationReads = 0;
   int publishes = 0;
+  Map<String, dynamic>? submittedSnapshot;
 
   @override
   Future<T> get<T>(
@@ -44,7 +50,7 @@ class _ConfigurationApi extends MagicApiClient {
       return <String, dynamic>{
             'baseVersion': 1,
             'dirty': false,
-            'snapshot': _snapshot,
+            'snapshot': snapshot,
           }
           as T;
     }
@@ -67,6 +73,9 @@ class _ConfigurationApi extends MagicApiClient {
     bool authenticated = true,
   }) async {
     if (path == '/crm/configuration/preview') {
+      submittedSnapshot = Map<String, dynamic>.from(
+        (data as Map)['snapshot'] as Map,
+      );
       return <String, dynamic>{
             'valid': true,
             'blockingIssues': const [],
@@ -87,7 +96,7 @@ class _ConfigurationApi extends MagicApiClient {
     throw StateError('Unexpected POST $path');
   }
 
-  static const _snapshot = <String, dynamic>{
+  static const _defaultSnapshot = <String, dynamic>{
     'categories': [
       {'key': 'general', 'label': 'Основное', 'order': 0, 'active': true},
     ],
@@ -157,7 +166,7 @@ void main() {
     await _pump(tester, api);
 
     expect(find.text('Поля и категории'), findsOneWidget);
-    expect(find.text('Справочники'), findsOneWidget);
+    expect(find.text('Варианты для полей'), findsOneWidget);
     expect(find.text('Бизнес-параметры'), findsOneWidget);
     expect(find.text('Вся школа'), findsOneWidget);
 
@@ -217,4 +226,128 @@ void main() {
       expect(api.configurationReads, 0);
     },
   );
+
+  testWidgets('inline field options migrate losslessly to one option set', (
+    tester,
+  ) async {
+    final api = _ConfigurationApi(
+      role: 'director',
+      capabilities: const [
+        'config.crm.read',
+        'config.crm.edit',
+        'config.crm.publish',
+      ],
+      snapshot: _inlineOptionsSnapshot(),
+    );
+    await _pump(tester, api);
+
+    expect(find.text('Черновик · версия 1'), findsOneWidget);
+    await tester.tap(find.text('Формат занятий'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Изменить'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Набор вариантов *'), findsOneWidget);
+    expect(find.text('Формат занятий: варианты'), findsOneWidget);
+    expect(find.text('Варианты через запятую *'), findsNothing);
+    await tester.tap(find.text('Отмена'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('configuration-publish')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Причина публикации *'),
+      'Перенесли варианты в единый набор',
+    );
+    await tester.tap(find.text('Опубликовать'));
+    await tester.pumpAndSettle();
+
+    final submitted = api.submittedSnapshot!;
+    final field = (submitted['fields'] as List).single as Map;
+    final set = (submitted['optionSets'] as List).single as Map;
+    expect(field['optionSetKey'], 'lead_lesson_format_options');
+    expect(field['options'], ['Онлайн', 'Офлайн']);
+    expect((set['options'] as List).map((item) => (item as Map)['label']), [
+      'Онлайн',
+      'Офлайн',
+    ]);
+  });
+
+  testWidgets('field editor creates and selects a central option set', (
+    tester,
+  ) async {
+    final api = _ConfigurationApi(
+      role: 'director',
+      capabilities: const [
+        'config.crm.read',
+        'config.crm.edit',
+        'config.crm.publish',
+      ],
+      snapshot: _inlineOptionsSnapshot(),
+    );
+    await _pump(tester, api);
+
+    await tester.tap(find.text('Формат занятий'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Изменить'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('field-create-option-set')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Название *').last,
+      'Направления',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Стабильный ключ *').last,
+      'directions',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Варианты через запятую *'),
+      'Вокал, Гитара',
+    );
+    await tester.tap(find.text('Сохранить').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Направления'), findsOneWidget);
+    expect(find.text('Варианты через запятую *'), findsNothing);
+    await tester.tap(find.text('Сохранить'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('configuration-publish')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Причина публикации *'),
+      'Выбрали общий набор',
+    );
+    await tester.tap(find.text('Опубликовать'));
+    await tester.pumpAndSettle();
+
+    final submitted = api.submittedSnapshot!;
+    final field = (submitted['fields'] as List).single as Map;
+    final sets = submitted['optionSets'] as List;
+    expect(field['optionSetKey'], 'directions');
+    expect(field['options'], ['Вокал', 'Гитара']);
+    expect(sets, hasLength(2));
+  });
 }
+
+Map<String, dynamic> _inlineOptionsSnapshot() => {
+  ..._ConfigurationApi._defaultSnapshot,
+  'fields': [
+    {
+      'id': '30000000-0000-4000-8000-000000000002',
+      'entityType': 'lead',
+      'key': 'lesson_format',
+      'label': 'Формат занятий',
+      'valueType': 'select',
+      'required': false,
+      'active': true,
+      'system': false,
+      'categoryKey': 'general',
+      'order': 0,
+      'width': 'full',
+      'placements': ['create', 'edit', 'card'],
+      'options': ['Онлайн', 'Офлайн'],
+    },
+  ],
+};

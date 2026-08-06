@@ -28,6 +28,7 @@ import {
   ScheduleSeriesQuery,
 } from "./dto/schedule-series.query";
 import { UpsertLessonDto } from "./dto/upsert-lesson.dto";
+import { LessonConstraintPreviewDto } from "./dto/lesson-constraint-preview.dto";
 import {
   LessonCancelCommandDto,
   LessonCancelPreviewDto,
@@ -145,6 +146,14 @@ export class CrmScheduleController {
     return this.v4DomainFlags.get("schedule").effectivePath === "v4"
       ? this.lessonCommands.create(actor, dto, metadata)
       : this.schedule.createLesson(actor, dto);
+  }
+
+  @Post("lessons/constraints/preview")
+  previewLessonConstraints(
+    @CurrentActor() actor: ActorContext,
+    @Body() dto: LessonConstraintPreviewDto,
+  ) {
+    return this.lessonCommands.previewConstraints(actor, dto);
   }
 
   // Registered before "lessons/:id" so the literal segment wins the match and

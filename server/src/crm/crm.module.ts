@@ -27,7 +27,6 @@ import { HomeworkService } from "./homework.service";
 import { ReferenceDataService } from "./reference-data.service";
 import { SubscriptionsService } from "./subscriptions.service";
 import { FinanceService } from "./finance.service";
-import { TasksService } from "./tasks.service";
 import { StaffService } from "./staff.service";
 import { TeachersService } from "./teachers.service";
 import { ScheduleService } from "./schedule.service";
@@ -93,7 +92,7 @@ import { SharedTaskController } from "./shared-task.controller";
 import { SharedTaskRepository } from "./tasks/shared-task.repository";
 import { SharedTaskService } from "./tasks/shared-task.service";
 import { SharedTaskReminderWorker } from "./tasks/shared-task-reminder.worker";
-import { CrmStudentFunnelController } from "./crm-student-funnel.controller";
+import { CrmClientPipelineController } from "./crm-student-funnel.controller";
 import { StudentFunnelService } from "./student-funnel.service";
 import { CrmConfigurationController } from "./crm-configuration.controller";
 import { CrmConfigurationService } from "./crm-configuration.service";
@@ -127,7 +126,7 @@ import { CrmConfigurationService } from "./crm-configuration.service";
     SubscriptionCommerceController,
     CommerceProjectionController,
     SharedTaskController,
-    CrmStudentFunnelController,
+    CrmClientPipelineController,
     CrmConfigurationController,
   ],
   providers: [
@@ -137,7 +136,6 @@ import { CrmConfigurationService } from "./crm-configuration.service";
     ReferenceDataService,
     SubscriptionsService,
     FinanceService,
-    TasksService,
     StaffService,
     TeachersService,
     ScheduleService,

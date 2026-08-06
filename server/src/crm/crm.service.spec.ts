@@ -9,7 +9,7 @@ import { DatabaseService } from "../db/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { StudentFunnelService } from "./student-funnel.service";
-import { TasksService } from "./tasks.service";
+import { SharedTaskService } from "./tasks/shared-task.service";
 import { CrmPolicy } from "./crm.policy";
 import { ChatWorkTimelineService } from "../messenger/chat-work-timeline.service";
 import { ScheduleService } from "./schedule.service";
@@ -51,8 +51,7 @@ describe("CrmService", () => {
       assertCanReadStudent: jest.fn(),
     };
     const tasks = {
-      listTasks: jest.fn().mockResolvedValue({ items: [] }),
-      listOpenTasksForStudents: jest.fn().mockResolvedValue([]),
+      list: jest.fn().mockResolvedValue({ items: [], counters: {} }),
     };
     const schedule = {
       listLessons: jest.fn().mockResolvedValue({ items: [] }),
@@ -68,7 +67,7 @@ describe("CrmService", () => {
       database as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
-      tasks as unknown as TasksService,
+      tasks as unknown as SharedTaskService,
       schedule as unknown as ScheduleService,
       timeline as unknown as TimelineService,
       notifications as unknown as NotificationsService,
@@ -118,8 +117,7 @@ describe("CrmService", () => {
       assertCanReadStudent: jest.fn(),
     };
     const tasks = {
-      listTasks: jest.fn().mockResolvedValue({ items: [] }),
-      listOpenTasksForStudents: jest.fn().mockResolvedValue([]),
+      list: jest.fn().mockResolvedValue({ items: [], counters: {} }),
     };
     const schedule = {
       listLessons: jest.fn().mockResolvedValue({ items: [] }),
@@ -135,7 +133,7 @@ describe("CrmService", () => {
       database as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
-      tasks as unknown as TasksService,
+      tasks as unknown as SharedTaskService,
       schedule as unknown as ScheduleService,
       timeline as unknown as TimelineService,
       notifications as unknown as NotificationsService,

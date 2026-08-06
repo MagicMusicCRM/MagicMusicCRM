@@ -225,8 +225,8 @@ describe("runImport", () => {
 
     await runImport({ client, exportsDir: dir, mode: "apply", exportDate: EXPORT_DATE });
 
-    const tasks = rowsOf("app.tasks", writes);
-    expect(tasks.map((t) => [t.entity_type, t.entity_id])).toEqual(
+    const tasks = rowsOf("app.shared_tasks", writes);
+    expect(tasks.map((t) => [t.linked_entity_type, t.linked_entity_id])).toEqual(
       expect.arrayContaining([
         ["lead", LEAD_ID],
         ["student", STUDENT_ID],
@@ -244,7 +244,7 @@ describe("runImport", () => {
 
     await runImport({ client, exportsDir: dir, mode: "apply", exportDate: EXPORT_DATE });
 
-    const tasks = rowsOf("app.tasks", writes);
+    const tasks = rowsOf("app.shared_tasks", writes);
     expect(tasks.length).toBeGreaterThan(0);
     for (const task of tasks) expect(task.created_by).toBe("user-1");
   });
@@ -271,9 +271,9 @@ describe("runImport", () => {
 
     await runImport({ client, exportsDir: dir, mode: "apply", exportDate: EXPORT_DATE });
 
-    const statuses = rowsOf("app.tasks", writes).map((t) => t.status);
-    expect(statuses).toContain("done");
-    expect(statuses).toContain("open");
+    const states = rowsOf("app.shared_tasks", writes).map((t) => t.state);
+    expect(states).toContain("closed");
+    expect(states).toContain("open");
   });
 
   /**
@@ -285,14 +285,14 @@ describe("runImport", () => {
 
     await runImport({ client, exportsDir: dir, mode: "apply", exportDate: EXPORT_DATE });
 
-    const history = rowsOf("app.task_history", writes);
+    const history = rowsOf("app.audit_events", writes);
     expect(history).toHaveLength(1);
     expect(history[0]).toMatchObject({
-      field: "status",
-      new_value: "done",
-      changed_at: "2026-06-21T14:14:00.000Z",
-      changed_by: "user-1",
-      source: "hollihop",
+      action: "workflow.shared_task_legacy_status",
+      created_at: "2026-06-21T14:14:00.000Z",
+      actor_user_id: "user-1",
+      metadata: '{"source":"hollihop"}',
+      after_ref: '{"field":"status","value":"done"}',
     });
   });
 
@@ -302,9 +302,9 @@ describe("runImport", () => {
 
     await runImport({ client, exportsDir: dir, mode: "apply", exportDate: EXPORT_DATE });
 
-    const tasks = rowsOf("app.tasks", writes);
-    expect(tasks.find((t) => t.status === "done")?.due_at).toBeNull();
-    expect(tasks.find((t) => t.status === "open")?.due_at).toBe("2027-08-11T00:00:00.000Z");
+    const tasks = rowsOf("app.shared_tasks", writes);
+    expect(tasks.find((t) => t.state === "closed")?.start_at).toBeNull();
+    expect(tasks.find((t) => t.state === "open")?.start_at).toBe("2027-08-11T00:00:00.000Z");
   });
 
   it("не задача — ложится комментарием, а не задачей", async () => {
@@ -340,7 +340,7 @@ describe("runImport", () => {
     });
 
     const ids = (w: { sql: string; values: unknown[] }[]) =>
-      rowsOf("app.tasks", w).map((t) => t.id);
+      rowsOf("app.shared_tasks", w).map((t) => t.id);
     expect(ids(second.writes)).toEqual(ids(first.writes));
   });
 

@@ -51,7 +51,7 @@ class SearchableSelect extends StatefulWidget {
   @override
   State<SearchableSelect> createState() => _SearchableSelectState();
 
-  static void show({
+  static Future<void> show({
     required BuildContext context,
     required String title,
     required String hintText,
@@ -60,23 +60,21 @@ class SearchableSelect extends StatefulWidget {
     String? selectedId,
     bool isNullable = true,
     Future<List<SearchableSelectItem>> Function(String query)? onSearch,
-  }) {
-    unawaited(
-      showMagicAdaptiveSurface<void>(
-        context,
-        kind: AppSurfaceKind.selection,
+  }) async {
+    await showMagicAdaptiveSurface<void>(
+      context,
+      kind: AppSurfaceKind.selection,
+      title: title,
+      icon: Icons.search_rounded,
+      builder: (context) => SearchableSelect(
         title: title,
-        icon: Icons.search_rounded,
-        builder: (context) => SearchableSelect(
-          title: title,
-          hintText: hintText,
-          items: items,
-          onSelected: onSelected,
-          selectedId: selectedId,
-          isNullable: isNullable,
-          onSearch: onSearch,
-          embedded: true,
-        ),
+        hintText: hintText,
+        items: items,
+        onSelected: onSelected,
+        selectedId: selectedId,
+        isNullable: isNullable,
+        onSearch: onSearch,
+        embedded: true,
       ),
     );
   }

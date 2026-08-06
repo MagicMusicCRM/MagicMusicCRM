@@ -3,7 +3,8 @@ part of 'manage_entities_widget.dart';
 // ─────────────────────────────────────────────────
 class _BranchesList extends ConsumerWidget {
   final String searchQuery;
-  const _BranchesList({required this.searchQuery});
+  final bool canEdit;
+  const _BranchesList({required this.searchQuery, required this.canEdit});
 
   String _offsetLabel(int minutes) {
     final sign = minutes >= 0 ? '+' : '-';
@@ -69,15 +70,17 @@ class _BranchesList extends ConsumerWidget {
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
                 child: ListTile(
-                  onTap: () async {
-                    final res = await showDialog<bool>(
-                      context: context,
-                      builder: (ctx) => BranchFormDialog(branch: item),
-                    );
-                    if (res == true) {
-                      ref.invalidate(entitiesProvider('branches'));
-                    }
-                  },
+                  onTap: !canEdit
+                      ? null
+                      : () async {
+                          final res = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => BranchFormDialog(branch: item),
+                          );
+                          if (res == true) {
+                            ref.invalidate(entitiesProvider('branches'));
+                          }
+                        },
                   leading: CircleAvatar(
                     backgroundColor: AppTheme.primaryGold.withAlpha(30),
                     child: Icon(
@@ -97,7 +100,7 @@ class _BranchesList extends ConsumerWidget {
                     ),
                   ),
                   trailing: Icon(
-                    Icons.edit_rounded,
+                    canEdit ? Icons.edit_rounded : Icons.lock_outline_rounded,
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                     size: 18,
                   ),
@@ -116,7 +119,8 @@ class _BranchesList extends ConsumerWidget {
 // ─────────────────────────────────────────────────
 class _PackagesList extends ConsumerWidget {
   final String searchQuery;
-  const _PackagesList({required this.searchQuery});
+  final bool canEdit;
+  const _PackagesList({required this.searchQuery, required this.canEdit});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -159,7 +163,7 @@ class _PackagesList extends ConsumerWidget {
             itemCount: filtered.length,
             itemBuilder: (ctx, i) {
               final item = filtered[i];
-              return _PackageCard(item: item);
+              return _PackageCard(item: item, canEdit: canEdit);
             },
           ),
         );
@@ -170,7 +174,8 @@ class _PackagesList extends ConsumerWidget {
 
 class _PackageCard extends ConsumerWidget {
   final Map<String, dynamic> item;
-  const _PackageCard({required this.item});
+  final bool canEdit;
+  const _PackageCard({required this.item, required this.canEdit});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -191,12 +196,18 @@ class _PackageCard extends ConsumerWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
-        onTap: () async {
-          final saved = await showPackageSheet(context, ref, existing: item);
-          if (saved == true) {
-            invalidateSubscriptionPackageCatalog(ref);
-          }
-        },
+        onTap: !canEdit
+            ? null
+            : () async {
+                final saved = await showPackageSheet(
+                  context,
+                  ref,
+                  existing: item,
+                );
+                if (saved == true) {
+                  invalidateSubscriptionPackageCatalog(ref);
+                }
+              },
         leading: CircleAvatar(
           backgroundColor: AppColor.goldSoft,
           child: const Icon(
@@ -243,11 +254,13 @@ class _PackageCard extends ConsumerWidget {
             ],
           ),
         ),
-        trailing: IconButton(
-          icon: Icon(Icons.archive_outlined, color: AppColor.danger),
-          tooltip: 'Архивировать',
-          onPressed: () => _confirmArchivePackage(context, ref, item),
-        ),
+        trailing: canEdit
+            ? IconButton(
+                icon: Icon(Icons.archive_outlined, color: AppColor.danger),
+                tooltip: 'Архивировать',
+                onPressed: () => _confirmArchivePackage(context, ref, item),
+              )
+            : const Icon(Icons.lock_outline_rounded),
       ),
     );
   }
@@ -373,7 +386,9 @@ class _PackageFormState extends State<_PackageForm> {
   late final TextEditingController _lessons;
   late final TextEditingController _price;
   late final TextEditingController _validity;
-  late final TextEditingController _branchId;
+  String? _branchId;
+  List<Map<String, dynamic>> _branches = const [];
+  bool _loadingBranches = true;
   late int _expectedVersion;
   bool _saving = false;
   bool _stale = false;
@@ -396,10 +411,9 @@ class _PackageFormState extends State<_PackageForm> {
     _validity = TextEditingController(
       text: (e?['validity_days'] ?? e?['validityDays'])?.toString() ?? '',
     );
-    _branchId = TextEditingController(
-      text: (e?['branch_id'] ?? e?['branchId'])?.toString() ?? '',
-    );
+    _branchId = (e?['branch_id'] ?? e?['branchId'])?.toString();
     _expectedVersion = _asInt(e?['version']);
+    _loadBranches();
   }
 
   @override
@@ -408,8 +422,22 @@ class _PackageFormState extends State<_PackageForm> {
     _lessons.dispose();
     _price.dispose();
     _validity.dispose();
-    _branchId.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadBranches() async {
+    try {
+      final branches = await widget.ref
+          .read(magicCrmServiceProvider)
+          .listBranches(limit: 100);
+      if (!mounted) return;
+      setState(() {
+        _branches = branches;
+        _loadingBranches = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingBranches = false);
+    }
   }
 
   InputDecoration _dec(String label, {String? hint}) {
@@ -440,8 +468,7 @@ class _PackageFormState extends State<_PackageForm> {
     final price = num.parse(_price.text.trim().replaceAll(',', '.'));
     final validityText = _validity.text.trim();
     final validityDays = validityText.isEmpty ? null : int.parse(validityText);
-    final branchText = _branchId.text.trim();
-    final branchId = branchText.isEmpty ? null : branchText;
+    final branchId = _branchId;
 
     setState(() => _saving = true);
     final crm = widget.ref.read(magicCrmServiceProvider);
@@ -532,8 +559,7 @@ class _PackageFormState extends State<_PackageForm> {
       _price.text = _packagePriceText(latest);
       _validity.text =
           (latest['validity_days'] ?? latest['validityDays'])?.toString() ?? '';
-      _branchId.text =
-          (latest['branch_id'] ?? latest['branchId'])?.toString() ?? '';
+      _branchId = (latest['branch_id'] ?? latest['branchId'])?.toString();
       setState(() {
         _expectedVersion = _asInt(latest['version']);
         _stale = false;
@@ -616,10 +642,31 @@ class _PackageFormState extends State<_PackageForm> {
             },
           ),
           const SizedBox(height: AppSpace.md),
-          TextFormField(
-            controller: _branchId,
-            decoration: _dec('ID филиала', hint: 'Необязательно'),
-            textInputAction: TextInputAction.done,
+          LayoutBuilder(
+            builder: (context, constraints) => DropdownMenu<String>(
+              key: ValueKey('package-branch-${_branchId ?? 'school'}'),
+              width: constraints.maxWidth,
+              enableFilter: true,
+              requestFocusOnTap: true,
+              initialSelection: _branchId,
+              label: Text(_loadingBranches ? 'Загрузка филиалов…' : 'Филиал'),
+              helperText: 'Необязательно: пусто означает всю школу',
+              dropdownMenuEntries: [
+                const DropdownMenuEntry(value: '', label: 'Вся школа'),
+                for (final branch in _branches)
+                  DropdownMenuEntry(
+                    value: branch['id'].toString(),
+                    label: branch['name']?.toString() ?? 'Филиал',
+                  ),
+              ],
+              onSelected: _loadingBranches
+                  ? null
+                  : (value) => setState(
+                      () => _branchId = value == null || value.isEmpty
+                          ? null
+                          : value,
+                    ),
+            ),
           ),
           if (_stale) ...[
             const SizedBox(height: AppSpace.md),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/workspace/desktop_workspace_shell.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 
@@ -79,7 +80,7 @@ void main() {
       final workspace = WorkspaceController(
         accountId: 'account-1',
         initialLink: link('home'),
-        titleResolver: (route) => 'Клиент · ${route.entityId}',
+        titleResolver: const EntityPresentationResolver().pageTitle,
         sharedScope: WorkspaceSharedScope(
           session: Object(),
           cache: Object(),
@@ -88,13 +89,20 @@ void main() {
       );
 
       workspace.push('tab-1', link('client-1'));
-      expect(workspace.state.activeTab.titleHint, 'Клиент · client-1');
+      expect(workspace.state.activeTab.titleHint, 'Ученик');
 
-      workspace.updateEntityTitle(link('client-1'), 'Ученик · Иванов Иван');
+      workspace.updateEntityPresentation(
+        link('client-1'),
+        const EntityPresentationReference(primary: 'Иванов Иван'),
+      );
       expect(workspace.state.activeTab.titleHint, 'Ученик · Иванов Иван');
+      expect(
+        workspace.state.activeTab.currentRoute.link.presentation?.primary,
+        'Иванов Иван',
+      );
 
       workspace.back('tab-1');
-      expect(workspace.state.activeTab.titleHint, 'Клиент · home');
+      expect(workspace.state.activeTab.titleHint, 'Ученик');
     },
   );
 

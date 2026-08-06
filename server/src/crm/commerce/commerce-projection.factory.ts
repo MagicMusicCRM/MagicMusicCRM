@@ -48,8 +48,12 @@ export class CommerceProjectionFactory {
       units: {
         total: subscription.units.total,
         used: subscription.units.used,
+        reserved: subscription.units.reserved,
+        paid: subscription.units.paid,
+        available: subscription.units.available,
         remaining: subscription.units.remaining,
       },
+      financial: { ...subscription.financial },
       terms: {
         displayName: subscription.terms.displayName,
         validityDays: subscription.terms.validityDays,
@@ -81,6 +85,7 @@ export class CommerceProjectionFactory {
       accounts: source.accounts.map((account) => ({
         currencyCode: account.currencyCode,
         actualPaymentsMinor: account.actualPaymentsMinor,
+        adjustmentsMinor: account.adjustmentsMinor,
         obligationDebitsMinor: account.obligationDebitsMinor,
         obligationCreditsMinor: account.obligationCreditsMinor,
         writeOffsMinor: account.writeOffsMinor,
@@ -104,7 +109,48 @@ export class CommerceProjectionFactory {
         invoiceIdentifier: movement.invoiceIdentifier ?? null,
         status: movement.status ?? null,
         acceptedByName: movement.acceptedByName ?? null,
+        issuedSubscriptionId: movement.issuedSubscriptionId ?? null,
+        subscriptionName: movement.subscriptionName ?? null,
+        sourcePaymentId: movement.sourcePaymentId ?? null,
       })),
+      lessonBalance: this.lessonBalance(subscriptions),
+    };
+  }
+
+  private lessonBalance(
+    subscriptions: CommerceStudentDto["subscriptions"],
+  ): CommerceStudentDto["lessonBalance"] {
+    const active = subscriptions.filter((item) => item.status === "active");
+    const sumUnits = (
+      field: "total" | "used" | "reserved" | "paid" | "available",
+    ) => active.reduce((sum, item) => sum + Number(item.units[field]), 0).toString();
+    const debts = new Map<string, bigint>();
+    for (const item of active) {
+      debts.set(
+        item.terms.currencyCode,
+        (debts.get(item.terms.currencyCode) ?? 0n) +
+          BigInt(item.financial.debtMinor),
+      );
+    }
+    const earliest = (values: (string | null)[]) =>
+      values.filter((value): value is string => value !== null).sort()[0] ?? null;
+    return {
+      activeSubscriptionCount: active.length,
+      total: sumUnits("total"),
+      used: sumUnits("used"),
+      reserved: sumUnits("reserved"),
+      paid: sumUnits("paid"),
+      available: sumUnits("available"),
+      debts: [...debts]
+        .filter(([, amount]) => amount > 0n)
+        .map(([currencyCode, amount]) => ({
+          currencyCode,
+          amountMinor: amount.toString(),
+        })),
+      nextPaymentAt: earliest(
+        active.map((item) => item.financial.nextPaymentAt),
+      ),
+      expiresAt: earliest(active.map((item) => item.expiresAt)),
     };
   }
 

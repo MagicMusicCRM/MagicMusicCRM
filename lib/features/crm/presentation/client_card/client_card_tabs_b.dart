@@ -179,19 +179,24 @@ extension _ClientCardTabsB on _ClientCardState {
       ? _nonEmpty(_student?['last_name'])
       : _nonEmpty(_leadData['last_name']);
 
-  void _syncWorkspaceTitle() {
+  String get _clientPresentationLabel {
     final name = [
       _clientLastName,
       _clientFirstName,
     ].whereType<String>().join(' ').trim();
-    if (name.isEmpty) return;
-    WorkspaceNavigationScope.maybeOf(context)?.controller.updateEntityTitle(
+    return name.isEmpty ? 'Без имени' : name;
+  }
+
+  void _syncWorkspaceTitle() {
+    WorkspaceNavigationScope.maybeOf(
+      context,
+    )?.controller.updateEntityPresentation(
       EntityLink.typed(
         entityType: EntityLinkType.client,
         entityId: _entityId,
         variant: widget.entityType,
       ),
-      '${_isStudent ? 'Ученик' : 'Лид'} · $name',
+      EntityPresentationReference(primary: _clientPresentationLabel),
     );
   }
 

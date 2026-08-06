@@ -623,6 +623,9 @@ extension _ClientCardTabsA on _ClientCardState {
         entityType: EntityLinkType.client,
         entityId: targetId,
         variant: targetType,
+        presentation: EntityPresentationReference(
+          primary: _clientPresentationLabel,
+        ),
       ),
       scrollController: _taskScrollController,
       canWrite:

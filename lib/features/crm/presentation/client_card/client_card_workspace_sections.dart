@@ -58,20 +58,30 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
           onChanged: () {},
         ),
         const SizedBox(height: AppSpace.lg),
-        ClientScheduleCalendar(
-          clientType: 'lead',
-          clientId: _leadId,
-          clientName: [
-            _clientFirstName,
-            _clientLastName,
-          ].whereType<String>().join(' '),
-          branches: _branches,
-          defaultBranchId: _clientBranchId,
-          canRead: canReadSchedule,
-          active: _selectedSection == 'lessons',
-          initialViewState: widget.initialViewState,
-          onViewStateChanged: widget.onViewStateChanged,
-        ),
+        if (!canReadSchedule)
+          const MagicPageState(
+            kind: MagicPageStateKind.forbidden,
+            title: 'Календарь недоступен',
+            message: 'У вашей роли нет доступа к расписанию.',
+          )
+        else
+          SizedBox(
+            height: 760,
+            child: ScheduleWidget(
+              title: 'Календарь занятий',
+              clientType: 'lead',
+              clientId: _leadId,
+              clientName: [
+                _clientFirstName,
+                _clientLastName,
+              ].whereType<String>().join(' '),
+              initialBranchId: _clientBranchId,
+              canWrite: canWriteSchedule,
+              active: _selectedSection == 'lessons',
+              initialViewState: widget.initialViewState,
+              onViewStateChanged: widget.onViewStateChanged,
+            ),
+          ),
       ],
     );
   }
@@ -158,6 +168,14 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
                         EntityLink.typed(
                           entityType: EntityLinkType.subscription,
                           entityId: subscription.id!,
+                          presentation: EntityPresentationReference(
+                            primary:
+                                (subscription.packageName?.trim().isNotEmpty ??
+                                    false)
+                                ? subscription.packageName!
+                                : 'Абонемент',
+                            context: _subscriptionRemainder(subscription),
+                          ),
                           optionalFocus: EntityLinkFocus(
                             focus: 'subscription',
                             filter: {

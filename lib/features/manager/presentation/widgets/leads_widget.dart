@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/providers/crm_section_focus_provider.dart';
 import 'package:magic_music_crm/core/providers/crm_navigation_provider.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
-import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 import 'package:intl/intl.dart';
@@ -20,12 +19,10 @@ import 'package:magic_music_crm/core/services/hollihop_service.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/core/widgets/v7/magic_desktop_scrollbar.dart';
-import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_forms/client_forms.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tasks_v4_panel.dart';
 import 'package:magic_music_crm/features/manager/presentation/transfer/lead_transfer_controller.dart';
-import 'manage_statuses_dialog.dart';
 import 'package:magic_music_crm/core/models/lead.dart';
 import 'lead_dialogs.dart';
 import 'lead_board_filters.dart';
@@ -74,6 +71,7 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget>
   // True between a keystroke and the moment the matching server board lands —
   // drives a small inline «идёт поиск…» hint (never a full-board skeleton).
   bool _searchInFlight = false;
+  Map<String, dynamic>? _lastBoard;
   final Map<String, String> _optimisticLeadStatuses = {};
   final Set<String> _hiddenLeadIds = {};
   final Set<String> _pendingLeadIds = {};
@@ -98,21 +96,6 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget>
   static const double _autoScrollMinSpeed = 8.0;
   static const double _autoScrollMaxSpeed = 24.0;
   static const double _autoScrollEdge = 110.0;
-
-  /// Column config (add/reorder/delete, incl. «Без статуса») is a system
-  /// setting → управляющий/директор/сисадмин only, not a branch admin.
-  bool get _canManageColumns {
-    final role = ref.watch(releaseGateStatusProvider).asData?.value.role;
-    return role == 'manager' || role == 'director' || role == 'system_admin';
-  }
-
-  bool get _canManageClientConfiguration =>
-      ref
-          .watch(capabilitySnapshotProvider)
-          .asData
-          ?.value
-          .allows('config.crm.read') ==
-      true;
 
   @override
   void initState() {
@@ -161,18 +144,20 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget>
       _refreshBoard();
     });
     final boardAsync = ref.watch(leadBoardProvider(_filters));
+    final latestBoard = boardAsync.value;
+    if (latestBoard != null) _lastBoard = latestBoard;
 
     // D1: keep the PREVIOUS board visible during a (debounced) refetch instead
     // of flashing a full-board skeleton. Only the very first load — when there
     // is no value to fall back on — shows the skeleton.
-    if (boardAsync.isLoading && !boardAsync.hasValue) {
+    if (boardAsync.isLoading && _lastBoard == null) {
       return const KanbanSkeleton();
     }
-    if (boardAsync.hasError && !boardAsync.hasValue) {
+    if (boardAsync.hasError && _lastBoard == null) {
       return LeadsBoardError(onRetry: _refreshBoard);
     }
 
-    final board = boardAsync.value ?? const <String, dynamic>{};
+    final board = latestBoard ?? _lastBoard ?? const <String, dynamic>{};
 
     // D1: once the matching server result has landed, drop the in-flight hint.
     // Done after this frame so we never call setState during build.

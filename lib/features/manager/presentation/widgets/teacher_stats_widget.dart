@@ -16,7 +16,10 @@ import 'package:magic_music_crm/core/widgets/teacher_rate_selector.dart';
 /// «Ставка по данной группе» (процесс заказчика: в конце месяца пробные без
 /// покупки вручную переводят в 0 — «входит в оклад»).
 class TeacherStatsWidget extends ConsumerStatefulWidget {
-  const TeacherStatsWidget({super.key});
+  const TeacherStatsWidget({super.key, this.filterRange, this.branchId});
+
+  final DateTimeRange? filterRange;
+  final String? branchId;
 
   @override
   ConsumerState<TeacherStatsWidget> createState() => _TeacherStatsWidgetState();
@@ -52,27 +55,45 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
   @override
   void initState() {
     super.initState();
-    // Период по умолчанию — текущий месяц (закрытие месяца у заказчика).
-    final now = DateTime.now();
-    _from = DateTime(now.year, now.month, 1);
-    _to = DateTime(now.year, now.month + 1, 1);
+    _applySharedFilter();
     _loadReferences();
     _loadReport();
+  }
+
+  void _applySharedFilter() {
+    final range = widget.filterRange;
+    final now = DateTime.now();
+    _from = range?.start ?? DateTime(now.year, now.month, 1);
+    _to = range == null
+        ? DateTime(now.year, now.month + 1, 1)
+        : range.end.add(const Duration(days: 1));
+    _branchId = widget.branchId;
+  }
+
+  @override
+  void didUpdateWidget(covariant TeacherStatsWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.filterRange != widget.filterRange ||
+        oldWidget.branchId != widget.branchId) {
+      _applySharedFilter();
+      _loadReport();
+    }
   }
 
   Future<void> _loadReferences() async {
     try {
       final crm = ref.read(magicCrmServiceProvider);
       final results = await Future.wait([
-        crm.listBranches(limit: 100),
+        if (widget.filterRange == null) crm.listBranches(limit: 100),
         crm.listTeachers(limit: 100),
         crm.listDisciplines(),
       ]);
       if (!mounted) return;
       setState(() {
-        _branches = results[0];
-        _teachers = results[1];
-        _disciplines = results[2];
+        final offset = widget.filterRange == null ? 1 : 0;
+        if (offset == 1) _branches = results[0];
+        _teachers = results[offset];
+        _disciplines = results[offset + 1];
       });
     } catch (_) {
       // Фильтры-справочники не критичны для отчёта — молча оставляем пустыми.
@@ -205,9 +226,7 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
   /// Month-end bulk pass (spec §3): tick the trials nobody bought, set them all
   /// to «входит в оклад» in one go.
   Future<void> _applyBulkRate() async {
-    final lessonIds = [
-      for (final ids in _selectedUnits.values) ...ids,
-    ];
+    final lessonIds = [for (final ids in _selectedUnits.values) ...ids];
     if (lessonIds.isEmpty || _applyingBulkRate) return;
 
     num? picked;
@@ -260,9 +279,9 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
           .read(magicCrmServiceProvider)
           .setLessonsTeacherRate(lessonIds: lessonIds, teacherRate: picked);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Обновлено занятий: $updated')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Обновлено занятий: $updated')));
       await _loadReport();
     } catch (e) {
       if (!mounted) return;
@@ -353,47 +372,49 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
       runSpacing: 8,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        OutlinedButton.icon(
-          onPressed: _pickPeriod,
-          icon: const Icon(Icons.date_range_rounded, size: 18),
-          label: Text(
-            '${_dayFmt.format(_from)} – '
-            '${_dayFmt.format(_to.subtract(const Duration(days: 1)))}',
-          ),
-        ),
-        SizedBox(
-          width: 180,
-          child: DropdownButtonFormField<String?>(
-            // Fixed-width filter box: without isExpanded the selected label plus
-            // the arrow overflow the 180px SizedBox and paint the stripes.
-            isExpanded: true,
-            key: ValueKey('branch-$_branchId'),
-            initialValue: _branchId,
-            decoration: const InputDecoration(
-              labelText: 'Филиал',
-              isDense: true,
+        if (widget.filterRange == null) ...[
+          OutlinedButton.icon(
+            onPressed: _pickPeriod,
+            icon: const Icon(Icons.date_range_rounded, size: 18),
+            label: Text(
+              '${_dayFmt.format(_from)} – '
+              '${_dayFmt.format(_to.subtract(const Duration(days: 1)))}',
             ),
-            items: [
-              const DropdownMenuItem<String?>(
-                value: null,
-                child: Text('Все филиалы'),
+          ),
+          SizedBox(
+            width: 180,
+            child: DropdownButtonFormField<String?>(
+              // Fixed-width filter box: without isExpanded the selected label plus
+              // the arrow overflow the 180px SizedBox and paint the stripes.
+              isExpanded: true,
+              key: ValueKey('branch-$_branchId'),
+              initialValue: _branchId,
+              decoration: const InputDecoration(
+                labelText: 'Филиал',
+                isDense: true,
               ),
-              ..._branches.map(
-                (branch) => DropdownMenuItem<String?>(
-                  value: branch['id']?.toString(),
-                  child: Text(
-                    branch['name']?.toString() ?? 'Филиал',
-                    overflow: TextOverflow.ellipsis,
+              items: [
+                const DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text('Все филиалы'),
+                ),
+                ..._branches.map(
+                  (branch) => DropdownMenuItem<String?>(
+                    value: branch['id']?.toString(),
+                    child: Text(
+                      branch['name']?.toString() ?? 'Филиал',
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ),
-              ),
-            ],
-            onChanged: (value) {
-              setState(() => _branchId = value);
-              _loadReport();
-            },
+              ],
+              onChanged: (value) {
+                setState(() => _branchId = value);
+                _loadReport();
+              },
+            ),
           ),
-        ),
+        ],
         SizedBox(
           width: 200,
           child: DropdownButtonFormField<String?>(
@@ -486,7 +507,10 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
             ),
             items: const [
               DropdownMenuItem<String?>(value: null, child: Text('Любой')),
-              DropdownMenuItem<String?>(value: 'active', child: Text('Работает')),
+              DropdownMenuItem<String?>(
+                value: 'active',
+                child: Text('Работает'),
+              ),
               DropdownMenuItem<String?>(
                 value: 'inactive',
                 child: Text('Не работает'),
@@ -597,9 +621,9 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
       if (opened.type != ResultType.done) {
         // No CSV handler (common on a bare desktop): the file is still saved,
         // so tell the user where instead of just failing.
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Сохранено: ${file.path}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Сохранено: ${file.path}')));
       }
     } catch (e) {
       if (!mounted) return;

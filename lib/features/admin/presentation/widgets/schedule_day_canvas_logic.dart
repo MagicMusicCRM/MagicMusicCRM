@@ -87,6 +87,7 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
 
   // ── Empty-cell tap / vertical select ────────────────────────────────────────
   void _onColumnTap(ScheduleColumn col, double localY) {
+    if (!widget.allowCreate) return;
     // A card is selected → the first tap on empty space dismisses it rather
     // than booking an hour. Deselecting must never cost a create dialog.
     if (_selectedId != null) {
@@ -98,6 +99,7 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
   }
 
   void _onSelectStart(ScheduleColumn col, int colIndex, double localY) {
+    if (!widget.allowCreate) return;
     // Anchor only. Nothing is shown and _dragging stays false until the pointer
     // actually travels [kSelectSlop] — see _onSelectUpdate.
     _selColumnId = col.id;
@@ -336,15 +338,26 @@ extension _ScheduleDayCanvasLogic on _ScheduleDayCanvasState {
               Positioned.fill(
                 child: GestureDetector(
                   behavior: HitTestBehavior.translucent,
-                  onTapUp: (d) => _onColumnTap(col, d.localPosition.dy),
-                  onLongPressStart: (d) =>
-                      _onSelectStart(col, colIndex, d.localPosition.dy),
-                  onLongPressMoveUpdate: (d) =>
-                      _onSelectUpdate(d.localPosition.dy, d.localPosition.dx),
-                  onLongPressEnd: (_) => _onSelectEnd(),
+                  onTapUp: widget.allowCreate
+                      ? (d) => _onColumnTap(col, d.localPosition.dy)
+                      : null,
+                  onLongPressStart: widget.allowCreate
+                      ? (d) => _onSelectStart(col, colIndex, d.localPosition.dy)
+                      : null,
+                  onLongPressMoveUpdate: widget.allowCreate
+                      ? (d) => _onSelectUpdate(
+                          d.localPosition.dy,
+                          d.localPosition.dx,
+                        )
+                      : null,
+                  onLongPressEnd: widget.allowCreate
+                      ? (_) => _onSelectEnd()
+                      : null,
                   // A cancelled gesture must drop the anchor too, or the teal
                   // block is left painted over a day nobody is dragging on.
-                  onLongPressCancel: _onSelectCancel,
+                  onLongPressCancel: widget.allowCreate
+                      ? _onSelectCancel
+                      : null,
                   child: const SizedBox.expand(),
                 ),
               ),

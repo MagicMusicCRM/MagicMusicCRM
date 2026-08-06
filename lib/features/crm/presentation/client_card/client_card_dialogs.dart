@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 
 import 'client_card_ui.dart';
@@ -178,12 +182,60 @@ Future<FamilyMemberInput?> showAddFamilyMemberSheet(
   required bool isStudent,
   required String defaultEntityType,
   String? defaultEntityId,
+  String? defaultEntityLabel,
 }) async {
   final cs = Theme.of(context).colorScheme;
+  final container = ProviderScope.containerOf(context, listen: false);
   var role = kFamilyRoleOptions.first.$1;
   var entityType = defaultEntityType;
-  final entityIdCtrl = TextEditingController(text: defaultEntityId ?? '');
+  var entityId = defaultEntityId ?? '';
+  var entityLabel = defaultEntityLabel ?? '';
   var isPrimaryContact = false;
+
+  String profileLabel(Map<String, dynamic> row) {
+    final name = [row['last_name'], row['first_name']]
+        .map((value) => value?.toString().trim() ?? '')
+        .where((value) => value.isNotEmpty)
+        .join(' ');
+    final email = row['email']?.toString().trim() ?? '';
+    return name.isNotEmpty
+        ? name
+        : email.isNotEmpty
+        ? email
+        : 'Профиль без имени';
+  }
+
+  Future<List<SearchableSelectItem>> searchCandidates(String query) async {
+    if (entityType == 'profile') {
+      final rows = await container
+          .read(magicProfileAdminServiceProvider)
+          .listProfiles(q: query, limit: 50);
+      return [
+        for (final row in rows)
+          if (row['id']?.toString().trim().isNotEmpty == true)
+            SearchableSelectItem(
+              id: row['id'].toString(),
+              label: profileLabel(row),
+              subtitle: 'Профиль',
+            ),
+      ];
+    }
+    final rows = await container
+        .read(magicCrmServiceProvider)
+        .searchClientRefs(q: query, type: entityType, limit: 50);
+    return [
+      for (final row in rows)
+        if (row['ref'] is Map &&
+            (row['ref'] as Map)['id']?.toString().trim().isNotEmpty == true)
+          SearchableSelectItem(
+            id: (row['ref'] as Map)['id'].toString(),
+            label: row['label']?.toString().trim().isNotEmpty == true
+                ? row['label'].toString()
+                : 'Клиент без имени',
+            subtitle: entityType == 'lead' ? 'Лид' : 'Ученик',
+          ),
+    ];
+  }
 
   final confirmed = await showMagicSheet<bool>(
     context,
@@ -244,22 +296,52 @@ Future<FamilyMemberInput?> showAddFamilyMemberSheet(
                   DropdownMenuItem(value: 'profile', child: Text('Профиль')),
                 ],
                 onChanged: (value) {
-                  if (value != null) setSheetState(() => entityType = value);
+                  if (value != null) {
+                    setSheetState(() {
+                      entityType = value;
+                      entityId = '';
+                      entityLabel = '';
+                    });
+                  }
                 },
               ),
               const SizedBox(height: AppSpace.md),
-              TextField(
-                controller: entityIdCtrl,
-                decoration: clientCardInputDecoration(
-                  cs,
-                  label: 'ID записи',
-                  hint: 'Идентификатор лида/ученика/профиля',
-                  helperText: defaultEntityId == null
-                      ? null
-                      : (isStudent
-                            ? 'По умолчанию — текущий ученик'
-                            : 'По умолчанию — текущий лид'),
-                  isDense: true,
+              InkWell(
+                onTap: () async {
+                  final items = await searchCandidates('');
+                  if (!context.mounted) return;
+                  SearchableSelect.show(
+                    context: context,
+                    title: 'Выберите запись',
+                    hintText: 'Поиск по имени, email или телефону...',
+                    items: items,
+                    selectedId: entityId,
+                    isNullable: false,
+                    onSearch: searchCandidates,
+                    onSelected: (item) => setSheetState(() {
+                      entityId = item?.id ?? '';
+                      entityLabel = item?.label ?? '';
+                    }),
+                  );
+                },
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                child: InputDecorator(
+                  decoration: clientCardInputDecoration(
+                    cs,
+                    label: 'Запись',
+                    isDense: true,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          entityLabel.isEmpty ? 'Выберите запись' : entityLabel,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const Icon(Icons.search_rounded),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: AppSpace.xs),
@@ -300,8 +382,6 @@ Future<FamilyMemberInput?> showAddFamilyMemberSheet(
     ],
   );
 
-  final entityId = entityIdCtrl.text.trim();
-  entityIdCtrl.dispose();
   if (confirmed != true) return null;
   return (
     role: role,

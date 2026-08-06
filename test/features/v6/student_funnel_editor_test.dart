@@ -19,8 +19,9 @@ class _FunnelApi extends MagicApiClient {
     Map<String, dynamic>? queryParameters,
     bool authenticated = true,
   }) async {
-    if (path == '/crm/student-funnel') {
+    if (path == '/crm/client-pipelines') {
       return <String, dynamic>{
+            'clientType': queryParameters?['clientType'],
             'branchId': queryParameters?['branchId'],
             'source': 'school',
             'schoolVersion': 1,
@@ -38,7 +39,7 @@ class _FunnelApi extends MagicApiClient {
           }
           as T;
     }
-    if (path == '/crm/student-funnel/revisions') {
+    if (path == '/crm/client-pipelines/revisions') {
       return <String, dynamic>{
             'items': [
               {'version': 1, 'reason': 'Системная версия'},
@@ -56,7 +57,16 @@ class _FunnelApi extends MagicApiClient {
     Map<String, dynamic>? queryParameters,
     bool authenticated = true,
   }) async {
-    if (path == '/crm/student-funnel/publish') {
+    if (path == '/crm/client-pipelines/preview') {
+      return <String, dynamic>{
+            'valid': true,
+            'changes': {'created': 0, 'updated': 1, 'archived': 0},
+            'affectedClients': 0,
+            'blockingIssues': <dynamic>[],
+          }
+          as T;
+    }
+    if (path == '/crm/client-pipelines/publish') {
       published = Map<String, dynamic>.from(data! as Map);
       if (failPublish) throw StateError('offline');
       return <String, dynamic>{'version': 2} as T;
@@ -65,7 +75,11 @@ class _FunnelApi extends MagicApiClient {
   }
 }
 
-Future<void> _open(WidgetTester tester, _FunnelApi api) async {
+Future<void> _open(
+  WidgetTester tester,
+  _FunnelApi api, {
+  String clientType = 'student',
+}) async {
   tester.view.physicalSize = const Size(390, 844);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
@@ -77,8 +91,11 @@ Future<void> _open(WidgetTester tester, _FunnelApi api) async {
         home: Scaffold(
           body: Builder(
             builder: (context) => FilledButton(
-              onPressed: () =>
-                  showStudentFunnelEditor(context, branches: const []),
+              onPressed: () => showClientPipelineEditor(
+                context,
+                branches: const [],
+                initialClientType: clientType,
+              ),
               child: const Text('Открыть'),
             ),
           ),
@@ -95,24 +112,27 @@ void main() {
     tester,
   ) async {
     final api = _FunnelApi();
-    await _open(tester, api);
+    await _open(tester, api, clientType: 'lead');
 
     expect(find.byKey(const ValueKey('magic-sheet-mobile')), findsOneWidget);
     await tester.enterText(
-      find.byKey(const ValueKey('student-funnel-stage-active')),
+      find.byKey(const ValueKey('client-pipeline-stage-active')),
       'Постоянное обучение',
     );
     await tester.enterText(
-      find.byKey(const ValueKey('student-funnel-reason')),
+      find.byKey(const ValueKey('client-pipeline-reason')),
       'Уточнили термин',
     );
-    final publish = find.byKey(const ValueKey('student-funnel-publish'));
+    final publish = find.byKey(const ValueKey('client-pipeline-publish'));
     await tester.ensureVisible(publish);
     await tester.pumpAndSettle();
     await tester.tap(publish);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.widgetWithText(FilledButton, 'Опубликовать').last);
     await tester.pumpAndSettle();
 
     expect(api.published?['expectedVersion'], 1);
+    expect(api.published?['clientType'], 'lead');
     expect(
       (api.published?['stages'] as List).single['label'],
       'Постоянное обучение',
@@ -124,16 +144,18 @@ void main() {
     final api = _FunnelApi(failPublish: true);
     await _open(tester, api);
 
-    final label = find.byKey(const ValueKey('student-funnel-stage-active'));
+    final label = find.byKey(const ValueKey('client-pipeline-stage-active'));
     await tester.enterText(label, 'Черновик этапа');
     await tester.enterText(
-      find.byKey(const ValueKey('student-funnel-reason')),
+      find.byKey(const ValueKey('client-pipeline-reason')),
       'Проверка сети',
     );
-    final publish = find.byKey(const ValueKey('student-funnel-publish'));
+    final publish = find.byKey(const ValueKey('client-pipeline-publish'));
     await tester.ensureVisible(publish);
     await tester.pumpAndSettle();
     await tester.tap(publish);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.widgetWithText(FilledButton, 'Опубликовать').last);
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Не удалось опубликовать'), findsOneWidget);

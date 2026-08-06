@@ -241,7 +241,7 @@ export interface ExportTaskHistory {
 }
 
 /**
- * A task-history row, if the export has one. Feeds app.task_history with the
+ * A task-history row, if the export has one. Feeds canonical audit events with the
  * ORIGINAL date (spec §2.2: «по датам и времени выполнения») rather than the
  * import date.
  *

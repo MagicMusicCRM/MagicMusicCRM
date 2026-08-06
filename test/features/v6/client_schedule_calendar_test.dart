@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
-import 'package:magic_music_crm/features/crm/presentation/client_card/client_schedule_calendar.dart';
-import 'package:syncfusion_flutter_calendar/calendar.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_day_canvas.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
 
 import '../crm/client_card/card_fake_api.dart';
 
@@ -20,13 +20,23 @@ const _branches = [
   {'id': 'branch-b', 'name': 'Центр', 'utcOffsetMinutes': 180},
 ];
 
+const _rooms = [
+  {'id': 'room-a', 'name': 'Класс 1', 'branchId': 'branch-a'},
+  {'id': 'room-b', 'name': 'Класс 2', 'branchId': 'branch-b'},
+];
+
 const _lessons = [
   {
     'id': 'lesson-selected',
     'studentId': 'student-1',
     'studentName': 'Анна Смирнова',
+    'teacherId': 'teacher-1',
+    'teacherName': 'Мария Педагог',
     'branchId': 'branch-a',
-    'scheduledAt': '2026-08-04T12:00:00.000Z',
+    'branchName': 'Сокол',
+    'roomId': 'room-a',
+    'roomName': 'Класс 1',
+    'scheduledAt': '2026-08-04T07:00:00.000Z',
     'durationMinutes': 60,
     'status': 'scheduled',
     'lifecycleState': 'scheduled',
@@ -37,22 +47,54 @@ const _lessons = [
     'id': 'lesson-other',
     'studentId': 'student-2',
     'studentName': 'Иван Петров',
+    'teacherId': 'teacher-1',
+    'teacherName': 'Мария Педагог',
     'branchId': 'branch-a',
-    'scheduledAt': '2026-08-04T13:00:00.000Z',
-    'durationMinutes': 45,
+    'branchName': 'Сокол',
+    'roomId': 'room-a',
+    'roomName': 'Класс 1',
+    'scheduledAt': '2026-08-04T09:00:00.000Z',
+    'durationMinutes': 60,
     'status': 'completed',
     'lifecycleState': 'successfully_completed',
     'isTrial': false,
     'conflictTypes': <String>[],
   },
+  {
+    'id': 'lesson-next-day',
+    'studentId': 'student-2',
+    'studentName': 'Иван Петров',
+    'teacherId': 'teacher-1',
+    'teacherName': 'Мария Педагог',
+    'branchId': 'branch-a',
+    'branchName': 'Сокол',
+    'roomId': 'room-a',
+    'roomName': 'Класс 1',
+    'scheduledAt': '2026-08-05T07:00:00.000Z',
+    'durationMinutes': 60,
+    'status': 'scheduled',
+    'lifecycleState': 'scheduled',
+    'isTrial': false,
+    'conflictTypes': <String>[],
+  },
 ];
+
+ContextViewState _dayState() => ContextViewState(
+  filters: const {
+    'section': 'lessons',
+    'clientCalendarMode': 'day',
+    'clientCalendarBranchId': 'branch-a',
+    'dayMode': 'byRoom',
+  },
+  date: DateTime(2026, 8, 4),
+);
 
 Widget _calendarApp(
   FakeCardApiClient api, {
   ContextViewState? initial,
   ValueChanged<ContextViewState>? onChanged,
-  TargetPlatform? platform,
   bool active = true,
+  bool clientContext = true,
 }) {
   return ProviderScope(
     overrides: [
@@ -62,16 +104,17 @@ Widget _calendarApp(
       ),
     ],
     child: MaterialApp(
-      theme: ThemeData(platform: platform),
+      theme: ThemeData(platform: TargetPlatform.windows),
       home: Scaffold(
-        body: SingleChildScrollView(
-          child: ClientScheduleCalendar(
-            clientType: 'student',
-            clientId: 'student-1',
-            clientName: 'Анна Смирнова',
-            branches: _branches,
-            defaultBranchId: 'branch-a',
-            canRead: true,
+        body: SizedBox(
+          height: 760,
+          child: ScheduleWidget(
+            title: 'Календарь занятий',
+            clientType: clientContext ? 'student' : null,
+            clientId: clientContext ? 'student-1' : null,
+            clientName: clientContext ? 'Анна Смирнова' : null,
+            initialBranchId: 'branch-a',
+            canWrite: false,
             active: active,
             initialViewState: initial,
             onViewStateChanged: onChanged,
@@ -85,191 +128,168 @@ Widget _calendarApp(
 void main() {
   setUpAll(() => initializeDateFormatting('ru'));
 
-  test('viewport is finite for Month, Week and Day', () {
-    final date = DateTime(2026, 8, 4);
-    final month = clientCalendarViewport(CalendarView.month, date);
-    final week = clientCalendarViewport(CalendarView.week, date);
-    final day = clientCalendarViewport(CalendarView.day, date);
-
-    expect(
-      month.endExclusive.difference(month.start).inDays,
-      inInclusiveRange(35, 42),
-    );
-    expect(week.endExclusive.difference(week.start).inDays, 7);
-    expect(day.endExclusive.difference(day.start).inDays, 1);
-  });
-
-  test('relation is typed and does not infer from display names', () {
-    expect(
-      lessonBelongsToClient(
-        const {'student_id': 'student-1', 'lead_id': 'lead-1'},
-        clientType: 'student',
-        clientId: 'student-1',
-      ),
-      isTrue,
-    );
-    expect(
-      lessonBelongsToClient(
-        const {'student_name': 'Анна Смирнова'},
-        clientType: 'student',
-        clientId: 'student-1',
-      ),
-      isFalse,
-    );
-    expect(
-      lessonBelongsToClient(
-        const {'student_id': 'student-1', 'lead_id': 'lead-1'},
-        clientType: 'lead',
-        clientId: 'lead-1',
-      ),
-      isTrue,
-    );
-  });
-
-  testWidgets('hidden client section does not prefetch the viewport', (
+  testWidgets('inactive client section does not prefetch schedule', (
     tester,
   ) async {
-    final api = FakeCardApiClient(scheduleMatrix: _lessons);
+    final api = FakeCardApiClient(
+      branches: _branches,
+      rooms: _rooms,
+      scheduleMatrix: _lessons,
+    );
     await tester.pumpWidget(_calendarApp(api, active: false));
     await tester.pumpAndSettle();
+
     expect(
       api.getCalls.where((call) => call.path == '/crm/schedule/matrix'),
       isEmpty,
     );
-
-    await tester.pumpWidget(_calendarApp(api));
-    await tester.pumpAndSettle();
-    expect(
-      api.getCalls.where((call) => call.path == '/crm/schedule/matrix'),
-      isNotEmpty,
-    );
   });
 
-  for (final platform in const [
-    TargetPlatform.windows,
-    TargetPlatform.android,
-  ]) {
-    testWidgets('$platform restores scope and renders relation legend', (
-      tester,
-    ) async {
+  testWidgets(
+    'client context reuses the canonical Day model and relation marks',
+    (tester) async {
       tester.view.devicePixelRatio = 1;
-      tester.view.physicalSize = Size(
-        platform == TargetPlatform.android ? 412 : 1200,
-        900,
-      );
+      tester.view.physicalSize = const Size(1200, 900);
       addTearDown(tester.view.reset);
-      final api = FakeCardApiClient(scheduleMatrix: _lessons);
-      await tester.pumpWidget(
-        _calendarApp(
-          api,
-          initial: ContextViewState(
-            filters: const {
-              'section': 'lessons',
-              'clientCalendarMode': 'day',
-              'clientCalendarBranchId': 'branch-a',
-            },
-            date: DateTime(2026, 8, 4),
-          ),
-          platform: platform,
-        ),
+      final api = FakeCardApiClient(
+        branches: _branches,
+        rooms: _rooms,
+        scheduleMatrix: _lessons,
       );
+      await tester.pumpWidget(_calendarApp(api, initial: _dayState()));
       await tester.pumpAndSettle();
 
       expect(find.text('Календарь занятий'), findsOneWidget);
-      expect(find.text('Клиент карточки'), findsOneWidget);
+      expect(find.text('Анна Смирнова'), findsWidgets);
       expect(find.text('Другие клиенты'), findsOneWidget);
-      expect(find.text('Пробное'), findsOneWidget);
-      expect(find.text('Конфликт'), findsOneWidget);
+      expect(find.byType(ScheduleDayCanvas), findsOneWidget);
       expect(
-        find.byKey(const ValueKey('client-calendar-grid')),
+        find.byKey(const ValueKey('schedule-lesson-lesson-selected')),
         findsOneWidget,
       );
       expect(
-        find.byKey(const ValueKey('client-calendar-lesson-lesson-selected')),
+        find.byKey(const ValueKey('schedule-lesson-lesson-other')),
         findsOneWidget,
       );
-      expect(
-        find.byKey(const ValueKey('client-calendar-lesson-lesson-other')),
-        findsOneWidget,
-      );
+      expect(find.byIcon(Icons.person_pin_circle_outlined), findsWidgets);
+      expect(find.byIcon(Icons.people_outline_rounded), findsWidgets);
+      expect(find.text('Создать занятие'), findsNothing);
 
       final matrixCalls = api.getCalls
           .where((call) => call.path == '/crm/schedule/matrix')
           .toList();
-      expect(matrixCalls, hasLength(2));
-      final matrix = matrixCalls.lastWhere(
-        (call) => !call.query.containsKey('studentId'),
-      );
-      final selectedMatrix = matrixCalls.lastWhere(
-        (call) => call.query['studentId'] == 'student-1',
-      );
-      expect(matrix.query['branchId'], 'branch-a');
-      expect(matrix.query['limit'], 500);
-      expect(matrix.query.containsKey('studentId'), isFalse);
-      expect(matrix.query.containsKey('leadId'), isFalse);
-      expect(selectedMatrix.query['branchId'], 'branch-a');
-      final from = DateTime.parse(matrix.query['from'] as String);
-      final to = DateTime.parse(matrix.query['to'] as String);
-      expect(to.difference(from).inDays, 1);
+      expect(matrixCalls, isNotEmpty);
+      for (final call in matrixCalls) {
+        expect(call.query['branchId'], 'branch-a');
+        expect(call.query.containsKey('studentId'), isFalse);
+        expect(call.query.containsKey('leadId'), isFalse);
+      }
       expect(tester.takeException(), isNull);
-    });
-  }
+    },
+  );
 
-  testWidgets('mode and branch changes publish restorable view state', (
+  testWidgets('schedule search keeps the view and marks Day Week Month', (
     tester,
   ) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(1200, 900);
     addTearDown(tester.view.reset);
-    final api = FakeCardApiClient(scheduleMatrix: _lessons);
-    final states = <ContextViewState>[];
+    final api = FakeCardApiClient(
+      branches: _branches,
+      rooms: _rooms,
+      scheduleMatrix: _lessons,
+    );
     await tester.pumpWidget(
-      _calendarApp(
-        api,
-        initial: ContextViewState(
-          filters: const {
-            'section': 'lessons',
-            'clientCalendarMode': 'day',
-            'clientCalendarBranchId': 'branch-a',
-          },
-          date: DateTime(2026, 8, 4),
-        ),
-        onChanged: states.add,
+      _calendarApp(api, initial: _dayState(), clientContext: false),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Найти занятие'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Анна Смирнова');
+    await tester.tap(find.widgetWithText(FilledButton, 'Найти'));
+    await tester.pump();
+
+    expect(find.text('Поиск: анна смирнова'), findsOneWidget);
+    expect(
+      api.getCalls.any((call) => call.path == '/crm/clients/search'),
+      isTrue,
+    );
+    expect(
+      api.getCalls.any(
+        (call) =>
+            call.path == '/crm/schedule/matrix' &&
+            call.query['studentId'] == 'student-1',
       ),
+      isTrue,
+    );
+    expect(_lessonBorder(tester, 'lesson-selected'), AppColor.gold);
+    await tester.pump(const Duration(seconds: 4));
+    expect(_lessonBorder(tester, 'lesson-selected'), AppColor.success);
+    expect(_lessonBorder(tester, 'lesson-other'), AppColor.text2);
+
+    await tester.tap(find.text('Неделя'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('schedule-week-view')), findsOneWidget);
+    expect(_lessonBorder(tester, 'lesson-selected'), AppColor.success);
+    expect(_lessonBorder(tester, 'lesson-other'), AppColor.text2);
+
+    await tester.tap(find.text('Месяц'));
+    await tester.pumpAndSettle();
+    expect(_monthDayBorder(tester, '2026-08-04'), AppColor.success);
+    expect(_monthDayBorder(tester, '2026-08-05'), isNot(AppColor.success));
+
+    await tester.tap(find.byTooltip('Поиск: анна смирнова'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Очистить'));
+    await tester.pump();
+    expect(find.text('Поиск: анна смирнова'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('mode and branch publish one restorable schedule state', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 900);
+    addTearDown(tester.view.reset);
+    final states = <ContextViewState>[];
+    final api = FakeCardApiClient(
+      branches: _branches,
+      rooms: _rooms,
+      scheduleMatrix: _lessons,
+    );
+    await tester.pumpWidget(
+      _calendarApp(api, initial: _dayState(), onChanged: states.add),
     );
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Неделя'));
     await tester.pumpAndSettle();
+    expect(states.last.filters['view'], 'week');
     expect(states.last.filters['clientCalendarMode'], 'week');
-    final weekCall = api.getCalls.lastWhere(
-      (call) => call.path == '/crm/schedule/matrix',
-    );
-    expect(
-      DateTime.parse(
-        weekCall.query['to'] as String,
-      ).difference(DateTime.parse(weekCall.query['from'] as String)).inDays,
-      7,
-    );
 
-    await tester.tap(find.byKey(const ValueKey('client-calendar-branch')));
+    await tester.tap(
+      find.byKey(const ValueKey('schedule-branch-selector-branch-a')),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Центр').last);
     await tester.pumpAndSettle();
+    expect(states.last.filters['branchId'], 'branch-b');
     expect(states.last.filters['clientCalendarBranchId'], 'branch-b');
-    final branchCall = api.getCalls.lastWhere(
-      (call) => call.path == '/crm/schedule/matrix',
-    );
-    expect(branchCall.query['branchId'], 'branch-b');
   });
 
-  testWidgets('lesson link stores calendar source state for workspace Back', (
+  testWidgets('linked lesson keeps client schedule state for workspace Back', (
     tester,
   ) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(1200, 900);
     addTearDown(tester.view.reset);
-    final api = FakeCardApiClient(scheduleMatrix: _lessons);
+    final api = FakeCardApiClient(
+      branches: _branches,
+      rooms: _rooms,
+      scheduleMatrix: _lessons,
+    );
     final controller = WorkspaceController(
       accountId: 'account-1',
       initialLink: EntityLink.typed(
@@ -298,26 +318,21 @@ void main() {
           capabilitySnapshotProvider.overrideWith((ref) async => snapshot),
         ],
         child: MaterialApp(
+          theme: ThemeData(platform: TargetPlatform.windows),
           home: Scaffold(
             body: WorkspaceNavigationScope(
               controller: controller,
               isDesktop: true,
-              child: SingleChildScrollView(
-                child: ClientScheduleCalendar(
+              child: SizedBox(
+                height: 760,
+                child: ScheduleWidget(
+                  title: 'Календарь занятий',
                   clientType: 'student',
                   clientId: 'student-1',
                   clientName: 'Анна Смирнова',
-                  branches: _branches,
-                  defaultBranchId: 'branch-a',
-                  canRead: true,
-                  initialViewState: ContextViewState(
-                    filters: const {
-                      'section': 'lessons',
-                      'clientCalendarMode': 'day',
-                      'clientCalendarBranchId': 'branch-a',
-                    },
-                    date: DateTime(2026, 8, 4),
-                  ),
+                  initialBranchId: 'branch-a',
+                  canWrite: false,
+                  initialViewState: _dayState(),
                 ),
               ),
             ),
@@ -327,12 +342,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final selectedLesson = find.byKey(
-      const ValueKey('client-calendar-lesson-lesson-selected'),
+    await tester.tap(
+      find.byKey(const ValueKey('schedule-lesson-lesson-selected')),
     );
-    await tester.ensureVisible(selectedLesson);
     await tester.pumpAndSettle();
-    await tester.tap(selectedLesson);
+    await tester.tap(find.byKey(const ValueKey('lesson-reference-Занятие')));
     await tester.pumpAndSettle();
 
     final tab = controller.state.activeTab;
@@ -340,92 +354,22 @@ void main() {
     expect(tab.currentRoute.link.entityType, EntityLinkType.lesson);
     final source = tab.routeStack.first.viewState;
     expect(source.filters['section'], 'lessons');
-    expect(source.filters['clientCalendarMode'], 'day');
+    expect(source.filters['view'], 'day');
     expect(source.filters['clientCalendarBranchId'], 'branch-a');
     expect(source.date, DateTime(2026, 8, 4));
   });
+}
 
-  testWidgets('Android lesson drilldown pushes schedule and keeps card Back', (
-    tester,
-  ) async {
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(412, 900);
-    addTearDown(tester.view.reset);
-    final api = FakeCardApiClient(scheduleMatrix: _lessons);
-    var openedQuery = <String, String>{};
-    final router = GoRouter(
-      initialLocation: '/students/student-1',
-      routes: [
-        GoRoute(
-          path: '/students/:id',
-          builder: (_, _) => Scaffold(
-            body: SingleChildScrollView(
-              child: ClientScheduleCalendar(
-                clientType: 'student',
-                clientId: 'student-1',
-                clientName: 'Анна Смирнова',
-                branches: _branches,
-                defaultBranchId: 'branch-a',
-                canRead: true,
-                initialViewState: ContextViewState(
-                  filters: const {
-                    'section': 'lessons',
-                    'clientCalendarMode': 'day',
-                    'clientCalendarBranchId': 'branch-a',
-                  },
-                  date: DateTime(2026, 8, 4),
-                ),
-              ),
-            ),
-          ),
-        ),
-        GoRoute(
-          path: '/admin',
-          builder: (_, state) {
-            openedQuery = state.uri.queryParameters;
-            return const Scaffold(body: Text('Расписание host'));
-          },
-        ),
-      ],
-    );
-    addTearDown(router.dispose);
-    const snapshot = CapabilitySnapshot(
-      accountId: 'account-1',
-      role: 'admin',
-      accessVersion: 1,
-      capabilities: {'crm.client.read.basic', 'schedule.lesson.write'},
-      scopes: {'schedule': 'branch'},
-    );
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          magicApiClientProvider.overrideWithValue(api),
-          capabilitySnapshotProvider.overrideWith((ref) async => snapshot),
-        ],
-        child: MaterialApp.router(
-          theme: ThemeData(platform: TargetPlatform.android),
-          routerConfig: router,
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
+Color _lessonBorder(WidgetTester tester, String id) {
+  final container = tester.widget<Container>(
+    find.byKey(ValueKey('schedule-lesson-$id')),
+  );
+  return ((container.decoration as BoxDecoration).border! as Border).top.color;
+}
 
-    final selectedLesson = find.byKey(
-      const ValueKey('client-calendar-lesson-lesson-selected'),
-    );
-    await tester.ensureVisible(selectedLesson);
-    await tester.pumpAndSettle();
-    await tester.tap(selectedLesson);
-    await tester.pumpAndSettle();
-
-    expect(find.text('Расписание host'), findsOneWidget);
-    expect(openedQuery['entityType'], 'lesson');
-    expect(openedQuery['entityId'], 'lesson-selected');
-    expect(openedQuery['focus'], 'lesson');
-    expect(openedQuery['f.clientId'], 'student-1');
-    expect(openedQuery['f.branchId'], 'branch-a');
-    router.pop();
-    await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('client-calendar-grid')), findsOneWidget);
-  });
+Color _monthDayBorder(WidgetTester tester, String day) {
+  final container = tester.widget<Container>(
+    find.byKey(ValueKey('schedule-month-day-$day')),
+  );
+  return ((container.decoration as BoxDecoration).border! as Border).top.color;
 }
