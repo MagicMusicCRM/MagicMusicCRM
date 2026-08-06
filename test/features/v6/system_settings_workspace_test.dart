@@ -324,6 +324,7 @@ void main() {
           'status': 'working',
           'firstName': 'Ольга',
           'lastName': 'Смирнова',
+          'email': 'hollihop-staff-1@migration.invalid',
           'isAppAccount': false,
         },
       ],
@@ -342,6 +343,7 @@ void main() {
     await tester.tap(find.text('Сотрудники').first);
     await tester.pumpAndSettle();
     expect(find.text('Работает'), findsOneWidget);
+    expect(find.textContaining('@migration.invalid'), findsNothing);
 
     await tester.tap(find.widgetWithText(ListTile, 'Расписание'));
     await tester.pumpAndSettle();

@@ -233,6 +233,12 @@ class _EmployeesList extends ConsumerWidget {
               final appRole = e['app_role'] as String? ?? '';
               final status = e['status'] as String? ?? '';
               final position = e['position'] as String? ?? '';
+              final email = (e['email'] as String? ?? '').trim();
+              final presentableEmail =
+                  email.endsWith('@migration.invalid') ||
+                      email.endsWith('@local.magicmusiccrm.invalid')
+                  ? ''
+                  : email;
               final roleLabel = _staffRoleLabel(role);
               final roleColor = role == 'manager'
                   ? const Color(0xFF8B5CF6)
@@ -262,9 +268,9 @@ class _EmployeesList extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if ((e['email'] ?? '').isNotEmpty)
+                        if (presentableEmail.isNotEmpty)
                           Text(
-                            e['email'],
+                            presentableEmail,
                             style: TextStyle(
                               color: Theme.of(
                                 context,
