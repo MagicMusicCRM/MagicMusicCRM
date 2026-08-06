@@ -43,10 +43,38 @@ void main() {
       fromLink.canonicalLocation?.toJson(),
     );
     expect(fromUrl.canonicalLocation?.ancestors.single.title, 'Клиенты');
+    expect(fromLink.location, startsWith('/manager?'));
+    expect(
+      Uri.parse(fromLink.location!).queryParameters,
+      containsPair('section', 'clients'),
+    );
     expect(
       fromUrl.canonicalLocation?.requiredCapabilities,
       contains('crm.client.read.basic'),
     );
+  });
+
+  test('client title survives the canonical staff route', () {
+    final registry = EntityRouteRegistry();
+    final resolved = registry.resolve(
+      EntityLink.typed(
+        entityType: EntityLinkType.client,
+        entityId: 'lead-1',
+        variant: 'lead',
+        presentation: const EntityPresentationReference(
+          primary: 'Анна Соколова',
+          context: 'Лид',
+        ),
+      ),
+      snapshot,
+    );
+
+    final restored = registry.resolveLocation(resolved.location!, snapshot);
+
+    expect(restored.canonicalLocation?.ancestors.single.title, 'Клиенты');
+    expect(restored.presentation.primary, 'Анна Соколова');
+    expect(restored.presentation.context, 'Лид');
+    expect(restored.canonicalLocation?.title, 'Лид · Анна Соколова');
   });
 
   test('query deep link uses the same entity registry policy', () {

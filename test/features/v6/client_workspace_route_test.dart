@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
@@ -11,6 +12,7 @@ import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/workspace/desktop_workspace_shell.dart';
 import 'package:magic_music_crm/core/workspace/workspace_store.dart';
+import 'package:magic_music_crm/core/widgets/v7/v7_nav_shell.dart';
 import 'package:magic_music_crm/features/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/client_card.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
@@ -37,6 +39,8 @@ Widget _app(FakeCardApiClient api, Widget child) {
 }
 
 void main() {
+  setUpAll(() => initializeDateFormatting('ru'));
+
   test('payment and subscription refs reuse the canonical client sections', () {
     const snapshot = CapabilitySnapshot(
       accountId: 'account-1',
@@ -73,8 +77,10 @@ void main() {
         tabId: 'tab-1',
       );
 
-      expect(surface, isA<ClientCardRouteSurface>());
-      final card = surface! as ClientCardRouteSurface;
+      expect(surface, isA<ClientWorkspaceWithNavigation>());
+      final card =
+          (surface! as ClientWorkspaceWithNavigation).child
+              as ClientCardRouteSurface;
       expect(card.entityId, 'student-1');
       expect(card.initialSection, entry.section);
       expect(card.viewState?.filters[entry.idKey], 'commerce-1');
@@ -122,12 +128,108 @@ void main() {
         expect(find.text('История и задачи'), findsOneWidget);
         expect(find.text('Контакты'), findsOneWidget);
         expect(find.text('Документы'), findsOneWidget);
-        expect(find.text('Доп. поля'), findsOneWidget);
+        expect(find.text('Доп. поля'), findsNothing);
+        expect(
+          find.byKey(
+            const Key('client-custom-fields-expansion'),
+            skipOffstage: false,
+          ),
+          findsOneWidget,
+        );
         expect(find.byIcon(Icons.arrow_back_rounded), findsOneWidget);
         expect(tester.takeException(), isNull);
       });
     }
   }
+
+  testWidgets(
+    'desktop client card is one canvas with a lazy calendar after preferences',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(1200, 900);
+      addTearDown(tester.view.reset);
+      final api = FakeCardApiClient(
+        role: 'manager',
+        student: _student,
+        studentLessons: const [
+          {
+            'id': 'lesson-1',
+            'scheduledAt': '2026-08-08T12:00:00.000Z',
+            'status': 'scheduled',
+          },
+        ],
+      );
+      await tester.pumpWidget(
+        _app(
+          api,
+          const ClientCard(
+            lead: {'id': 'student-1'},
+            entityType: 'student',
+            routed: true,
+            capabilitySnapshot: CapabilitySnapshot(
+              accountId: 'account-1',
+              role: 'manager',
+              accessVersion: 1,
+              capabilities: {
+                'crm.client.read.basic',
+                'commerce.client_finance.read',
+                'schedule.lesson.read.assigned',
+              },
+              scopes: {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('client-desktop-canvas')), findsOneWidget);
+      for (final section in const [
+        'Обзор',
+        'Занятия',
+        'Оплаты',
+        'Абонементы',
+        'История и задачи',
+        'Контакты',
+        'Документы',
+      ]) {
+        expect(find.text(section), findsOneWidget);
+      }
+      expect(
+        find.byKey(const Key('client-calendar-expansion')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('client-calendar-widget')), findsNothing);
+      expect(find.byKey(const Key('client-lesson-date-tray')), findsOneWidget);
+      expect(find.text('Фактические занятия'), findsNothing);
+      expect(find.text('Предстоящие'), findsNothing);
+      expect(find.text('Прошедшие'), findsNothing);
+      expect(
+        tester.getTopLeft(find.text('Обзор')).dy,
+        tester.getTopLeft(find.text('Контакты')).dy,
+      );
+      expect(
+        tester.getTopLeft(find.text('Оплаты')).dy,
+        tester.getTopLeft(find.text('Абонементы')).dy,
+      );
+      expect(
+        tester.getTopLeft(find.text('Предпочтительное расписание')).dy,
+        lessThan(
+          tester
+              .getTopLeft(find.byKey(const Key('client-calendar-expansion')))
+              .dy,
+        ),
+      );
+
+      await tester.ensureVisible(
+        find.byKey(const Key('client-calendar-expansion')),
+      );
+      await tester.tap(find.byKey(const Key('client-calendar-expansion')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('client-calendar-widget')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('forbidden client workspace does not mount a data fetcher', (
     tester,
@@ -338,6 +440,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(DesktopWorkspaceShell), findsOneWidget);
+    expect(find.byType(V7NavShell), findsOneWidget);
     expect(find.byType(ClientCardRouteSurface), findsOneWidget);
     expect(find.byType(Dialog), findsNothing);
     expect(find.text('Обзор'), findsOneWidget);
@@ -396,6 +499,7 @@ void main() {
     router.push('/students/student-1?section=overview');
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('Оплаты'));
     await tester.tap(find.text('Оплаты'));
     await tester.pumpAndSettle();
 

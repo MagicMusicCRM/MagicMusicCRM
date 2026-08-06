@@ -308,6 +308,7 @@ class _StudentScheduleSectionState
       ...future.take(16),
     ];
     return SingleChildScrollView(
+      key: const Key('client-lesson-date-tray'),
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [

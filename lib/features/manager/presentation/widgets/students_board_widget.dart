@@ -12,6 +12,7 @@ import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/core/widgets/v7/magic_desktop_scrollbar.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_forms/client_forms.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/client_board_toolbar.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/students_board_providers.dart';
 import 'package:magic_music_crm/features/manager/presentation/transfer/lead_transfer_controller.dart';
 import 'package:magic_music_crm/features/manager/presentation/transfer/lead_transfer_widgets.dart';
@@ -41,6 +42,7 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
   // Лиды board search). Lowercased; empty == no filter.
   final TextEditingController _searchCtrl = TextEditingController();
   String _query = '';
+  bool _filtersOpen = false;
   bool _branchesLoaded = false;
   String? _branchLoadError;
 
@@ -314,9 +316,7 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
     return result;
   }
 
-  Widget _buildBranchSelector() {
-    final access = ref.watch(capabilitySnapshotProvider).asData?.value;
-    final canWrite = access?.allows('crm.client.write') == true;
+  Widget _buildToolbar() {
     final seen = <String>{};
     final items =
         _branches
@@ -351,87 +351,42 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
         }
       },
     );
-    final searchField = TextField(
-      key: const ValueKey('students-search'),
-      controller: _searchCtrl,
-      decoration: InputDecoration(
-        isDense: true,
-        prefixIcon: const Icon(Icons.search_rounded, size: 18),
-        hintText: 'Имя или телефон',
-        suffixIcon: _query.isEmpty
-            ? null
-            : IconButton(
-                tooltip: 'Очистить поиск',
-                icon: const Icon(Icons.close_rounded, size: 18),
-                onPressed: () {
-                  _searchCtrl.clear();
-                  setState(() => _query = '');
-                },
+    final filterPanel =
+        _filtersOpen &&
+            _branchesLoaded &&
+            _branchLoadError == null &&
+            _branches.isNotEmpty
+        ? Container(
+            key: const ValueKey('students-filters-panel'),
+            width: 360,
+            margin: const EdgeInsets.only(top: AppSpace.sm),
+            padding: const EdgeInsets.all(AppSpace.md),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(AppRadius.control),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outlineVariant,
               ),
-      ),
-      onChanged: (value) => setState(() => _query = value.trim().toLowerCase()),
-    );
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final compact = constraints.maxWidth < 700;
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  const Icon(
-                    Icons.school_rounded,
-                    size: 20,
-                    color: AppTheme.primaryGold,
-                  ),
-                  const SizedBox(width: 10),
-                  const Expanded(
-                    child: Text(
-                      'Ученики',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Обновить',
-                    icon: const Icon(Icons.refresh_rounded),
-                    onPressed: _refreshBoard,
-                  ),
-                  if (canWrite)
-                    FilledButton.icon(
-                      key: const ValueKey('students-create'),
-                      onPressed: _branches.isEmpty ? null : _createStudent,
-                      icon: const Icon(Icons.add_rounded),
-                      label: Text(compact ? 'Создать' : 'Новый ученик'),
-                    ),
-                ],
-              ),
-              const SizedBox(height: AppSpace.sm),
-              if (!_branchesLoaded && _branchLoadError == null)
-                const LinearProgressIndicator()
-              else if (_branchLoadError != null || _branches.isEmpty)
-                const SizedBox.shrink()
-              else if (compact) ...[
-                branchField,
-                const SizedBox(height: AppSpace.sm),
-                searchField,
-              ] else
-                Row(
-                  children: [
-                    SizedBox(width: 240, child: branchField),
-                    const SizedBox(width: AppSpace.md),
-                    Expanded(child: searchField),
-                  ],
-                ),
-            ],
-          );
-        },
-      ),
+            ),
+            child: branchField,
+          )
+        : null;
+    return ClientBoardToolbar(
+      title: 'Ученики',
+      searchKey: const ValueKey('students-search'),
+      searchController: _searchCtrl,
+      searchHint: 'Имя или телефон',
+      activeFilterCount: _selectedBranchId == null ? 0 : 1,
+      onSearchChanged: (value) =>
+          setState(() => _query = value.trim().toLowerCase()),
+      onSearchSubmitted: (value) =>
+          setState(() => _query = value.trim().toLowerCase()),
+      onClearSearch: () {
+        _searchCtrl.clear();
+        setState(() => _query = '');
+      },
+      onFiltersPressed: () => setState(() => _filtersOpen = !_filtersOpen),
+      inlineFilters: filterPanel,
     );
   }
 
@@ -448,6 +403,13 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final canWrite =
+        ref
+            .watch(capabilitySnapshotProvider)
+            .asData
+            ?.value
+            .allows('crm.client.write') ==
+        true;
     // Realtime: refresh the board when another staff member changes a student.
     ref.listen(crmRealtimeProvider, (prev, next) {
       final event = next.value;
@@ -490,7 +452,7 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
     if (!_branchesLoaded && _branchLoadError == null) {
       return Column(
         children: [
-          _buildBranchSelector(),
+          _buildToolbar(),
           const Expanded(child: Center(child: CircularProgressIndicator())),
         ],
       );
@@ -500,7 +462,7 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
     if (_branchLoadError != null) {
       return Column(
         children: [
-          _buildBranchSelector(),
+          _buildToolbar(),
           Expanded(
             child: Center(
               child: Padding(
@@ -551,7 +513,7 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
     if (_branches.isEmpty) {
       return Column(
         children: [
-          _buildBranchSelector(),
+          _buildToolbar(),
           const Expanded(
             child: Center(
               child: Column(
@@ -583,17 +545,28 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
     if (_selectedBranchId == null) {
       return Column(
         children: [
-          _buildBranchSelector(),
+          _buildToolbar(),
           const Expanded(child: KanbanSkeleton()),
         ],
       );
     }
 
-    return Column(
-      children: [
-        _buildBranchSelector(),
-        Expanded(child: _buildBoardArea(_selectedBranchId!, transfer)),
-      ],
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      floatingActionButton: canWrite
+          ? FloatingActionButton(
+              key: const ValueKey('students-create'),
+              onPressed: _createStudent,
+              tooltip: 'Новый ученик',
+              child: const Icon(Icons.person_add_rounded),
+            )
+          : null,
+      body: Column(
+        children: [
+          _buildToolbar(),
+          Expanded(child: _buildBoardArea(_selectedBranchId!, transfer)),
+        ],
+      ),
     );
   }
 

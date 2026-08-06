@@ -61,73 +61,13 @@ Widget _sectionTitle(String title) {
   );
 }
 
-/// One student-lessons-tab row. [onOpenSchedule] jumps to the dashboard
-/// schedule focused on this lesson (only wired when it has a date + id).
-Widget _lessonRow(
-  ColorScheme cs,
-  Lesson l, {
-  required void Function(DateTime scheduledAt, String lessonId) onOpenSchedule,
-}) {
-  final dt = DateTime.tryParse(l.scheduledAt ?? '');
-  final dateStr = dt != null
-      ? DateFormat('d MMM, HH:mm', 'ru').format(dt)
-      : '—';
-  final teacherData = l.teachers;
-  String teacherName = '—';
-  if (teacherData != null) {
-    final tfName = teacherData['first_name']?.toString() ?? '';
-    final tlName = teacherData['last_name']?.toString() ?? '';
-    final p = teacherData['profiles'] as Map<String, dynamic>?;
-    var tName = '$tfName $tlName'.trim();
-    if (tName.isEmpty && p != null) {
-      tName = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'.trim();
-    }
-    teacherName = tName.isEmpty ? '—' : tName;
-  }
-  final projection = LessonStateProjection.fromMap(l.raw);
-  final lessonId = l.id;
-  return Card(
-    margin: const EdgeInsets.only(bottom: 8),
-    child: ListTile(
-      onTap: (lessonId != null && lessonId.isNotEmpty && dt != null)
-          ? () => onOpenSchedule(dt, lessonId)
-          : null,
-      title: Text(dateStr, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(
-        [
-          'Преп.: $teacherName',
-          '${l.groups?['name'] ?? 'Инд.'}',
-          if ((l.rooms?['name']?.toString() ?? '').isNotEmpty)
-            'Ауд.: ${l.rooms!['name']}',
-          // Only director/system_admin get a non-null rate from the API, so
-          // this row simply does not appear for anyone else.
-          if (l.appliedTeacherRate != null)
-            l.appliedTeacherRate == 0
-                ? 'Ставка: входит в оклад'
-                : 'Ставка: ${l.appliedTeacherRate} ₽/ч',
-        ].join(' • '),
-      ),
-      trailing: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (l.isTrial) ...[
-            const LessonTrialBadge(compact: true),
-            const SizedBox(height: 4),
-          ],
-          LessonStateBadge(projection: projection),
-        ],
-      ),
-    ),
-  );
-}
-
 /// Plain-student history timeline: own tasks + non-progress comments, merged
 /// and sorted desc. (Converted clients use [_mergedHistoryView] instead.)
 Widget _studentTimelineView(
   ColorScheme cs, {
   required List<Map<String, dynamic>> tasks,
   required List<Map<String, dynamic>> comments,
+  bool embedded = false,
 }) {
   if (tasks.isEmpty && comments.isEmpty) {
     return Center(
@@ -151,6 +91,8 @@ Widget _studentTimelineView(
   );
   return ListView.builder(
     padding: const EdgeInsets.all(AppSpace.xl),
+    shrinkWrap: embedded,
+    physics: embedded ? const NeverScrollableScrollPhysics() : null,
     itemCount: items.length,
     itemBuilder: (ctx, i) {
       final item = items[i];
@@ -224,6 +166,7 @@ Widget _mergedHistoryView(
   ColorScheme cs, {
   required bool loading,
   required List<Map<String, dynamic>> items,
+  bool embedded = false,
 }) {
   // Lead status history loads independently; show a spinner until it settles
   // so converted history isn't briefly missing its lead half.
@@ -240,6 +183,8 @@ Widget _mergedHistoryView(
   }
   return ListView.builder(
     padding: const EdgeInsets.all(AppSpace.xl),
+    shrinkWrap: embedded,
+    physics: embedded ? const NeverScrollableScrollPhysics() : null,
     itemCount: items.length,
     itemBuilder: (ctx, i) {
       final item = items[i];
@@ -371,16 +316,6 @@ Widget _statusHistorySection(
         ),
       );
     }).toList(),
-  );
-}
-
-Widget _emptyHint(ColorScheme cs, String text) {
-  return Padding(
-    padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
-    child: Text(
-      text,
-      style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
-    ),
   );
 }
 

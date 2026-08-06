@@ -190,6 +190,11 @@ Future<void> _enterStudentMinimum(WidgetTester tester) async {
     ),
     '9995554433',
   );
+  await tester.tap(find.byKey(const ValueKey('student-source')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Сайт').last);
+  await tester.ensureVisible(find.byKey(const ValueKey('student-submit')));
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -272,6 +277,7 @@ void main() {
       'firstName': 'Пётр',
       'lastName': 'Смирнов',
       'phone': '+79995554433',
+      'sourceId': '20000000-0000-4000-8000-000000000001',
       'branchId': '40000000-0000-4000-8000-000000000001',
       'status': 'consultation',
       'customFields': const <Map<String, dynamic>>[],

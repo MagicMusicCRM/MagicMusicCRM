@@ -266,6 +266,7 @@ extension MagicCrmLeads on MagicCrmService {
     String? phone,
     String? email,
     String? source,
+    String? sourceId,
     String? statusId,
     String? notes,
     String? assignedTo,
@@ -280,6 +281,7 @@ extension MagicCrmLeads on MagicCrmService {
     if (source != null && source.trim().isNotEmpty) {
       data['source'] = source.trim();
     }
+    if (sourceId != null) data['sourceId'] = sourceId;
     if (statusId != null && statusId.trim().isNotEmpty) {
       data['statusId'] = statusId.trim();
     }
@@ -303,6 +305,7 @@ extension MagicCrmLeads on MagicCrmService {
     String? phone,
     String? email,
     String? source,
+    String? sourceId,
     String? statusId,
     bool clearStatus = false,
     String? notes,
@@ -319,6 +322,7 @@ extension MagicCrmLeads on MagicCrmService {
     if (phone != null) data['phone'] = phone.trim();
     if (email != null) data['email'] = email.trim();
     if (source != null) data['source'] = source.trim();
+    if (sourceId != null) data['sourceId'] = sourceId;
     if (statusId != null) data['statusId'] = statusId.trim();
     // Explicit request to un-assign the lead's status ("Без статуса" column);
     // the backend treats this as set-to-null rather than coalesce-preserve.

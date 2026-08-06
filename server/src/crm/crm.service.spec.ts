@@ -192,6 +192,7 @@ describe("CrmService", () => {
       null,
       JSON.stringify({}),
       null, // branch_id: no branchId in customDataPatch
+      null, // source_id: legacy internal call has no validated source
     ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -323,6 +324,7 @@ describe("CrmService", () => {
       "lead-a",
       JSON.stringify({ discipline: "Вокал", sourceLeadId: "lead-a" }),
       null, // branch_id: no branchId UUID in customDataPatch
+      null, // source_id: legacy internal conversion path
     ]);
     const conversionSql = String(query.mock.calls[4][0]);
     expect(conversionSql).toContain("inserted_student_link as");
@@ -572,6 +574,7 @@ describe("CrmService", () => {
       JSON.stringify({ middleName: "Сергеевна", notes: "Важно" }),
       null, // branch_id: no branchId UUID in customDataPatch
       false,
+      null, // source_id unchanged
     ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({

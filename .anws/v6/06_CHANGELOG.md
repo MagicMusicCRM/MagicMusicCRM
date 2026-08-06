@@ -11,6 +11,17 @@
 
 ---
 
+## 2026-08-07 — Единая desktop-карточка клиента
+
+- **[CHANGE]** По подтверждению владельца desktop-карточка клиента уточнена как одна длинная прокручиваемая страница без секционных вкладок; mobile сохраняет компактную секционную навигацию.
+- **[CHANGE]** `V6-401..403` уточнены: deep link прокручивает к блоку, preferred schedule расположен перед фактическим календарём, а Month/Week/Day calendar раскрывается интерактивно и не делает viewport-запрос в свёрнутом состоянии.
+- **[CHANGE]** После визуального checkpoint широкая карточка использует двухколоночные ряды и ограниченную ширину полей; `Дополнительные поля` убраны из section navigation и стали раскрываемой частью `Обзора` на desktop/mobile.
+- **[CHANGE]** Удалены дубли `Фактические/Предстоящие/Прошедшие`: фактические занятия остаются в date tray preferred schedule даже без серии. Длинные payment movements/installments свернуты по умолчанию и раскрываются независимо.
+- **[CHANGE]** Desktop role rail остаётся видимым в routed client workspace; прямые ссылки и переходы из расписания canonicalize-ятся в `Клиенты > Лид/Ученик · имя` с сохранением route presentation tail.
+- **[CHANGE]** Students получили тот же toolbar/FAB-контракт, что Leads: search + раскрываемые filters слева, единственный role-gated create action справа снизу.
+- **[CHANGE]** Advertising source, Request type, Learning goal, Level, Category и Lesson type стали primary Overview fields. Миграция `0102` добавляет Student один canonical `lead_sources.id`, сохраняет source при Lead→Student conversion и архивирует legacy `adSource` без потери labels; новые Lead/Student требуют active source.
+- **[CHANGE]** Существующие API paths и capability projection сохранены; source contract расширен additive-полями `sourceId/sourceName` без параллельного endpoint или второго UI-поля.
+
 ## 2026-08-06 — Единый источник вариантов CRM-полей
 
 - **[CHANGE]** По подтверждению владельца `Варианты для полей` закреплены как единственное пользовательское место управления значениями select/radio/multi-select/checkbox-group полей; дублирующий inline-ввод в редакторе поля исключается.

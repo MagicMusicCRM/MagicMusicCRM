@@ -199,6 +199,7 @@ describe("SubscriptionsService", () => {
               phone: "+79990000000",
               custom_data: { discipline: "Фортепиано" },
               branch_id: "branch-a",
+              source_id: "source-a",
               created_at: "2026-07-18T09:00:00.000Z",
             },
           ],

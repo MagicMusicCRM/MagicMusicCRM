@@ -189,7 +189,9 @@ Do not add a base class or new package for these patterns. If an existing widget
 
 ### Client workspace
 
-Desktop client card is a routed full work area; mobile is a full-screen nested route. Canonical sections: Overview, Lessons, Payments, Subscriptions, History & Tasks, Contacts/Representatives, Documents, Custom fields. Preferred schedule moves out of Info into Lessons. Payments is separate from subscriptions.
+Desktop client card is a routed full work area and one vertically scrollable workspace-canvas: its capability-projected sections are visible in a stable reading order without a section tab switch. The role-projected left navigation rail remains mounted while any client is open; every entry path resolves under the canonical `Клиенты > Лид/Ученик · имя` context instead of creating a parallel standalone surface. Large desktop uses bounded field widths and two-column section rows where content permits; section deep links scroll to the matching block. Mobile remains a full-screen nested route with compact section navigation. Canonical sections: Overview, Lessons, Payments, Subscriptions, History & Tasks, Contacts/Representatives, Documents. Configuration-driven Custom fields are a collapsed region inside Overview on every width, never a separate client-card destination. Preferred schedule moves out of Info into Lessons; the actual client calendar follows it as an interactive expandable region. Payments remains separate from subscriptions.
+
+Lead and Student boards share one toolbar/layout contract: search and an expandable `Фильтры` control on the left, one role-gated create FAB at bottom-right. Client Overview treats Advertising source, Request type, Learning goal, Level, Category and Lesson type as primary fields. Advertising source is one canonical `lead_sources.id` reference shared by Lead and Student and copied losslessly during conversion; legacy `adSource` is migration input only and never a second editable field.
 
 ### Schedule and lessons
 
@@ -251,4 +253,3 @@ One surface has one primary action. Destructive actions are labelled, visually s
 7. Approve production only after security, reconciliation and rollback gates pass.
 
 Detailed matrices and component contracts: [app_experience_redesign.detail.md](app_experience_redesign.detail.md).
-

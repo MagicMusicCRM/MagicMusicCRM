@@ -258,6 +258,12 @@ class EntityRouteRegistry {
       link = EntityLink.fromJson({
         'entityType': rawType,
         'entityId': entityId,
+        if (uri.queryParameters['entityTitle']?.trim().isNotEmpty == true)
+          'presentation': {
+            'primary': uri.queryParameters['entityTitle'],
+            if (uri.queryParameters['entityContext']?.trim().isNotEmpty == true)
+              'context': uri.queryParameters['entityContext'],
+          },
         if ((focus != null && focus.isNotEmpty) || filter.isNotEmpty)
           'optionalFocus': {
             if (focus != null && focus.isNotEmpty) 'focus': focus,
@@ -484,6 +490,10 @@ class EntityRouteRegistry {
         'section': section,
         'entityId': link.entityId,
         'entityType': link.rawEntityType,
+        if (link.presentation?.isUsable == true)
+          'entityTitle': link.presentation!.primary.trim(),
+        if (link.presentation?.context?.trim().isNotEmpty == true)
+          'entityContext': link.presentation!.context!.trim(),
         if (focus?.focus?.isNotEmpty == true) 'focus': focus!.focus,
         for (final entry
             in focus?.filter.entries ?? const <MapEntry<String, dynamic>>[])
@@ -513,7 +523,10 @@ class EntityRouteRegistry {
   _defaultRegistrations = {
     EntityLinkType.client: EntityRouteRegistration(
       isAllowed: (_, snapshot) => snapshot.allows('crm.client.read.basic'),
-      buildLocation: (link, _) {
+      buildLocation: (link, snapshot) {
+        if (snapshot.role != 'client') {
+          return _staffRoute(link, snapshot, 'clients');
+        }
         final segment = link.rawEntityType == 'lead' ? 'leads' : 'students';
         final section = link.optionalFocus?.filter['section']?.toString();
         return Uri(

@@ -16,11 +16,10 @@ import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tas
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
 import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 import 'package:magic_music_crm/features/messenger/presentation/screens/crm_nav_rbac.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_forms/client_forms_api.dart';
 import 'package:magic_music_crm/core/utils/status_color.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
-import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
-import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/models/types.dart';
@@ -142,6 +141,21 @@ class _ClientCardState extends ConsumerState<ClientCard>
   late final ScrollController _taskScrollController;
   late final ScrollController _paymentScrollController;
   late final ScrollController _subscriptionScrollController;
+  late final ScrollController _desktopScrollController;
+  bool _desktopCalendarExpanded = false;
+  bool _customFieldsExpanded = false;
+  final Map<String, GlobalKey> _desktopSectionKeys = {
+    for (final section in [
+      'overview',
+      'lessons',
+      'payments',
+      'subscriptions',
+      'history_tasks',
+      'contacts',
+      'documents',
+    ])
+      section: GlobalKey(),
+  };
 
   // ── Aggregation (Phase 4) ─────────────────────────────────────────────────
   // The card opens for one entity (widget.entityType / widget.lead['id']) but a
@@ -177,7 +191,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
     (Icons.history_rounded, 'История и задачи', 'history_tasks'),
     (Icons.people_alt_outlined, 'Контакты', 'contacts'),
     (Icons.folder_outlined, 'Документы', 'documents'),
-    (Icons.tune_rounded, 'Доп. поля', 'custom_fields'),
   ];
 
   static const List<(IconData, String, String)> _studentTabs = [
@@ -188,7 +201,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
     (Icons.history_rounded, 'История и задачи', 'history_tasks'),
     (Icons.people_alt_outlined, 'Контакты', 'contacts'),
     (Icons.folder_outlined, 'Документы', 'documents'),
-    (Icons.tune_rounded, 'Доп. поля', 'custom_fields'),
   ];
 
   List<(IconData, String, String)> _tabsFor({
@@ -286,6 +298,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
   }
 
   List<Map<String, dynamic>> _branches = [];
+  List<Map<String, dynamic>> _sources = [];
   bool _loadingMetadata = true;
   List<CrmCustomFieldDefinition> _customFieldSchema = const [];
   // KVA-234: справочник дисциплин (GET /crm/disciplines) для мультивыбора.
@@ -302,6 +315,11 @@ class _ClientCardState extends ConsumerState<ClientCard>
     'source_lead_id',
     'leadid',
     'lead_id',
+    'adsource',
+    'advertisingsource',
+    'advertising_source',
+    'source',
+    'sourceid',
   };
 
   static const Set<String> _commonClientCustomFieldKeys = {
@@ -309,9 +327,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
     'gender',
     'birthday',
     'age',
-    // #8: «Источник заявки» ('source') удалён — на проде он пуст у всех, а
-    // настоящие данные выгрузки лежат в 'adSource' («Рекламный источник»).
-    'adSource',
     'requestType',
     'learningGoal',
     'discipline',
@@ -333,6 +348,14 @@ class _ClientCardState extends ConsumerState<ClientCard>
     'disciplines',
     'address',
     'applicationData',
+  };
+
+  static const Set<String> _primaryBusinessCustomFieldKeys = {
+    'requestType',
+    'learningGoal',
+    'level',
+    'category',
+    'lessonType',
   };
 
   // KVA-234: одиночные contactPerson*-поля заменены редактором списка
@@ -359,16 +382,13 @@ class _ClientCardState extends ConsumerState<ClientCard>
   // `blacklisted` здесь больше нет: ✔ решение владельца 17.07 сделало чёрный
   // список баном — у него автор, причина и последствие (клиенту закрыты чаты),
   // ставится он своим эндпоинтом и живёт в колонке, а не в custom_data.
-  static const Set<String> _studentOnlyCustomFieldKeys = {
-    'contractStatus',
-    'cabinetStatus',
-    'noEmail',
-  };
-
   @override
   void initState() {
     super.initState();
-    _selectedSection = widget.initialSection;
+    _customFieldsExpanded = widget.initialSection == 'custom_fields';
+    _selectedSection = _customFieldsExpanded
+        ? 'overview'
+        : widget.initialSection;
     final restoredOffset = widget.initialViewState?.scrollOffset ?? 0;
     _taskScrollController = ScrollController(
       initialScrollOffset: _selectedSection == 'history_tasks'
@@ -383,6 +403,18 @@ class _ClientCardState extends ConsumerState<ClientCard>
           ? restoredOffset
           : 0,
     );
+    _desktopScrollController = ScrollController(
+      initialScrollOffset: _selectedSection == 'overview' ? restoredOffset : 0,
+    );
+    if (_selectedSection != 'overview') {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _ensureDesktopSectionVisible(
+          _selectedSection,
+          animated: false,
+          additionalOffset: restoredOffset,
+        ),
+      );
+    }
     _leadData = Map<String, dynamic>.from(widget.lead);
     _commentCtrl = TextEditingController();
     if (widget.entityType == 'student') {
@@ -414,7 +446,13 @@ class _ClientCardState extends ConsumerState<ClientCard>
   void didUpdateWidget(covariant ClientCard oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.initialSection != widget.initialSection) {
-      _selectedSection = widget.initialSection;
+      _customFieldsExpanded = widget.initialSection == 'custom_fields';
+      _selectedSection = _customFieldsExpanded
+          ? 'overview'
+          : widget.initialSection;
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _ensureDesktopSectionVisible(_selectedSection),
+      );
     }
   }
 
@@ -430,6 +468,46 @@ class _ClientCardState extends ConsumerState<ClientCard>
   // extension part files (extensions cannot call the @protected setState).
   void _emitState(void Function() fn) {
     if (mounted) setState(fn);
+  }
+
+  void _selectSection(String section) {
+    _emitState(() => _selectedSection = section);
+    widget.onSectionChanged?.call(section);
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _ensureDesktopSectionVisible(section),
+    );
+  }
+
+  Future<void> _ensureDesktopSectionVisible(
+    String section, {
+    bool animated = true,
+    double additionalOffset = 0,
+  }) async {
+    if (!mounted || !widget.routed || MediaQuery.sizeOf(context).width < 840) {
+      return;
+    }
+    final target = _desktopSectionKeys[section]?.currentContext;
+    if (target == null) return;
+    await Scrollable.ensureVisible(
+      target,
+      alignment: 0.02,
+      duration: animated
+          ? AppMotion.effective(context, AppMotion.medium)
+          : Duration.zero,
+      curve: Curves.easeOutCubic,
+    );
+    if (!mounted ||
+        additionalOffset <= 0 ||
+        !_desktopScrollController.hasClients) {
+      return;
+    }
+    final position = _desktopScrollController.position;
+    _desktopScrollController.jumpTo(
+      (position.pixels + additionalOffset).clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      ),
+    );
   }
 
   void _openLinkedRecord(
@@ -462,6 +540,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
     _taskScrollController.dispose();
     _paymentScrollController.dispose();
     _subscriptionScrollController.dispose();
+    _desktopScrollController.dispose();
     super.dispose();
   }
 
@@ -517,22 +596,45 @@ class _ClientCardState extends ConsumerState<ClientCard>
               : _buildHeader(cs, curStatus),
           if (_isBlacklisted) _buildBlacklistBanner(cs),
           Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.6)),
-          _buildTabBar(cs, tabs, selectedIndex: selectedIndex),
-          Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.6)),
           Expanded(
-            child: IndexedStack(
-              index: selectedIndex,
-              children: [
-                for (final tab in tabs)
-                  _buildWorkspaceSection(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                if (widget.routed && constraints.maxWidth >= 840) {
+                  return _buildDesktopWorkspaceCanvas(
                     cs,
                     curStatus,
-                    tab.$3,
+                    tabs,
                     canReadClientFinance: canReadClientFinance,
                     canReadSchedule: canReadSchedule,
                     canWriteSchedule: canWriteSchedule,
-                  ),
-              ],
+                  );
+                }
+                return Column(
+                  children: [
+                    _buildTabBar(cs, tabs, selectedIndex: selectedIndex),
+                    Divider(
+                      height: 1,
+                      color: cs.outlineVariant.withValues(alpha: 0.6),
+                    ),
+                    Expanded(
+                      child: IndexedStack(
+                        index: selectedIndex,
+                        children: [
+                          for (final tab in tabs)
+                            _buildWorkspaceSection(
+                              cs,
+                              curStatus,
+                              tab.$3,
+                              canReadClientFinance: canReadClientFinance,
+                              canReadSchedule: canReadSchedule,
+                              canWriteSchedule: canWriteSchedule,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
           Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.6)),

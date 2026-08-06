@@ -226,4 +226,89 @@ void main() {
       expect(customData.containsKey('responsibleName'), isFalse);
     }
   });
+
+  testWidgets(
+    'source and key business fields stay primary without legacy duplicate',
+    (tester) async {
+      const sourceId = 'cccccccc-dddd-4eee-8fff-aaaaaaaaaaaa';
+      final api = FakeCardApiClient(
+        lead: {...rawLead(), 'sourceId': sourceId},
+        sources: const [
+          {'id': sourceId, 'displayName': 'Рекомендация', 'isActive': true},
+        ],
+        customFields: const [
+          {
+            'entity': 'leads',
+            'key': 'requestType',
+            'label': 'Тип обращения',
+            'type': 'text',
+          },
+          {
+            'entity': 'leads',
+            'key': 'learningGoal',
+            'label': 'Цель обучения',
+            'type': 'text',
+          },
+          {
+            'entity': 'leads',
+            'key': 'level',
+            'label': 'Уровень',
+            'type': 'text',
+          },
+          {
+            'entity': 'leads',
+            'key': 'category',
+            'label': 'Категория',
+            'type': 'text',
+          },
+          {
+            'entity': 'leads',
+            'key': 'lessonType',
+            'label': 'Тип обучения',
+            'type': 'text',
+          },
+          {
+            'entity': 'leads',
+            'key': 'adSource',
+            'label': 'Старый рекламный источник',
+            'type': 'text',
+          },
+          {
+            'entity': 'leads',
+            'key': 'shirtSize',
+            'label': 'Размер футболки',
+            'type': 'text',
+          },
+        ],
+      );
+      await pumpClientCard(
+        tester,
+        api: api,
+        seed: const {'id': 'lead-1'},
+        statuses: statuses,
+      );
+
+      for (final label in const [
+        'Рекламный источник *',
+        'Тип обращения',
+        'Цель обучения',
+        'Уровень',
+        'Категория',
+        'Тип обучения',
+      ]) {
+        expect(find.text(label), findsOneWidget);
+      }
+      expect(find.text('Старый рекламный источник'), findsNothing);
+      expect(find.text('Размер футболки'), findsNothing);
+
+      await tester.ensureVisible(
+        find.byKey(const Key('client-custom-fields-expansion')),
+      );
+      await tester.tap(find.text('Дополнительные поля'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Размер футболки'), findsOneWidget);
+      expect(find.text('Старый рекламный источник'), findsNothing);
+    },
+  );
 }

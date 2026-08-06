@@ -39,6 +39,9 @@ export interface ValidatedStudentCreate {
   phone: string;
   branchId: string;
   status: string;
+  sourceId: string;
+  sourceCanonicalName: string;
+  sourceDisplayName: string;
   customFields: TypedClientCustomValue[];
   warnings: ClientValidationWarning[];
 }
@@ -81,6 +84,7 @@ export class ClientWriteValidator {
 
   async validateStudentCreate(
     dto: StrictCreateStudentDto,
+    fallbackSourceId?: string | null,
   ): Promise<ValidatedStudentCreate> {
     const firstName = this.requiredText(dto.firstName, "firstName");
     const lastName = this.requiredText(dto.lastName, "lastName");
@@ -88,6 +92,13 @@ export class ClientWriteValidator {
     const status = this.requiredText(dto.status, "status");
     if (!(await this.repository.branchExists(dto.branchId))) {
       this.fail("branchId", "BRANCH_INACTIVE", "Выберите активный филиал.");
+    }
+    const sourceId = dto.sourceId ?? fallbackSourceId;
+    const source = sourceId
+      ? await this.repository.findActiveSource(sourceId)
+      : null;
+    if (!source) {
+      this.fail("sourceId", "SOURCE_INACTIVE", "Выберите активный источник.");
     }
     const custom = await this.validateCustomFields(
       "student",
@@ -99,6 +110,9 @@ export class ClientWriteValidator {
       phone: phone.value,
       branchId: dto.branchId,
       status,
+      sourceId: source.id,
+      sourceCanonicalName: source.canonical_name,
+      sourceDisplayName: source.display_name,
       customFields: custom.values,
       warnings: [...phone.warnings, ...custom.warnings],
     };

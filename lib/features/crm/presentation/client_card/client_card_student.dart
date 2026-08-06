@@ -70,50 +70,24 @@ extension _ClientCardStudent on _ClientCardState {
     });
   }
 
-  // ── Student tab: Занятия (flat list; Phase 5 adds past/upcoming) ──────────
+  // ── Student tab: Занятия ─────────────────────────────────────────────────
   Widget _buildLessonsTab(
     ColorScheme cs, {
     required bool canReadSchedule,
     required bool canWriteSchedule,
+    bool embedded = false,
   }) {
     return _studentGuard(cs, () {
-      final now = DateTime.now();
-      final upcoming = <Lesson>[];
-      final past = <Lesson>[];
-      for (final lesson in _lessons) {
-        final date = DateTime.tryParse(lesson.scheduledAt ?? '');
-        if (date != null && !date.isBefore(now)) {
-          upcoming.add(lesson);
-        } else {
-          past.add(lesson);
-        }
-      }
-      int byTime(Lesson left, Lesson right) {
-        final leftDate = DateTime.tryParse(left.scheduledAt ?? '');
-        final rightDate = DateTime.tryParse(right.scheduledAt ?? '');
-        if (leftDate == null && rightDate == null) return 0;
-        if (leftDate == null) return 1;
-        if (rightDate == null) return -1;
-        return leftDate.compareTo(rightDate);
-      }
-
-      upcoming.sort(byTime);
-      past.sort((left, right) => byTime(right, left));
-
       return ListView(
+        shrinkWrap: embedded,
+        physics: embedded ? const NeverScrollableScrollPhysics() : null,
         padding: const EdgeInsets.all(AppSpace.xl),
         children: [
           if (_commerceStudent != null) ...[
             _lessonBalanceSummary(
               _commerceStudent!.lessonBalance,
-              onSubscriptions: () {
-                _emitState(() => _selectedSection = 'subscriptions');
-                widget.onSectionChanged?.call('subscriptions');
-              },
-              onPayments: () {
-                _emitState(() => _selectedSection = 'payments');
-                widget.onSectionChanged?.call('payments');
-              },
+              onSubscriptions: () => _selectSection('subscriptions'),
+              onPayments: () => _selectSection('payments'),
             ),
             const SizedBox(height: AppSpace.xl),
           ],
@@ -136,6 +110,12 @@ extension _ClientCardStudent on _ClientCardState {
               title: 'Календарь недоступен',
               message: 'У вашей роли нет доступа к расписанию.',
             )
+          else if (embedded)
+            _buildDesktopCalendarExpansion(
+              clientType: 'student',
+              clientId: _studentId,
+              canWriteSchedule: canWriteSchedule,
+            )
           else
             SizedBox(
               height: 760,
@@ -154,66 +134,13 @@ extension _ClientCardStudent on _ClientCardState {
                 onViewStateChanged: widget.onViewStateChanged,
               ),
             ),
-          const SizedBox(height: AppSpace.xl),
-          _sectionTitle('Фактические занятия'),
-          if (_lessons.isEmpty)
-            _emptyHint(cs, 'Занятий пока нет')
-          else ...[
-            if (upcoming.isNotEmpty) ...[
-              _sectionTitle('Предстоящие'),
-              ...upcoming.map(
-                (lesson) => _lessonRow(
-                  cs,
-                  lesson,
-                  onOpenSchedule: _openScheduleForLesson,
-                ),
-              ),
-            ],
-            if (upcoming.isNotEmpty && past.isNotEmpty)
-              const SizedBox(height: AppSpace.md),
-            if (past.isNotEmpty) ...[
-              _sectionTitle('Прошедшие'),
-              ...past.map(
-                (lesson) => _lessonRow(
-                  cs,
-                  lesson,
-                  onOpenSchedule: _openScheduleForLesson,
-                ),
-              ),
-            ],
-          ],
         ],
       );
     });
   }
 
-  /// One tappable lesson row. Tapping focuses the dashboard schedule on the
-  /// lesson's day with the lesson highlighted, then closes the card.
-  /// Focus the dashboard schedule on [scheduledAt] with [lessonId] highlighted,
-  /// then close this card and route to the admin dashboard schedule tab.
-  ///
-  /// Mirrors [ClientAppUserPanel._openChat]: set the cross-screen navigation
-  /// target, pop this card (the dialog / sheet), then navigate to the host
-  /// screen. The schedule lives on canonical CRM tab 2 (Расписание) inside the
-  /// admin dashboard, so we also request that tab via [crmNavigationRequestProvider].
-  void _openScheduleForLesson(DateTime scheduledAt, String lessonId) {
-    ref.read(scheduleNavigationProvider.notifier).focus(scheduledAt, lessonId);
-    // Select the schedule destination (tab 2) once the dashboard renders.
-    ref
-        .read(crmNavigationRequestProvider.notifier)
-        .navigateTo(
-          CrmNavigationRequest.schedule(date: scheduledAt, lessonId: lessonId),
-        );
-    // Close the card (dialog on desktop / bottom sheet on mobile).
-    if (Navigator.of(context).canPop()) {
-      Navigator.of(context).pop(_dirty ? true : null);
-    }
-    // Route to the admin dashboard which hosts the schedule.
-    context.go('/admin');
-  }
-
   // ── Student tab: Оплаты ──────────────────────────────────────────────────
-  Widget _buildPaymentsTab(ColorScheme cs) {
+  Widget _buildPaymentsTab(ColorScheme cs, {bool embedded = false}) {
     return _studentGuard(
       cs,
       () => _paymentsView(
@@ -231,6 +158,7 @@ extension _ClientCardStudent on _ClientCardState {
         onCancelAdjustment: () => _emitState(() => _adjustingPayment = null),
         onSubmitAdjustment: _recordPaymentAdjustment,
         scrollController: _paymentScrollController,
+        embedded: embedded,
         highlightedPaymentId: widget.initialViewState?.filters['paymentId']
             ?.toString(),
         onOpenPayment: (sourceContext, paymentId, presentation, target) =>
@@ -295,7 +223,7 @@ extension _ClientCardStudent on _ClientCardState {
   // For a converted client this folds lead status history into the student
   // timeline (merged, de-duped by id, origin-badged). A plain student keeps the
   // Phase 2 view (its own tasks + comments).
-  Widget _buildStudentHistoryTab(ColorScheme cs) {
+  Widget _buildStudentHistoryTab(ColorScheme cs, {bool embedded = false}) {
     if (_isConverted) {
       return _studentGuard(
         cs,
@@ -303,6 +231,7 @@ extension _ClientCardStudent on _ClientCardState {
           cs,
           loading: _loadingHistory,
           items: _mergedHistory,
+          embedded: embedded,
         ),
       );
     }
@@ -312,6 +241,7 @@ extension _ClientCardStudent on _ClientCardState {
         cs,
         tasks: _studentTasks,
         comments: _studentComments,
+        embedded: embedded,
       ),
     );
   }
@@ -319,12 +249,13 @@ extension _ClientCardStudent on _ClientCardState {
   // ── Student tab: Прогресс (домашние задания от педагога) ──────────────────
   // Заказчик: ДЗ, назначенное педагогом, фиксируется в разделе «Прогресс»
   // карточки клиента. Тянем список домашек ученика (app.lesson_homeworks).
-  Widget _buildProgressTab(ColorScheme cs) {
+  Widget _buildProgressTab(ColorScheme cs, {bool embedded = false}) {
     return _studentGuard(
       cs,
       () => _HomeworkProgressList(
         studentId: _studentId,
         refreshKey: _homeworkRefreshKey,
+        embedded: embedded,
       ),
     );
   }
@@ -332,10 +263,11 @@ extension _ClientCardStudent on _ClientCardState {
   /// Trial homework belongs to the lead until a paid subscription is issued.
   /// Staff therefore need the same progress surface before conversion; the
   /// server moves these rows to the student atomically with subscription issue.
-  Widget _buildLeadProgressTab(ColorScheme cs) {
+  Widget _buildLeadProgressTab(ColorScheme cs, {bool embedded = false}) {
     return _HomeworkProgressList(
       leadId: _leadId,
       refreshKey: _homeworkRefreshKey,
+      embedded: embedded,
     );
   }
 

@@ -456,87 +456,20 @@ extension _LeadsActions on _LeadsWidgetState {
 
   Widget _buildToolbar(Map<String, dynamic> board) {
     final total = board['total_count'] ?? 0;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Воронка продаж · $total',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 240,
-                  child: TextField(
-                    key: const ValueKey('leads-search'),
-                    controller: _searchCtrl,
-                    decoration: InputDecoration(
-                      isDense: true,
-                      prefixIcon: const Icon(Icons.search_rounded, size: 18),
-                      hintText: 'Имя, телефон, источник',
-                      suffixIcon: _searchCtrl.text.isEmpty
-                          ? null
-                          : IconButton(
-                              tooltip: 'Очистить поиск',
-                              icon: const Icon(Icons.close_rounded, size: 18),
-                              onPressed: _clearSearch,
-                            ),
-                    ),
-                    onChanged: _onSearchChanged,
-                    onSubmitted: _submitSearch,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                _FiltersButton(
-                  activeCount: _activeFilterCount,
-                  onPressed: _onFiltersPressed,
-                ),
-              ],
-            ),
-          ),
-          if (_filtersOpen && MediaQuery.sizeOf(context).width >= 720)
-            _buildInlineFilterPanel(),
-          // D1: a small inline progress hint shown only while the debounced
-          // server refetch for the current query is in flight. It never
-          // replaces the board, so the previous results stay visible.
-          if (_searchInFlight && _liveQuery.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8, bottom: 2),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                  const SizedBox(width: AppSpace.sm),
-                  Text(
-                    'идёт поиск…',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
+    return ClientBoardToolbar(
+      title: 'Воронка продаж · $total',
+      searchKey: const ValueKey('leads-search'),
+      searchController: _searchCtrl,
+      searchHint: 'Имя, телефон, источник',
+      activeFilterCount: _activeFilterCount,
+      onSearchChanged: _onSearchChanged,
+      onSearchSubmitted: _submitSearch,
+      onClearSearch: _clearSearch,
+      onFiltersPressed: _onFiltersPressed,
+      inlineFilters: _filtersOpen && MediaQuery.sizeOf(context).width >= 720
+          ? _buildInlineFilterPanel()
+          : null,
+      searching: _searchInFlight && _liveQuery.isNotEmpty,
     );
   }
 

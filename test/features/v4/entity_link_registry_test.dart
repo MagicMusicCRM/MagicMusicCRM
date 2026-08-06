@@ -202,7 +202,12 @@ void main() {
       );
 
       final resolved = registry.resolve(link, snapshot());
-      expect(resolved.location, '/students/student-1?section=payments');
+      final uri = Uri.parse(resolved.location!);
+      expect(uri.path, '/manager');
+      expect(uri.queryParameters, containsPair('section', 'clients'));
+      expect(uri.queryParameters, containsPair('entityType', 'student'));
+      expect(uri.queryParameters, containsPair('entityId', 'student-1'));
+      expect(uri.queryParameters, containsPair('f.section', 'payments'));
       final restored = registry.resolveLocation(resolved.location!, snapshot());
       expect(restored.state, EntityRouteState.resolved);
       expect(restored.link.optionalFocus?.filter['section'], 'payments');

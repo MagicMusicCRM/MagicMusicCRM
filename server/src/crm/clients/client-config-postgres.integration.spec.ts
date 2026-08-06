@@ -266,6 +266,7 @@ describe("Client configuration and strict validators (PostgreSQL)", () => {
         lastName: "Иванова",
         phone: "+79990000000",
         branchId,
+        sourceId: source.id,
         status: " ",
       }),
     ).rejects.toMatchObject({
@@ -278,6 +279,7 @@ describe("Client configuration and strict validators (PostgreSQL)", () => {
         lastName: "Иванова",
         phone: "+79990000000",
         branchId: randomUUID(),
+        sourceId: source.id,
         status: "active",
       }),
     ).rejects.toMatchObject({
@@ -290,10 +292,12 @@ describe("Client configuration and strict validators (PostgreSQL)", () => {
         lastName: "Иванова",
         phone: "+79990000000",
         branchId,
+        sourceId: source.id,
         status: "active",
       }),
     ).resolves.toMatchObject({
       branchId,
+      sourceId: source.id,
       status: "active",
       warnings: [],
     });

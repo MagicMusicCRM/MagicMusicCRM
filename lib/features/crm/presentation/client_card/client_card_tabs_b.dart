@@ -2,88 +2,91 @@ part of 'client_card.dart';
 
 extension _ClientCardTabsB on _ClientCardState {
   // ── Tab: Комментарии ─────────────────────────────────────────────────────
-  Widget _buildCommentsTab(ColorScheme cs) {
+  Widget _buildCommentsTab(ColorScheme cs, {bool embedded = false}) {
+    final comments = SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpace.xl,
+        AppSpace.lg,
+        AppSpace.xl,
+        AppSpace.md,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionTitle('Комментарии'),
+          _CommentsList(
+            // For a converted client both halves are loaded, merged,
+            // de-duped by id and origin-badged; single-side cards pass one
+            // ref and render exactly as before (no origin chip).
+            refs: _halfRefs,
+            showOrigin: _isConverted,
+            refreshKey: _commentsRefreshKey,
+          ),
+        ],
+      ),
+    );
+    final input = Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpace.xl,
+        AppSpace.sm,
+        AppSpace.xl,
+        AppSpace.lg,
+      ),
+      child: _buildCommentInput(cs),
+    );
+    if (embedded) {
+      return Column(children: [comments, input]);
+    }
     return Column(
       children: [
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpace.xl,
-              AppSpace.lg,
-              AppSpace.xl,
-              AppSpace.md,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _sectionTitle('Комментарии'),
-                _CommentsList(
-                  // For a converted client both halves are loaded, merged,
-                  // de-duped by id and origin-badged; single-side cards pass one
-                  // ref and render exactly as before (no origin chip).
-                  refs: _halfRefs,
-                  showOrigin: _isConverted,
-                  refreshKey: _commentsRefreshKey,
-                ),
-              ],
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpace.xl,
-            AppSpace.sm,
-            AppSpace.xl,
-            AppSpace.lg,
-          ),
-          child: _buildCommentInput(cs),
-        ),
+        Expanded(child: comments),
+        input,
       ],
     );
   }
 
   // ── Tab: Семья ───────────────────────────────────────────────────────────
-  Widget _buildFamilyTab(ColorScheme cs) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpace.xl,
-        AppSpace.lg,
-        AppSpace.xl,
-        AppSpace.xl,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(child: _sectionTitle('Семья')),
-              _buildFamilyAddButton(cs),
-            ],
-          ),
-          _familySection(
-            cs,
-            loading: _loadingFamily,
-            family: _family,
-            busy: _familyBusy,
-            onRemove: _removeFamilyMember,
-          ),
-          // #14: контактные лица живут на одной вкладке с семьёй — из Инфо
-          // дубль убран.
-          const SizedBox(height: AppSpace.lg),
-          _buildContactPersonsEditor(cs, _isStudent ? 'students' : 'leads'),
-          // #9: строка «Контакты» из выгрузки HolliHop (custom_data.contacts) —
-          // только чтение, показывается когда заполнена.
-          if (_hhField('contacts') != null)
-            _buildInfoCard('Контакты из HolliHop', [
-              _InfoRow(
-                icon: Icons.family_restroom_outlined,
-                label: 'Контактные лица',
-                value: _hhField('contacts')!,
-              ),
-            ]),
-        ],
-      ),
+  Widget _buildFamilyTab(ColorScheme cs, {bool embedded = false}) {
+    const padding = EdgeInsets.fromLTRB(
+      AppSpace.xl,
+      AppSpace.lg,
+      AppSpace.xl,
+      AppSpace.xl,
     );
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(child: _sectionTitle('Семья')),
+            _buildFamilyAddButton(cs),
+          ],
+        ),
+        _familySection(
+          cs,
+          loading: _loadingFamily,
+          family: _family,
+          busy: _familyBusy,
+          onRemove: _removeFamilyMember,
+        ),
+        // #14: контактные лица живут на одной вкладке с семьёй — из Инфо
+        // дубль убран.
+        const SizedBox(height: AppSpace.lg),
+        _buildContactPersonsEditor(cs, _isStudent ? 'students' : 'leads'),
+        // #9: строка «Контакты» из выгрузки HolliHop (custom_data.contacts) —
+        // только чтение, показывается когда заполнена.
+        if (_hhField('contacts') != null)
+          _buildInfoCard('Контакты из HolliHop', [
+            _InfoRow(
+              icon: Icons.family_restroom_outlined,
+              label: 'Контактные лица',
+              value: _hhField('contacts')!,
+            ),
+          ]),
+      ],
+    );
+    if (embedded) return Padding(padding: padding, child: content);
+    return SingleChildScrollView(padding: padding, child: content);
   }
 
   Widget _buildFamilyAddButton(ColorScheme cs) {
@@ -109,26 +112,26 @@ extension _ClientCardTabsB on _ClientCardState {
   }
 
   // ── Tab: История ─────────────────────────────────────────────────────────
-  Widget _buildHistoryTab(ColorScheme cs) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpace.xl,
-        AppSpace.lg,
-        AppSpace.xl,
-        AppSpace.xl,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _sectionTitle('История статусов'),
-          _statusHistorySection(
-            cs,
-            loading: _loadingHistory,
-            history: _statusHistory,
-          ),
-        ],
-      ),
+  Widget _buildHistoryTab(ColorScheme cs, {bool embedded = false}) {
+    const padding = EdgeInsets.fromLTRB(
+      AppSpace.xl,
+      AppSpace.lg,
+      AppSpace.xl,
+      AppSpace.xl,
     );
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionTitle('История статусов'),
+        _statusHistorySection(
+          cs,
+          loading: _loadingHistory,
+          history: _statusHistory,
+        ),
+      ],
+    );
+    if (embedded) return Padding(padding: padding, child: content);
+    return SingleChildScrollView(padding: padding, child: content);
   }
 
   // ══ STUDENT (entityType == 'student') ════════════════════════════════════
@@ -208,6 +211,10 @@ extension _ClientCardTabsB on _ClientCardState {
       ? _nonEmpty(_student?['email'])
       : _nonEmpty(_leadData['email']);
 
+  String? get _clientSourceId => _isStudent
+      ? _nonEmpty(_student?['source_id'] ?? _leadData['source_id'])
+      : _nonEmpty(_leadData['source_id']);
+
   String? get _clientBranchId {
     final studentCustom = _student?['custom_data'];
     if (_isStudent && studentCustom is Map) {
@@ -236,6 +243,8 @@ extension _ClientCardTabsB on _ClientCardState {
             _leadData['email'] = value;
           case 'branchId':
             _leadData['branch_id'] = value;
+          case 'sourceId':
+            _leadData['source_id'] = value;
         }
       }
       if (_mode.hasStudentHalf && _student != null) {
@@ -258,6 +267,8 @@ extension _ClientCardTabsB on _ClientCardState {
               cd['branchId'] = value;
             }
             _student!['custom_data'] = cd;
+          case 'sourceId':
+            _student!['source_id'] = value;
         }
       }
       _edited = true;

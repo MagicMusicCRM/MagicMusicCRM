@@ -26,11 +26,11 @@ import 'package:magic_music_crm/features/manager/presentation/transfer/lead_tran
 import 'package:magic_music_crm/core/models/lead.dart';
 import 'lead_dialogs.dart';
 import 'lead_board_filters.dart';
+import 'client_board_toolbar.dart';
 import 'leads_board_states.dart';
 
 part 'kanban_column.dart';
 part 'lead_card.dart';
-part 'filters_button.dart';
 part 'lead_badges.dart';
 part 'leads_actions.dart';
 

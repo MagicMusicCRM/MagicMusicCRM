@@ -209,6 +209,10 @@ export class StrictCreateStudentDto {
   status!: string;
 
   @IsOptional()
+  @IsUUID()
+  sourceId?: string;
+
+  @IsOptional()
   @IsArray()
   @ArrayMaxSize(100)
   @ValidateNested({ each: true })

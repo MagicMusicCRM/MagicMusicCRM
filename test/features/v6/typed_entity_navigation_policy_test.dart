@@ -265,9 +265,14 @@ void main() {
           ),
         ),
         GoRoute(
-          path: '/students/:id',
-          builder: (context, state) =>
-              Scaffold(body: Text('student:${state.pathParameters['id']}')),
+          path: '/manager',
+          builder: (context, state) => Scaffold(
+            body: Text(
+              '${state.uri.queryParameters['section']}:'
+              '${state.uri.queryParameters['entityType']}:'
+              '${state.uri.queryParameters['entityId']}',
+            ),
+          ),
         ),
       ],
     );
@@ -276,7 +281,7 @@ void main() {
 
     await tester.tap(find.text('Открыть'));
     await tester.pumpAndSettle();
-    expect(find.text('student:student-mobile'), findsOneWidget);
+    expect(find.text('clients:student:student-mobile'), findsOneWidget);
     expect(workspace.state.activeTab.routeStack, hasLength(1));
 
     router.pop();

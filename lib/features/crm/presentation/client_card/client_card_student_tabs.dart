@@ -131,6 +131,7 @@ Widget _paymentsView(
   onOpenPayment,
   String? highlightedPaymentId,
   ScrollController? scrollController,
+  bool embedded = false,
 }) {
   final account = commerce == null || commerce.accounts.isEmpty
       ? null
@@ -158,7 +159,9 @@ Widget _paymentsView(
 
   return ListView(
     key: const Key('client-payments-tab'),
-    controller: scrollController,
+    controller: embedded ? null : scrollController,
+    shrinkWrap: embedded,
+    physics: embedded ? const NeverScrollableScrollPhysics() : null,
     padding: const EdgeInsets.all(AppSpace.xl),
     children: [
       Row(
@@ -257,70 +260,77 @@ Widget _paymentsView(
         ),
         const SizedBox(height: AppSpace.lg),
       ],
-      _PaymentSectionHeader(
+      _PaymentExpansion(
+        key: const Key('payment-movements-expansion'),
         title: 'Поступления и списания',
-        count: movements.length,
-      ),
-      const SizedBox(height: AppSpace.sm),
-      if (movements.isEmpty && fallbackPayments.isEmpty)
-        const _PaymentEmpty(
-          icon: Icons.receipt_long_outlined,
-          text: 'Операций пока нет',
-        )
-      else if (movements.isNotEmpty)
-        ...movements.map(
-          (movement) => _PaymentMovementRow(
-            movement: movement,
-            highlighted: movement.id == highlightedPaymentId,
-            onOpen: (context, target) => onOpenPayment(
-              context,
-              movement.id,
-              _movementPresentation(movement),
-              target,
+        count: movements.isNotEmpty
+            ? movements.length
+            : fallbackPayments.length,
+        initiallyExpanded: highlightedPaymentId != null,
+        children: [
+          if (movements.isEmpty && fallbackPayments.isEmpty)
+            const _PaymentEmpty(
+              icon: Icons.receipt_long_outlined,
+              text: 'Операций пока нет',
+            )
+          else if (movements.isNotEmpty)
+            ...movements.map(
+              (movement) => _PaymentMovementRow(
+                movement: movement,
+                highlighted: movement.id == highlightedPaymentId,
+                onOpen: (context, target) => onOpenPayment(
+                  context,
+                  movement.id,
+                  _movementPresentation(movement),
+                  target,
+                ),
+                onAdjust: movement.kind == CommerceMovementKind.payment
+                    ? () => onAdjust(movement)
+                    : null,
+              ),
+            )
+          else
+            ...fallbackPayments.map(
+              (payment) => _LegacyPaymentRow(
+                payment: payment,
+                highlighted: payment.id == highlightedPaymentId,
+                onOpen: payment.id == null
+                    ? null
+                    : (context, target) => onOpenPayment(
+                        context,
+                        payment.id!,
+                        EntityPresentationReference(
+                          primary: [
+                            payment.paymentDate,
+                            '${payment.amountRaw} ₽',
+                          ].whereType<String>().join(' · '),
+                        ),
+                        target,
+                      ),
+              ),
             ),
-            onAdjust: movement.kind == CommerceMovementKind.payment
-                ? () => onAdjust(movement)
-                : null,
-          ),
-        )
-      else
-        ...fallbackPayments.map(
-          (payment) => _LegacyPaymentRow(
-            payment: payment,
-            highlighted: payment.id == highlightedPaymentId,
-            onOpen: payment.id == null
-                ? null
-                : (context, target) => onOpenPayment(
-                    context,
-                    payment.id!,
-                    EntityPresentationReference(
-                      primary: [
-                        payment.paymentDate,
-                        '${payment.amountRaw} ₽',
-                      ].whereType<String>().join(' · '),
-                    ),
-                    target,
-                  ),
-          ),
-        ),
-      const SizedBox(height: AppSpace.xl),
-      _PaymentSectionHeader(
+        ],
+      ),
+      const SizedBox(height: AppSpace.md),
+      _PaymentExpansion(
+        key: const Key('payment-installments-expansion'),
         title: 'Рассрочки и обязательства',
         count: installments.length,
+        children: [
+          if (installments.isEmpty)
+            const _PaymentEmpty(
+              icon: Icons.event_available_outlined,
+              text: 'Активных графиков рассрочки нет',
+            )
+          else
+            ...installments.map(
+              (entry) => _InstallmentRow(
+                subscription: entry.subscription,
+                installment: entry.installment,
+              ),
+            ),
+        ],
       ),
-      const SizedBox(height: AppSpace.sm),
-      if (installments.isEmpty)
-        const _PaymentEmpty(
-          icon: Icons.event_available_outlined,
-          text: 'Активных графиков рассрочки нет',
-        )
-      else
-        ...installments.map(
-          (entry) => _InstallmentRow(
-            subscription: entry.subscription,
-            installment: entry.installment,
-          ),
-        ),
     ],
   );
 }
@@ -409,6 +419,49 @@ class _PaymentSectionHeader extends StatelessWidget {
         ),
         Text('$count', style: const TextStyle(color: AppColor.text2)),
       ],
+    );
+  }
+}
+
+class _PaymentExpansion extends StatelessWidget {
+  const _PaymentExpansion({
+    super.key,
+    required this.title,
+    required this.count,
+    required this.children,
+    this.initiallyExpanded = false,
+  });
+
+  final String title;
+  final int count;
+  final List<Widget> children;
+  final bool initiallyExpanded;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        border: Border.all(color: cs.outlineVariant),
+      ),
+      child: ExpansionTile(
+        initiallyExpanded: initiallyExpanded,
+        maintainState: false,
+        title: _PaymentSectionHeader(title: title, count: count),
+        childrenPadding: const EdgeInsets.fromLTRB(
+          AppSpace.sm,
+          0,
+          AppSpace.sm,
+          AppSpace.sm,
+        ),
+        children: [
+          Divider(height: 1, color: cs.outlineVariant),
+          ...children,
+        ],
+      ),
     );
   }
 }

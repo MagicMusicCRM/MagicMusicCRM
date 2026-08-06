@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  Injectable,
+  NotFoundException,
+  UnprocessableEntityException,
+} from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
@@ -58,6 +62,7 @@ interface LeadRow {
   phone: string | null;
   email: string | null;
   source: string | null;
+  source_id?: string | null;
   notes: string | null;
   assigned_to: string | null;
   custom_data: Record<string, unknown> | null;
@@ -405,7 +410,7 @@ export class LeadsService {
         select l.id, l.status_id, ls.stage_key as status_key,
           ls.name as status_name, ls.color as status_color,
           ls.sort_order as status_sort_order, l.first_name, l.last_name, l.phone,
-          l.email, l.source, l.notes, l.assigned_to, l.blacklisted, l.blacklist_reason, l.custom_data,
+          l.email, l.source, l.source_id, l.notes, l.assigned_to, l.blacklisted, l.blacklist_reason, l.custom_data,
           assigned_profile.first_name as assigned_first_name,
           assigned_profile.last_name as assigned_last_name,
           ${branchIdExpr("l")} as branch_id,
@@ -793,7 +798,7 @@ export class LeadsService {
         )
         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         returning id, status_id, null::text as status_name, first_name,
-          last_name, phone, email, source, notes, assigned_to,
+          last_name, phone, email, source, source_id, notes, assigned_to,
           blacklisted, blacklist_reason, custom_data, created_by, created_at,
           updated_at
       `,
@@ -865,8 +870,8 @@ export class LeadsService {
         LeadRow & { branch_id: string | null }
       >(
         `select id, status_id, null::text as status_name, first_name, last_name,
-           phone, email, source, notes, assigned_to, custom_data, created_by,
-           created_at, updated_at, branch_id
+           phone, email, source, source_id, notes, assigned_to, custom_data,
+           created_by, created_at, updated_at, branch_id
          from app.leads where id = $1 and deleted_at is null for update`,
         [leadId],
       );
@@ -881,6 +886,22 @@ export class LeadsService {
         );
       }
       let customData = { ...initialCustomData };
+      let sourceName = dto.source?.trim() || null;
+      if (dto.sourceId) {
+        const source = await client.query<{ display_name: string }>(
+          `select display_name from app.lead_sources
+           where id = $1 and is_active and deleted_at is null limit 1`,
+          [dto.sourceId],
+        );
+        sourceName = source.rows[0]?.display_name ?? null;
+        if (!sourceName) {
+          throw new UnprocessableEntityException({
+            code: "SOURCE_INACTIVE",
+            field: "sourceId",
+            message: "Выберите активный источник.",
+          });
+        }
+      }
       const assignedTo = dto.clearAssignedTo ? null : (dto.assignedTo ?? null);
       if (beforeRow && assignedTo) {
         const responsible = await assertEligibleResponsible(
@@ -905,6 +926,7 @@ export class LeadsService {
           phone = coalesce($5, phone),
           email = coalesce($6, email),
           source = coalesce($7, source),
+          source_id = coalesce($14::uuid, source_id),
           notes = coalesce($8, notes),
           assigned_to = case when $13::boolean then null
                              else coalesce($9, assigned_to) end,
@@ -916,7 +938,7 @@ export class LeadsService {
           updated_at = now()
         where id = $1 and deleted_at is null
         returning id, status_id, null::text as status_name, first_name,
-          last_name, phone, email, source, notes, assigned_to,
+          last_name, phone, email, source, source_id, notes, assigned_to,
           blacklisted, blacklist_reason, custom_data, created_by, created_at,
           updated_at
       `,
@@ -927,13 +949,14 @@ export class LeadsService {
           dto.lastName?.trim() || null,
           dto.phone?.trim() || null,
           dto.email?.trim().toLowerCase() || null,
-          dto.source?.trim() || null,
+          sourceName,
           dto.notes?.trim() || null,
           assignedTo,
           customData,
           dto.clearStatus ?? false,
           branchId,
           dto.clearAssignedTo ?? false,
+          dto.sourceId ?? null,
         ],
       );
       const updatedLead = result.rows[0];
@@ -1360,6 +1383,7 @@ export class LeadsService {
       phone: row.phone,
       email: presentableEmail(row.email),
       source: row.source,
+      sourceId: row.source_id ?? null,
       notes: row.notes,
       assignedTo: row.assigned_to,
       customData: row.custom_data ?? {},

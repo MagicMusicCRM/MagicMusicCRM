@@ -364,11 +364,13 @@ extension _ClientCardData on _ClientCardState {
   Future<void> _fetchMetadata() async {
     final crm = ref.read(magicCrmServiceProvider);
     final settings = ref.read(magicSettingsServiceProvider);
+    final forms = ref.read(clientFormsApiProvider);
     final results = await Future.wait<dynamic>([
       crm.listBranches(limit: 100),
       settings.getCrmCustomFields(),
       // KVA-234: справочник дисциплин для мультивыбора; сбой не роняет форму.
       crm.listDisciplines().catchError((_) => const <Map<String, dynamic>>[]),
+      forms.listSources(includeArchived: true),
     ]);
 
     if (mounted) {
@@ -378,6 +380,7 @@ extension _ClientCardData on _ClientCardState {
         _disciplineOptions = List<Map<String, dynamic>>.from(
           results[2] as List,
         );
+        _sources = List<Map<String, dynamic>>.from(results[3] as List);
         _loadingMetadata = false;
       });
     }
@@ -455,6 +458,7 @@ extension _ClientCardData on _ClientCardState {
           lastName: _clientLastName,
           phone: _clientPhone,
           email: _clientEmail,
+          sourceId: _clientSourceId,
           statusId: statusId,
           assignedTo: _leadData['assigned_to']?.toString(),
           clearAssignedTo:
@@ -479,6 +483,7 @@ extension _ClientCardData on _ClientCardState {
           phone: _clientPhone,
           email: _clientEmail,
           status: _student?['status']?.toString(),
+          sourceId: _clientSourceId,
           clearResponsible:
               _studentResponsibleChanged &&
               !_hasResponsibleInCustomData(customData),

@@ -559,15 +559,9 @@ extension _ClientCardEditors on _ClientCardState {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Контактные лица',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                ),
-              ),
-              TextButton.icon(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final addButton = TextButton.icon(
                 onPressed: () => _editContactPerson(entity),
                 style: TextButton.styleFrom(
                   foregroundColor: AppColor.gold,
@@ -579,8 +573,24 @@ extension _ClientCardEditors on _ClientCardState {
                 ),
                 icon: const Icon(Icons.add_rounded, size: 15),
                 label: const Text('Добавить контактное лицо'),
-              ),
-            ],
+              );
+              const title = Text(
+                'Контактные лица',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+              );
+              if (constraints.maxWidth < 420) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [title, addButton],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: title),
+                  addButton,
+                ],
+              );
+            },
           ),
           const SizedBox(height: 6),
           if (persons.isEmpty)
@@ -669,6 +679,42 @@ extension _ClientCardEditors on _ClientCardState {
             )
             .toList(),
         onChanged: (v) => _updateClientCore('branchId', v),
+      ),
+    );
+  }
+
+  Widget _buildSourceDropdown(ColorScheme cs) {
+    final current = _clientSourceId;
+    final initialValue =
+        _sources.any((source) => source['id']?.toString() == current)
+        ? current
+        : null;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpace.md),
+      child: DropdownButtonFormField<String>(
+        key: ValueKey('client-source-$_editorEpoch'),
+        initialValue: initialValue,
+        isExpanded: true,
+        decoration: _inputDecoration(
+          cs,
+          label: 'Рекламный источник *',
+          isDense: true,
+        ),
+        items: _sources
+            .map((source) {
+              final id = source['id']?.toString() ?? '';
+              final active = source['isActive'] == true;
+              return DropdownMenuItem(
+                value: id,
+                enabled: active || id == current,
+                child: Text(
+                  '${active ? '' : 'Архив · '}${source['displayName'] ?? '—'}',
+                  overflow: TextOverflow.ellipsis,
+                ),
+              );
+            })
+            .toList(growable: false),
+        onChanged: (value) => _updateClientCore('sourceId', value),
       ),
     );
   }

@@ -174,18 +174,21 @@ Top workflow: school dashboard → branch drilldown → record → correction/co
 
 ### 7.1 Client workspace
 
-Desktop uses full work area with a compact identity header, key status/actions and a section tab bar. Mobile uses a concise identity app bar and scrollable section tabs/menu. Canonical sections:
+Desktop uses the full work area with a compact identity header, key status/actions and one vertical page scrollbar. There is no desktop section tab bar: all capability-projected sections render in a stable reading order, large widths place compatible cards in two-column rows, and form controls keep a readable bounded width. A section deep link scrolls/focuses the corresponding heading. Mobile uses a concise identity app bar and scrollable section tabs/menu for the remaining destinations. Canonical sections:
 
-1. `Обзор` — essential identity, branch, responsible staff, lifecycle, next action.
-2. `Занятия` — preferred schedule + actual Month/Week/Day calendar + lesson list.
+1. `Обзор` — essential identity, branch, responsible staff, lifecycle, next action, canonical required Advertising source, primary Request type/Learning goal/Level/Category/Lesson type, and a collapsed configuration-driven `Дополнительные поля` region on desktop and mobile. Legacy `adSource`/`source` custom definitions are excluded from rendering.
+2. `Занятия` — preferred schedule with an always-visible actual-lesson date tray + expandable Month/Week/Day calendar; no duplicate upcoming/past lists.
 3. `Оплаты` — personal account, income/expense, actual payments, obligations/installments.
 4. `Абонементы` — issued subscriptions and commercial snapshots.
 5. `История и задачи` — chronological audit/user history and canonical tasks.
 6. `Контакты` — contacts/representatives with actor-safe projection.
 7. `Документы` — existing supported attachments/documents.
-8. `Доп. поля` — configuration-driven categories/layout.
 
-Sections unavailable by capability are absent. Direct section deep links route to a safe forbidden/fallback state without first rendering hidden data.
+Sections unavailable by capability are absent. Direct section deep links route to a safe forbidden/fallback state without first rendering hidden data. The desktop role navigation rail stays mounted for the full client route; schedule/chat/task/direct-URL entry paths all canonicalize to the same `Clients` ancestor and preserve Lead/Student identity in the route presentation tail. On desktop, Preferred schedule stays expanded and immediately precedes the actual Month/Week/Day calendar; only that calendar viewport may be collapsed by default and it must not fetch while collapsed.
+
+Lead and Student primary boards reuse the same toolbar component and geometry: title, stable local/server-safe search field, `Filters` expander and one capability-gated create FAB. Student filtering may expose a smaller filter set, but it must not use a visually separate header/action pattern.
+
+`lead_sources` is the single acquisition-source catalog. Both Lead and Student store its UUID; conversion and subscription-driven conversion copy the exact UUID. New Lead/Student creation requires an active source. Migration preserves unmatched historical `adSource` labels as archived catalog entries before backfill, then removes duplicate configurable source fields.
 
 ### 7.2 Lessons section
 
@@ -204,6 +207,8 @@ Viewport query is bounded by visible date range and scope. Clicking an event ope
 ### 7.3 Payments section
 
 Desktop: balance summary and payment actions above a filterable transaction/obligation table. Mobile: summary cards followed by chronological list; filters in sheet. `Добавить оплату` opens a primary route on compact and a large routed workspace surface on desktop.
+
+The long `Поступления и списания` and `Рассрочки и обязательства` groups are independently collapsed by default on every width; a typed deep link may expand the matching record group.
 
 Form groups:
 
@@ -307,4 +312,3 @@ Every migrated route must pass:
 | Data | API call parity, no duplicate mutation, actor-safe payload, result reconciliation |
 
 Owner UAT records route, role, scope, device, start state, actions, expected/actual, screenshot/video, API trace and resulting data evidence.
-

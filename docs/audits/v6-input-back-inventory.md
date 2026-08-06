@@ -4,8 +4,8 @@
 
 | Slice | Count |
 |---|---:|
-| Production scroll sites | 142 |
-| Explicit scrollbar callsites | 12 |
+| Production scroll sites | 143 |
+| Explicit scrollbar callsites | 13 |
 | Files with visible-thumb evidence | 2 |
 | Scroll sites without file-level controller evidence | 118 |
 | Production Back/exit sites | 197 |

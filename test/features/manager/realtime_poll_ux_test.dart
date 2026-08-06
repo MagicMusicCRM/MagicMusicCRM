@@ -200,10 +200,10 @@ void main() {
         expect(api.count('/crm/leads/board'), initialCalls);
         expect(find.byType(KanbanSkeleton), findsNothing);
       }
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(api.count('/crm/leads/board'), initialCalls + 1);
-    await tester.pumpAndSettle();
-    expect(find.byType(KanbanSkeleton), findsNothing);
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(api.count('/crm/leads/board'), initialCalls + 1);
+      await tester.pumpAndSettle();
+      expect(find.byType(KanbanSkeleton), findsNothing);
     },
   );
 
@@ -330,8 +330,20 @@ void main() {
         );
         await tester.pumpAndSettle();
 
+        expect(find.byKey(const ValueKey('students-search')), findsOneWidget);
+        expect(find.widgetWithText(OutlinedButton, 'Фильтры'), findsOneWidget);
         expect(find.byKey(const ValueKey('students-create')), findsOneWidget);
         expect(find.byTooltip('Настроить воронку'), findsNothing);
+        tester
+            .widget<OutlinedButton>(
+              find.widgetWithText(OutlinedButton, 'Фильтры'),
+            )
+            .onPressed!();
+        await tester.pump();
+        expect(
+          find.byKey(const ValueKey('students-filters-panel')),
+          findsOneWidget,
+        );
         expect(tester.takeException(), isNull, reason: 'viewport $size');
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump();

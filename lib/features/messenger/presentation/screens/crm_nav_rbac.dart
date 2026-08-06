@@ -20,7 +20,9 @@
 /// management surfaces start at Manager.
 library;
 
+import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
+import 'package:magic_music_crm/core/widgets/v7/v7_nav_shell.dart';
 
 /// Operational CRM tab indices shared by admin/manager/director/system_admin.
 const List<int> kManagerOnlyCrmTabs = [1, 6, 7, 8];
@@ -125,6 +127,75 @@ List<int> crmVisibleTabsForCapabilities(
     tabs.add(8);
   }
   return tabs;
+}
+
+V7NavDestination crmV7DestinationForTab(
+  String role,
+  int tab, {
+  int badgeCount = 0,
+}) {
+  if (role == 'teacher') {
+    if (tab == 1) {
+      return const V7NavDestination(
+        icon: Icons.calendar_today_outlined,
+        selectedIcon: Icons.calendar_today_rounded,
+        label: 'Расписание',
+      );
+    }
+    if (tab == 2) {
+      return const V7NavDestination(
+        icon: Icons.school_outlined,
+        selectedIcon: Icons.school_rounded,
+        label: 'Ученики',
+      );
+    }
+  }
+  return switch (tab) {
+    1 => const V7NavDestination(
+      icon: Icons.dashboard_outlined,
+      selectedIcon: Icons.dashboard_rounded,
+      label: 'Обзор',
+    ),
+    2 => V7NavDestination(
+      icon: Icons.calendar_today_outlined,
+      selectedIcon: Icons.calendar_today_rounded,
+      label: 'Расписание',
+      badgeCount: badgeCount,
+    ),
+    3 => V7NavDestination(
+      icon: Icons.people_outline_rounded,
+      selectedIcon: Icons.people_rounded,
+      label: 'Клиенты',
+      badgeCount: badgeCount,
+    ),
+    5 => V7NavDestination(
+      icon: Icons.account_balance_wallet_outlined,
+      selectedIcon: Icons.account_balance_wallet_rounded,
+      label: 'Финансы',
+      badgeCount: badgeCount,
+    ),
+    6 => V7NavDestination(
+      icon: Icons.task_alt_outlined,
+      selectedIcon: Icons.task_alt_rounded,
+      label: 'Задачи',
+      badgeCount: badgeCount,
+    ),
+    7 => const V7NavDestination(
+      icon: Icons.insert_chart_outlined_rounded,
+      selectedIcon: Icons.insert_chart_rounded,
+      label: 'Аналитика',
+    ),
+    8 => const V7NavDestination(
+      icon: Icons.tune_outlined,
+      selectedIcon: Icons.tune_rounded,
+      label: 'Настройки',
+    ),
+    _ => const V7NavDestination(
+      icon: Icons.chat_bubble_outline_rounded,
+      selectedIcon: Icons.chat_bubble_rounded,
+      label: 'Чат',
+    ),
+  };
 }
 
 /// Resolves a canonical navigation request without ever crossing the role's

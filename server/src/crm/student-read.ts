@@ -10,6 +10,8 @@ import { DatabaseService } from "../db/database.service";
 export interface StudentRow {
   id: string;
   lead_id: string | null;
+  source_id: string | null;
+  source_name: string | null;
   status: string;
   custom_data: Record<string, unknown> | null;
   profile_id: string | null;
@@ -33,17 +35,19 @@ export async function findStudent(
   const result = await db.query<StudentRow>(
     `
       select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
-        s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason,
+        s.lead_id, s.source_id, source.display_name as source_name,
+        s.custom_data, s.blacklisted, s.blacklist_reason,
         p.first_name, p.last_name, u.email, p.phone, s.created_at,
         coalesce(array_remove(array_agg(distinct tp.user_id), null), '{}'::uuid[]) as teacher_user_ids
       from app.students s
       left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
       left join app.users u on u.id = p.user_id and u.deleted_at is null
+      left join app.lead_sources source on source.id = s.source_id
       left join app.lessons l on l.student_id = s.id and l.deleted_at is null
       left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
       left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
       where s.id = $1 and s.deleted_at is null
-      group by s.id, p.id, u.id
+      group by s.id, p.id, u.id, source.id
       limit 1
     `,
     [studentId],

@@ -4,6 +4,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
 } from "class-validator";
 
@@ -32,6 +33,10 @@ export class UpdateStudentDto {
   @IsString()
   @MaxLength(50)
   status?: string;
+
+  @IsOptional()
+  @IsUUID()
+  sourceId?: string;
 
   @IsOptional()
   @IsObject()

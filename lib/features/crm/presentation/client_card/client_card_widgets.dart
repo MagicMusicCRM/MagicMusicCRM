@@ -646,10 +646,12 @@ class _HomeworkProgressList extends ConsumerStatefulWidget {
   final String? studentId;
   final String? leadId;
   final int refreshKey;
+  final bool embedded;
   const _HomeworkProgressList({
     this.studentId,
     this.leadId,
     required this.refreshKey,
+    this.embedded = false,
   }) : assert(studentId != null || leadId != null);
 
   @override
@@ -729,6 +731,10 @@ class _HomeworkProgressListState extends ConsumerState<_HomeworkProgressList> {
         }
         return ListView.builder(
           padding: const EdgeInsets.all(AppSpace.xl),
+          shrinkWrap: widget.embedded,
+          physics: widget.embedded
+              ? const NeverScrollableScrollPhysics()
+              : null,
           itemCount: items.length,
           itemBuilder: (ctx, i) {
             final h = items[i];

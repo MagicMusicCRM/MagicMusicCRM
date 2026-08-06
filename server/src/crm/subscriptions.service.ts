@@ -2,6 +2,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  UnprocessableEntityException,
 } from "@nestjs/common";
 import type { PoolClient } from "pg";
 import { AuditService } from "../audit/audit.service";
@@ -72,6 +73,7 @@ interface LeadConversionLeadRow {
   phone: string | null;
   custom_data: Record<string, unknown> | null;
   branch_id: string | null;
+  source_id: string | null;
   created_at: Date | string;
 }
 
@@ -384,7 +386,7 @@ export class SubscriptionsService {
       const leadResult = await client.query<LeadConversionLeadRow>(
         `
           select id, first_name, last_name, email, phone, custom_data,
-            branch_id, created_at
+            branch_id, source_id, created_at
           from app.leads
           where id = $1 and deleted_at is null
           for update
@@ -393,6 +395,13 @@ export class SubscriptionsService {
       );
       const lead = leadResult.rows[0];
       if (!lead) throw new NotFoundException("Лид не найден.");
+      if (!lead.source_id) {
+        throw new UnprocessableEntityException({
+          code: "SOURCE_REQUIRED",
+          field: "sourceId",
+          message: "Укажите рекламный источник перед выдачей абонемента.",
+        });
+      }
 
       const packageResult = await client.query<SubscriptionPackageRow>(
         `
@@ -467,8 +476,8 @@ export class SubscriptionsService {
                 returning id
               )
               insert into app.students
-                (profile_id, lead_id, status, custom_data, branch_id)
-              select id, $5, 'active', $6::jsonb, $7
+                (profile_id, lead_id, status, custom_data, branch_id, source_id)
+              select id, $5, 'active', $6::jsonb, $7, $8
               from updated_profile
               returning id
             `,
@@ -480,6 +489,7 @@ export class SubscriptionsService {
               leadId,
               JSON.stringify(customData),
               lead.branch_id,
+              lead.source_id,
             ],
           );
           studentId = inserted.rows[0].id;
@@ -511,8 +521,8 @@ export class SubscriptionsService {
                 returning id
               )
               insert into app.students
-                (profile_id, lead_id, status, custom_data, branch_id)
-              select id, $6, 'active', $7::jsonb, $8
+                (profile_id, lead_id, status, custom_data, branch_id, source_id)
+              select id, $6, 'active', $7::jsonb, $8, $9
               from inserted_profile
               returning id
             `,
@@ -525,6 +535,7 @@ export class SubscriptionsService {
               leadId,
               JSON.stringify(customData),
               lead.branch_id,
+              lead.source_id,
             ],
           );
           studentId = inserted.rows[0].id;

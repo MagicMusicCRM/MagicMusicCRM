@@ -4,6 +4,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  UnprocessableEntityException,
 } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import { AuditService } from "../audit/audit.service";
@@ -379,10 +380,12 @@ export class CrmService {
             returning id, user_id, first_name, last_name, phone
           ),
           inserted_student as (
-            insert into app.students (profile_id, status, lead_id, custom_data, branch_id)
-            select id, $6, $7, $8::jsonb, $9::uuid
+            insert into app.students (
+              profile_id, status, lead_id, custom_data, branch_id, source_id
+            )
+            select id, $6, $7, $8::jsonb, $9::uuid, $10::uuid
             from inserted_profile
-            returning id, status, profile_id, lead_id, custom_data, created_at,
+            returning id, status, profile_id, lead_id, source_id, custom_data, created_at,
               blacklisted, blacklist_reason
           ),
           inserted_student_link as (
@@ -406,11 +409,13 @@ export class CrmService {
             returning entity_id
           )
           select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
-            s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
+            s.lead_id, s.source_id, source.display_name as source_name,
+            s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
             '{}'::uuid[] as teacher_user_ids
           from inserted_student s
           join inserted_profile p on p.id = s.profile_id
           join inserted_user u on u.id = p.user_id
+          left join app.lead_sources source on source.id = s.source_id
           limit 1
         `,
         [
@@ -423,6 +428,7 @@ export class CrmService {
           leadId,
           JSON.stringify(transactionCustomData),
           branchId,
+          validated?.sourceId ?? null,
         ],
         );
         if (validated) {
@@ -662,6 +668,20 @@ export class CrmService {
             before.status ?? "",
           );
         }
+        if (dto.sourceId) {
+          const source = await client.query<{ display_name: string }>(
+            `select display_name from app.lead_sources
+             where id = $1 and is_active and deleted_at is null limit 1`,
+            [dto.sourceId],
+          );
+          if (!source.rows[0]) {
+            throw new UnprocessableEntityException({
+              code: "SOURCE_INACTIVE",
+              field: "sourceId",
+              message: "Выберите активный источник.",
+            });
+          }
+        }
         let customDataPatch = { ...initialCustomData };
         if (before && requestedResponsibleId) {
           const responsible = await assertEligibleResponsible(
@@ -709,15 +729,17 @@ export class CrmService {
                   - 'responsible' - 'responsibleUserId' - 'responsibleName'
               else coalesce(s.custom_data, '{}'::jsonb) || $7::jsonb end,
             branch_id = coalesce($8::uuid, s.branch_id),
+            source_id = coalesce($10::uuid, s.source_id),
             updated_at = now()
           from target
           where s.id = target.id
-          returning s.id, s.status, s.profile_id, s.lead_id, s.custom_data,
+          returning s.id, s.status, s.profile_id, s.lead_id, s.source_id, s.custom_data,
             s.blacklisted, s.blacklist_reason, s.created_at
         )
         select us.id, us.status, us.profile_id,
           coalesce(updated_profile_dependency.user_id, p.user_id) as profile_user_id,
-          us.lead_id, us.custom_data, us.blacklisted, us.blacklist_reason,
+          us.lead_id, us.source_id, source.display_name as source_name,
+          us.custom_data, us.blacklisted, us.blacklist_reason,
           coalesce(updated_profile_dependency.first_name, p.first_name) as first_name,
           coalesce(updated_profile_dependency.last_name, p.last_name) as last_name,
           coalesce(updated_user_dependency.email, u.email) as email,
@@ -730,16 +752,17 @@ export class CrmService {
         left join updated_user updated_user_dependency on true
         left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
         left join app.users u on u.id = p.user_id and u.deleted_at is null
+        left join app.lead_sources source on source.id = us.source_id
         left join app.lessons l on l.student_id = s.id and l.deleted_at is null
         left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
         left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
-        group by us.id, us.status, us.profile_id, us.lead_id, us.custom_data,
+        group by us.id, us.status, us.profile_id, us.lead_id, us.source_id, us.custom_data,
           us.blacklisted, us.blacklist_reason, us.created_at, p.id, u.id,
           updated_profile_dependency.user_id,
           updated_profile_dependency.first_name,
           updated_profile_dependency.last_name,
           updated_profile_dependency.phone,
-          updated_user_dependency.email
+          updated_user_dependency.email, source.id
         limit 1
       `,
           [
@@ -752,6 +775,7 @@ export class CrmService {
             JSON.stringify(customDataPatch),
             branchId,
             dto.clearResponsible ?? false,
+            dto.sourceId ?? null,
           ],
         );
         const updatedStudent = updated.rows[0];
@@ -1349,6 +1373,8 @@ export class CrmService {
     return {
       id: row.id,
       leadId: row.lead_id,
+      sourceId: row.source_id ?? null,
+      sourceName: row.source_name ?? null,
       status: row.status,
       customData: row.custom_data ?? {},
       profileId: row.profile_id,

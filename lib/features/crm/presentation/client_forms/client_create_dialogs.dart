@@ -343,7 +343,7 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
                       initialValue: _sourceId,
                       isExpanded: true,
                       decoration: InputDecoration(
-                        labelText: 'Источник *',
+                        labelText: 'Рекламный источник *',
                         errorText: _fieldErrors['sourceId'],
                       ),
                       hint: const Text('Выберите источник'),
@@ -397,7 +397,9 @@ class _StudentCreateDialogV4State extends ConsumerState<StudentCreateDialogV4> {
   String _phone = '';
   String? _branchId;
   String? _status;
+  String? _sourceId;
   List<Map<String, dynamic>> _branches = const [];
+  List<Map<String, dynamic>> _sources = const [];
   List<Map<String, dynamic>> _fields = const [];
   List<StudentFunnelStage> _statuses = const [];
   Map<String, String> _fieldErrors = const {};
@@ -429,6 +431,7 @@ class _StudentCreateDialogV4State extends ConsumerState<StudentCreateDialogV4> {
       final results = await Future.wait([
         api.listBranches(),
         api.listFields(entityType: 'student'),
+        api.listSources(),
       ]);
       if (!mounted) return;
       final branches = results[0];
@@ -451,6 +454,7 @@ class _StudentCreateDialogV4State extends ConsumerState<StudentCreateDialogV4> {
       setState(() {
         _branches = branches;
         _fields = _createPlacementFields(results[1]);
+        _sources = results[2];
         _branchId = selectedBranch;
         _statuses = statuses;
         if (!statuses.any((stage) => stage.key == _status)) {
@@ -478,6 +482,7 @@ class _StudentCreateDialogV4State extends ConsumerState<StudentCreateDialogV4> {
     if (_phone.isEmpty) errors['phone'] = 'Укажите корректный телефон.';
     if (_branchId == null) errors['branchId'] = 'Выберите филиал.';
     if (_status == null) errors['status'] = 'Выберите этап воронки.';
+    if (_sourceId == null) errors['sourceId'] = 'Выберите источник.';
     for (final field in _fields.where((item) => item['required'] == true)) {
       final id = field['id']?.toString() ?? '';
       final value = _customValues[id];
@@ -508,6 +513,7 @@ class _StudentCreateDialogV4State extends ConsumerState<StudentCreateDialogV4> {
             phone: _phone,
             branchId: _branchId!,
             status: _status!,
+            sourceId: _sourceId!,
             customFields: _serializedCustomFields(_fields, _customValues),
           );
       if (!mounted) return;
@@ -573,7 +579,10 @@ class _StudentCreateDialogV4State extends ConsumerState<StudentCreateDialogV4> {
         ),
         FilledButton(
           key: const ValueKey('student-submit'),
-          onPressed: _saving || _loading || _branches.isEmpty ? null : _save,
+          onPressed:
+              _saving || _loading || _branches.isEmpty || _sources.isEmpty
+              ? null
+              : _save,
           child: _saving
               ? const SizedBox.square(
                   dimension: 18,
@@ -631,6 +640,35 @@ class _StudentCreateDialogV4State extends ConsumerState<StudentCreateDialogV4> {
                         )
                         .toList(growable: false),
                     onChanged: _saving ? null : _selectBranch,
+                  ),
+                const SizedBox(height: AppSpace.sm),
+                if (_sources.isEmpty)
+                  const _EmptyMetadata(
+                    message:
+                        'Нет активных рекламных источников. Создание ученика недоступно.',
+                  )
+                else
+                  DropdownButtonFormField<String>(
+                    key: const ValueKey('student-source'),
+                    initialValue: _sourceId,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: 'Рекламный источник *',
+                      errorText: _fieldErrors['sourceId'],
+                    ),
+                    items: _sources
+                        .map(
+                          (source) => DropdownMenuItem(
+                            value: source['id']?.toString(),
+                            child: Text(
+                              source['displayName']?.toString() ?? '—',
+                            ),
+                          ),
+                        )
+                        .toList(growable: false),
+                    onChanged: _saving
+                        ? null
+                        : (value) => setState(() => _sourceId = value),
                   ),
                 const SizedBox(height: AppSpace.sm),
                 if (_statuses.isEmpty)

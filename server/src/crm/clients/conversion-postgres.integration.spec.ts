@@ -39,6 +39,7 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
   let directorId: string;
   let leadDefinitionId: string;
   let studentDefinitionId: string;
+  let sourceId: string;
   let studentId: string;
 
   beforeAll(async () => {
@@ -93,18 +94,31 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
     managerId = users.rows.find((row) => row.role === "manager")!.id;
     directorId = users.rows.find((row) => row.role === "director")!.id;
     linkedUserId = users.rows.find((row) => row.role === "client")!.id;
+    const source = await database.query<{ id: string }>(
+      `
+        insert into app.lead_sources (canonical_name, display_name, is_active)
+        values ($1, $2, true)
+        returning id
+      `,
+      [
+        `conversion_${randomUUID().replace(/-/g, "")}`,
+        "Conversion source",
+      ],
+    );
+    sourceId = source.rows[0]!.id;
     const lead = await database.query<{ id: string }>(
       `
         insert into app.leads (
-          first_name, last_name, phone, custom_data, branch_id, created_by
+          first_name, last_name, phone, custom_data, branch_id, source_id,
+          created_by
         )
         values (
           'Старое', 'Имя', '+79990000000',
-          '{"legacy":"preserved"}'::jsonb, $1, $2
+          '{"legacy":"preserved"}'::jsonb, $1, $2, $3
         )
         returning id
       `,
-      [branchId, managerId],
+      [branchId, sourceId, managerId],
     );
     leadId = lead.rows[0]!.id;
     await database.query(
@@ -214,6 +228,7 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
       }
     }
     await database.query("delete from app.leads where id = $1", [leadId]);
+    await database.query("delete from app.lead_sources where id = $1", [sourceId]);
     await database.query(
       "delete from app.client_custom_field_definitions where id = any($1::uuid[])",
       [[leadDefinitionId, studentDefinitionId]],
@@ -248,6 +263,7 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
       crm_links: string;
       copied_value: string;
       legacy_value: string;
+      source_id: string;
     }>(
       `
         select
@@ -262,7 +278,9 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
             where definition_id = $4 and entity_type = 'student'
               and entity_id = $2) as copied_value,
           (select custom_data->>'legacy' from app.students
-            where id = $2) as legacy_value
+            where id = $2) as legacy_value,
+          (select source_id::text from app.students
+            where id = $2) as source_id
       `,
       [leadId, studentId, linkedUserId, studentDefinitionId],
     );
@@ -272,6 +290,7 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
       crm_links: "1",
       copied_value: "перенесено",
       legacy_value: "preserved",
+      source_id: sourceId,
     });
 
     await expect(

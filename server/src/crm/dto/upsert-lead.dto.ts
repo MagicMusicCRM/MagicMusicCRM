@@ -49,6 +49,10 @@ export class UpsertLeadDto {
   source?: string;
 
   @IsOptional()
+  @IsUUID()
+  sourceId?: string;
+
+  @IsOptional()
   @IsString()
   @MaxLength(3000)
   notes?: string;

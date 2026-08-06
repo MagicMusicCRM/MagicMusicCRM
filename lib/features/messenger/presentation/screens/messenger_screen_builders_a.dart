@@ -307,76 +307,14 @@ extension _MessengerBuildersA on _MessengerScreenState {
   /// Builds the v7 nav destination for a canonical CRM tab index (see
   /// [_visibleCrmTabs]). Teacher reuses 1/2 for Расписание/Ученики.
   V7NavDestination _v7DestinationForTab(int tab) {
-    if (widget.role == 'teacher') {
-      switch (tab) {
-        case 1:
-          return const V7NavDestination(
-            icon: Icons.calendar_today_outlined,
-            selectedIcon: Icons.calendar_today_rounded,
-            label: 'Расписание',
-          );
-        case 2:
-          return const V7NavDestination(
-            icon: Icons.school_outlined,
-            selectedIcon: Icons.school_rounded,
-            label: 'Ученики',
-          );
-      }
-    }
-    switch (tab) {
-      case 1:
-        return const V7NavDestination(
-          icon: Icons.dashboard_outlined,
-          selectedIcon: Icons.dashboard_rounded,
-          label: 'Обзор',
-        );
-      case 2:
-        return V7NavDestination(
-          icon: Icons.calendar_today_outlined,
-          selectedIcon: Icons.calendar_today_rounded,
-          label: 'Расписание',
-          badgeCount: _unseenFor(CrmSection.schedule),
-        );
-      case 3:
-        return V7NavDestination(
-          icon: Icons.people_outline_rounded,
-          selectedIcon: Icons.people_rounded,
-          label: 'Клиенты',
-          badgeCount: _unseenFor(CrmSection.clients),
-        );
-      case 5:
-        return V7NavDestination(
-          icon: Icons.account_balance_wallet_outlined,
-          selectedIcon: Icons.account_balance_wallet_rounded,
-          label: 'Финансы',
-          badgeCount: _unseenFor(CrmSection.finance),
-        );
-      case 6:
-        return V7NavDestination(
-          icon: Icons.task_alt_outlined,
-          selectedIcon: Icons.task_alt_rounded,
-          label: 'Задачи',
-          badgeCount: _unseenFor(CrmSection.tasks),
-        );
-      case 7:
-        return const V7NavDestination(
-          icon: Icons.insert_chart_outlined_rounded,
-          selectedIcon: Icons.insert_chart_rounded,
-          label: 'Аналитика',
-        );
-      case 8:
-        return const V7NavDestination(
-          icon: Icons.tune_outlined,
-          selectedIcon: Icons.tune_rounded,
-          label: 'Настройки',
-        );
-      default:
-        return const V7NavDestination(
-          icon: Icons.chat_bubble_outline_rounded,
-          selectedIcon: Icons.chat_bubble_rounded,
-          label: 'Чат',
-        );
-    }
+    final badgeCount = switch (tab) {
+      2 => _unseenFor(CrmSection.schedule),
+      3 => _unseenFor(CrmSection.clients),
+      5 => _unseenFor(CrmSection.finance),
+      6 => _unseenFor(CrmSection.tasks),
+      _ => 0,
+    };
+    return crmV7DestinationForTab(widget.role, tab, badgeCount: badgeCount);
   }
 
   // ── Chat List Panel ────────────────────────────────────────────────────────

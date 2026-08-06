@@ -70,7 +70,7 @@ void main() {
   testWidgets(
     'manager records a branch-scoped immutable payment from the tab',
     (tester) async {
-      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.physicalSize = const Size(800, 900);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -132,25 +132,18 @@ void main() {
       await tester.tap(find.text('Оплаты'));
       await tester.pumpAndSettle();
       expect(find.text('Оплаты и личный счёт'), findsOneWidget);
-      await tester.scrollUntilVisible(
-        find.text('Оплата за август'),
-        160,
-        scrollable: find.descendant(
-          of: find.byKey(const Key('client-payments-tab')),
-          matching: find.byType(Scrollable),
-        ),
-      );
+      expect(find.text('Оплата за август'), findsNothing);
+      final movements = find.byKey(const Key('payment-movements-expansion'));
+      tester
+          .widget<ListTile>(
+            find.descendant(of: movements, matching: find.byType(ListTile)),
+          )
+          .onTap!();
+      await tester.pumpAndSettle();
       expect(find.text('Оплата за август'), findsOneWidget);
       expect(find.textContaining('Мария Управляющая'), findsOneWidget);
 
-      await tester.scrollUntilVisible(
-        find.byKey(const Key('open-payment-form')),
-        -160,
-        scrollable: find.descendant(
-          of: find.byKey(const Key('client-payments-tab')),
-          matching: find.byType(Scrollable),
-        ),
-      );
+      await tester.ensureVisible(find.byKey(const Key('open-payment-form')));
       tester
           .widget<FilledButton>(find.byKey(const Key('open-payment-form')))
           .onPressed!();
@@ -191,28 +184,30 @@ void main() {
         isEmpty,
       );
 
-      await tester.scrollUntilVisible(
-        find.byKey(
-          const ValueKey('adjust-payment-cccccccc-cccc-4ccc-8ccc-cccccccccccc'),
-        ),
-        160,
-        scrollable: find.descendant(
-          of: find.byKey(const Key('client-payments-tab')),
-          matching: find.byType(Scrollable),
-        ),
+      final adjust = find.byKey(
+        const ValueKey('adjust-payment-cccccccc-cccc-4ccc-8ccc-cccccccccccc'),
       );
-      await tester.tap(
-        find.byKey(
-          const ValueKey('adjust-payment-cccccccc-cccc-4ccc-8ccc-cccccccccccc'),
-        ),
-      );
+      if (adjust.evaluate().isEmpty) {
+        tester
+            .widget<ListTile>(
+              find.descendant(
+                of: find.byKey(const Key('payment-movements-expansion')),
+                matching: find.byType(ListTile),
+              ),
+            )
+            .onTap!();
+        await tester.pumpAndSettle();
+      }
+      tester.widget<IconButton>(adjust).onPressed!();
       await tester.pump();
       await tester.enterText(find.byKey(const Key('adjustment-amount')), '500');
       await tester.enterText(
         find.byKey(const Key('adjustment-reason')),
         'Частичный возврат',
       );
-      await tester.tap(find.byKey(const Key('adjustment-submit')));
+      tester
+          .widget<FilledButton>(find.byKey(const Key('adjustment-submit')))
+          .onPressed!();
       await tester.pumpAndSettle();
       final adjustment = api.idempotentRequests.singleWhere(
         (item) => item.path.endsWith('/adjustments'),

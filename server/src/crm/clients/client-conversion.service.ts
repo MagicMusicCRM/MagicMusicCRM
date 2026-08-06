@@ -42,14 +42,13 @@ export class ClientConversionService {
       if (existing.rows[0]) {
         return { studentId: existing.rows[0].student_id, replayed: true };
       }
-      const validated = await this.validator.validateStudentCreate(dto);
-
       const leadResult = await client.query<{
         id: string;
+        source_id: string | null;
         custom_data: Record<string, unknown> | null;
       }>(
         `
-          select id, custom_data
+          select id, source_id, custom_data
           from app.leads
           where id = $1 and deleted_at is null
           for update
@@ -58,6 +57,10 @@ export class ClientConversionService {
       );
       const lead = leadResult.rows[0];
       if (!lead) throw new NotFoundException("Лид не найден.");
+      const validated = await this.validator.validateStudentCreate(
+        dto,
+        lead.source_id,
+      );
       const legacyCustomData = {
         ...(lead.custom_data ?? {}),
         sourceLeadId: leadId,
@@ -80,9 +83,9 @@ export class ClientConversionService {
             returning id
           )
           insert into app.students (
-            profile_id, lead_id, status, custom_data, branch_id
+            profile_id, lead_id, status, custom_data, branch_id, source_id
           )
-          select id, $5, $6, $7::jsonb, $8 from profile
+          select id, $5, $6, $7::jsonb, $8, $9 from profile
           returning id
         `,
         [
@@ -94,6 +97,7 @@ export class ClientConversionService {
           validated.status,
           JSON.stringify(legacyCustomData),
           validated.branchId,
+          validated.sourceId,
         ],
       );
       const studentId = student.rows[0]!.id;

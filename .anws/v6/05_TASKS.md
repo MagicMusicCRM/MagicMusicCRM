@@ -217,25 +217,25 @@ flowchart TD
 ## 8. Sprint S4 — Client workspace, lessons & payments
 
 - [x] **V6-401** `[REQ-CLIENT-001, REQ-NAV-002]` — Перевести client card в canonical full workspace route.
-  - **Работа:** desktop full work area, compact full-screen route, stable section deep links and actor-safe capability projection; share existing providers/content.
-  - **Критерий:** fixed 600px primary dialog absent; Overview/Lessons/Payments/Subscriptions/History & Tasks/Contacts/Documents/Custom fields route correctly and preserve context.
+  - **Работа:** desktop full work area, compact full-screen route, stable section deep links and actor-safe capability projection; share existing providers/content. На desktop секции образуют один вертикальный workspace-canvas без переключения вкладок; широкие поверхности используют двухколоночные ряды и ограниченную ширину полей, compact сохраняет секционную навигацию.
+  - **Критерий:** fixed 600px primary dialog absent; на desktop Overview/Lessons/Payments/Subscriptions/History & Tasks/Contacts/Documents видимы в одном прокручиваемом reading order, section deep links прокручивают к нужному блоку, а configuration-driven «Дополнительные поля» раскрываются внутри Overview на всех ширинах без отдельной секции.
   - **Проверка:** Admin/Manager/Director + deny cases on 360/840/1200; API trace parity.
   - **Оценка:** 8 ч · **Зависимости:** INT-S3 · **Приоритет:** P0.
 
 - [x] **V6-402** `[REQ-CLIENT-001]` — Перенести preferred schedule в section `Занятия`.
-  - **Работа:** remove duplicate Info placement; editor supports date range, weekdays, time/duration, lessons/day, description and effective scope through existing domain path.
-  - **Критерий:** one canonical editor/list; default client branch; school option only when valid/capable; preferred plan remains distinct from actual lessons.
+  - **Работа:** remove duplicate Info placement; editor supports date range, weekdays, time/duration, lessons/day, description and effective scope through existing domain path. На desktop блок расположен непосредственно перед раскрываемым фактическим календарём клиента.
+  - **Критерий:** one canonical editor/list; default client branch; school option only when valid/capable; date tray показывает фактические занятия даже без настроенной preferred series и остаётся единственным компактным списком вместо дублей `Фактические/Предстоящие/Прошедшие`.
   - **Проверка:** CRUD + branch/school + validation + Back/dirty form tests.
   - **Оценка:** 7 ч · **Зависимости:** V6-401 · **Приоритет:** P0.
 
 - [x] **V6-403** `[REQ-CLIENT-001, REQ-NAV-001]` — Добавить client Month/Week/Day calendar.
-  - **Работа:** actor-scoped viewport query, branch selector, selected-client green+marker, other visible lessons neutral gray, lifecycle/trial/conflict independent; lesson quick link.
-  - **Критерий:** no unbounded school fetch or hidden client fields; mode/date/scope restore after linked navigation; non-color legend present.
+  - **Работа:** actor-scoped viewport query, branch selector, selected-client green+marker, other visible lessons neutral gray, lifecycle/trial/conflict independent; lesson quick link. Desktop calendar is an interactive expandable section immediately after preferred schedule.
+  - **Критерий:** collapsed calendar does not mount/fetch the viewport; expand restores mode/date/scope, no unbounded school fetch or hidden client fields; linked navigation and non-color legend remain intact; отдельный chronological lesson list не дублирует date tray.
   - **Проверка:** lifecycle × relation matrix, viewport/network assertions, Windows/Android drilldown.
   - **Оценка:** 8 ч · **Зависимости:** V6-402, V6-105 · **Приоритет:** P0.
 
 - [x] **V6-404** `[REQ-PAYMENT-001]` — Реализовать canonical Client Payments section/form.
-  - **Работа:** balance, income/expense, actual payments, obligations/installments; create route with branch/date/amount/method/status/actors/comment/id and typed discount/surcharge/installment preview.
+  - **Работа:** balance, income/expense, actual payments, obligations/installments; длинные `Поступления и списания` и `Рассрочки и обязательства` независимы и collapsed by default; create route with branch/date/amount/method/status/actors/comment/id and typed discount/surcharge/installment preview.
   - **Критерий:** immutable history not edited; invalid negative/hidden rewrite blocked; retry creates exactly one ledger effect; Manager sees only allowed client finance.
   - **Проверка:** money/idempotency/reconciliation tests, role/scope negative requests, network failure preserves input.
   - **Оценка:** 8 ч · **Зависимости:** V6-401, approved commerce backend readiness · **Приоритет:** P0.
@@ -252,10 +252,16 @@ flowchart TD
   - **Проверка:** full entity-link matrix for allow/missing/archived/forbidden on Windows/Android.
   - **Оценка:** 6 ч · **Зависимости:** V6-401..404, V6-105 · **Приоритет:** P0.
 
+- [x] **V6-407** `[REQ-CLIENT-001, REQ-NAV-001, REQ-STUDENT-001, REQ-CFG-001]` — Унифицировать client navigation, boards и системные поля.
+  - **Работа:** держать role navigation rail смонтированным поверх routed client workspace; canonicalize direct/schedule links под `Клиенты`; переиспользовать Lead toolbar/FAB в Students; поднять Advertising source, Request type, Learning goal, Level, Category и Lesson type в primary Overview; мигрировать Student на общий `lead_sources.id`.
+  - **Критерий:** карточка не становится standalone-окном; breadcrumb/title сохраняют тип и имя клиента; Students/Leads имеют один UI-контракт; `adSource`/`source` не отображаются как дубли; create/conversion сохраняют один обязательный source UUID.
+  - **Проверка:** route round-trip + mounted rail; responsive board toolbar/FAB; client-card primary/additional field test; PostgreSQL migration + Lead→Student source preservation.
+  - **Оценка:** 6 ч · **Зависимости:** V6-401, V6-405, V6-406 · **Приоритет:** P0.
+
 - [x] **INT-S4** — Принять client workspace.
   - **Критерий:** CH-06/11 closed; full card, Lessons, Payments, configurable Student entry and linked navigation mounted in production; trace/reconciliation clean.
   - **Проверка:** full Flutter tests + targeted integration, role/scope matrix, Windows/Android device runs, relevant server tests only where approved.
-  - **Оценка:** 4 ч · **Зависимости:** V6-401..406 · **Приоритет:** P0.
+  - **Оценка:** 4 ч · **Зависимости:** V6-401..407 · **Приоритет:** P0.
 
 ---
 

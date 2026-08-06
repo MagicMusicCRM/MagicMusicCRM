@@ -245,6 +245,27 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (loc.startsWith('/teacher') && role != 'teacher') return roleRoute;
       if (loc.startsWith('/client') && role != 'client') return roleRoute;
 
+      if (role != 'client' &&
+          state.uri.pathSegments.length == 2 &&
+          const {
+            'student',
+            'students',
+            'leads',
+          }.contains(state.uri.pathSegments.first)) {
+        final rawType = state.uri.pathSegments.first == 'leads'
+            ? 'lead'
+            : 'student';
+        return Uri(
+          path: roleRoute,
+          queryParameters: {
+            'section': 'clients',
+            'entityType': rawType,
+            'entityId': state.uri.pathSegments[1],
+            'f.section': ?state.uri.queryParameters['section'],
+          },
+        ).toString();
+      }
+
       return null;
     },
     routes: [
@@ -383,6 +404,13 @@ EntityLink? _dashboardEntityLink(GoRouterState state) {
     'version': EntityLink.schemaVersion,
     'entityType': type,
     'entityId': id,
+    if (state.uri.queryParameters['entityTitle']?.trim().isNotEmpty == true)
+      'presentation': {
+        'primary': state.uri.queryParameters['entityTitle'],
+        if (state.uri.queryParameters['entityContext']?.trim().isNotEmpty ==
+            true)
+          'context': state.uri.queryParameters['entityContext'],
+      },
     if (state.uri.queryParameters['focus']?.isNotEmpty == true ||
         state.uri.queryParameters.keys.any((key) => key.startsWith('f.')))
       'optionalFocus': {
