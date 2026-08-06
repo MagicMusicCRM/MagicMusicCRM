@@ -1,0 +1,4 @@
+
+> magic-music-crm-server@0.1.0 build
+> nest build
+

@@ -1,0 +1,3 @@
+FrameLayout id=android:id/content bounds=[0,0][1080,2400]
+  FrameLayout flags=focusable bounds=[0,0][1080,2400]
+    View desc="Проверяем сессию и доступ" flags=focusable bounds=[299,1345][781,1393]

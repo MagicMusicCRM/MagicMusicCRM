@@ -1,0 +1,7 @@
+FrameLayout id=android:id/content bounds=[0,0][1080,2400]
+  FrameLayout flags=focusable bounds=[0,0][1080,2400]
+    View desc="Закрыть" flags=clickable,focusable bounds=[0,0][1080,2400]
+      View desc="Поиск в расписании" flags=focusable bounds=[168,602][912,686]
+      EditText flags=clickable,focusable bounds=[168,728][912,854]
+      Button desc="Отмена" flags=clickable,focusable bounds=[445,917][651,1043]
+      Button desc="Найти" flags=clickable,focusable bounds=[672,917][912,1043]

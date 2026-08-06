@@ -1,0 +1,17 @@
+
+> magic-music-crm-server@0.1.0 test
+> node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand --runInBand
+
+(node:13028) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+[Nest] 13028  - 06.08.2026, 19:50:40   ERROR [LessonCompletionWorker] Poison Lesson completion work: lesson=ac32cd58-2f17-4411-a0a7-9a9f4f31a0e1 attempts=2 error=ConflictException
+[33m[Nest] 13028  - [39m06.08.2026, 19:51:26 [33m   WARN[39m [38;5;3m[ScheduleService] [39m[33mLesson lesson-committed created but audience resolution failed: Error: audience unavailable[39m
+[32m[Nest] 13028  - [39m06.08.2026, 19:51:27 [32m    LOG[39m [38;5;3m[RealtimeGateway] [39m[32mRealtime connected user=admin-a[39m
+[32m[Nest] 13028  - [39m06.08.2026, 19:51:27 [32m    LOG[39m [38;5;3m[RealtimeGateway] [39m[32mRealtime connected user=teacher-a[39m
+[33m[Nest] 13028  - [39m06.08.2026, 19:51:27 [33m   WARN[39m [38;5;3m[RealtimeGateway] [39m[33mRealtime handshake rejected: malformed payload[39m
+
+Test Suites: 151 passed, 151 total
+Tests:       1157 passed, 1157 total
+Snapshots:   0 total
+Time:        138.68 s
+Ran all test suites.

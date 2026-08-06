@@ -1,0 +1,7 @@
+
+Path : C:\Users\Alinka\Documents\Codex Import\MagicMusicCRM\outputs\stage9-release-20260806\MagicMusicCRM-1.2.3-156.apk
+Hash : BCDBC45EBFFE949D3E6CD96BCB5C4C6909EF5EE6846A0CC462131EF7D1F69801
+
+Path : C:\Users\Alinka\Documents\Codex Import\MagicMusicCRM\outputs\stage9-release-20260806\MagicMusicCRM-1.2.3-156-windows-x64.zip
+Hash : DC19C129BC312F4051CE054D8CD432463EFAD93B6EC2A8DF36F9A078A92C6D66
+

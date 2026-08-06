@@ -1,0 +1,739 @@
+Resolving dependencies...
+Downloading packages...
+  _fe_analyzer_shared 93.0.0 (105.0.0 available)
+  _flutterfire_internals 1.3.59 (1.3.76 available)
+  analyzer 10.0.1 (14.1.0 available)
+  async 2.13.0 (2.13.1 available)
+  audio_session 0.1.25 (0.2.4 available)
+  cli_util 0.4.2 (0.5.2 available)
+  code_assets 1.0.0 (1.2.1 available)
+  coverage 1.15.0 (1.15.1 available)
+  cross_file 0.3.5+2 (0.3.5+4 available)
+  dbus 0.7.12 (0.7.14 available)
+  desktop_drop 0.7.0 (0.7.1 available)
+  dio 5.9.2 (5.11.0 available)
+  dio_web_adapter 2.1.2 (2.2.1 available)
+  equatable 2.0.8 (2.1.0 available)
+  file_picker 9.2.3 (11.0.3 available)
+  firebase_core 3.15.2 (4.13.0 available)
+  firebase_core_platform_interface 6.0.2 (8.1.0 available)
+  firebase_core_web 2.24.1 (3.10.0 available)
+  firebase_messaging 15.2.10 (16.5.0 available)
+  firebase_messaging_platform_interface 4.6.10 (4.9.3 available)
+  firebase_messaging_web 3.10.10 (4.2.4 available)
+  flutter_local_notifications 20.1.0 (22.2.0 available)
+  flutter_local_notifications_linux 7.0.0 (8.0.1 available)
+  flutter_local_notifications_platform_interface 10.0.0 (12.1.0 available)
+  flutter_local_notifications_windows 2.0.1 (3.1.1 available)
+  flutter_plugin_android_lifecycle 2.0.34 (2.0.35 available)
+  flutter_riverpod 3.3.1 (3.4.2 available)
+  flutter_secure_storage 9.2.4 (10.3.1 available)
+  flutter_secure_storage_linux 1.2.3 (3.0.1 available)
+  flutter_secure_storage_macos 3.1.3 (4.0.0 available)
+  flutter_secure_storage_platform_interface 1.1.2 (2.0.2 available)
+  flutter_secure_storage_web 1.2.1 (2.1.1 available)
+  flutter_secure_storage_windows 3.1.2 (4.2.2 available)
+  go_router 17.1.0 (17.3.0 available)
+  hooks 1.0.2 (2.1.0 available)
+  image 4.8.0 (4.9.1 available)
+  intl 0.20.2 (0.20.3 available)
+  js 0.6.7 (0.7.2 available)
+  json_annotation 4.11.0 (4.12.0 available)
+  just_audio 0.9.46 (0.10.6 available)
+  just_audio_windows 0.2.2 (0.2.3 available)
+  matcher 0.12.19 (0.12.20 available)
+  meta 1.17.0 (1.19.0 available)
+  msix 3.16.13 (3.18.0 available)
+  native_toolchain_c 0.17.5 (0.19.3 available)
+  objective_c 9.3.0 (9.5.0 available)
+  package_config 2.2.0 (3.0.0 available)
+  package_info_plus 9.0.0 (10.2.1 available)
+  package_info_plus_platform_interface 3.2.1 (4.1.0 available)
+  path_provider 2.1.5 (2.1.6 available)
+  path_provider_android 2.2.22 (2.3.1 available)
+  path_provider_linux 2.2.1 (2.2.2 available)
+  path_provider_platform_interface 2.1.2 (2.1.3 available)
+  permission_handler 12.0.1 (13.0.0 available)
+  permission_handler_android 13.0.1 (14.0.0 available)
+  permission_handler_apple 9.4.7 (9.5.0 available)
+  permission_handler_html 0.1.3+5 (0.1.4+1 available)
+  permission_handler_platform_interface 4.3.0 (4.4.0 available)
+  permission_handler_windows 0.2.1 (0.2.2 available)
+  posix 6.5.0 (6.5.2 available)
+  record 5.2.1 (7.1.1 available)
+  record_android 1.5.1 (2.1.2 available)
+! record_linux 1.3.0 (overridden) (2.1.1 available)
+  record_platform_interface 1.5.0 (2.1.0 available)
+  record_web 1.3.0 (2.1.2 available)
+  record_windows 1.0.7 (2.2.3 available)
+  riverpod 3.2.1 (3.4.2 available)
+  sentry 8.14.2 (9.26.0 available)
+  sentry_flutter 8.14.2 (9.26.0 available)
+  socket_io_client 3.1.5 (3.1.6 available)
+  syncfusion_flutter_calendar 29.2.5 (34.1.33 available)
+  syncfusion_flutter_core 29.2.11 (34.1.33 available)
+  syncfusion_flutter_datepicker 29.2.11 (34.1.33 available)
+  syncfusion_localizations 29.2.11 (34.1.33 available)
+  synchronized 3.4.0 (3.4.1+1 available)
+  test 1.30.0 (1.31.2 available)
+  test_api 0.7.10 (0.7.13 available)
+  test_core 0.6.16 (0.6.19 available)
+  timezone 0.10.0 (0.11.1 available)
+  url_launcher_android 6.3.28 (6.3.32 available)
+  url_launcher_web 2.4.2 (2.4.3 available)
+  uuid 4.5.3 (4.6.0 available)
+  vector_math 2.2.0 (2.4.2 available)
+  vm_service 15.0.2 (15.2.0 available)
+  win32 5.15.0 (6.3.0 available)
+  xml 6.6.1 (7.0.1 available)
+Got dependencies!
+86 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+00:00 +0: loading C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/api/magic_api_client_test.dart
+00:00 +0: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/api/magic_api_client_test.dart: MagicApiClient adds bearer token to authenticated requests
+00:00 +1: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/api/magic_api_client_test.dart: MagicApiClient adds stable v4 command metadata to mutating requests
+00:00 +2: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/api/magic_api_client_test.dart: MagicApiClient refreshes once after unauthorized response and retries request
+00:00 +3: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/api/magic_api_client_test.dart: MagicApiClient proactively refreshes an expired JWT before sending (no 401 needed)
+00:00 +4: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/api/magic_api_client_test.dart: MagicApiClient shares one refresh across parallel unauthorized requests
+00:00 +5: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/api/magic_api_client_test.dart: MagicApiClient shares one refresh across separate client instances
+00:00 +6: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/api/magic_api_client_test.dart: MagicApiClient clears tokens when refresh fails
+00:00 +7: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/api/magic_api_client_test.dart: MagicApiClient maps backend validation errors to typed exception
+00:00 +8: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/api/magic_api_client_test.dart: MagicApiClient keeps base URL path prefix for v3 API deployments
+00:00 +9: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/api/magic_api_client_test.dart: MagicApiClient sends PUT requests through the shared authenticated pipeline
+00:00 +10: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/api/magic_token_store_relogin_test.dart: read() returns the freshly re-logged-in session despite a stale backend
+00:01 +11: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/models/payment_test.dart: Payment.fromMap (M2 real DTO parse) parses a numeric-string amount and keeps the raw value
+00:01 +12: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/models/payment_test.dart: Payment.fromMap (M2 real DTO parse) accepts a numeric amount and defaults to 0 when absent/garbage
+00:01 +13: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/models/payment_test.dart: Payment.fromMap (M2 real DTO parse) methodLabel falls back method -> type -> empty
+00:01 +14: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/models/payment_test.dart: Payment.fromMap (M2 real DTO parse) note falls back notes -> description -> empty
+00:01 +15: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/models/payment_test.dart: Payment.fromMap (M2 real DTO parse) reads the nested student and builds the display name
+00:01 +16: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/models/payment_test.dart: Payment.fromMap (M2 real DTO parse) has no student when the nested map is absent
+00:01 +17: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/navigation/app_back_policy_test.dart: Back closes overlay, route, then local tab state
+00:02 +18: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/navigation/app_back_policy_test.dart: Back closes overlay, route, then local tab state
+00:02 +19: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/navigation/app_back_policy_test.dart: Back closes overlay, route, then local tab state
+00:03 +20: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/navigation/app_back_policy_test.dart: partial and full mobile sheets both dismiss before the page
+00:04 +21: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/navigation/app_back_policy_test.dart: UI Back uses Navigator before desktop tab history
+00:04 +22: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/navigation/app_back_policy_test.dart: deep-link return preserves source and falls back only when cold
+00:08 +23: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/router/app_router_test.dart: routerProvider keeps one GoRouter across auth and gate updates
+00:08 +24: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/router/app_router_test.dart: stale gate 401 does not belong to a new session
+00:08 +25: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/alert_policy_test.dart: shouldSoundFor — молчим про то, на что смотришь новый лид, а человек на «Клиентах» — тихо
+00:08 +26: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/alert_policy_test.dart: shouldSoundFor — молчим про то, на что смотришь новый лид, а человек в «Задачах» — звук
+00:08 +27: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/alert_policy_test.dart: shouldSoundFor — молчим про то, на что смотришь новая задача, а человек в «Задачах» — тихо
+00:08 +28: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/alert_policy_test.dart: shouldSoundFor — молчим про то, на что смотришь сообщение в ОТКРЫТОМ чате — тихо
+00:08 +29: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/alert_policy_test.dart: shouldSoundFor — молчим про то, на что смотришь сообщение в ДРУГОМ чате — звук, хоть вкладка и та же
+00:08 +30: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/alert_policy_test.dart: shouldSoundFor — молчим про то, на что смотришь открыт список чатов, диалог не выбран — звук
+00:08 +31: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/alert_policy_test.dart: shouldSoundFor — молчим про то, на что смотришь событие без раздела — звук
+00:08 +32: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/alert_policy_test.dart: shouldSoundFor — молчим про то, на что смотришь приложение не на экране CRM — звук
+00:08 +33: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/alert_policy_test.dart: sectionForEntity сущности разложены по разделам
+00:08 +34: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/alert_policy_test.dart: sectionForEntity неизвестное и null — не раздел
+00:08 +35: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/alert_policy_test.dart: AlertThrottle — 5 секунд между звуками первый звук проходит
+00:08 +36: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/alert_policy_test.dart: AlertThrottle — 5 секунд между звуками второй сразу — проглатывается
+00:08 +37: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/alert_policy_test.dart: AlertThrottle — 5 секунд между звуками через 4 секунды — ещё рано
+00:08 +38: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/alert_policy_test.dart: AlertThrottle — 5 секунд между звуками через 5 секунд — можно
+00:08 +39: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/alert_policy_test.dart: AlertThrottle — 5 секунд между звуками десять событий подряд — один звук
+00:08 +40: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/alert_policy_test.dart: AlertThrottle — 5 секунд между звуками счётчик ожидания честен до звука и после
+00:09 +41: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/chat_attachment_service_test.dart: uploads chat attachments through v3 File API multipart contract
+00:10 +42: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService maps overview stats to legacy dashboard keys
+00:10 +43: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService maps overview stats to legacy dashboard keys
+00:10 +44: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService maps overview stats to legacy dashboard keys
+00:10 +45: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService maps overview stats to legacy dashboard keys
+00:10 +46: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService maps overview stats to legacy dashboard keys
+00:10 +47: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService maps overview stats to legacy dashboard keys
+00:10 +48: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService maps overview stats to legacy dashboard keys
+00:10 +49: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService maps manager dashboard KPI contract
+00:10 +50: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService uses canonical task filters and calendar
+00:10 +51: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService maps finance report to report widget legacy keys
+00:10 +52: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService maps CRM reference data to legacy keys
+00:10 +53: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService maps schedule matrix and room availability contracts
+00:10 +54: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService maps teachers to client chat contacts through v3 API
+00:10 +55: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService maps Phase 07 staff teacher filters and activity log contracts
+00:10 +56: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService creates groups and manages group students through v3 API
+00:10 +57: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService teacher payroll, payouts, rates, stats and group rate override
+00:10 +58: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService gets updates students and creates comments through v3 API
+00:10 +59: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService maps student search card and duplicate candidate contracts
+00:10 +60: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService creates students teachers and staff through v3 API
+00:10 +61: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService creates student from lead with conversion payload
+00:10 +62: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService returns student to lead through v3 API
+00:10 +63: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService lists student groups through v3 API
+00:10 +64: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService creates updates and deletes rooms through v3 API
+00:10 +65: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService maps leads and passes trial lesson filter
+00:10 +66: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService maps lead board and lead card aggregate contracts
+00:10 +67: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService requests and maps the unassigned lead-board column page
+00:10 +68: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService manages leads and lead statuses through v3 API
+00:10 +69: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService sends explicit responsible clear flags only when requested
+00:10 +70: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService creates lessons with branch and room ids
+00:10 +71: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService creates trial lessons for leads
+00:10 +72: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService maps subscriptions to legacy keys
+00:10 +73: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService maps payments
+00:10 +74: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService maps unified timeline
+00:10 +75: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService maps student balances to debtor legacy shape
+00:10 +76: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService maps progress comments to legacy keys
+00:10 +77: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService getAnalyticsFunnel requests /analytics/funnel and maps stages
+00:10 +78: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService getAnalyticsDebts requests /analytics/debts and maps buckets
+00:10 +79: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService getAnalyticsBranches requests /analytics/branches with date params
+00:10 +80: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService getAnalyticsLossReasons requests /analytics/loss-reasons
+00:10 +81: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService getAnalyticsForecast requests /analytics/forecast
+00:10 +82: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService getAnalyticsChurn requests /analytics/churn-risk
+00:10 +83: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService getAnalyticsChatSla requests /analytics/chats/sla
+00:10 +84: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService getAppLeadsCount reads /crm/leads/app-count and returns the count
+00:10 +85: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService getAppLeadsCount coerces a string count to int
+00:10 +86: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService listBranchDisciplines maps items to snake keys
+00:10 +87: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService listDisciplines maps items to {id, name}
+00:10 +88: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService getLeadStatusHistory requests /crm/leads/{id}/status-history and maps items
+00:10 +89: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService listLeadApplications requests /crm/leads/{id}/applications and maps items
+00:10 +90: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService getFamilyForEntity requests /crm/families/by-entity/{type}/{id} and maps family + members
+00:10 +91: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService getFamilyForEntity returns null family when entity has no family
+00:10 +92: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService updateScheduleSeries sends explicit null to clear validUntil
+00:10 +93: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService issueLeadSubscription converts only through the package endpoint
+00:10 +94: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_crm_service_test.dart: MagicCrmService lead homework list and create preserve lead ownership
+00:10 +95: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_messenger_service_test.dart: MagicMessengerService creates direct chat and maps chat summary to legacy keys
+00:11 +96: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_messenger_service_test.dart: MagicMessengerService creates direct chat and maps chat summary to legacy keys
+00:11 +97: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_messenger_service_test.dart: MagicMessengerService creates direct chat and maps chat summary to legacy keys
+00:11 +98: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_notifications_service_test.dart: MagicNotificationsService lists and marks notifications through v3 API
+00:11 +99: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_notifications_service_test.dart: MagicNotificationsService lists and marks notifications through v3 API
+00:11 +100: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_notifications_service_test.dart: MagicNotificationsService lists and marks notifications through v3 API
+00:11 +101: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_notifications_service_test.dart: MagicNotificationsService lists and marks notifications through v3 API
+00:11 +102: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_notifications_service_test.dart: MagicNotificationsService lists and marks notifications through v3 API
+00:11 +103: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_notifications_service_test.dart: MagicNotificationsService lists and marks notifications through v3 API
+00:11 +104: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_notifications_service_test.dart: MagicNotificationsService lists and marks notifications through v3 API
+00:11 +105: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_notifications_service_test.dart: MagicNotificationsService lists and marks notifications through v3 API
+00:11 +106: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_notifications_service_test.dart: MagicNotificationsService lists and marks notifications through v3 API
+00:11 +107: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_notifications_service_test.dart: MagicNotificationsService lists and marks notifications through v3 API
+00:11 +108: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_messenger_service_test.dart: MagicMessengerService lists channels and channel posts through v3 API
+00:11 +109: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_notifications_service_test.dart: MagicNotificationsService sends admin broadcasts with role target and push channel
+00:11 +110: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_messenger_service_test.dart: MagicMessengerService creates and updates channels through v3 API
+00:11 +111: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_notifications_service_test.dart: MagicNotificationsService registers and deletes push devices through v3 API
+00:11 +112: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_messenger_service_test.dart: MagicMessengerService assignChat self-claim posts to assign with empty body
+00:11 +113: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_messenger_service_test.dart: MagicMessengerService assignChat with userId posts the target
+00:11 +114: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_messenger_service_test.dart: MagicMessengerService archiveChat / unarchiveChat / unassignChat hit the right routes
+00:11 +115: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_messenger_service_test.dart: MagicMessengerService leaveGroup posts to groups/:id/leave
+00:11 +116: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_messenger_service_test.dart: MagicMessengerService _legacyChat surfaces folder, assignedTo, archived, ownerName
+00:11 +117: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_messenger_service_test.dart: MagicMessengerService listChats follows keyset pages, preserves filters, and deduplicates ids
+00:11 +118: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_messenger_service_test.dart: MagicMessengerService legacyChatFromSummary maps camelCase realtime summary to legacy keys
+00:11 +119: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_messenger_service_test.dart: MagicMessengerService reads channel access and permission rules through v3 API
+00:11 +120: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_profile_admin_service_test.dart: MagicProfileAdminService lists profiles with legacy keys
+00:11 +121: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_profile_admin_service_test.dart: MagicProfileAdminService updates role through admin endpoint
+00:11 +122: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_profile_admin_service_test.dart: MagicProfileAdminService lists profile notes with legacy keys
+00:11 +123: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_profile_admin_service_test.dart: MagicProfileAdminService creates profile note through admin endpoint
+00:12 +124: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_realtime_service_test.dart: MagicRealtimeService derives realtime origin from API base URL
+00:12 +125: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_realtime_service_test.dart: MagicRealtimeService connects socket.io transport with per-handshake v3 bearer token and realtime path
+00:12 +126: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_realtime_service_test.dart: MagicRealtimeService shares one socket across consumers and closes it with the last one
+00:12 +127: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_realtime_service_test.dart: MagicRealtimeService logout A then login B force-disposes A transport and detaches handlers
+00:12 +128: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_realtime_service_test.dart: MagicRealtimeService connect refuses to reuse a shared socket with another JWT subject
+00:12 +129: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_realtime_service_test.dart: MagicRealtimeService emits room, typing and presence events
+00:12 +130: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_realtime_service_test.dart: MagicRealtimeService joinChannel emits a channel room.join for announcements delivery
+00:12 +131: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_realtime_service_test.dart: MagicRealtimeService onConnect fires on every (re)connect so rooms can be re-joined
+00:12 +132: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_realtime_service_test.dart: MagicRealtimeService maps socket payloads to string-keyed event maps
+00:12 +133: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_realtime_service_test.dart: MagicRealtimeService onChatCreated receives chat.created payloads
+00:12 +134: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_realtime_service_test.dart: MagicRealtimeService onChatRemoved receives chat.removed payloads
+00:12 +135: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_realtime_service_test.dart: MagicRealtimeService rejects connect without an authenticated session
+00:12 +136: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_realtime_service_test.dart: MagicRealtimeService access invalidation refetches the current session projection
+00:12 +137: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_settings_service_test.dart: reads and updates admin chat avatar through v3 settings API
+00:13 +138: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/magic_settings_service_test.dart: reads and updates CRM custom field schema through v3 settings API
+00:13 +139: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/section_unseen_test.dart: sectionKeyForTab вкладки со счётчиком разложены по ключам сервера
+00:13 +140: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/section_unseen_test.dart: sectionKeyForTab у Чата своего счётчика тут нет — у него точный
+00:13 +141: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/section_unseen_test.dart: sectionKeyForTab витрины без своих объектов счётчика не получают
+00:13 +142: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/section_unseen_test.dart: sectionKeyForTab неизвестная вкладка — не падаем
+00:13 +143: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/services/section_unseen_test.dart: ключи разделов совпадают с серверными набор ровно тот же
+00:14 +144: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/status_color_test.dart: statusColorFromValue maps semantic tokens without throwing (regression: FFinfo crash)
+00:14 +145: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/status_color_test.dart: statusColorFromValue parses hex with and without # / alpha
+00:14 +146: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/status_color_test.dart: statusColorFromValue falls back for null / empty / garbage instead of throwing
+00:14 +147: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +148: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +149: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +150: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +151: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +152: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +153: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +154: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +155: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +156: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +157: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +158: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +159: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +160: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +161: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +162: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +163: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +164: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +165: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +166: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +167: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +168: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +169: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +170: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +171: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +172: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +173: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +174: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +175: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +176: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +177: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +178: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +179: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +180: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +181: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:15 +182: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: global indicator overlays any routed child
+00:16 +183: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/adaptive_surface_policy_test.dart: declarative policy covers 360, 600 and 840 widths
+00:16 +184: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/update/update_prompt_test.dart: helper launch failure closes progress and shows recoverable error
+00:16 +185: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/adaptive_surface_policy_test.dart: Client and Payment primary jobs reuse their route callback
+00:17 +186: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/adaptive_surface_policy_test.dart: Client and Payment primary jobs reuse their route callback
+00:17 +187: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/auto_dismiss_snackbar_test.dart: snackbar WITH an action auto-dismisses after its duration (the «Занятие перенесено»/«Отменить» shape)
+00:18 +188: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/auto_dismiss_snackbar_test.dart: snackbar WITH an action auto-dismisses after its duration (the «Занятие перенесено»/«Отменить» shape)
+00:18 +189: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/adaptive_surface_policy_test.dart: Lesson quick view builds once in sheet then desktop drawer
+00:18 +190: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/adaptive_surface_policy_test.dart: Lesson quick view builds once in sheet then desktop drawer
+00:18 +191: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/adaptive_surface_policy_test.dart: Lesson quick view builds once in sheet then desktop drawer
+00:18 +192: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/adaptive_surface_policy_test.dart: Lesson quick view builds once in sheet then desktop drawer
+00:18 +193: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/adaptive_surface_policy_test.dart: Lesson quick view builds once in sheet then desktop drawer
+00:18 +194: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/adaptive_surface_policy_test.dart: Lesson quick view builds once in sheet then desktop drawer
+00:19 +195: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/expandable_magic_sheet_test.dart: portrait sheet is full width and reaches all three snap states
+00:19 +196: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/expandable_magic_sheet_test.dart: portrait sheet is full width and reaches all three snap states
+00:20 +197: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/expandable_magic_sheet_test.dart: portrait sheet is full width and reaches all three snap states
+00:21 +198: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/expandable_magic_sheet_test.dart: portrait sheet is full width and reaches all three snap states
+00:21 +199: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/dirty_form_exit_test.dart: all exit sources use the same Save Discard Cancel decision
+00:21 +200: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/magic_desktop_scrollbar_test.dart: desktop owns one position and exposes a draggable vertical bar
+00:21 +201: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/magic_toast_test.dart: undo toast (with action) auto-dismisses in ~3 s
+00:21 +202: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/magic_toast_test.dart: undo toast (with action) auto-dismisses in ~3 s
+00:22 +203: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/magic_toast_test.dart: undo toast (with action) auto-dismisses in ~3 s
+00:22 +204: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/magic_toast_test.dart: undo toast (with action) auto-dismisses in ~3 s
+00:22 +205: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/magic_toast_test.dart: undo toast (with action) auto-dismisses in ~3 s
+00:22 +206: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/magic_toast_test.dart: undo toast (with action) auto-dismisses in ~3 s
+00:22 +207: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/magic_toast_test.dart: undo toast (with action) auto-dismisses in ~3 s
+00:22 +208: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/ru_phone_field_test.dart: keeps label and empty mask with a custom decoration
+00:22 +209: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/ru_phone_field_test.dart: keeps label and empty mask with a custom decoration
+00:22 +210: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/ru_phone_field_test.dart: keeps label and empty mask with a custom decoration
+00:22 +211: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/ru_phone_field_test.dart: keeps label and empty mask with a custom decoration
+00:22 +212: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/searchable_select_test.dart: empty query keeps the whole list (browsing, not searching)
+00:22 +213: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/searchable_select_test.dart: empty query keeps the whole list (browsing, not searching)
+00:23 +214: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/searchable_select_test.dart: empty query keeps the whole list (browsing, not searching)
+00:23 +215: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/searchable_select_test.dart: empty query keeps the whole list (browsing, not searching)
+00:23 +216: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/searchable_select_test.dart: empty query keeps the whole list (browsing, not searching)
+00:23 +217: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/searchable_select_test.dart: empty query keeps the whole list (browsing, not searching)
+00:23 +218: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/searchable_select_test.dart: empty query keeps the whole list (browsing, not searching)
+00:24 +219: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/send_file_dialog_test.dart: does not autofocus caption and remains visible above keyboard
+00:24 +220: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/send_file_dialog_test.dart: does not autofocus caption and remains visible above keyboard
+00:25 +221: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/send_file_dialog_test.dart: does not autofocus caption and remains visible above keyboard
+00:25 +222: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/v7_nav_shell_test.dart: desktop rail renders all destinations and reports taps
+00:25 +223: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/v7_nav_shell_test.dart: desktop rail renders all destinations and reports taps
+00:25 +224: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/v7_nav_shell_test.dart: desktop rail renders all destinations and reports taps
+00:26 +225: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/v7_nav_shell_test.dart: desktop rail renders all destinations and reports taps
+00:26 +226: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/core/widgets/v7_nav_shell_test.dart: desktop rail renders all destinations and reports taps
+00:26 +227: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/create_lesson_student_search_test.dart: a student beyond the pre-loaded page is found via the server
+00:26 +228: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/create_lesson_student_search_test.dart: a student beyond the pre-loaded page is found via the server
+00:26 +229: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/create_lesson_student_search_test.dart: a student beyond the pre-loaded page is found via the server
+00:26 +230: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/create_lesson_student_search_test.dart: a student beyond the pre-loaded page is found via the server
+00:26 +231: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/create_lesson_student_search_test.dart: a student beyond the pre-loaded page is found via the server
+00:26 +232: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/create_lesson_student_search_test.dart: a student beyond the pre-loaded page is found via the server
+00:26 +233: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/create_lesson_student_search_test.dart: a student beyond the pre-loaded page is found via the server
+00:27 +234: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/create_lesson_student_search_test.dart: a student beyond the pre-loaded page is found via the server
+00:27 +235: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/create_lesson_student_search_test.dart: a student beyond the pre-loaded page is found via the server
+00:27 +236: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/create_lesson_student_search_test.dart: a student beyond the pre-loaded page is found via the server
+00:28 +237: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/create_lesson_student_search_test.dart: a student beyond the pre-loaded page is found via the server
+00:28 +238: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/create_lesson_student_search_test.dart: a student beyond the pre-loaded page is found via the server
+00:28 +239: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/create_lesson_student_search_test.dart: a student beyond the pre-loaded page is found via the server
+00:29 +240: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/create_lesson_student_search_test.dart: a student beyond the pre-loaded page is found via the server
+00:29 +241: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/create_lesson_student_search_test.dart: a student beyond the pre-loaded page is found via the server
+00:29 +242: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/create_lesson_student_search_test.dart: a student beyond the pre-loaded page is found via the server
+Error loading subscriptions: FormatException: Commerce student projection is missing
+00:30 +243: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/schedule_day_drag_test.dart: schedule day grid — which cards move a past («completed») lesson is still draggable
+00:30 +244: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/schedule_day_drag_test.dart: schedule day grid — which cards move a past («completed») lesson is still draggable
+00:30 +245: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/schedule_day_drag_test.dart: schedule day grid — which cards move a past («completed») lesson is still draggable
+00:30 +246: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/schedule_day_drag_test.dart: schedule day grid — which cards move a past («completed») lesson is still draggable
+00:31 +247: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/schedule_day_view_test.dart: KVA-166 schedule day view rendering lesson with String or double duration_minutes still renders
+00:31 +248: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/schedule_day_view_test.dart: KVA-166 schedule day view rendering lesson with String or double duration_minutes still renders
+00:31 +249: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/schedule_day_view_test.dart: KVA-166 schedule day view rendering lesson with String or double duration_minutes still renders
+00:31 +250: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/schedule_day_view_test.dart: KVA-166 schedule day view rendering lesson with String or double duration_minutes still renders
+00:31 +251: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/schedule_day_view_test.dart: KVA-166 schedule day view rendering lesson with String or double duration_minutes still renders
+00:31 +252: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/schedule_day_view_test.dart: KVA-166 schedule day view rendering lesson with String or double duration_minutes still renders
+00:31 +253: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/schedule_day_view_test.dart: KVA-166 schedule day view rendering lesson with String or double duration_minutes still renders
+00:31 +254: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/schedule_day_view_test.dart: KVA-166 schedule day view rendering lesson with String or double duration_minutes still renders
+00:31 +255: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/schedule_day_view_test.dart: KVA-166 schedule day view rendering lesson with String or double duration_minutes still renders
+00:31 +256: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/schedule_day_view_test.dart: KVA-166 schedule day view rendering lesson with String or double duration_minutes still renders
+00:31 +257: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/schedule_day_view_test.dart: KVA-166 schedule day view rendering lesson with String or double duration_minutes still renders
+00:31 +258: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/schedule_filters_test.dart: «Только пробные» hides the non-trial lesson
+00:31 +259: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/schedule_filters_test.dart: «Только пробные» hides the non-trial lesson
+00:31 +260: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/schedule_filters_test.dart: «Только пробные» hides the non-trial lesson
+00:31 +261: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/schedule_filters_test.dart: «Только пробные» hides the non-trial lesson
+00:31 +262: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/schedule_filters_test.dart: «Только пробные» hides the non-trial lesson
+00:31 +263: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/schedule_filters_test.dart: «Только пробные» hides the non-trial lesson
+00:32 +264: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/schedule_filters_test.dart: «Только пробные» hides the non-trial lesson
+00:32 +265: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/schedule_filters_test.dart: «Только пробные» hides the non-trial lesson
+00:34 +266: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/schedule_filters_test.dart: «Только пробные» hides the non-trial lesson
+00:34 +267: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/auth/registration_no_ellipse_test.dart: registration screen has no RadialGradient glow
+00:34 +268: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/auth/registration_no_ellipse_test.dart: registration screen has no RadialGradient glow
+00:34 +269: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/auth/registration_no_ellipse_test.dart: registration screen has no RadialGradient glow
+00:34 +270: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/auth/registration_no_ellipse_test.dart: registration screen has no RadialGradient glow
+00:34 +271: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/auth/registration_no_ellipse_test.dart: registration screen has no RadialGradient glow
+00:34 +272: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/auth/registration_no_ellipse_test.dart: registration screen has no RadialGradient glow
+00:35 +273: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/auth/registration_no_ellipse_test.dart: registration screen has no RadialGradient glow
+00:35 +274: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/auth/registration_phone_field_test.dart: RegistrationScreen phone field (a) RuPhoneField is present in the registration screen
+00:36 +275: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/auth/registration_phone_field_test.dart: RegistrationScreen phone field (a) RuPhoneField is present in the registration screen
+00:36 +276: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/auth/relogin_after_logout_test.dart: login error keeps credentials and permits a retry
+00:37 +277: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/auth/relogin_after_logout_test.dart: login error keeps credentials and permits a retry
+00:37 +278: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/auth/relogin_after_logout_test.dart: login error keeps credentials and permits a retry
+00:37 +279: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/auth/relogin_after_logout_test.dart: login error keeps credentials and permits a retry
+00:38 +280: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/client/upcoming_lessons_trial_test.dart: клиент видит явную метку пробного урока
+00:38 +281: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/admin/schedule_redesign_test.dart: KVA-195 schedule redesign tapping an empty hour opens the (single) create dialog
+00:39 +282: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/crm/client_card/client_card_save_payload_test.dart: лид без статуса: statusId и notes не уходят в PATCH
+00:39 +283: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/crm/client_card/client_card_save_payload_test.dart: лид без статуса: statusId и notes не уходят в PATCH
+00:39 +284: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/crm/client_card/client_card_save_payload_test.dart: лид без статуса: statusId и notes не уходят в PATCH
+00:39 +285: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/crm/client_card/client_card_save_payload_test.dart: лид без статуса: statusId и notes не уходят в PATCH
+00:39 +286: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/crm/client_card/client_card_save_payload_test.dart: лид без статуса: statusId и notes не уходят в PATCH
+00:39 +287: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/crm/client_card/client_card_save_payload_test.dart: лид без статуса: statusId и notes не уходят в PATCH
+00:39 +288: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/crm/client_card/client_card_save_payload_test.dart: лид без статуса: statusId и notes не уходят в PATCH
+00:40 +289: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/crm/client_card/client_card_save_payload_test.dart: лид без статуса: statusId и notes не уходят в PATCH
+00:40 +290: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/crm/client_card/client_card_save_payload_test.dart: лид без статуса: statusId и notes не уходят в PATCH
+00:40 +291: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/crm/client_card/client_card_save_payload_test.dart: лид без статуса: statusId и notes не уходят в PATCH
+00:40 +292: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/crm/client_card/client_card_save_payload_test.dart: лид без статуса: statusId и notes не уходят в PATCH
+00:41 +293: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/crm/client_card/client_card_save_payload_test.dart: лид без статуса: statusId и notes не уходят в PATCH
+00:41 +294: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/crm/client_card/client_card_save_payload_test.dart: лид без статуса: statusId и notes не уходят в PATCH
+00:41 +295: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/crm/client_card/client_card_save_payload_test.dart: лид без статуса: statusId и notes не уходят в PATCH
+00:41 +296: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/crm/client_card/client_card_save_payload_test.dart: лид без статуса: statusId и notes не уходят в PATCH
+00:41 +297: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/crm/client_card/client_card_save_payload_test.dart: лид без статуса: statusId и notes не уходят в PATCH
+00:41 +298: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/crm/client_card/client_card_save_payload_test.dart: лид без статуса: statusId и notes не уходят в PATCH
+00:41 +299: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/crm/client_card/client_card_save_payload_test.dart: лид без статуса: statusId и notes не уходят в PATCH
+00:41 +300: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/crm/client_card/client_card_save_payload_test.dart: лид без статуса: statusId и notes не уходят в PATCH
+00:42 +301: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/crm/client_card/client_card_student_action_bar_test.dart: студенческий бар действий не переполняется на 360x690
+00:42 +302: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/crm/client_card/client_card_task_expand_test.dart: задача в карточке лида раскрывается по тапу
+00:43 +303: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/crm/client_card/client_card_task_expand_test.dart: задача в карточке лида раскрывается по тапу
+00:43 +304: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/crm/client_card/client_card_task_expand_test.dart: задача в карточке лида раскрывается по тапу
+00:43 +305: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/crm/client_card/client_card_task_expand_test.dart: задача в карточке лида раскрывается по тапу
+00:44 +306: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/crm/client_card/client_card_task_expand_test.dart: задача в карточке лида раскрывается по тапу
+00:44 +307: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/lead_board_pagination_test.dart: loads, dedupes and advances each lead-board column independently
+00:44 +308: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/lead_board_pagination_test.dart: loads, dedupes and advances each lead-board column independently
+00:45 +309: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/lead_board_pagination_test.dart: loads, dedupes and advances each lead-board column independently
+00:45 +310: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/lead_board_pagination_test.dart: loads, dedupes and advances each lead-board column independently
+00:45 +311: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/reports_tab_persistence_test.dart: a parent rebuild does not reset the selected reports tab
+00:45 +312: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/reports_tab_persistence_test.dart: a parent rebuild does not reset the selected reports tab
+00:45 +313: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/reports_tab_persistence_test.dart: a parent rebuild does not reset the selected reports tab
+00:46 +314: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/reports_tab_persistence_test.dart: a parent rebuild does not reset the selected reports tab
+00:46 +315: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/reports_tab_persistence_test.dart: a parent rebuild does not reset the selected reports tab
+00:46 +316: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/reports_tab_persistence_test.dart: a parent rebuild does not reset the selected reports tab
+00:46 +317: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/reports_tab_persistence_test.dart: a parent rebuild does not reset the selected reports tab
+00:46 +318: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/reports_tab_persistence_test.dart: a parent rebuild does not reset the selected reports tab
+00:46 +319: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/reports_tab_persistence_test.dart: a parent rebuild does not reset the selected reports tab
+00:46 +320: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/reports_tab_persistence_test.dart: a parent rebuild does not reset the selected reports tab
+00:46 +321: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/reports_tab_persistence_test.dart: a parent rebuild does not reset the selected reports tab
+00:48 +322: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/reports_tab_persistence_test.dart: a parent rebuild does not reset the selected reports tab
+00:48 +323: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/reports_tab_persistence_test.dart: a parent rebuild does not reset the selected reports tab
+00:48 +324: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/crm/client_card/client_card_save_payload_test.dart: ответственный лида уходит канонически как assignedTo
+00:48 +325: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/teacher_stats_bulk_rate_test.dart: offers a tick box for trials but not for groups
+00:48 +326: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/teacher_stats_bulk_rate_test.dart: offers a tick box for trials but not for groups
+00:48 +327: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/teacher_stats_bulk_rate_test.dart: offers a tick box for trials but not for groups
+00:48 +328: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/teacher_stats_bulk_rate_test.dart: offers a tick box for trials but not for groups
+00:49 +329: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/teacher_stats_bulk_rate_test.dart: offers a tick box for trials but not for groups
+00:49 +330: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/teacher_stats_bulk_rate_test.dart: offers a tick box for trials but not for groups
+00:49 +331: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/teacher_stats_bulk_rate_test.dart: offers a tick box for trials but not for groups
+00:50 +332: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/teacher_stats_bulk_rate_test.dart: offers a tick box for trials but not for groups
+00:50 +333: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/teacher_stats_bulk_rate_test.dart: offers a tick box for trials but not for groups
+00:50 +334: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/teacher_stats_bulk_rate_test.dart: offers a tick box for trials but not for groups
+00:50 +335: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/teacher_stats_bulk_rate_test.dart: offers a tick box for trials but not for groups
+00:50 +336: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/teacher_stats_bulk_rate_test.dart: offers a tick box for trials but not for groups
+00:50 +337: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/teacher_stats_bulk_rate_test.dart: offers a tick box for trials but not for groups
+00:50 +338: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/teacher_stats_bulk_rate_test.dart: offers a tick box for trials but not for groups
+00:50 +339: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/teacher_stats_bulk_rate_test.dart: offers a tick box for trials but not for groups
+00:50 +340: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/teacher_stats_bulk_rate_test.dart: offers a tick box for trials but not for groups
+00:50 +341: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/manager/teacher_stats_bulk_rate_test.dart: offers a tick box for trials but not for groups
+00:50 +342: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/announcements_composer_test.dart: клиент в «Объявлениях»: ни композера, ни подсказки — только чтение
+00:50 +343: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/announcements_composer_test.dart: клиент в «Объявлениях»: ни композера, ни подсказки — только чтение
+00:50 +344: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/announcements_composer_test.dart: клиент в «Объявлениях»: ни композера, ни подсказки — только чтение
+00:50 +345: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/announcements_composer_test.dart: клиент в «Объявлениях»: ни композера, ни подсказки — только чтение
+00:50 +346: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/announcements_composer_test.dart: клиент в «Объявлениях»: ни композера, ни подсказки — только чтение
+00:50 +347: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/announcements_composer_test.dart: клиент в «Объявлениях»: ни композера, ни подсказки — только чтение
+00:50 +348: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/announcements_composer_test.dart: клиент в «Объявлениях»: ни композера, ни подсказки — только чтение
+00:50 +349: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/announcements_composer_test.dart: клиент в «Объявлениях»: ни композера, ни подсказки — только чтение
+00:50 +350: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/announcements_composer_test.dart: клиент в «Объявлениях»: ни композера, ни подсказки — только чтение
+00:50 +351: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/announcements_composer_test.dart: клиент в «Объявлениях»: ни композера, ни подсказки — только чтение
+00:50 +352: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/announcements_composer_test.dart: клиент в «Объявлениях»: ни композера, ни подсказки — только чтение
+00:51 +353: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/announcements_composer_test.dart: клиент в «Объявлениях»: ни композера, ни подсказки — только чтение
+00:51 +354: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/announcements_composer_test.dart: клиент в «Объявлениях»: ни композера, ни подсказки — только чтение
+00:51 +355: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/announcements_composer_test.dart: клиент в «Объявлениях»: ни композера, ни подсказки — только чтение
+MessengerScreen: Error connecting v3 realtime: Bad state: Realtime requires an authenticated v3 session.
+MessengerScreen: _loadMessages started for ann-1 (LoadId: 1)
+MessengerScreen: _loadMessages finished (LoadId: 1)
+MessengerScreen: _loadMessages started for admin-1 (LoadId: 2)
+MessengerScreen: _loadMessages finished (LoadId: 2)
+00:52 +356: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: staff chat screen follows every server cursor past 100 rows
+00:52 +357: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: staff chat screen follows every server cursor past 100 rows
+MessengerScreen: Error connecting v3 realtime: Bad state: Realtime requires an authenticated v3 session.
+00:52 +358: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/tasks_navigation_test.dart: (setUpAll)
+00:52 +358: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:52 +359: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:52 +360: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:52 +361: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:52 +362: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +363: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +364: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +365: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +366: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +367: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +368: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +369: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +370: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +371: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +372: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +373: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +374: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +375: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +376: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +377: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +378: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +379: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +380: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +381: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +382: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +383: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +384: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +385: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +386: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +387: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +388: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +389: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +390: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +391: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +392: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +393: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +394: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +395: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+00:53 +396: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: долгое нажатие → «Архивировать» → PATCH, чат уходит в «Архив», оттуда возвращается
+MessengerScreen: Error connecting v3 realtime: Bad state: Realtime requires an authenticated v3 session.
+00:53 +397: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/tasks_navigation_test.dart: manager can open Tasks from the mobile overflow navigation
+00:54 +397: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: архив загружается заново после полного remount
+MessengerScreen: Error connecting v3 realtime: Bad state: Realtime requires an authenticated v3 session.
+MessengerScreen: Error connecting v3 realtime: Bad state: Realtime requires an authenticated v3 session.
+00:54 +398: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/tasks_navigation_test.dart: manager can open Tasks from the mobile overflow navigation
+00:55 +398: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: админ: правый клик по строке тоже открывает меню архива
+MessengerScreen: Error connecting v3 realtime: Bad state: Realtime requires an authenticated v3 session.
+00:55 +399: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/tasks_navigation_test.dart: manager can open Tasks from the mobile overflow navigation
+00:55 +399: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: #5: контакт уже связан с лидом — «Сохранить как лид/ученик» не предлагаем
+MessengerScreen: Error connecting v3 realtime: Bad state: Realtime requires an authenticated v3 session.
+MessengerScreen: _loadMessages started for c1 (LoadId: 1)
+MessengerScreen: _loadMessages finished (LoadId: 1)
+00:55 +400: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/tasks_navigation_test.dart: manager can open Tasks from the mobile overflow navigation
+00:56 +400: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/chat_archive_test.dart: #5: несвязанный/ещё не разрешённый контакт не предлагает создание дубля
+MessengerScreen: Error connecting v3 realtime: Bad state: Realtime requires an authenticated v3 session.
+MessengerScreen: _loadMessages started for c1 (LoadId: 1)
+MessengerScreen: _loadMessages finished (LoadId: 1)
+00:56 +401: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/tasks_navigation_test.dart: manager can open Tasks from the mobile overflow navigation
+00:56 +402: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/tasks_navigation_test.dart: manager can open Tasks from the mobile overflow navigation
+00:56 +403: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/tasks_navigation_test.dart: manager can open Tasks from the mobile overflow navigation
+00:56 +404: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/tasks_navigation_test.dart: manager can open Tasks from the mobile overflow navigation
+MessengerScreen: Error connecting v3 realtime: Bad state: Realtime requires an authenticated v3 session.
+00:56 +405: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/s8_desktop_ux_states_test.dart: S8 desktop UX states T8.1 schedule renders the calendar grid even with no lessons
+00:57 +406: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/s8_desktop_ux_states_test.dart: S8 desktop UX states T8.1 schedule renders the calendar grid even with no lessons
+00:57 +407: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/access_editor_roles_test.dart: access editor is a fullscreen route and system Back closes it
+00:58 +407: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/s8_desktop_ux_states_test.dart: S8 desktop UX states T8.1 schedule shows an error state with retry on failure
+Error fetching schedule: Exception: network unavailable
+00:58 +408: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/access_editor_roles_test.dart: access editor is a fullscreen route and system Back closes it
+00:58 +409: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/access_editor_roles_test.dart: access editor is a fullscreen route and system Back closes it
+00:58 +410: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/access_editor_roles_test.dart: access editor is a fullscreen route and system Back closes it
+00:58 +410: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/tasks_navigation_test.dart: manager Overview Tasks action opens Tasks instead of Clients
+MessengerScreen: Error connecting v3 realtime: Bad state: Realtime requires an authenticated v3 session.
+00:58 +411: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/access_editor_roles_test.dart: access editor is a fullscreen route and system Back closes it
+00:59 +412: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_card_roles_test.dart: Teacher card renders only learning sections on narrow layout
+00:59 +413: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_card_roles_test.dart: Teacher card renders only learning sections on narrow layout
+00:59 +413: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/tasks_navigation_test.dart: director can open Analytics from compact navigation
+MessengerScreen: Error connecting v3 realtime: Bad state: Realtime requires an authenticated v3 session.
+00:59 +414: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_card_roles_test.dart: Teacher card renders only learning sections on narrow layout
+00:59 +415: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_card_roles_test.dart: Teacher card renders only learning sections on narrow layout
+00:59 +415: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/tasks_navigation_test.dart: admin never mounts or requests the Tasks destination
+MessengerScreen: Error connecting v3 realtime: Bad state: Realtime requires an authenticated v3 session.
+00:59 +416: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_card_roles_test.dart: Teacher card renders only learning sections on narrow layout
+01:00 +416: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/messenger/tasks_navigation_test.dart: teacher chat does not request the privileged profile directory
+MessengerScreen: Error connecting v3 realtime: Bad state: Realtime requires an authenticated v3 session.
+01:00 +417: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_card_roles_test.dart: Teacher card renders only learning sections on narrow layout
+01:00 +418: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_card_roles_test.dart: Teacher card renders only learning sections on narrow layout
+01:00 +419: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:00 +420: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:00 +421: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:00 +422: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:00 +423: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:00 +424: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:01 +425: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:01 +426: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:01 +427: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:01 +428: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:02 +429: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:02 +430: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:02 +431: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:02 +432: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:02 +433: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:02 +434: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:02 +435: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:03 +436: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:03 +437: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:03 +438: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:03 +439: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:03 +440: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:03 +441: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:03 +442: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:03 +443: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:03 +444: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:04 +445: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:04 +446: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:04 +447: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:04 +448: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:04 +449: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:04 +450: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:04 +451: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:04 +452: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:04 +453: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:05 +454: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:05 +455: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:05 +456: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:05 +457: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:05 +458: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:05 +459: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:06 +460: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:06 +461: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:06 +462: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:06 +463: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:07 +464: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/client_finance_roles_test.dart: six roles receive only their approved finance surface
+01:07 +465: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/lesson_form_test.dart: единый Client selector отправляет Lead и trial независимо
+01:08 +466: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/lesson_form_test.dart: единый Client selector отправляет Lead и trial независимо
+01:08 +467: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/lesson_form_test.dart: единый Client selector отправляет Lead и trial независимо
+01:09 +468: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/lesson_form_test.dart: единый Client selector отправляет Lead и trial независимо
+01:09 +469: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/lesson_form_test.dart: единый Client selector отправляет Lead и trial независимо
+01:09 +470: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/lesson_form_test.dart: единый Client selector отправляет Lead и trial независимо
+01:10 +471: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/shared_tasks_ui_test.dart: section root is not treated as a missing linked task
+01:10 +472: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/shared_tasks_ui_test.dart: section root is not treated as a missing linked task
+01:10 +473: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/stable_server_search_test.dart: server search keeps the loaded list while the request runs
+01:10 +474: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/stable_server_search_test.dart: server search keeps the loaded list while the request runs
+01:11 +475: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/stable_server_search_test.dart: server search keeps the loaded list while the request runs
+01:11 +476: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/stable_server_search_test.dart: server search keeps the loaded list while the request runs
+01:11 +477: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/stable_server_search_test.dart: server search keeps the loaded list while the request runs
+01:11 +478: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_cancel_form_test.dart: active client-card subscription previews impact and retries cancel stably
+01:11 +479: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_cancel_form_test.dart: active client-card subscription previews impact and retries cancel stably
+01:12 +480: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_cancel_form_test.dart: active client-card subscription previews impact and retries cancel stably
+01:12 +481: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_cancel_form_test.dart: active client-card subscription previews impact and retries cancel stably
+01:12 +482: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_cancel_form_test.dart: active client-card subscription previews impact and retries cancel stably
+01:13 +482: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/lesson_form_test.dart: preview-конфликт блокирует create без force affordance
+Error loading subscriptions: FormatException: Commerce student projection is missing
+01:13 +483: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_cancel_form_test.dart: active client-card subscription previews impact and retries cancel stably
+01:14 +484: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_cancel_form_test.dart: active client-card subscription previews impact and retries cancel stably
+01:14 +485: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_cancel_form_test.dart: active client-card subscription previews impact and retries cancel stably
+01:14 +486: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_cancel_form_test.dart: active client-card subscription previews impact and retries cancel stably
+01:14 +487: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_cancel_form_test.dart: active client-card subscription previews impact and retries cancel stably
+01:14 +488: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_cancel_form_test.dart: active client-card subscription previews impact and retries cancel stably
+01:14 +489: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_cancel_form_test.dart: active client-card subscription previews impact and retries cancel stably
+01:14 +490: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_cancel_form_test.dart: active client-card subscription previews impact and retries cancel stably
+01:15 +491: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_cancel_form_test.dart: active client-card subscription previews impact and retries cancel stably
+01:15 +492: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_cancel_form_test.dart: active client-card subscription previews impact and retries cancel stably
+01:15 +493: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_cancel_form_test.dart: active client-card subscription previews impact and retries cancel stably
+01:16 +494: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_cancel_form_test.dart: active client-card subscription previews impact and retries cancel stably
+01:16 +495: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_cancel_form_test.dart: active client-card subscription previews impact and retries cancel stably
+01:16 +496: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_cancel_form_test.dart: active client-card subscription previews impact and retries cancel stably
+01:16 +497: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_cancel_form_test.dart: active client-card subscription previews impact and retries cancel stably
+01:16 +498: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_cancel_form_test.dart: active client-card subscription previews impact and retries cancel stably
+01:16 +499: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_cancel_form_test.dart: active client-card subscription previews impact and retries cancel stably
+01:16 +500: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_cancel_form_test.dart: active client-card subscription previews impact and retries cancel stably
+01:16 +500: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/teacher_schedule_read_only_test.dart: teacher schedule exposes the same retryable error state
+Error fetching schedule: Bad state: network unavailable
+01:16 +501: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_cancel_form_test.dart: active client-card subscription previews impact and retries cancel stably
+01:16 +502: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_cancel_form_test.dart: active client-card subscription previews impact and retries cancel stably
+01:17 +503: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_cancel_form_test.dart: active client-card subscription previews impact and retries cancel stably
+01:17 +504: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_cancel_form_test.dart: active client-card subscription previews impact and retries cancel stably
+01:17 +504: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/lesson_form_test.dart: authoritative 422 показывает structured violations и lesson link
+Error loading subscriptions: FormatException: Commerce student projection is missing
+01:17 +505: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_cancel_form_test.dart: active client-card subscription previews impact and retries cancel stably
+01:17 +506: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_issue_form_test.dart: narrow form calculates discount + surcharge, installments and stable retry
+01:17 +507: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_replace_form_test.dart: active client-card subscription previews warnings and retries replace stably
+01:17 +508: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_replace_form_test.dart: active client-card subscription previews warnings and retries replace stably
+01:18 +508: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/lesson_form_test.dart: edit отправляет expectedVersion и не меняет snapshot
+Error loading subscriptions: FormatException: Commerce student projection is missing
+01:18 +509: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_replace_form_test.dart: active client-card subscription previews warnings and retries replace stably
+01:18 +510: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_replace_form_test.dart: active client-card subscription previews warnings and retries replace stably
+01:18 +511: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_replace_form_test.dart: active client-card subscription previews warnings and retries replace stably
+01:18 +512: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_replace_form_test.dart: active client-card subscription previews warnings and retries replace stably
+01:19 +513: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/subscription_replace_form_test.dart: active client-card subscription previews warnings and retries replace stably
+01:19 +514: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/shared_tasks_ui_test.dart: mobile task editor opens as an expandable full-width sheet
+01:19 +515: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v4/shared_tasks_ui_test.dart: mobile task editor opens as an expandable full-width sheet
+01:19 +516: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_payments_tab_test.dart: lesson tab shows the reconciled server balance and its links
+01:20 +517: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_payments_tab_test.dart: lesson tab shows the reconciled server balance and its links
+01:21 +518: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_payments_tab_test.dart: lesson tab shows the reconciled server balance and its links
+01:22 +519: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_payments_tab_test.dart: lesson tab shows the reconciled server balance and its links
+01:23 +520: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_payments_tab_test.dart: lesson tab shows the reconciled server balance and its links
+01:24 +521: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_payments_tab_test.dart: lesson tab shows the reconciled server balance and its links
+01:24 +522: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_payments_tab_test.dart: lesson tab shows the reconciled server balance and its links
+01:24 +523: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_payments_tab_test.dart: lesson tab shows the reconciled server balance and its links
+01:24 +524: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_payments_tab_test.dart: lesson tab shows the reconciled server balance and its links
+01:24 +525: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_payments_tab_test.dart: lesson tab shows the reconciled server balance and its links
+01:25 +526: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_payments_tab_test.dart: lesson tab shows the reconciled server balance and its links
+01:25 +527: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_payments_tab_test.dart: lesson tab shows the reconciled server balance and its links
+01:25 +528: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_payments_tab_test.dart: lesson tab shows the reconciled server balance and its links
+01:26 +529: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_payments_tab_test.dart: lesson tab shows the reconciled server balance and its links
+01:26 +530: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_payments_tab_test.dart: lesson tab shows the reconciled server balance and its links
+01:26 +531: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/crm_configuration_workspace_test.dart: director edits a draft and publishes through impact preview
+01:27 +532: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/crm_configuration_workspace_test.dart: director edits a draft and publishes through impact preview
+01:27 +533: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_schedule_calendar_test.dart: schedule search keeps the view and marks Day Week Month
+01:27 +534: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_schedule_calendar_test.dart: schedule search keeps the view and marks Day Week Month
+01:27 +535: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_schedule_calendar_test.dart: schedule search keeps the view and marks Day Week Month
+01:28 +536: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_schedule_calendar_test.dart: schedule search keeps the view and marks Day Week Month
+01:28 +537: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_schedule_calendar_test.dart: schedule search keeps the view and marks Day Week Month
+01:29 +538: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_schedule_calendar_test.dart: schedule search keeps the view and marks Day Week Month
+01:29 +539: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_payments_tab_test.dart: manager records a branch-scoped immutable payment from the tab
+01:29 +540: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_payments_tab_test.dart: manager records a branch-scoped immutable payment from the tab
+01:30 +541: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_payments_tab_test.dart: manager records a branch-scoped immutable payment from the tab
+01:30 +542: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_payments_tab_test.dart: manager records a branch-scoped immutable payment from the tab
+01:30 +543: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_payments_tab_test.dart: manager records a branch-scoped immutable payment from the tab
+01:30 +544: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_payments_tab_test.dart: manager records a branch-scoped immutable payment from the tab
+01:30 +545: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_payments_tab_test.dart: manager records a branch-scoped immutable payment from the tab
+01:31 +546: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/representative_modal_set_test.dart: lesson quick view expands and confirmation stays concise
+01:31 +547: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/representative_modal_set_test.dart: lesson quick view expands and confirmation stays concise
+01:31 +548: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/representative_modal_set_test.dart: lesson quick view expands and confirmation stays concise
+01:31 +549: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/representative_modal_set_test.dart: lesson quick view expands and confirmation stays concise
+01:31 +550: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/student_funnel_editor_test.dart: editor publishes configured labels through the mobile sheet
+01:31 +551: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/student_funnel_editor_test.dart: editor publishes configured labels through the mobile sheet
+01:31 +552: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/student_funnel_editor_test.dart: editor publishes configured labels through the mobile sheet
+01:31 +553: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/student_funnel_editor_test.dart: editor publishes configured labels through the mobile sheet
+01:32 +554: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/student_funnel_editor_test.dart: editor publishes configured labels through the mobile sheet
+01:32 +555: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/student_funnel_editor_test.dart: editor publishes configured labels through the mobile sheet
+01:32 +556: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/student_funnel_editor_test.dart: editor publishes configured labels through the mobile sheet
+01:32 +557: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/student_funnel_editor_test.dart: editor publishes configured labels through the mobile sheet
+01:32 +558: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/student_funnel_editor_test.dart: editor publishes configured labels through the mobile sheet
+01:33 +559: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/student_funnel_editor_test.dart: editor publishes configured labels through the mobile sheet
+01:33 +560: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/student_funnel_editor_test.dart: editor publishes configured labels through the mobile sheet
+01:33 +561: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/student_funnel_editor_test.dart: editor publishes configured labels through the mobile sheet
+01:33 +562: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/student_funnel_editor_test.dart: editor publishes configured labels through the mobile sheet
+01:33 +563: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/student_funnel_editor_test.dart: editor publishes configured labels through the mobile sheet
+01:34 +564: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/preferred_schedule_editor_test.dart: editor returns weekdays and consecutive lessons per day
+01:35 +565: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/preferred_schedule_editor_test.dart: editor returns weekdays and consecutive lessons per day
+01:35 +566: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/preferred_schedule_editor_test.dart: editor returns weekdays and consecutive lessons per day
+01:35 +567: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/preferred_schedule_editor_test.dart: editor returns weekdays and consecutive lessons per day
+01:35 +568: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/preferred_schedule_editor_test.dart: editor returns weekdays and consecutive lessons per day
+01:35 +569: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/preferred_schedule_editor_test.dart: editor returns weekdays and consecutive lessons per day
+01:35 +570: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/preferred_schedule_editor_test.dart: editor returns weekdays and consecutive lessons per day
+01:35 +571: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/preferred_schedule_editor_test.dart: editor returns weekdays and consecutive lessons per day
+01:35 +572: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/preferred_schedule_editor_test.dart: editor returns weekdays and consecutive lessons per day
+01:35 +573: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/preferred_schedule_editor_test.dart: editor returns weekdays and consecutive lessons per day
+01:35 +574: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/preferred_schedule_editor_test.dart: editor returns weekdays and consecutive lessons per day
+01:35 +575: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/preferred_schedule_editor_test.dart: editor returns weekdays and consecutive lessons per day
+01:35 +576: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/preferred_schedule_editor_test.dart: editor returns weekdays and consecutive lessons per day
+01:35 +577: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/preferred_schedule_editor_test.dart: editor returns weekdays and consecutive lessons per day
+01:35 +578: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/preferred_schedule_editor_test.dart: editor returns weekdays and consecutive lessons per day
+01:35 +579: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/preferred_schedule_editor_test.dart: editor returns weekdays and consecutive lessons per day
+01:35 +580: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/preferred_schedule_editor_test.dart: editor returns weekdays and consecutive lessons per day
+01:35 +581: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/preferred_schedule_editor_test.dart: editor returns weekdays and consecutive lessons per day
+01:35 +582: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/preferred_schedule_editor_test.dart: editor returns weekdays and consecutive lessons per day
+01:35 +583: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/preferred_schedule_editor_test.dart: editor returns weekdays and consecutive lessons per day
+01:36 +584: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/preferred_schedule_editor_test.dart: editor returns weekdays and consecutive lessons per day
+01:36 +585: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/preferred_schedule_editor_test.dart: editor returns weekdays and consecutive lessons per day
+01:36 +586: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/system_settings_workspace_test.dart: manager sees one six-area settings workspace read-only
+01:36 +587: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/system_settings_workspace_test.dart: manager sees one six-area settings workspace read-only
+01:36 +588: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/system_settings_workspace_test.dart: manager sees one six-area settings workspace read-only
+01:36 +589: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/system_settings_workspace_test.dart: manager sees one six-area settings workspace read-only
+01:37 +590: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/system_settings_workspace_test.dart: manager sees one six-area settings workspace read-only
+01:37 +591: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_workspace_route_test.dart: preferred schedule creates branch-scoped weekday slots
+01:37 +592: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_workspace_route_test.dart: preferred schedule creates branch-scoped weekday slots
+01:37 +593: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_workspace_route_test.dart: preferred schedule creates branch-scoped weekday slots
+01:37 +594: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_workspace_route_test.dart: preferred schedule creates branch-scoped weekday slots
+01:37 +595: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_workspace_route_test.dart: preferred schedule creates branch-scoped weekday slots
+01:37 +596: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_workspace_route_test.dart: preferred schedule creates branch-scoped weekday slots
+01:38 +597: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_workspace_route_test.dart: preferred schedule creates branch-scoped weekday slots
+01:39 +598: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/system_settings_workspace_test.dart: manager creates staff from the mounted users workspace
+01:40 +599: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_workspace_route_test.dart: production desktop host mounts the routed client workspace
+01:40 +600: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/system_settings_workspace_test.dart: director creates teacher from the mounted users workspace
+01:41 +601: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_workspace_route_test.dart: section selection updates the direct link without refetch
+01:41 +602: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/system_settings_workspace_test.dart: manager creates a group from the mounted schedule workspace
+01:42 +603: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/client_workspace_route_test.dart: routed and legacy hosts keep the same client API trace
+01:42 +604: C:/Users/Alinka/Documents/Codex Import/MagicMusicCRM/test/features/v6/system_settings_workspace_test.dart: settings lists localized staff status and group size
+01:43 +605: All tests passed!
