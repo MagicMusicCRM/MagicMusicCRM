@@ -78,7 +78,7 @@ graph TD
   - **Зависимости**: T1.1.1.
   - **Приоритет**: P0.
 
-- [ ] **T1.1.3** [REQ-SCHEDULE-102, REQ-LESSON-101, REQ-CLIENT-102]: Добавить schedule/config/note schema
+- [x] **T1.1.3** [REQ-SCHEDULE-102, REQ-LESSON-101, REQ-CLIENT-102]: Добавить schedule/config/note schema
   - **Описание**: Создать отдельную additive migration для catalog snapshot fields/facts, recurring plans/participants и canonical client note.
   - **Входные данные**: T1.1.2, [`schedule_v7.detail.md` §3](04_SYSTEM_DESIGN/schedule_v7.detail.md), [`crm_workspace_v7.md` §6](04_SYSTEM_DESIGN/crm_workspace_v7.md).
   - **Выходные данные**: schedule/config/note up/down SQL, indexes/constraints/types.

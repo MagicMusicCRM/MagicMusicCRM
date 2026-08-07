@@ -1,5 +1,7 @@
 import { ConfigService } from "@nestjs/config";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { Pool, PoolClient } from "pg";
 import { DatabaseService } from "../../db/database.service";
 import { MigrationRunner } from "../../db/migration-runner";
@@ -54,6 +56,140 @@ describe("Lesson lifecycle schema (PostgreSQL)", () => {
   afterAll(async () => {
     await database.onModuleDestroy();
     await pool.end();
+  });
+
+  it("rolls the empty v7 schedule/note schema down and up", async () => {
+    const client = await pool.connect();
+    await client.query("begin");
+    try {
+      const migrationRoot = resolve(process.cwd(), "db/migrations");
+      await client.query(
+        readFileSync(
+          resolve(migrationRoot, "0104_v7_schedule_plans_notes.down.sql"),
+          "utf8",
+        ),
+      );
+      expect(
+        (await client.query("select to_regclass('app.schedule_plans') as value"))
+          .rows[0]?.value,
+      ).toBeNull();
+      await client.query(
+        readFileSync(
+          resolve(migrationRoot, "0104_v7_schedule_plans_notes.up.sql"),
+          "utf8",
+        ),
+      );
+      expect(
+        (await client.query("select to_regclass('app.schedule_plans') as value"))
+          .rows[0]?.value,
+      ).toBe("app.schedule_plans");
+    } finally {
+      await client.query("rollback");
+      client.release();
+    }
+  });
+
+  it("rejects mixed plan, settlement snapshot and note lineage shapes", async () => {
+    const client = await pool.connect();
+    await client.query("begin");
+    try {
+      const branch = await client.query<{ id: string }>(
+        "insert into app.branches (name) values ($1) returning id",
+        [`V7 foundation ${randomUUID()}`],
+      );
+      const users = await client.query<{ id: string; role: string }>(
+        `
+          insert into app.users (email, role, email_verified_at)
+          values ($1, 'manager', now()), ($2, 'client', now())
+          returning id, role::text as role
+        `,
+        [
+          `v7-foundation-manager-${randomUUID()}@example.test`,
+          `v7-foundation-client-${randomUUID()}@example.test`,
+        ],
+      );
+      const managerId = users.rows.find((row) => row.role === "manager")!.id;
+      const clientId = users.rows.find((row) => row.role === "client")!.id;
+      const profile = await client.query<{ id: string }>(
+        `
+          insert into app.profiles (user_id, first_name, last_name)
+          values ($1, 'V7', 'Foundation') returning id
+        `,
+        [clientId],
+      );
+      const student = await client.query<{ id: string }>(
+        `
+          insert into app.students (profile_id, branch_id)
+          values ($1, $2) returning id
+        `,
+        [profile.rows[0]!.id, branch.rows[0]!.id],
+      );
+      const studentId = student.rows[0]!.id;
+      const subscription = await client.query<{ id: string }>(
+        `
+          insert into app.subscriptions (
+            student_id, lessons_total, lessons_used, status
+          ) values ($1, 12, 0, 'active') returning id
+        `,
+        [studentId],
+      );
+      await client.query(
+        `
+          insert into app.schedule_plans (
+            kind, title, student_id, subscription_id, active_from, created_by
+          ) values ('individual', 'Фортепиано', $1, $2, current_date, $3)
+        `,
+        [studentId, subscription.rows[0]!.id, managerId],
+      );
+      await expectConstraint(
+        client,
+        () =>
+          client.query(
+            `
+              insert into app.schedule_plans (
+                kind, title, active_from, created_by
+              ) values ('individual', 'Без клиента', current_date, $1)
+            `,
+            [managerId],
+          ),
+        "23514",
+      );
+      await expectConstraint(
+        client,
+        () =>
+          client.query(
+            "insert into app.client_internal_notes (body, updated_by) values ('x', $1)",
+            [managerId],
+          ),
+        "23514",
+      );
+      const lesson = await client.query<{ id: string }>(
+        `
+          insert into app.lessons (
+            student_id, branch_id, scheduled_at, created_by
+          ) values ($1, $2, now() + interval '1 day', $3) returning id
+        `,
+        [studentId, branch.rows[0]!.id, managerId],
+      );
+      await expectConstraint(
+        client,
+        () =>
+          client.query(
+            `
+              insert into app.lesson_client_charge_facts (
+                lesson_id, client_type, client_id, charge_type,
+                snapshot_value, amount_minor, units, currency_code,
+                settlement_type_key
+              ) values ($1, 'student', $2, 'none', 0, 0, 0, 'RUB', 'free')
+            `,
+            [lesson.rows[0]!.id, studentId],
+          ),
+        "23514",
+      );
+    } finally {
+      await client.query("rollback");
+      client.release();
+    }
   });
 
   it("maps legacy state and enforces immutable facts, terminal transitions and unique reservations", async () => {
