@@ -61,8 +61,8 @@
   - Проверки: `flutter analyze` чисто, `flutter test` 163/163, `git diff server/`+`lib/core/services/` пусто.
   - Осталось: **P1-7** сетевой baseline (нужен seeded backend). Follow-up: вынести `_V7Field`/`_V7PrimaryButton` в общий файл; выверить текст онбординг-слайдов; owner-визуальная приёмка.
 
-**▶ Следующий шаг:** `/forge` по `.anws/v7/05_TASKS.md`: `T2.1.2` — три
-статуса оплаты и due worker рассрочки.
+**▶ Следующий шаг:** `/forge` по `.anws/v7/05_TASKS.md`: `T2.1.3` — reversal,
+техническое удаление и единый reporting exclusion.
 
 ---
 
@@ -122,7 +122,7 @@
 > **Примечание**: Этот блок автоматически поддерживается процессами `/genesis`, `/blueprint` и `/forge`.
 
 - **Последняя версия архитектуры**: `.anws/v7` (Financial & Lesson Integrity)
-- **Активный список задач**: `.anws/v7/05_TASKS.md` — следующая задача `T2.1.2`
+- **Активный список задач**: `.anws/v7/05_TASKS.md` — следующая задача `T2.1.3`
 - **Фаза**: `/genesis`, `/design-system` и `/blueprint` завершены; выполняется `/forge`
 - **Последнее обновление**: `2026-08-07`
 
@@ -152,9 +152,15 @@ _`T2.1.1` закрыта 2026-08-07: подписанный purchase preview/com
 recipient+payer в стабильном UUID-порядке, проверяет обе branch-scopes и свежий
 баланс, создаёт абонемент со всеми часами и один полный debit на счёте payer.
 Personal account требует полной суммы; installment хранит отдельный график.
-Проверки: race/fault/idempotency/two-client scope 10/10, весь commerce 47/47,
-typecheck/build, reconcile issues=0, inventory finance=171/unowned=0. Следующий
-шаг `/forge`: `T2.1.2` — payment lifecycle и due worker._
+`T2.1.2` закрыта 2026-08-07: migration `0106`, единый lifecycle manual/due
+payment records и opt-in due worker реализуют ровно три статуса; pending не
+меняет баланс/долг, unpaid образует долг, а конкурентная верификация создаёт
+один immutable ActualPayment. Legacy payment API делегирует тому же lifecycle;
+найденный DELETE-trigger исправлен и защищён regression test. Gate: commerce
+50/50, Actor Matrix/leak 9/9, full backend 152/152 suites и 1174/1174 tests,
+typecheck/build, `0106` down→up, reconcile issues=0, inventory finance=192,
+lesson writes=13, unowned=0. Следующий шаг `/forge`: `T2.1.3` — reversal и
+единый reporting exclusion._
 
 ### 🌊 Wave v6/S0 — Evidence & UX Foundation ✅
 _Owner подтвердил полное выполнение v6. `V6-001..005` и `INT-S0` закрыты 2026-08-04: воспроизводимый generator покрывает 21 GoRouter route, 248/259 production-reachable Dart files, 256/256 service calls, route/surface/navigation/input/back ownership с unowned=0; v4 inventory обновлён и снова проходит stale-check. Baseline: Flutter analyze clean и 486/486 tests, backend typecheck/build clean, 150/150 suites и 1160/1160 tests, actor/payload 9/9, targeted workflow contracts 68/68 (`docs/audits/v6-s0-baseline.md`). Следующий шаг `/forge`: `V6-101` canonical location adapter._

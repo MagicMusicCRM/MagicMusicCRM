@@ -96,6 +96,9 @@ import { CrmClientPipelineController } from "./crm-student-funnel.controller";
 import { StudentFunnelService } from "./student-funnel.service";
 import { CrmConfigurationController } from "./crm-configuration.controller";
 import { CrmConfigurationService } from "./crm-configuration.service";
+import { InstallmentDueWorker } from "./commerce/installment-due.worker";
+import { PaymentLifecycleRepository } from "./commerce/payment-lifecycle.repository";
+import { PaymentLifecycleService } from "./commerce/payment-lifecycle.service";
 
 @Module({
   imports: [
@@ -192,6 +195,9 @@ import { CrmConfigurationService } from "./crm-configuration.service";
     CommerceProjectionRepository,
     CommerceProjectionService,
     SubscriptionReservationService,
+    PaymentLifecycleRepository,
+    PaymentLifecycleService,
+    InstallmentDueWorker,
     SharedTaskRepository,
     SharedTaskService,
     SharedTaskReminderWorker,

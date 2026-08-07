@@ -19,6 +19,9 @@ import { RealtimeBus } from "../../realtime/realtime-bus";
 import { CrmPolicy } from "../crm.policy";
 import { ActualPaymentService } from "./actual-payment.service";
 import { CommerceProjectionRepository } from "./commerce-projection.repository";
+import { InstallmentDueWorker } from "./installment-due.worker";
+import { PaymentLifecycleRepository } from "./payment-lifecycle.repository";
+import { PaymentLifecycleService } from "./payment-lifecycle.service";
 import { SubscriptionIssueRepository } from "./subscription-issue.repository";
 import { SubscriptionIssueService } from "./subscription-issue.service";
 import { SubscriptionPreviewTokenService } from "./subscription-preview-token.service";
@@ -60,6 +63,8 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
   let issueRepository: SubscriptionIssueRepository;
   let issueService: SubscriptionIssueService;
   let paymentService: ActualPaymentService;
+  let paymentLifecycle: PaymentLifecycleService;
+  let dueWorker: InstallmentDueWorker;
   let commerceRepository: CommerceProjectionRepository;
   let actors: Record<UserRole, ActorContext>;
   let studentId: string;
@@ -102,11 +107,25 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       } as unknown as ConfigService),
     );
     commerceRepository = new CommerceProjectionRepository(database);
+    const paymentRepository = new PaymentLifecycleRepository(
+      database,
+      new PlatformIntegrityRepository(),
+    );
+    paymentLifecycle = new PaymentLifecycleService(
+      paymentRepository,
+      issueRepository,
+      policy,
+      integrity,
+      commerceRepository,
+      reservations,
+    );
+    dueWorker = new InstallmentDueWorker(paymentRepository, reservations);
     paymentService = new ActualPaymentService(
       issueRepository,
       policy,
       integrity,
       commerceRepository,
+      paymentLifecycle,
     );
     const fixture = await createFixture(pool);
     actors = fixture.actors;
@@ -239,7 +258,7 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       projection[0]!.subscriptions[0]!.installments.map(
         (item) => item.status,
       ),
-    ).toEqual(["paid", "pending"]);
+    ).toEqual(["paid", "scheduled"]);
     expect(projection[0]!.subscriptions[0]).toMatchObject({
       units: {
         total: "10.00",
@@ -252,7 +271,9 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       financial: {
         actualPaidMinor: "320000",
         obligationMinor: "640000",
-        debtMinor: "320000",
+        debtMinor: "0",
+        pendingMinor: "0",
+        remainingObligationMinor: "320000",
         overpaymentMinor: "0",
         nextPaymentAt: "2026-09-01T09:00:00+00:00",
       },
@@ -314,7 +335,8 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
     expect(Number(subscription.units.available)).toBeCloseTo(3.4375);
     expect(subscription.financial).toMatchObject({
       actualPaidMinor: "220000",
-      debtMinor: "420000",
+      debtMinor: "0",
+      remainingObligationMinor: "420000",
     });
     expect(reconciled[0]!.movements).toEqual(
       expect.arrayContaining([
@@ -326,6 +348,227 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
         }),
       ]),
     );
+  });
+
+  it("materializes due installments once and serializes paid/unpaid verification", async () => {
+    const issued = await issueService.issue(
+      actors.director,
+      studentId,
+      {
+        packageId,
+        installments: [
+          { dueAt: "2030-01-01T09:00:00.000Z", amountMinor: "400000" },
+          { dueAt: "2031-01-01T09:00:00.000Z", amountMinor: "400000" },
+        ],
+      },
+      mutationMetadata("payment-lifecycle-subscription"),
+    );
+
+    await Promise.all([
+      dueWorker.runOnce(new Date("2030-06-01T00:00:00.000Z"), 100),
+      dueWorker.runOnce(new Date("2030-06-01T00:00:00.000Z"), 100),
+    ]);
+    const first = await pool.query<{
+      id: string;
+      status: "posted_pending";
+      version: string;
+    }>(
+      `select id, status, version::text
+       from app.client_payment_records
+       where installment_id = $1`,
+      [issued.installments[0]!.id],
+    );
+    expect(first.rows).toHaveLength(1);
+    expect(first.rows[0]).toMatchObject({
+      status: "posted_pending",
+      version: "1",
+    });
+    expect(
+      await pool.query(
+        "select id from app.client_payment_records where installment_id = $1",
+        [issued.installments[1]!.id],
+      ),
+    ).toHaveProperty("rowCount", 0);
+    await expect(
+      paymentLifecycle.create(
+        actors.director,
+        studentId,
+        {
+          issuedSubscriptionId: issued.subscription.id,
+          installmentId: issued.installments[0]!.id,
+          amountMinor: "400000",
+          status: "posted_pending",
+          reason: "Повторная ручная фиксация той же части",
+        },
+        mutationMetadata("duplicate-installment-record"),
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    const transitions = await Promise.allSettled([
+      paymentLifecycle.transition(
+        actors.admin,
+        studentId,
+        first.rows[0]!.id,
+        {
+          expectedVersion: 1,
+          targetStatus: "paid",
+          method: "cashless",
+          externalIdentifier: `${marker}-verify-admin`,
+          occurredAt: "2030-06-01T10:00:00.000Z",
+          reason: "Платёж рассрочки проверен администратором",
+        },
+        mutationMetadata("payment-verify-admin"),
+      ),
+      paymentLifecycle.transition(
+        actors.manager,
+        studentId,
+        first.rows[0]!.id,
+        {
+          expectedVersion: 1,
+          targetStatus: "paid",
+          method: "cashless",
+          externalIdentifier: `${marker}-verify-manager`,
+          occurredAt: "2030-06-01T10:00:00.000Z",
+          reason: "Платёж рассрочки проверен управляющим",
+        },
+        mutationMetadata("payment-verify-manager"),
+      ),
+    ]);
+    expect(transitions.filter((item) => item.status === "fulfilled")).toHaveLength(1);
+    expect(transitions.filter((item) => item.status === "rejected")).toHaveLength(1);
+    const paid = await pool.query<{
+      status: string;
+      actual_payment_id: string;
+      events: string;
+      payments: string;
+    }>(
+      `select record.status, record.actual_payment_id,
+         (select count(*)::text from app.client_payment_status_events event
+          where event.payment_record_id = record.id) as events,
+         (select count(*)::text from app.payments payment
+          where payment.payment_record_id = record.id) as payments
+       from app.client_payment_records record where record.id = $1`,
+      [first.rows[0]!.id],
+    );
+    expect(paid.rows[0]).toMatchObject({
+      status: "paid",
+      events: "2",
+      payments: "1",
+    });
+
+    await dueWorker.runOnce(new Date("2032-01-01T00:00:00.000Z"), 100);
+    const second = await pool.query<{ id: string }>(
+      "select id from app.client_payment_records where installment_id = $1",
+      [issued.installments[1]!.id],
+    );
+    expect(second.rows).toHaveLength(1);
+    await paymentLifecycle.transition(
+      actors.admin,
+      studentId,
+      second.rows[0]!.id,
+      {
+        expectedVersion: 1,
+        targetStatus: "unpaid",
+        reason: "Платёж по рассрочке не поступил",
+      },
+      mutationMetadata("payment-mark-unpaid"),
+    );
+    const scope = await commerceRepository.resolveStudentScope(
+      actors.director,
+      studentId,
+    );
+    const projection = await commerceRepository.loadProjection(
+      actors.director,
+      [scope],
+    );
+    expect(
+      projection[0]!.subscriptions.find(
+        (item) => item.id === issued.subscription.id,
+      )!.financial,
+    ).toMatchObject({
+      actualPaidMinor: "400000",
+      pendingMinor: "0",
+      debtMinor: "400000",
+      remainingObligationMinor: "400000",
+    });
+    await expect(
+      paymentLifecycle.transition(
+        actors.director,
+        studentId,
+        first.rows[0]!.id,
+        {
+          expectedVersion: 2,
+          targetStatus: "unpaid",
+          reason: "Недопустимая отмена подтверждённой оплаты",
+        },
+        mutationMetadata("paid-is-immutable"),
+      ),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+  });
+
+  it("creates and replays a manual pending record before marking it debt", async () => {
+    const input = {
+      amountMinor: "12345",
+      currencyCode: "RUB",
+      status: "posted_pending" as const,
+      dueAt: "2026-08-07T09:00:00.000Z",
+      verificationNote: "Проверить ручной перевод",
+      reason: "Клиент сообщил о переводе",
+    };
+    const mutation = mutationMetadata("manual-pending-payment");
+    const created = await paymentLifecycle.create(
+      actors.director,
+      payerStudentId,
+      input,
+      mutation,
+    );
+    expect(
+      await paymentLifecycle.create(
+        actors.director,
+        payerStudentId,
+        input,
+        mutation,
+      ),
+    ).toEqual(created);
+    expect(created).toMatchObject({
+      paymentRecord: { status: "posted_pending", version: 1 },
+      actualPayment: null,
+      statusHistory: [{ reason: "Клиент сообщил о переводе" }],
+    });
+    const unpaid = await paymentLifecycle.transition(
+      actors.admin,
+      payerStudentId,
+      created.paymentRecord.id,
+      {
+        expectedVersion: 1,
+        targetStatus: "unpaid",
+        reason: "Перевод не найден в банке",
+      },
+      mutationMetadata("manual-payment-unpaid"),
+    );
+    expect(unpaid).toMatchObject({
+      paymentRecord: { status: "unpaid", version: 2 },
+      actualPayment: null,
+      statusHistory: [
+        { afterStatus: "posted_pending" },
+        { afterStatus: "unpaid", reason: "Перевод не найден в банке" },
+      ],
+    });
+    const scope = await commerceRepository.resolveStudentScope(
+      actors.director,
+      payerStudentId,
+    );
+    expect(
+      (await commerceRepository.loadProjection(actors.director, [scope]))[0]!
+        .accounts,
+    ).toEqual([
+      expect.objectContaining({
+        currencyCode: "RUB",
+        pendingMinor: "0",
+        debtMinor: "12345",
+        balanceMinor: "0",
+      }),
+    ]);
   });
 
   it("purchases once from another client personal account and replays safely", async () => {
@@ -1174,10 +1417,19 @@ async function cleanupFixture(
         )
       : { rows: [] as { id: string }[] };
     const adjustmentIds = adjustments.rows.map((row) => row.id);
+    const paymentRecords = studentIds.length > 0
+      ? await client.query<{ id: string }>(
+          `select id from app.client_payment_records
+           where student_id = any($1::uuid[])`,
+          [studentIds],
+        )
+      : { rows: [] as { id: string }[] };
+    const paymentRecordIds = paymentRecords.rows.map((row) => row.id);
     const aggregateIds = [
       ...subscriptionIds,
       ...paymentIds,
       ...adjustmentIds,
+      ...paymentRecordIds,
     ];
 
     await deleteByIds(
@@ -1220,6 +1472,20 @@ async function cleanupFixture(
       "app.subscription_obligation_facts",
       "issued_subscription_id",
       subscriptionIds,
+      "uuid",
+    );
+    await deleteByIds(
+      client,
+      "app.client_payment_status_events",
+      "payment_record_id",
+      paymentRecordIds,
+      "uuid",
+    );
+    await deleteByIds(
+      client,
+      "app.client_payment_records",
+      "id",
+      paymentRecordIds,
       "uuid",
     );
     await deleteByIds(

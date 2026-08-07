@@ -49,6 +49,8 @@ const requiredMigrations = [
   "0092_shared_tasks_audience_schema",
   "0097_unified_crm_configuration",
   "0098_admin_persona_boundary",
+  "0103_v7_client_commerce",
+  "0106_v7_payment_lifecycle",
 ];
 
 const invariantSql: ReadonlyArray<{ id: string; sql: string }> = [
@@ -69,11 +71,11 @@ const invariantSql: ReadonlyArray<{ id: string; sql: string }> = [
   {
     id: "access.capability-registry-packages",
     sql: `
-      select 23 as source_count,
+      select 25 as source_count,
              (select count(*) from app.capability_definitions where active) as target_count,
-             greatest(0, 23 - (select count(*) from app.capability_definitions where active))
+             greatest(0, 25 - (select count(*) from app.capability_definitions where active))
              + abs(6 - (select count(*) from app.role_packages where active))
-             + abs(138 - (
+             + abs(150 - (
                select count(*)
                  from app.role_package_capabilities entry
                  join app.role_packages package on package.id = entry.package_id

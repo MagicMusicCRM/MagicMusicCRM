@@ -137,7 +137,7 @@ graph TD
   - **Зависимости**: INT-S0.
   - **Приоритет**: P0.
 
-- [ ] **T2.1.2** [REQ-PAYMENT-101]: Три статуса оплаты и due worker
+- [x] **T2.1.2** [REQ-PAYMENT-101]: Три статуса оплаты и due worker
   - **Описание**: Реализовать manual/due payment record, posted_pending marker, verified paid/unpaid transitions и immutable actual payment creation.
   - **Входные данные**: INT-S0, [`commerce_integrity.detail.md` §3](04_SYSTEM_DESIGN/commerce_integrity.detail.md).
   - **Выходные данные**: PaymentLifecycle service/repository/DTO/worker.

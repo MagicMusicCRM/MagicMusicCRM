@@ -11,6 +11,7 @@ import { ActorContext } from "../common/security/actor-context";
 import { CurrentActor } from "../common/security/current-actor.decorator";
 import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
 import { ActualPaymentService } from "./commerce/actual-payment.service";
+import { PaymentLifecycleService } from "./commerce/payment-lifecycle.service";
 import { SubscriptionLifecycleService } from "./commerce/subscription-lifecycle.service";
 import { SubscriptionIssueService } from "./commerce/subscription-issue.service";
 import {
@@ -19,6 +20,10 @@ import {
   PurchaseSubscriptionPreviewDto,
 } from "./dto/issue-subscription.dto";
 import { RecordActualPaymentDto } from "./dto/record-actual-payment.dto";
+import {
+  CreatePaymentRecordDto,
+  TransitionPaymentRecordDto,
+} from "./dto/payment-lifecycle.dto";
 import {
   SubscriptionCancelCommandDto,
   SubscriptionCancelPreviewDto,
@@ -35,6 +40,7 @@ export class SubscriptionCommerceController {
     private readonly issueService: SubscriptionIssueService,
     private readonly paymentService: ActualPaymentService,
     private readonly lifecycleService: SubscriptionLifecycleService,
+    private readonly paymentLifecycle: PaymentLifecycleService,
   ) {}
 
   @Post(":studentId/subscriptions/issue")
@@ -49,6 +55,41 @@ export class SubscriptionCommerceController {
       idempotencyKey: idempotencyKey ?? "",
       requestId: requestId ?? "",
     });
+  }
+
+  @Post(":studentId/payment-records")
+  createPaymentRecord(
+    @CurrentActor() actor: ActorContext,
+    @Param("studentId", ParseUUIDPipe) studentId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+    @Body() dto: CreatePaymentRecordDto,
+  ) {
+    return this.paymentLifecycle.create(actor, studentId, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
+  }
+
+  @Post(":studentId/payment-records/:paymentRecordId/transition")
+  transitionPaymentRecord(
+    @CurrentActor() actor: ActorContext,
+    @Param("studentId", ParseUUIDPipe) studentId: string,
+    @Param("paymentRecordId", ParseUUIDPipe) paymentRecordId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+    @Body() dto: TransitionPaymentRecordDto,
+  ) {
+    return this.paymentLifecycle.transition(
+      actor,
+      studentId,
+      paymentRecordId,
+      dto,
+      {
+        idempotencyKey: idempotencyKey ?? "",
+        requestId: requestId ?? "",
+      },
+    );
   }
 
   @Post(":studentId/subscriptions/purchase/preview")

@@ -46,6 +46,16 @@ describe("capability route policy", () => {
     ],
     [
       "POST",
+      "/crm/students/id/payment-records",
+      "commerce.client_finance.write",
+    ],
+    [
+      "POST",
+      "/crm/students/id/payment-records/id/transition",
+      "commerce.client_finance.write",
+    ],
+    [
+      "POST",
       "/crm/students/id/adjustments",
       "commerce.subscription.issue",
     ],

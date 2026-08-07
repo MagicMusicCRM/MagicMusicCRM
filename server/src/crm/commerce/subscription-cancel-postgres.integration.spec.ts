@@ -14,6 +14,8 @@ import { RealtimeBus } from "../../realtime/realtime-bus";
 import { CrmPolicy } from "../crm.policy";
 import { ActualPaymentService } from "./actual-payment.service";
 import { CommerceProjectionRepository } from "./commerce-projection.repository";
+import { PaymentLifecycleRepository } from "./payment-lifecycle.repository";
+import { PaymentLifecycleService } from "./payment-lifecycle.service";
 import { SubscriptionIssueRepository } from "./subscription-issue.repository";
 import { SubscriptionIssueService } from "./subscription-issue.service";
 import { SubscriptionLifecycleRepository } from "./subscription-lifecycle.repository";
@@ -75,11 +77,23 @@ describe("Subscription cancellation preview/confirm", () => {
           key === "COMMERCE_PREVIEW_SECRET" ? previewSecret : fallback,
       } as unknown as ConfigService),
     );
+    const commerceRepository = new CommerceProjectionRepository(database);
     paymentService = new ActualPaymentService(
       issueRepository,
       policy,
       integrity,
-      new CommerceProjectionRepository(database),
+      commerceRepository,
+      new PaymentLifecycleService(
+        new PaymentLifecycleRepository(
+          database,
+          new PlatformIntegrityRepository(),
+        ),
+        issueRepository,
+        policy,
+        integrity,
+        commerceRepository,
+        reservations,
+      ),
     );
     lifecycleService = new SubscriptionLifecycleService(
       new SubscriptionLifecycleRepository(database),
@@ -795,6 +809,11 @@ async function cleanupFixture(
       [[fixture.studentId, fixture.otherStudentId]],
     );
     const paymentIds = payments.rows.map((row) => row.id);
+    const paymentRecords = await client.query<{ id: string }>(
+      "select id from app.client_payment_records where student_id = any($1::uuid[])",
+      [[fixture.studentId, fixture.otherStudentId]],
+    );
+    const paymentRecordIds = paymentRecords.rows.map((row) => row.id);
     await deleteByIds(
       client,
       "app.idempotency_records",
@@ -806,7 +825,7 @@ async function cleanupFixture(
       client,
       "app.platform_outbox_events",
       "aggregate_id",
-      [...subscriptionIds, ...paymentIds],
+      [...subscriptionIds, ...paymentIds, ...paymentRecordIds],
       "text",
     );
     await client.query("delete from app.audit_events where actor_user_id = $1", [
@@ -816,7 +835,7 @@ async function cleanupFixture(
       client,
       "app.aggregate_versions",
       "aggregate_id",
-      [...subscriptionIds, ...paymentIds],
+      [...subscriptionIds, ...paymentIds, ...paymentRecordIds],
       "text",
     );
     for (const table of [
@@ -840,6 +859,20 @@ async function cleanupFixture(
         "uuid",
       );
     }
+    await deleteByIds(
+      client,
+      "app.client_payment_status_events",
+      "payment_record_id",
+      paymentRecordIds,
+      "uuid",
+    );
+    await deleteByIds(
+      client,
+      "app.client_payment_records",
+      "id",
+      paymentRecordIds,
+      "uuid",
+    );
     await deleteByIds(client, "app.payments", "id", paymentIds, "uuid");
     await deleteByIds(
       client,

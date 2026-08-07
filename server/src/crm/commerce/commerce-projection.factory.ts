@@ -91,6 +91,8 @@ export class CommerceProjectionFactory {
         writeOffsMinor: account.writeOffsMinor,
         balanceMinor: account.balanceMinor,
         debtMinor: account.debtMinor,
+        pendingMinor: account.pendingMinor,
+        remainingObligationMinor: account.remainingObligationMinor,
       })),
       subscriptions,
       movements: source.movements.map((movement) => ({

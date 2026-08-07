@@ -233,7 +233,9 @@ export class CommerceProjectionRepository {
               0::numeric as adjustment_minor,
               0::numeric as obligation_debit_minor,
               0::numeric as obligation_credit_minor,
-              0::numeric as write_off_minor
+              0::numeric as write_off_minor,
+              0::numeric as pending_minor,
+              0::numeric as debt_minor
             from app.payments payment
             where payment.student_id = selected.student_id
               and payment.deleted_at is null
@@ -253,6 +255,8 @@ export class CommerceProjectionRepository {
                   then obligation.amount_minor::numeric
                 else 0::numeric
               end,
+              0::numeric,
+              0::numeric,
               0::numeric
             from app.subscription_obligation_facts obligation
             where obligation.student_id = selected.student_id
@@ -263,7 +267,9 @@ export class CommerceProjectionRepository {
               0::numeric,
               0::numeric,
               0::numeric,
-              lesson_charge.amount_minor::numeric
+              lesson_charge.amount_minor::numeric,
+              0::numeric,
+              0::numeric
             from app.lesson_client_charge_facts lesson_charge
             where lesson_charge.client_type = 'student'
               and lesson_charge.client_id = selected.student_id
@@ -274,11 +280,27 @@ export class CommerceProjectionRepository {
               adjustment.amount_minor::numeric,
               0::numeric,
               0::numeric,
+              0::numeric,
+              0::numeric,
               0::numeric
             from app.account_adjustments adjustment
             where adjustment.student_id = selected.student_id
               and adjustment.deleted_at is null
               and adjustment.status = 'paid'
+            union all
+            select
+              record.currency_code,
+              0::numeric,
+              0::numeric,
+              0::numeric,
+              0::numeric,
+              0::numeric,
+              case when record.status = 'posted_pending'
+                then record.amount_minor::numeric else 0::numeric end,
+              case when record.status = 'unpaid'
+                then record.amount_minor::numeric else 0::numeric end
+            from app.client_payment_records record
+            where record.student_id = selected.student_id
           ),
           totals as (
             select
@@ -287,7 +309,9 @@ export class CommerceProjectionRepository {
               sum(adjustment_minor) as adjustments_minor,
               sum(obligation_debit_minor) as obligation_debits_minor,
               sum(obligation_credit_minor) as obligation_credits_minor,
-              sum(write_off_minor) as write_offs_minor
+              sum(write_off_minor) as write_offs_minor,
+              sum(pending_minor) as pending_minor,
+              sum(debt_minor) as debt_minor
             from monetary_facts
             group by currency_code
           )
@@ -306,7 +330,9 @@ export class CommerceProjectionRepository {
                 - totals.obligation_debits_minor
                 - totals.write_offs_minor
               )::text,
-              'debtMinor', greatest(
+              'debtMinor', totals.debt_minor::text,
+              'pendingMinor', totals.pending_minor::text,
+              'remainingObligationMinor', greatest(
                 -(
                   totals.actual_payments_minor
                   + totals.adjustments_minor
@@ -349,6 +375,11 @@ export class CommerceProjectionRepository {
                 'actualPaidMinor', financial.actual_paid_minor::text,
                 'obligationMinor', financial.obligation_minor::text,
                 'debtMinor', greatest(
+                  financial.debt_minor,
+                  0
+                )::text,
+                'pendingMinor', financial.pending_minor::text,
+                'remainingObligationMinor', greatest(
                   financial.obligation_minor - financial.actual_paid_minor,
                   0
                 )::text,
@@ -450,11 +481,29 @@ export class CommerceProjectionRepository {
                   where obligation.issued_subscription_id in (
                     select id from lifecycle_chain
                   )
-                ), 0)::numeric as obligation_minor
+                ), 0)::numeric as obligation_minor,
+                coalesce((
+                  select sum(record.amount_minor)
+                  from app.client_payment_records record
+                  where record.issued_subscription_id in (
+                    select id from lifecycle_chain
+                  )
+                    and record.status = 'posted_pending'
+                ), 0)::numeric as pending_minor,
+                coalesce((
+                  select sum(record.amount_minor)
+                  from app.client_payment_records record
+                  where record.issued_subscription_id in (
+                    select id from lifecycle_chain
+                  )
+                    and record.status = 'unpaid'
+                ), 0)::numeric as debt_minor
             )
             select
               totals.actual_paid_minor,
               totals.obligation_minor,
+              totals.pending_minor,
+              totals.debt_minor,
               case
                 when totals.obligation_minor <= 0 then
                   (issued.commercial_snapshot ->> 'unitCount')::numeric
@@ -491,12 +540,16 @@ export class CommerceProjectionRepository {
                 'dueAt', installment.due_at,
                 'amountMinor', installment.amount_minor::text,
                 'currencyCode', installment.currency_code,
-                'status', case
+                'status', coalesce((
+                  select record.status
+                  from app.client_payment_records record
+                  where record.installment_id = installment.id
+                ), case
                   when installment.status = 'void' then 'void'
                   when financial.actual_paid_minor >= installment.cumulative_minor
                     then 'paid'
-                  else 'pending'
-                end
+                  else 'scheduled'
+                end)
               )
               order by installment.installment_number
             ) as items
@@ -574,6 +627,39 @@ export class CommerceProjectionRepository {
               where payment.student_id = selected.student_id
                 and payment.deleted_at is null
                 and payment.amount_minor is not null
+                and payment.payment_record_id is null
+              union all
+              select
+                record.id,
+                'payment_record'::text,
+                'credit'::text,
+                record.amount_minor::text,
+                record.currency_code,
+                coalesce(record.verified_at, record.due_at, record.created_at),
+                record.method,
+                null::text,
+                null::text,
+                actual.branch_id,
+                branch.name,
+                record.verification_note,
+                record.external_identifier,
+                record.status,
+                nullif(btrim(
+                  coalesce(author.first_name, '') || ' ' ||
+                  coalesce(author.last_name, '')
+                ), ''),
+                record.issued_subscription_id,
+                subscription.commercial_snapshot ->> 'displayName',
+                null::uuid
+              from app.client_payment_records record
+              left join app.payments actual
+                on actual.id = record.actual_payment_id
+              left join app.branches branch on branch.id = actual.branch_id
+              left join app.subscriptions subscription
+                on subscription.id = record.issued_subscription_id
+              left join app.users creator on creator.id = record.created_by
+              left join app.profiles author on author.user_id = creator.id
+              where record.student_id = selected.student_id
               union all
               select
                 obligation.id,

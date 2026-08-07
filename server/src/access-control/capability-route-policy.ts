@@ -219,13 +219,18 @@ export function resolveCapabilityRoutePolicy(
   if (
     path.includes("/subscriptions") ||
     path.includes("/subscription-payments") ||
+    path.includes("/payment-records") ||
     path.includes("/adjustments") ||
     path.includes("/payments") ||
     path.includes("/student-balances") ||
     path.includes("/expected-payments")
   ) {
     return policy(
-      read ? "commerce.client_finance.read" : "commerce.subscription.issue",
+      read
+        ? "commerce.client_finance.read"
+        : path.includes("/payment-records")
+          ? "commerce.client_finance.write"
+          : "commerce.subscription.issue",
       "self_or_assigned",
       read ? ["client", ...staffRoles] : staffRoles,
       "CrmPolicy student-finance/resource scope",

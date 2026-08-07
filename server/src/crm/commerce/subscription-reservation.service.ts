@@ -194,7 +194,7 @@ export class SubscriptionReservationService {
   async publishPostCommit(input: {
     studentId: string;
     payerStudentId?: string;
-    subscriptionId: string;
+    subscriptionId?: string | null;
     lessonId?: string;
   }): Promise<void> {
     try {
@@ -215,12 +215,14 @@ export class SubscriptionReservationService {
         id: input.lessonId ?? null,
         affectedUserIds: userIds,
       });
-      this.realtime.emitCrmChanged({
-        entity: "subscription",
-        action: "updated",
-        id: input.subscriptionId,
-        affectedUserIds: userIds,
-      });
+      if (input.subscriptionId) {
+        this.realtime.emitCrmChanged({
+          entity: "subscription",
+          action: "updated",
+          id: input.subscriptionId,
+          affectedUserIds: userIds,
+        });
+      }
       this.realtime.emitFinanceChanged(userIds);
     } catch (error) {
       this.logger.warn(

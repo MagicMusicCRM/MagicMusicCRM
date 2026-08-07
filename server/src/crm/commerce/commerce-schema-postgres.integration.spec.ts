@@ -81,6 +81,32 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
     }
   });
 
+  it("deletes legacy subscriptions instead of leaving orphan rows", async () => {
+    const client = await pool.connect();
+    await client.query("begin");
+    try {
+      const fixture = await createClientFixture(client);
+      const subscription = await client.query<{ id: string }>(
+        `
+          insert into app.subscriptions (
+            student_id, lessons_total, lessons_used, status
+          ) values ($1, 10, 4, 'active')
+          returning id
+        `,
+        [fixture.studentId],
+      );
+
+      const deleted = await client.query<{ id: string }>(
+        "delete from app.subscriptions where id = $1 returning id",
+        [subscription.rows[0]!.id],
+      );
+      expect(deleted.rows).toEqual(subscription.rows);
+    } finally {
+      await client.query("rollback");
+      client.release();
+    }
+  });
+
   it("keeps issued snapshots stable while catalog versions change", async () => {
     const client = await pool.connect();
     await client.query("begin");

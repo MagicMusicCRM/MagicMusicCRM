@@ -14,6 +14,7 @@ import { CrmPolicy } from "../crm.policy";
 import { RecordActualPaymentDto } from "../dto/record-actual-payment.dto";
 import { RecordPaymentAdjustmentDto } from "../dto/create-adjustment.dto";
 import { CommerceProjectionRepository } from "./commerce-projection.repository";
+import { PaymentLifecycleService } from "./payment-lifecycle.service";
 import { CommerceMutationMetadata } from "./subscription-issue.service";
 import { SubscriptionIssueRepository } from "./subscription-issue.repository";
 
@@ -29,6 +30,7 @@ export class ActualPaymentService {
     private readonly policy: CrmPolicy,
     private readonly integrity: PlatformIntegrityService,
     private readonly commerce: CommerceProjectionRepository,
+    private readonly paymentLifecycle: PaymentLifecycleService,
   ) {}
 
   async record(
@@ -37,158 +39,33 @@ export class ActualPaymentService {
     dto: RecordActualPaymentDto,
     metadata: CommerceMutationMetadata,
   ) {
-    this.policy.assertCanWriteCrm(actor);
-    this.assertMetadata(metadata);
-    const scope = await this.commerce.resolveStudentScope(actor, studentId);
-    if (!scope.branchId) {
-      throw new UnprocessableEntityException({
-        code: "PAYMENT_BRANCH_REQUIRED",
-        field: "branchId",
-        message: "Для платежа укажите филиал в карточке ученика.",
-      });
-    }
-    if (dto.branchId !== undefined && dto.branchId !== scope.branchId) {
-      throw new UnprocessableEntityException({
-        code: "PAYMENT_BRANCH_MISMATCH",
-        field: "branchId",
-        message: "Платёж можно провести только в филиале ученика.",
-      });
-    }
-    const amountMinor = this.normalizeAmount(dto.amountMinor);
-    const occurredAt = new Date(dto.occurredAt);
-    if (Number.isNaN(occurredAt.getTime())) {
-      throw new UnprocessableEntityException({
-        code: "PAYMENT_DATE_INVALID",
-        field: "occurredAt",
-        message: "Укажите корректную дату фактического платежа.",
-      });
-    }
-    if (dto.method !== "cash" && dto.method !== "cashless") {
-      throw new UnprocessableEntityException({
-        code: "PAYMENT_METHOD_INVALID",
-        field: "method",
-        message: "Способ оплаты должен быть cash или cashless.",
-      });
-    }
-    if (
-      dto.currencyCode !== undefined &&
-      !/^[A-Z]{3}$/.test(dto.currencyCode)
-    ) {
-      throw new UnprocessableEntityException({
-        code: "PAYMENT_CURRENCY_INVALID",
-        field: "currencyCode",
-        message: "Код валюты должен состоять из трёх заглавных букв.",
-      });
-    }
-    const paymentId = this.deterministicId(
-      actor.userId,
-      metadata.idempotencyKey,
-    );
     const comment = this.optionalText(dto.comment);
-    const invoiceIdentifier = this.optionalText(dto.invoiceIdentifier);
-    const normalizedPayload = {
+    const result = await this.paymentLifecycle.create(
+      actor,
       studentId,
-      issuedSubscriptionId: dto.issuedSubscriptionId,
-      branchId: scope.branchId,
-      amountMinor,
-      method: dto.method,
-      occurredAt: occurredAt.toISOString(),
-      currencyCode: dto.currencyCode ?? null,
-      comment,
-      invoiceIdentifier,
-    };
-    const audit: PlatformAuditInput = {
-      action: "crm.actual_payment_recorded",
-      entityType: "payment",
-      entityId: paymentId,
-      metadata: {
-        studentId,
+      {
         issuedSubscriptionId: dto.issuedSubscriptionId,
+        amountMinor: dto.amountMinor,
+        currencyCode: dto.currencyCode,
+        status: "paid",
         method: dto.method,
-        branchId: scope.branchId,
+        externalIdentifier:
+          this.optionalText(dto.invoiceIdentifier) ??
+          `api:${metadata.idempotencyKey}`,
+        occurredAt: dto.occurredAt,
+        branchId: dto.branchId,
+        verificationNote: comment ?? undefined,
+        reason: comment ?? "Фактическая оплата",
       },
-    };
-    const result =
-      await this.integrity.executeVersionedMutation<PaymentMutationResult>({
-        actorKey: actor.userId,
-        actorUserId: actor.userId,
-        operation: "crm.actual-payment.record",
-        idempotencyKey: metadata.idempotencyKey,
-        requestId: metadata.requestId,
-        aggregateType: "commerce:actual-payment",
-        aggregateId: paymentId,
-        expectedVersion: 0,
-        payload: normalizedPayload,
-        audit,
-        outbox: {
-          type: "commerce.payment.recorded",
-          payload: {
-            entityId: paymentId,
-            invalidates: ["student-finance", "revenue"],
-          },
-        },
-        mutate: async (client, nextVersion) => {
-          if (!(await this.repository.lockStudent(client, studentId))) {
-            throw new NotFoundException("Ученик не найден.");
-          }
-          const target =
-            await this.repository.findIssuedPaymentTargetForShare(
-              client,
-              dto.issuedSubscriptionId,
-              studentId,
-            );
-          if (!target) {
-            throw new NotFoundException(
-              "Выданный абонемент этого ученика не найден.",
-            );
-          }
-          if (
-            dto.currencyCode !== undefined &&
-            dto.currencyCode !== target.currency_code
-          ) {
-            throw new UnprocessableEntityException({
-              code: "PAYMENT_CURRENCY_MISMATCH",
-              field: "currencyCode",
-              message:
-                "Валюта платежа должна совпадать с валютой выданного абонемента.",
-            });
-          }
-          const currencyCode = target.currency_code;
-          const payment = await this.repository.createActualPayment(client, {
-            id: paymentId,
-            studentId,
-            issuedSubscriptionId: dto.issuedSubscriptionId,
-            amountMinor,
-            currencyCode,
-            method: dto.method,
-            occurredAt,
-            actorUserId: actor.userId,
-            branchId: scope.branchId,
-            comment,
-            invoiceIdentifier,
-            idempotencyRef:
-              `${actor.userId}:${metadata.idempotencyKey}`,
-            requestFingerprint: fingerprintPayload({
-              ...normalizedPayload,
-              currencyCode,
-            }),
-          });
-          audit.afterRef = {
-            paymentId: payment.id,
-            paymentVersion: nextVersion,
-            studentId,
-            issuedSubscriptionId: payment.issued_subscription_id,
-          };
-          return {
-            entityId: payment.id,
-            version: nextVersion,
-          };
-        },
-      });
-    return this.loadStablePayment(
-      result.resultRef.entityId,
-      result.resultRef.version,
+      metadata,
     );
+    if (!result.actualPayment) {
+      throw new ConflictException({
+        code: "PAYMENT_RESULT_MISSING",
+        message: "Зафиксированный фактический платёж не найден.",
+      });
+    }
+    return { payment: result.actualPayment };
   }
 
   async recordAdjustment(
@@ -360,42 +237,6 @@ export class ActualPaymentService {
         },
         version: adjustmentVersion,
         createdAt: adjustment.created_at,
-      },
-    };
-  }
-
-  private async loadStablePayment(
-    paymentId: string,
-    paymentVersion: number,
-  ) {
-    const payment = await this.repository.findActualPayment(paymentId);
-    if (!payment) {
-      throw new ConflictException({
-        code: "PAYMENT_RESULT_MISSING",
-        message: "Зафиксированный фактический платёж не найден.",
-        paymentId,
-      });
-    }
-    return {
-      payment: {
-        id: payment.id,
-        studentId: payment.student_id,
-        issuedSubscriptionId: payment.issued_subscription_id,
-        amountMinor: payment.amount_minor,
-        currencyCode: payment.currency,
-        method: payment.method,
-        occurredAt: payment.payment_date,
-        branchId: payment.branch_id,
-        branchName: payment.branch_name,
-        comment: payment.notes,
-        invoiceIdentifier: payment.invoice_number,
-        status: "paid",
-        acceptedBy: {
-          userId: payment.created_by,
-          name: payment.created_by_name,
-        },
-        version: paymentVersion,
-        createdAt: payment.created_at,
       },
     };
   }

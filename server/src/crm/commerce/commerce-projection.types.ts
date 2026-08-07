@@ -16,6 +16,8 @@ export interface CommerceAccountDto {
   writeOffsMinor: string;
   balanceMinor: string;
   debtMinor: string;
+  pendingMinor: string;
+  remainingObligationMinor: string;
 }
 
 export type CommerceDiscountDto =
@@ -60,6 +62,8 @@ export interface CommerceSubscriptionDto {
     actualPaidMinor: string;
     obligationMinor: string;
     debtMinor: string;
+    pendingMinor: string;
+    remainingObligationMinor: string;
     overpaymentMinor: string;
     nextPaymentAt: string | null;
   };
@@ -77,6 +81,7 @@ export interface CommerceSubscriptionDto {
 
 export type CommerceMovementKind =
   | "payment"
+  | "payment_record"
   | "refund"
   | "adjustment"
   | "obligation"
@@ -96,7 +101,14 @@ export interface CommerceMovementDto {
   branchName?: string | null;
   comment?: string | null;
   invoiceIdentifier?: string | null;
-  status?: "paid" | "pending" | "void" | null;
+  status?:
+    | "unpaid"
+    | "posted_pending"
+    | "paid"
+    | "pending"
+    | "scheduled"
+    | "void"
+    | null;
   acceptedByName?: string | null;
   issuedSubscriptionId?: string | null;
   subscriptionName?: string | null;
