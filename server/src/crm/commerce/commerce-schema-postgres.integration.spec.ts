@@ -454,6 +454,122 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
       client.release();
     }
   });
+
+  it("rolls the empty v7 commerce schema down and up losslessly", async () => {
+    const client = await pool.connect();
+    await client.query("begin");
+    try {
+      const migrationRoot = resolve(process.cwd(), "db/migrations");
+      await client.query(
+        readFileSync(
+          resolve(migrationRoot, "0103_v7_client_commerce.down.sql"),
+          "utf8",
+        ),
+      );
+      expect(await hasColumn(client, "payer_student_id")).toBe(false);
+      expect(
+        (await client.query("select to_regclass('app.client_payment_records') as value"))
+          .rows[0]?.value,
+      ).toBeNull();
+
+      await client.query(
+        readFileSync(
+          resolve(migrationRoot, "0103_v7_client_commerce.up.sql"),
+          "utf8",
+        ),
+      );
+      expect(await hasColumn(client, "payer_student_id")).toBe(true);
+      const capabilities = await client.query<{ capability_key: string }>(
+        `
+          select capability_key
+          from app.capability_definitions
+          where active
+            and capability_key in (
+              'commerce.client_finance.write', 'config.commerce.manage'
+            )
+          order by capability_key
+        `,
+      );
+      expect(capabilities.rows.map((row) => row.capability_key)).toEqual([
+        "commerce.client_finance.write",
+        "config.commerce.manage",
+      ]);
+    } finally {
+      await client.query("rollback");
+      client.release();
+    }
+  });
+
+  it("enforces payment state, identity and role-package constraints", async () => {
+    const client = await pool.connect();
+    await client.query("begin");
+    try {
+      const fixture = await createClientFixture(client);
+      await expectRejectedFactMutation(client, () =>
+        client.query(
+          `
+            insert into app.client_payment_records (
+              student_id, amount_minor, currency_code, status
+            ) values ($1, 10000, 'RUB', 'paid')
+          `,
+          [fixture.studentId],
+        ),
+      );
+      const payment = await client.query<{ id: string }>(
+        `
+          insert into app.client_payment_records (
+            student_id, amount_minor, currency_code, status,
+            due_at, verification_note, created_by
+          ) values (
+            $1, 10000, 'RUB', 'posted_pending', now(),
+            'Проверить оплату за рассрочку', $2
+          )
+          returning id
+        `,
+        [fixture.studentId, fixture.managerId],
+      );
+      await expectRejectedFactMutation(client, () =>
+        client.query(
+          "update app.client_payment_records set amount_minor = 20000 where id = $1",
+          [payment.rows[0]!.id],
+        ),
+      );
+
+      const roleMatrix = await client.query<{
+        capability_key: string;
+        role: string;
+        effect: string;
+      }>(
+        `
+          select entry.capability_key, package.role::text, entry.effect
+          from app.role_package_capabilities entry
+          join app.role_packages package on package.id = entry.package_id
+          where package.active
+            and entry.capability_key in (
+              'commerce.client_finance.write', 'config.commerce.manage'
+            )
+          order by entry.capability_key, package.role::text
+        `,
+      );
+      expect(
+        roleMatrix.rows.filter(
+          (row) =>
+            row.capability_key === "commerce.client_finance.write" &&
+            row.effect === "allow",
+        ).map((row) => row.role),
+      ).toEqual(["admin", "director", "manager", "system_admin"]);
+      expect(
+        roleMatrix.rows.filter(
+          (row) =>
+            row.capability_key === "config.commerce.manage" &&
+            row.effect === "allow",
+        ).map((row) => row.role),
+      ).toEqual(["director", "system_admin"]);
+    } finally {
+      await client.query("rollback");
+      client.release();
+    }
+  });
 });
 
 async function hasColumn(

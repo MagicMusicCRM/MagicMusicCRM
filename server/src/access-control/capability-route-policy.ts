@@ -50,6 +50,7 @@ export const BASELINE_CAPABILITY_ROLES: Readonly<
   "schedule.attendance.write": staffRoles,
   "schedule.lesson.complete": staffRoles,
   "commerce.client_finance.read": ["client", ...staffRoles],
+  "commerce.client_finance.write": staffRoles,
   "commerce.school_finance.read": rootBusinessRoles,
   "commerce.package.read": staffRoles,
   "commerce.package.manage": rootBusinessRoles,
@@ -61,6 +62,7 @@ export const BASELINE_CAPABILITY_ROLES: Readonly<
   "config.crm.read": rootBusinessRoles,
   "config.crm.edit": rootBusinessRoles,
   "config.crm.publish": rootBusinessRoles,
+  "config.commerce.manage": rootBusinessRoles,
   "system.settings.manage": managementRoles,
 };
 

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "task": "T1.1.1",
-  "source_digest": "f85f993991a06e828d0eecc2ccd1e12b8ef50b48cd40c3c82eb2efc6a3e1f7ae",
+  "source_digest": "3d599d7736071fea27659d5aee4e81c9c636ba2022aa4fa7ba68adc9e9dc97b3",
   "summary": {
     "matched_source_files": 45,
     "finance_callsites": 163,
@@ -16,7 +16,7 @@
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 164
+      "line": 166
     },
     {
       "kind": "wire",
@@ -840,7 +840,7 @@
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 165
+      "line": 167
     },
     {
       "kind": "wire",
@@ -848,7 +848,7 @@
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 192
+      "line": 194
     },
     {
       "kind": "wire",
@@ -856,7 +856,7 @@
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 193
+      "line": 195
     },
     {
       "kind": "wire",
@@ -864,7 +864,7 @@
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 218
+      "line": 220
     },
     {
       "kind": "wire",
@@ -872,7 +872,7 @@
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 219
+      "line": 221
     },
     {
       "kind": "wire",
@@ -880,7 +880,7 @@
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 221
+      "line": 223
     },
     {
       "kind": "sql-table",

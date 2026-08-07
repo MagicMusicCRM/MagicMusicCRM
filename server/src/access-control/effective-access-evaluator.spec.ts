@@ -54,6 +54,12 @@ const packageAllows: Readonly<Record<CapabilityKey, readonly AccessRole[]>> = {
     "director",
     "system_admin",
   ],
+  "commerce.client_finance.write": [
+    "admin",
+    "manager",
+    "director",
+    "system_admin",
+  ],
   "commerce.school_finance.read": ["director", "system_admin"],
   "commerce.package.read": ["admin", "manager", "director", "system_admin"],
   "commerce.package.manage": ["director", "system_admin"],
@@ -70,6 +76,7 @@ const packageAllows: Readonly<Record<CapabilityKey, readonly AccessRole[]>> = {
   "config.crm.read": ["director", "system_admin"],
   "config.crm.edit": ["director", "system_admin"],
   "config.crm.publish": ["director", "system_admin"],
+  "config.commerce.manage": ["director", "system_admin"],
   "system.settings.manage": ["manager", "director", "system_admin"],
 };
 

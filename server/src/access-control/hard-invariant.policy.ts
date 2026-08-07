@@ -66,6 +66,7 @@ const TEACHER_HARD_DENIES = new Set<CapabilityKey>([
   "schedule.attendance.write",
   "schedule.lesson.complete",
   "commerce.client_finance.read",
+  "commerce.client_finance.write",
   "commerce.package.read",
   "commerce.subscription.issue",
 ]);
@@ -75,12 +76,14 @@ const DIRECTOR_ONLY_CAPABILITIES = new Set<CapabilityKey>([
   "access.user.override.manage",
   "commerce.school_finance.read",
   "commerce.package.manage",
+  "config.commerce.manage",
 ]);
 
 const CONFIG_CAPABILITIES = new Set<CapabilityKey>([
   "config.crm.read",
   "config.crm.edit",
   "config.crm.publish",
+  "config.commerce.manage",
 ]);
 
 const ADMIN_PERSONA_DENIED_CAPABILITIES = new Set<CapabilityKey>([

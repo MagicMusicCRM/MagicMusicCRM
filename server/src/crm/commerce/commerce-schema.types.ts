@@ -51,10 +51,70 @@ export interface IssuedCommercialSnapshot {
 export interface IssuedSubscriptionEntity {
   id: string;
   studentId: string;
+  payerStudentId?: string | null;
+  fundingMode?: SubscriptionFundingMode | null;
+  purchaseReason?: string | null;
   packageId: string;
   status: string;
   version: number;
   commercialSnapshot: IssuedCommercialSnapshot;
+}
+
+export type SubscriptionFundingMode =
+  | "personal_account"
+  | "installment"
+  | "legacy";
+
+export type ClientPaymentStatus = "unpaid" | "posted_pending" | "paid";
+
+export interface ClientPaymentRecordEntity {
+  id: string;
+  studentId: string;
+  issuedSubscriptionId: string | null;
+  installmentId: string | null;
+  amountMinor: string;
+  currencyCode: CurrencyCode;
+  status: ClientPaymentStatus;
+  dueAt: Date | null;
+  method: string | null;
+  externalIdentifier: string | null;
+  verificationNote: string | null;
+  actualPaymentId: string | null;
+  version: number;
+  createdBy: string | null;
+  verifiedBy: string | null;
+  verifiedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ClientPaymentStatusEventEntity {
+  id: string;
+  paymentRecordId: string;
+  beforeStatus: ClientPaymentStatus | null;
+  afterStatus: ClientPaymentStatus;
+  reason: string;
+  actorUserId: string | null;
+  aggregateVersion: number;
+  actualPaymentId: string | null;
+  occurredAt: Date;
+}
+
+export type CommerceReportingSourceKind =
+  | "payment"
+  | "payment_record"
+  | "account_adjustment";
+
+export interface CommerceReportingExclusionEntity {
+  id: string;
+  sourceKind: CommerceReportingSourceKind;
+  sourceId: string;
+  counterpartKind: CommerceReportingSourceKind | null;
+  counterpartId: string | null;
+  reason: string;
+  actorUserId: string;
+  auditEventId: string | null;
+  occurredAt: Date;
 }
 
 export interface SubscriptionInstallmentEntity {

@@ -99,6 +99,13 @@ export const CAPABILITY_DEFINITIONS = [
     overrideMode: "deny_only",
   },
   {
+    key: "commerce.client_finance.write",
+    version: 1,
+    domain: "commerce",
+    riskLevel: "critical",
+    overrideMode: "deny_only",
+  },
+  {
     key: "commerce.school_finance.read",
     version: 1,
     domain: "commerce",
@@ -174,6 +181,13 @@ export const CAPABILITY_DEFINITIONS = [
     domain: "config",
     riskLevel: "critical",
     overrideMode: "allow_deny",
+  },
+  {
+    key: "config.commerce.manage",
+    version: 1,
+    domain: "config",
+    riskLevel: "critical",
+    overrideMode: "locked",
   },
   {
     key: "system.settings.manage",

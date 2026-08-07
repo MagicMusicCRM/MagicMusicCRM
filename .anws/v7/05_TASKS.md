@@ -64,7 +64,7 @@ graph TD
   - **Зависимости**: нет.
   - **Приоритет**: P0.
 
-- [ ] **T1.1.2** [REQ-COMMERCE-101, REQ-PAYMENT-101, REQ-PAYMENT-102]: Добавить v7 commerce schema
+- [x] **T1.1.2** [REQ-COMMERCE-101, REQ-PAYMENT-101, REQ-PAYMENT-102]: Добавить v7 commerce schema
   - **Описание**: Создать migrations для payer/funding, payment records/events/exclusions и capability registry; сохранить legacy payments/subscriptions.
   - **Входные данные**: [`commerce_integrity.detail.md` §1](04_SYSTEM_DESIGN/commerce_integrity.detail.md), [`schedule_v7.detail.md` §3](04_SYSTEM_DESIGN/schedule_v7.detail.md), результат T1.1.1.
   - **Выходные данные**: commerce/access up/down SQL и schema repository types.
