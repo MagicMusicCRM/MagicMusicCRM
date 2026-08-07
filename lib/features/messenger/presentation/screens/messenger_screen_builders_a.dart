@@ -359,19 +359,6 @@ extension _MessengerBuildersA on _MessengerScreenState {
                       contentPadding: EdgeInsets.zero,
                     ),
                   ),
-                  PopupMenuItem(
-                    value: 'theme',
-                    child: ListTile(
-                      leading: Icon(
-                        isDark
-                            ? Icons.light_mode_rounded
-                            : Icons.dark_mode_rounded,
-                      ),
-                      title: Text(isDark ? 'Светлая тема' : 'Тёмная тема'),
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ),
                   const PopupMenuDivider(),
                   const PopupMenuItem(
                     value: 'logout',
@@ -398,8 +385,6 @@ extension _MessengerBuildersA on _MessengerScreenState {
                         context.push('/profile');
                       }
                     }
-                  } else if (value == 'theme') {
-                    ref.read(themeModeProvider.notifier).toggle();
                   } else if (value == 'logout') {
                     final canLogout = await requestWorkspaceDirtyExit(
                       context,

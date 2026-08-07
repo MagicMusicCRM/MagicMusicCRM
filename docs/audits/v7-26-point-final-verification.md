@@ -1,15 +1,22 @@
 # V7 — финальная перепроверка 26 пунктов ТЗ
 
-**Дата:** 2026-08-07
-**Кандидат:** `1.5.1+157`
+**Дата:** 2026-08-08
+**Кандидат:** `1.5.1+158`
 **Источник:** `pasted-text.txt`, пункты 1–26
 **Решение:** **PRODUCTION PASS 26/26**
+
+> **Актуализация evidence от 2026-08-08.** Старый набор иллюстраций ниже
+> остаётся историей инженерной приёмки, но не используется как owner-demo:
+> часть кадров была снята из debug-сборки. Исправленный owner-документ
+> [MagicMusicCRM_26_правок_реальное_приложение_1.5.1.docx](../../outputs/MagicMusicCRM_26_правок_реальное_приложение_1.5.1.docx)
+> содержит только Windows/Android Release, единственную тёмную тему и реальные
+> production-данные. Все 24 страницы документа отрендерены и просмотрены.
 
 ## Итог без приукрашивания
 
 Все 26 пунктов имеют production UI или, где требование чисто серверное,
 авторитетный backend-contract. Найденный deployment-разрыв устранён: production
-переведён с ревизии `0488e19` на `4f1cf3c`, миграции `0102..0113` применены,
+переведён с ревизии `0488e19` на `54759e0`, миграции `0102..0113` применены,
 API healthy и проблемные v7 endpoints возвращают `200`. Полный deployment,
 backup и rollback evidence: [v7-production-backend-sync.md](v7-production-backend-sync.md).
 
@@ -59,16 +66,16 @@ device renders и backend lifecycle tests.
 ## Gates
 
 - `flutter analyze` — PASS.
-- `flutter test` — **645/645 PASS**.
+- `flutter test` — **646/646 PASS**.
 - Backend `npm run typecheck` — PASS.
 - Backend `npm run build` — PASS.
-- Backend full Jest — **155/155 suites, 1237/1237 tests PASS**.
+- Backend full Jest — **155/155 suites, 1238/1238 tests PASS**.
 - Generated inventories — v6 routes `22`, reachable `261`, unowned `0`; v7 finance sites `255`, lesson writes `7`, unowned `0` — PASS.
 - Real production accounts `magic1..5` — **5/5 roles PASS** on Windows runner.
 - Secure restart/logout/switch/same-account login — PASS.
 - Android release update-over-install — session preserved; compact direct link opens after fix.
-- Final signed APK `1.5.1+157` installed with `adb install -r` — PASS; authenticated session remained active ([final device capture](v7-26-point-ui-evidence/android/22-final-apk-session-live.png)).
-- Production revision — `4f1cf3c`; migrations — `114/114`, latest `0113`.
+- Final signed APK `1.5.1+158` installed with `adb install -r` — PASS; authenticated session remained active.
+- Production revision — `54759e0`; migrations — `114/114`, latest `0113`.
 - Production API health — `200`; internal note, operational history,
   schedule plans/series и commerce — **5/5 `200`**.
 - Production role matrix — **5/5**; Client → Director → Client relogin — PASS.
@@ -77,13 +84,14 @@ device renders и backend lifecycle tests.
 
 ## Release artifacts
 
-- Android APK: `build/app/outputs/flutter-apk/app-release.apk`, 84,606,473 bytes, SHA-256 `C0DC2C0DC5BEE953F67F06E05BF9A8F2A5F81ECD8528ECC190CBFD66370D3115`.
+- Android APK: `build/app/outputs/flutter-apk/app-release.apk`, 84,606,277 bytes, SHA-256 `9F2114214689131BC19B57F89C8072A6973D654063E6B3834DCC7673B0725812`.
 - APK signature: v2 verified, RSA 2048, certificate `CN=Magic Music CRM, OU=Release, O=Nazarova Natalia IP, L=Moscow, C=RU`.
-- Windows EXE: `build/windows/x64/runner/Release/magic_music_crm.exe`, 757,760 bytes, SHA-256 `6D3A505358815CB625929E88DD857F25D3E03BEA0C795A56C0788810C64801E3`.
+- Windows EXE: `build/windows/x64/runner/Release/magic_music_crm.exe`, 757,760 bytes, SHA-256 `12CA092970EE14C1357954179A9EB05777AD8D07305159DB074E7C38641E91EC`.
+- Owner DOCX: `outputs/MagicMusicCRM_26_правок_реальное_приложение_1.5.1.docx`, 3,279,685 bytes, SHA-256 `D37AD3C29B18D4538902A77149FB41921005E0244850D20E16D534F5F607F3A1`.
 
 ## Release decision
 
 Backend и migrations синхронизированы, version skew устранён. Повторная LIVE
 проверка rows 3/6/7/26 на Windows и Android прошла; backend больше не блокирует
-кандидат `1.5.1+157`. Публичный update manifest в рамках этой серверной операции
+кандидат `1.5.1+158`. Публичный update manifest в рамках этой серверной операции
 не изменялся.

@@ -30,7 +30,7 @@ class V7NavDestination {
 ///
 /// Presentational only: [selectedIndex] / [onSelected] index into
 /// [destinations]; RBAC (which destinations a role sees) is decided by the
-/// caller. Theme-adaptive so light mode keeps working.
+/// caller.
 class V7NavShell extends StatelessWidget {
   const V7NavShell({
     super.key,

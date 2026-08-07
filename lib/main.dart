@@ -16,7 +16,6 @@ import 'package:magic_music_crm/core/widgets/auto_dismiss_scaffold_messenger.dar
 import 'package:magic_music_crm/core/services/lead_notification_listener.dart';
 import 'package:magic_music_crm/core/services/notification_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
-import 'package:magic_music_crm/core/providers/theme_provider.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:syncfusion_localizations/syncfusion_localizations.dart';
@@ -199,7 +198,6 @@ class _MagicMusicAppState extends ConsumerState<MagicMusicApp>
     }
 
     final router = ref.watch(routerProvider);
-    final themeMode = ref.watch(themeModeProvider);
     final availableUpdate = ref.watch(availableUpdateProvider);
     final updateFlowActive = ref.watch(windowsUpdateFlowActiveProvider);
 
@@ -208,9 +206,8 @@ class _MagicMusicAppState extends ConsumerState<MagicMusicApp>
       child: MaterialApp.router(
         title: 'MagicMusic',
         debugShowCheckedModeBanner: false,
-        theme: AppTheme.light,
-        darkTheme: AppTheme.dark,
-        themeMode: themeMode,
+        theme: AppTheme.dark,
+        themeMode: ThemeMode.dark,
         routerConfig: router,
         // #16: every ScaffoldMessenger.of() in the app resolves to this
         // messenger, which strips Flutter 3.41's «action ⇒ persist forever»

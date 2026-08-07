@@ -83,7 +83,7 @@ void main() {
   group('AppTheme — v7 token alignment (no regression elsewhere)', () {
     test('error color tracks v7 --danger', () {
       expect(AppTheme.dark.colorScheme.error, AppColor.danger);
-      expect(AppTheme.light.colorScheme.error, AppColor.danger);
+      expect(AppTheme.dark.brightness, Brightness.dark);
     });
 
     test(

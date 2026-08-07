@@ -4,11 +4,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
+import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/clients_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/manager_overview_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/reports_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tasks_v4_panel.dart';
 import 'package:magic_music_crm/features/messenger/presentation/screens/messenger_screen.dart';
+import 'package:magic_music_crm/core/widgets/v7/v7_nav_shell.dart';
 
 import 'messenger_test_api.dart';
 
@@ -61,6 +63,34 @@ Future<RecordingFakeApiClient> _pumpStaffMessenger(
 
 void main() {
   setUpAll(() => initializeDateFormatting('ru', null));
+
+  testWidgets('desktop workspace does not render a duplicate mobile nav bar', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final api = RecordingFakeApiClient(profileRole: 'teacher');
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          magicApiClientProvider.overrideWithValue(api),
+          capabilitySnapshotProvider.overrideWith(
+            (ref) async => _staffSnapshot('teacher'),
+          ),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.dark,
+          home: const MessengerScreen(role: 'teacher', workspaceOwned: true),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 150));
+
+    expect(find.byType(V7NavShell), findsNothing);
+  });
 
   testWidgets('manager can open Tasks from the mobile overflow navigation', (
     tester,

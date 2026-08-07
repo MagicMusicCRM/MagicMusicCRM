@@ -13,8 +13,8 @@ void main() {
       File('assets/fonts/InterVariable-Italic.ttf').lengthSync(),
       greaterThan(0),
     );
-    expect(AppTheme.light.textTheme.bodyMedium?.fontFamily, 'Inter');
     expect(AppTheme.dark.textTheme.bodyMedium?.fontFamily, 'Inter');
+    expect(AppTheme.dark.brightness, Brightness.dark);
     expect(AppMotion.fast, const Duration(milliseconds: 160));
     expect(AppMotion.medium, const Duration(milliseconds: 240));
     expect(AppMotion.slow, const Duration(milliseconds: 300));
@@ -29,7 +29,7 @@ void main() {
       addTearDown(tester.view.reset);
       await tester.pumpWidget(
         MaterialApp(
-          theme: AppTheme.light,
+          theme: AppTheme.dark,
           home: MediaQuery(
             data: const MediaQueryData(
               textScaler: TextScaler.linear(2),

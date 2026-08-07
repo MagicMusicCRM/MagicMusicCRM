@@ -33,7 +33,6 @@ import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/core/services/magic_messenger_service.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/core/services/magic_realtime_service.dart';
-import 'package:magic_music_crm/core/providers/theme_provider.dart';
 import 'package:magic_music_crm/core/providers/crm_navigation_provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/features/profile/presentation/screens/profile_screen.dart';
@@ -383,8 +382,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       selectedTab: selectedCrmTab,
     );
 
-    if (isDesktop &&
-        !(widget.workspaceOwned && MediaQuery.sizeOf(context).width >= 840)) {
+    if (isDesktop && !widget.workspaceOwned) {
       return Scaffold(
         body: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -411,7 +409,8 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         onBack: () => _consumeBackNavigation(includeCrmTabs: true),
         child: Scaffold(
           body: SafeArea(child: bodyContent),
-          bottomNavigationBar: selectedCrmTab == 0 && _selectedChatId != null
+          bottomNavigationBar:
+              isDesktop || (selectedCrmTab == 0 && _selectedChatId != null)
               ? null // Hide bar in chat view
               : V7NavShell(
                   isDesktop: false,
