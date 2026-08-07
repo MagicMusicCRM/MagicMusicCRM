@@ -32,7 +32,13 @@ graph TD
   R --> I4
   S --> I4
   T --> I4
-  I4 --> U["T6.1.1 Full gates"] --> V["T6.1.2 Devices/build"] --> W["T6.1.3 Release docs"] --> I5["INT-S5"]
+  I4 --> X["T5.2.1 Entity text + adaptive client"]
+  I4 --> Y["T5.2.2 Plan preview + rows"]
+  I4 --> Z["T5.2.3 Planned settlement + worker"] --> C2["T5.2.4 Correction + UI"]
+  X --> I4R["INT-S4R"]
+  Y --> I4R
+  C2 --> I4R
+  I4R --> U["T6.1.1 Full gates"] --> V["T6.1.2 Devices/build"] --> W["T6.1.3 Release 1.5.1"] --> I5["INT-S5"]
 ```
 
 ## Дорожная карта
@@ -44,6 +50,7 @@ graph TD
 | S2 | Lesson Integrity | catalogs + manual settlement + unified transition | no direct temporal PATCH; N client + 1 teacher facts | 34 ч |
 | S3 | Recurring Plans | named plans, rows, end/history/tray | active/ended/group/individual flows green | 22 ч |
 | S4 | Client Workspace | adaptive UI, note/history/actions/config | desktop/mobile parity and no duplicate Actions | 30 ч |
+| S4R | Owner Refinement | entity-text links, plan conflicts, planned auto settlement/correction | atomic worker/correction + explainable constraints + adaptive parity | 74 ч |
 | S5 | Final Candidate | full regression, devices, release evidence | all gates + 5 accounts + signed artifacts | 24 ч |
 
 ## S0 — Data Foundation
@@ -425,13 +432,94 @@ graph TD
   - **Зависимости**: T5.1.1–T5.1.4, INT-S3.
   - **Приоритет**: P0.
 
+## S4R — Owner Refinement
+
+### SYS-APP-EXPERIENCE / SYS-CRM-WORKSPACE
+
+- [x] **T5.2.1** [REQ-CLIENT-101]: Entity-text navigation, client calendar focus и adaptive Client Card
+  - **Описание**: Удалить отдельные internal open/new-tab controls; все typed related records открывать по тексту сущности. Desktop всегда создаёт/выбирает новую workspace tab с source view state; compact использует canonical stack. Добавить default hide-other client lessons и compact thematic tabs без duplicate providers.
+  - **Входные данные**: INT-S4, ADR-003, `crm_workspace_v7.md` §3/8.
+  - **Выходные данные**: единый navigator policy, text-link affordances и adaptive Client Card/calendar.
+  - **📎 Ссылка**: US-V7-009, ADR-003.
+  - **Критерии приемки**:
+    - Given typed client/teacher/room/group/lesson/payment/subscription/task/user label, When activated by pointer/keyboard, Then desktop opens one new selected tab and source tab remains byte-equivalent; compact pushes canonical route.
+    - Given Client Card calendar first expansion, Then hide-other checked; unchecked shows current client green and others neutral in Month/Week/Day.
+    - Given desktop/compact, Then one long canvas vs thematic tabs share the same providers/commands and forbidden requests remain 0.
+  - **Тип верификации**: Flutter unit/widget/integration + Windows/Android smoke.
+  - **Инструкция по верификации**: typed navigation policy, link affordance, workspace limit/source-state, client schedule colors and widths 360/600/840/1200.
+  - **Оценка**: 12 ч.
+  - **Зависимости**: INT-S4.
+  - **Приоритет**: P0.
+
+### SYS-SCHEDULE / SYS-CRM-WORKSPACE
+
+- [x] **T5.2.2** [REQ-SCHEDULE-102, REQ-SCHEDULE-103]: Multi-row plan editor и authoritative constraints preview
+  - **Описание**: Добавить plan preview endpoint поверх существующих occurrence expansion/constraint engine; UI common defaults + repeatable rows с required teacher/room/decision и понятными per-date violations/typed links.
+  - **Входные данные**: INT-S4, `schedule_v7.md` §5/6/9, existing ScheduleConstraintEngine.
+  - **Выходные данные**: preview DTO/controller/service и Flutter multi-row plan editor.
+  - **📎 Ссылка**: US-V7-008, US-V7-013, ADR-009.
+  - **Критерии приемки**:
+    - Given rows across dates, When preview/commit runs, Then both use the same half-open teacher/client/room/branch validation and return identical violations.
+    - Given same teacher/room overlap, Then save blocked with date/resource/conflicting lesson; different free teacher+room allowed.
+    - Given existing group lesson, When participant added, Then no duplicate teacher/room booking is created.
+  - **Тип верификации**: PostgreSQL integration + Flutter widget.
+  - **Инструкция по верификации**: cross-plan/cross-row/DST/open-ended matrix and visible error-link tests.
+  - **Оценка**: 16 ч.
+  - **Зависимости**: INT-S4.
+  - **Приоритет**: P0.
+
+### SYS-SCHEDULE / SYS-COMMERCE-INTEGRITY / SYS-PLATFORM-QUALITY
+
+- [x] **T5.2.3** [REQ-LESSON-101, REQ-LESSON-102, REQ-LESSON-103]: Planned settlement schema, reservations и automatic worker
+  - **Описание**: Добавить versioned planned decision bound к immutable config revisions для individual/group lessons и plan rows; create/update reservations атомарно; completion worker вызывает existing settlement port и пишет terminal facts exactly once.
+  - **Входные данные**: INT-S4, ADR-008/009, `commerce_integrity.md` §5/7, `schedule_v7.detail.md` §1.
+  - **Выходные данные**: additive migration/backfill, DTO/services/worker, Flutter required selectors.
+  - **📎 Ссылка**: US-V7-005/006/012.
+  - **Критерии приемки**:
+    - Given create/plan lesson, Then settlement/pay selections required, free lesson = zero client settlement, config revision frozen and exact reservation allocated.
+    - Given lesson end, When worker succeeds/replays/restarts, Then one terminal transition, N client facts and one teacher fact; reconciliation delta 0.
+    - Given domain/persistent failure, Then no partial facts and lesson is review-required with staff-safe reason.
+  - **Тип верификации**: migration + PostgreSQL concurrency/fault + Flutter widget.
+  - **Инструкция по верификации**: down→up, create/edit/plan/group, worker kill/retry/poison, subscription race and catalog rollback.
+  - **Оценка**: 26 ч.
+  - **Зависимости**: INT-S4.
+  - **Приоритет**: P0.
+
+- [x] **T5.2.4** [REQ-LESSON-103, REQ-REPORT-101]: Atomic pre-start edit и post-terminal correction
+  - **Описание**: Реализовать signed preview/commit: до старта менять planned decision/reservations; после settlement одной транзакцией создавать reversal/exclusion и optional replacement. Причина/author/effective result доступны staff и ordinary reporting не видит superseded facts.
+  - **Входные данные**: T5.2.3, ADR-008/009, reporting inventory T1.1.1.
+  - **Выходные данные**: correction schema/service/API/UI/history/reconciliation.
+  - **📎 Ссылка**: US-V7-010/011/012.
+  - **Критерии приемки**:
+    - Given pre-start edit, Then expected versions and reservation delta commit together.
+    - Given completed lesson, When correction replacement/cancel commits, Then source facts immutable, reversal+replacement all-or-nothing, payroll/client/report totals show only effective result.
+    - Given Admin/Manager/Director, Then full human reason is visible; Teacher/Client receive no hidden finance/audit fields.
+  - **Тип верификации**: PostgreSQL fault/reconciliation + Actor Matrix + Flutter widget.
+  - **Инструкция по верификации**: two-writer/replay/failure-at-each-write, all reporting consumers and staff history.
+  - **Оценка**: 14 ч.
+  - **Зависимости**: T5.2.3.
+  - **Приоритет**: P0.
+
+- [x] **INT-S4R** [MILESTONE]: Owner refinement integration gate
+  - **Описание**: Доказать четыре уточнённых потока вместе: text links, client calendar/adaptive card, recurring constraints и planned auto settlement/correction.
+  - **Входные данные**: T5.2.1–T5.2.4.
+  - **Выходные данные**: `docs/audits/v7-int-s4r-owner-refinement.md`.
+  - **📎 Ссылка**: US-V7-009/012/013, ADR-003/009.
+  - **Критерии приемки**:
+    - Given accounts 3/4/5, Windows/Android and real PostgreSQL, When complete stories run, Then source state survives links, conflicts explain failure, worker/correction remain atomic and hidden requests/leaks=0.
+  - **Тип верификации**: Integration/Smoke/E2E.
+  - **Инструкция по верификации**: targeted/full suites plus real-device/network-log story matrix.
+  - **Оценка**: 6 ч.
+  - **Зависимости**: T5.2.1–T5.2.4.
+  - **Приоритет**: P0.
+
 ## S5 — Final Candidate
 
 ### SYS-PLATFORM-QUALITY / Release
 
-- [ ] **T6.1.1** [REQ-REPORT-101]: Полный regression/security/reconciliation gate
+- [x] **T6.1.1** [REQ-REPORT-101]: Полный regression/security/reconciliation gate
   - **Описание**: Запустить/исправить full backend/Flutter, Actor Matrix, inventories, migrations и reconciliation без ослабления checks.
-  - **Входные данные**: INT-S4, ADR-007 §Стратегия проверки.
+  - **Входные данные**: INT-S4R, ADR-007 §Стратегия проверки.
   - **Выходные данные**: green logs and error inventory.
   - **📎 Ссылка**: `access_audit_v7.md` §7.
   - **Критерии приемки**:
@@ -439,10 +527,10 @@ graph TD
   - **Тип верификации**: Full regression/security.
   - **Инструкция по верификации**: backend typecheck/build/test/security; Flutter analyze/test; migration/preflight/inventory twice.
   - **Оценка**: 8 ч.
-  - **Зависимости**: INT-S4.
+  - **Зависимости**: INT-S4R.
   - **Приоритет**: P0.
 
-- [ ] **T6.1.2** [REQ-COMMERCE-101, REQ-SCHEDULE-101, REQ-CLIENT-101]: Windows/Android и 5 аккаунтов
+- [x] **T6.1.2** [REQ-COMMERCE-101, REQ-SCHEDULE-101, REQ-CLIENT-101]: Windows/Android и 5 аккаунтов
   - **Описание**: Выполнить реальный login/relogin и story UAT на target devices, собрать release artifacts и проверить подпись/launch.
   - **Входные данные**: T6.1.1, реальные `magic1..5@gmail.com` / `123456`.
   - **Выходные данные**: screenshots/logs/checklist, Windows/APK/AAB artifacts.
@@ -456,8 +544,8 @@ graph TD
   - **Зависимости**: T6.1.1.
   - **Приоритет**: P0.
 
-- [ ] **T6.1.3** [REQ-REPORT-101]: Оформить final candidate v7
-  - **Описание**: Обновить version, audits, manifest/changelog/AGENTS/tasks, release hashes and rollback notes; удалить только доказанный dead adapter/code.
+- [x] **T6.1.3** [REQ-REPORT-101]: Оформить final candidate v7 `1.5.1`
+  - **Описание**: Только после green real checks установить version `1.5.1`, обновить audits, manifest/changelog/AGENTS/tasks, release hashes and rollback notes; удалить только доказанный dead adapter/code.
   - **Входные данные**: T6.1.2, все INT reports.
   - **Выходные данные**: final candidate audit, checked tasks, clean inventory/versioned artifacts.
   - **📎 Ссылка**: ADR-006, ADR-007.
@@ -469,7 +557,7 @@ graph TD
   - **Зависимости**: T6.1.2.
   - **Приоритет**: P0.
 
-- [ ] **INT-S5** [MILESTONE]: Финальная приёмка v7
+- [x] **INT-S5** [MILESTONE]: Финальная приёмка v7
   - **Описание**: Принять или отклонить v7 по фактическим evidence, не по наличию кода.
   - **Входные данные**: T6.1.1–T6.1.3.
   - **Выходные данные**: `docs/audits/v7-final-candidate.md`, release decision.
@@ -497,10 +585,12 @@ graph TD
 | US-V7-009 Card actions | T5.1.1→T5.1.3→INT-S4 | no general Actions/duplicates | Полное |
 | US-V7-010 Note/reasons | T2.1.5→T5.1.2→INT-S4 | staff context survives conversion | Полное |
 | US-V7-011 RBAC/reports | T1.1.1→T2.1.3→T2.1.5→T6.1.1→INT-S5 | roles/leaks/reports/reconcile | Полное |
+| US-V7-012 Planned auto settlement | T5.2.3→T5.2.4→INT-S4R→INT-S5 | required preselection, atomic worker/correction | Полное |
+| US-V7-013 Plan constraints preview | T5.2.2→INT-S4R→INT-S5 | per-row/date explainable conflicts | Полное |
 
 ## Итог
 
-- Level-3 implementation tasks: **24**
-- Integration milestones: **6**
-- P0 tasks/milestones: **27**; P1: **3**
-- Прогноз: **169 ч** включая проверки и release evidence.
+- Level-3 implementation tasks: **28**
+- Integration milestones: **7**
+- P0 tasks/milestones: **32**; P1: **3**
+- Прогноз: **243 ч** включая проверки и release evidence.

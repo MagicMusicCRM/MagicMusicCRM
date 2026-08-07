@@ -1225,7 +1225,7 @@ export class ScheduleService {
                        where reservation.subscription_id = subscription.id
                          and reservation.state = 'reserved'), 0)
                    - coalesce((select sum(fact.units)
-                       from app.lesson_client_charge_facts fact
+                       from app.lesson_client_charge_facts_effective fact
                        where fact.subscription_id = subscription.id
                          and fact.charge_type = 'subscription'), 0)
                  ) as available
@@ -1288,11 +1288,37 @@ export class ScheduleService {
           subscription_id, trial, duration_minutes
         )
         select lesson.id, 'student', plan.student_id, 'scheduled',
-          'subscription', lesson.duration_minutes::numeric / 60,
-          'none', 0, plan.subscription_id, false, lesson.duration_minutes
+          'subscription',
+          round(
+            lesson.duration_minutes::numeric
+              * (settlement.item->>'hourShareBasisPoints')::numeric / 6000
+          ) / 100,
+          case when rate.value > 0 then 'fixed' else 'none' end,
+          rate.value, plan.subscription_id, false, lesson.duration_minutes
         from app.lessons lesson
         join app.schedule_series series on series.id = lesson.series_id
         join app.schedule_plans plan on plan.id = series.plan_id
+        join app.crm_configuration_revisions revision
+          on revision.id = series.settlement_revision_id
+        cross join lateral (
+          select item
+          from jsonb_array_elements(
+            revision.effective_snapshot->'lessonSettlementTypes'
+          ) item
+          where item->>'stableKey' =
+            series.planned_financial_decision->>'settlementTypeKey'
+          limit 1
+        ) settlement
+        cross join lateral (
+          select coalesce((
+            select teacher_rate.rate
+            from app.teacher_rates teacher_rate
+            where teacher_rate.teacher_id = series.teacher_id
+              and teacher_rate.effective_from <= lesson.scheduled_at::date
+            order by teacher_rate.effective_from desc, teacher_rate.created_at desc
+            limit 1
+          ), 0)::numeric as value
+        ) rate
         where lesson.id = any($1::uuid[]) and plan.kind = 'individual'
         on conflict (lesson_id) do nothing
       `,
@@ -1307,10 +1333,22 @@ export class ScheduleService {
           trial, duration_minutes
         )
         select lesson.id, plan.group_id, 'scheduled', 'none', 0,
-          'none', 0, false, lesson.duration_minutes
+          case when rate.value > 0 then 'fixed' else 'none' end,
+          rate.value, false, lesson.duration_minutes
         from app.lessons lesson
         join app.schedule_series series on series.id = lesson.series_id
         join app.schedule_plans plan on plan.id = series.plan_id
+        join app.groups lesson_group on lesson_group.id = plan.group_id
+        cross join lateral (
+          select coalesce(lesson_group.teacher_rate, (
+            select teacher_rate.rate
+            from app.teacher_rates teacher_rate
+            where teacher_rate.teacher_id = series.teacher_id
+              and teacher_rate.effective_from <= lesson.scheduled_at::date
+            order by teacher_rate.effective_from desc, teacher_rate.created_at desc
+            limit 1
+          ), 0)::numeric as value
+        ) rate
         where lesson.id = any($1::uuid[]) and plan.kind = 'group'
         on conflict (lesson_id) do nothing
       `,
@@ -1322,9 +1360,24 @@ export class ScheduleService {
           lesson_id, student_id, charge_type, charge_value, subscription_id
         )
         select lesson.id, participant.student_id, 'subscription',
-          lesson.duration_minutes::numeric / 60, participant.subscription_id
+          round(
+            lesson.duration_minutes::numeric
+              * (settlement.item->>'hourShareBasisPoints')::numeric / 6000
+          ) / 100,
+          participant.subscription_id
         from app.lessons lesson
         join app.schedule_series series on series.id = lesson.series_id
+        join app.crm_configuration_revisions revision
+          on revision.id = series.settlement_revision_id
+        cross join lateral (
+          select item
+          from jsonb_array_elements(
+            revision.effective_snapshot->'lessonSettlementTypes'
+          ) item
+          where item->>'stableKey' =
+            series.planned_financial_decision->>'settlementTypeKey'
+          limit 1
+        ) settlement
         join app.schedule_plan_participants participant
           on participant.plan_id = series.plan_id
          and participant.effective_from <= lesson.series_date
@@ -1332,6 +1385,41 @@ export class ScheduleService {
            or participant.effective_until >= lesson.series_date)
         where lesson.id = any($1::uuid[])
         on conflict (lesson_id, student_id) do nothing
+      `,
+      [lessonIds],
+    );
+    await executor.query(
+      `
+        insert into app.lesson_settlement_plans (
+          lesson_id, decision, settlement_revision_id,
+          compensation_revision_id, selected_by
+        )
+        select lesson.id, series.planned_financial_decision,
+          series.settlement_revision_id, series.compensation_revision_id,
+          series.created_by
+        from app.lessons lesson
+        join app.schedule_series series on series.id = lesson.series_id
+        where lesson.id = any($1::uuid[])
+          and series.planned_financial_decision is not null
+        on conflict (lesson_id) do nothing
+      `,
+      [lessonIds],
+    );
+    await executor.query(
+      `
+        insert into app.lesson_settlement_plan_revisions (
+          lesson_id, version, decision, settlement_revision_id,
+          compensation_revision_id, actor_user_id
+        )
+        select lesson.id, 1, series.planned_financial_decision,
+          series.settlement_revision_id, series.compensation_revision_id,
+          series.created_by
+        from app.lessons lesson
+        join app.schedule_series series on series.id = lesson.series_id
+        join app.lesson_settlement_plans plan on plan.lesson_id = lesson.id
+        where lesson.id = any($1::uuid[])
+          and series.planned_financial_decision is not null
+        on conflict (lesson_id, version) do nothing
       `,
       [lessonIds],
     );
@@ -1365,6 +1453,7 @@ export class ScheduleService {
         where snapshot.lesson_id = any($1::uuid[])
           and series.plan_id is not null
           and snapshot.client_charge_type = 'subscription'
+          and snapshot.client_charge_value > 0
         union all
         select participant.lesson_id, participant.student_id,
           participant.subscription_id, participant.charge_value::text
@@ -1374,6 +1463,7 @@ export class ScheduleService {
         where participant.lesson_id = any($1::uuid[])
           and series.plan_id is not null
           and participant.charge_type = 'subscription'
+          and participant.charge_value > 0
         order by subscription_id, lesson_id
       `,
       [lessonIds],

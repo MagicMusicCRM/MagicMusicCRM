@@ -17,6 +17,7 @@ import {
   MinLength,
   ValidateNested,
 } from "class-validator";
+import { ConfiguredLessonFinancialDecisionDto } from "./lesson-financial-decision.dto";
 
 export class SchedulePlanRowDto {
   @IsOptional()
@@ -52,6 +53,15 @@ export class SchedulePlanRowDto {
   @IsString()
   @MaxLength(500)
   notes?: string;
+
+  @ValidateNested()
+  @Type(() => ConfiguredLessonFinancialDecisionDto)
+  financialDecision!: ConfiguredLessonFinancialDecisionDto;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  plannedSettlementReason?: string;
 }
 
 export class SchedulePlanParticipantDto {
@@ -101,6 +111,8 @@ export class CreateSchedulePlanDto {
   @Type(() => SchedulePlanParticipantDto)
   participants?: SchedulePlanParticipantDto[];
 }
+
+export class SchedulePlanConstraintPreviewDto extends CreateSchedulePlanDto {}
 
 export class UpdateSchedulePlanDto {
   @Type(() => Number)

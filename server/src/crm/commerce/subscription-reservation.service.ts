@@ -96,7 +96,7 @@ export class SubscriptionReservationService {
             $2::numeric + coalesce(
               (
                 select sum(fact.units)
-                from app.lesson_client_charge_facts fact
+                from app.lesson_client_charge_facts_effective fact
                 where fact.subscription_id = $1
                   and fact.charge_type = 'subscription'
               ),
@@ -126,7 +126,7 @@ export class SubscriptionReservationService {
       );
     }
 
-    await client.query(
+    const reservationWrite = await client.query(
       `
         insert into app.lesson_reservations (
           lesson_id,
@@ -134,9 +134,21 @@ export class SubscriptionReservationService {
           units
         )
         values ($1, $2, $3)
+        on conflict (lesson_id, subscription_id) do update
+          set units = excluded.units,
+              state = 'reserved',
+              financial_fact_id = null,
+              terminal_at = null,
+              version = app.lesson_reservations.version + 1,
+              updated_at = now()
+          where app.lesson_reservations.state = 'released'
+        returning id
       `,
       [input.lessonId, input.subscriptionId, input.units],
     );
+    if (!reservationWrite.rows[0]) {
+      this.capacityViolation(input.subscriptionId, input.units, "0");
+    }
   }
 
   async lockSettlementCoverage(
@@ -191,7 +203,7 @@ export class SubscriptionReservationService {
           subscription.lessons_total::text, subscription.lessons_used::text,
           coalesce((
             select sum(fact.units)
-            from app.lesson_client_charge_facts fact
+            from app.lesson_client_charge_facts_effective fact
             where fact.subscription_id = subscription.id
               and fact.charge_type = 'subscription'
           ), 0)::text as settled_units,
@@ -335,7 +347,7 @@ export class SubscriptionReservationService {
           select
             fact.client_id as student_id,
             fact.subscription_id
-          from app.lesson_client_charge_facts fact
+          from app.lesson_client_charge_facts_effective fact
           where fact.lesson_id = $1 and fact.client_type = 'student'
         `,
         [lessonId],

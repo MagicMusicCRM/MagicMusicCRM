@@ -497,34 +497,6 @@ class _TaskTileState extends State<_TaskTile> {
   }
 }
 
-class _EntityOpenButtons extends StatelessWidget {
-  const _EntityOpenButtons({required this.onOpen});
-
-  final ValueChanged<EntityOpenTarget> onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    final desktop =
-        WorkspaceNavigationScope.maybeOf(context)?.isDesktop == true;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton(
-          tooltip: 'Открыть связанную запись',
-          onPressed: () => onOpen(EntityOpenTarget.current),
-          icon: const Icon(Icons.chevron_right_rounded, size: 20),
-        ),
-        if (desktop)
-          IconButton(
-            tooltip: 'Открыть в новой вкладке',
-            onPressed: () => onOpen(EntityOpenTarget.newTab),
-            icon: const Icon(Icons.open_in_new_rounded, size: 18),
-          ),
-      ],
-    );
-  }
-}
-
 /// One labelled info row for compact read-only card sections.
 class _InfoRow extends StatelessWidget {
   final IconData icon;
@@ -587,13 +559,24 @@ class _InfoRow extends StatelessWidget {
                       fontSize: 11,
                     ),
                   ),
-                  Text(
-                    value,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
+                  if (onOpen == null)
+                    Text(
+                      value,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    )
+                  else
+                    EntityLinkText(
+                      text: value,
+                      onPressed: () =>
+                          onOpen!(context, EntityOpenTarget.current),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                  ),
                   if (hint != null)
                     Text(
                       hint!,
@@ -614,26 +597,11 @@ class _InfoRow extends StatelessWidget {
               const SizedBox(width: AppSpace.sm),
               trailing!,
             ],
-            if (onOpen != null)
-              _EntityOpenButtons(onOpen: (target) => onOpen!(context, target)),
           ],
         ),
       ),
     );
-    if (onOpen == null) return content;
-    return Semantics(
-      button: true,
-      link: true,
-      label: '$label: $value',
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(AppRadius.control),
-          onTap: () => onOpen!(context, EntityOpenTarget.current),
-          child: content,
-        ),
-      ),
-    );
+    return content;
   }
 }
 

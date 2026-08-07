@@ -8,14 +8,14 @@
 
 | Slice | Count |
 |---|---:|
-| Dart files | 261 |
-| Files reachable from main.dart | 260 |
+| Dart files | 262 |
+| Files reachable from main.dart | 261 |
 | GoRouter routes | 22 |
 | Screen/Page classes | 21 |
 | Production-reachable screens | 21 |
 | Isolated/unreachable screens | 0 |
-| Modal/sheet/drawer callsites | 97 |
-| Reachable surface callsites | 97 |
+| Modal/sheet/drawer callsites | 98 |
+| Reachable surface callsites | 98 |
 | Screens missing loading/error/retry evidence | 0 |
 | Unowned items | 0 |
 

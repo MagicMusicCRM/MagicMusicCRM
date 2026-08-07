@@ -14,6 +14,7 @@ import {
   ValidateNested,
 } from "class-validator";
 import { ClientRefDto } from "./client-ref.dto";
+import { ConfiguredLessonFinancialDecisionDto } from "./lesson-financial-decision.dto";
 
 /**
  * Contract 7 (правки №2): the pinned attendee reference shape. A lesson's
@@ -124,4 +125,14 @@ export class UpsertLessonDto {
   @Min(0)
   @Max(100000)
   teacherRate?: number;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ConfiguredLessonFinancialDecisionDto)
+  financialDecision?: ConfiguredLessonFinancialDecisionDto;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  plannedSettlementReason?: string;
 }

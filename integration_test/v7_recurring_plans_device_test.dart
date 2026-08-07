@@ -33,6 +33,10 @@ const _activePlan = {
       'durationMinutes': 60,
       'validFrom': '2026-08-01',
       'validUntil': null,
+      'financialDecision': {
+        'settlementTypeKey': 'free_lesson',
+        'teacherCompensationRuleKey': 'none',
+      },
       'active': true,
     },
   ],
@@ -65,9 +69,11 @@ void main() {
       ],
       teachers: const [
         {'id': 'teacher-1', 'firstName': 'Мария', 'lastName': 'Иванова'},
+        {'id': 'teacher-2', 'firstName': 'Пётр', 'lastName': 'Сидоров'},
       ],
       rooms: const [
         {'id': 'room-1', 'branchId': 'branch-1', 'name': 'Класс 1'},
+        {'id': 'room-2', 'branchId': 'branch-1', 'name': 'Класс 2'},
       ],
       schedulePlans: const [_activePlan, _endedPlan],
       schedulePlanTrays: const {
@@ -151,6 +157,31 @@ void main() {
     await _chooseReferences(tester);
     await _saveEditor(tester);
     expect(
+      find.byKey(const ValueKey('schedule-plan-row-group-0')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('schedule-plan-add-row-group')));
+    await tester.pumpAndSettle();
+    final currentDay = DateTime.now().weekday;
+    final otherDay = currentDay == 7 ? 1 : currentDay + 1;
+    await tester.tap(
+      find.byKey(ValueKey('preferred-schedule-weekday-$currentDay')),
+    );
+    await tester.tap(
+      find.byKey(ValueKey('preferred-schedule-weekday-$otherDay')),
+    );
+    await tester.tap(find.text('Мария Иванова').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Пётр Сидоров').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Класс 1').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Класс 2').last);
+    await tester.pumpAndSettle();
+    await _saveEditor(tester);
+    await tester.tap(find.byKey(const Key('schedule-plan-preview-and-create')));
+    await tester.pumpAndSettle();
+    expect(
       api.idempotentRequests.where(
         (request) => request.path == '/crm/schedule-plans',
       ),
@@ -207,6 +238,19 @@ Future<void> _chooseReferences(WidgetTester tester) async {
   await tester.tap(room);
   await tester.pumpAndSettle();
   await tester.tap(find.text('Класс 1').last);
+  await tester.pumpAndSettle();
+  await tester.ensureVisible(
+    find.byKey(const ValueKey('schedule-plan-settlement-type')),
+  );
+  await tester.tap(find.byKey(const ValueKey('schedule-plan-settlement-type')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Бесплатное занятие').last);
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.byKey(const ValueKey('schedule-plan-compensation-rule')),
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Не оплачивать').last);
   await tester.pumpAndSettle();
 }
 

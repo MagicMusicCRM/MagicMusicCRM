@@ -74,6 +74,33 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
     expect(payroll.debt).toBe(1500);
   });
 
+  it("uses the effective immutable settlement fact instead of recalculating payroll", async () => {
+    const { service, query } = createServiceWithQueryResults([
+      {
+        rows: [lessonRow({
+          student_id: "s-1",
+          teacher_rate: "9999",
+          settlement_fact_id: "fact-effective",
+          settled_amount_minor: "12345",
+        })],
+      },
+      {
+        rows: [
+          { teacher_id: "t-1", rate: "600", effective_from: "2026-01-01" },
+        ],
+      },
+      { rows: [] },
+    ]);
+
+    const payroll = await service.getTeacherPayroll(actor, "t-1");
+
+    expect(payroll.accruedTotal).toBe(123.45);
+    expect(payroll.debt).toBe(123.45);
+    expect(String(query.mock.calls[0][0])).toContain(
+      "app.lesson_teacher_compensation_facts_effective",
+    );
+  });
+
   it("применяет коэффициенты статусов и переопределение ставки группы", async () => {
     const { service } = createServiceWithQueryResults([
       {

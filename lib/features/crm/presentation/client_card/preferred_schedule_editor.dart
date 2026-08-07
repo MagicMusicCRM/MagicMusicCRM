@@ -4,6 +4,7 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision_flow.dart';
 
 class PreferredScheduleDraft {
   const PreferredScheduleDraft({
@@ -19,6 +20,8 @@ class PreferredScheduleDraft {
     required this.notes,
     this.title,
     this.subscriptionId,
+    this.settlementTypeKey = '',
+    this.teacherCompensationRuleKey = '',
     this.openEnded = false,
   });
 
@@ -34,6 +37,8 @@ class PreferredScheduleDraft {
   final String notes;
   final String? title;
   final String? subscriptionId;
+  final String settlementTypeKey;
+  final String teacherCompensationRuleKey;
   final bool openEnded;
 }
 
@@ -46,10 +51,14 @@ class PreferredScheduleEditor extends StatefulWidget {
     this.series,
     this.planMode = false,
     this.initialTitle,
+    this.initialDraft,
     this.subscriptionOptions = const [],
     this.initialSubscriptionId,
     this.requireSubscription = false,
     this.allowOpenEnded = false,
+    this.showPeriod = true,
+    this.decisionCatalogs = const {},
+    this.requireFinancialDecision = false,
     super.key,
   });
 
@@ -60,10 +69,14 @@ class PreferredScheduleEditor extends StatefulWidget {
   final Map<String, dynamic>? series;
   final bool planMode;
   final String? initialTitle;
+  final PreferredScheduleDraft? initialDraft;
   final List<Map<String, dynamic>> subscriptionOptions;
   final String? initialSubscriptionId;
   final bool requireSubscription;
   final bool allowOpenEnded;
+  final bool showPeriod;
+  final Map<String, LessonDecisionCatalog> decisionCatalogs;
+  final bool requireFinancialDecision;
 
   @override
   State<PreferredScheduleEditor> createState() =>
@@ -86,6 +99,8 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
   String? _teacherId;
   String? _roomId;
   String? _subscriptionId;
+  String? _settlementTypeKey;
+  String? _teacherCompensationRuleKey;
   late bool _openEnded;
   String? _error;
 
@@ -95,36 +110,45 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
   void initState() {
     super.initState();
     final series = widget.series;
+    final initial = widget.initialDraft;
     final availableBranchIds = widget.branches
         .map((branch) => branch['id']?.toString() ?? '')
         .where((id) => id.isNotEmpty)
         .toSet();
     final seriesBranch = series?['branch_id']?.toString();
-    final preferredBranch = seriesBranch ?? widget.defaultBranchId;
+    final preferredBranch =
+        seriesBranch ?? initial?.branchId ?? widget.defaultBranchId;
     _branchId = availableBranchIds.contains(preferredBranch)
         ? preferredBranch!
         : (availableBranchIds.isEmpty ? '' : availableBranchIds.first);
-    _weekdays = {
-      (series?['weekday'] as num?)?.toInt() ?? DateTime.now().weekday,
-    };
-    _beginTime = series?['begin_time']?.toString() ?? '15:00';
-    _durationMinutes = (series?['duration_minutes'] as num?)?.toInt() ?? 60;
-    _lessonsPerDay = 1;
+    _weekdays = series == null
+        ? Set.of(initial?.weekdays ?? {DateTime.now().weekday})
+        : {(series['weekday'] as num?)?.toInt() ?? DateTime.now().weekday};
+    _beginTime =
+        series?['begin_time']?.toString() ?? initial?.beginTime ?? '15:00';
+    _durationMinutes =
+        (series?['duration_minutes'] as num?)?.toInt() ??
+        initial?.durationMinutes ??
+        60;
+    _lessonsPerDay = initial?.lessonsPerDay ?? 1;
     final today = DateUtils.dateOnly(DateTime.now());
     final requestedStart =
-        _date(series?['valid_from']) ?? today.add(const Duration(days: 1));
+        _date(series?['valid_from']) ??
+        initial?.validFrom ??
+        today.add(const Duration(days: 1));
     _validFrom = _isEdit && requestedStart.isBefore(today)
         ? today
         : requestedStart;
     _validUntil =
         _date(series?['valid_until']) ??
+        initial?.validUntil ??
         _validFrom.add(const Duration(days: 90));
     if (_validUntil.isBefore(_validFrom)) {
       _validUntil = _validFrom.add(const Duration(days: 90));
     }
-    _teacherId = series?['teacher_id']?.toString();
-    _roomId = series?['room_id']?.toString();
-    _subscriptionId = widget.initialSubscriptionId;
+    _teacherId = series?['teacher_id']?.toString() ?? initial?.teacherId;
+    _roomId = series?['room_id']?.toString() ?? initial?.roomId;
+    _subscriptionId = widget.initialSubscriptionId ?? initial?.subscriptionId;
     if (!widget.subscriptionOptions.any(
       (option) => option['id']?.toString() == _subscriptionId,
     )) {
@@ -132,7 +156,21 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
           ? null
           : widget.subscriptionOptions.first['id']?.toString();
     }
-    _openEnded = widget.allowOpenEnded && series?['valid_until'] == null;
+    final seriesDecision = Map<String, dynamic>.from(
+      series?['financial_decision'] as Map? ?? const {},
+    );
+    _settlementTypeKey =
+        seriesDecision['settlementTypeKey']?.toString() ??
+        initial?.settlementTypeKey;
+    _teacherCompensationRuleKey =
+        seriesDecision['teacherCompensationRuleKey']?.toString() ??
+        initial?.teacherCompensationRuleKey;
+    _syncDecisionForBranch();
+    _openEnded =
+        widget.allowOpenEnded &&
+        (series == null
+            ? initial?.openEnded ?? true
+            : series['valid_until'] == null);
     if (!widget.rooms.any(
       (room) =>
           room['id']?.toString() == _roomId &&
@@ -141,7 +179,7 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
       _roomId = null;
     }
     _notesController = TextEditingController(
-      text: series?['notes']?.toString() ?? '',
+      text: series?['notes']?.toString() ?? initial?.notes ?? '',
     );
     _titleController = TextEditingController(text: widget.initialTitle ?? '');
     _exitController = DirtyFormExitController(onSave: _validate);
@@ -173,8 +211,28 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
     notes: _notesController.text.trim(),
     title: widget.planMode ? _titleController.text.trim() : null,
     subscriptionId: _subscriptionId,
+    settlementTypeKey: _settlementTypeKey ?? '',
+    teacherCompensationRuleKey: _teacherCompensationRuleKey ?? '',
     openEnded: _openEnded,
   );
+
+  LessonDecisionCatalog? get _decisionCatalog =>
+      widget.decisionCatalogs[_branchId];
+
+  void _syncDecisionForBranch() {
+    final catalog = _decisionCatalog;
+    if (catalog == null) return;
+    if (!catalog.settlementTypes.any(
+      (item) => item.key == _settlementTypeKey,
+    )) {
+      _settlementTypeKey = null;
+    }
+    if (!catalog.compensationRules.any(
+      (item) => item.key == _teacherCompensationRuleKey,
+    )) {
+      _teacherCompensationRuleKey = null;
+    }
+  }
 
   void _changed(VoidCallback change) {
     setState(() {
@@ -198,6 +256,13 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
       error = 'Выберите педагога.';
     } else if (_roomId == null || _roomId!.isEmpty) {
       error = 'Выберите аудиторию.';
+    } else if ((widget.planMode || widget.requireFinancialDecision) &&
+        (_settlementTypeKey == null || _settlementTypeKey!.isEmpty)) {
+      error = 'Выберите тип списания.';
+    } else if ((widget.planMode || widget.requireFinancialDecision) &&
+        (_teacherCompensationRuleKey == null ||
+            _teacherCompensationRuleKey!.isEmpty)) {
+      error = 'Выберите оплату преподавателю.';
     } else if (!_openEnded && _validUntil.isBefore(_validFrom)) {
       error = 'Дата окончания не может быть раньше даты начала.';
     } else {
@@ -273,7 +338,7 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (widget.planMode) ...[
+          if (widget.planMode || widget.requireFinancialDecision) ...[
             TextField(
               key: const ValueKey('schedule-plan-title'),
               controller: _titleController,
@@ -320,6 +385,7 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
                     _changed(() {
                       _branchId = value;
                       _roomId = null;
+                      _syncDecisionForBranch();
                     });
                   },
           ),
@@ -349,80 +415,83 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
             ],
           ),
           const SizedBox(height: AppSpace.md),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final fields = [
-                InkWell(
-                  key: const ValueKey('preferred-schedule-time'),
-                  onTap: _pickTime,
-                  child: InputDecorator(
-                    decoration: const InputDecoration(labelText: 'Время'),
-                    child: Text(_beginTime),
+          if (widget.showPeriod)
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final fields = [
+                  InkWell(
+                    key: const ValueKey('preferred-schedule-time'),
+                    onTap: _pickTime,
+                    child: InputDecorator(
+                      decoration: const InputDecoration(labelText: 'Время'),
+                      child: Text(_beginTime),
+                    ),
                   ),
-                ),
-                DropdownButtonFormField<int>(
-                  key: const ValueKey('preferred-schedule-duration'),
-                  initialValue: _durationMinutes,
-                  decoration: const InputDecoration(labelText: 'Длительность'),
-                  items: const [30, 45, 60, 90, 120]
-                      .map(
-                        (value) => DropdownMenuItem(
-                          value: value,
-                          child: Text('$value мин'),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    if (value != null) {
-                      _changed(() => _durationMinutes = value);
-                    }
-                  },
-                ),
-                DropdownButtonFormField<int>(
-                  key: const ValueKey('preferred-schedule-lessons-per-day'),
-                  initialValue: _lessonsPerDay,
-                  decoration: const InputDecoration(
-                    labelText: 'Занятий в день',
-                    helperText: 'Идут подряд',
+                  DropdownButtonFormField<int>(
+                    key: const ValueKey('preferred-schedule-duration'),
+                    initialValue: _durationMinutes,
+                    decoration: const InputDecoration(
+                      labelText: 'Длительность',
+                    ),
+                    items: const [30, 45, 60, 90, 120]
+                        .map(
+                          (value) => DropdownMenuItem(
+                            value: value,
+                            child: Text('$value мин'),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        _changed(() => _durationMinutes = value);
+                      }
+                    },
                   ),
-                  items: const [1, 2, 3, 4]
-                      .map(
-                        (value) => DropdownMenuItem(
-                          value: value,
-                          child: Text('$value'),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: _isEdit
-                      ? null
-                      : (value) {
-                          if (value != null) {
-                            _changed(() => _lessonsPerDay = value);
-                          }
-                        },
-                ),
-              ];
-              if (constraints.maxWidth < 520) {
-                return Column(
+                  DropdownButtonFormField<int>(
+                    key: const ValueKey('preferred-schedule-lessons-per-day'),
+                    initialValue: _lessonsPerDay,
+                    decoration: const InputDecoration(
+                      labelText: 'Занятий в день',
+                      helperText: 'Идут подряд',
+                    ),
+                    items: const [1, 2, 3, 4]
+                        .map(
+                          (value) => DropdownMenuItem(
+                            value: value,
+                            child: Text('$value'),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: _isEdit
+                        ? null
+                        : (value) {
+                            if (value != null) {
+                              _changed(() => _lessonsPerDay = value);
+                            }
+                          },
+                  ),
+                ];
+                if (constraints.maxWidth < 520) {
+                  return Column(
+                    children: [
+                      for (final field in fields) ...[
+                        field,
+                        const SizedBox(height: AppSpace.md),
+                      ],
+                    ],
+                  );
+                }
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    for (final field in fields) ...[
-                      field,
-                      const SizedBox(height: AppSpace.md),
+                    for (var index = 0; index < fields.length; index++) ...[
+                      if (index > 0) const SizedBox(width: AppSpace.sm),
+                      Expanded(child: fields[index]),
                     ],
                   ],
                 );
-              }
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (var index = 0; index < fields.length; index++) ...[
-                    if (index > 0) const SizedBox(width: AppSpace.sm),
-                    Expanded(child: fields[index]),
-                  ],
-                ],
-              );
-            },
-          ),
+              },
+            ),
           const SizedBox(height: AppSpace.md),
           SearchablePickerField(
             label: 'Педагог',
@@ -455,6 +524,67 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
             ],
             onSelected: (item) => _changed(() => _roomId = item?.id),
           ),
+          if (widget.planMode) ...[
+            const SizedBox(height: AppSpace.md),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final catalog = _decisionCatalog;
+                final fields = [
+                  DropdownButtonFormField<String>(
+                    key: const ValueKey('schedule-plan-settlement-type'),
+                    initialValue: _settlementTypeKey,
+                    decoration: const InputDecoration(
+                      labelText: 'Тип списания *',
+                      helperText: 'Применится после окончания занятия',
+                    ),
+                    items: [
+                      for (final item in catalog?.settlementTypes ?? const [])
+                        DropdownMenuItem(
+                          value: item.key,
+                          child: Text(item.label),
+                        ),
+                    ],
+                    onChanged: (value) =>
+                        _changed(() => _settlementTypeKey = value),
+                  ),
+                  DropdownButtonFormField<String>(
+                    key: const ValueKey('schedule-plan-compensation-rule'),
+                    initialValue: _teacherCompensationRuleKey,
+                    decoration: const InputDecoration(
+                      labelText: 'Оплата преподавателю *',
+                      helperText: 'Сотрудник выбирает правило явно',
+                    ),
+                    items: [
+                      for (final item in catalog?.compensationRules ?? const [])
+                        DropdownMenuItem(
+                          value: item.key,
+                          child: Text(item.label),
+                        ),
+                    ],
+                    onChanged: (value) =>
+                        _changed(() => _teacherCompensationRuleKey = value),
+                  ),
+                ];
+                if (constraints.maxWidth < 520) {
+                  return Column(
+                    children: [
+                      fields.first,
+                      const SizedBox(height: AppSpace.md),
+                      fields.last,
+                    ],
+                  );
+                }
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: fields.first),
+                    const SizedBox(width: AppSpace.sm),
+                    Expanded(child: fields.last),
+                  ],
+                );
+              },
+            ),
+          ],
           const SizedBox(height: AppSpace.md),
           LayoutBuilder(
             builder: (context, constraints) {
@@ -491,7 +621,7 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
               );
             },
           ),
-          if (widget.allowOpenEnded) ...[
+          if (widget.showPeriod && widget.allowOpenEnded) ...[
             const SizedBox(height: AppSpace.sm),
             SwitchListTile.adaptive(
               key: const ValueKey('schedule-plan-open-ended'),

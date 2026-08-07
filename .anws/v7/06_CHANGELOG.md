@@ -25,6 +25,19 @@
 - **[CHANGE]** Автоматическая связь типа списания с оплатой преподавателю
   отклонена владельцем: директор настраивает оба каталога, а сотрудник выбирает
   оба значения вручную для каждого занятия.
+- **[CHANGE]** Последующее уточнение владельца: автоматический *выбор* по-прежнему
+  запрещён, но сотрудник обязан выбрать оба значения до назначения занятия;
+  после его окончания worker применяет зафиксированное решение атомарно.
+- **[ADD]** Неуспешное автопроведение создаёт `Требует проверки` без частичных
+  фактов; pre-start edit меняет reservation, post-terminal correction создаёт
+  append-only reversal/replacement одной транзакцией.
+- **[ADD]** Постоянное расписание получает repeatable rows и authoritative
+  per-date constraints preview с видимыми teacher/client/room/branch причинами.
+- **[CHANGE]** Внутренние переходы выполняются по entity text: desktop всегда
+  открывает новую workspace tab, compact — канонический route stack. Client Card
+  остаётся long canvas на desktop и использует тематические tabs на телефонах.
+- **[CHANGE]** Финальный номер версии зафиксирован как `1.5.1`, но устанавливается
+  только после green full regression и реальных Windows/Android проверок.
 - **[CHANGE]** Покупка абонемента блокируется целиком при недостатке средств на
   выбранном личном счёте; отрицательный баланс пока не разрешён.
 - **[CHANGE]** При рассрочке вся итоговая стоимость резервируется сразу как
@@ -62,3 +75,12 @@
   по шести волнам: data, commerce, lesson integrity, plans, Client Card и release.
 - **[FIX]** Task review разделил две перегруженные P0-задачи; итоговый план
   покрывает 11/11 требований и 11/11 stories, открытых Critical/High нет.
+- **[ADD]** Owner refinement реализовал entity-text navigation, client-focused
+  Month/Week/Day, multi-row recurring plans и обязательный planned settlement.
+- **[ADD]** Миграции `0111..0113` добавили versioned plan/revisions, automatic
+  completion worker и append-only correction с effective reporting views.
+- **[FIX]** Full regression устранил residue correction tests, совместимость
+  старого migration rollback с effective views и time-dependent reversal test.
+- **[CHANGE]** После full/device/security gates выпущен final candidate
+  `1.5.1+157`; исторический HolliHop credential принят владельцем как явный
+  риск без добавления секрета в текущий candidate.

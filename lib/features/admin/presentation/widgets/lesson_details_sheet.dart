@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/entity_link_text.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/v7/adaptive_surface.dart';
@@ -84,7 +85,6 @@ Widget _referenceRow(
   BuildContext context,
   LessonEntityReference reference,
   ValueChanged<EntityOpenTarget> onOpen,
-  bool showNewTabAction,
 ) {
   final canOpen = reference.link != null && reference.available;
   if (!canOpen) {
@@ -95,41 +95,26 @@ Widget _referenceRow(
       reference.available ? reference.value : 'Связанная запись недоступна',
     );
   }
-  return Semantics(
-    button: true,
-    link: true,
-    label: '${reference.label}: ${reference.value}',
-    child: InkWell(
-      key: ValueKey('lesson-reference-${reference.label}'),
-      borderRadius: BorderRadius.circular(AppRadius.sm),
-      onTap: () => onOpen(EntityOpenTarget.current),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
-        child: Row(
-          children: [
-            Icon(reference.icon, size: 18, color: AppColor.gold),
-            const SizedBox(width: AppSpace.sm),
-            Expanded(
-              child: Text(
-                '${reference.label}: ${reference.value}',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.primary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            if (showNewTabAction)
-              IconButton(
-                tooltip: 'Открыть в новой вкладке',
-                onPressed: () => onOpen(EntityOpenTarget.newTab),
-                icon: const Icon(Icons.open_in_new_rounded, size: 18),
-              ),
-            const Icon(Icons.chevron_right_rounded, size: 20),
-          ],
+  return Row(
+    children: [
+      Icon(reference.icon, size: 18, color: AppColor.gold),
+      const SizedBox(width: AppSpace.sm),
+      Text(
+        '${reference.label}: ',
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          fontSize: 13,
         ),
       ),
-    ),
+      Expanded(
+        child: EntityLinkText(
+          key: ValueKey('lesson-reference-${reference.label}'),
+          text: reference.value,
+          onPressed: () => onOpen(EntityOpenTarget.current),
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+        ),
+      ),
+    ],
   );
 }
 
@@ -144,7 +129,6 @@ Future<void> showLessonDetailsSheet(
   required String roomName,
   List<LessonEntityReference>? references,
   void Function(EntityLink link, EntityOpenTarget target)? onOpenReference,
-  bool showNewTabAction = false,
   required String timeRange,
   required String currentStatus,
   required List<String> conflicts,
@@ -152,6 +136,9 @@ Future<void> showLessonDetailsSheet(
   required VoidCallback onEdit,
   required Future<void> Function() onCancel,
   Future<void> Function()? onSettle,
+  Future<void> Function()? onAdjustSettlement,
+  String? adjustSettlementLabel,
+  List<Map<String, dynamic>> settlementHistory = const [],
 }) {
   return showMagicAdaptiveSurface<void>(
     context,
@@ -184,7 +171,7 @@ Future<void> showLessonDetailsSheet(
           _referenceRow(surfaceContext, reference, (target) {
             Navigator.pop(surfaceContext);
             onOpenReference?.call(reference.link!, target);
-          }, showNewTabAction),
+          }),
           const SizedBox(height: 10),
         ],
         detailRow(
@@ -209,8 +196,36 @@ Future<void> showLessonDetailsSheet(
             conflicts.map(conflictLabel).join(', '),
           ),
         ],
+        if (settlementHistory.isNotEmpty) ...[
+          const SizedBox(height: AppSpace.sm),
+          ExpansionTile(
+            key: const Key('lesson-settlement-history'),
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: const EdgeInsets.only(bottom: AppSpace.sm),
+            title: const Text(
+              'История расчёта',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            ),
+            children: [
+              for (final item in settlementHistory)
+                _SettlementHistoryEntry(item: item),
+            ],
+          ),
+        ],
         if (lessonId != null) ...[
           const SizedBox(height: AppSpace.lg),
+          if (onAdjustSettlement != null) ...[
+            FilledButton.icon(
+              key: const Key('lesson-adjust-settlement'),
+              onPressed: () async {
+                Navigator.pop(surfaceContext);
+                await onAdjustSettlement();
+              },
+              icon: const Icon(Icons.price_change_outlined, size: 18),
+              label: Text(adjustSettlementLabel ?? 'Изменить расчёт'),
+            ),
+            const SizedBox(height: AppSpace.sm),
+          ],
           if (onSettle != null) ...[
             FilledButton.icon(
               onPressed: () async {
@@ -244,4 +259,68 @@ Future<void> showLessonDetailsSheet(
       ],
     ),
   );
+}
+
+class _SettlementHistoryEntry extends StatelessWidget {
+  const _SettlementHistoryEntry({required this.item});
+
+  final Map<String, dynamic> item;
+
+  @override
+  Widget build(BuildContext context) {
+    final decision = item['decision'] is Map
+        ? Map<String, dynamic>.from(item['decision'] as Map)
+        : const <String, dynamic>{};
+    final effective = item['effective'] == true;
+    final reason = item['reason']?.toString().trim();
+    final kind = item['kind'] == 'correction'
+        ? 'Корректировка'
+        : 'План расчёта';
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: AppSpace.sm),
+      padding: const EdgeInsets.all(AppSpace.sm),
+      decoration: BoxDecoration(
+        color: effective
+            ? AppColor.success.withValues(alpha: 0.12)
+            : AppColor.input,
+        border: Border.all(
+          color: effective ? AppColor.success : AppColor.divider,
+        ),
+        borderRadius: BorderRadius.circular(AppRadius.control),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$kind · ${effective ? 'действующий' : 'заменён'}',
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+          ),
+          const SizedBox(height: AppSpace.xs),
+          Text(
+            'Списание: ${decision['settlementTypeKey'] ?? '—'} · '
+            'преподаватель: ${decision['teacherCompensationRuleKey'] ?? '—'}',
+            style: const TextStyle(fontSize: 12),
+          ),
+          if (reason?.isNotEmpty == true)
+            Text('Причина: $reason', style: const TextStyle(fontSize: 12)),
+          Text(
+            '${item['actorName'] ?? 'Сотрудник'} · ${_historyDate(item['createdAt'])}',
+            style: TextStyle(
+              fontSize: 11,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _historyDate(Object? raw) {
+  final date = DateTime.tryParse(raw?.toString() ?? '')?.toLocal();
+  if (date == null) return '—';
+  String two(int value) => value.toString().padLeft(2, '0');
+  return '${two(date.day)}.${two(date.month)}.${date.year} '
+      '${two(date.hour)}:${two(date.minute)}';
 }

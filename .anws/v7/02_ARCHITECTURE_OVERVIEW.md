@@ -50,8 +50,8 @@ Firebase, ни realtime-события не содержат авторитет�
 | `SYS-UI-FOUNDATION` | v7 tokens/components, формы, accessibility, keyboard/scroll и responsive layout | Не вызывает API напрямую | Flutter Material |
 | `SYS-ACCESS-SCOPE` | Capabilities, роли, school/branch/client scope и actor-safe projection | Скрытый UI не считается защитой | NestJS guards/policy, PostgreSQL, Flutter projection |
 | `SYS-CRM-WORKSPACE` | Lead/Student, Client Card, общая заметка, conversion и композиция клиентских разделов | Не вычисляет баланс, settlement или payroll | Flutter + NestJS CRM |
-| `SYS-SCHEDULE` | Lessons, recurring schedule plans/series, конфликты, перенос и lifecycle | Не пишет финансовые факты самостоятельно | Flutter calendar + NestJS schedule |
-| `SYS-COMMERCE-INTEGRITY` | Личный счёт, purchase/payer, subscriptions, installments, payment lifecycle/reversal, client settlement и teacher compensation snapshots | Не владеет календарной геометрией или school-wide UI reports | NestJS commerce, PostgreSQL ledger |
+| `SYS-SCHEDULE` | Lessons, recurring plans/series, plan preview, конфликты, перенос, planned decision lifecycle и completion worker | Не вычисляет денежные правила самостоятельно | Flutter calendar + NestJS schedule |
+| `SYS-COMMERCE-INTEGRITY` | Личный счёт, subscriptions/installments/payment reversal, planned/final client settlement, teacher compensation и correction facts | Не владеет календарной геометрией или school-wide UI reports | NestJS commerce, PostgreSQL ledger |
 | `SYS-OPERATIONS` | Tasks, dashboard, finance drilldowns, users/settings и technical staff history presentation | Не меняет immutable commerce facts в обход команд | Flutter + NestJS projections |
 | `SYS-PLATFORM-QUALITY` | Транзакции, idempotency, version guards, audit/outbox, realtime invalidation, reconciliation, migrations и release gates | Не содержит дублирующей бизнес-модели | PostgreSQL, NestJS, Jest, Flutter tests |
 
@@ -64,7 +64,8 @@ Firebase, ни realtime-события не содержат авторитет�
 | `SubscriptionObligationReserve` | `SYS-COMMERCE-INTEGRITY` | полное обязательство рассрочки, не wallet cash |
 | `InstallmentPayment` | `SYS-COMMERCE-INTEGRITY` | `unpaid → posted_pending → paid`; correction через reversal |
 | `PaymentReversal` | `SYS-COMMERCE-INTEGRITY` | не удаляет source; создаёт reporting exclusion pair |
-| `LessonSettlement` / teacher accrual | `SYS-COMMERCE-INTEGRITY` | immutable snapshot из единого lesson transition |
+| `PlannedLessonSettlement` | `SYS-SCHEDULE` + Commerce validation port | versioned до terminal state, bound к immutable config revisions |
+| `LessonSettlement` / teacher accrual / correction | `SYS-COMMERCE-INTEGRITY` | append-only facts из transition/worker; effective result через reversal links |
 | `RecurringSchedulePlan` / series | `SYS-SCHEDULE` | effective-dated, versioned, завершение через preview |
 | `ClientInternalNote` | `SYS-CRM-WORKSPACE` | одна versioned note, survives Lead→Student |
 | `OperationalAuditEntry` | `SYS-PLATFORM-QUALITY` | immutable, actor-scoped, reason + before/after refs |

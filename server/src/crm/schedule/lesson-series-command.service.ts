@@ -13,6 +13,7 @@ import { CreateScheduleSeriesDto } from "../dto/schedule-series.dto";
 import { SchedulePlanRowDto } from "../dto/schedule-plan.dto";
 import { UpsertLessonDto } from "../dto/upsert-lesson.dto";
 import { ScheduleConstraintEngine } from "./constraint-engine.service";
+import { ConstraintViolation } from "./constraint-engine.types";
 import type { LessonCommandMetadata } from "./lesson-command.service";
 import { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
 import {
@@ -28,12 +29,21 @@ interface SeriesOccurrenceRow {
   timezone_name: string;
 }
 
-interface SeriesOccurrence {
+export interface SeriesOccurrence {
   index: number;
   localDate: string;
   startAt: string;
   endAt: string;
   timezone: string;
+}
+
+export interface SchedulePlanRowConstraintPreview {
+  occurrences: SeriesOccurrence[];
+  failures: Array<{
+    occurrence: SeriesOccurrence;
+    studentId: string;
+    violations: ConstraintViolation[];
+  }>;
 }
 
 @Injectable()
@@ -152,6 +162,30 @@ export class LessonSeriesCommandService {
     validUntil: string | null,
     studentIds: string[],
   ): Promise<void> {
+    const preview = await this.previewPlanRow(
+      client,
+      row,
+      validFrom,
+      validUntil,
+      studentIds,
+    );
+    const failure = preview.failures[0];
+    if (failure) {
+      throw new UnprocessableEntityException({
+        code: "SCHEDULE_PLAN_CONSTRAINT_VIOLATIONS",
+        message: "Schedule plan row violates schedule constraints.",
+        ...failure,
+      });
+    }
+  }
+
+  async previewPlanRow(
+    client: PoolClient,
+    row: SchedulePlanRowDto,
+    validFrom: string,
+    validUntil: string | null,
+    studentIds: string[],
+  ): Promise<SchedulePlanRowConstraintPreview> {
     const dto = Object.assign(new CreateScheduleSeriesDto(), {
       teacherId: row.teacherId,
       roomId: row.roomId,
@@ -166,6 +200,7 @@ export class LessonSeriesCommandService {
     const validationOccurrences = occurrences.length > 0
       ? occurrences
       : [await this.firstPlanOccurrence(client, dto)];
+    const failures: SchedulePlanRowConstraintPreview["failures"] = [];
     for (const occurrence of validationOccurrences) {
       for (const studentId of studentIds) {
         const result = await this.constraints.validate(
@@ -180,9 +215,7 @@ export class LessonSeriesCommandService {
           client,
         );
         if (!result.valid) {
-          throw new UnprocessableEntityException({
-            code: "SCHEDULE_PLAN_CONSTRAINT_VIOLATIONS",
-            message: "Schedule plan row violates schedule constraints.",
+          failures.push({
             occurrence,
             studentId,
             violations: result.violations,
@@ -190,6 +223,7 @@ export class LessonSeriesCommandService {
         }
       }
     }
+    return { occurrences: validationOccurrences, failures };
   }
 
   private async firstPlanOccurrence(

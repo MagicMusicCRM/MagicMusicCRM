@@ -84,6 +84,20 @@ export class LessonCompletionWorker
       leaseSeconds: options.leaseSeconds ?? DEFAULT_LEASE_SECONDS,
       maxAttempts,
     });
+    for (const stranded of await this.repository.poisonReviewRequired(
+      options.limit ?? DEFAULT_BATCH_SIZE,
+    )) {
+      try {
+        await this.completion.markReviewRequired(
+          stranded,
+          "LessonCompletionLeaseExhausted",
+        );
+      } catch (error) {
+        this.logger.error(
+          `Poison Lesson ${stranded.lessonId} recovery failed: ${failureName(error)}`,
+        );
+      }
+    }
     const result: LessonCompletionRunResult = {
       claimed: claims.length,
       completed: 0,
@@ -112,6 +126,16 @@ export class LessonCompletionWorker
         if (failed === "retry") result.retry += 1;
         if (failed === "poison") {
           result.poison += 1;
+          try {
+            await this.completion.markReviewRequired(
+              claim,
+              failureName(error),
+            );
+          } catch (reviewError) {
+            this.logger.error(
+              `Poison Lesson ${claim.lessonId} review transition failed: ${failureName(reviewError)}`,
+            );
+          }
           this.logger.error(
             `Poison Lesson completion work: lesson=${claim.lessonId} attempts=${claim.attempts} error=${failureName(error)}`,
           );

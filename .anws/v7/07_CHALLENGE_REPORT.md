@@ -78,6 +78,12 @@ publish позволяет Manager поменять protected catalog → раз
 - **Проверка:** clock test даёт pending и 0 finance facts; staff settle создаёт N
   client facts + 1 teacher accrual exactly once.
 
+> **Уточнение владельца 2026-08-07:** решение superseded. Worker снова проводит
+> занятие автоматически, но только после обязательного ручного выбора обоих
+> независимых типов *до* создания. Planned decision привязан к immutable config
+> revisions; failure создаёт pending без частичных facts. Реализация отслеживается
+> T5.2.3/4 и до INT-S4R считается открытой High-зоной.
+
 ### CH-V7-04 — Ordinary report exclusion может остаться неодинаковым
 
 - **Severity:** Medium — открыт как обязательный implementation gate.
@@ -91,6 +97,24 @@ publish позволяет Manager поменять protected catalog → раз
   подключить общий view/predicate и оставить contract test `unowned=0`.
 - **Проверка:** одна reversal fixture отсутствует во всех ordinary
   card/dashboard/report/export totals и присутствует в technical history.
+
+### CH-V7-05 — Автопроведение по текущему каталогу меняет обещанный расчёт
+
+- **Severity:** High — закрыто в дизайне, implementation open.
+- **Доказательство:** catalog label/share/pay value может измениться между
+  назначением и окончанием занятия; stable key без revision недостаточен.
+- **Решение:** planned decision сохраняет точные published revision ids; worker и
+  correction используют их, а не текущий effective snapshot.
+- **Проверка:** publish/rollback/archive между create и clock не меняют result.
+
+### CH-V7-06 — Commit плана запрещает конфликт, но UI не объясняет дату
+
+- **Severity:** Medium — закрыто в дизайне, implementation open.
+- **Доказательство:** create plan возвращает первую violation только после submit;
+  multi-day form не показывает остальные occurrence dates.
+- **Решение:** отдельный bounded plan preview переиспользует тот же expansion и
+  constraint engine и возвращает row/date/resource/conflicting ids.
+- **Проверка:** preview/commit parity, cross-row и cross-plan matrix.
 
 ## 5. Проверенные гипотезы
 
@@ -123,7 +147,7 @@ publish позволяет Manager поменять protected catalog → раз
 
 ## 7. Final verdict
 
-🟢 **GREEN FOR BLUEPRINT.** Design internally consistent after corrections.
-Coding is forbidden to declare complete until CH-V7-04 inventory shows every
-ordinary finance consumer owned and reconciliation/role/device gates pass.
-
+🟡 **BLUEPRINT UPDATED; IMPLEMENTATION REQUIRED.** Design is internally
+consistent, but T5.2.1–T5.2.4 and INT-S4R are mandatory before final gates.
+Candidate `1.5.1` cannot be declared until CH-V7-04/05/06, reconciliation,
+role/device gates and real application stories pass.

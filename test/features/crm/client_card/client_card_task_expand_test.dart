@@ -70,6 +70,7 @@ void main() {
     expect(find.text('История'), findsWidgets);
     expect(find.text('Задача создана'), findsOneWidget);
     expect(find.textContaining('Олег Сидоров'), findsOneWidget);
-    expect(find.text('Открыть связанную запись'), findsOneWidget);
+    expect(find.text('Лид'), findsOneWidget);
+    expect(find.byKey(const Key('shared-task-linked-entity')), findsOneWidget);
   });
 }

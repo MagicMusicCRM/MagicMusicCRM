@@ -42,6 +42,23 @@ void main() {
           'isTrial': true,
           'conflictTypes': ['room_overlap'],
         },
+        {
+          'id': 'lesson-other',
+          'studentId': 'student-2',
+          'studentName': 'Иван Петров',
+          'teacherId': 'teacher-1',
+          'teacherName': 'Мария Педагог',
+          'branchId': 'branch-a',
+          'branchName': 'Сокол',
+          'roomId': 'room-a',
+          'roomName': 'Класс 1',
+          'scheduledAt': '2026-08-04T14:00:00.000Z',
+          'durationMinutes': 60,
+          'status': 'scheduled',
+          'lifecycleState': 'scheduled',
+          'isTrial': false,
+          'conflictTypes': <String>[],
+        },
       ],
     );
     final router = GoRouter(
@@ -87,7 +104,11 @@ void main() {
               accountId: 'account-1',
               role: 'admin',
               accessVersion: 1,
-              capabilities: {'crm.client.read.basic', 'schedule.lesson.write'},
+              capabilities: {
+                'crm.client.read.basic',
+                'schedule.lesson.read.assigned',
+                'schedule.lesson.write',
+              },
               scopes: {'schedule': 'branch'},
             ),
           ),
@@ -98,15 +119,33 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Анна Смирнова'), findsWidgets);
+    final hideOthers = tester.widget<FilterChip>(
+      find.byKey(const ValueKey('client-calendar-hide-others')),
+    );
+    expect(hideOthers.selected, isTrue);
+    expect(find.text('Другие клиенты'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('schedule-lesson-lesson-other')),
+      findsNothing,
+    );
+    await tester.tap(find.byKey(const ValueKey('client-calendar-hide-others')));
+    await tester.pumpAndSettle();
     expect(find.text('Другие клиенты'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('schedule-lesson-lesson-other')),
+      findsOneWidget,
+    );
     final lesson = find.byKey(const ValueKey('schedule-lesson-lesson-device'));
     await tester.ensureVisible(lesson);
     await tester.pumpAndSettle();
     await tester.tap(lesson);
-    await tester.pump();
-    await tester.tap(lesson);
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('lesson-reference-Занятие')));
+    final reference = find.byKey(const ValueKey('lesson-reference-Занятие'));
+    if (reference.evaluate().isEmpty) {
+      await tester.tap(lesson);
+      await tester.pumpAndSettle();
+    }
+    await tester.tap(reference);
     await tester.pumpAndSettle();
     expect(find.text('Расписание host'), findsOneWidget);
 

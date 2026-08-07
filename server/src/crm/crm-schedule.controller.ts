@@ -8,6 +8,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from "@nestjs/common";
@@ -46,6 +47,7 @@ import { V4DomainFlagsService } from "../platform/v4-domain-flags";
 import { assertLessonPatchUsesTransition } from "./schedule/lesson-protected-patch.guard";
 import {
   CreateSchedulePlanDto,
+  SchedulePlanConstraintPreviewDto,
   SchedulePlanEndCommandDto,
   SchedulePlanEndPreviewDto,
   SchedulePlanQuery,
@@ -53,6 +55,15 @@ import {
   UpdateSchedulePlanDto,
 } from "./dto/schedule-plan.dto";
 import { SchedulePlanService } from "./schedule/schedule-plan.service";
+import {
+  LessonSettlementPlanCommandDto,
+  LessonSettlementPlanPreviewDto,
+} from "./dto/lesson-settlement-plan.dto";
+import {
+  LessonSettlementCorrectionCommandDto,
+  LessonSettlementCorrectionPreviewDto,
+} from "./dto/lesson-settlement-correction.dto";
+import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-correction.service";
 
 @UseGuards(JwtAuthGuard)
 @Controller("crm")
@@ -64,6 +75,7 @@ export class CrmScheduleController {
     private readonly lessonTransitions: LessonTransitionService,
     private readonly v4DomainFlags: V4DomainFlagsService,
     private readonly schedulePlans: SchedulePlanService,
+    private readonly settlementCorrections: LessonSettlementCorrectionService,
   ) {}
 
   @Get("schedule-plans")
@@ -85,6 +97,14 @@ export class CrmScheduleController {
       idempotencyKey: idempotencyKey ?? "",
       requestId: requestId ?? "",
     });
+  }
+
+  @Post("schedule-plans/constraints/preview")
+  previewSchedulePlanConstraints(
+    @CurrentActor() actor: ActorContext,
+    @Body() dto: SchedulePlanConstraintPreviewDto,
+  ) {
+    return this.schedulePlans.previewConstraints(actor, dto);
   }
 
   @Post("schedule-plans/:id/end/preview")
@@ -247,6 +267,65 @@ export class CrmScheduleController {
     @Body() dto: BulkLessonRateDto,
   ) {
     return this.schedule.setLessonsTeacherRate(actor, dto);
+  }
+
+  @Post("lessons/:id/planned-settlement/preview")
+  previewLessonSettlementPlan(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: LessonSettlementPlanPreviewDto,
+  ) {
+    this.v4DomainFlags.assertEnabled("schedule");
+    return this.lessonCommands.previewSettlementPlan(actor, id, dto);
+  }
+
+  @Put("lessons/:id/planned-settlement")
+  updateLessonSettlementPlan(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+    @Body() dto: LessonSettlementPlanCommandDto,
+  ) {
+    this.v4DomainFlags.assertEnabled("schedule");
+    return this.lessonCommands.updateSettlementPlan(actor, id, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
+  }
+
+  @Post("lessons/:id/settlement-correction/preview")
+  previewLessonSettlementCorrection(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: LessonSettlementCorrectionPreviewDto,
+  ) {
+    this.v4DomainFlags.assertEnabled("schedule");
+    return this.settlementCorrections.preview(actor, id, dto);
+  }
+
+  @Get("lessons/:id/settlement-history")
+  getLessonSettlementHistory(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    this.v4DomainFlags.assertEnabled("schedule");
+    return this.settlementCorrections.history(actor, id);
+  }
+
+  @Post("lessons/:id/settlement-correction")
+  correctLessonSettlement(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+    @Body() dto: LessonSettlementCorrectionCommandDto,
+  ) {
+    this.v4DomainFlags.assertEnabled("schedule");
+    return this.settlementCorrections.commit(actor, id, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
   }
 
   @Patch("lessons/:id")

@@ -61,8 +61,8 @@
   - Проверки: `flutter analyze` чисто, `flutter test` 163/163, `git diff server/`+`lib/core/services/` пусто.
   - Осталось: **P1-7** сетевой baseline (нужен seeded backend). Follow-up: вынести `_V7Field`/`_V7PrimaryButton` в общий файл; выверить текст онбординг-слайдов; owner-визуальная приёмка.
 
-**▶ Следующий шаг:** `/forge` по `.anws/v7/05_TASKS.md`: `T6.1.1` — полный
-regression/security/reconciliation gate финального кандидата v7.
+**▶ Следующий шаг:** owner UAT финального кандидата `1.5.1+157`; обязательных
+инженерных задач v7 не осталось.
 
 ---
 
@@ -122,8 +122,8 @@ regression/security/reconciliation gate финального кандидата 
 > **Примечание**: Этот блок автоматически поддерживается процессами `/genesis`, `/blueprint` и `/forge`.
 
 - **Последняя версия архитектуры**: `.anws/v7` (Financial & Lesson Integrity)
-- **Активный список задач**: `.anws/v7/05_TASKS.md` — следующая задача `T6.1.1`
-- **Фаза**: `/genesis`, `/design-system` и `/blueprint` завершены; выполняется `/forge`
+- **Активный список задач**: `.anws/v7/05_TASKS.md` — все задачи закрыты
+- **Фаза**: v7 final candidate `1.5.1+157` готов к owner UAT
 - **Последнее обновление**: `2026-08-07`
 
 ### 🌊 Wave v7/S0 — Architecture Foundation ✅
@@ -372,17 +372,25 @@ unknown/unowned=0, server diff empty
 (`docs/audits/v7-int-s4-client-workspace.md`). Следующий шаг `/forge`:
 `T6.1.1`._
 
-### 🌊 Wave v7/S8 — Final Candidate ⛔
+### 🌊 Wave v7/S4R — Owner Refinement ✅
 
-_`T6.1.1` выполнена до единственного внешнего security blocker: backend 155/155
-suites и 1227/1227 tests, Actor Matrix/leak 9/9, Flutter analyze и 642/642,
-двойные inventory/preflight/reconcile с unowned=0/drift=0, current tracked
-Gitleaks=0, npm/Trivy/Semgrep Critical/High=0. Windows и Android прошли
-real-account relogin и v7 story diagnostics. History-aware scan доказал, что один
-текущий HolliHop credential присутствует в 23 находках трёх старых коммитов.
-Версия не повышена, release artifacts не выпущены, задачи не закрыты. Требуются
-ротация ключа у провайдера и явное разрешение на coordinated history rewrite;
-затем gate запускается заново (`docs/audits/v7-t6-regression-security-blocked.md`)._
+_`T5.2.1..T5.2.4` и `INT-S4R` закрыты 2026-08-07: entity-text links сохраняют
+source tab, Client Card calendar скрывает чужие занятия по умолчанию, recurring
+plan поддерживает required teacher/room/finance rows, planned settlement
+проводится restart-safe worker, а post-terminal correction сохраняет immutable
+source facts и effective reporting. Windows/Android stories 3/3 на каждой
+платформе; реальные аккаунты 1..5 и relogin PASS; PostgreSQL fault/concurrency,
+RBAC и inventories зелёные (`docs/audits/v7-int-s4r-owner-refinement.md`)._
+
+### 🌊 Wave v7/S5 — Final Candidate ✅
+
+_`T6.1.1..T6.1.3` и `INT-S5` закрыты 2026-08-07. Backend 155/155 suites и
+1237/1237 tests, Flutter 644/644, analyze/typecheck/build, Actor Matrix 9/9,
+двойные preflight/reconcile, migrations и inventories прошли. Current candidate
+Gitleaks/Semgrep/Trivy имеют 0 findings/High/Critical. Release `1.5.1+157`
+собран для Windows/APK/AAB; подпись, hashes, install и launch на Android 15
+проверены. Старый HolliHop credential в Git history оставлен как явно принятый
+владельцем риск без утечки в текущих файлах (`docs/audits/v7-final-candidate.md`)._
 
 _History rewrite отрепетирован в отдельном local clone без remotes: два имени
 старого bugreport и три уникальных credential/token значения очищены во всех

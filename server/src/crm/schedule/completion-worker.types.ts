@@ -10,7 +10,10 @@ export interface LessonCompletionClaim {
 export interface LessonCompletionResultRef {
   [key: string]: unknown;
   lessonId: string;
-  state: "settlement_pending";
+  state: "successfully_completed" | "settlement_pending";
+  transitionId?: string;
+  clientFinancialFactIds?: string[];
+  teacherFinancialFactId?: string;
 }
 
 export interface LessonCompletionWorkerMetrics {

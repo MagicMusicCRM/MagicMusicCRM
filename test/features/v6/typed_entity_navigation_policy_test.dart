@@ -44,7 +44,7 @@ void main() {
   );
 
   testWidgets(
-    'all typed entities use current-tab history or explicit new tab',
+    'all typed entities resolve and related desktop links open a new tab',
     (tester) async {
       final workspace = controller();
       final navigationKey = GlobalKey();
@@ -129,7 +129,18 @@ void main() {
         ),
       ];
 
-      for (var index = 0; index < links.length; index++) {
+      final registry = EntityRouteRegistry();
+      for (final link in links) {
+        final resolution = registry.resolve(link, snapshot);
+        expect(resolution.state, EntityRouteState.resolved);
+        expect(
+          resolution.location,
+          startsWith('/manager?'),
+          reason: link.rawEntityType,
+        );
+      }
+
+      for (var index = 0; index < 3; index++) {
         final resolution = await navigateEntityLink(
           navigationKey.currentContext!,
           snapshot,
@@ -142,24 +153,13 @@ void main() {
               : null,
         );
         expect(resolution.state, EntityRouteState.resolved);
-        expect(
-          resolution.location,
-          startsWith('/manager?'),
-          reason: links[index].rawEntityType,
-        );
         expect(workspace.state.activeTab.currentRoute.link, same(links[index]));
       }
 
-      expect(workspace.state.tabs, hasLength(1));
-      expect(workspace.state.activeTab.routeStack, hasLength(links.length + 1));
-      for (var index = 0; index < links.length; index++) {
-        workspace.back('tab-1');
-      }
-      expect(
-        workspace.state.activeTab.currentRoute.viewState.filters['branch'],
-        'branch-1',
-      );
-      expect(workspace.state.activeTab.currentRoute.viewState.scrollOffset, 84);
+      expect(workspace.state.tabs, hasLength(4));
+      final source = workspace.state.tabs.first.currentRoute.viewState;
+      expect(source.filters['branch'], 'branch-1');
+      expect(source.scrollOffset, 84);
 
       await navigateEntityLink(
         navigationKey.currentContext!,
@@ -167,7 +167,7 @@ void main() {
         links.first,
         target: EntityOpenTarget.newTab,
       );
-      expect(workspace.state.tabs, hasLength(2));
+      expect(workspace.state.tabs, hasLength(5));
       expect(workspace.state.activeTab.currentRoute.link, same(links.first));
       expect(workspace.state.activeTab.titleHint, 'Ученик · Иванов Иван');
     },

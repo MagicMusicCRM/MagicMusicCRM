@@ -263,7 +263,7 @@ export class SubscriptionIssueRepository {
             and obligation.currency_code = $2
           union all
           select -charge.amount_minor::numeric
-          from app.lesson_client_charge_facts charge
+          from app.lesson_client_charge_facts_effective charge
           where charge.client_type = 'student'
             and charge.client_id = $1
             and charge.currency_code = $2

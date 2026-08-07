@@ -25,10 +25,38 @@ export interface LessonFinancialDecision {
   teacherCompensationValueMinor?: string;
 }
 
+export interface PreparedLessonSettlementPlan {
+  decision: LessonFinancialDecision;
+  settlementRevisionId: string;
+  compensationRevisionId: string;
+}
+
+export interface PlannedSubscriptionAllocation {
+  clientType: "lead" | "student";
+  clientId: string;
+  subscriptionId: string;
+  units: number;
+}
+
+export interface StoredLessonSettlementPlan
+  extends PreparedLessonSettlementPlan {
+  lessonId: string;
+  version: number;
+  state: "planned" | "settled" | "review_required" | "cancelled";
+  reasonText: string | null;
+}
+
 export interface LessonSettlementInput {
   context: LessonSettlementContext;
   decision: LessonFinancialDecision;
   reasonText?: string;
+  configurationRevisionIds?: {
+    settlementRevisionId: string;
+    compensationRevisionId: string;
+  };
+  correction?: {
+    id: string;
+  };
 }
 
 export interface LessonSettlementResult {

@@ -230,7 +230,7 @@ const replacementContextSql = `
   ),
   current_charge as (
     select sum(fact.units)::numeric as units
-    from app.lesson_client_charge_facts fact
+    from app.lesson_client_charge_facts_effective fact
     where fact.subscription_id = $1
       and fact.charge_type = 'subscription'
   ),
@@ -377,7 +377,7 @@ const cancellationContextSql = `
   ),
   current_charge as (
     select sum(fact.units)::numeric as units
-    from app.lesson_client_charge_facts fact
+    from app.lesson_client_charge_facts_effective fact
     where fact.subscription_id = $1
       and fact.charge_type = 'subscription'
   ),
@@ -426,7 +426,7 @@ const cancellationContextSql = `
       fact.amount_minor,
       fact.units,
       fact.created_at
-    from app.lesson_client_charge_facts fact
+    from app.lesson_client_charge_facts_effective fact
     where fact.subscription_id in (
       select id from lifecycle_chain
     )

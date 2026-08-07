@@ -57,20 +57,18 @@ Future<EntityRouteResolution> navigateEntityLink(
     final workspace = WorkspaceNavigationScope.maybeOf(context);
     if (workspace?.isDesktop == true) {
       try {
-        if (target == EntityOpenTarget.newTab) {
-          workspace!.controller.open(
-            link,
-            titleHint: resolution.canonicalLocation?.title,
-            explicitNew: true,
-          );
-        } else {
-          final controller = workspace!.controller;
-          controller.push(
+        final controller = workspace!.controller;
+        if (sourceViewState != null) {
+          controller.updateCurrentView(
             controller.state.activeTabId,
-            link,
-            currentViewState: sourceViewState,
+            sourceViewState,
           );
         }
+        controller.open(
+          link,
+          titleHint: resolution.canonicalLocation?.title,
+          explicitNew: true,
+        );
       } on WorkspaceLimitReached {
         _showMessage(context, 'Можно открыть не больше 10 вкладок.');
       }

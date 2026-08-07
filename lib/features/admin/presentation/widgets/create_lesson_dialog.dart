@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/navigation/app_back_policy.dart';
+import 'package:magic_music_crm/core/navigation/entity_link_text.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
@@ -134,6 +135,9 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   String _teacherCompensationType = 'none';
   final _clientChargeController = TextEditingController(text: '0');
   final _teacherCompensationController = TextEditingController(text: '0');
+  LessonDecisionCatalog? _decisionCatalog;
+  String? _settlementTypeKey;
+  String? _compensationRuleKey;
 
   bool get _isEdit => widget.lesson != null;
   bool get _snapshotLocked => _isEdit;
@@ -271,7 +275,10 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
           _selectedBranchId ?? _branches.firstOrNull?['id']?.toString();
       if (branchId != null) {
         if (mounted) setState(() => _selectedBranchId ??= branchId);
-        await _loadRooms(branchId);
+        await Future.wait([
+          _loadRooms(branchId),
+          _loadDecisionCatalog(branchId),
+        ]);
       }
       await _loadSubscriptions();
     } catch (error) {
@@ -297,6 +304,33 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     } catch (error) {
       debugPrint('Error loading rooms: $error');
     }
+  }
+
+  Future<void> _loadDecisionCatalog(String branchId) async {
+    final response = await ref
+        .read(magicApiClientProvider)
+        .get<Map<String, dynamic>>(
+          '/crm/configuration/lesson-decisions',
+          queryParameters: {'branchId': branchId},
+        );
+    if (!mounted) return;
+    final catalog = LessonDecisionCatalog.fromJson(
+      response,
+      LessonDecisionOperation.settle,
+    );
+    setState(() {
+      _decisionCatalog = catalog;
+      if (!catalog.settlementTypes.any(
+        (item) => item.key == _settlementTypeKey,
+      )) {
+        _settlementTypeKey = null;
+      }
+      if (!catalog.compensationRules.any(
+        (item) => item.key == _compensationRuleKey,
+      )) {
+        _compensationRuleKey = null;
+      }
+    });
   }
 
   Future<void> _loadSubscriptions() async {
@@ -354,6 +388,8 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         (!_isEdit && chargeValue == null) ||
         (!_isEdit && compensationValue == null) ||
         missingSubscription ||
+        (!_isEdit && _settlementTypeKey == null) ||
+        (!_isEdit && _compensationRuleKey == null) ||
         (_isEdit && version == null)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -458,6 +494,10 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
       'clientChargeValue': chargeValue,
       'teacherCompensationType': _teacherCompensationType,
       'teacherCompensationValue': compensationValue,
+      'financialDecision': {
+        'settlementTypeKey': _settlementTypeKey,
+        'teacherCompensationRuleKey': _compensationRuleKey,
+      },
       if (_clientChargeType == 'subscription')
         'subscriptionId': _selectedSubscriptionId,
       if (_clientType == 'lead' && widget.leadName?.trim().isNotEmpty == true)
@@ -559,7 +599,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
               spacing: 4,
               children: [
                 for (final lessonId in lessonIds)
-                  TextButton.icon(
+                  EntityLinkText(
                     key: ValueKey('conflict-lesson-$lessonId'),
                     onPressed: () {
                       ref
@@ -568,8 +608,8 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                       Navigator.pop(dialogContext);
                       Navigator.pop(context);
                     },
-                    icon: const Icon(Icons.open_in_new_rounded, size: 15),
-                    label: const Text('Открыть конфликтующее занятие'),
+                    text:
+                        'Занятие ${lessonId.length <= 8 ? lessonId : lessonId.substring(0, 8)}',
                   ),
               ],
             ),
@@ -665,8 +705,14 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                       _selectedBranchId = value;
                       _selectedRoomId = null;
                       _rooms = [];
+                      _decisionCatalog = null;
+                      _settlementTypeKey = null;
+                      _compensationRuleKey = null;
                     });
-                    if (value != null) _loadRooms(value);
+                    if (value != null) {
+                      _loadRooms(value);
+                      _loadDecisionCatalog(value);
+                    }
                   },
                 ),
                 SearchablePickerField(
@@ -760,6 +806,47 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                     () => _completionType = value ?? 'standard.success',
                   ),
                 ),
+              const SizedBox(height: 16),
+              _responsivePair(
+                DropdownButtonFormField<String>(
+                  key: const ValueKey('lesson-settlement-type-field'),
+                  initialValue: _settlementTypeKey,
+                  decoration: const InputDecoration(
+                    labelText: 'Тип списания *',
+                    helperText: 'Выбирается до назначения занятия',
+                  ),
+                  items: [
+                    for (final item
+                        in _decisionCatalog?.settlementTypes ?? const [])
+                      DropdownMenuItem(
+                        value: item.key,
+                        child: Text(item.label),
+                      ),
+                  ],
+                  onChanged: _snapshotLocked
+                      ? null
+                      : (value) => setState(() => _settlementTypeKey = value),
+                ),
+                DropdownButtonFormField<String>(
+                  key: const ValueKey('lesson-compensation-rule-field'),
+                  initialValue: _compensationRuleKey,
+                  decoration: const InputDecoration(
+                    labelText: 'Правило оплаты преподавателю *',
+                    helperText: 'Не выводится автоматически из списания',
+                  ),
+                  items: [
+                    for (final item
+                        in _decisionCatalog?.compensationRules ?? const [])
+                      DropdownMenuItem(
+                        value: item.key,
+                        child: Text(item.label),
+                      ),
+                  ],
+                  onChanged: _snapshotLocked
+                      ? null
+                      : (value) => setState(() => _compensationRuleKey = value),
+                ),
+              ),
               const SizedBox(height: 16),
               _responsivePair(
                 DropdownButtonFormField<String>(

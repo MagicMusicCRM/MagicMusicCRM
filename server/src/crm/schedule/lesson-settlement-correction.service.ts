@@ -1,0 +1,347 @@
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  UnprocessableEntityException,
+} from "@nestjs/common";
+import { createHash, randomUUID } from "node:crypto";
+import { PoolClient } from "pg";
+import { ActorContext } from "../../common/security/actor-context";
+import { DatabaseService } from "../../db/database.service";
+import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
+import { fingerprintPayload } from "../../platform/platform-integrity.util";
+import { LessonSettlementResult } from "../commerce/lesson-settlement.port";
+import { LessonSettlementService } from "../commerce/lesson-settlement.service";
+import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
+import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
+import { CrmPolicy } from "../crm.policy";
+import {
+  LessonSettlementCorrectionCommandDto,
+  LessonSettlementCorrectionPreviewDto,
+} from "../dto/lesson-settlement-correction.dto";
+import { LessonCommandMetadata } from "./lesson-command.service";
+
+@Injectable()
+export class LessonSettlementCorrectionService {
+  constructor(
+    private readonly database: DatabaseService,
+    private readonly platform: PlatformIntegrityService,
+    private readonly policy: CrmPolicy,
+    private readonly settlement: LessonSettlementService,
+    private readonly previewTokens: SubscriptionPreviewTokenService,
+    private readonly reservations: SubscriptionReservationService,
+  ) {}
+
+  async history(actor: ActorContext, lessonId: string) {
+    this.policy.assertCanWriteCrm(actor);
+    const lesson = await this.database.query<{ id: string }>(
+      "select id from app.lessons where id = $1 and deleted_at is null",
+      [lessonId],
+    );
+    if (!lesson.rows[0]) throw new NotFoundException("Урок не найден.");
+    const history = await this.database.query<{
+      kind: "planned" | "correction";
+      version: number | string;
+      decision: Record<string, unknown>;
+      reason_text: string | null;
+      actor_user_id: string;
+      actor_name: string;
+      created_at: Date | string;
+      effective: boolean;
+    }>(
+      `with latest_plan as (
+         select max(version) as version
+         from app.lesson_settlement_plan_revisions where lesson_id = $1
+       ), latest_correction as (
+         select max(version) as version
+         from app.lesson_settlement_corrections where lesson_id = $1
+       ), entries as (
+         select 'planned'::text as kind, revision.version, revision.decision,
+           revision.reason_text, revision.actor_user_id, revision.created_at,
+           (revision.version = latest_plan.version
+             and latest_correction.version is null) as effective
+         from app.lesson_settlement_plan_revisions revision
+         cross join latest_plan cross join latest_correction
+         where revision.lesson_id = $1
+         union all
+         select 'correction'::text, correction.version, correction.decision,
+           correction.reason_text, correction.actor_user_id,
+           correction.created_at,
+           correction.version = latest_correction.version
+         from app.lesson_settlement_corrections correction
+         cross join latest_correction
+         where correction.lesson_id = $1
+       )
+       select entries.*,
+         trim(coalesce(profile.first_name, '') || ' ' ||
+           coalesce(profile.last_name, '')) as actor_name
+       from entries
+       left join app.profiles profile
+         on profile.user_id = entries.actor_user_id
+        and profile.deleted_at is null
+       order by entries.created_at desc, entries.kind desc, entries.version desc`,
+      [lessonId],
+    );
+    return {
+      lessonId,
+      items: history.rows.map((row) => ({
+        kind: row.kind,
+        version: Number(row.version),
+        decision: row.decision,
+        reason: row.reason_text,
+        actorUserId: row.actor_user_id,
+        actorName: row.actor_name || "Сотрудник",
+        createdAt: new Date(row.created_at).toISOString(),
+        effective: row.effective,
+      })),
+    };
+  }
+
+  async preview(
+    actor: ActorContext,
+    lessonId: string,
+    dto: LessonSettlementCorrectionPreviewDto,
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    const preview = await this.database.transaction(async (client) => {
+      await client.query("savepoint lesson_settlement_correction_preview");
+      try {
+        return await this.applyCorrection(
+          client,
+          actor,
+          lessonId,
+          dto,
+          randomUUID(),
+          false,
+        );
+      } finally {
+        await client.query("rollback to savepoint lesson_settlement_correction_preview");
+        await client.query("release savepoint lesson_settlement_correction_preview");
+      }
+    });
+    const correctionFingerprint = this.fingerprint(dto, preview.settled);
+    const signed = this.previewTokens.issueLessonTransition({
+      kind: "lesson.transition",
+      operation: "correct",
+      actorUserId: actor.userId,
+      lessonId,
+      expectedVersion: dto.expectedVersion,
+      transitionFingerprint: correctionFingerprint,
+    });
+    return {
+      canConfirm: true,
+      financialPreview: this.financialProjection(preview.settled),
+      previewToken: signed.token,
+      previewExpiresAt: signed.expiresAt,
+    };
+  }
+
+  async commit(
+    actor: ActorContext,
+    lessonId: string,
+    dto: LessonSettlementCorrectionCommandDto,
+    metadata: LessonCommandMetadata,
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    this.assertMetadata(metadata);
+    const signed = this.previewTokens.verifyLessonTransition(dto.previewToken);
+    if (signed.operation !== "correct" || signed.actorUserId !== actor.userId ||
+        signed.lessonId !== lessonId ||
+        signed.expectedVersion !== dto.expectedVersion) {
+      throw new UnprocessableEntityException({
+        code: "LESSON_SETTLEMENT_CORRECTION_PREVIEW_INVALID",
+      });
+    }
+    const correctionId = this.stableCorrectionId(
+      actor.userId,
+      lessonId,
+      metadata.idempotencyKey,
+    );
+    const mutation = await this.platform.executeVersionedMutation({
+      actorKey: `user:${actor.userId}`,
+      actorUserId: actor.userId,
+      operation: "schedule.lesson.settlement-correction",
+      idempotencyKey: metadata.idempotencyKey,
+      payload: { lessonId, ...dto },
+      aggregateType: "schedule:lesson",
+      aggregateId: lessonId,
+      expectedVersion: dto.expectedVersion,
+      requestId: metadata.requestId,
+      audit: {
+        action: "crm.lesson_settlement_corrected",
+        entityType: "lesson",
+        entityId: lessonId,
+        reason: "lesson.settlement.correction",
+        reasonText: dto.reasonText.trim(),
+        beforeRef: { lessonId, version: dto.expectedVersion },
+        afterRef: { correctionId },
+      },
+      outbox: {
+        type: "schedule.lesson.changed",
+        payload: { lessonId, action: "settlement-corrected" },
+      },
+      mutate: async (client, nextVersion) => {
+        const applied = await this.applyCorrection(
+          client,
+          actor,
+          lessonId,
+          dto,
+          correctionId,
+          true,
+        );
+        if (this.fingerprint(dto, applied.settled) !==
+            signed.transitionFingerprint) {
+          throw new UnprocessableEntityException({
+            code: "LESSON_SETTLEMENT_CORRECTION_PREVIEW_STALE",
+          });
+        }
+        const updated = await client.query<{ version: number | string }>(
+          `update app.lessons set updated_at = now()
+           where id = $1 and version = $2
+             and lifecycle_state = 'successfully_completed'
+           returning version`,
+          [lessonId, dto.expectedVersion],
+        );
+        if (!updated.rows[0] || Number(updated.rows[0].version) !== nextVersion) {
+          throw new ConflictException({ code: "LESSON_VERSION_DIVERGED" });
+        }
+        return {
+          lessonId,
+          correctionId,
+          correctionVersion: applied.correctionVersion,
+          clientFinancialFactIds: applied.settled.clientFacts.map((fact) => fact.id),
+          teacherFinancialFactId: applied.settled.teacherFact.id,
+        };
+      },
+    });
+    if (!mutation.replayed) {
+      await this.reservations.publishLessonSettlementPostCommit(lessonId);
+    }
+    return {
+      ...mutation.resultRef,
+      version: mutation.version,
+      replayed: mutation.replayed,
+    };
+  }
+
+  private async applyCorrection(
+    client: PoolClient,
+    actor: ActorContext,
+    lessonId: string,
+    dto: LessonSettlementCorrectionPreviewDto,
+    correctionId: string,
+    lock: boolean,
+  ) {
+    const lesson = await client.query<{
+      version: number | string;
+      lifecycle_state: string;
+      branch_id: string;
+    }>(
+      `select version, lifecycle_state, branch_id from app.lessons
+       where id = $1 and deleted_at is null
+       ${lock ? "for update" : ""}`,
+      [lessonId],
+    );
+    const source = lesson.rows[0];
+    if (!source) throw new NotFoundException("Урок не найден.");
+    if (Number(source.version) !== dto.expectedVersion) {
+      throw new ConflictException({ code: "STALE_AGGREGATE_VERSION" });
+    }
+    if (source.lifecycle_state !== "successfully_completed") {
+      throw new ConflictException({
+        code: "LESSON_SETTLEMENT_CORRECTION_NOT_ALLOWED",
+      });
+    }
+    const prepared = await this.settlement.preparePlan(
+      client,
+      source.branch_id,
+      dto.financialDecision,
+    );
+    const previous = await client.query<{ id: string; version: number | string }>(
+      `select id, version from app.lesson_settlement_corrections
+       where lesson_id = $1 order by version desc limit 1
+       ${lock ? "for update" : ""}`,
+      [lessonId],
+    );
+    const correctionVersion = Number(previous.rows[0]?.version ?? 0) + 1;
+    await client.query(
+      `insert into app.lesson_settlement_corrections (
+         id, lesson_id, version, supersedes_correction_id, decision,
+         settlement_revision_id, compensation_revision_id,
+         reason_text, actor_user_id
+       ) values ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9)`,
+      [
+        correctionId,
+        lessonId,
+        correctionVersion,
+        previous.rows[0]?.id ?? null,
+        JSON.stringify(dto.financialDecision),
+        prepared.settlementRevisionId,
+        prepared.compensationRevisionId,
+        dto.reasonText.trim(),
+        actor.userId,
+      ],
+    );
+    const settled = await this.settlement.settle(client, lessonId, {
+      context: "settle",
+      decision: dto.financialDecision,
+      reasonText: dto.reasonText.trim(),
+      configurationRevisionIds: {
+        settlementRevisionId: prepared.settlementRevisionId,
+        compensationRevisionId: prepared.compensationRevisionId,
+      },
+      correction: { id: correctionId },
+    });
+    return { correctionVersion, settled };
+  }
+
+  private fingerprint(
+    dto: LessonSettlementCorrectionPreviewDto,
+    settled: LessonSettlementResult,
+  ) {
+    return fingerprintPayload({
+      expectedVersion: dto.expectedVersion,
+      reasonText: dto.reasonText.trim(),
+      financialDecision: dto.financialDecision,
+      financial: this.financialProjection(settled),
+    });
+  }
+
+  private financialProjection(settled: LessonSettlementResult) {
+    return {
+      clientFacts: settled.clientFacts.map((fact) => ({
+        clientId: fact.clientId,
+        settlementTypeKey: fact.settlementTypeKey,
+        settlementLabel: fact.settlementLabel,
+        chargeType: fact.chargeType,
+        subscriptionId: fact.subscriptionId,
+        amountMinor: fact.amountMinor,
+        units: fact.units,
+      })),
+      teacherFact: {
+        compensationRuleKey: settled.teacherFact.compensationRuleKey,
+        compensationRuleLabel: settled.teacherFact.compensationRuleLabel,
+        amountMinor: settled.teacherFact.amountMinor,
+      },
+    };
+  }
+
+  private assertMetadata(metadata: LessonCommandMetadata) {
+    if (!/^[A-Za-z0-9._:-]{8,160}$/.test(metadata.idempotencyKey) ||
+        !metadata.requestId || metadata.requestId.length > 160) {
+      throw new UnprocessableEntityException({
+        code: "MUTATION_METADATA_REQUIRED",
+      });
+    }
+  }
+
+  private stableCorrectionId(userId: string, lessonId: string, key: string) {
+    const bytes = createHash("sha256")
+      .update(`schedule.lesson.correction\0${userId}\0${lessonId}\0${key}`)
+      .digest().subarray(0, 16);
+    bytes[6] = (bytes[6]! & 0x0f) | 0x50;
+    bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+    const hex = bytes.toString("hex");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+}

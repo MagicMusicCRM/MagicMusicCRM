@@ -41,6 +41,8 @@ interface PayrollLessonRow {
   teacher_rate: string | number | null;
   attendance_kind: string | null;
   charge_share: string | number | null;
+  settlement_fact_id: string | null;
+  settled_amount_minor: string | number | null;
 }
 
 interface TeacherRateRow {
@@ -106,6 +108,18 @@ export class PayrollService {
     ratesByTeacher: Map<string, Array<{ rate: number; effectiveFrom: string }>>,
   ): { hours: number; rate: number; coefficient: number; amount: number } {
     const hours = Number(lesson.duration_minutes ?? 0) / 60;
+    if (
+      lesson.settlement_fact_id != null &&
+      lesson.settled_amount_minor != null
+    ) {
+      const amount = Number(lesson.settled_amount_minor) / 100;
+      return {
+        hours,
+        rate: hours > 0 ? this.round2(amount / hours) : 0,
+        coefficient: 1,
+        amount: this.round2(amount),
+      };
+    }
     let rate: number;
     if (lesson.teacher_rate !== null && lesson.teacher_rate !== undefined) {
       // Per-lesson override (набранная вручную ставка за это занятие) wins.
@@ -159,7 +173,9 @@ export class PayrollService {
           l.teacher_rate, g.teacher_rate as group_rate, g.name as group_name,
           trim(coalesce(sp.first_name, '') || ' ' || coalesce(sp.last_name, '')) as student_name,
           trim(coalesce(ld.first_name, '') || ' ' || coalesce(ld.last_name, '')) as lead_name,
-          lp.attendance_kind, lp.charge_share
+          lp.attendance_kind, lp.charge_share,
+          compensation.id as settlement_fact_id,
+          compensation.amount_minor as settled_amount_minor
         from app.lessons l
         left join app.groups g on g.id = l.group_id and g.deleted_at is null
         left join app.students s on s.id = l.student_id and s.deleted_at is null
@@ -169,6 +185,8 @@ export class PayrollService {
         left join app.leads ld on ld.id = l.lead_id and ld.deleted_at is null
         left join app.lesson_participation lp
           on lp.lesson_id = l.id and lp.student_id = l.student_id
+        left join app.lesson_teacher_compensation_facts_effective compensation
+          on compensation.lesson_id = l.id
         where l.deleted_at is null
           and l.teacher_id is not null
           and l.status in ('completed', 'done')
@@ -529,7 +547,7 @@ export class PayrollService {
       // teacherNames holds exactly the teachers that passed the status/
       // discipline/category filter above.
       if (!teacherNames.has(lesson.teacher_id)) continue;
-      const { hours, amount } = this.computeLessonAccrual(lesson, rates);
+      const { hours, rate, amount } = this.computeLessonAccrual(lesson, rates);
       const teacher = teachers.get(lesson.teacher_id) ?? {
         hoursTotal: 0,
         accruedTotal: 0,
@@ -542,8 +560,9 @@ export class PayrollService {
         groupId: lesson.group_id,
         studentId: lesson.group_id ? null : lesson.student_id,
         unitName: this.unitNameFor(lesson),
-        teacherRate:
-          lesson.group_rate === null || lesson.group_rate === undefined
+        teacherRate: lesson.settlement_fact_id != null
+          ? rate
+          : lesson.group_rate === null || lesson.group_rate === undefined
             ? null
             : Number(lesson.group_rate),
         days: new Map<string, number>(),

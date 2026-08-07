@@ -411,6 +411,11 @@ extension _ScheduleActions on _ScheduleWidgetState {
         final key = _filterClientType == 'lead' ? 'lead_id' : 'student_id';
         if (l[key]?.toString() != _filterClientId) return false;
       }
+      if (widget.clientId != null &&
+          _hideOtherClientLessons &&
+          !_isContextClientLesson(l)) {
+        return false;
+      }
       return true;
     }).toList();
   }

@@ -27,7 +27,8 @@ export interface SchedulePlanEndPreviewTokenPayload {
 
 export interface LessonTransitionPreviewTokenPayload {
   kind: "lesson.transition";
-  operation: "reschedule" | "cancel" | "settle" | "bulk";
+  operation: "reschedule" | "cancel" | "settle" | "bulk" | "correct" |
+    "planned-settlement";
   actorUserId: string;
   lessonId: string;
   expectedVersion: number;
@@ -688,7 +689,14 @@ function assertLessonTransitionPayload(
     Object.keys(payload).length !== exactKeys.length ||
     exactKeys.some((key) => !(key in payload)) ||
     payload.kind !== "lesson.transition" ||
-    !["reschedule", "cancel", "settle", "bulk"].includes(
+    ![
+      "reschedule",
+      "cancel",
+      "settle",
+      "bulk",
+      "correct",
+      "planned-settlement",
+    ].includes(
       payload.operation as string,
     ) ||
     !isUuid(payload.actorUserId) ||

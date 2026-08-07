@@ -179,7 +179,7 @@ Use existing components first. Add or extend only repeated behavior:
 | `MagicAdaptiveSurface` | Chooses route/sheet/dialog container from declared job | Existing `showMagicSheet/Drawer` |
 | `MagicDraggableSheet` | Handle, extents, expand, safe area, dirty-state integration | Flutter `DraggableScrollableSheet` |
 | `MagicDesktopScrollbar` | Styled explicit controller owner per axis | Flutter `Scrollbar`/theme |
-| `MagicEntityLink` | Typed actor-safe link, tooltip, focus and open-new-tab action | Existing `EntityRouteRegistry` |
+| `MagicEntityLink` | Typed actor-safe entity text; desktop new-tab/compact stack policy, focus and semantics | Existing `EntityRouteRegistry` |
 | `MagicPageState` | Consistent loading/empty/error/forbidden/retry region | Existing skeleton/toast components |
 | `MagicScopeSelector` | Displays valid effective school/branch choices | Existing branch selector/provider |
 
@@ -189,7 +189,13 @@ Do not add a base class or new package for these patterns. If an existing widget
 
 ### Client workspace
 
-Desktop client card is a routed full work area and one vertically scrollable workspace-canvas: its capability-projected sections are visible in a stable reading order without a section tab switch. The role-projected left navigation rail remains mounted while any client is open; every entry path resolves under the canonical `Клиенты > Лид/Ученик · имя` context instead of creating a parallel standalone surface. Large desktop uses bounded field widths and two-column section rows where content permits; section deep links scroll to the matching block. Mobile remains a full-screen nested route with compact section navigation. Canonical sections: Overview, Lessons, Payments, Subscriptions, History & Tasks, Contacts/Representatives, Documents. Configuration-driven Custom fields are a collapsed region inside Overview on every width, never a separate client-card destination. Preferred schedule moves out of Info into Lessons; the actual client calendar follows it as an interactive expandable region. Payments remains separate from subscriptions.
+Desktop client card is a routed full work area and one vertically scrollable workspace-canvas: its capability-projected sections are visible in a stable reading order without a section tab switch. The role-projected left navigation rail remains mounted while any client is open; every entry path resolves under the canonical `Клиенты > Лид/Ученик · имя` context instead of creating a parallel standalone surface. Large desktop uses bounded field widths and two-column section rows where content permits; section deep links scroll to the matching block. Mobile remains a full-screen nested route with compact thematic tabs over the same providers and commands. Canonical sections: Overview, Lessons, Payments, Subscriptions, History & Tasks, Contacts/Representatives, Documents. Configuration-driven Custom fields are a collapsed region inside Overview on every width, never a separate client-card destination. Preferred schedule moves out of Info into Lessons; the actual client calendar follows it as an interactive expandable region and defaults to hiding other clients' lessons. Payments remains separate from subscriptions.
+
+Internal related-record navigation is rendered on the entity label itself: client,
+teacher, room, group, lesson, payment, subscription, task and user names use the
+typed `EntityRouteRegistry` seam. Desktop always opens/selects a new workspace
+tab after snapshotting the source view; compact pushes the canonical route.
+Standalone «Открыть в новой вкладке» controls are not part of the UI.
 
 Lead and Student boards share one toolbar/layout contract: search and an expandable `Фильтры` control on the left, one role-gated create FAB at bottom-right. Client Overview treats Advertising source, Request type, Learning goal, Level, Category and Lesson type as primary fields. Advertising source is one canonical `lead_sources.id` reference shared by Lead and Student and copied losslessly during conversion; legacy `adSource` is migration input only and never a second editable field.
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,6 +10,7 @@ import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/create_lesson_dialog.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision_flow.dart';
 
 const _teacherId = '22222222-2222-2222-2222-222222222222';
 const _studentId = '33333333-3333-3333-3333-333333333333';
@@ -53,6 +55,7 @@ class _FakeApiClient extends MagicApiClient {
   final lessonPosts = <Map<String, dynamic>>[];
   final decisionPreviews = <Map<String, dynamic>>[];
   final decisionCommits = <Map<String, dynamic>>[];
+  final decisionCommitMethods = <String>[];
 
   @override
   Future<T> get<T>(
@@ -160,7 +163,9 @@ class _FakeApiClient extends MagicApiClient {
       if (createError case final error?) throw error;
       return <String, dynamic>{'id': 'lesson-1', 'version': 1} as T;
     }
-    if (path.endsWith('/reschedule/preview')) {
+    if (path.endsWith('/reschedule/preview') ||
+        path.endsWith('/planned-settlement/preview') ||
+        path.endsWith('/settlement-correction/preview')) {
       decisionPreviews.add(Map<String, dynamic>.from(data as Map));
       return <String, dynamic>{
             'operation': 'reschedule',
@@ -204,11 +209,32 @@ class _FakeApiClient extends MagicApiClient {
     Map<String, dynamic>? queryParameters,
     bool authenticated = true,
   }) async {
-    if (path.endsWith('/reschedule')) {
+    if (path.endsWith('/reschedule') ||
+        path.endsWith('/settlement-correction')) {
       decisionCommits.add(Map<String, dynamic>.from(data as Map));
+      decisionCommitMethods.add('POST $path');
       return <String, dynamic>{'transitionId': 'transition-1'} as T;
     }
     throw UnimplementedError('POST IDEMPOTENT $path');
+  }
+
+  @override
+  Future<T> request<T>(
+    String method,
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+    ResponseType? responseType,
+    MagicMutationIdentity? mutationIdentity,
+  }) async {
+    if (method == 'PUT' && path.endsWith('/planned-settlement')) {
+      decisionCommits.add(Map<String, dynamic>.from(data as Map));
+      decisionCommitMethods.add('$method $path');
+      expect(mutationIdentity, isNotNull);
+      return <String, dynamic>{'lessonId': 'lesson-1', 'version': 8} as T;
+    }
+    throw UnimplementedError('$method $path');
   }
 }
 
@@ -224,6 +250,29 @@ Widget _host(_FakeApiClient client, {Map<String, dynamic>? lesson}) {
               child: const Text('открыть диалог'),
             ),
           ),
+        ),
+      ),
+    ),
+  );
+}
+
+Widget _decisionHost(_FakeApiClient client, LessonDecisionOperation operation) {
+  return MaterialApp(
+    home: Scaffold(
+      body: Builder(
+        builder: (context) => FilledButton(
+          onPressed: () => showLessonDecisionFlow(
+            context,
+            api: client,
+            operation: operation,
+            lesson: const {
+              'id': '66666666-6666-6666-6666-666666666666',
+              'version': 7,
+              'branch_id': _branchId,
+              'scheduled_at': '2026-08-10T07:00:00.000Z',
+            },
+          ),
+          child: const Text('открыть расчёт'),
         ),
       ),
     ),
@@ -269,6 +318,20 @@ Future<void> _selectRequiredResources(
   await tester.pumpAndSettle();
   await tester.tap(find.text('Зал 1').last);
   await tester.pumpAndSettle();
+
+  await tester.ensureVisible(
+    find.byKey(const ValueKey('lesson-settlement-type-field')),
+  );
+  await tester.tap(find.byKey(const ValueKey('lesson-settlement-type-field')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Бесплатное занятие').last);
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.byKey(const ValueKey('lesson-compensation-rule-field')),
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Не оплачивать').last);
+  await tester.pumpAndSettle();
 }
 
 Future<void> _tapCreate(WidgetTester tester) async {
@@ -309,6 +372,10 @@ void main() {
     expect(body['clientChargeValue'], 0);
     expect(body['teacherCompensationType'], 'none');
     expect(body['teacherCompensationValue'], 0);
+    expect(body['financialDecision'], {
+      'settlementTypeKey': 'free_lesson',
+      'teacherCompensationRuleKey': 'none',
+    });
     expect(body['roomId'], _roomId);
     expect(body, isNot(contains('studentId')));
     expect(body, isNot(contains('leadId')));
@@ -475,4 +542,62 @@ void main() {
     expect(body['previewToken'], 'signed-lesson-preview');
     expect(body['confirm'], isTrue);
   });
+
+  for (final operation in const [
+    LessonDecisionOperation.plannedSettlement,
+    LessonDecisionOperation.correction,
+  ]) {
+    testWidgets('${operation.name} uses signed preview and one atomic commit', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final client = _FakeApiClient();
+      await tester.pumpWidget(_decisionHost(client, operation));
+      await tester.tap(find.text('открыть расчёт'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('lesson-decision-reason')),
+        'Расчёт изменён после проверки сотрудником',
+      );
+      await tester.tap(find.byKey(const Key('lesson-decision-settlement')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Бесплатное занятие').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('lesson-decision-compensation')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Не оплачивать').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('lesson-decision-submit')));
+      await tester.pumpAndSettle();
+
+      expect(client.decisionPreviews, hasLength(1));
+      expect(client.decisionPreviews.single, isNot(contains('reasonCode')));
+      expect(find.byKey(const Key('lesson-decision-preview')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('lesson-decision-submit')));
+      await tester.pumpAndSettle();
+
+      expect(client.decisionCommits, hasLength(1));
+      expect(client.decisionCommits.single, {
+        'expectedVersion': 7,
+        'reasonText': 'Расчёт изменён после проверки сотрудником',
+        'financialDecision': {
+          'settlementTypeKey': 'free_lesson',
+          'teacherCompensationRuleKey': 'none',
+        },
+        'previewToken': 'signed-lesson-preview',
+        'confirm': true,
+      });
+      expect(
+        client.decisionCommitMethods.single,
+        startsWith(
+          operation == LessonDecisionOperation.plannedSettlement
+              ? 'PUT '
+              : 'POST ',
+        ),
+      );
+    });
+  }
 }

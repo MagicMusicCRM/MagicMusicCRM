@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/entity_link_text.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 import 'package:magic_music_crm/core/workspace/workspace_state.dart';
@@ -219,25 +220,16 @@ class WorkspaceLinkedEntityButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        TextButton(onPressed: () => controller.open(link), child: Text(label)),
-        IconButton(
-          key: ValueKey(
-            'workspace-open-new-${link.rawEntityType}-${link.entityId}',
-          ),
-          tooltip: 'Открыть в новой вкладке',
-          onPressed: () {
-            try {
-              controller.open(link, explicitNew: true);
-            } on WorkspaceLimitReached {
-              onLimitReached?.call();
-            }
-          },
-          icon: const Icon(Icons.open_in_new),
-        ),
-      ],
+    return EntityLinkText(
+      key: ValueKey('workspace-linked-${link.rawEntityType}-${link.entityId}'),
+      text: label,
+      onPressed: () {
+        try {
+          controller.open(link, explicitNew: true);
+        } on WorkspaceLimitReached {
+          onLimitReached?.call();
+        }
+      },
     );
   }
 }

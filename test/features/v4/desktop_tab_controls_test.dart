@@ -38,7 +38,7 @@ void main() {
     );
 
     await tester.tap(
-      find.byKey(const ValueKey('workspace-open-new-client-client-11')),
+      find.byKey(const ValueKey('workspace-linked-client-client-11')),
     );
     expect(limitReached, isTrue);
     expect(workspace.state.tabs, hasLength(10));

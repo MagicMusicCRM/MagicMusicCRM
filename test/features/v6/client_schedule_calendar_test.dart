@@ -161,7 +161,11 @@ void main() {
 
       expect(find.text('Календарь занятий'), findsOneWidget);
       expect(find.text('Анна Смирнова'), findsWidgets);
-      expect(find.text('Другие клиенты'), findsOneWidget);
+      final hideOthers = tester.widget<FilterChip>(
+        find.byKey(const ValueKey('client-calendar-hide-others')),
+      );
+      expect(hideOthers.selected, isTrue);
+      expect(find.text('Другие клиенты'), findsNothing);
       expect(find.byType(ScheduleDayCanvas), findsOneWidget);
       expect(
         find.byKey(const ValueKey('schedule-lesson-lesson-selected')),
@@ -169,10 +173,10 @@ void main() {
       );
       expect(
         find.byKey(const ValueKey('schedule-lesson-lesson-other')),
-        findsOneWidget,
+        findsNothing,
       );
       expect(find.byIcon(Icons.person_pin_circle_outlined), findsWidgets);
-      expect(find.byIcon(Icons.people_outline_rounded), findsWidgets);
+      expect(find.byIcon(Icons.people_outline_rounded), findsNothing);
       expect(find.text('Создать занятие'), findsNothing);
 
       final matrixCalls = api.getCalls
@@ -184,6 +188,17 @@ void main() {
         expect(call.query.containsKey('studentId'), isFalse);
         expect(call.query.containsKey('leadId'), isFalse);
       }
+
+      await tester.tap(
+        find.byKey(const ValueKey('client-calendar-hide-others')),
+      );
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey('schedule-lesson-lesson-other')),
+        findsOneWidget,
+      );
+      expect(_lessonBorder(tester, 'lesson-selected'), AppColor.success);
+      expect(_lessonBorder(tester, 'lesson-other'), AppColor.text2);
       expect(tester.takeException(), isNull);
     },
   );
@@ -356,10 +371,12 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('lesson-reference-Занятие')));
     await tester.pumpAndSettle();
 
-    final tab = controller.state.activeTab;
-    expect(tab.routeStack, hasLength(2));
-    expect(tab.currentRoute.link.entityType, EntityLinkType.lesson);
-    final source = tab.routeStack.first.viewState;
+    expect(controller.state.tabs, hasLength(2));
+    final sourceTab = controller.state.tabs.first;
+    final targetTab = controller.state.activeTab;
+    expect(sourceTab.routeStack, hasLength(1));
+    expect(targetTab.currentRoute.link.entityType, EntityLinkType.lesson);
+    final source = sourceTab.currentRoute.viewState;
     expect(source.filters['section'], 'lessons');
     expect(source.filters['view'], 'day');
     expect(source.filters['clientCalendarBranchId'], 'branch-a');

@@ -7,25 +7,43 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 
-enum LessonDecisionOperation { reschedule, cancel, settle }
+enum LessonDecisionOperation {
+  reschedule,
+  cancel,
+  settle,
+  plannedSettlement,
+  correction,
+}
 
 extension on LessonDecisionOperation {
   String get key => switch (this) {
     LessonDecisionOperation.reschedule => 'reschedule',
     LessonDecisionOperation.cancel => 'cancel',
     LessonDecisionOperation.settle => 'settle',
+    LessonDecisionOperation.plannedSettlement => 'planned-settlement',
+    LessonDecisionOperation.correction => 'settlement-correction',
   };
 
   String get title => switch (this) {
     LessonDecisionOperation.reschedule => 'Перенос занятия',
     LessonDecisionOperation.cancel => 'Отмена занятия',
     LessonDecisionOperation.settle => 'Результат занятия',
+    LessonDecisionOperation.plannedSettlement => 'Изменение расчёта',
+    LessonDecisionOperation.correction => 'Корректировка расчёта',
   };
 
   String get action => switch (this) {
     LessonDecisionOperation.reschedule => 'Перенести',
     LessonDecisionOperation.cancel => 'Отменить занятие',
     LessonDecisionOperation.settle => 'Зафиксировать результат',
+    LessonDecisionOperation.plannedSettlement => 'Изменить расчёт',
+    LessonDecisionOperation.correction => 'Сохранить корректировку',
+  };
+
+  String get catalogContext => switch (this) {
+    LessonDecisionOperation.plannedSettlement ||
+    LessonDecisionOperation.correction => 'settle',
+    _ => key,
   };
 }
 
@@ -84,9 +102,11 @@ class LessonDecisionCatalog {
     ]..sort((left, right) => left.order.compareTo(right.order));
 
     return LessonDecisionCatalog(
-      settlementTypes: parse(
-        'settlementTypes',
-      ).where((item) => item.allowedContexts.contains(operation.key)).toList(),
+      settlementTypes: parse('settlementTypes')
+          .where(
+            (item) => item.allowedContexts.contains(operation.catalogContext),
+          )
+          .toList(),
       compensationRules: parse('teacherCompensationRules'),
     );
   }
@@ -145,7 +165,9 @@ class LessonDecisionController {
     }
     final payload = <String, dynamic>{
       'expectedVersion': expectedVersion,
-      'reasonCode': 'manual',
+      if (operation != LessonDecisionOperation.plannedSettlement &&
+          operation != LessonDecisionOperation.correction)
+        'reasonCode': 'manual',
       'reasonText': reason.trim(),
       'financialDecision': {
         'settlementTypeKey': settlementTypeKey,
@@ -176,10 +198,19 @@ class LessonDecisionController {
         !preview.canConfirm) {
       throw StateError('Сначала получите актуальный расчёт.');
     }
+    final data = {...payload, 'previewToken': token, 'confirm': true};
+    if (operation == LessonDecisionOperation.plannedSettlement) {
+      return _api.request<Map<String, dynamic>>(
+        'PUT',
+        '/crm/lessons/${lesson['id']}/${operation.key}',
+        data: data,
+        mutationIdentity: identity,
+      );
+    }
     return _api.postIdempotent<Map<String, dynamic>>(
       '/crm/lessons/${lesson['id']}/${operation.key}',
       identity: identity,
-      data: {...payload, 'previewToken': token, 'confirm': true},
+      data: data,
     );
   }
 }

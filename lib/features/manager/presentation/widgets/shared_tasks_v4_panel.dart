@@ -7,6 +7,7 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
+import 'package:magic_music_crm/core/navigation/entity_link_text.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
@@ -1246,7 +1247,13 @@ class _SharedTaskDetails extends StatelessWidget {
     final start = DateTime.tryParse(
       task['startAt']?.toString() ?? '',
     )?.toLocal();
-    final linked = task['linkedEntity'] is Map;
+    final rawLinked = task['linkedEntity'];
+    final linked = rawLinked is Map
+        ? EntityLink.fromJson({
+            'entityType': rawLinked['type'],
+            'entityId': rawLinked['id'],
+          })
+        : null;
     return SingleChildScrollView(
       padding: AppSpace.sheetBody,
       child: Column(
@@ -1274,12 +1281,21 @@ class _SharedTaskDetails extends StatelessWidget {
               ),
             ],
           ),
-          if (linked) ...[
+          if (linked?.isSupported == true) ...[
             const SizedBox(height: AppSpace.lg),
-            OutlinedButton.icon(
-              onPressed: onOpenEntity,
-              icon: const Icon(Icons.open_in_new_rounded),
-              label: const Text('Открыть связанную запись'),
+            Row(
+              children: [
+                const Text('Связанная запись: '),
+                Flexible(
+                  child: EntityLinkText(
+                    key: const Key('shared-task-linked-entity'),
+                    text: const EntityPresentationResolver()
+                        .resolve(linked!)
+                        .primary,
+                    onPressed: onOpenEntity,
+                  ),
+                ),
+              ],
             ),
           ],
           const SizedBox(height: AppSpace.xl),

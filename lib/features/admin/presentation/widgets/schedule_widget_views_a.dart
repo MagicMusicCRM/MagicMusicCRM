@@ -19,7 +19,9 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
         selectedDate: _selectedDate,
         displayedMonth: _displayedMonth,
         studentNames: _studentNames,
-        monthDaySummary: _filterClientId == null ? _monthDaySummary : const {},
+        monthDaySummary: _filterClientId == null && widget.clientId == null
+            ? _monthDaySummary
+            : const {},
         lessonsForDate: _lessonsForDate,
         parseLessonTime: _parseLessonTime,
         clientContext: widget.clientId != null,
@@ -550,17 +552,26 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
       child: Wrap(
         spacing: AppSpace.lg,
         runSpacing: AppSpace.xs,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
+          FilterChip(
+            key: const ValueKey('client-calendar-hide-others'),
+            selected: _hideOtherClientLessons,
+            label: const Text('Скрывать чужие занятия'),
+            onSelected: (selected) =>
+                _emitState(() => _hideOtherClientLessons = selected),
+          ),
           _clientContextLegend(
             Icons.person_pin_circle_outlined,
             AppColor.success,
             name == null || name.isEmpty ? 'Клиент карточки' : name,
           ),
-          _clientContextLegend(
-            Icons.people_outline_rounded,
-            AppColor.text2,
-            'Другие клиенты',
-          ),
+          if (!_hideOtherClientLessons)
+            _clientContextLegend(
+              Icons.people_outline_rounded,
+              AppColor.text2,
+              'Другие клиенты',
+            ),
         ],
       ),
     );

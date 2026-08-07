@@ -6,9 +6,10 @@
 
 ## 1. Overview
 
-Client Card остаётся одним каноническим scrollable workspace внутри видимого
-navigation rail. v7 не возвращает вкладки: он встраивает новые commerce/schedule
-действия в смысловые секции и добавляет одну общую staff-note/technical history.
+Client Card остаётся одним каноническим workspace внутри видимого navigation
+rail. Desktop использует длинный scrollable canvas; compact использует короткие
+тематические вкладки над теми же providers/commands. Новые commerce/schedule
+действия живут в смысловых секциях вместе с общей staff-note/history.
 
 ## 2. Goals / Non-Goals
 
@@ -16,8 +17,8 @@ navigation rail. v7 не возвращает вкладки: он встраи�
 - Действия находятся в своих секциях; общего меню «Действия» нет.
 - Tasks/comments/history достижимы быстрым скроллом; тяжёлые finance lists
   свёрнуты по умолчанию.
-- Desktop использует компактную grid-композицию; mobile — тот же порядок в одну
-  колонку.
+- Desktop использует компактную grid-композицию; mobile группирует тот же порядок
+  во вкладки `Обзор / Занятия / Абонементы и оплаты / Прогресс / История`.
 - Не создаются отдельные routes/cards для одной и той же сущности.
 
 ## 3. Composition
@@ -37,6 +38,10 @@ flowchart TB
 
 Preferred schedule может быть пустым; Plans/actual lesson trays всё равно
 загружаются и отображаются.
+
+Раскрываемый Month/Week/Day calendar следует за preferred schedule. Чекбокс
+`Скрывать чужие занятия` включён при первом открытии; выключение показывает все
+actor-visible lessons, где текущий клиент отмечен зелёным, остальные — серым.
 
 ## 4. Components
 
@@ -58,6 +63,7 @@ Preferred schedule может быть пустым; Plans/actual lesson trays �
 | Отменить абонемент | Commerce lifecycle | remain at same section/scroll |
 | Удалить оплату | Payment reversal | confirm impact, show technical marker |
 | Перенести занятие | Schedule transition | refresh plan tray/calendar, preserve route |
+| Перейти к связанной записи | Entity text link | desktop new tab / compact canonical stack |
 | Назначить ДЗ | Shared Homework | stays in Progress |
 | Архивировать | Client Archive | separate header action + preview |
 | Изменить заметку | Client note command | expected version, inline conflict/reload |
@@ -90,8 +96,8 @@ Technical history is not a financial report and never contributes to KPIs.
 
 - Expanded: compact field columns and paired cards where total reading width
   remains useful; narrow sections do not stretch labels across the viewport.
-- Compact: one column, sticky concise section navigation optional, full-width
-  inputs/actions and keyboard-safe sheets.
+- Compact: full-width thematic tabs, one column inside a tab, inputs/actions and
+  keyboard-safe sheets; changing tab does not refetch the card aggregate.
 - All expansion panels expose semantic expanded state and keyboard activation.
 - Payment/lesson markers use text/icon plus color; destructive confirmations
   name client, payer, amount/hours and reason.
@@ -119,11 +125,12 @@ does not blank the card. Forbidden capability prevents provider creation.
 - payments details default collapsed and tasks/history remain quickly reachable;
 - Lead→Student note identity and history preserved;
 - Back/deep-link/scroll state and Admin/Manager/Director projection tests.
+- default hide-other toggle and green/gray Month/Week/Day tests.
 
 ## 12. Trade-offs
 
-- One long canvas is retained over tabs because the owner prioritizes immediate
-  overview; collapsible heavy details control length.
+- One long canvas is retained on desktop because the owner prioritizes immediate
+  overview; compact tabs reduce phone scrolling without duplicating state.
 - One plain note is separate from comments/configurable fields because it has a
   unique staff-wide purpose and conversion lifecycle.
 - Operational history reuses audit rather than copying reasons into Client rows.
@@ -134,4 +141,3 @@ does not blank the card. Forbidden capability prevents provider creation.
 - existing typed client route/workspace state;
 - backend ClientRef/conversion/audit projection seams;
 - Commerce/Schedule controllers from sibling design documents.
-

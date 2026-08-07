@@ -13,6 +13,7 @@ class SchedulePlanRow {
     required this.validFrom,
     required this.validUntil,
     required this.notes,
+    required this.financialDecision,
     required this.active,
   });
 
@@ -30,6 +31,9 @@ class SchedulePlanRow {
     validFrom: map['validFrom']?.toString() ?? '',
     validUntil: map['validUntil']?.toString(),
     notes: map['notes']?.toString(),
+    financialDecision: Map<String, dynamic>.from(
+      map['financialDecision'] as Map? ?? const {},
+    ),
     active: map['active'] == true,
   );
 
@@ -46,6 +50,7 @@ class SchedulePlanRow {
   final String validFrom;
   final String? validUntil;
   final String? notes;
+  final Map<String, dynamic> financialDecision;
   final bool active;
 
   Map<String, dynamic> command({bool includeSeriesId = true}) => {
@@ -56,6 +61,7 @@ class SchedulePlanRow {
     'weekday': weekday,
     'beginTime': beginTime,
     'durationMinutes': durationMinutes,
+    'financialDecision': financialDecision,
     if (notes?.trim().isNotEmpty == true) 'notes': notes!.trim(),
   };
 }

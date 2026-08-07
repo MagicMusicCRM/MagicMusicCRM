@@ -570,7 +570,11 @@ class _PaymentMovementRow extends StatelessWidget {
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+        EntityLinkText(
+          text: title,
+          onPressed: () => onOpen(context, EntityOpenTarget.current),
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
         if (movement.kind == CommerceMovementKind.paymentRecord)
           Padding(
             padding: const EdgeInsets.only(top: AppSpace.xs),
@@ -630,12 +634,10 @@ class _PaymentMovementRow extends StatelessWidget {
           onPressed: onReverse,
           icon: Icon(Icons.delete_outline_rounded, color: cs.error),
         ),
-      _EntityOpenButtons(onOpen: (target) => onOpen(context, target)),
     ];
     return Semantics(
       key: ValueKey('commerce-movement-${movement.id}'),
-      button: true,
-      link: true,
+      container: true,
       label: '$title, ${formatPaymentMinor(movement.amountMinor)}',
       child: Padding(
         padding: const EdgeInsets.only(bottom: AppSpace.sm),
@@ -648,53 +650,47 @@ class _PaymentMovementRow extends StatelessWidget {
             ),
             borderRadius: BorderRadius.circular(AppRadius.control),
           ),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(AppRadius.control),
-            onTap: () => onOpen(context, EntityOpenTarget.current),
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpace.md),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final leading = Icon(
-                    credit
-                        ? Icons.south_west_rounded
-                        : Icons.north_east_rounded,
-                    color: credit ? AppTheme.success : cs.error,
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpace.md),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final leading = Icon(
+                  credit ? Icons.south_west_rounded : Icons.north_east_rounded,
+                  color: credit ? AppTheme.success : cs.error,
+                );
+                if (constraints.maxWidth >= 620) {
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      leading,
+                      const SizedBox(width: AppSpace.md),
+                      Expanded(child: content),
+                      const SizedBox(width: AppSpace.sm),
+                      amount,
+                      ...actions,
+                    ],
                   );
-                  if (constraints.maxWidth >= 620) {
-                    return Row(
+                }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         leading,
-                        const SizedBox(width: AppSpace.md),
-                        Expanded(child: content),
                         const SizedBox(width: AppSpace.sm),
-                        amount,
-                        ...actions,
+                        Expanded(child: content),
                       ],
-                    );
-                  }
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          leading,
-                          const SizedBox(width: AppSpace.sm),
-                          Expanded(child: content),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpace.sm),
-                      Wrap(
-                        alignment: WrapAlignment.end,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [amount, ...actions],
-                      ),
-                    ],
-                  );
-                },
-              ),
+                    ),
+                    const SizedBox(height: AppSpace.sm),
+                    Wrap(
+                      alignment: WrapAlignment.end,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [amount, ...actions],
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         ),
@@ -797,14 +793,13 @@ class _LegacyPaymentRow extends StatelessWidget {
             )
           : null,
       leading: const Icon(Icons.payments_outlined, color: AppTheme.success),
-      title: Text('${payment.amountRaw} ₽'),
+      title: onOpen == null
+          ? Text('${payment.amountRaw} ₽')
+          : EntityLinkText(
+              text: '${payment.amountRaw} ₽',
+              onPressed: () => onOpen!(context, EntityOpenTarget.current),
+            ),
       subtitle: Text(payment.paymentDate ?? 'Дата не указана'),
-      onTap: onOpen == null
-          ? null
-          : () => onOpen!(context, EntityOpenTarget.current),
-      trailing: onOpen == null
-          ? null
-          : _EntityOpenButtons(onOpen: (target) => onOpen!(context, target)),
     );
   }
 }

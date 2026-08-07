@@ -2,7 +2,7 @@
 
 **Статус:** Accepted  
 **PRD:** REQ-COMMERCE-101/102, REQ-PAYMENT-101/102,
-REQ-LESSON-101/102, REQ-REPORT-101  
+REQ-LESSON-101/102/103, REQ-REPORT-101
 **ADR:** ADR-007, ADR-008, ADR-009, ADR-010
 
 ## 1. Overview
@@ -20,7 +20,8 @@ settlement и начисления преподавателю. Она расши
 - выдать все часы и зафиксировать полное обязательство рассрочки;
 - поддержать `Не оплачен / Проведён, ожидает подтверждения / Оплачен`;
 - отменить абонемент и сторнировать оплату без физического удаления;
-- рассчитывать configurable client settlement и вручную выбранную teacher pay;
+- валидировать planned client settlement/teacher pay, автоматически проводить их
+  после lesson end и поддерживать append-only correction;
 - давать reconciliation delta = 0 и bounded actor-safe projections.
 
 ### Non-Goals
@@ -57,6 +58,8 @@ flowchart LR
 | `PaymentReversalService` | preview/storno/reporting exclusion | переиспользует account adjustment fact |
 | `SubscriptionLifecycleService` | cancel/refund original payer | расширяет текущий preview token flow |
 | `LessonFinancialDecisionService` | settlement + teacher accrual snapshot | заменяет boolean boundary |
+| `PlannedLessonSettlementService` | binds manual decision to config revisions and reservation impact | расширяет settlement port |
+| `LessonSettlementCorrectionService` | atomic reversal/exclusion + optional replacement | переиспользует append-only facts |
 | `CommerceConfigurationAdapter` | effective settlement/pay rules | расширяет unified CRM Configuration snapshot |
 | `CommerceProjectionRepository` | wallet/debt/pending/subscription/movements/history | расширяет один существующий SQL projection |
 | `CommerceReconciliation` | ledger/obligation/payment/exclusion/hours/accrual checks | расширяет v4 preflight/reconcile |
@@ -73,6 +76,8 @@ flowchart LR
 | Cancel preview | active subscription | subscription/version | used/reserved/paid/refundable/pending/unpaid impact |
 | Cancel commit | fresh preview, reason | refund ≤ confirmed-funded cap | close unfunded obligation + refund original payer + exclusion + audit |
 | Lesson settlement | valid lesson/config/subscription | settlement rule + teacher rule + reason | client facts + teacher accrual snapshots |
+| Planned settlement | scheduled lesson/current revisions | required client + teacher decisions | versioned plan + exact reservation impact |
+| Settlement correction | effective completed settlement | reason + replacement/cancel | reversal/exclusion + optional new effective facts |
 
 ## 6. API interfaces
 
@@ -109,6 +114,9 @@ erDiagram
   SUBSCRIPTION ||--o{ LESSON_CLIENT_FACT : consumes
   LESSON ||--o{ LESSON_CLIENT_FACT : settles
   LESSON ||--o| TEACHER_ACCRUAL_FACT : accrues
+  LESSON ||--o{ PLANNED_SETTLEMENT : plans
+  LESSON_CLIENT_FACT ||--o{ SETTLEMENT_REVERSAL : corrects
+  TEACHER_ACCRUAL_FACT ||--o{ SETTLEMENT_REVERSAL : corrects
 ```
 
 Ключевые additions и constraints приведены в
@@ -142,6 +150,9 @@ stateDiagram-v2
 | `remainingObligationMinor` | purchase charge − confirmed funding − cancelled unfunded obligation |
 | `revenueMinor` | paid cash facts, не состоящие в reporting exclusion |
 
+Lesson/client/teacher projections use only non-reversed effective facts. Planned
+decisions and failed worker reasons are operational state, not revenue/payroll.
+
 Future installment schedule не является долгом; полная purchase obligation уже
 видна отдельно и не выдаётся за деньги на счёте.
 
@@ -158,6 +169,8 @@ Future installment schedule не является долгом; полная pur
 ## 11. Failure and observability
 
 - stale token/version → `409` без фактов;
+- worker domain failure → review-required with 0 partial facts;
+- correction failure → reversal/replacement rollback together;
 - insufficient one-time balance → field-level `422`;
 - same idempotency + different payload → `409`;
 - deadlock/serialization retry — bounded server retry либо safe client retry key;
@@ -172,6 +185,7 @@ Future installment schedule не является долгом; полная pur
 - Actor Matrix/payload leak for six roles and two-client scope;
 - migration down→up + lossless legacy paid backfill;
 - reconciliation twice, delta 0;
+- worker retry/poison and post-terminal correction races;
 - Flutter Client Card tests and real accounts 3/4/5.
 
 ## 13. Trade-offs

@@ -2,11 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
+import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/models/schedule_plan.dart';
+import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
+import 'package:magic_music_crm/core/navigation/entity_link_text.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision_flow.dart';
 
 import 'preferred_schedule_editor.dart';
 import 'recurring_schedule_plan_controller.dart';
@@ -463,16 +468,38 @@ class _RecurringSchedulePlanSectionState
   );
 
   Future<
-    ({List<Map<String, dynamic>> teachers, List<Map<String, dynamic>> rooms})
+    ({
+      List<Map<String, dynamic>> teachers,
+      List<Map<String, dynamic>> rooms,
+      Map<String, LessonDecisionCatalog> decisionCatalogs,
+    })
   >
   _references() async {
-    final values = await Future.wait([
-      _crm.listTeachers(limit: 100),
-      _crm.listRooms(limit: 100),
+    final teachersFuture = _crm.listTeachers(limit: 100);
+    final roomsFuture = _crm.listRooms(limit: 100);
+    final api = ref.read(magicApiClientProvider);
+    final catalogsFuture = Future.wait<Map<String, dynamic>>([
+      for (final branch in widget.branches)
+        api.get<Map<String, dynamic>>(
+          '/crm/configuration/lesson-decisions',
+          queryParameters: {'branchId': branch['id']?.toString()},
+        ),
     ]);
+    final teachers = await teachersFuture;
+    final rooms = await roomsFuture;
+    final rawCatalogs = await catalogsFuture;
     return (
-      teachers: List<Map<String, dynamic>>.from(values[0]),
-      rooms: List<Map<String, dynamic>>.from(values[1]),
+      teachers: List<Map<String, dynamic>>.from(teachers),
+      rooms: List<Map<String, dynamic>>.from(rooms),
+      decisionCatalogs: {
+        for (var index = 0; index < widget.branches.length; index++)
+          if (widget.branches[index]['id']?.toString().isNotEmpty == true)
+            widget.branches[index]['id']
+                .toString(): LessonDecisionCatalog.fromJson(
+              rawCatalogs[index],
+              LessonDecisionOperation.settle,
+            ),
+      },
     );
   }
 
@@ -496,9 +523,34 @@ class _RecurringSchedulePlanSectionState
           teachers: references.teachers,
           rooms: references.rooms,
           defaultBranchId: widget.defaultBranchId,
+          decisionCatalogs: references.decisionCatalogs,
         ),
       );
       if (draft == null || !mounted) return;
+      final rowDrafts = await showMagicSheet<List<PreferredScheduleDraft>>(
+        context,
+        title: 'Проверка постоянного расписания',
+        subtitle:
+            'Добавьте отдельный набор дней для другого педагога или аудитории',
+        icon: Icons.rule_rounded,
+        builder: (_) => _SchedulePlanRowsReview(
+          initial: draft,
+          branches: widget.branches,
+          teachers: references.teachers,
+          rooms: references.rooms,
+          defaultBranchId: widget.defaultBranchId,
+          decisionCatalogs: references.decisionCatalogs,
+          onValidate: (rows) => _crm.previewSchedulePlanConstraints(
+            title: draft.title!,
+            studentId: widget.studentId,
+            subscriptionId: draft.subscriptionId!,
+            activeFrom: _apiDate(draft.validFrom),
+            activeUntil: draft.openEnded ? null : _apiDate(draft.validUntil),
+            rows: [for (final row in rows) ..._draftRows(row)],
+          ),
+        ),
+      );
+      if (rowDrafts == null || !mounted) return;
       await _crm.createSchedulePlan(
         identity: MagicMutationIdentity.create('schedule-plan-create'),
         title: draft.title!,
@@ -506,7 +558,7 @@ class _RecurringSchedulePlanSectionState
         subscriptionId: draft.subscriptionId!,
         activeFrom: _apiDate(draft.validFrom),
         activeUntil: draft.openEnded ? null : _apiDate(draft.validUntil),
-        rows: _draftRows(draft),
+        rows: [for (final row in rowDrafts) ..._draftRows(row)],
       );
       await _reload('Расписание создано');
     } catch (error) {
@@ -531,6 +583,7 @@ class _RecurringSchedulePlanSectionState
               'valid_from': _apiDate(DateTime.now()),
               'valid_until': plan.activeUntil,
               'notes': row.notes,
+              'financial_decision': row.financialDecision,
             };
       final draft = await showMagicSheet<PreferredScheduleDraft>(
         context,
@@ -549,6 +602,7 @@ class _RecurringSchedulePlanSectionState
           rooms: references.rooms,
           defaultBranchId: widget.defaultBranchId,
           series: source,
+          decisionCatalogs: references.decisionCatalogs,
         ),
       );
       if (draft == null || !mounted) return;
@@ -600,6 +654,10 @@ class _RecurringSchedulePlanSectionState
           'beginTime': _slotTime(draft, slot),
           'durationMinutes': draft.durationMinutes,
           if (draft.notes.isNotEmpty) 'notes': draft.notes,
+          'financialDecision': {
+            'settlementTypeKey': draft.settlementTypeKey,
+            'teacherCompensationRuleKey': draft.teacherCompensationRuleKey,
+          },
         });
       }
     }
@@ -633,6 +691,327 @@ class _RecurringSchedulePlanSectionState
       type: MagicToastType.danger,
     );
   }
+}
+
+class _SchedulePlanRowsReview extends ConsumerStatefulWidget {
+  const _SchedulePlanRowsReview({
+    required this.initial,
+    required this.branches,
+    required this.teachers,
+    required this.rooms,
+    required this.defaultBranchId,
+    required this.decisionCatalogs,
+    required this.onValidate,
+  });
+
+  final PreferredScheduleDraft initial;
+  final List<Map<String, dynamic>> branches;
+  final List<Map<String, dynamic>> teachers;
+  final List<Map<String, dynamic>> rooms;
+  final String? defaultBranchId;
+  final Map<String, LessonDecisionCatalog> decisionCatalogs;
+  final Future<Map<String, dynamic>> Function(List<PreferredScheduleDraft> rows)
+  onValidate;
+
+  @override
+  ConsumerState<_SchedulePlanRowsReview> createState() =>
+      _SchedulePlanRowsReviewState();
+}
+
+class _SchedulePlanRowsReviewState
+    extends ConsumerState<_SchedulePlanRowsReview> {
+  static const _weekdays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+
+  late final List<PreferredScheduleDraft> _rows = [widget.initial];
+  Map<String, dynamic>? _preview;
+  String? _error;
+  bool _loading = false;
+
+  Future<void> _edit([int? index]) async {
+    final seed = index == null ? _rows.last : _rows[index];
+    final result = await showMagicSheet<PreferredScheduleDraft>(
+      context,
+      title: index == null ? 'Добавить набор дней' : 'Изменить набор дней',
+      subtitle: 'Для выбранных дней педагог и аудитория обязательны',
+      icon: Icons.edit_calendar_outlined,
+      builder: (_) => PreferredScheduleEditor(
+        branches: widget.branches,
+        teachers: widget.teachers,
+        rooms: widget.rooms,
+        defaultBranchId: widget.defaultBranchId,
+        initialDraft: seed,
+        showPeriod: false,
+        requireFinancialDecision: true,
+        decisionCatalogs: widget.decisionCatalogs,
+      ),
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      if (index == null) {
+        _rows.add(result);
+      } else {
+        _rows[index] = result;
+      }
+      _preview = null;
+      _error = null;
+    });
+  }
+
+  Future<void> _submit() async {
+    setState(() {
+      _loading = true;
+      _preview = null;
+      _error = null;
+    });
+    try {
+      final preview = await widget.onValidate(List.unmodifiable(_rows));
+      if (!mounted) return;
+      if (preview['valid'] == true) {
+        Navigator.pop(context, List<PreferredScheduleDraft>.from(_rows));
+        return;
+      }
+      setState(() => _preview = preview);
+    } catch (error) {
+      if (mounted) setState(() => _error = '$error');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final issues = _constraintIssues(_preview);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var index = 0; index < _rows.length; index++) ...[
+          _rowCard(index, _rows[index]),
+          const SizedBox(height: AppSpace.sm),
+        ],
+        OutlinedButton.icon(
+          key: const Key('schedule-plan-add-row-group'),
+          onPressed: _loading ? null : _edit,
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('Добавить другой набор дней'),
+        ),
+        if (issues.isNotEmpty) ...[
+          const SizedBox(height: AppSpace.md),
+          _constraintPanel(issues),
+        ],
+        if (_error != null) ...[
+          const SizedBox(height: AppSpace.md),
+          Text(
+            'Не удалось проверить расписание: $_error',
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+        ],
+        const SizedBox(height: AppSpace.lg),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: _loading ? null : () => Navigator.pop(context),
+                child: const Text('Отмена'),
+              ),
+            ),
+            const SizedBox(width: AppSpace.sm),
+            Expanded(
+              child: FilledButton(
+                key: const Key('schedule-plan-preview-and-create'),
+                onPressed: _loading ? null : _submit,
+                child: Text(_loading ? 'Проверяем…' : 'Проверить и создать'),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _rowCard(int index, PreferredScheduleDraft row) {
+    final days = row.weekdays.toList()..sort();
+    final teacher = widget.teachers.cast<Map<String, dynamic>?>().firstWhere(
+      (item) => item?['id']?.toString() == row.teacherId,
+      orElse: () => null,
+    );
+    final room = widget.rooms.cast<Map<String, dynamic>?>().firstWhere(
+      (item) => item?['id']?.toString() == row.roomId,
+      orElse: () => null,
+    );
+    final branch = widget.branches.cast<Map<String, dynamic>?>().firstWhere(
+      (item) => item?['id']?.toString() == row.branchId,
+      orElse: () => null,
+    );
+    final teacherName =
+        '${teacher?['first_name'] ?? ''} ${teacher?['last_name'] ?? ''}'.trim();
+    return Container(
+      key: ValueKey('schedule-plan-row-group-$index'),
+      padding: const EdgeInsets.all(AppSpace.md),
+      decoration: BoxDecoration(
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(AppRadius.control),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Строка ${index + 1} · ${days.map((day) => _weekdays[day - 1]).join(', ')} · ${row.beginTime}',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${teacherName.isEmpty ? 'Педагог не выбран' : teacherName} · '
+                  '${room?['name'] ?? 'Аудитория не выбрана'} · '
+                  '${branch?['name'] ?? 'Филиал'} · ${row.durationMinutes} мин'
+                  '${row.lessonsPerDay > 1 ? ' × ${row.lessonsPerDay}' : ''}',
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            key: ValueKey('schedule-plan-edit-row-group-$index'),
+            onPressed: _loading ? null : () => _edit(index),
+            tooltip: 'Изменить строку ${index + 1}',
+            icon: const Icon(Icons.edit_outlined),
+          ),
+          if (_rows.length > 1)
+            IconButton(
+              key: ValueKey('schedule-plan-delete-row-group-$index'),
+              onPressed: _loading
+                  ? null
+                  : () => setState(() {
+                      _rows.removeAt(index);
+                      _preview = null;
+                    }),
+              tooltip: 'Удалить строку ${index + 1}',
+              icon: const Icon(Icons.delete_outline_rounded),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _constraintPanel(List<_PlanConstraintIssue> issues) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      key: const Key('schedule-plan-constraint-errors'),
+      padding: const EdgeInsets.all(AppSpace.md),
+      decoration: BoxDecoration(
+        color: AppColor.dangerSoft,
+        border: Border.all(color: AppColor.danger.withValues(alpha: 0.35)),
+        borderRadius: BorderRadius.circular(AppRadius.control),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Расписание пересекается с занятыми интервалами',
+            style: TextStyle(color: cs.error, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: AppSpace.sm),
+          for (final issue in issues) ...[
+            Text(
+              'Строка ${issue.rowIndex + 1}: ${issue.label} · ${issue.dates.take(3).join(', ')}'
+              '${issue.dates.length > 3 ? ' и ещё ${issue.dates.length - 3}' : ''}',
+            ),
+            if (issue.rowIndexes.isNotEmpty)
+              Text(
+                'Пересечение со строками: ${issue.rowIndexes.map((index) => index + 1).join(', ')}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            if (issue.lessonIds.isNotEmpty)
+              Wrap(
+                spacing: AppSpace.sm,
+                runSpacing: 2,
+                children: [
+                  for (final id in issue.lessonIds)
+                    EntityLinkText(
+                      text:
+                          'Занятие ${id.length <= 8 ? id : id.substring(0, 8)}',
+                      onPressed: () => openEntityLink(
+                        context,
+                        ref,
+                        EntityLink.typed(
+                          entityType: EntityLinkType.lesson,
+                          entityId: id,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            const SizedBox(height: AppSpace.sm),
+          ],
+        ],
+      ),
+    );
+  }
+
+  List<_PlanConstraintIssue> _constraintIssues(Map<String, dynamic>? preview) {
+    if (preview == null) return const [];
+    final issues = <String, _PlanConstraintIssue>{};
+    for (final rawRow in (preview['rows'] as List? ?? const [])) {
+      if (rawRow is! Map) continue;
+      final rowIndex = (rawRow['index'] as num?)?.toInt() ?? 0;
+      for (final rawFailure in (rawRow['failures'] as List? ?? const [])) {
+        if (rawFailure is! Map) continue;
+        final occurrence = rawFailure['occurrence'];
+        final date = occurrence is Map
+            ? occurrence['localDate']?.toString() ?? ''
+            : '';
+        for (final rawViolation
+            in (rawFailure['violations'] as List? ?? const [])) {
+          if (rawViolation is! Map) continue;
+          final code = rawViolation['code']?.toString() ?? 'UNKNOWN';
+          final resource = rawViolation['resource'];
+          final resourceId = resource is Map
+              ? resource['id']?.toString() ?? ''
+              : '';
+          final key = '$rowIndex:$code:$resourceId';
+          final issue = issues.putIfAbsent(
+            key,
+            () => _PlanConstraintIssue(rowIndex, _constraintLabel(code)),
+          );
+          if (date.isNotEmpty) issue.dates.add(date);
+          issue.lessonIds.addAll(
+            (rawViolation['conflictingLessonIds'] as List? ?? const []).map(
+              (id) => id.toString(),
+            ),
+          );
+          issue.rowIndexes.addAll(
+            (rawViolation['conflictingRowIndexes'] as List? ?? const [])
+                .whereType<num>()
+                .map((index) => index.toInt()),
+          );
+        }
+      }
+    }
+    return issues.values.toList(growable: false);
+  }
+
+  String _constraintLabel(String code) => switch (code) {
+    'INVALID_INTERVAL' => 'некорректный интервал',
+    'OUTSIDE_BRANCH_HOURS' => 'вне часов работы филиала',
+    'TEACHER_UNAVAILABLE' => 'педагог недоступен',
+    'TEACHER_BRANCH_MISMATCH' => 'педагог не назначен в этот филиал',
+    'TEACHER_OVERLAP' => 'педагог уже занят',
+    'CLIENT_OVERLAP' => 'у клиента уже есть занятие',
+    'ROOM_OVERLAP' => 'аудитория уже занята',
+    _ => 'нарушено ограничение расписания',
+  };
+}
+
+class _PlanConstraintIssue {
+  _PlanConstraintIssue(this.rowIndex, this.label);
+
+  final int rowIndex;
+  final String label;
+  final Set<String> dates = {};
+  final Set<String> lessonIds = {};
+  final Set<int> rowIndexes = {};
 }
 
 class _SchedulePlanEndForm extends StatefulWidget {

@@ -12,7 +12,11 @@ import {
 import {
   ClientChargeFactType,
   LessonSettlementInput,
+  LessonFinancialDecision,
   LessonSettlementResult,
+  PreparedLessonSettlementPlan,
+  PlannedSubscriptionAllocation,
+  StoredLessonSettlementPlan,
   TeacherCompensationFactType,
 } from "./lesson-settlement.port";
 import {
@@ -59,6 +63,272 @@ interface CommerceCatalogRow {
 
 @Injectable()
 export class LessonSettlementRepository {
+  async preparePlan(
+    client: PoolClient,
+    branchId: string,
+    decision: LessonFinancialDecision,
+  ): Promise<PreparedLessonSettlementPlan> {
+    const catalog = await this.loadCatalog(client, branchId);
+    this.assertPlannedDecision(catalog, decision);
+    return {
+      decision: JSON.parse(JSON.stringify(decision)) as LessonFinancialDecision,
+      settlementRevisionId: catalog.settlement_revision_id,
+      compensationRevisionId: catalog.compensation_revision_id,
+    };
+  }
+
+  async assignPlan(
+    client: PoolClient,
+    input: {
+      lessonId: string;
+      branchId: string;
+      decision: LessonFinancialDecision;
+      selectedBy: string;
+      reasonText?: string;
+    },
+  ): Promise<PreparedLessonSettlementPlan> {
+    const prepared = await this.preparePlan(
+      client,
+      input.branchId,
+      input.decision,
+    );
+    await this.insertPreparedPlan(client, {
+      lessonId: input.lessonId,
+      selectedBy: input.selectedBy,
+      reasonText: input.reasonText,
+      ...prepared,
+    });
+    return prepared;
+  }
+
+  async insertPreparedPlan(
+    client: PoolClient,
+    input: PreparedLessonSettlementPlan & {
+      lessonId: string;
+      selectedBy: string;
+      reasonText?: string;
+    },
+  ): Promise<void> {
+    const result = await client.query(
+      `
+        insert into app.lesson_settlement_plans (
+          lesson_id, decision, settlement_revision_id,
+          compensation_revision_id, selected_by, reason_text
+        ) values ($1, $2::jsonb, $3, $4, $5, $6)
+        on conflict (lesson_id) do nothing
+        returning lesson_id
+      `,
+      [
+        input.lessonId,
+        JSON.stringify(input.decision),
+        input.settlementRevisionId,
+        input.compensationRevisionId,
+        input.selectedBy,
+        input.reasonText?.trim() || null,
+      ],
+    );
+    if (!result.rows[0]) {
+      throw new ConflictException({
+        code: "LESSON_SETTLEMENT_PLAN_EXISTS",
+        lessonId: input.lessonId,
+      });
+    }
+    await client.query(
+      `insert into app.lesson_settlement_plan_revisions (
+         lesson_id, version, decision, settlement_revision_id,
+         compensation_revision_id, reason_text, actor_user_id
+       ) values ($1, 1, $2::jsonb, $3, $4, $5, $6)`,
+      [
+        input.lessonId,
+        JSON.stringify(input.decision),
+        input.settlementRevisionId,
+        input.compensationRevisionId,
+        input.reasonText?.trim() || null,
+        input.selectedBy,
+      ],
+    );
+  }
+
+  async plannedSubscriptionAllocations(
+    client: PoolClient,
+    lessonId: string,
+    plan: PreparedLessonSettlementPlan,
+  ): Promise<PlannedSubscriptionAllocation[]> {
+    const catalog = await this.loadCatalog(client, "", {
+      settlementRevisionId: plan.settlementRevisionId,
+      compensationRevisionId: plan.compensationRevisionId,
+    });
+    this.assertPlannedDecision(catalog, plan.decision);
+    const duration = await client.query<{ duration_minutes: number }>(
+      `select duration_minutes from app.lessons
+       where id = $1 and deleted_at is null`,
+      [lessonId],
+    );
+    if (!duration.rows[0]) throw new NotFoundException("Урок не найден.");
+    const charges = await client.query<ChargeSourceRow>(
+      `select snapshot.client_type, snapshot.client_id,
+         snapshot.client_charge_type as charge_type,
+         snapshot.client_charge_value as charge_value,
+         snapshot.subscription_id
+       from app.lesson_snapshots snapshot
+       where snapshot.lesson_id = $1 and snapshot.group_id is null
+       union all
+       select 'student'::text, participant.student_id,
+         participant.charge_type, participant.charge_value,
+         participant.subscription_id
+       from app.lesson_snapshot_participants participant
+       where participant.lesson_id = $1
+       order by client_type, client_id`,
+      [lessonId],
+    );
+    const decisions = new Map(
+      (plan.decision.clientDecisions ?? []).map((item) => [item.clientId, item]),
+    );
+    const settlementTypes = new Map(
+      catalog.settlement_types.map((item) => [item.stableKey, item]),
+    );
+    return charges.rows.flatMap((charge) => {
+      const selected = decisions.get(charge.client_id);
+      const subscriptionId = selected?.subscriptionId ?? charge.subscription_id;
+      if (!subscriptionId) return [];
+      const settlement = settlementTypes.get(
+        selected?.settlementTypeKey ?? plan.decision.settlementTypeKey,
+      );
+      if (!settlement) {
+        this.invalidDecision("SETTLEMENT_TYPE_NOT_ALLOWED", "settlementTypeKey");
+      }
+      const calculated = calculateClientSettlement({
+        durationMinutes: duration.rows[0]!.duration_minutes,
+        hourShareBasisPoints: settlement.hourShareBasisPoints,
+        fixedPenaltyMinor: settlement.fixedPenaltyMinor ?? "0",
+        chargeType: "subscription",
+        baseChargeMinor: 0n,
+      });
+      const units = Number(calculated.units);
+      return units > 0
+        ? [{
+            clientType: charge.client_type,
+            clientId: charge.client_id,
+            subscriptionId,
+            units,
+          }]
+        : [];
+    });
+  }
+
+  async replacePlan(
+    client: PoolClient,
+    input: PreparedLessonSettlementPlan & {
+      lessonId: string;
+      expectedVersion: number;
+      selectedBy: string;
+      reasonText: string;
+    },
+  ): Promise<number> {
+    const result = await client.query<{ version: number | string }>(
+      `update app.lesson_settlement_plans
+       set decision = $3::jsonb,
+           settlement_revision_id = $4,
+           compensation_revision_id = $5,
+           selected_by = $6,
+           selected_at = now(),
+           reason_text = $7,
+           failure_code = null,
+           version = version + 1,
+           updated_at = now()
+       where lesson_id = $1 and version = $2 and state = 'planned'
+       returning version`,
+      [
+        input.lessonId,
+        input.expectedVersion,
+        JSON.stringify(input.decision),
+        input.settlementRevisionId,
+        input.compensationRevisionId,
+        input.selectedBy,
+        input.reasonText.trim(),
+      ],
+    );
+    if (!result.rows[0]) {
+      throw new ConflictException({ code: "LESSON_SETTLEMENT_PLAN_STALE" });
+    }
+    const version = Number(result.rows[0].version);
+    await client.query(
+      `insert into app.lesson_settlement_plan_revisions (
+         lesson_id, version, decision, settlement_revision_id,
+         compensation_revision_id, reason_text, actor_user_id
+       ) values ($1, $2, $3::jsonb, $4, $5, $6, $7)`,
+      [
+        input.lessonId,
+        version,
+        JSON.stringify(input.decision),
+        input.settlementRevisionId,
+        input.compensationRevisionId,
+        input.reasonText.trim(),
+        input.selectedBy,
+      ],
+    );
+    return version;
+  }
+
+  async loadPlan(
+    client: PoolClient,
+    lessonId: string,
+    lock = false,
+  ): Promise<StoredLessonSettlementPlan | null> {
+    const result = await client.query<{
+      lesson_id: string;
+      decision: LessonFinancialDecision;
+      settlement_revision_id: string;
+      compensation_revision_id: string;
+      version: number | string;
+      state: StoredLessonSettlementPlan["state"];
+      reason_text: string | null;
+    }>(
+      `select lesson_id, decision, settlement_revision_id,
+         compensation_revision_id, version, state, reason_text
+       from app.lesson_settlement_plans where lesson_id = $1
+       ${lock ? "for update" : ""}`,
+      [lessonId],
+    );
+    const row = result.rows[0];
+    return row
+      ? {
+          lessonId: row.lesson_id,
+          decision: row.decision,
+          settlementRevisionId: row.settlement_revision_id,
+          compensationRevisionId: row.compensation_revision_id,
+          version: Number(row.version),
+          state: row.state,
+          reasonText: row.reason_text,
+        }
+      : null;
+  }
+
+  async markPlanState(
+    client: PoolClient,
+    lessonId: string,
+    state: "settled" | "review_required" | "cancelled",
+    failureCode?: string,
+  ): Promise<void> {
+    const result = await client.query(
+      `update app.lesson_settlement_plans
+       set state = $2,
+           failure_code = case when $2 = 'review_required' then $3 else null end,
+           version = version + 1,
+           updated_at = now()
+       where lesson_id = $1
+         and state in ('planned', 'review_required')
+       returning lesson_id`,
+      [lessonId, state, failureCode?.trim().slice(0, 120) || null],
+    );
+    if (!result.rows[0]) {
+      throw new ConflictException({
+        code: "LESSON_SETTLEMENT_PLAN_STATE",
+        lessonId,
+      });
+    }
+  }
+
   async settle(
     client: PoolClient,
     lessonId: string,
@@ -70,7 +340,7 @@ export class LessonSettlementRepository {
     );
 
     const existing = await this.loadFacts(client, lessonId);
-    if (existing) {
+    if (existing && !input?.correction) {
       if (input) this.assertExistingDecision(existing, input);
       return existing;
     }
@@ -298,7 +568,7 @@ export class LessonSettlementRepository {
           client_fact.hour_share_basis_points,
           client_fact.fixed_penalty_minor,
           client_fact.configuration_revision_id
-        from app.lesson_client_charge_facts client_fact
+        from app.lesson_client_charge_facts_effective client_fact
         where client_fact.lesson_id = $1
         order by client_fact.client_type, client_fact.client_id
       `,
@@ -327,7 +597,7 @@ export class LessonSettlementRepository {
         compensation_rule_key, compensation_rule_label, compensation_mode,
         compensation_default_value, compensation_actual_value,
         compensation_override_reason, configuration_revision_id
-      from app.lesson_teacher_compensation_facts
+      from app.lesson_teacher_compensation_facts_effective
       where lesson_id = $1
     `, [lessonId]);
     if (clientFacts.rows.length === 0 && teacherFacts.rows.length === 0) return null;
@@ -395,7 +665,11 @@ export class LessonSettlementRepository {
     if (input.reasonText && input.reasonText.trim().length > 500) {
       this.invalidDecision("REASON_TOO_LONG", "reasonText");
     }
-    const catalog = await this.loadCatalog(client, source.branch_id);
+    const catalog = await this.loadCatalog(
+      client,
+      source.branch_id,
+      input.configurationRevisionIds,
+    );
     const settlementTypes = new Map(
       catalog.settlement_types.filter((type) => type.active)
         .map((type) => [type.stableKey, type]),
@@ -472,7 +746,30 @@ export class LessonSettlementRepository {
       };
     });
 
-    await this.lockAndReserveSubscriptions(client, source.lesson_id, facts);
+    const supersededClients = input.correction
+      ? new Map((await client.query<{ id: string; client_id: string }>(
+          `select id, client_id
+           from app.lesson_client_charge_facts_effective
+           where lesson_id = $1`,
+          [source.lesson_id],
+        )).rows.map((row) => [row.client_id, row.id]))
+      : new Map<string, string>();
+    const supersededTeacher = input.correction
+      ? (await client.query<{ id: string }>(
+          `select id from app.lesson_teacher_compensation_facts_effective
+           where lesson_id = $1`,
+          [source.lesson_id],
+        )).rows[0]?.id ?? null
+      : null;
+    if (input.correction) {
+      await this.lockCorrectionSubscriptionCapacity(
+        client,
+        source.lesson_id,
+        facts,
+      );
+    } else {
+      await this.lockAndReserveSubscriptions(client, source.lesson_id, facts);
+    }
     for (const fact of facts) {
       await client.query(
         `
@@ -481,10 +778,10 @@ export class LessonSettlementRepository {
             subscription_id, amount_minor, units, settlement_type_key,
             settlement_label, settlement_color_token,
             hour_share_basis_points, fixed_penalty_minor,
-            configuration_revision_id
+            configuration_revision_id, correction_id, supersedes_fact_id
           ) values (
             $1, $2, $3, $4, $5::numeric, $6, $7::bigint, $8::numeric,
-            $9, $10, $11, $12, $13::bigint, $14
+            $9, $10, $11, $12, $13::bigint, $14, $15, $16
           )
         `,
         [
@@ -506,6 +803,8 @@ export class LessonSettlementRepository {
           fact.settlement.hourShareBasisPoints,
           fact.settlement.fixedPenaltyMinor ?? "0",
           catalog.settlement_revision_id,
+          input.correction?.id ?? null,
+          supersededClients.get(fact.charge.client_id) ?? null,
         ],
       );
     }
@@ -540,10 +839,11 @@ export class LessonSettlementRepository {
           rate_minor, duration_minutes, amount_minor,
           compensation_rule_key, compensation_rule_label, compensation_mode,
           compensation_default_value, compensation_actual_value,
-          compensation_override_reason, configuration_revision_id
+          compensation_override_reason, configuration_revision_id,
+          correction_id, supersedes_fact_id
         ) values (
           $1, $2, $3, $4::numeric, $5::bigint, $6, $7::bigint,
-          $8, $9, $3, $10::bigint, $11::bigint, $12, $13
+          $8, $9, $3, $10::bigint, $11::bigint, $12, $13, $14, $15
         )
       `,
       [
@@ -560,6 +860,8 @@ export class LessonSettlementRepository {
         teacher!.actualValue,
         teacher!.overrideReason,
         catalog.compensation_revision_id,
+        input.correction?.id ?? null,
+        supersededTeacher,
       ],
     );
   }
@@ -567,7 +869,32 @@ export class LessonSettlementRepository {
   private async loadCatalog(
     client: PoolClient,
     branchId: string,
+    revisions?: {
+      settlementRevisionId: string;
+      compensationRevisionId: string;
+    },
   ): Promise<CommerceCatalogRow> {
+    if (revisions) {
+      const frozen = await client.query<CommerceCatalogRow>(
+        `select settlement.id as settlement_revision_id,
+           compensation.id as compensation_revision_id,
+           settlement.effective_snapshot->'lessonSettlementTypes'
+             as settlement_types,
+           compensation.effective_snapshot->'teacherCompensationRules'
+             as compensation_rules
+         from app.crm_configuration_revisions settlement
+         join app.crm_configuration_revisions compensation
+           on compensation.id = $2
+         where settlement.id = $1`,
+        [revisions.settlementRevisionId, revisions.compensationRevisionId],
+      );
+      const catalog = frozen.rows[0];
+      if (!catalog || !Array.isArray(catalog.settlement_types) ||
+          !Array.isArray(catalog.compensation_rules)) {
+        throw new ConflictException({ code: "COMMERCE_CATALOG_REVISION_MISSING" });
+      }
+      return catalog;
+    }
     const result = await client.query<CommerceCatalogRow>(
       `
         with school as (
@@ -602,6 +929,38 @@ export class LessonSettlementRepository {
       throw new ConflictException({ code: "COMMERCE_CATALOG_NOT_PUBLISHED" });
     }
     return catalog;
+  }
+
+  private assertPlannedDecision(
+    catalog: CommerceCatalogRow,
+    decision: LessonFinancialDecision,
+  ) {
+    const settlement = catalog.settlement_types.find(
+      (item) => item.active && item.stableKey === decision.settlementTypeKey,
+    );
+    if (!settlement || !settlement.allowedContexts.includes("settle")) {
+      this.invalidDecision("SETTLEMENT_TYPE_NOT_ALLOWED", "settlementTypeKey");
+    }
+    const rule = catalog.compensation_rules.find(
+      (item) =>
+        item.active && item.stableKey === decision.teacherCompensationRuleKey,
+    );
+    if (!rule) {
+      this.invalidDecision(
+        "TEACHER_COMPENSATION_RULE_NOT_FOUND",
+        "teacherCompensationRuleKey",
+      );
+    }
+    const value = decision.teacherCompensationValueMinor;
+    if (value !== undefined && !/^\d{1,19}$/.test(value)) {
+      this.invalidDecision("INVALID_TEACHER_VALUE", "teacherCompensationValueMinor");
+    }
+    if ((rule.mode === "none" || rule.mode === "standard") && value !== undefined) {
+      this.invalidDecision("TEACHER_OVERRIDE_NOT_ALLOWED", "teacherCompensationValueMinor");
+    }
+    if (rule.mode === "percent" && value !== undefined && BigInt(value) > 20_000n) {
+      this.invalidDecision("INVALID_TEACHER_PERCENT", "teacherCompensationValueMinor");
+    }
   }
 
   private async lockAndReserveSubscriptions(
@@ -646,7 +1005,7 @@ export class LessonSettlementRepository {
               subscription.lessons_total - subscription.lessons_used
               - coalesce((
                 select sum(charge.units)
-                from app.lesson_client_charge_facts charge
+                from app.lesson_client_charge_facts_effective charge
                 where charge.subscription_id = subscription.id
                   and charge.charge_type = 'subscription'
               ), 0)
@@ -698,6 +1057,72 @@ export class LessonSettlementRepository {
           code: "SUBSCRIPTION_RESERVATION_TERMINAL",
           lessonId,
           subscriptionId,
+        });
+      }
+    }
+  }
+
+  private async lockCorrectionSubscriptionCapacity(
+    client: PoolClient,
+    lessonId: string,
+    facts: Array<{
+      charge: ChargeSourceRow;
+      subscriptionId: string | null;
+      calculation: { units: string; amountMinor: string };
+    }>,
+  ): Promise<void> {
+    const selected = facts.filter(
+      (fact) => fact.subscriptionId && Number(fact.calculation.units) > 0,
+    );
+    if (new Set(selected.map((fact) => fact.subscriptionId)).size !==
+        selected.length) {
+      this.invalidDecision("DUPLICATE_SUBSCRIPTION_SELECTION", "clientDecisions");
+    }
+    for (const fact of selected.sort((left, right) =>
+      left.subscriptionId!.localeCompare(right.subscriptionId!))) {
+      const locked = await client.query<{
+        student_id: string;
+        status: string;
+        is_usable: boolean;
+        lessons_total: string;
+        lessons_used: string;
+      }>(
+        `select student_id, status,
+           (starts_at is null or starts_at <= current_date)
+             and (expires_at is null or expires_at >= current_date)
+             as is_usable,
+           lessons_total::text, lessons_used::text
+         from app.subscriptions where id = $1 for update`,
+        [fact.subscriptionId],
+      );
+      const subscription = locked.rows[0];
+      const used = await client.query<{ settled: string; reserved: string }>(
+        `select
+           coalesce((select sum(units)
+             from app.lesson_client_charge_facts_effective
+             where subscription_id = $1 and charge_type = 'subscription'
+               and lesson_id <> $2), 0)::text as settled,
+           coalesce((select sum(units) from app.lesson_reservations
+             where subscription_id = $1 and state = 'reserved'
+               and lesson_id <> $2), 0)::text as reserved`,
+        [fact.subscriptionId, lessonId],
+      );
+      const available = subscription
+        ? Number(subscription.lessons_total) -
+          Number(subscription.lessons_used) -
+          Number(used.rows[0]?.settled ?? 0) -
+          Number(used.rows[0]?.reserved ?? 0)
+        : 0;
+      if (!subscription || fact.charge.client_type !== "student" ||
+          subscription.student_id !== fact.charge.client_id ||
+          subscription.status !== "active" || !subscription.is_usable ||
+          available + Number.EPSILON < Number(fact.calculation.units)) {
+        throw new UnprocessableEntityException({
+          code: "SUBSCRIPTION_CAPACITY",
+          subscriptionId: fact.subscriptionId,
+          clientId: fact.charge.client_id,
+          requestedUnits: fact.calculation.units,
+          availableUnits: Math.max(0, available).toFixed(2),
         });
       }
     }

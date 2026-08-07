@@ -271,7 +271,7 @@ export class CommerceProjectionRepository {
               lesson_charge.amount_minor::numeric,
               0::numeric,
               0::numeric
-            from app.lesson_client_charge_facts lesson_charge
+            from app.lesson_client_charge_facts_effective lesson_charge
             where lesson_charge.client_type = 'student'
               and lesson_charge.client_id = selected.student_id
             union all
@@ -427,7 +427,7 @@ export class CommerceProjectionRepository {
                 )::numeric,
                 0
               ) + coalesce(sum(charge.units), 0)::numeric as used_units
-            from app.lesson_client_charge_facts charge
+            from app.lesson_client_charge_facts_effective charge
             where charge.subscription_id = issued.id
               and charge.client_type = 'student'
               and charge.client_id = selected.student_id
@@ -720,7 +720,7 @@ export class CommerceProjectionRepository {
                 null::integer,
                 null::uuid,
                 null::timestamptz
-              from app.lesson_client_charge_facts charge
+              from app.lesson_client_charge_facts_effective charge
               left join app.subscriptions subscription
                 on subscription.id = charge.subscription_id
               where charge.client_type = 'student'

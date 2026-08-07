@@ -393,6 +393,27 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
     final conflicts = conflictTypes(lesson['conflict_types']);
     final lessonId = lesson['id']?.toString();
     final currentStatus = lesson['status']?.toString() ?? 'scheduled';
+    final lifecycleState =
+        lesson['lifecycle_state']?.toString() ??
+        lesson['lifecycleState']?.toString() ??
+        currentStatus;
+    var settlementHistory = <Map<String, dynamic>>[];
+    if (widget.canWrite && lessonId?.isNotEmpty == true) {
+      try {
+        final response = await ref
+            .read(magicApiClientProvider)
+            .get<Map<String, dynamic>>(
+              '/crm/lessons/$lessonId/settlement-history',
+            );
+        settlementHistory = [
+          for (final item in response['items'] as List? ?? const [])
+            if (item is Map) Map<String, dynamic>.from(item),
+        ];
+      } catch (_) {
+        // Детали занятия остаются доступны; мутация всё равно потребует
+        // актуальный подписанный preview с сервера.
+      }
+    }
     CapabilitySnapshot? snapshot;
     try {
       snapshot = await ref.read(capabilitySnapshotProvider.future);
@@ -565,18 +586,36 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
           );
         });
       },
-      showNewTabAction:
-          WorkspaceNavigationScope.maybeOf(context)?.isDesktop == true,
       timeRange: timeRange,
       currentStatus: currentStatus,
       conflicts: conflicts,
+      settlementHistory: settlementHistory,
       lessonId: widget.canWrite ? lessonId : null,
       onEdit: () => _editLesson(lesson),
       onCancel: () => _cancelLesson(lesson),
-      onSettle:
-          currentStatus == 'scheduled' || currentStatus == 'settlement_pending'
+      onSettle: lifecycleState == 'settlement_pending'
           ? () => _settleLesson(lesson)
           : null,
+      onAdjustSettlement:
+          lifecycleState == 'successfully_completed' ||
+              currentStatus == 'completed' ||
+              currentStatus == 'done'
+          ? () => _adjustLessonSettlement(
+              lesson,
+              LessonDecisionOperation.correction,
+            )
+          : lifecycleState == 'scheduled' && start.isAfter(DateTime.now())
+          ? () => _adjustLessonSettlement(
+              lesson,
+              LessonDecisionOperation.plannedSettlement,
+            )
+          : null,
+      adjustSettlementLabel:
+          lifecycleState == 'successfully_completed' ||
+              currentStatus == 'completed' ||
+              currentStatus == 'done'
+          ? 'Исправить расчёт'
+          : 'Изменить расчёт',
     );
   }
 
@@ -619,6 +658,30 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
       MagicToast.show(
         context,
         'Результат занятия зафиксирован',
+        type: MagicToastType.success,
+      );
+    }
+  }
+
+  Future<void> _adjustLessonSettlement(
+    Map<String, dynamic> lesson,
+    LessonDecisionOperation operation,
+  ) async {
+    if (!widget.canWrite) return;
+    final changed = await showLessonDecisionFlow(
+      context,
+      api: ref.read(magicApiClientProvider),
+      operation: operation,
+      lesson: lesson,
+    );
+    if (changed == true && mounted) {
+      await _refreshEditedSchedule();
+      if (!mounted) return;
+      MagicToast.show(
+        context,
+        operation == LessonDecisionOperation.correction
+            ? 'Расчёт занятия исправлен'
+            : 'Расчёт занятия изменён',
         type: MagicToastType.success,
       );
     }

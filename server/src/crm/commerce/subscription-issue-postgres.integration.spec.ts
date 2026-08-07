@@ -619,7 +619,7 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       studentId,
       created.paymentRecord.id,
       { expectedVersion: 1 },
-      new Date("2026-08-07T12:01:00.000Z"),
+      new Date(),
     );
     expect(preview).toMatchObject({
       paymentRecordId: created.paymentRecord.id,

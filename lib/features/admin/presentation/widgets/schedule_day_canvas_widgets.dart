@@ -86,13 +86,10 @@ class _LessonCard extends StatelessWidget {
   });
 
   Color get _accent {
-    if (entry.searchContext) {
+    if (entry.clientContext || entry.searchContext) {
       return entry.relatedClient ? AppColor.success : AppColor.text2;
     }
     if (entry.conflicts.isNotEmpty) return AppColor.danger;
-    if (entry.clientContext) {
-      return entry.relatedClient ? AppColor.success : AppColor.text2;
-    }
     return LessonStateProjection.fromMap(entry.lesson).token.accent;
   }
 

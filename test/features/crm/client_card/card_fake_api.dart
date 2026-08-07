@@ -135,6 +135,32 @@ class FakeCardApiClient extends MagicApiClient {
     if (path == '/crm/rooms') {
       return <String, dynamic>{'items': rooms} as T;
     }
+    if (path == '/crm/configuration/lesson-decisions') {
+      return <String, dynamic>{
+            'settlementTypes': const [
+              {
+                'stableKey': 'free_lesson',
+                'label': 'Бесплатное занятие',
+                'colorToken': 'warning',
+                'hourShareBasisPoints': 0,
+                'allowedContexts': ['cancel', 'reschedule', 'settle'],
+                'active': true,
+                'order': 0,
+              },
+            ],
+            'teacherCompensationRules': const [
+              {
+                'stableKey': 'none',
+                'label': 'Не оплачивать',
+                'mode': 'none',
+                'value': '0',
+                'active': true,
+                'order': 0,
+              },
+            ],
+          }
+          as T;
+    }
     if (path == '/crm/schedule-series') {
       return <String, dynamic>{'items': scheduleSeries} as T;
     }
@@ -503,6 +529,22 @@ class FakeCardApiClient extends MagicApiClient {
               'reservedUnits': '2.00',
               'preservedTerminalLessons': 3,
             },
+          }
+          as T;
+    }
+    if (path == '/crm/schedule-plans/constraints/preview') {
+      final rows = data is Map ? data['rows'] as List? ?? const [] : const [];
+      return <String, dynamic>{
+            'valid': true,
+            'rows': [
+              for (var index = 0; index < rows.length; index++)
+                {
+                  'index': index,
+                  'valid': true,
+                  'occurrencesChecked': 1,
+                  'failures': <dynamic>[],
+                },
+            ],
           }
           as T;
     }

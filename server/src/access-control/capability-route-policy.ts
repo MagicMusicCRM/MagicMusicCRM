@@ -126,6 +126,15 @@ export function resolveCapabilityRoutePolicy(
     );
   }
 
+  if (read && /^\/crm\/lessons\/[^/]+\/settlement-history$/.test(path)) {
+    return policy(
+      "schedule.lesson.write",
+      "self_or_assigned",
+      staffRoles,
+      "Staff-only lesson settlement reasons and correction history",
+    );
+  }
+
   if (path.startsWith("/crm/configuration")) {
     const capabilityKey = read
       ? "config.crm.read"

@@ -63,6 +63,10 @@ describe("Lesson lifecycle schema (PostgreSQL)", () => {
     await client.query("begin");
     try {
       const migrationRoot = resolve(process.cwd(), "db/migrations");
+      await client.query(`
+        drop view if exists app.lesson_teacher_compensation_facts_effective;
+        drop view if exists app.lesson_client_charge_facts_effective;
+      `);
       await client.query(
         readFileSync(
           resolve(migrationRoot, "0104_v7_schedule_plans_notes.down.sql"),
@@ -79,6 +83,22 @@ describe("Lesson lifecycle schema (PostgreSQL)", () => {
           "utf8",
         ),
       );
+      await client.query(`
+        create view app.lesson_client_charge_facts_effective as
+        select fact.*
+        from app.lesson_client_charge_facts fact
+        where not exists (
+          select 1 from app.lesson_client_charge_facts newer
+          where newer.supersedes_fact_id = fact.id
+        );
+        create view app.lesson_teacher_compensation_facts_effective as
+        select fact.*
+        from app.lesson_teacher_compensation_facts fact
+        where not exists (
+          select 1 from app.lesson_teacher_compensation_facts newer
+          where newer.supersedes_fact_id = fact.id
+        );
+      `);
       expect(
         (await client.query("select to_regclass('app.schedule_plans') as value"))
           .rows[0]?.value,

@@ -1,403 +1,45 @@
 {
-  "version": "v7",
-  "status": "complete",
   "glossary": {
-    "Configurable CRM": "CRM, в которой доступная бизнес-конфигурация хранится как versioned server-owned metadata и определяет формы, карточки, доски, справочники, business defaults, допустимые действия и представления Flutter-клиента.",
-    "Business configuration": "Пользовательские правила и метаданные, которые можно менять без нарушения безопасности, исторических фактов, referential integrity и обязательных domain lifecycle.",
-    "Protected invariant": "Не редактируемое через CRM правило безопасности, аудита, финансовой неизменяемости, идентичности, протокола API или целостности lifecycle.",
-    "Configuration area": "Именованная область настройки, например Lead, Student, Lesson, Shared Task, Subscription или Analytics.",
-    "Category": "Настраиваемая секция формы или карточки, содержащая упорядоченные поля.",
-    "Field definition": "Типизированное определение поля с ключом, подписью, validation rules, visibility, editability и lifecycle.",
-    "Field placement": "Позиция существующего поля в конкретной форме, карточке, таблице или board view без дублирования его определения.",
-    "Dictionary": "Версионируемый бизнес-справочник с управляемыми вариантами выбора.",
-    "Business parameter": "Типизированное числовое, денежное, процентное, временное или boolean значение, используемое разрешённой бизнес-логикой.",
-    "Student funnel": "Настраиваемая директором упорядоченная доска учеников со стадиями и допустимыми переходами вместо захардкоженных колонок «Пробные» и «Пауза».",
-    "Configuration capability": "Отдельное право чтения или изменения конкретной configuration area, делегируемое через существующие персональные capability overrides.",
-    "Published configuration": "Атомарно опубликованная версия конфигурации, которую используют backend validation и Flutter rendering.",
-    "Configuration scope": "Общешкольная базовая конфигурация или филиальное переопределение разрешённой части; effective value вычисляется как branch override поверх school default.",
-    "Legacy scenario": "Старый параллельный пользовательский путь, который должен быть мигрирован или удалён после подтверждённого parity.",
-    "Production approval": "Явное решение о выпуске после закрытия Critical/High, security gate, owner UAT и rollback rehearsal.",
-    "Canonical app location": "Единое типизированное описание route, parent hierarchy, access requirement и безопасно восстанавливаемого view state, используемое GoRouter, workspace history и breadcrumbs.",
-    "Adaptive surface": "Контейнер, выбранный по работе и доступной ширине: route/page для primary workflow, expandable sheet для quick context, dialog для короткого решения.",
-    "Workspace tab": "Параллельный desktop-контекст с собственной историей, безопасно сохраняемый в account-scoped cache и очищаемый при logout.",
-    "Navigation hierarchy": "Разделение parallel tabs, chronological Back/Forward history и typed ancestor breadcrumbs.",
-    "Effective UI scope": "Разрешённый school/branch контекст конкретного route/operation, не расширяющий backend resource scope.",
-    "Personal account": "Append-only денежный ledger клиента; доступный баланс учитывает только подтверждённые оплаты и фактические списания и не хранится редактируемым числом.",
-    "Subscription purchase": "Атомарная операция, которая фиксирует коммерческий snapshot и создаёт получателю абонемент со всеми часами; обычная покупка требует и списывает полный доступный баланс, рассрочка вместо этого создаёт резерв полного коммерческого обязательства.",
-    "Subscription obligation reserve": "Полная итоговая стоимость покупки в рассрочку, зафиксированная как коммерческое обязательство, но не как блокировка уже внесённых денег; части становятся подтверждёнными оплатами по единому payment lifecycle.",
-    "Payment status": "Единый lifecycle оплаты: unpaid (долг), posted_pending (проведён и ожидает проверки сотрудником), paid (проверен и подтверждён сотрудником).",
-    "Unpaid payment": "Наступившее обязательство без подтверждённого поступления; учитывается как долг.",
-    "Posted pending payment": "Автоматически созданная или заявленная оплата с пометкой «проверить оплату за рассрочку», ожидающая решения сотрудника.",
-    "Paid payment": "Подтверждённое сотрудником поступление, которое становится окончательным денежным фактом личного счёта.",
-    "Voided payment": "Пользовательское «удаление оплаты», реализованное неизменяемым сторно: обычные финансовые отчёты исключают исходный факт и сторно, а технический журнал сохраняет оба.",
-    "Operational reason": "Обязательная человекочитаемая причина рискованного действия, сохраняемая с автором, временем, before/after и видимая Администратору, Управляющему и Директору.",
-    "Subscription cancellation": "Сторнирование покупки: обычная статистика исключает исходную продажу и сторно, защищённый аудит сохраняет обе операции.",
-    "Lesson settlement type": "Версионируемое правило директора с названием, цветом и клиентским списанием часов; оплату преподавателю сотрудник выбирает отдельно для каждого занятия.",
-    "Recurring schedule plan": "Именованный контейнер индивидуального или группового постоянного расписания, объединяющий несколько строк-серий и собственную ленту фактических занятий."
+    "Entity text link": "Кликабельное отображаемое имя типизированной связанной сущности; на desktop открывает новую внутреннюю вкладку, на compact добавляет канонический маршрут в стек.",
+    "Planned lesson settlement": "Обязательное versioned-решение о списании клиента и оплате преподавателя, выбранное до создания занятия и привязанное к опубликованным ревизиям каталогов.",
+    "Automatic lesson settlement": "Атомарное применение planned settlement после наступления конца занятия: lifecycle, клиентские факты, резервы, начисление преподавателю, audit и outbox фиксируются одной транзакцией.",
+    "Settlement review required": "Состояние занятия settlement_pending после неприменимой planned decision; частичных финансовых фактов нет, причина видна staff.",
+    "Settlement correction": "Versioned preview/commit, который после проведения атомарно сторнирует effective-факты и применяет замену либо оставляет расчёт отменённым, сохраняя техническую историю.",
+    "Schedule plan row": "Одна строка постоянного расписания: филиал, день недели, время, длительность, преподаватель, аудитория и planned settlement. Общие значения можно применить к нескольким строкам.",
+    "Group membership exception": "Добавление клиента в уже существующее групповое занятие не создаёт вторую бронь преподавателя или аудитории."
   },
   "entities": [
-    {
-      "name": "ConfigurationArea",
-      "owns": ["key", "title", "supportedSurfaces", "supportedScopes", "protectedKeys", "version", "lifecycle"]
-    },
-    {
-      "name": "ConfigurationScope",
-      "owns": ["type: school|branch", "branchId?", "baseSchoolVersion", "overrideVersion"]
-    },
-    {
-      "name": "ConfigCategory",
-      "owns": ["areaId", "key", "label", "order", "visibilityRule", "lifecycle", "version"]
-    },
-    {
-      "name": "FieldDefinition",
-      "owns": ["areaId", "key", "type", "label", "requiredRule", "validation", "default", "visibilityRule", "editRule", "lifecycle", "version"]
-    },
-    {
-      "name": "FieldPlacement",
-      "owns": ["fieldId", "surface", "categoryId", "order", "width", "visibilityRule"]
-    },
-    {
-      "name": "Dictionary",
-      "owns": ["key", "label", "valueType", "options", "lifecycle", "version"]
-    },
-    {
-      "name": "DictionaryOption",
-      "owns": ["dictionaryId", "stableKey", "label", "order", "styleToken", "lifecycle", "version"]
-    },
-    {
-      "name": "BusinessParameter",
-      "owns": ["key", "type", "unit", "value", "allowedRange", "effectiveFrom", "version"]
-    },
-    {
-      "name": "StudentFunnel",
-      "owns": ["stages", "transitionRules", "defaultStage", "archivePolicy", "version"]
-    },
-    {
-      "name": "StudentFunnelStage",
-      "owns": ["stableKey", "label", "order", "styleToken", "entryRule", "exitRule", "lifecycle"]
-    },
-    {
-      "name": "ConfigurationDraft",
-      "owns": ["baseVersion", "changes", "validationResult", "author", "createdAt"]
-    },
-    {
-      "name": "ConfigurationRevision",
-      "owns": ["version", "snapshot", "publishedBy", "publishedAt", "reason", "auditRef"]
-    },
-    {
-      "name": "ConfigurationCapability",
-      "owns": ["areaKey", "read", "write", "publish"]
-    },
-    {
-      "name": "SharedTask",
-      "owns": ["canonicalCreateAction", "audience", "branchScope", "singleSharedState", "linkedEntity"]
-    },
-    {
-      "name": "LessonContextLink",
-      "owns": ["lessonId", "targetType", "targetId", "optionalFocus"]
-    },
-    {
-      "name": "AnalyticsDashboard",
-      "owns": ["sections", "sharedFilters", "actorScope", "drilldowns", "chartDefinitions"]
-    },
-    {
-      "name": "AppLocation",
-      "owns": ["routeName", "typedParams", "parent", "requiredAccess", "surfaceKind", "viewStateVersion", "safeViewState"]
-    },
-    {
-      "name": "WorkspaceTab",
-      "owns": ["accountId", "locationStack", "activeIndex", "title", "dirtyState", "schemaVersion"]
-    },
-    {
-      "name": "AdaptiveSurfacePolicy",
-      "owns": ["jobKind", "widthClass", "containerKind", "backPolicy", "dirtyStatePolicy"]
-    },
-    {
-      "name": "BreadcrumbTrail",
-      "owns": ["typedAncestors", "currentNode", "collapsedNodes", "actorSafeLabels"]
-    },
-    {
-      "name": "ReleaseDecision",
-      "owns": ["securityGate", "openFindings", "ownerUat", "rollbackEvidence", "decision"]
-    },
-    {
-      "name": "PersonalAccount",
-      "owns": ["ownerStudentId", "currency", "appendOnlyEntries", "computedBalance", "availableBalance", "version"]
-    },
-    {
-      "name": "SubscriptionPurchase",
-      "owns": ["recipientStudentId", "payerStudentId", "packageSnapshot", "commercialTerms", "finalPrice", "obligationReserveId?", "sufficientFundsPolicy:one-time", "ledgerEntryIds", "idempotencyKey", "lifecycle"]
-    },
-    {
-      "name": "SubscriptionObligationReserve",
-      "owns": ["purchaseId", "payerStudentId", "currency", "reservedAmount", "paidAmount", "cancelledAmount", "installmentSchedule", "lifecycle", "version"]
-    },
-    {
-      "name": "InstallmentPayment",
-      "owns": ["purchaseId", "installmentNumber", "payerStudentId", "amount", "dueAt", "status:unpaid|posted_pending|paid", "verificationNote", "verifiedBy", "verifiedAt", "version"]
-    },
-    {
-      "name": "LessonSettlementType",
-      "owns": ["stableKey", "label", "colorToken", "clientChargeRule", "effectiveScope", "lifecycle", "version"]
-    },
-    {
-      "name": "TeacherCompensationRule",
-      "owns": ["stableKey", "label", "calculationMode", "value", "effectiveScope", "lifecycle", "version"]
-    },
-    {
-      "name": "RecurringSchedulePlan",
-      "owns": ["clientOrGroupRef", "title", "scheduleKind", "series", "activeFrom", "activeUntil", "lifecycle", "version"]
-    },
-    {
-      "name": "ClientInternalNote",
-      "owns": ["clientRef", "body", "version", "updatedBy", "updatedAt", "auditRef"]
-    },
-    {
-      "name": "PaymentReversal",
-      "owns": ["sourcePaymentId", "amount", "currency", "reason", "actor", "occurredAt", "auditRef", "reportingExclusionPair"]
-    },
-    {
-      "name": "OperationalAuditEntry",
-      "owns": ["action", "entityRef", "reason", "actor", "occurredAt", "beforeRef", "afterRef", "technicalOnly"]
-    }
-  ],
-  "relationships": [
-    "ConfigurationArea contains ConfigCategory, FieldDefinition, FieldPlacement and references Dictionary or BusinessParameter.",
-    "School scope provides defaults; a branch scope stores only explicit overrides for configuration keys whose area supports branch separation.",
-    "FieldPlacement reuses one FieldDefinition across form, card, table and board surfaces.",
-    "StudentFunnel is an area-specific configuration built from stable StudentFunnelStage records.",
-    "ConfigurationDraft becomes one ConfigurationRevision only after full server validation and atomic publish.",
-    "ConfigurationCapability extends the existing v4 capability registry and personal overrides; it does not create a second access system.",
-    "Flutter renders published metadata while backend independently enforces the same published validation and access rules.",
-    "SharedTask, LessonContextLink and AnalyticsDashboard reuse existing v4 domain APIs and typed workspace navigation.",
-    "AppLocation adapts existing GoRouter, WorkspaceController and EntityRouteRegistry metadata; it is not a second router or registry.",
-    "WorkspaceTab represents parallel desktop context, while its location stack represents chronological history and BreadcrumbTrail represents route hierarchy.",
-    "AdaptiveSurfacePolicy selects a presentation container without duplicating form content, providers or service calls.",
-    "Effective UI scope is intersected with current capabilities and resource scope before navigation or provider creation.",
-    "ReleaseDecision cannot be approved while any Critical or High security finding is open.",
-    "SubscriptionPurchase belongs to a recipient Student and exactly one payer; a one-time purchase atomically debits the payer PersonalAccount, while an installment purchase atomically creates a full SubscriptionObligationReserve.",
-    "SubscriptionObligationReserve records the full installment commitment without pretending unpaid money already exists on the PersonalAccount.",
-    "An InstallmentPayment is linked to one SubscriptionPurchase and follows the only allowed status lifecycle; only a confirmed paid fact may become immutable wallet income.",
-    "LessonSettlementType and TeacherCompensationRule are independent catalogs selected explicitly for the Lesson; neither automatically determines or filters the other, and both are snapshotted on its financial fact.",
-    "RecurringSchedulePlan contains one or more immutable/effective-dated schedule series and owns their active or ended presentation.",
-    "ClientInternalNote is one canonical staff note that survives Lead-to-Student conversion without becoming a duplicate configurable field.",
-    "PaymentReversal never deletes the source payment; its paired exclusion removes both facts from ordinary financial statistics while OperationalAuditEntry remains staff-visible.",
-    "OperationalAuditEntry exposes required reasons to Admin, Manager and Director without leaking technical finance audit to Teacher or Client."
+    "EntityLink",
+    "WorkspaceTab",
+    "ClientCardDesktopCanvas",
+    "ClientCardCompactSection",
+    "SchedulePlan",
+    "SchedulePlanRow",
+    "Lesson",
+    "PlannedLessonSettlement",
+    "LessonReservation",
+    "LessonSettlementFact",
+    "LessonSettlementCorrection",
+    "ConstraintViolation"
   ],
   "flows": [
-    {
-      "name": "Configure business area",
-      "steps": ["select school or branch scope", "load effective configuration", "edit only explicit values for that scope", "validate dependencies and migration impact", "preview affected surfaces", "publish atomically", "invalidate affected clients", "record audit"]
-    },
-    {
-      "name": "Render configurable surface",
-      "steps": ["load actor-safe metadata", "resolve placement and visibility", "render typed native control", "validate locally for UX", "submit stable keys", "validate authoritatively on server"]
-    },
-    {
-      "name": "Change field or option lifecycle",
-      "steps": ["calculate usage impact", "block destructive incompatible change", "archive used definition or option", "allow physical deletion only when unused", "preserve historical label snapshot"]
-    },
-    {
-      "name": "Delegate configuration access",
-      "steps": ["director selects user and area", "apply existing capability override", "enforce protected invariant", "increment access version", "invalidate all user sessions", "audit before and after"]
-    },
-    {
-      "name": "Operate student funnel",
-      "steps": ["load configured stages", "create student from primary Students section", "move with version guard", "validate configured transition", "persist stage key", "invalidate board"]
-    },
-    {
-      "name": "Create shared task",
-      "steps": ["invoke one canonical create action", "select recipients and branches", "submit one SharedTask command", "show one shared state", "remove legacy duplicate scenario after parity"]
-    },
-    {
-      "name": "Navigate from lesson",
-      "steps": ["resolve actor-safe entity reference", "render explicit linked control", "open typed student, teacher or room context", "preserve lesson workspace state"]
-    },
-    {
-      "name": "Analyze school",
-      "steps": ["open unified dashboard", "apply shared date and branch filters", "enforce actor finance scope", "render operational and finance sections", "drill down with identical predicates"]
-    },
-    {
-      "name": "Accept product UX",
-      "steps": ["inventory forms, buttons, navigation and states", "apply shared components and labels", "run role and device matrix", "perform real-account UAT", "record evidence"]
-    },
-    {
-      "name": "Navigate connected workspace",
-      "steps": ["resolve account and capability snapshot", "resolve canonical app location", "open current desktop tab or mobile stack", "build actor-safe breadcrumbs", "follow typed entity link", "return through per-context history", "restore filters, date and position"]
-    },
-    {
-      "name": "Open adaptive mobile work",
-      "steps": ["classify job as primary, quick context, selection or confirmation", "open full-screen route or full-width sheet/dialog", "expand sheet by drag or labelled action", "intercept UI/system/predictive Back", "resolve dirty state", "restore source context"]
-    },
-    {
-      "name": "Restore desktop workspace",
-      "steps": ["load account and schema-version cache", "validate route and current access", "discard stale or forbidden entries safely", "restore up to ten tabs and active history", "clear current account cache on logout"]
-    },
-    {
-      "name": "Approve production",
-      "steps": ["make repository private", "rotate exposed credentials", "run full security gate", "resolve Critical and High findings", "rehearse rollout and rollback", "obtain owner approval"]
-    },
-    {
-      "name": "Purchase subscription from personal account",
-      "steps": ["select recipient and payer", "load package and effective commercial terms", "preview discount surcharge and installments", "for one-time payment lock and validate the full available balance", "atomically debit one-time payment or create the full installment obligation reserve", "issue all subscription hours", "snapshot rules", "audit and invalidate both clients"]
-    },
-    {
-      "name": "Cancel subscription purchase",
-      "steps": ["preview used reserved and refundable value", "capture reason and refund amount", "atomically cancel remaining entitlement and post reversal to original payer", "exclude sale and reversal from ordinary sales statistics", "retain immutable technical audit"]
-    },
-    {
-      "name": "Settle or move lesson",
-      "steps": ["choose configured lesson settlement type", "choose configured teacher compensation rule", "capture mandatory reason for move", "preview client hours and teacher compensation", "validate schedule constraints", "atomically transition source and create successor when moved", "write immutable settlement snapshots", "render configured color and non-color label"]
-    },
-    {
-      "name": "Manage recurring schedule plan",
-      "steps": ["create named individual or group plan", "add one or more schedule series", "generate bounded lessons", "show plan-specific date tray", "end plan effective-dated", "collapse ended plans by default and preserve history"]
-    },
-    {
-      "name": "Verify installment payment",
-      "steps": ["create the due installment entry automatically", "show posted_pending with a check-payment marker", "employee verifies external payment evidence", "confirm paid or return to unpaid", "reconcile debt and personal-account projections", "audit every transition"]
-    },
-    {
-      "name": "Void payment",
-      "steps": ["load immutable source payment", "capture mandatory human-readable reason", "preview balance and linked subscription impact", "atomically post reversal and reporting exclusion pair", "show technical action to Admin Manager and Director", "invalidate client ledger debt and reports"]
-    }
-  ],
-  "protected_invariants": [
-    "Role identity, root-role protection and capability evaluation order.",
-    "Authentication, session rotation, authorization and privacy boundaries.",
-    "Stable entity identifiers, foreign keys, audit and idempotency semantics.",
-    "Append-only payment, ledger, settlement and historical commercial facts.",
-    "Required lesson and subscription lifecycle transitions and concurrency guards.",
-    "API protocol, typed trust-boundary validation and private-file security.",
-    "Configuration engine metadata needed to validate configuration itself."
+    "Нажатие на текст связанной сущности -> capability resolution -> новая desktop-вкладка или compact route stack.",
+    "Plan preview -> разворачивание каждой строки в даты -> единый constraint engine -> понятные staff-нарушения -> versioned commit.",
+    "Lesson create/update-before-start -> planned settlement validation -> revision snapshot -> atomic reservation recalculation.",
+    "Lesson end -> worker retry for transient failure -> atomic settlement or settlement_pending without partial facts.",
+    "Post-settlement correction -> signed preview -> reversal plus replacement in one transaction -> effective reporting refresh."
   ],
   "missing_components": [
-    {
-      "name": "Configuration scope hierarchy",
-      "status": "resolved",
-      "decision": "Every configuration area declares supported scopes; school is the default and branch overrides are available wherever domain logic can be safely separated."
-    },
-    {
-      "name": "Draft, preview, publish and rollback",
-      "status": "required",
-      "reason": "Immediate partial writes could make forms and validation disagree across active sessions."
-    },
-    {
-      "name": "Dependency and usage impact analysis",
-      "status": "required",
-      "reason": "Type, option and stage changes can orphan current records or rewrite history."
-    },
-    {
-      "name": "Configuration contract and cache invalidation",
-      "status": "required",
-      "reason": "Backend and Flutter must use the same published version and fail safely on unknown metadata."
-    },
-    {
-      "name": "Dynamic form accessibility and responsive layout",
-      "status": "required",
-      "reason": "Configurable placement must remain keyboard, screen-reader, Windows and Android safe."
-    },
-    {
-      "name": "Legacy data and hardcoded enum migration",
-      "status": "required",
-      "reason": "Existing stable values must map losslessly to configurable stable keys before old code paths are removed."
-    },
-    {
-      "name": "Real-account owner UAT evidence",
-      "status": "required",
-      "reason": "Recipients, branches, labels and production security cannot be accepted only through mocked tests."
-    },
-    {
-      "name": "Atomic payer-to-recipient subscription purchase",
-      "status": "required",
-      "reason": "Текущий issue flow создаёт обязательство и отдельную оплату только получателя, но не списывает стоимость с выбранного личного счёта."
-    },
-    {
-      "name": "Configurable settlement and compensation matrix",
-      "status": "resolved",
-      "reason": "Директор настраивает доступные типы, а сотрудник вручную и явно выбирает списание клиента и оплату преподавателю для каждого занятия."
-    },
-    {
-      "name": "Recurring schedule plan aggregate",
-      "status": "required",
-      "reason": "Отдельные schedule_series не сохраняют принадлежность строк одному именованному расписанию и не дают plan-specific history/tray."
-    },
-    {
-      "name": "Canonical client internal note",
-      "status": "required",
-      "reason": "Lead notes и поток комментариев не образуют одно общее верхнее поле, сохраняемое после конвертации в Student."
-    },
-    {
-      "name": "Payer sufficient-funds guard",
-      "status": "resolved",
-      "reason": "Обычная покупка блокируется при нехватке полной суммы; явно выбранная рассрочка создаёт коммерческое обязательство и не выдаёт неоплаченные деньги за существующий баланс."
-    },
-    {
-      "name": "Installment obligation reserve",
-      "status": "resolved",
-      "reason": "Полная стоимость резервируется как обязательство покупки, все часы выдаются сразу, а подтверждённые части становятся доходными фактами личного счёта."
-    },
-    {
-      "name": "Three-state payment lifecycle",
-      "status": "resolved",
-      "reason": "Pending не увеличивает доступный баланс и живёт в очереди проверки; сотрудник переводит его в paid или unpaid, paid исправляется только сторно."
-    },
-    {
-      "name": "Staff-visible action reasons",
-      "status": "resolved",
-      "reason": "Причины переносов, возвратов, списаний с чужого счёта, изменений оплаты преподавателю и удаления оплат сохраняются в едином техническом журнале для Admin/Manager/Director."
-    }
+    "Plan-level constraints preview API and Flutter violation presentation.",
+    "Persisted versioned planned settlement bound to configuration revisions.",
+    "Worker path that calls the existing settlement port atomically.",
+    "Append-only settlement correction command and effective exclusion projection.",
+    "Single text-link affordance over existing EntityRouteRegistry."
   ],
   "clarifications": [
     {
-      "question": "Настраиваем только бизнес-справочники, а роли, lifecycle, финансовые и security-инварианты оставляем системными?",
-      "answer": "Настраиваем всё возможное; при необходимости перерабатываем логику под кастомный функционал.",
-      "decision": "All safely configurable business metadata, views and workflows enter scope; only integrity and security invariants remain code-owned."
-    },
-    {
-      "question": "Настройки должны быть общешкольными с возможностью филиальных переопределений?",
-      "answer": "Где логику можно разделить по филиалам, нужен выбор между филиальным и общешкольным форматом.",
-      "decision": "Use school defaults plus sparse branch overrides for configuration areas that explicitly support branch scope."
-    },
-    {
-      "question": "Изменения конфигурации применять сразу или через черновик, предпросмотр и публикацию?",
-      "answer": "Пользователь завершил обсуждение конфигуратора и перешёл к другим проблемам.",
-      "decision": "Use draft, preview and atomic publish because partial live configuration can desynchronize active clients and server validation."
-    },
-    {
-      "question": "При отмене абонемента обычная статистика исключает исходную продажу, а защищённый audit сохраняет продажу и сторно?",
-      "answer": "Да, про отмену абонемента всё верно.",
-      "decision": "Cancellation posts an immutable reversal to the original payer, excludes both paired facts from ordinary sales statistics, and retains both in protected audit."
-    },
-    {
-      "question": "Кто настраивает типы списаний и связанные типы оплаты преподавателю?",
-      "answer": "Директор.",
-      "decision": "Director configures versioned LessonSettlementType and dependent TeacherCompensationRule records through the existing draft-preview-publish configuration lifecycle."
-    },
-    {
-      "question": "Оплату преподавателю выводить автоматически из типа списания или выбирать вручную?",
-      "answer": "Без автоматизации; сотрудник всегда выбирает и контролирует.",
-      "decision": "Director configures the available settlement and compensation catalogs, while an authorized staff operator explicitly selects both values for every lesson transition; no automatic mapping is applied."
-    },
-    {
-      "question": "Если на счёте плательщика недостаточно денег, блокировать покупку или разрешать отрицательный баланс?",
-      "answer": "Пока блокировать.",
-      "decision": "A one-time purchase locks the payer account, checks the complete final price and creates no fact when funds are insufficient; an explicit installment purchase creates a full commercial obligation instead of counterfeit wallet income."
-    },
-    {
-      "question": "Как выдавать часы и списывать деньги при рассрочке?",
-      "answer": "Резервируем всю сумму, а платежи частями.",
-      "decision": "The purchase reserves the complete discounted/surcharged final price as an installment obligation, issues all hours immediately, and settles that obligation through verified installment payments."
-    },
-    {
-      "question": "Как должны появляться и подтверждаться платежи рассрочки?",
-      "answer": "Автоматически появляется добавление на личный счёт со статусом «Проведен, ожидает подтверждения» и пометкой проверить оплату; сотрудник подтверждает его в «Оплачен». Всего статусы: «Не оплачен», «Проведен, ожидает подтверждения», «Оплачен»; неоплаченный — долг.",
-      "decision": "Use one versioned payment lifecycle: pending is a non-spendable verification queue, paid is immutable wallet income, unpaid is debt, and installment reservation is a commercial obligation rather than cash."
-    },
-    {
-      "question": "Какие решения принять по оставшимся 20 вопросам финансов, списаний, расписаний, ролей и отчётности?",
-      "answer": "Все рекомендации; исключение: Администратор также может делать возвраты и списывать с чужого счёта. Все причины должны фиксироваться и быть видны Admin/Manager/Director. Эти роли также могут удалять оплаты с причиной без попадания в обычную финансовую статистику, сохраняя техническую UI-информацию.",
-      "decision": "Adopt every recommended domain rule, extend risky client-finance mutations to Admin/Manager/Director, require visible operational reasons, and implement payment deletion as immutable reversal plus ordinary-report exclusion rather than physical deletion."
+      "question": "Если автопроведение не сработало, оставляем занятие в статусе «Требует проверки» без частичных списаний и начислений?",
+      "answer": "Да"
     }
   ]
 }

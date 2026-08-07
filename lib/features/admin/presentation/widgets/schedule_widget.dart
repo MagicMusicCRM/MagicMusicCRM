@@ -17,7 +17,6 @@ import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
-import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 
 import 'create_lesson_dialog.dart';
 import 'schedule_day_canvas.dart';
@@ -134,6 +133,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   String? _filterClientType;
   String? _filterClientId;
   String? _filterClientName;
+  bool _hideOtherClientLessons = true;
   String _scheduleSearchQuery = '';
   bool _scheduleSearchLoading = false;
   // The user's own branch (staff assignment), resolved once, used as the
@@ -215,6 +215,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     _filterClientType = filters['clientType']?.toString();
     _filterClientId = filters['clientId']?.toString();
     _filterClientName = filters['clientName']?.toString();
+    _hideOtherClientLessons = filters['showOtherClientLessons'] != true;
     _scheduleSearchQuery = filters['scheduleQuery']?.toString().trim() ?? '';
     _onlyTrial = filters['trial'] == true || filters['trial'] == '1';
     _onlyConflicts =
@@ -263,6 +264,8 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       if (_filterClientType != null) 'clientType': _filterClientType,
       if (_filterClientId != null) 'clientId': _filterClientId,
       if (_filterClientName != null) 'clientName': _filterClientName,
+      if (widget.clientId != null && !_hideOtherClientLessons)
+        'showOtherClientLessons': true,
       if (_scheduleSearchQuery.isNotEmpty)
         'scheduleQuery': _scheduleSearchQuery,
       if (_onlyTrial) 'trial': true,

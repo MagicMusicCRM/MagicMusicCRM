@@ -103,6 +103,7 @@ import { PaymentReversalRepository } from "./commerce/payment-reversal.repositor
 import { PaymentReversalService } from "./commerce/payment-reversal.service";
 import { SchedulePlanRepository } from "./schedule/schedule-plan.repository";
 import { SchedulePlanService } from "./schedule/schedule-plan.service";
+import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-correction.service";
 
 @Module({
   imports: [
@@ -189,6 +190,7 @@ import { SchedulePlanService } from "./schedule/schedule-plan.service";
     LessonCompletionWorkerRepository,
     LessonCompletionService,
     LessonCompletionWorker,
+    LessonSettlementCorrectionService,
     PackageCatalogRepository,
     PackageCatalogService,
     SubscriptionIssueRepository,

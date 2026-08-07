@@ -31,6 +31,10 @@ const _activePlan = {
       'durationMinutes': 60,
       'validFrom': '2026-08-01',
       'validUntil': null,
+      'financialDecision': {
+        'settlementTypeKey': 'free_lesson',
+        'teacherCompensationRuleKey': 'none',
+      },
       'active': true,
     },
   ],
@@ -59,6 +63,10 @@ const _groupPlan = {
       'durationMinutes': 90,
       'validFrom': '2026-08-02',
       'validUntil': '2026-12-31',
+      'financialDecision': {
+        'settlementTypeKey': 'free_lesson',
+        'teacherCompensationRuleKey': 'none',
+      },
       'active': true,
     },
   ],
@@ -88,6 +96,10 @@ const _endedPlan = {
       'durationMinutes': 60,
       'validFrom': '2026-01-01',
       'validUntil': '2026-07-31',
+      'financialDecision': {
+        'settlementTypeKey': 'free_lesson',
+        'teacherCompensationRuleKey': 'none',
+      },
       'active': true,
     },
   ],
@@ -187,13 +199,56 @@ void main() {
     );
     await tester.tap(find.byKey(const ValueKey('preferred-schedule-save')));
     await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('schedule-plan-row-group-0')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('schedule-plan-add-row-group')));
+    await tester.pumpAndSettle();
+    final currentDay = DateTime.now().weekday;
+    final otherDay = currentDay == 7 ? 1 : currentDay + 1;
+    await tester.tap(
+      find.byKey(ValueKey('preferred-schedule-weekday-$currentDay')),
+    );
+    await tester.tap(
+      find.byKey(ValueKey('preferred-schedule-weekday-$otherDay')),
+    );
+    await tester.tap(find.text('Мария Иванова').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Пётр Сидоров').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Класс 1').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Класс 2').last);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('preferred-schedule-save')),
+    );
+    await tester.tap(find.byKey(const ValueKey('preferred-schedule-save')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('schedule-plan-row-group-1')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('schedule-plan-preview-and-create')));
+    await tester.pumpAndSettle();
+    expect(
+      api.postRequests.where(
+        (request) => request.path == '/crm/schedule-plans/constraints/preview',
+      ),
+      hasLength(1),
+    );
     final create = api.idempotentRequests.singleWhere(
       (request) => request.path == '/crm/schedule-plans',
     );
     expect(create.data, containsPair('kind', 'individual'));
     expect(create.data, containsPair('subscriptionId', 'subscription-1'));
     expect(create.data['activeUntil'], isNull);
-    expect(create.data['rows'], hasLength(1));
+    expect(create.data['rows'], hasLength(2));
+    expect(
+      (create.data['rows'] as List).map((row) => row['teacherId']),
+      containsAll(['teacher-1', 'teacher-2']),
+    );
 
     await tester.ensureVisible(
       find.byKey(const ValueKey('schedule-plan-row-edit-series-active')),
@@ -254,9 +309,11 @@ FakeCardApiClient _api({List<Map<String, dynamic>>? plans}) =>
       ],
       teachers: const [
         {'id': 'teacher-1', 'firstName': 'Мария', 'lastName': 'Иванова'},
+        {'id': 'teacher-2', 'firstName': 'Пётр', 'lastName': 'Сидоров'},
       ],
       rooms: const [
         {'id': 'room-1', 'branchId': 'branch-1', 'name': 'Класс 1'},
+        {'id': 'room-2', 'branchId': 'branch-1', 'name': 'Класс 2'},
       ],
       schedulePlans: plans ?? const [_activePlan, _groupPlan, _endedPlan],
       schedulePlanTrays: {
@@ -315,5 +372,18 @@ Future<void> _chooseReferences(WidgetTester tester) async {
   await tester.tap(find.text('Выберите аудиторию'));
   await tester.pumpAndSettle();
   await tester.tap(find.text('Класс 1').last);
+  await tester.pumpAndSettle();
+  await tester.ensureVisible(
+    find.byKey(const ValueKey('schedule-plan-settlement-type')),
+  );
+  await tester.tap(find.byKey(const ValueKey('schedule-plan-settlement-type')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Бесплатное занятие').last);
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.byKey(const ValueKey('schedule-plan-compensation-rule')),
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Не оплачивать').last);
   await tester.pumpAndSettle();
 }

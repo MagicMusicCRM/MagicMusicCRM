@@ -16,12 +16,22 @@ calculated client units/penalty and teacher amount. Token binds actor, lesson,
 version, successor, config revision, subscription/reservation fingerprints and
 decisions. Commit compares a newly calculated fingerprint.
 
-Existing automatic completion worker no longer creates terminal financial facts.
-When scheduled time passes, it idempotently marks the lesson
-`settlement_pending` and emits a staff-queue invalidation. Only the explicit
-settle command creates `completed` client/teacher facts. New plan/series snapshots
-do not store a teacher-compensation default; legacy values remain display-only
-until their lesson is explicitly settled.
+Create and every plan row persist a versioned planned decision. The decision
+contains settlement/pay keys, optional per-client subscription choices and exact
+published configuration revision ids. Existing lesson reservations allocate the
+calculated planned units, not a second client-side estimate.
+
+When scheduled time passes, the completion worker locks claim/lesson/decision,
+calls the existing Commerce settlement port and in one PlatformIntegrity
+transaction writes lifecycle, client facts, teacher fact, reservation terminal
+states, transition, audit and outbox. Transient failures retry. A persistent or
+domain failure rolls back every fact and performs a separate idempotent transition
+to `settlement_pending` with a staff-safe failure code.
+
+Before start, decision replacement checks expected lesson/decision versions and
+atomically releases/reallocates reservations. After completion, correction uses
+signed preview and writes exclusion/reversal plus optional replacement facts in
+one transaction; source facts remain technical history.
 
 ## 2. Operation mapping
 
@@ -55,9 +65,11 @@ lesson reservation time.
 
 ## 4. Create/update plan algorithm
 
-1. Validate subject, plan kind, 1+ rows and subscriptions.
+1. Validate subject, plan kind, 1+ rows, required teacher/room/planned decision
+   and subscriptions.
 2. Sort/lock subject, teacher, room and subscription keys.
-3. Validate every row against constraints and cross-row duplicates.
+3. Expand every row to branch-local occurrence dates and validate through the
+   canonical constraint engine. Return row/date/resource/conflicting lesson ids.
 4. Create plan; call existing series creator for each row with `planId`.
 5. Generate lessons using current horizon/unique conflict semantics.
 6. Group plans snapshot participants and allocate per-client reservations.
@@ -93,6 +105,9 @@ none call `updateLesson` for protected fields.
 One `RecurringSchedulePlanSection` renders desktop/mobile with shared data:
 expanded active cards, collapsed ended cards, rows, tray and actions. Preferred
 schedule remains a separate preference block and never gates lessons/plans.
+The create editor has common defaults plus repeatable rows; copying defaults is a
+UI convenience only, while the API always receives explicit teacher, room and
+planned decision per row.
 
 ## 8. Contract checks
 
@@ -101,3 +116,5 @@ schedule remains a separate preference block and never gates lessons/plans.
 - preview and commit calculations byte-equivalent for stable facts;
 - direct link/back returns original Month/Week/Day/client tray state;
 - all status colors have semantics labels and non-color markers.
+- worker fault injection proves 0 partial facts; correction reporting sees only
+  the latest effective settlement.

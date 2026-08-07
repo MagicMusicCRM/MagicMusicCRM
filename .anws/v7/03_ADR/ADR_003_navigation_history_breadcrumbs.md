@@ -1,7 +1,7 @@
 # ADR-003 — Unified navigation, history and breadcrumbs
 
-- **Status:** Proposed
-- **Date:** 2026-08-04
+- **Status:** Accepted
+- **Date:** 2026-08-07
 
 ## Context
 
@@ -17,10 +17,17 @@ Use one canonical location descriptor shared by GoRouter, `WorkspaceController` 
 - Mobile uses one route stack; overlays are dismissed before routes.
 - UI Back and Android system/predictive Back use the same pop/dirty-state policy.
 - Typed entity links use `EntityRouteRegistry`; direct deep links reconstruct location and breadcrumbs without prior history.
+- Related-record affordances are the entity text itself. Separate current/new-tab
+  buttons are forbidden for internal records.
+- On desktop every related entity-text transition snapshots the source view,
+  opens and selects a new workspace tab. Mobile uses the canonical route stack.
+- Plain text remains non-interactive when a typed id is absent or current
+  capability resolution cannot open the target.
 
 ## Consequences
 
 - A route owns its stable identity, parameters, parent metadata and restorable view state.
 - Logout clears the account workspace cache; restoration validates route version and current access.
 - The implementation must bridge existing mechanisms, not create a second navigation registry.
-
+- Accessibility semantics, keyboard focus and hover/underline make entity text
+  discoverable without relying on color alone.

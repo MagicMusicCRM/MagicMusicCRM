@@ -11,11 +11,13 @@ import { PlatformIntegrityService } from "../../platform/platform-integrity.serv
 import { fingerprintPayload } from "../../platform/platform-integrity.util";
 import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
 import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
+import { LessonSettlementService } from "../commerce/lesson-settlement.service";
 import { CrmPolicy } from "../crm.policy";
 import {
   CreateSchedulePlanDto,
   SchedulePlanEndCommandDto,
   SchedulePlanEndPreviewDto,
+  SchedulePlanConstraintPreviewDto,
   SchedulePlanParticipantDto,
   SchedulePlanQuery,
   SchedulePlanRowDto,
@@ -45,10 +47,62 @@ export class SchedulePlanService {
     private readonly previewTokens: SubscriptionPreviewTokenService,
     private readonly lifecycle: LessonLifecycleRepository,
     private readonly reservations: SubscriptionReservationService,
+    private readonly settlement: LessonSettlementService,
   ) {}
 
   list(actor: ActorContext, query: SchedulePlanQuery) {
     return this.repository.list(actor, query);
+  }
+
+  async previewConstraints(
+    actor: ActorContext,
+    dto: SchedulePlanConstraintPreviewDto,
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    const normalized = this.normalizeCreate(dto);
+    return this.database.transaction(async (client) => {
+      const studentIds = normalized.kind === "individual"
+        ? [normalized.studentId!]
+        : normalized.participants.map((participant) => participant.studentId);
+      await this.lockAndValidate(
+        client,
+        this.stableId(`schedule.plan.preview\0${actor.userId}`),
+        normalized.kind,
+        normalized.studentId,
+        normalized.groupId,
+        normalized.subscriptionId,
+        normalized.participants,
+        normalized.rows,
+      );
+      const rows = [];
+      for (const [index, row] of normalized.rows.entries()) {
+        await this.settlement.preparePlan(
+          client,
+          row.branchId,
+          row.financialDecision,
+        );
+        rows.push({
+          index,
+          ...(await this.series.previewPlanRow(
+            client,
+            row,
+            normalized.activeFrom,
+            normalized.activeUntil,
+            studentIds,
+          )),
+        });
+      }
+      this.addCrossRowViolations(normalized.rows, rows, studentIds[0]!);
+      return {
+        valid: rows.every((row) => row.failures.length === 0),
+        rows: rows.map((row) => ({
+          index: row.index,
+          valid: row.failures.length === 0,
+          occurrencesChecked: row.occurrences.length,
+          failures: row.failures,
+        })),
+      };
+    });
   }
 
   async previewEnd(
@@ -359,6 +413,11 @@ export class SchedulePlanService {
             studentIds,
           );
           const seriesId = this.seriesId(planId, version, index);
+          const settlementPlan = await this.settlement.preparePlan(
+            client,
+            row.branchId,
+            row.financialDecision,
+          );
           await this.repository.insertSeries(client, {
             id: seriesId,
             planId,
@@ -369,6 +428,7 @@ export class SchedulePlanService {
             row,
             actorUserId: actor.userId,
             version,
+            settlementPlan,
           });
           await this.schedule.materializePlanSeries(client, seriesId);
           seriesIds.push(seriesId);
@@ -473,6 +533,11 @@ export class SchedulePlanService {
         const seriesIds: string[] = [];
         for (const [index, row] of dto.rows.entries()) {
           const seriesId = this.seriesId(planId, version, index);
+          const settlementPlan = await this.settlement.preparePlan(
+            client,
+            row.branchId,
+            row.financialDecision,
+          );
           await this.repository.insertSeries(client, {
             id: seriesId,
             planId,
@@ -483,6 +548,7 @@ export class SchedulePlanService {
             row,
             actorUserId: actor.userId,
             version,
+            settlementPlan,
           });
           if (row.seriesId) continuations.set(row.seriesId, seriesId);
           seriesIds.push(seriesId);
@@ -617,6 +683,57 @@ export class SchedulePlanService {
     ].join(":"));
     if (new Set(keys).size !== keys.length) {
       this.fail("SCHEDULE_PLAN_DUPLICATE_ROW", ["rows"]);
+    }
+  }
+
+  private addCrossRowViolations(
+    rows: SchedulePlanRowDto[],
+    previews: Array<{
+      index: number;
+      occurrences: Array<{ startAt: string; endAt: string }>;
+      failures: Array<Record<string, unknown>>;
+    }>,
+    studentId: string,
+  ) {
+    for (let leftIndex = 0; leftIndex < rows.length; leftIndex += 1) {
+      for (let rightIndex = leftIndex + 1; rightIndex < rows.length; rightIndex += 1) {
+        const left = rows[leftIndex]!;
+        const right = rows[rightIndex]!;
+        for (const leftOccurrence of previews[leftIndex]!.occurrences) {
+          const rightOccurrence = previews[rightIndex]!.occurrences.find(
+            (candidate) =>
+              Date.parse(leftOccurrence.startAt) < Date.parse(candidate.endAt) &&
+              Date.parse(candidate.startAt) < Date.parse(leftOccurrence.endAt),
+          );
+          if (!rightOccurrence) continue;
+          const shared = [
+            ...(left.teacherId === right.teacherId
+              ? [{ code: "TEACHER_OVERLAP", type: "teacher", id: left.teacherId }]
+              : []),
+            ...(left.roomId === right.roomId
+              ? [{ code: "ROOM_OVERLAP", type: "room", id: left.roomId }]
+              : []),
+            { code: "CLIENT_OVERLAP", type: "client", id: studentId },
+          ];
+          for (const [source, target, occurrence] of [
+            [leftIndex, rightIndex, leftOccurrence],
+            [rightIndex, leftIndex, rightOccurrence],
+          ] as const) {
+            previews[source]!.failures.push({
+              occurrence,
+              studentId,
+              violations: shared.map((violation) => ({
+                code: violation.code,
+                resource: { type: violation.type, id: violation.id },
+                conflictingLessonIds: [],
+                conflictingRowIndexes: [target],
+                ruleIds: ["schedule_plan.rows"],
+              })),
+            });
+          }
+          break;
+        }
+      }
     }
   }
 

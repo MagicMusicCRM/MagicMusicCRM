@@ -586,6 +586,28 @@ extension MagicCrmSchedule on MagicCrmService {
     );
   }
 
+  Future<Map<String, dynamic>> previewSchedulePlanConstraints({
+    required String title,
+    required String studentId,
+    required String subscriptionId,
+    required String activeFrom,
+    required String? activeUntil,
+    required List<Map<String, dynamic>> rows,
+  }) {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/schedule-plans/constraints/preview',
+      data: {
+        'kind': 'individual',
+        'title': title.trim(),
+        'studentId': studentId,
+        'subscriptionId': subscriptionId,
+        'activeFrom': activeFrom,
+        'activeUntil': activeUntil,
+        'rows': rows,
+      },
+    );
+  }
+
   Future<Map<String, dynamic>> updateSchedulePlan(
     String planId, {
     required MagicMutationIdentity identity,

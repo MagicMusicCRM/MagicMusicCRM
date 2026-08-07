@@ -176,8 +176,10 @@ class ScheduleMonthView extends StatelessWidget {
         selectedDate.year == date.year &&
         selectedDate.month == date.month &&
         selectedDate.day == date.day;
+    final relationContext = clientContext || searchContext;
     final related =
-        searchContext && lessons.any((lesson) => isContextClientLesson(lesson));
+        relationContext &&
+        lessons.any((lesson) => isContextClientLesson(lesson));
 
     // Up to two preview chips from the in-memory (capped) matrix; the count
     // badge stays authoritative for the full-day total.
@@ -200,7 +202,7 @@ class ScheduleMonthView extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(5, 4, 5, 4),
           decoration: BoxDecoration(
             color: isCurrentMonth
-                ? searchContext
+                ? relationContext
                       ? (related
                             ? AppColor.success.withAlpha(28)
                             : AppColor.text2.withAlpha(12))
@@ -208,14 +210,14 @@ class ScheduleMonthView extends StatelessWidget {
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: searchContext
+              color: relationContext
                   ? (related ? AppColor.success : AppColor.text2.withAlpha(70))
                   : isToday
                   ? AppColor.gold
                   : isSelected
                   ? AppColor.goldLine
                   : cs.onSurfaceVariant.withAlpha(14),
-              width: searchContext && related || !searchContext && isToday
+              width: relationContext && related || !relationContext && isToday
                   ? 1.5
                   : 1,
             ),
@@ -253,7 +255,7 @@ class ScheduleMonthView extends StatelessWidget {
                     Text(
                       '$count',
                       style: TextStyle(
-                        color: searchContext
+                        color: relationContext
                             ? (related ? AppColor.success : AppColor.text2)
                             : count >= 9
                             ? AppColor.warning

@@ -9,6 +9,8 @@ import { RealtimeBus } from "../../realtime/realtime-bus";
 import { ClientReferenceService } from "../clients/client-reference.service";
 import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
 import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
+import { LessonSettlementRepository } from "../commerce/lesson-settlement.repository";
+import { LessonSettlementService } from "../commerce/lesson-settlement.service";
 import { CrmPolicy } from "../crm.policy";
 import { ScheduleService } from "../schedule.service";
 import { AvailabilityRepository } from "./availability.repository";
@@ -84,6 +86,10 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       } as unknown as ConfigService),
       lifecycle,
       reservations,
+      new LessonSettlementService(
+        database,
+        new LessonSettlementRepository(),
+      ),
     );
   });
 
@@ -161,6 +167,51 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         return count;
       });
       expect(regenerated).toBe(0);
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("previews every row and explains overlaps inside the new plan before create", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    try {
+      const preview = await plans.previewConstraints(actor, {
+        kind: "individual",
+        title: "Проверка пересечений",
+        studentId: fixture.studentIds[0],
+        subscriptionId: fixture.subscriptionIds[0],
+        activeFrom: fixture.today,
+        activeUntil: fixture.until60,
+        rows: [
+          row(fixture, 1, "10:00"),
+          row(fixture, 1, "10:30"),
+        ],
+      });
+
+      expect(preview.valid).toBe(false);
+      expect(preview.rows).toHaveLength(2);
+      for (const [index, result] of preview.rows.entries()) {
+        expect(result.valid).toBe(false);
+        expect(result.occurrencesChecked).toBeGreaterThan(0);
+        expect(result.failures).toEqual(expect.arrayContaining([
+          expect.objectContaining({
+            violations: expect.arrayContaining([
+              expect.objectContaining({
+                code: "CLIENT_OVERLAP",
+                conflictingRowIndexes: [index === 0 ? 1 : 0],
+              }),
+              expect.objectContaining({ code: "TEACHER_OVERLAP" }),
+              expect.objectContaining({ code: "ROOM_OVERLAP" }),
+            ]),
+          }),
+        ]));
+      }
+      const persisted = await pool.query<{ count: string }>(
+        "select count(*)::text as count from app.schedule_plans where created_by = $1",
+        [fixture.managerId],
+      );
+      expect(persisted.rows[0]?.count).toBe("0");
     } finally {
       await cleanup(pool, fixture);
     }
@@ -700,6 +751,10 @@ function row(
     weekday,
     beginTime,
     durationMinutes: 60,
+    financialDecision: {
+      settlementTypeKey: "lesson",
+      teacherCompensationRuleKey: "none",
+    },
   };
 }
 
@@ -835,6 +890,20 @@ async function cleanup(pool: Pool, fixture: Awaited<ReturnType<typeof createFixt
     );
     await client.query(
       `delete from app.lesson_reservations where lesson_id in (
+         select lesson.id from app.lessons lesson join app.schedule_series series
+           on series.id = lesson.series_id join app.schedule_plans plan on plan.id = series.plan_id
+         where plan.created_by = $1)`,
+      [fixture.managerId],
+    );
+    await client.query(
+      `delete from app.lesson_settlement_plan_revisions where lesson_id in (
+         select lesson.id from app.lessons lesson join app.schedule_series series
+           on series.id = lesson.series_id join app.schedule_plans plan on plan.id = series.plan_id
+         where plan.created_by = $1)`,
+      [fixture.managerId],
+    );
+    await client.query(
+      `delete from app.lesson_settlement_plans where lesson_id in (
          select lesson.id from app.lessons lesson join app.schedule_series series
            on series.id = lesson.series_id join app.schedule_plans plan on plan.id = series.plan_id
          where plan.created_by = $1)`,

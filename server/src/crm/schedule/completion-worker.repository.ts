@@ -166,6 +166,23 @@ export class LessonCompletionWorkerRepository {
     });
   }
 
+  async poisonReviewRequired(limit = 25): Promise<LessonCompletionClaim[]> {
+    const result = await this.database.query<ClaimRow>(
+      `select work.lesson_id, lesson.version as lesson_version,
+         work.scheduled_end_at, work.attempts,
+         coalesce(work.updated_at, now()) as claimed_at,
+         'poison-recovery'::text as claimed_by
+       from app.lesson_completion_work work
+       join app.lessons lesson on lesson.id = work.lesson_id
+       where work.state = 'poison'
+         and lesson.lifecycle_state = 'scheduled'
+       order by work.updated_at, work.lesson_id
+       limit $1`,
+      [positiveInteger(limit, 25)],
+    );
+    return result.rows.map(mapClaim);
+  }
+
   async lockClaimAndLesson(
     client: PoolClient,
     claim: LessonCompletionClaim,
@@ -203,9 +220,38 @@ export class LessonCompletionWorkerRepository {
     return row;
   }
 
-  async markPending(
+  async lockPoisonAndLesson(
     client: PoolClient,
     claim: LessonCompletionClaim,
+  ): Promise<CompletionSourceRow> {
+    const owned = await client.query(
+      `select lesson_id from app.lesson_completion_work
+       where lesson_id = $1 and state = 'poison' and attempts = $2
+       for update`,
+      [claim.lessonId, claim.attempts],
+    );
+    if (!owned.rows[0]) {
+      throw workerError("LESSON_COMPLETION_POISON_NOT_FOUND");
+    }
+    const source = await client.query<CompletionSourceRow>(
+      `select id, version, lifecycle_state from app.lessons
+       where id = $1 and deleted_at is null for update`,
+      [claim.lessonId],
+    );
+    if (!source.rows[0]) {
+      throw workerError("LESSON_COMPLETION_SOURCE_MISSING");
+    }
+    return source.rows[0];
+  }
+
+  async markCompleted(
+    client: PoolClient,
+    claim: LessonCompletionClaim,
+    result: {
+      transitionId: string;
+      clientFinancialFactIds: string[];
+      teacherFinancialFactId: string;
+    },
   ): Promise<void> {
     const updated = await client.query(
       `
@@ -214,11 +260,11 @@ export class LessonCompletionWorkerRepository {
             claimed_at = null,
             claimed_by = null,
             completed_at = now(),
-            transition_id = null,
-            client_financial_fact_id = null,
-            client_financial_fact_ids = '{}'::uuid[],
-            teacher_financial_fact_id = null,
-            terminal_state = 'settlement_pending',
+            transition_id = $4,
+            client_financial_fact_id = $5,
+            client_financial_fact_ids = $6::uuid[],
+            teacher_financial_fact_id = $7,
+            terminal_state = 'successfully_completed',
             last_error = null,
             updated_at = now()
         where lesson_id = $1
@@ -230,11 +276,27 @@ export class LessonCompletionWorkerRepository {
         claim.lessonId,
         claim.workerId,
         claim.attempts,
+        result.transitionId,
+        result.clientFinancialFactIds[0] ?? null,
+        result.clientFinancialFactIds,
+        result.teacherFinancialFactId,
       ],
     );
     if (updated.rowCount !== 1) {
       throw workerError("LESSON_COMPLETION_CLAIM_NOT_OWNED");
     }
+  }
+
+  async markReviewRequired(
+    client: PoolClient,
+    claim: LessonCompletionClaim,
+  ): Promise<void> {
+    await client.query(
+      `update app.lesson_completion_work
+       set terminal_state = 'settlement_pending', updated_at = now()
+       where lesson_id = $1 and state = 'poison' and attempts = $2`,
+      [claim.lessonId, claim.attempts],
+    );
   }
 
   async markTerminalObserved(claim: LessonCompletionClaim): Promise<boolean> {

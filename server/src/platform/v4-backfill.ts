@@ -302,7 +302,7 @@ async function planLessonSnapshots(client: PoolClient): Promise<{
                  ), 0)
                  - coalesce((
                    select sum(fact.units)
-                   from app.lesson_client_charge_facts fact
+                   from app.lesson_client_charge_facts_effective fact
                    where fact.subscription_id = subscription.id
                      and fact.charge_type = 'subscription'
                  ), 0)

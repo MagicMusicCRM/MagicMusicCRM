@@ -7,6 +7,7 @@ import {
   SchedulePlanQuery,
   SchedulePlanRowDto,
 } from "../dto/schedule-plan.dto";
+import { PreparedLessonSettlementPlan } from "../commerce/lesson-settlement.port";
 
 export interface LockedSchedulePlan {
   id: string;
@@ -124,6 +125,7 @@ export class SchedulePlanRepository {
               'validFrom', series.valid_from,
               'validUntil', series.valid_until,
               'notes', series.notes,
+              'financialDecision', series.planned_financial_decision,
               'supersededBy', series.superseded_by,
               'active', series.deleted_at is null and series.superseded_by is null
             ) order by series.valid_from, series.weekday, series.begin_time, series.id)
@@ -293,14 +295,19 @@ export class SchedulePlanRepository {
       row: SchedulePlanRowDto;
       actorUserId: string;
       version: number;
+      settlementPlan: PreparedLessonSettlementPlan;
     },
   ) {
     return client.query(
       `insert into app.schedule_series (
          id, plan_id, student_id, group_id, teacher_id, room_id, branch_id,
          weekday, begin_time, duration_minutes, valid_from, valid_until,
-         notes, created_by, version
-       ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9::time,$10,$11::date,$12::date,$13,$14,$15)`,
+         notes, created_by, version, planned_financial_decision,
+         settlement_revision_id, compensation_revision_id
+       ) values (
+         $1,$2,$3,$4,$5,$6,$7,$8,$9::time,$10,$11::date,$12::date,
+         $13,$14,$15,$16::jsonb,$17,$18
+       )`,
       [
         input.id,
         input.planId,
@@ -317,6 +324,9 @@ export class SchedulePlanRepository {
         input.row.notes?.trim() || null,
         input.actorUserId,
         input.version,
+        JSON.stringify(input.settlementPlan.decision),
+        input.settlementPlan.settlementRevisionId,
+        input.settlementPlan.compensationRevisionId,
       ],
     );
   }
@@ -617,7 +627,7 @@ export class SchedulePlanRepository {
          ) order by item.settlement_type_key) as markers
          from (
            select distinct settlement_type_key, settlement_label, settlement_color_token
-           from app.lesson_client_charge_facts fact
+           from app.lesson_client_charge_facts_effective fact
            where fact.lesson_id = lesson.id and fact.settlement_type_key is not null
          ) item
        ) marker on true
