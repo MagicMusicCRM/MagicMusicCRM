@@ -11,6 +11,19 @@ const PAYMENT_REVERSAL_TOKEN_DOMAIN =
   "magicmusiccrm:payment-reversal-preview:v1";
 const LESSON_TRANSITION_TOKEN_DOMAIN =
   "magicmusiccrm:lesson-transition-preview:v1";
+const SCHEDULE_PLAN_END_TOKEN_DOMAIN =
+  "magicmusiccrm:schedule-plan-end-preview:v1";
+
+export interface SchedulePlanEndPreviewTokenPayload {
+  kind: "schedule.plan.end";
+  actorUserId: string;
+  planId: string;
+  expectedVersion: number;
+  lastDate: string;
+  impactFingerprint: string;
+  issuedAtSeconds: number;
+  expiresAtSeconds: number;
+}
 
 export interface LessonTransitionPreviewTokenPayload {
   kind: "lesson.transition";
@@ -258,6 +271,68 @@ export function verifyLessonTransitionPreview(
     nowSeconds,
     assertLessonTransitionPayload,
   );
+}
+
+export function signSchedulePlanEndPreview(
+  secret: string,
+  payload: SchedulePlanEndPreviewTokenPayload,
+): string {
+  return signPayload(
+    secret,
+    SCHEDULE_PLAN_END_TOKEN_DOMAIN,
+    payload,
+    assertSchedulePlanEndPayload,
+  );
+}
+
+export function verifySchedulePlanEndPreview(
+  secret: string,
+  token: string,
+  nowSeconds: number,
+): SchedulePlanEndPreviewTokenPayload {
+  return verifyPayload(
+    secret,
+    SCHEDULE_PLAN_END_TOKEN_DOMAIN,
+    token,
+    nowSeconds,
+    assertSchedulePlanEndPayload,
+  );
+}
+
+function assertSchedulePlanEndPayload(
+  value: unknown,
+): asserts value is SchedulePlanEndPreviewTokenPayload {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
+  }
+  const payload = value as Record<string, unknown>;
+  const exactKeys = [
+    "kind",
+    "actorUserId",
+    "planId",
+    "expectedVersion",
+    "lastDate",
+    "impactFingerprint",
+    "issuedAtSeconds",
+    "expiresAtSeconds",
+  ];
+  if (
+    Object.keys(payload).length !== exactKeys.length ||
+    exactKeys.some((key) => !(key in payload)) ||
+    payload.kind !== "schedule.plan.end" ||
+    !isUuid(payload.actorUserId) ||
+    !isUuid(payload.planId) ||
+    !isPositiveInteger(payload.expectedVersion) ||
+    typeof payload.lastDate !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(payload.lastDate) ||
+    typeof payload.impactFingerprint !== "string" ||
+    !/^[a-f0-9]{64}$/.test(payload.impactFingerprint) ||
+    !isPositiveInteger(payload.issuedAtSeconds) ||
+    !isPositiveInteger(payload.expiresAtSeconds) ||
+    payload.expiresAtSeconds < payload.issuedAtSeconds
+  ) {
+    throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
+  }
 }
 
 function signPayload<T>(

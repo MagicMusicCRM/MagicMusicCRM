@@ -1,20 +1,20 @@
 # MagicMusicCRM v4 — Current-State Inventory
 
 **Task:** T8.1.2
-**Source digest:** `185309db96246ebabf40bdf82bfd2e7b00ec6456081e1af6317988b7d4767a89`
+**Source digest:** `26a14e4e4716119b180629f5b0878ab50f211e60eac3dc0f57993e0791170454`
 **Validation:** PASS
 
 ## Coverage
 
 | Slice | Count |
 |---|---:|
-| backend routes | 306 |
+| backend routes | 309 |
 | role guards | 22 |
-| policy calls | 233 |
-| dto fields | 768 |
+| policy calls | 235 |
+| dto fields | 776 |
 | flutter role checks | 141 |
 | flutter navigation sources | 315 |
-| schedule entry points | 38 |
+| schedule entry points | 41 |
 | attendance mutations | 0 |
 | finance writes | 46 |
 | schema tables | 5 |
@@ -98,7 +98,7 @@ Indexes: `users_app_accounts_role_created_idx`, `users_email_lower_unique`, `use
 | backend-route | POST /crm/leads/:leadId/subscriptions/issue | `server/src/crm/crm-leads.controller.ts:123` | commerce-migration-pending |
 | backend-route | POST /crm/teachers/:id/payouts | `server/src/crm/crm-people.controller.ts:81` | commerce-migration-pending |
 | backend-route | POST /crm/teachers/:id/rates | `server/src/crm/crm-people.controller.ts:90` | commerce-migration-pending |
-| backend-route | PATCH /crm/lessons/teacher-rate | `server/src/crm/crm-schedule.controller.ts:209` | commerce-migration-pending |
+| backend-route | PATCH /crm/lessons/teacher-rate | `server/src/crm/crm-schedule.controller.ts:244` | commerce-migration-pending |
 | backend-route | POST /crm/students/:id/adjustments | `server/src/crm/crm-students.controller.ts:126` | commerce-migration-pending |
 | backend-route | POST /crm/students/:id/transfer | `server/src/crm/crm-students.controller.ts:140` | commerce-migration-pending |
 | backend-route | POST /crm/students/:studentId/subscriptions/issue | `server/src/crm/subscription-commerce.controller.ts:50` | commerce-migration-pending |

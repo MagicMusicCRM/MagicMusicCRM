@@ -6,9 +6,11 @@ import {
 import { ConfigService } from "@nestjs/config";
 import {
   LessonTransitionPreviewTokenPayload,
+  SchedulePlanEndPreviewTokenPayload,
   PaymentReversalPreviewTokenPayload,
   signLessonTransitionPreview,
   signPaymentReversalPreview,
+  signSchedulePlanEndPreview,
   signSubscriptionCancelPreview,
   signSubscriptionPurchasePreview,
   signSubscriptionReplacePreview,
@@ -17,6 +19,7 @@ import {
   SubscriptionPreviewTokenError,
   SubscriptionReplacePreviewTokenPayload,
   verifyPaymentReversalPreview,
+  verifySchedulePlanEndPreview,
   verifyLessonTransitionPreview,
   verifySubscriptionCancelPreview,
   verifySubscriptionPurchasePreview,
@@ -259,6 +262,44 @@ export class SubscriptionPreviewTokenService {
           error.code === "PREVIEW_TOKEN_EXPIRED"
             ? "Предпросмотр действия с занятием устарел. Обновите расчёт."
             : "Подписанный предпросмотр действия с занятием недействителен.",
+      });
+    }
+  }
+
+  issueSchedulePlanEnd(
+    payload: Omit<
+      SchedulePlanEndPreviewTokenPayload,
+      "issuedAtSeconds" | "expiresAtSeconds"
+    >,
+    now = new Date(),
+  ) {
+    const issuedAtSeconds = Math.floor(now.getTime() / 1000);
+    const complete: SchedulePlanEndPreviewTokenPayload = {
+      ...payload,
+      issuedAtSeconds,
+      expiresAtSeconds: issuedAtSeconds + SUBSCRIPTION_PREVIEW_TTL_SECONDS,
+    };
+    return {
+      token: signSchedulePlanEndPreview(this.secret(), complete),
+      expiresAt: new Date(complete.expiresAtSeconds * 1000).toISOString(),
+      payload: complete,
+    };
+  }
+
+  verifySchedulePlanEnd(token: string, now = new Date()) {
+    try {
+      return verifySchedulePlanEndPreview(
+        this.secret(),
+        token,
+        Math.floor(now.getTime() / 1000),
+      );
+    } catch (error) {
+      if (!(error instanceof SubscriptionPreviewTokenError)) throw error;
+      throw new UnprocessableEntityException({
+        code: error.code,
+        message: error.code === "PREVIEW_TOKEN_EXPIRED"
+          ? "Предпросмотр завершения расписания устарел. Обновите расчёт."
+          : "Подписанный предпросмотр завершения расписания недействителен.",
       });
     }
   }

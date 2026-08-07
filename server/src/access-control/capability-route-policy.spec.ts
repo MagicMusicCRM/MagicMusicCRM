@@ -20,6 +20,9 @@ describe("capability route policy", () => {
     ["GET", "/crm/lessons", "schedule.lesson.read.assigned"],
     ["GET", "/crm/schedule-plans", "schedule.lesson.read.assigned"],
     ["POST", "/crm/schedule-plans", "schedule.lesson.write"],
+    ["GET", "/crm/schedule-plans/id/tray", "schedule.lesson.read.assigned"],
+    ["POST", "/crm/schedule-plans/id/end/preview", "schedule.lesson.write"],
+    ["POST", "/crm/schedule-plans/id/end", "schedule.lesson.write"],
     ["PATCH", "/crm/schedule-plans/id", "schedule.lesson.write"],
     [
       "GET",

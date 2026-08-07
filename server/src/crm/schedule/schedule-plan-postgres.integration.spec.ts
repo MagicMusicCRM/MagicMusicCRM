@@ -8,6 +8,7 @@ import { PlatformIntegrityService } from "../../platform/platform-integrity.serv
 import { RealtimeBus } from "../../realtime/realtime-bus";
 import { ClientReferenceService } from "../clients/client-reference.service";
 import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
+import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
 import { CrmPolicy } from "../crm.policy";
 import { ScheduleService } from "../schedule.service";
 import { AvailabilityRepository } from "./availability.repository";
@@ -32,6 +33,8 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
   let database: DatabaseService;
   let plans: SchedulePlanService;
   let schedule: ScheduleService;
+  let reservations: SubscriptionReservationService;
+  let lifecycle: LessonLifecycleRepository;
 
   beforeAll(async () => {
     pool = new Pool({ connectionString: databaseUrl });
@@ -44,7 +47,8 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       emitCrmChanged: jest.fn(),
       emitFinanceChanged: jest.fn(),
     } as unknown as RealtimeBus;
-    const reservations = new SubscriptionReservationService(database, realtime);
+    reservations = new SubscriptionReservationService(database, realtime);
+    lifecycle = new LessonLifecycleRepository(database);
     schedule = new ScheduleService(
       database,
       {} as never,
@@ -62,7 +66,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       new ScheduleConstraintEngine(
         new ConstraintEngineRepository(database, availability),
       ),
-      new LessonLifecycleRepository(database),
+      lifecycle,
       reservations,
     );
     plans = new SchedulePlanService(
@@ -71,6 +75,15 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       new SchedulePlanRepository(database),
       series,
       schedule,
+      database,
+      new SubscriptionPreviewTokenService({
+        get: (key: string, fallback: string) =>
+          key === "COMMERCE_PREVIEW_SECRET"
+            ? "schedule-plan-test-preview-secret-0123456789abcdef"
+            : fallback,
+      } as unknown as ConfigService),
+      lifecycle,
+      reservations,
     );
   });
 
@@ -336,6 +349,328 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       await cleanup(pool, fixture);
     }
   });
+
+  it("ends a plan mid-week, preserves history and terminal lessons, and replays once", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    try {
+      const created = await plans.create(actor, {
+        kind: "individual",
+        title: "Завершаемое расписание",
+        studentId: fixture.studentIds[0],
+        subscriptionId: fixture.subscriptionIds[0],
+        activeFrom: fixture.today,
+        activeUntil: fixture.until60,
+        rows: [row(fixture, 1, "10:00"), row(fixture, 4, "11:00")],
+      }, {
+        idempotencyKey: `plan-end-source-${randomUUID()}`,
+        requestId: `request-${randomUUID()}`,
+      });
+      const lastDate = addDays(fixture.today, 14);
+      const before = await pool.query<{
+        id: string;
+        series_date: string;
+        lifecycle_state: string;
+        version: string;
+      }>(
+        `select lesson.id, lesson.series_date::text, lesson.lifecycle_state,
+          lesson.version::text
+         from app.lessons lesson join app.schedule_series series
+           on series.id = lesson.series_id
+         where series.plan_id = $1 order by lesson.series_date, lesson.id`,
+        [created.id],
+      );
+      const historical = before.rows.find((lesson) => lesson.series_date <= lastDate)!;
+      const terminal = before.rows.find((lesson) => lesson.series_date > lastDate)!;
+      expect(historical).toBeDefined();
+      expect(terminal).toBeDefined();
+      await pool.query(
+        "update app.lessons set lifecycle_state = 'cancelled' where id = $1",
+        [terminal.id],
+      );
+      await pool.query(
+        "update app.lesson_reservations set state = 'released' where lesson_id = $1",
+        [terminal.id],
+      );
+
+      const preview = await plans.previewEnd(actor, created.id, {
+        expectedVersion: 1,
+        lastDate,
+        reasonText: "Клиент завершил регулярные занятия",
+      });
+      expect(preview).toMatchObject({
+        canConfirm: true,
+        confirmRequired: true,
+        impact: { preservedTerminalLessons: 1 },
+      });
+      expect(preview.impact.futureUnsettledLessons).toBeGreaterThan(0);
+      const command = {
+        expectedVersion: 1,
+        lastDate,
+        reasonText: "Клиент завершил регулярные занятия",
+        previewToken: preview.previewToken,
+        confirm: true as const,
+      };
+      const key = `plan-end-${randomUUID()}`;
+      const ended = await plans.end(actor, created.id, command, {
+        idempotencyKey: key,
+        requestId: `request-${randomUUID()}`,
+      });
+      const replay = await plans.end(actor, created.id, command, {
+        idempotencyKey: key,
+        requestId: `request-${randomUUID()}`,
+      });
+      expect(ended).toMatchObject({
+        status: "ended",
+        version: 2,
+        replayed: false,
+        preservedTerminalLessons: 1,
+      });
+      expect(replay).toEqual({ ...ended, replayed: true });
+
+      const persisted = await pool.query<{
+        status: string;
+        active_until: string;
+        end_reason: string;
+        active_series_after_end: string;
+        uncancelled_future: string;
+        end_transitions: string;
+        reserved_future: string;
+        historical_state: string;
+        historical_version: string;
+        terminal_state: string;
+      }>(
+        `select plan.status, plan.active_until::text, plan.end_reason,
+          (select count(*)::text from app.schedule_series series
+             where series.plan_id = plan.id and series.deleted_at is null
+               and series.superseded_by is null and series.valid_until > $2::date)
+            as active_series_after_end,
+          (select count(*)::text from app.lessons lesson
+             join app.schedule_series series on series.id = lesson.series_id
+             where series.plan_id = plan.id and lesson.series_date > $2::date
+               and lesson.lifecycle_state in ('scheduled', 'settlement_pending'))
+            as uncancelled_future,
+          (select count(*)::text from app.lesson_transitions transition
+             join app.schedule_series series on series.id = (
+               select lesson.series_id from app.lessons lesson where lesson.id = transition.lesson_id
+             ) where series.plan_id = plan.id and transition.reason_code = 'schedule.plan.end')
+            as end_transitions,
+          (select count(*)::text from app.lesson_reservations reservation
+             join app.lessons lesson on lesson.id = reservation.lesson_id
+             join app.schedule_series series on series.id = lesson.series_id
+             where series.plan_id = plan.id and lesson.series_date > $2::date
+               and reservation.state = 'reserved') as reserved_future,
+          (select lifecycle_state from app.lessons where id = $3) as historical_state,
+          (select version::text from app.lessons where id = $3) as historical_version,
+          (select lifecycle_state from app.lessons where id = $4) as terminal_state
+         from app.schedule_plans plan where plan.id = $1`,
+        [created.id, lastDate, historical.id, terminal.id],
+      );
+      expect(persisted.rows[0]).toEqual({
+        status: "ended",
+        active_until: lastDate,
+        end_reason: command.reasonText,
+        active_series_after_end: "0",
+        uncancelled_future: "0",
+        end_transitions: String(ended.endedLessons),
+        reserved_future: "0",
+        historical_state: historical.lifecycle_state,
+        historical_version: historical.version,
+        terminal_state: "cancelled",
+      });
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("rejects a stale end preview and rolls the whole end mutation back on failure", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    try {
+      const created = await plans.create(actor, {
+        kind: "individual",
+        title: "Атомарное завершение",
+        studentId: fixture.studentIds[0],
+        subscriptionId: fixture.subscriptionIds[0],
+        activeFrom: fixture.today,
+        activeUntil: fixture.until60,
+        rows: [row(fixture, 2, "10:00"), row(fixture, 5, "11:00")],
+      }, {
+        idempotencyKey: `plan-atomic-source-${randomUUID()}`,
+        requestId: `request-${randomUUID()}`,
+      });
+      const lastDate = addDays(fixture.today, 14);
+      const base = {
+        expectedVersion: 1,
+        lastDate,
+        reasonText: "Проверка атомарности",
+      };
+      const stale = await plans.previewEnd(actor, created.id, base);
+      const changed = await pool.query<{ id: string }>(
+        `update app.lessons set lifecycle_state = 'cancelled'
+         where id = (select lesson.id from app.lessons lesson
+           join app.schedule_series series on series.id = lesson.series_id
+           where series.plan_id = $1 and lesson.series_date > $2::date
+             and lesson.lifecycle_state = 'scheduled' order by lesson.series_date limit 1)
+         returning id`,
+        [created.id, lastDate],
+      );
+      await pool.query(
+        "update app.lesson_reservations set state = 'released' where lesson_id = $1",
+        [changed.rows[0]!.id],
+      );
+      await expect(plans.end(actor, created.id, {
+        ...base,
+        previewToken: stale.previewToken,
+        confirm: true,
+      }, {
+        idempotencyKey: `plan-stale-${randomUUID()}`,
+        requestId: `request-${randomUUID()}`,
+      })).rejects.toMatchObject({ response: { code: "SCHEDULE_PLAN_END_PREVIEW_STALE" } });
+
+      const fresh = await plans.previewEnd(actor, created.id, base);
+      const before = await pool.query<{ scheduled: string; reserved: string }>(
+        `select
+          (select count(*)::text from app.lessons lesson join app.schedule_series series
+             on series.id = lesson.series_id where series.plan_id = $1
+               and lesson.series_date > $2::date and lesson.lifecycle_state = 'scheduled') as scheduled,
+          (select count(*)::text from app.lesson_reservations reservation
+             join app.lessons lesson on lesson.id = reservation.lesson_id
+             join app.schedule_series series on series.id = lesson.series_id
+             where series.plan_id = $1 and lesson.series_date > $2::date
+               and reservation.state = 'reserved') as reserved`,
+        [created.id, lastDate],
+      );
+      expect(Number(before.rows[0]!.scheduled)).toBeGreaterThan(1);
+      const originalAppend = lifecycle.appendTransition.bind(lifecycle);
+      let appendCount = 0;
+      const fault = jest.spyOn(lifecycle, "appendTransition").mockImplementation(
+        (client, input) => {
+          appendCount += 1;
+          if (appendCount === 2) throw new Error("injected plan-end failure");
+          return originalAppend(client, input);
+        },
+      );
+      try {
+        await expect(plans.end(actor, created.id, {
+          ...base,
+          previewToken: fresh.previewToken,
+          confirm: true,
+        }, {
+          idempotencyKey: `plan-fault-${randomUUID()}`,
+          requestId: `request-${randomUUID()}`,
+        })).rejects.toThrow("injected plan-end failure");
+      } finally {
+        fault.mockRestore();
+      }
+      const after = await pool.query<{
+        status: string;
+        version: string;
+        scheduled: string;
+        reserved: string;
+        transitions: string;
+      }>(
+        `select plan.status, plan.version::text,
+          (select count(*)::text from app.lessons lesson join app.schedule_series series
+             on series.id = lesson.series_id where series.plan_id = plan.id
+               and lesson.series_date > $2::date and lesson.lifecycle_state = 'scheduled') as scheduled,
+          (select count(*)::text from app.lesson_reservations reservation
+             join app.lessons lesson on lesson.id = reservation.lesson_id
+             join app.schedule_series series on series.id = lesson.series_id
+             where series.plan_id = plan.id and lesson.series_date > $2::date
+               and reservation.state = 'reserved') as reserved,
+          (select count(*)::text from app.lesson_transitions transition
+             join app.lessons lesson on lesson.id = transition.lesson_id
+             join app.schedule_series series on series.id = lesson.series_id
+             where series.plan_id = plan.id and transition.reason_code = 'schedule.plan.end')
+            as transitions
+         from app.schedule_plans plan where plan.id = $1`,
+        [created.id, lastDate],
+      );
+      expect(after.rows[0]).toEqual({
+        status: "active",
+        version: "1",
+        scheduled: before.rows[0]!.scheduled,
+        reserved: before.rows[0]!.reserved,
+        transitions: "0",
+      });
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
+
+  it("pages a bounded plan tray without duplicates and does not leak it to another client", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    try {
+      const created = await plans.create(actor, {
+        kind: "individual",
+        title: "Длинный трей",
+        studentId: fixture.studentIds[0],
+        subscriptionId: fixture.subscriptionIds[0],
+        activeFrom: fixture.today,
+        activeUntil: fixture.until60,
+        rows: Array.from({ length: 7 }, (_, index) =>
+          row(fixture, index + 1, "18:00")),
+      }, {
+        idempotencyKey: `plan-tray-${randomUUID()}`,
+        requestId: `request-${randomUUID()}`,
+      });
+      const ids: string[] = [];
+      let page = await plans.tray(actor, created.id, { limit: 10 });
+      for (let pageNumber = 0; pageNumber < 10; pageNumber += 1) {
+        expect(page.items.length).toBeLessThanOrEqual(10);
+        expect(page.items).toEqual([...page.items].sort((left, right) =>
+          left.scheduledAt.localeCompare(right.scheduledAt) || left.id.localeCompare(right.id)));
+        ids.push(...page.items.map((item) => item.id));
+        if (!page.nextCursor) break;
+        page = await plans.tray(actor, created.id, {
+          limit: 10,
+          cursor: page.nextCursor,
+          direction: "next",
+        });
+      }
+      expect(ids.length).toBeGreaterThan(40);
+      expect(new Set(ids).size).toBe(ids.length);
+      expect(page.hasNext).toBe(false);
+      expect(ids[0]).toBeDefined();
+      const owner = await pool.query<{ user_id: string }>(
+        `select profile.user_id from app.students student
+         join app.profiles profile on profile.id = student.profile_id
+         where student.id = $1`,
+        [fixture.studentIds[0]],
+      );
+      const clientTray = await plans.tray({
+        userId: owner.rows[0]!.user_id,
+        role: "client",
+      }, created.id, { limit: 5 });
+      expect(clientTray.items.length).toBeGreaterThan(0);
+      const hidden = await plans.tray({
+        userId: randomUUID(),
+        role: "client",
+      }, created.id, { limit: 5 });
+      expect(hidden).toMatchObject({ items: [], hasPrevious: false, hasNext: false });
+
+      await pool.query(
+        `insert into app.schedule_plans (
+           kind, title, student_id, subscription_id, active_from, active_until,
+           status, ended_at, ended_by, end_reason, created_by
+         ) select 'individual', 'Архив ' || item,
+           $1, $2, current_date - item, current_date - item,
+           'ended', now(), $3, 'Тест ограничения истории', $3
+         from generate_series(1, 22) item`,
+        [fixture.studentIds[0], fixture.subscriptionIds[0], fixture.managerId],
+      );
+      const bounded = await plans.list(actor, {
+        studentId: fixture.studentIds[0],
+        includeEnded: true,
+      });
+      expect(bounded.items.filter((item) => item.status === "active")).toHaveLength(1);
+      expect(bounded.items.filter((item) => item.status === "ended")).toHaveLength(20);
+    } finally {
+      await cleanup(pool, fixture);
+    }
+  });
 });
 
 function row(
@@ -351,6 +686,12 @@ function row(
     beginTime,
     durationMinutes: 60,
   };
+}
+
+function addDays(date: string, days: number) {
+  const value = new Date(`${date}T00:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
 }
 
 async function createFixture(pool: Pool) {

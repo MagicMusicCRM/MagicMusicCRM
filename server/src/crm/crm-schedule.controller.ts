@@ -46,7 +46,10 @@ import { V4DomainFlagsService } from "../platform/v4-domain-flags";
 import { assertLessonPatchUsesTransition } from "./schedule/lesson-protected-patch.guard";
 import {
   CreateSchedulePlanDto,
+  SchedulePlanEndCommandDto,
+  SchedulePlanEndPreviewDto,
   SchedulePlanQuery,
+  SchedulePlanTrayQuery,
   UpdateSchedulePlanDto,
 } from "./dto/schedule-plan.dto";
 import { SchedulePlanService } from "./schedule/schedule-plan.service";
@@ -82,6 +85,38 @@ export class CrmScheduleController {
       idempotencyKey: idempotencyKey ?? "",
       requestId: requestId ?? "",
     });
+  }
+
+  @Post("schedule-plans/:id/end/preview")
+  previewSchedulePlanEnd(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: SchedulePlanEndPreviewDto,
+  ) {
+    return this.schedulePlans.previewEnd(actor, id, dto);
+  }
+
+  @Post("schedule-plans/:id/end")
+  endSchedulePlan(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+    @Body() dto: SchedulePlanEndCommandDto,
+  ) {
+    return this.schedulePlans.end(actor, id, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
+  }
+
+  @Get("schedule-plans/:id/tray")
+  schedulePlanTray(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Query() query: SchedulePlanTrayQuery,
+  ) {
+    return this.schedulePlans.tray(actor, id, query);
   }
 
   @Patch("schedule-plans/:id")

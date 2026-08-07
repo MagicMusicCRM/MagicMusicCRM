@@ -61,8 +61,8 @@
   - Проверки: `flutter analyze` чисто, `flutter test` 163/163, `git diff server/`+`lib/core/services/` пусто.
   - Осталось: **P1-7** сетевой baseline (нужен seeded backend). Follow-up: вынести `_V7Field`/`_V7PrimaryButton` в общий файл; выверить текст онбординг-слайдов; owner-визуальная приёмка.
 
-**▶ Следующий шаг:** `/forge` по `.anws/v7/05_TASKS.md`: `T4.1.1` — aggregate
-постоянных расписаний и effective edit.
+**▶ Следующий шаг:** `/forge` по `.anws/v7/05_TASKS.md`: `T4.1.3` — production
+Client Card section для постоянных расписаний и bounded tray.
 
 ---
 
@@ -291,6 +291,20 @@ typecheck/build, reconcile `issues=[]`, access 294/294, inventories
 routes=306/DTO=768/finance=244/lesson mutations=7/unknown=0/unowned=0
 (`docs/audits/v7-schedule-plan-aggregate.md`). Следующий шаг `/forge`:
 `T4.1.2`._
+
+_`T4.1.2` закрыта 2026-08-07: actor-bound HMAC preview фиксирует Plan,
+last date/reason и точный Series/Lesson/reservation impact. Один versioned,
+idempotent commit заканчивает Plan/active Series, отменяет только более поздние
+unsettled Lessons через lifecycle transition с zero-financial decision,
+освобождает reservations и сохраняет past/terminal history. Fault injection
+подтвердил полный rollback, stale preview — zero partial write. Actor-scoped
+tray использует opaque `(scheduled_at,id)` cursor, page ≤40, markers без
+hidden finance и no duplicates; list ограничивает ended history двадцатью
+планами. Gate: targeted PostgreSQL 6/6, full backend 155/155 suites и
+1223/1223 tests, typecheck/build, reconcile `issues=[]`, access 297/297,
+shadow unexplained=0, inventories routes=309/DTO=776/finance=246/lesson
+mutations=7/unknown=0/unowned=0 (`docs/audits/v7-schedule-plan-end-tray.md`).
+Следующий шаг `/forge`: `T4.1.3`._
 
 ### 🌊 Wave v6/S0 — Evidence & UX Foundation ✅
 _Owner подтвердил полное выполнение v6. `V6-001..005` и `INT-S0` закрыты 2026-08-04: воспроизводимый generator покрывает 21 GoRouter route, 248/259 production-reachable Dart files, 256/256 service calls, route/surface/navigation/input/back ownership с unowned=0; v4 inventory обновлён и снова проходит stale-check. Baseline: Flutter analyze clean и 486/486 tests, backend typecheck/build clean, 150/150 suites и 1160/1160 tests, actor/payload 9/9, targeted workflow contracts 68/68 (`docs/audits/v6-s0-baseline.md`). Следующий шаг `/forge`: `V6-101` canonical location adapter._

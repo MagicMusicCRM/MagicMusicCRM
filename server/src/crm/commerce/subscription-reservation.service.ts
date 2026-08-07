@@ -271,6 +271,20 @@ export class SubscriptionReservationService {
     }
   }
 
+  async releaseForLessons(
+    client: PoolClient,
+    lessonIds: string[],
+  ): Promise<number> {
+    if (lessonIds.length === 0) return 0;
+    const result = await client.query(
+      `update app.lesson_reservations
+       set state = 'released', financial_fact_id = null
+       where lesson_id = any($1::uuid[]) and state = 'reserved'`,
+      [lessonIds],
+    );
+    return result.rowCount ?? 0;
+  }
+
   async publishPostCommit(input: {
     studentId: string;
     payerStudentId?: string;

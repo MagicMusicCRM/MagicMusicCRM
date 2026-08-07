@@ -311,7 +311,7 @@ graph TD
   - **Зависимости**: INT-S2.
   - **Приоритет**: P0.
 
-- [ ] **T4.1.2** [REQ-SCHEDULE-102]: End preview/commit и bounded plan tray
+- [x] **T4.1.2** [REQ-SCHEDULE-102]: End preview/commit и bounded plan tray
   - **Описание**: Добавить impact token, future cancellation/reservation release и cursor tray/history projection.
   - **Входные данные**: T4.1.1, [`schedule_v7.detail.md` §5/6](04_SYSTEM_DESIGN/schedule_v7.detail.md).
   - **Выходные данные**: end/tray endpoints, SQL indexes/projections/tests.

@@ -1,6 +1,7 @@
 import { Transform, Type } from "class-transformer";
 import {
   ArrayMinSize,
+  Equals,
   IsArray,
   IsBoolean,
   IsDateString,
@@ -13,6 +14,7 @@ import {
   Max,
   MaxLength,
   Min,
+  MinLength,
   ValidateNested,
 } from "class-validator";
 
@@ -148,4 +150,47 @@ export class SchedulePlanQuery {
   @Transform(({ value }) => value === true || value === "true")
   @IsBoolean()
   includeEnded?: boolean;
+}
+
+export class SchedulePlanEndPreviewDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+
+  @IsDateString()
+  lastDate!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(500)
+  reasonText!: string;
+}
+
+export class SchedulePlanEndCommandDto extends SchedulePlanEndPreviewDto {
+  @IsString()
+  @MaxLength(16_384)
+  previewToken!: string;
+
+  @Equals(true)
+  confirm!: true;
+}
+
+export class SchedulePlanTrayQuery {
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  @Matches(/^[A-Za-z0-9_-]+$/)
+  cursor?: string;
+
+  @IsOptional()
+  @IsIn(["previous", "next"])
+  direction?: "previous" | "next";
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(40)
+  limit?: number;
 }
