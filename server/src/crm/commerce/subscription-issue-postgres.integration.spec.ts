@@ -883,6 +883,26 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       debit_count: "1",
       payer_student_id: payerStudentId,
     });
+    const scope = await commerceRepository.resolveStudentScope(
+      actors.admin,
+      studentId,
+    );
+    const [projection] = await commerceRepository.loadProjection(
+      actors.admin,
+      [scope],
+    );
+    expect(
+      projection!.subscriptions.find(
+        (subscription) => subscription.id === first.subscription.id,
+      ),
+    ).toMatchObject({
+      units: { paid: "10.00", available: "10.00" },
+      financial: {
+        actualPaidMinor: "800000",
+        debtMinor: "0",
+        remainingObligationMinor: "0",
+      },
+    });
     await expect(
       pool.query<{ reason: string; reason_text: string }>(
         `select reason, reason_text
