@@ -5,7 +5,7 @@ import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/security/access_management.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/access_editor_sheet.dart';
 
-class _FakeAccessSource implements AccessManagementDataSource {
+class AccessEditorTestDataSource implements AccessManagementDataSource {
   String role = 'client';
   int version = 1;
   int getCalls = 0;
@@ -94,7 +94,7 @@ class _FakeAccessSource implements AccessManagementDataSource {
   }
 }
 
-Widget _host(String actorRole, _FakeAccessSource source) {
+Widget _host(String actorRole, AccessEditorTestDataSource source) {
   return MaterialApp(
     home: MediaQuery(
       data: const MediaQueryData(size: Size(900, 900)),
@@ -132,7 +132,7 @@ void main() {
     tester.view.physicalSize = const Size(360, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    final source = _FakeAccessSource();
+    final source = AccessEditorTestDataSource();
     await tester.pumpWidget(
       MaterialApp(
         home: AccessEditorSheet(
@@ -153,7 +153,7 @@ void main() {
   });
 
   testWidgets('Manager gets zero access controls', (tester) async {
-    final source = _FakeAccessSource();
+    final source = AccessEditorTestDataSource();
     await tester.pumpWidget(_host('manager', source));
     await tester.pumpAndSettle();
 
@@ -166,7 +166,7 @@ void main() {
   testWidgets(
     'Director sees lower roles, package/effective values and explicit reset',
     (tester) async {
-      final source = _FakeAccessSource();
+      final source = AccessEditorTestDataSource();
       await tester.pumpWidget(_host('director', source));
       await tester.pumpAndSettle();
 
@@ -204,7 +204,7 @@ void main() {
   testWidgets('system_admin emergency surface can assign every role', (
     tester,
   ) async {
-    final source = _FakeAccessSource();
+    final source = AccessEditorTestDataSource();
     await tester.pumpWidget(_host('system_admin', source));
     await tester.pumpAndSettle();
 
@@ -219,7 +219,7 @@ void main() {
   testWidgets('409 refreshes server state without partial optimistic UI', (
     tester,
   ) async {
-    final source = _FakeAccessSource()..conflictNext = true;
+    final source = AccessEditorTestDataSource()..conflictNext = true;
     await tester.pumpWidget(_host('director', source));
     await tester.pumpAndSettle();
 

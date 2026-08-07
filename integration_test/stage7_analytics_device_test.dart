@@ -8,6 +8,8 @@ import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/reports_widget.dart';
 
+import 'evidence_screenshot.dart';
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() => initializeDateFormatting('ru', null));
@@ -21,7 +23,8 @@ void main() {
 
     expect(find.text('Обзор'), findsOneWidget);
     expect(find.text('Журналы'), findsOneWidget);
-    expect(find.text('Каталог'), findsOneWidget);
+    expect(find.text('XLSX'), findsOneWidget);
+    await captureEvidence(tester, 'director-dashboard-xlsx-export');
     await tester.tap(find.text('Журналы'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('operational-journals')), findsOneWidget);
@@ -37,8 +40,11 @@ void main() {
 
 Widget _app(_DeviceApi api, {required String role}) => ProviderScope(
   overrides: [magicApiClientProvider.overrideWithValue(api)],
-  child: MaterialApp(
-    home: Scaffold(body: ReportsWidget(role: role)),
+  child: RepaintBoundary(
+    key: evidenceRootKey,
+    child: MaterialApp(
+      home: Scaffold(body: ReportsWidget(role: role)),
+    ),
   ),
 );
 

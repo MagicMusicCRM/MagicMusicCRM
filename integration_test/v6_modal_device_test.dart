@@ -9,6 +9,8 @@ import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision_flow.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_details_sheet.dart';
 
+import 'evidence_screenshot.dart';
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -17,13 +19,20 @@ void main() {
   ) async {
     await initializeDateFormatting('ru');
     await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.dark, home: const _ModalDeviceHome()),
+      RepaintBoundary(
+        key: evidenceRootKey,
+        child: MaterialApp(
+          theme: AppTheme.dark,
+          home: const _ModalDeviceHome(),
+        ),
+      ),
     );
 
     await tester.tap(find.text('Быстрый просмотр'));
     await tester.pumpAndSettle();
     expect(find.text('Анна Смирнова'), findsNWidgets(2));
     expect(find.text('Перенести или изменить'), findsOneWidget);
+    await captureEvidence(tester, 'lesson-quick-view');
     if (const bool.fromEnvironment('V6_VISUAL_CHECK')) {
       debugPrint('V6_MODAL_SCREENSHOT_READY');
       await tester.runAsync(
@@ -65,6 +74,7 @@ void main() {
     expect(find.byKey(const Key('lesson-decision-preview')), findsOneWidget);
     expect(find.textContaining('Клиент:'), findsOneWidget);
     expect(find.textContaining('Преподаватель:'), findsOneWidget);
+    await captureEvidence(tester, 'lesson-reschedule-reason-preview');
     await tester.ensureVisible(find.byKey(const Key('lesson-decision-submit')));
     await tester.tap(find.byKey(const Key('lesson-decision-submit')));
     await tester.pumpAndSettle();

@@ -8,6 +8,7 @@ import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/recurring_schedule_plan_section.dart';
 
 import '../test/features/crm/client_card/card_fake_api.dart';
+import 'evidence_screenshot.dart';
 
 const _activePlan = {
   'id': 'plan-active',
@@ -104,24 +105,27 @@ void main() {
       },
     );
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [magicApiClientProvider.overrideWithValue(api)],
-        child: MaterialApp(
-          theme: AppTheme.dark,
-          home: Scaffold(
-            body: SafeArea(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: RecurringSchedulePlanSection(
-                  studentId: 'student-1',
-                  fallbackLessons: const [],
-                  branches: api.branches,
-                  defaultBranchId: 'branch-1',
-                  subscriptions: const [
-                    {'id': 'subscription-1', 'label': '12 занятий'},
-                  ],
-                  canWrite: true,
-                  onChanged: () {},
+      RepaintBoundary(
+        key: evidenceRootKey,
+        child: ProviderScope(
+          overrides: [magicApiClientProvider.overrideWithValue(api)],
+          child: MaterialApp(
+            theme: AppTheme.dark,
+            home: Scaffold(
+              body: SafeArea(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: RecurringSchedulePlanSection(
+                    studentId: 'student-1',
+                    fallbackLessons: const [],
+                    branches: api.branches,
+                    defaultBranchId: 'branch-1',
+                    subscriptions: const [
+                      {'id': 'subscription-1', 'label': '12 занятий'},
+                    ],
+                    canWrite: true,
+                    onChanged: () {},
+                  ),
                 ),
               ),
             ),
@@ -134,6 +138,7 @@ void main() {
     expect(find.text('Индивидуальный вокал'), findsOneWidget);
     expect(find.byKey(const Key('client-lesson-date-tray')), findsOneWidget);
     expect(find.text('Завершённое фортепиано'), findsNothing);
+    await captureEvidence(tester, 'recurring-plan-active-tray');
     await tester.ensureVisible(find.text('Завершённые (1)'));
     await tester.tap(find.text('Завершённые (1)'));
     await tester.pumpAndSettle();
@@ -155,6 +160,7 @@ void main() {
     await tester.tap(find.byKey(const Key('schedule-plan-add')));
     await tester.pumpAndSettle();
     await _chooseReferences(tester);
+    await captureEvidence(tester, 'recurring-plan-editor-required-fields');
     await _saveEditor(tester);
     expect(
       find.byKey(const ValueKey('schedule-plan-row-group-0')),
@@ -212,6 +218,7 @@ void main() {
     await tester.tap(submit);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('schedule-plan-end-impact')), findsOneWidget);
+    await captureEvidence(tester, 'recurring-plan-end-impact');
     await tester.ensureVisible(submit);
     await tester.tap(submit);
     await tester.pumpAndSettle();

@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import '../test/features/crm/client_card/card_fake_api.dart';
+import 'evidence_screenshot.dart';
 
 const _student = <String, dynamic>{
   'id': 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
@@ -70,6 +71,7 @@ void main() {
     expect(find.text('Важен звонок перед занятием'), findsOneWidget);
     expect(find.text('Причина: Дубль банковской операции'), findsOneWidget);
     expect(find.textContaining('Анна Администратор'), findsOneWidget);
+    await captureEvidence(tester, 'windows-client-workspace-overview');
 
     await tester.enterText(
       find.byKey(const Key('client-internal-note-input')),
@@ -211,6 +213,7 @@ void main() {
     await tester.pumpAndSettle();
     _expectNoFlutterException(tester, 'после раскрытия движений');
     expect(find.text('Проведён, ожидает подтверждения'), findsWidgets);
+    await captureEvidence(tester, 'compact-client-payments');
 
     await tester.tap(
       find.byKey(
@@ -272,6 +275,39 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     debugPrint('V7_CLIENT_WORKSPACE_COMPACT_PASS ${_trace(api)}');
+  });
+
+  testWidgets('converted student keeps the originating lead visible', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final student = {..._student, 'leadId': 'lead-1'};
+    final api = FakeCardApiClient(
+      role: 'manager',
+      student: student,
+      lead: const {
+        'id': 'lead-1',
+        'firstName': 'Анна',
+        'lastName': 'Соколова',
+        'statusId': null,
+        'sourceDisplayName': 'Заявка с сайта',
+        'customData': <String, dynamic>{},
+      },
+    );
+    await pumpClientCard(
+      tester,
+      api: api,
+      seed: student,
+      entityType: 'student',
+      routed: true,
+      settle: false,
+    );
+    expect(find.text('Лид→Ученик'), findsOneWidget);
+    await captureEvidence(tester, 'client-lead-student-link');
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(

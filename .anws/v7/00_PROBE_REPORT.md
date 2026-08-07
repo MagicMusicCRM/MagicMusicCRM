@@ -1,100 +1,101 @@
-# 🔎 MagicMusicCRM v6 — Deep Probe перед полным feature/UAT loop
+# 🔎 MagicMusicCRM v7 — Deep Probe и 26-point UI acceptance
 
 | Поле | Значение |
 |---|---|
-| Дата | 2026-08-06 |
+| Дата | 2026-08-07 |
 | Режим | Deep PROFILE → REASON → OBJECT → BENCHMARK → EMIT |
-| Объём | Flutter + NestJS + PostgreSQL + Windows/Android runtime boundaries |
-| Источники | свежий AST/Git probe, production inventories, route/service/runtime tracing |
-| Решение | **кодовая поверхность покрыта; user-story acceptance ещё не завершена** |
+| Объём | Flutter + NestJS + PostgreSQL + Windows + Android 15/API 35 + production API |
+| Кандидат | `1.5.1+157` |
+| Решение | **ENGINEERING PASS; PRODUCTION BLOCKED BY VERSION SKEW** |
 
 ## 1. Executive conclusion
 
-Предыдущий probe устарел: перечисленные там разрывы production mounting были закрыты в v6/S1–S6. В текущем коде подключены desktop workspace, adaptive surfaces, явные scroll/input contracts, канонические Client/Lesson/Task routes, bounded client calendar, единый Dashboard и единая CRM Configuration с reusable field option sets.
+Кодовая и UI-поверхность v7 подтверждена по исходным 26 пунктам ТЗ: длинная/адаптивная карточка, навигационный workspace, расписания, commerce, задачи, analytics/configuration и role projection реально отрисованы на Windows/Android. Все 26 пунктов имеют UI evidence либо, для чисто серверных правил, авторитетный contract/reconciliation gate.
 
-Структурная полнота подтверждена: все production routes, surfaces, navigation sites и service calls имеют владельца. Однако зелёные инженерные suites не означают, что каждая функция реально пройдена пользователем. Текущий незакрытый риск — отсутствие единого story-level журнала `код → ожидаемое поведение → реальное исполнение → ошибка → исправление → повторный прогон`.
+Приёмка выявила критичный deployment-разрыв: healthy production API отвечает `404` на три маршрута, которые присутствуют и проходят tests в текущем `server/`:
 
-## 2. Свежая карта
+- `GET /crm/clients/student/:id/internal-note`;
+- `GET /crm/clients/student/:id/operational-history`;
+- `GET /crm/schedule-plans?clientType=student&clientId=:id`.
 
-| Метрика | Результат |
-|---|---:|
-| AST files / parse errors | 1,202 / 0 |
-| Flutter production routes / screens | 22 / 22 |
-| Production-reachable Flutter files | 253 |
-| Production modal/surface calls | 93 |
-| Production navigation sites | 263 |
-| Production wire calls | 264 |
-| Unowned entries | 0 |
-| Git commits / authors (180 дней) | 723 / 5 |
+Следовательно, публичный frontend-only rollout запрещён. Нужен синхронный backend/migration deployment и повторный LIVE smoke.
 
-Единственный inventory false-positive — conditional `runtime_env_io.dart`; это platform selection, не потерянная feature surface.
+## 2. Свежий профиль территории
 
-## 3. Production systems
+Deep inventory построен из AST/Git/runtime roots без изменения production-кода.
 
-| Система | Проверенное назначение | Главный acceptance-риск |
-|---|---|---|
-| Session & Account | login/signup/OTP/MFA/recovery/onboarding/legal/profile/deletion | реальная смена аккаунтов и очистка старой session/realtime state |
-| App Experience | RBAC nav, typed links, tabs, Back, adaptive surfaces | role/deep-link/Back/restart matrix |
-| Messenger | direct/group/channel chat, files, reactions, pins, read/presence | reconnect, late events и роль/room scope |
-| CRM Clients | Lead/Student search, funnels, cards, conversion/archive | ввод поиска без rebuild/reset; correct actor projection |
-| Schedule | Month/Week/Day, conflicts, lesson lifecycle, attendance | search highlighting, branch/timezone and concurrency |
-| Commerce | catalog, subscription snapshot, payment, ledger, replacement/cancel | immutable history and permission scope |
-| Shared Tasks | audience preview, links, reminders, history, close | preview reconciliation and linked navigation |
-| Dashboard | one filter state, sections, drilldowns, exports | school-finance non-request for forbidden actors |
-| Configuration | organization/schedule/CRM/options/catalog/access/data | effective school/branch revisions and fail-closed capabilities |
-| Platform Quality | health, notifications, realtime invalidation, Windows update | lifecycle recovery and release artifact provenance |
+| Слой | Модули / классы | Строки | Наблюдение |
+|---|---:|---:|---|
+| `lib/core` | 116 модулей | 27 383 | navigation/session/service trust boundary |
+| `lib/features` | 144 модуля | 63 573 | основные production UI workflows |
+| `server/src` | 528 модулей / 395 классов | 126 546 | NestJS policy/domain/API boundary |
+| `server/db` | 232 файла | 50 814 | additive schema, migrations, reconcile |
+| `integration_test` | 14+ сценариев | 2 401+ | Windows/Android runtime acceptance |
+| `test/features` | 81 файла | 17 862 | widget/contract regressions |
 
-## 4. Runtime inspector
+High-churn seams остаются прежними: client card, schedule, CRM service/controller, router, tasks and reporting. Это аргумент за targeted device evidence, не за rewrite.
+
+## 3. Runtime inspector
 
 ### Process roots
 
-1. `lib/main.dart` запускает Flutter/Riverpod/GoRouter, health warmup, push, session-gated realtime and Windows update check.
-2. `server/src/main.ts` запускает NestJS with strict validation, safe exception/logging boundary, shutdown hooks, `/api`, CORS and HTTP/Socket.IO.
+1. `lib/main.dart` — Flutter/Riverpod/GoRouter, account session, realtime, notification and Windows updater lifecycle.
+2. `server/src/main.ts` — NestJS strict validation, auth/policy boundary, `/api`, CORS, Socket.IO and shutdown hooks.
+3. PostgreSQL services/repositories — source of truth for finance, schedule collisions, subscriptions, tasks and access.
 
-### Spawn chains
+### Trust and recovery boundaries
 
-| Parent | Child | Проверка | Contract |
-|---|---|---|---|
-| Windows updater | PowerShell broker | encoded command, timeout/kill, captured output/exit, hash + PID + receipt validation | Strong |
-| Security gate | local CLI | `shell: false`, synchronous exit/stdout/stderr capture | Strong |
+- REST DTO/policy/DB boundary is strong; some Flutter reads remain map-decoded and therefore require runtime smoke.
+- Realtime transport is account-scoped and reset before token replacement.
+- Workspace persistence is account-scoped and cleared on logout/role change.
+- External process spawn remains confined to the signed Windows update broker and repository security gate.
 
-### IPC / trust boundaries
+## 4. Что реально нашёл probe
 
-- REST is **mixed-strength**: server DTO/policy/DB boundary is strong; several Flutter responses remain map-decoded.
-- Realtime is **mixed-strength**: client events are DTO/rate/policy checked and server event names are explicitly allowlisted; Flutter payloads are still maps.
-- Account replacement is explicitly guarded: realtime transport is reset before tokens change, subject mismatch disposes the old socket, reconnect obtains a fresh token.
-- CRM/finance/access events are invalidation hints; values are refetched through authorized projections.
-- Production realtime CORS fails closed without an allowlist.
+| ID | Находка | Root cause | Действие | Retest |
+|---|---|---|---|---|
+| P7-01 | На Android tap по Student возвращал на сохранённую доску | async workspace restore происходил после incoming direct link | direct link повторно применяется после restore, если разрешён и отличается | regression + LIVE Android PASS |
+| P7-02 | Замена абонемента падала на desktop layout | `Row(crossAxisAlignment: stretch)` находился в вертикально unbounded scroll | cross-axis заменён на `start` в общем comparison widget | Windows lifecycle integration PASS |
+| P7-03 | Analytics device-test ожидал старую вкладку `Каталог` | тест отстал от unified IA | ожидание синхронизировано с `Обзор / Журналы`; добавлена XLSX evidence | Windows integration PASS |
+| P7-04 | Note/history/plans не работают на real app | production backend старее frontend/server candidate | не маскировать; блокировать rollout до deployment | API probe: `404/404/404` |
 
-## 5. Risk matrix
+## 5. Evidence и gates
 
-| ID | Риск | Вероятность | Влияние | Проверка в UAT loop |
-|---|---|---:|---:|---|
-| R1 | сохранённая сессия/сокет мешает повторному входу или переносит старый аккаунт | medium | critical | последовательный login/logout/same+other account/restart for all personas |
-| R2 | search field теряет focus/value из-за rebuild/refetch | medium | high | ввод ФИО посимвольно в Leads/Students/Chat/Schedule |
-| R3 | calendar search не даёт устойчивой зелёной/серой иерархии | medium | high | Month/Week/Day exact/non-match/clear filter |
-| R4 | map-shaped payload drift проявится только runtime | medium | high | реальный backend for every service-backed story |
-| R5 | forbidden role создаёт скрытый finance/config request | low | critical | network/log assertion for Client/Teacher/Admin/Manager |
-| R6 | high-churn CRM/client/schedule seams regress | high | high | prioritize cross-navigation and mutations, then full retest |
-| R7 | owner acceptance mistakenly inferred from green tests | high | high | separate Implementation Status from Test Status in canonical XLSX |
+- Каноническая матрица: [`docs/audits/v7-26-point-final-verification.md`](../../docs/audits/v7-26-point-final-verification.md).
+- Каталог снимков: [`docs/audits/v7-26-point-ui-evidence/README.md`](../../docs/audits/v7-26-point-ui-evidence/README.md).
+- Flutter analyze: PASS.
+- Flutter full: **645/645**.
+- Backend typecheck/build: PASS/PASS.
+- Backend full: **155/155 suites, 1237/1237 tests**.
+- Real accounts: **5/5 role shells** plus restart/logout/account-switch PASS.
+- Android release update-over-install: stored session preserved.
+- Production health: `200`; required v7 note/history/plan routes: `404`.
 
-## 6. Git forensics
+## 6. Risk matrix after retest
 
-Самые изменяемые продуктовые seams за 180 дней: `crm.service.ts` (106), `client_card.dart` (67), `messenger_screen.dart` (60), `leads_widget.dart` (56), `schedule_widget.dart` (47), `crm.module.ts` (45), Flutter CRM service (41), tasks (35), reports (29) and router (28). Coupling `crm.service.ts ↔ spec` = 0.968, `crm.service.ts ↔ controller` = 0.960.
-
-Это не основание переписывать систему. Это порядок тестирования: auth switching → typed search → calendar filtering → client workspace links → finance/subscription mutations → realtime reconnect → scoped dashboard/config.
+| Риск | Вероятность | Влияние | Состояние |
+|---|---:|---:|---|
+| Backend/frontend version skew | certain | critical | **OPEN — release blocker** |
+| Restored workspace overrides compact deep link | low | high | fixed + regression |
+| Wide subscription replacement layout crash | low | high | fixed + Windows integration |
+| Real-client data variation reveals map-decoding drift | medium | high | keep LIVE smoke after deployment |
+| Forbidden finance/config request from lower role | low | critical | Actor/full suites and real role shells green |
+| Owner acceptance inferred from source presence | low | high | 26-row screenshot/contract matrix now canonical |
 
 ## 7. Decision and next gate
 
 ### PASS
 
-- production surface ownership;
-- current architecture/runtime map;
-- engineering regression evidence already recorded for v6/S6.
+- implementation coverage of all 26 requirements;
+- Windows/Android production UI rendering;
+- five-account authentication and session replacement;
+- complete Flutter/backend regression gates;
+- root fixes P7-01..P7-03.
 
-### OPEN
+### BLOCKED
 
-- story-level execution on real accounts and target platforms;
-- error inventory, root-cause fixes and complete post-fix retest.
+- final production acceptance while the deployed server lacks current v7 endpoints.
 
-Следующий обязательный артефакт — один канонический XLSX. Он является единственным реестром user stories, expected behavior, execution evidence and errors. Release acceptance запрещено выводить только из source presence или aggregate green suites.
+### Required next action
+
+Deploy the backend and migrations from the same accepted revision, then repeat real-account Windows/Android rows 3, 6, 7 and 26. Only a `200`/actor-correct response and clean UI on both platforms can change the release decision to APPROVED.

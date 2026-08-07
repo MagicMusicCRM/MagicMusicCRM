@@ -10,6 +10,7 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_day
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
 
 import '../test/features/crm/client_card/card_fake_api.dart';
+import 'evidence_screenshot.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -17,6 +18,10 @@ void main() {
   testWidgets('client calendar drills into schedule and Back restores it', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final api = FakeCardApiClient(
       branches: const [
         {'id': 'branch-a', 'name': 'Сокол', 'utcOffsetMinutes': 180},
@@ -35,7 +40,7 @@ void main() {
           'branchName': 'Сокол',
           'roomId': 'room-a',
           'roomName': 'Класс 1',
-          'scheduledAt': '2026-08-04T12:00:00.000Z',
+          'scheduledAt': '2026-08-04T07:00:00.000Z',
           'durationMinutes': 60,
           'status': 'scheduled',
           'lifecycleState': 'scheduled',
@@ -52,7 +57,7 @@ void main() {
           'branchName': 'Сокол',
           'roomId': 'room-a',
           'roomName': 'Класс 1',
-          'scheduledAt': '2026-08-04T14:00:00.000Z',
+          'scheduledAt': '2026-08-04T09:00:00.000Z',
           'durationMinutes': 60,
           'status': 'scheduled',
           'lifecycleState': 'scheduled',
@@ -96,24 +101,27 @@ void main() {
     );
     addTearDown(router.dispose);
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          magicApiClientProvider.overrideWithValue(api),
-          capabilitySnapshotProvider.overrideWith(
-            (ref) async => const CapabilitySnapshot(
-              accountId: 'account-1',
-              role: 'admin',
-              accessVersion: 1,
-              capabilities: {
-                'crm.client.read.basic',
-                'schedule.lesson.read.assigned',
-                'schedule.lesson.write',
-              },
-              scopes: {'schedule': 'branch'},
+      RepaintBoundary(
+        key: evidenceRootKey,
+        child: ProviderScope(
+          overrides: [
+            magicApiClientProvider.overrideWithValue(api),
+            capabilitySnapshotProvider.overrideWith(
+              (ref) async => const CapabilitySnapshot(
+                accountId: 'account-1',
+                role: 'admin',
+                accessVersion: 1,
+                capabilities: {
+                  'crm.client.read.basic',
+                  'schedule.lesson.read.assigned',
+                  'schedule.lesson.write',
+                },
+                scopes: {'schedule': 'branch'},
+              ),
             ),
-          ),
-        ],
-        child: MaterialApp.router(routerConfig: router),
+          ],
+          child: MaterialApp.router(routerConfig: router),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -128,6 +136,7 @@ void main() {
       find.byKey(const ValueKey('schedule-lesson-lesson-other')),
       findsNothing,
     );
+    await captureEvidence(tester, 'client-calendar-hide-others-default');
     await tester.tap(find.byKey(const ValueKey('client-calendar-hide-others')));
     await tester.pumpAndSettle();
     expect(find.text('Другие клиенты'), findsOneWidget);
@@ -135,6 +144,7 @@ void main() {
       find.byKey(const ValueKey('schedule-lesson-lesson-other')),
       findsOneWidget,
     );
+    await captureEvidence(tester, 'client-calendar-show-others-highlight');
     final lesson = find.byKey(const ValueKey('schedule-lesson-lesson-device'));
     await tester.ensureVisible(lesson);
     await tester.pumpAndSettle();

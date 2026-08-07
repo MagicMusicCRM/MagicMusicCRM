@@ -6,8 +6,8 @@ import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/manage_entities_widget.dart';
 
-class _SettingsApi extends MagicApiClient {
-  _SettingsApi({
+class SettingsTestApi extends MagicApiClient {
+  SettingsTestApi({
     required this.role,
     required this.capabilities,
     this.groups = const [],
@@ -129,7 +129,7 @@ class _SettingsApi extends MagicApiClient {
 
 Future<void> _pump(
   WidgetTester tester,
-  _SettingsApi api, {
+  SettingsTestApi api, {
   String? initialArea,
 }) async {
   tester.view.physicalSize = const Size(1200, 900);
@@ -158,7 +158,7 @@ void main() {
   ) async {
     await _pump(
       tester,
-      _SettingsApi(
+      SettingsTestApi(
         role: 'manager',
         capabilities: const [
           'system.settings.manage',
@@ -187,7 +187,7 @@ void main() {
   ) async {
     await _pump(
       tester,
-      _SettingsApi(
+      SettingsTestApi(
         role: 'director',
         capabilities: const [
           'system.settings.manage',
@@ -206,7 +206,7 @@ void main() {
   ) async {
     await _pump(
       tester,
-      _SettingsApi(
+      SettingsTestApi(
         role: 'manager',
         capabilities: const [
           'system.settings.manage',
@@ -233,7 +233,7 @@ void main() {
   testWidgets('manager creates staff from the mounted users workspace', (
     tester,
   ) async {
-    final api = _SettingsApi(
+    final api = SettingsTestApi(
       role: 'manager',
       capabilities: const ['system.settings.manage', 'crm.client.write'],
     );
@@ -264,7 +264,7 @@ void main() {
   testWidgets('director creates teacher from the mounted users workspace', (
     tester,
   ) async {
-    final api = _SettingsApi(
+    final api = SettingsTestApi(
       role: 'director',
       capabilities: const ['system.settings.manage', 'crm.client.write'],
     );
@@ -290,7 +290,7 @@ void main() {
   testWidgets('manager creates a group from the mounted schedule workspace', (
     tester,
   ) async {
-    final api = _SettingsApi(
+    final api = SettingsTestApi(
       role: 'manager',
       capabilities: const ['system.settings.manage', 'schedule.lesson.write'],
     );
@@ -314,7 +314,7 @@ void main() {
   testWidgets('settings lists localized staff status and group size', (
     tester,
   ) async {
-    final api = _SettingsApi(
+    final api = SettingsTestApi(
       role: 'director',
       capabilities: const ['system.settings.manage', 'schedule.lesson.write'],
       staff: const [

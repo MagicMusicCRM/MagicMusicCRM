@@ -615,31 +615,34 @@ Future<void> pumpClientCard(
   bool routed = false,
 }) async {
   await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        magicApiClientProvider.overrideWithValue(api),
-        crmRealtimeProvider.overrideWith(
-          (ref) => const Stream<CrmChangedEvent>.empty(),
-        ),
-      ],
-      child: MaterialApp(
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: Center(
-              child: ElevatedButton(
-                onPressed: () => showDialog<bool>(
-                  context: context,
-                  builder: (_) {
-                    final card = ClientCard(
-                      lead: seed,
-                      entityType: entityType,
-                      allStatuses: statuses,
-                      routed: routed,
-                    );
-                    return routed ? Material(child: card) : card;
-                  },
+    RepaintBoundary(
+      key: const Key('evidence-screenshot-root'),
+      child: ProviderScope(
+        overrides: [
+          magicApiClientProvider.overrideWithValue(api),
+          crmRealtimeProvider.overrideWith(
+            (ref) => const Stream<CrmChangedEvent>.empty(),
+          ),
+        ],
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: Center(
+                child: ElevatedButton(
+                  onPressed: () => showDialog<bool>(
+                    context: context,
+                    builder: (_) {
+                      final card = ClientCard(
+                        lead: seed,
+                        entityType: entityType,
+                        allStatuses: statuses,
+                        routed: routed,
+                      );
+                      return routed ? Material(child: card) : card;
+                    },
+                  ),
+                  child: const Text('open'),
                 ),
-                child: const Text('open'),
               ),
             ),
           ),

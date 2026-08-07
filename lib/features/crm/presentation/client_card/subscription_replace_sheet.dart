@@ -338,7 +338,7 @@ class _PackageComparison extends StatelessWidget {
           );
         }
         return Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(child: oldCard),
             const Padding(

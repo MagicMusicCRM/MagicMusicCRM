@@ -1621,7 +1621,7 @@
       "definition_only": false,
       "status": "typed-context",
       "file": "lib/core/workspace/production_workspace_host.dart",
-      "line": 277
+      "line": 286
     },
     {
       "kind": "workspace",
@@ -1631,7 +1631,7 @@
       "definition_only": false,
       "status": "production-workspace-usage",
       "file": "lib/core/workspace/production_workspace_host.dart",
-      "line": 324
+      "line": 333
     },
     {
       "kind": "typed-entity",
@@ -1641,7 +1641,7 @@
       "definition_only": false,
       "status": "typed-context",
       "file": "lib/core/workspace/production_workspace_host.dart",
-      "line": 328
+      "line": 337
     },
     {
       "kind": "workspace",
@@ -2723,7 +2723,7 @@
       "definition_only": false,
       "status": "production-workspace-usage",
       "file": "lib/core/workspace/production_workspace_host.dart",
-      "line": 324
+      "line": 333
     }
   ]
 }

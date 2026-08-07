@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/v7/adaptive_surface.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tasks_v4_panel.dart';
+
+import 'evidence_screenshot.dart';
+import '../test/features/v4/shared_tasks_ui_test.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -13,7 +17,13 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.dark, home: const _TaskAudienceDeviceHome()),
+      RepaintBoundary(
+        key: evidenceRootKey,
+        child: MaterialApp(
+          theme: AppTheme.dark,
+          home: const _TaskAudienceDeviceHome(),
+        ),
+      ),
     );
 
     await tester.tap(find.text('Новая задача'));
@@ -31,6 +41,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Свернуть'), findsOneWidget);
     }
+    await captureEvidence(tester, 'task-audience-preview');
 
     await tester.ensureVisible(find.byKey(const Key('shared-task-title')));
     await tester.enterText(
@@ -44,6 +55,37 @@ void main() {
 
     expect(find.text('Сохранено: Вся школа'), findsOneWidget);
     debugPrint('V6_TASK_AUDIENCE_DEVICE_PASS');
+  });
+
+  testWidgets('overdue reminder stays visible until explicit close', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final source = FakeSharedTasksDataSource();
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: evidenceRootKey,
+        child: ProviderScope(
+          child: MaterialApp(
+            theme: AppTheme.dark,
+            home: Scaffold(
+              body: SharedTasksV4Panel(dataSource: source, canWrite: true),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Просроченных задач: 1'), findsOneWidget);
+    expect(find.text('Закрыть задачу'), findsOneWidget);
+    await captureEvidence(tester, 'task-overdue-explicit-close');
+    await tester.tap(find.text('Закрыть задачу'));
+    await tester.pumpAndSettle();
+    expect(find.text('Нет задач'), findsOneWidget);
   });
 }
 

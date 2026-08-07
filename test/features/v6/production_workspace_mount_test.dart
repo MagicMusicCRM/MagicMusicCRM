@@ -101,6 +101,47 @@ void main() {
     expect(find.text('home'), findsOneWidget);
   });
 
+  testWidgets('compact direct link wins over a restored clients board', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(600, 800);
+    addTearDown(tester.view.reset);
+    final store = AccountWorkspaceStore(InMemoryWorkspaceKeyValueStore());
+
+    Widget app({required Key key, EntityLink? initialLink}) => ProviderScope(
+      overrides: [accountWorkspaceStoreProvider.overrideWithValue(store)],
+      child: MaterialApp(
+        home: Scaffold(
+          body: ProductionWorkspaceHost(
+            key: key,
+            snapshot: snapshot,
+            initialLink: initialLink,
+            tabBuilder: (_, tab) => Text(tab.currentRoute.link.entityId),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(app(key: const ValueKey('persist-board')));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(
+      app(
+        key: const ValueKey('open-student'),
+        initialLink: EntityLink.typed(
+          entityType: EntityLinkType.client,
+          entityId: 'student-direct',
+          variant: 'student',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DesktopWorkspaceShell), findsNothing);
+    expect(find.text('student-direct'), findsOneWidget);
+    expect(find.text('home'), findsNothing);
+  });
+
   testWidgets('desktop direct link reconstructs its canonical context path', (
     tester,
   ) async {

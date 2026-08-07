@@ -9,8 +9,8 @@ import 'package:magic_music_crm/features/crm/presentation/client_card/client_arc
 import 'package:magic_music_crm/features/crm/presentation/client_card/comment_share_button.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/teacher_client_card.dart';
 
-class _ClientCardRolesFakeApi extends MagicApiClient {
-  _ClientCardRolesFakeApi()
+class ClientCardRolesTestApi extends MagicApiClient {
+  ClientCardRolesTestApi()
     : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   final posts = <({String path, Map<String, dynamic> data})>[];
@@ -143,7 +143,7 @@ class _ClientCardRolesFakeApi extends MagicApiClient {
 Future<void> _pump(
   WidgetTester tester,
   Widget child,
-  _ClientCardRolesFakeApi api, {
+  ClientCardRolesTestApi api, {
   Size size = const Size(390, 844),
 }) async {
   tester.view.physicalSize = size;
@@ -165,7 +165,7 @@ void main() {
   testWidgets('Teacher card renders only learning sections on narrow layout', (
     tester,
   ) async {
-    final api = _ClientCardRolesFakeApi();
+    final api = ClientCardRolesTestApi();
     await _pump(
       tester,
       const TeacherClientCard(entityType: 'student', entityId: 'student-a'),
@@ -209,7 +209,7 @@ void main() {
   testWidgets(
     'archive action is hidden without role and confirms exact impact',
     (tester) async {
-      final api = _ClientCardRolesFakeApi();
+      final api = ClientCardRolesTestApi();
       var archived = false;
       await _pump(
         tester,
@@ -261,7 +261,7 @@ void main() {
   testWidgets('comment share uses explicit flag and expected version', (
     tester,
   ) async {
-    final api = _ClientCardRolesFakeApi();
+    final api = ClientCardRolesTestApi();
     var refreshed = false;
     await _pump(
       tester,

@@ -6,8 +6,8 @@ import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_forms/crm_configuration_workspace.dart';
 
-class _ConfigurationApi extends MagicApiClient {
-  _ConfigurationApi({
+class ConfigurationTestApi extends MagicApiClient {
+  ConfigurationTestApi({
     required this.role,
     required this.capabilities,
     Map<String, dynamic>? snapshot,
@@ -202,7 +202,7 @@ class _ConfigurationApi extends MagicApiClient {
 
 Future<void> _pump(
   WidgetTester tester,
-  _ConfigurationApi api, {
+  ConfigurationTestApi api, {
   Size size = const Size(1200, 900),
 }) async {
   tester.view.physicalSize = size;
@@ -222,7 +222,7 @@ void main() {
   testWidgets('director edits a draft and publishes through impact preview', (
     tester,
   ) async {
-    final api = _ConfigurationApi(
+    final api = ConfigurationTestApi(
       role: 'director',
       capabilities: const [
         'config.crm.read',
@@ -267,7 +267,7 @@ void main() {
   testWidgets(
     'director configures independent lesson and teacher catalogs and publishes impact',
     (tester) async {
-      final api = _ConfigurationApi(
+      final api = ConfigurationTestApi(
         role: 'director',
         capabilities: const [
           'config.crm.read',
@@ -362,7 +362,7 @@ void main() {
   testWidgets(
     'local catalog changes are guarded by Save Discard Cancel back flow',
     (tester) async {
-      final api = _ConfigurationApi(
+      final api = ConfigurationTestApi(
         role: 'director',
         capabilities: const [
           'config.crm.read',
@@ -405,7 +405,7 @@ void main() {
   testWidgets('director can publish rollback as a new configuration revision', (
     tester,
   ) async {
-    final api = _ConfigurationApi(
+    final api = ConfigurationTestApi(
       role: 'director',
       capabilities: const [
         'config.crm.read',
@@ -431,7 +431,7 @@ void main() {
   testWidgets('delegated manager is branch-only and cannot publish', (
     tester,
   ) async {
-    final api = _ConfigurationApi(
+    final api = ConfigurationTestApi(
       role: 'manager',
       capabilities: const ['config.crm.read', 'config.crm.edit'],
     );
@@ -447,32 +447,33 @@ void main() {
   });
 
   for (final role in const ['admin', 'teacher', 'client']) {
-    testWidgets('$role sees forbidden state and issues no configuration request', (
-      tester,
-    ) async {
-      final api = _ConfigurationApi(role: role, capabilities: const []);
-      await _pump(tester, api);
+    testWidgets(
+      '$role sees forbidden state and issues no configuration request',
+      (tester) async {
+        final api = ConfigurationTestApi(role: role, capabilities: const []);
+        await _pump(tester, api);
 
-      expect(
-        find.text('Недостаточно прав для конфигурации CRM.'),
-        findsOneWidget,
-      );
-      expect(find.text('Занятия и оплата'), findsNothing);
-      expect(api.configurationReads, 0);
-    });
+        expect(
+          find.text('Недостаточно прав для конфигурации CRM.'),
+          findsOneWidget,
+        );
+        expect(find.text('Занятия и оплата'), findsNothing);
+        expect(api.configurationReads, 0);
+      },
+    );
   }
 
   testWidgets('inline field options migrate losslessly to one option set', (
     tester,
   ) async {
-    final api = _ConfigurationApi(
+    final api = ConfigurationTestApi(
       role: 'director',
       capabilities: const [
         'config.crm.read',
         'config.crm.edit',
         'config.crm.publish',
       ],
-      snapshot: _inlineOptionsSnapshot(),
+      snapshot: inlineOptionsSnapshot(),
     );
     await _pump(tester, api);
 
@@ -511,14 +512,14 @@ void main() {
   testWidgets('field editor creates and selects a central option set', (
     tester,
   ) async {
-    final api = _ConfigurationApi(
+    final api = ConfigurationTestApi(
       role: 'director',
       capabilities: const [
         'config.crm.read',
         'config.crm.edit',
         'config.crm.publish',
       ],
-      snapshot: _inlineOptionsSnapshot(),
+      snapshot: inlineOptionsSnapshot(),
     );
     await _pump(tester, api);
 
@@ -566,8 +567,8 @@ void main() {
   });
 }
 
-Map<String, dynamic> _inlineOptionsSnapshot() => {
-  ..._ConfigurationApi._defaultSnapshot,
+Map<String, dynamic> inlineOptionsSnapshot() => {
+  ...ConfigurationTestApi._defaultSnapshot,
   'fields': [
     {
       'id': '30000000-0000-4000-8000-000000000002',

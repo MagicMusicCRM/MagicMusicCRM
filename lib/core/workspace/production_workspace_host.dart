@@ -130,6 +130,15 @@ class _ProductionWorkspaceHostState
           .then((restored) {
             if (!mounted || generation != _generation) return;
             _controller.restore(restored);
+            final directLink = widget.initialLink;
+            if (directLink != null &&
+                registry.resolve(directLink, widget.snapshot).canOpen &&
+                !_sameLink(
+                  _controller.state.activeTab.currentRoute.link,
+                  directLink,
+                )) {
+              _controller.push(_controller.state.activeTabId, directLink);
+            }
           }),
     );
   }

@@ -12,6 +12,8 @@ import 'package:magic_music_crm/features/auth/data/services/magic_auth_service.d
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 import 'package:magic_music_crm/main.dart';
 
+import 'evidence_screenshot.dart';
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -48,20 +50,29 @@ void main() {
       expect((await auth.currentProfile()).role, role, reason: 'magic$number');
 
       await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            magicTokenStoreProvider.overrideWithValue(tokens),
-            magicApiClientProvider.overrideWithValue(api),
-            magicAuthServiceProvider.overrideWithValue(auth),
-            notificationServiceProvider.overrideWith(
-              _NoopNotificationService.new,
-            ),
-          ],
-          child: const MagicMusicApp(),
+        RepaintBoundary(
+          key: evidenceRootKey,
+          child: ProviderScope(
+            overrides: [
+              magicTokenStoreProvider.overrideWithValue(tokens),
+              magicApiClientProvider.overrideWithValue(api),
+              magicAuthServiceProvider.overrideWithValue(auth),
+              notificationServiceProvider.overrideWith(
+                _NoopNotificationService.new,
+              ),
+            ],
+            child: const MagicMusicApp(),
+          ),
         ),
       );
       await _pumpUntilVisible(tester, find.text(readyLabel));
       _expectRoleShell(role);
+      await captureEvidence(tester, 'real-role-$number-$role');
+      if (role == 'teacher') {
+        await tester.tap(find.text('Расписание').first);
+        await tester.pump(const Duration(seconds: 3));
+        await captureEvidence(tester, 'real-role-2-teacher-schedule');
+      }
       expect(tester.takeException(), isNull, reason: 'magic$number');
 
       await tester.pumpWidget(const SizedBox.shrink());

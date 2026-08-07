@@ -7,7 +7,7 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tasks_v4_panel.dart';
 
-class _FakeSharedTasks extends SharedTasksDataSource {
+class FakeSharedTasksDataSource extends SharedTasksDataSource {
   bool closed = false;
   bool failNextClose = false;
   int createCalls = 0;
@@ -217,7 +217,7 @@ class _FakeSharedTasks extends SharedTasksDataSource {
 }
 
 Widget _host(
-  _FakeSharedTasks source, {
+  FakeSharedTasksDataSource source, {
   Size size = const Size(900, 900),
   EntityLink? initialLink,
   EntityLink? linkedEntity,
@@ -242,7 +242,7 @@ void main() {
   testWidgets('section root is not treated as a missing linked task', (
     tester,
   ) async {
-    final source = _FakeSharedTasks()..closed = true;
+    final source = FakeSharedTasksDataSource()..closed = true;
     await tester.pumpWidget(
       _host(
         source,
@@ -259,7 +259,7 @@ void main() {
   });
 
   testWidgets('shows exactly one create action per viewport', (tester) async {
-    final source = _FakeSharedTasks();
+    final source = FakeSharedTasksDataSource();
     await tester.pumpWidget(_host(source, size: const Size(900, 900)));
     await tester.pumpAndSettle();
     expect(find.text('Новая задача'), findsOneWidget);
@@ -274,7 +274,7 @@ void main() {
   testWidgets('one editor creates and updates through the canonical source', (
     tester,
   ) async {
-    final source = _FakeSharedTasks();
+    final source = FakeSharedTasksDataSource();
     await tester.pumpWidget(_host(source));
     await tester.pumpAndSettle();
 
@@ -311,7 +311,7 @@ void main() {
   testWidgets('search, priority and calendar use the canonical query', (
     tester,
   ) async {
-    final source = _FakeSharedTasks();
+    final source = FakeSharedTasksDataSource();
     await tester.pumpWidget(_host(source));
     await tester.pumpAndSettle();
 
@@ -343,7 +343,9 @@ void main() {
   });
 
   testWidgets('read-only role has no task mutation controls', (tester) async {
-    await tester.pumpWidget(_host(_FakeSharedTasks(), canWrite: false));
+    await tester.pumpWidget(
+      _host(FakeSharedTasksDataSource(), canWrite: false),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Новая задача'), findsNothing);
@@ -353,7 +355,7 @@ void main() {
   testWidgets('shows non-modal reminder and explicit close action', (
     tester,
   ) async {
-    final source = _FakeSharedTasks();
+    final source = FakeSharedTasksDataSource();
     await tester.pumpWidget(_host(source));
     await tester.pumpAndSettle();
 
@@ -369,7 +371,7 @@ void main() {
   testWidgets('close failure keeps task open and retries explicitly', (
     tester,
   ) async {
-    final source = _FakeSharedTasks()..failNextClose = true;
+    final source = FakeSharedTasksDataSource()..failNextClose = true;
     await tester.pumpWidget(_host(source));
     await tester.pumpAndSettle();
 
@@ -393,7 +395,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
-      _host(_FakeSharedTasks(), size: const Size(390, 844)),
+      _host(FakeSharedTasksDataSource(), size: const Size(390, 844)),
     );
     await tester.pumpAndSettle();
 
@@ -415,7 +417,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
-      _host(_FakeSharedTasks(), size: const Size(390, 844)),
+      _host(FakeSharedTasksDataSource(), size: const Size(390, 844)),
     );
     await tester.pumpAndSettle();
 
@@ -474,7 +476,7 @@ void main() {
     tester.view.physicalSize = const Size(1000, 1000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    final source = _FakeSharedTasks();
+    final source = FakeSharedTasksDataSource();
     await tester.pumpWidget(_host(source));
     await tester.pumpAndSettle();
 
@@ -538,7 +540,7 @@ void main() {
   testWidgets('failed recipient preview blocks submit until retry succeeds', (
     tester,
   ) async {
-    final source = _FakeSharedTasks()..failAudiencePreview = true;
+    final source = FakeSharedTasksDataSource()..failAudiencePreview = true;
     await tester.pumpWidget(_host(source));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Новая задача'));
@@ -572,7 +574,7 @@ void main() {
   testWidgets('direct task link uses canonical filters and opens history', (
     tester,
   ) async {
-    final source = _FakeSharedTasks();
+    final source = FakeSharedTasksDataSource();
     await tester.pumpWidget(
       _host(
         source,
