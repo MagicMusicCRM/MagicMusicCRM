@@ -22,6 +22,7 @@ class StudentScheduleSection extends ConsumerStatefulWidget {
   final String? legacyPreference;
   final bool canWrite;
   final VoidCallback onChanged;
+  final ValueChanged<Map<String, dynamic>>? onOpenLesson;
 
   const StudentScheduleSection({
     super.key,
@@ -33,6 +34,7 @@ class StudentScheduleSection extends ConsumerStatefulWidget {
     required this.canWrite,
     this.legacyPreference,
     required this.onChanged,
+    this.onOpenLesson,
   });
 
   @override
@@ -344,8 +346,11 @@ class _StudentScheduleSectionState
       message: tooltip,
       waitDuration: const Duration(milliseconds: 300),
       child: InkWell(
+        key: ValueKey('client-lesson-${lesson['id']}'),
         borderRadius: BorderRadius.circular(4),
-        onTap: null,
+        onTap: widget.canWrite && widget.onOpenLesson != null
+            ? () => widget.onOpenLesson!(lesson)
+            : null,
         child: Stack(
           children: [
             Container(

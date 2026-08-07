@@ -10,6 +10,7 @@ import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/create_lesson_dialog.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/client_app_user_panel.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tasks_v4_panel.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';

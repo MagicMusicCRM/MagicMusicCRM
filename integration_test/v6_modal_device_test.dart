@@ -73,7 +73,7 @@ class _ModalDeviceHomeState extends State<_ModalDeviceHome> {
               conflicts: const [],
               lessonId: 'lesson-1',
               onEdit: () {},
-              onDelete: () async {},
+              onCancel: () async {},
             ),
             child: const Text('Быстрый просмотр'),
           ),

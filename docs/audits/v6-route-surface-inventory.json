@@ -3,14 +3,14 @@
   "task": "V6-001",
   "generated_from": "lib/main.dart import graph + GoRouter + presentation callsites",
   "summary": {
-    "dart_files": 255,
-    "production_reachable_files": 254,
+    "dart_files": 256,
+    "production_reachable_files": 255,
     "go_routes": 22,
     "screens": 21,
     "production_screens": 21,
     "isolated_screens": 0,
-    "modal_surface_calls": 94,
-    "production_surface_calls": 94,
+    "modal_surface_calls": 92,
+    "production_surface_calls": 92,
     "screen_state_gaps": 0,
     "unowned": 0
   },
@@ -581,6 +581,22 @@
         "retry": true
       },
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
+      "line": 327
+    },
+    {
+      "kind": "dialog",
+      "call": "showDialog",
+      "owner": "SYS-APP-EXPERIENCE",
+      "production_reachable": true,
+      "status": "production-callsite",
+      "states": {
+        "loading": true,
+        "empty": true,
+        "error": true,
+        "forbidden": false,
+        "retry": true
+      },
+      "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
       "line": 241
     },
     {
@@ -677,7 +693,7 @@
         "retry": true
       },
       "file": "lib/features/crm/presentation/client_card/student_schedule_section.dart",
-      "line": 560
+      "line": 565
     },
     {
       "kind": "magic-sheet",
@@ -693,7 +709,7 @@
         "retry": true
       },
       "file": "lib/features/crm/presentation/client_card/student_schedule_section.dart",
-      "line": 466
+      "line": 471
     },
     {
       "kind": "dialog",
@@ -709,7 +725,7 @@
         "retry": false
       },
       "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 265
+      "line": 266
     },
     {
       "kind": "magic-sheet",
@@ -858,38 +874,6 @@
     {
       "kind": "dialog",
       "call": "showDialog",
-      "owner": "SYS-SCHEDULE",
-      "production_reachable": true,
-      "status": "production-callsite",
-      "states": {
-        "loading": true,
-        "empty": true,
-        "error": true,
-        "forbidden": false,
-        "retry": false
-      },
-      "file": "lib/features/admin/presentation/widgets/teacher_detail_dialog.dart",
-      "line": 325
-    },
-    {
-      "kind": "dialog",
-      "call": "showDialog",
-      "owner": "SYS-APP-EXPERIENCE",
-      "production_reachable": true,
-      "status": "production-callsite",
-      "states": {
-        "loading": true,
-        "empty": true,
-        "error": true,
-        "forbidden": false,
-        "retry": true
-      },
-      "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 327
-    },
-    {
-      "kind": "dialog",
-      "call": "showDialog",
       "owner": "SYS-APP-EXPERIENCE",
       "production_reachable": true,
       "status": "production-callsite",
@@ -902,6 +886,22 @@
       },
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
       "line": 851
+    },
+    {
+      "kind": "dialog",
+      "call": "showDialog",
+      "owner": "SYS-SCHEDULE",
+      "production_reachable": true,
+      "status": "production-callsite",
+      "states": {
+        "loading": true,
+        "empty": true,
+        "error": true,
+        "forbidden": false,
+        "retry": false
+      },
+      "file": "lib/features/admin/presentation/widgets/teacher_detail_dialog.dart",
+      "line": 325
     },
     {
       "kind": "drawer",
@@ -920,20 +920,20 @@
       "line": 214
     },
     {
-      "kind": "dialog",
-      "call": "showDialog",
+      "kind": "magic-sheet",
+      "call": "showMagicSheet",
       "owner": "SYS-CRM-WORKSPACE",
       "production_reachable": true,
       "status": "production-callsite",
       "states": {
-        "loading": true,
+        "loading": false,
         "empty": true,
         "error": false,
         "forbidden": false,
         "retry": false
       },
-      "file": "lib/features/manager/presentation/widgets/lead_card.dart",
-      "line": 484
+      "file": "lib/features/manager/presentation/widgets/lead_dialogs.dart",
+      "line": 23
     },
     {
       "kind": "dialog",
@@ -1082,18 +1082,18 @@
     {
       "kind": "dialog",
       "call": "showDialog",
-      "owner": "SYS-SCHEDULE",
+      "owner": "SYS-CRM-WORKSPACE",
       "production_reachable": true,
       "status": "production-callsite",
       "states": {
         "loading": true,
         "empty": true,
-        "error": true,
+        "error": false,
         "forbidden": false,
-        "retry": false
+        "retry": true
       },
-      "file": "lib/features/admin/presentation/widgets/teacher_detail_dialog.dart",
-      "line": 287
+      "file": "lib/features/manager/presentation/widgets/student_funnel_editor.dart",
+      "line": 354
     },
     {
       "kind": "dialog",
@@ -1109,7 +1109,7 @@
         "retry": true
       },
       "file": "lib/features/manager/presentation/widgets/student_funnel_editor.dart",
-      "line": 354
+      "line": 330
     },
     {
       "kind": "dialog",
@@ -1240,22 +1240,6 @@
       "line": 126
     },
     {
-      "kind": "magic-sheet",
-      "call": "showMagicSheet",
-      "owner": "SYS-CRM-WORKSPACE",
-      "production_reachable": true,
-      "status": "production-callsite",
-      "states": {
-        "loading": false,
-        "empty": true,
-        "error": false,
-        "forbidden": false,
-        "retry": false
-      },
-      "file": "lib/features/manager/presentation/widgets/lead_dialogs.dart",
-      "line": 23
-    },
-    {
       "kind": "dialog",
       "call": "showDialog",
       "owner": "SYS-CRM-WORKSPACE",
@@ -1266,10 +1250,26 @@
         "empty": true,
         "error": false,
         "forbidden": false,
-        "retry": true
+        "retry": false
       },
-      "file": "lib/features/manager/presentation/widgets/student_funnel_editor.dart",
-      "line": 330
+      "file": "lib/features/manager/presentation/widgets/lead_card.dart",
+      "line": 484
+    },
+    {
+      "kind": "dialog",
+      "call": "showDialog",
+      "owner": "SYS-SCHEDULE",
+      "production_reachable": true,
+      "status": "production-callsite",
+      "states": {
+        "loading": true,
+        "empty": true,
+        "error": true,
+        "forbidden": false,
+        "retry": false
+      },
+      "file": "lib/features/admin/presentation/widgets/teacher_detail_dialog.dart",
+      "line": 287
     },
     {
       "kind": "dialog",
@@ -1302,38 +1302,6 @@
       },
       "file": "lib/features/admin/presentation/widgets/staff_detail_dialog.dart",
       "line": 14
-    },
-    {
-      "kind": "dialog",
-      "call": "showDialog",
-      "owner": "SYS-SCHEDULE",
-      "production_reachable": true,
-      "status": "production-callsite",
-      "states": {
-        "loading": false,
-        "empty": true,
-        "error": false,
-        "forbidden": true,
-        "retry": false
-      },
-      "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
-      "line": 380
-    },
-    {
-      "kind": "magic-sheet",
-      "call": "showMagicSheet",
-      "owner": "SYS-UI-FOUNDATION",
-      "production_reachable": true,
-      "status": "production-callsite",
-      "states": {
-        "loading": false,
-        "empty": false,
-        "error": false,
-        "forbidden": false,
-        "retry": false
-      },
-      "file": "lib/core/widgets/v7/magic_sheet.dart",
-      "line": 12
     },
     {
       "kind": "dialog",
@@ -1464,22 +1432,6 @@
       "line": 137
     },
     {
-      "kind": "bottom-sheet",
-      "call": "showModalBottomSheet",
-      "owner": "SYS-UI-FOUNDATION",
-      "production_reachable": true,
-      "status": "production-callsite",
-      "states": {
-        "loading": false,
-        "empty": false,
-        "error": false,
-        "forbidden": false,
-        "retry": false
-      },
-      "file": "lib/core/widgets/v7/magic_sheet.dart",
-      "line": 20
-    },
-    {
       "kind": "magic-sheet",
       "call": "showMagicSheet",
       "owner": "SYS-PLATFORM-QUALITY",
@@ -1494,6 +1446,22 @@
       },
       "file": "lib/core/widgets/telegram/message_bubble.dart",
       "line": 495
+    },
+    {
+      "kind": "dialog",
+      "call": "showDialog",
+      "owner": "SYS-PLATFORM-QUALITY",
+      "production_reachable": true,
+      "status": "production-callsite",
+      "states": {
+        "loading": true,
+        "empty": true,
+        "error": true,
+        "forbidden": false,
+        "retry": false
+      },
+      "file": "lib/core/widgets/telegram/create_group_dialog.dart",
+      "line": 14
     },
     {
       "kind": "dialog",
@@ -1640,36 +1608,36 @@
       "line": 123
     },
     {
-      "kind": "dialog",
-      "call": "showDialog",
-      "owner": "SYS-PLATFORM-QUALITY",
+      "kind": "magic-sheet",
+      "call": "showMagicSheet",
+      "owner": "SYS-UI-FOUNDATION",
       "production_reachable": true,
       "status": "production-callsite",
       "states": {
-        "loading": true,
-        "empty": true,
-        "error": true,
+        "loading": false,
+        "empty": false,
+        "error": false,
         "forbidden": false,
         "retry": false
       },
-      "file": "lib/core/widgets/telegram/create_group_dialog.dart",
-      "line": 14
+      "file": "lib/core/widgets/v7/magic_sheet.dart",
+      "line": 12
     },
     {
-      "kind": "dialog",
-      "call": "showDialog",
-      "owner": "SYS-APP-EXPERIENCE",
+      "kind": "bottom-sheet",
+      "call": "showModalBottomSheet",
+      "owner": "SYS-UI-FOUNDATION",
       "production_reachable": true,
       "status": "production-callsite",
       "states": {
-        "loading": true,
-        "empty": true,
-        "error": true,
+        "loading": false,
+        "empty": false,
+        "error": false,
         "forbidden": false,
         "retry": false
       },
-      "file": "lib/features/messenger/presentation/screens/messenger_screen_messaging.dart",
-      "line": 176
+      "file": "lib/core/widgets/v7/magic_sheet.dart",
+      "line": 20
     },
     {
       "kind": "draggable-sheet",
@@ -1698,26 +1666,10 @@
         "empty": true,
         "error": true,
         "forbidden": false,
-        "retry": true
-      },
-      "file": "lib/features/admin/presentation/widgets/create_group_dialog.dart",
-      "line": 11
-    },
-    {
-      "kind": "dialog",
-      "call": "showDialog",
-      "owner": "SYS-SCHEDULE",
-      "production_reachable": true,
-      "status": "production-callsite",
-      "states": {
-        "loading": false,
-        "empty": true,
-        "error": false,
-        "forbidden": true,
         "retry": false
       },
-      "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
-      "line": 344
+      "file": "lib/features/admin/presentation/widgets/create_employee_dialog.dart",
+      "line": 12
     },
     {
       "kind": "dialog",
@@ -1848,22 +1800,6 @@
       "line": 311
     },
     {
-      "kind": "adaptive-surface",
-      "call": "showMagicAdaptiveSurface",
-      "owner": "SYS-PLATFORM-QUALITY",
-      "production_reachable": true,
-      "status": "production-callsite",
-      "states": {
-        "loading": true,
-        "empty": true,
-        "error": true,
-        "forbidden": false,
-        "retry": false
-      },
-      "file": "lib/features/admin/presentation/widgets/create_employee_dialog.dart",
-      "line": 12
-    },
-    {
       "kind": "dialog",
       "call": "showDialog",
       "owner": "SYS-PLATFORM-QUALITY",
@@ -1880,6 +1816,22 @@
       "line": 76
     },
     {
+      "kind": "dialog",
+      "call": "showDialog",
+      "owner": "SYS-APP-EXPERIENCE",
+      "production_reachable": true,
+      "status": "production-callsite",
+      "states": {
+        "loading": true,
+        "empty": true,
+        "error": true,
+        "forbidden": false,
+        "retry": false
+      },
+      "file": "lib/features/messenger/presentation/screens/messenger_screen_messaging.dart",
+      "line": 176
+    },
+    {
       "kind": "adaptive-surface",
       "call": "showMagicAdaptiveSurface",
       "owner": "SYS-SCHEDULE",
@@ -1893,7 +1845,7 @@
         "retry": false
       },
       "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
-      "line": 155
+      "line": 156
     },
     {
       "kind": "dialog",
@@ -2005,7 +1957,7 @@
         "retry": false
       },
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 488
+      "line": 501
     },
     {
       "kind": "dialog",
@@ -2021,7 +1973,23 @@
         "retry": false
       },
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 66
+      "line": 68
+    },
+    {
+      "kind": "adaptive-surface",
+      "call": "showMagicAdaptiveSurface",
+      "owner": "SYS-PLATFORM-QUALITY",
+      "production_reachable": true,
+      "status": "production-callsite",
+      "states": {
+        "loading": true,
+        "empty": true,
+        "error": true,
+        "forbidden": false,
+        "retry": true
+      },
+      "file": "lib/features/admin/presentation/widgets/create_group_dialog.dart",
+      "line": 11
     },
     {
       "kind": "adaptive-surface",
@@ -2030,14 +1998,14 @@
       "production_reachable": true,
       "status": "production-callsite",
       "states": {
-        "loading": false,
-        "empty": false,
-        "error": false,
+        "loading": true,
+        "empty": true,
+        "error": true,
         "forbidden": true,
-        "retry": false
+        "retry": true
       },
-      "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
-      "line": 240
+      "file": "lib/features/admin/presentation/widgets/lesson_decision_flow.dart",
+      "line": 199
     },
     {
       "kind": "dialog",

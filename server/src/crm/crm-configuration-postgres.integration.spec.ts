@@ -259,6 +259,26 @@ describe("Unified CRM configuration (PostgreSQL)", () => {
     );
   });
 
+  it("projects active lesson decisions to operational administrators", async () => {
+    const catalog = await service.getLessonDecisionCatalog(
+      { userId: randomUUID(), role: "admin" },
+      branchId,
+    );
+    expect(catalog.branchId).toBe(branchId);
+    expect(catalog.settlementTypes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ stableKey: "free_lesson" }),
+        expect.objectContaining({ stableKey: "paid_miss" }),
+      ]),
+    );
+    expect(catalog.teacherCompensationRules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ stableKey: "none" }),
+        expect.objectContaining({ stableKey: "standard" }),
+      ]),
+    );
+  });
+
   it("keeps branch overrides sparse and manager scope branch-only", async () => {
     const school = await service.getEffective(director);
     const branch = structuredClone(school.snapshot as ConfigSnapshot);

@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "task": "T8.1.2",
-  "source_digest_sha256": "3d7d0558e18f2938ca01c7b48a74a10912649429af154efd2159465b8f2b0102",
-  "source_file_count": 731,
+  "source_digest_sha256": "bf2b1a9febc9ba8a7227bc88162c066b250adf5395881467079f7adfc82aebda",
+  "source_file_count": 732,
   "systems": [
     "SYS-APP",
     "SYS-ACCESS",
@@ -14,13 +14,13 @@
     "SYS-PLATFORM"
   ],
   "summary": {
-    "backend_routes": 302,
+    "backend_routes": 303,
     "role_guards": 22,
-    "policy_calls": 230,
+    "policy_calls": 231,
     "dto_fields": 739,
     "flutter_role_checks": 141,
     "flutter_navigation_sources": 315,
-    "schedule_entry_points": 40,
+    "schedule_entry_points": 35,
     "attendance_mutations": 0,
     "finance_writes": 46,
     "schema_tables": 5,
@@ -106,17 +106,6 @@
       "line": 106
     },
     {
-      "id": "PATCH /crm/students/:id",
-      "verb": "PATCH",
-      "route": "/crm/students/:id",
-      "controller": "updateStudent",
-      "roles": [],
-      "owner": "SYS-CRM",
-      "status": "compatibility-facade",
-      "file": "server/src/crm/crm-students.controller.ts",
-      "line": 169
-    },
-    {
       "id": "GET /crm/students/:id/groups",
       "verb": "GET",
       "route": "/crm/students/:id/groups",
@@ -126,6 +115,17 @@
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-students.controller.ts",
       "line": 97
+    },
+    {
+      "id": "GET /crm/student-balances",
+      "verb": "GET",
+      "route": "/crm/student-balances",
+      "controller": "listStudentBalances",
+      "roles": [],
+      "owner": "SYS-CRM",
+      "status": "compatibility-facade",
+      "file": "server/src/crm/crm-students.controller.ts",
+      "line": 89
     },
     {
       "id": "POST /crm/students",
@@ -194,15 +194,37 @@
       "line": 42
     },
     {
-      "id": "GET /crm/student-balances",
-      "verb": "GET",
-      "route": "/crm/student-balances",
-      "controller": "listStudentBalances",
+      "id": "POST /crm/client-pipelines/preview",
+      "verb": "POST",
+      "route": "/crm/client-pipelines/preview",
+      "controller": "preview",
+      "roles": [],
+      "owner": "SYS-CRM",
+      "status": "compatibility-facade",
+      "file": "server/src/crm/crm-student-funnel.controller.ts",
+      "line": 34
+    },
+    {
+      "id": "PATCH /crm/students/:id",
+      "verb": "PATCH",
+      "route": "/crm/students/:id",
+      "controller": "updateStudent",
       "roles": [],
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-students.controller.ts",
-      "line": 89
+      "line": 169
+    },
+    {
+      "id": "GET /crm/client-pipelines/revisions",
+      "verb": "GET",
+      "route": "/crm/client-pipelines/revisions",
+      "controller": "listRevisions",
+      "roles": [],
+      "owner": "SYS-CRM",
+      "status": "compatibility-facade",
+      "file": "server/src/crm/crm-student-funnel.controller.ts",
+      "line": 26
     },
     {
       "id": "DELETE /crm/students/:id",
@@ -214,17 +236,6 @@
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-students.controller.ts",
       "line": 178
-    },
-    {
-      "id": "POST /crm/students/:id/return-to-lead",
-      "verb": "POST",
-      "route": "/crm/students/:id/return-to-lead",
-      "controller": "returnStudentToLead",
-      "roles": [],
-      "owner": "SYS-CRM",
-      "status": "compatibility-facade",
-      "file": "server/src/crm/crm-students.controller.ts",
-      "line": 186
     },
     {
       "id": "POST /crm/students/:id/invite",
@@ -403,26 +414,26 @@
       "line": 27
     },
     {
-      "id": "POST /crm/client-pipelines/preview",
+      "id": "POST /crm/students/:id/return-to-lead",
       "verb": "POST",
-      "route": "/crm/client-pipelines/preview",
-      "controller": "preview",
+      "route": "/crm/students/:id/return-to-lead",
+      "controller": "returnStudentToLead",
       "roles": [],
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
-      "file": "server/src/crm/crm-student-funnel.controller.ts",
-      "line": 34
+      "file": "server/src/crm/crm-students.controller.ts",
+      "line": 186
     },
     {
-      "id": "GET /crm/client-pipelines/revisions",
-      "verb": "GET",
-      "route": "/crm/client-pipelines/revisions",
-      "controller": "listRevisions",
+      "id": "POST /crm/students/:studentId/subscription-payments",
+      "verb": "POST",
+      "route": "/crm/students/:studentId/subscription-payments",
+      "controller": "recordActualPayment",
       "roles": [],
-      "owner": "SYS-CRM",
+      "owner": "SYS-COMMERCE",
       "status": "compatibility-facade",
-      "file": "server/src/crm/crm-student-funnel.controller.ts",
-      "line": 26
+      "file": "server/src/crm/subscription-commerce.controller.ts",
+      "line": 158
     },
     {
       "id": "GET /crm/client-pipelines",
@@ -436,26 +447,15 @@
       "line": 18
     },
     {
-      "id": "DELETE /crm/lessons/:id",
-      "verb": "DELETE",
-      "route": "/crm/lessons/:id",
-      "controller": "deleteLesson",
+      "id": "POST /crm/lessons/:id/settle",
+      "verb": "POST",
+      "route": "/crm/lessons/:id/settle",
+      "controller": "settleLesson",
       "roles": [],
       "owner": "SYS-SCHEDULE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 290
-    },
-    {
-      "id": "GET /crm/schedule-series",
-      "verb": "GET",
-      "route": "/crm/schedule-series",
-      "controller": "listScheduleSeries",
-      "roles": [],
-      "owner": "SYS-SCHEDULE",
-      "status": "compatibility-facade",
-      "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 59
+      "line": 275
     },
     {
       "id": "GET /crm/hollihop/lead-statuses",
@@ -612,6 +612,39 @@
       "line": 137
     },
     {
+      "id": "POST /crm/staff",
+      "verb": "POST",
+      "route": "/crm/staff",
+      "controller": "createStaff",
+      "roles": [],
+      "owner": "SYS-CRM",
+      "status": "compatibility-facade",
+      "file": "server/src/crm/crm-people.controller.ts",
+      "line": 129
+    },
+    {
+      "id": "GET /crm/schedule-series",
+      "verb": "GET",
+      "route": "/crm/schedule-series",
+      "controller": "listScheduleSeries",
+      "roles": [],
+      "owner": "SYS-SCHEDULE",
+      "status": "compatibility-facade",
+      "file": "server/src/crm/crm-schedule.controller.ts",
+      "line": 59
+    },
+    {
+      "id": "DELETE /crm/lessons/:id",
+      "verb": "DELETE",
+      "route": "/crm/lessons/:id",
+      "controller": "deleteLesson",
+      "roles": [],
+      "owner": "SYS-SCHEDULE",
+      "status": "compatibility-facade",
+      "file": "server/src/crm/crm-schedule.controller.ts",
+      "line": 290
+    },
+    {
       "id": "POST /crm/schedule-series",
       "verb": "POST",
       "route": "/crm/schedule-series",
@@ -623,48 +656,15 @@
       "line": 73
     },
     {
-      "id": "POST /crm/students/:studentId/subscription-payments",
-      "verb": "POST",
-      "route": "/crm/students/:studentId/subscription-payments",
-      "controller": "recordActualPayment",
-      "roles": [],
-      "owner": "SYS-COMMERCE",
-      "status": "compatibility-facade",
-      "file": "server/src/crm/subscription-commerce.controller.ts",
-      "line": 158
-    },
-    {
-      "id": "PATCH /crm/schedule-series/:id",
-      "verb": "PATCH",
+      "id": "DELETE /crm/schedule-series/:id",
+      "verb": "DELETE",
       "route": "/crm/schedule-series/:id",
-      "controller": "updateScheduleSeries",
+      "controller": "deleteScheduleSeries",
       "roles": [],
       "owner": "SYS-SCHEDULE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 90
-    },
-    {
-      "id": "GET /crm/lessons",
-      "verb": "GET",
-      "route": "/crm/lessons",
-      "controller": "listLessons",
-      "roles": [],
-      "owner": "SYS-SCHEDULE",
-      "status": "compatibility-facade",
-      "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 108
-    },
-    {
-      "id": "POST /crm/lessons/:id/settle",
-      "verb": "POST",
-      "route": "/crm/lessons/:id/settle",
-      "controller": "settleLesson",
-      "roles": [],
-      "owner": "SYS-SCHEDULE",
-      "status": "compatibility-facade",
-      "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 275
+      "line": 99
     },
     {
       "id": "POST /crm/lessons/:id/settle/preview",
@@ -821,15 +821,37 @@
       "line": 116
     },
     {
-      "id": "DELETE /crm/schedule-series/:id",
-      "verb": "DELETE",
-      "route": "/crm/schedule-series/:id",
-      "controller": "deleteScheduleSeries",
+      "id": "GET /crm/lessons",
+      "verb": "GET",
+      "route": "/crm/lessons",
+      "controller": "listLessons",
       "roles": [],
       "owner": "SYS-SCHEDULE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 99
+      "line": 108
+    },
+    {
+      "id": "PATCH /crm/schedule-series/:id",
+      "verb": "PATCH",
+      "route": "/crm/schedule-series/:id",
+      "controller": "updateScheduleSeries",
+      "roles": [],
+      "owner": "SYS-SCHEDULE",
+      "status": "compatibility-facade",
+      "file": "server/src/crm/crm-schedule.controller.ts",
+      "line": 90
+    },
+    {
+      "id": "GET /crm/staff",
+      "verb": "GET",
+      "route": "/crm/staff",
+      "controller": "listStaff",
+      "roles": [],
+      "owner": "SYS-CRM",
+      "status": "compatibility-facade",
+      "file": "server/src/crm/crm-people.controller.ts",
+      "line": 121
     },
     {
       "id": "POST /crm/students/:studentId/subscriptions/:issuedSubscriptionId/replace/preview",
@@ -841,17 +863,6 @@
       "status": "compatibility-facade",
       "file": "server/src/crm/subscription-commerce.controller.ts",
       "line": 172
-    },
-    {
-      "id": "POST /crm/students/:studentId/subscriptions/:issuedSubscriptionId/replace",
-      "verb": "POST",
-      "route": "/crm/students/:studentId/subscriptions/:issuedSubscriptionId/replace",
-      "controller": "replaceSubscription",
-      "roles": [],
-      "owner": "SYS-COMMERCE",
-      "status": "compatibility-facade",
-      "file": "server/src/crm/subscription-commerce.controller.ts",
-      "line": 188
     },
     {
       "id": "POST /crm/students/:studentId/subscriptions/:issuedSubscriptionId/cancel/preview",
@@ -1309,15 +1320,15 @@
       "line": 38
     },
     {
-      "id": "POST /crm/staff",
+      "id": "POST /crm/students/:studentId/subscriptions/:issuedSubscriptionId/replace",
       "verb": "POST",
-      "route": "/crm/staff",
-      "controller": "createStaff",
+      "route": "/crm/students/:studentId/subscriptions/:issuedSubscriptionId/replace",
+      "controller": "replaceSubscription",
       "roles": [],
-      "owner": "SYS-CRM",
+      "owner": "SYS-COMMERCE",
       "status": "compatibility-facade",
-      "file": "server/src/crm/crm-people.controller.ts",
-      "line": 129
+      "file": "server/src/crm/subscription-commerce.controller.ts",
+      "line": 188
     },
     {
       "id": "POST /messenger/chats/:chatId/unarchive",
@@ -1734,15 +1745,17 @@
       "line": 29
     },
     {
-      "id": "GET /crm/staff",
-      "verb": "GET",
-      "route": "/crm/staff",
-      "controller": "listStaff",
-      "roles": [],
+      "id": "PATCH /settings/admin-chat-avatar",
+      "verb": "PATCH",
+      "route": "/settings/admin-chat-avatar",
+      "controller": "updateAdminChatAvatar",
+      "roles": [
+        "admin"
+      ],
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
-      "file": "server/src/crm/crm-people.controller.ts",
-      "line": 121
+      "file": "server/src/settings/settings.controller.ts",
+      "line": 32
     },
     {
       "id": "GET /crm/reports/teacher-stats/export",
@@ -1756,15 +1769,15 @@
       "line": 107
     },
     {
-      "id": "GET /crm/reports/teacher-stats",
-      "verb": "GET",
-      "route": "/crm/reports/teacher-stats",
-      "controller": "getTeacherStats",
+      "id": "POST /crm/teachers/:id/rates",
+      "verb": "POST",
+      "route": "/crm/teachers/:id/rates",
+      "controller": "setTeacherRate",
       "roles": [],
-      "owner": "SYS-REPORTING",
+      "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-people.controller.ts",
-      "line": 99
+      "line": 90
     },
     {
       "id": "PATCH /crm/client-config/fields/:id",
@@ -1976,17 +1989,6 @@
       "line": 58
     },
     {
-      "id": "POST /crm/contacts/save-from-chat",
-      "verb": "POST",
-      "route": "/crm/contacts/save-from-chat",
-      "controller": "saveContactFromChat",
-      "roles": [],
-      "owner": "SYS-CRM",
-      "status": "compatibility-facade",
-      "file": "server/src/crm/crm-contacts.controller.ts",
-      "line": 53
-    },
-    {
       "id": "GET /crm/contacts/by-user/:userId",
       "verb": "GET",
       "route": "/crm/contacts/by-user/:userId",
@@ -2028,7 +2030,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-configuration.controller.ts",
-      "line": 74
+      "line": 82
     },
     {
       "id": "GET /crm/configuration/revisions",
@@ -2039,7 +2041,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-configuration.controller.ts",
-      "line": 66
+      "line": 74
     },
     {
       "id": "POST /crm/configuration/publish",
@@ -2050,7 +2052,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-configuration.controller.ts",
-      "line": 58
+      "line": 66
     },
     {
       "id": "POST /crm/configuration/preview",
@@ -2061,7 +2063,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-configuration.controller.ts",
-      "line": 50
+      "line": 58
     },
     {
       "id": "PUT /crm/configuration/draft",
@@ -2072,7 +2074,7 @@
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-configuration.controller.ts",
-      "line": 42
+      "line": 50
     },
     {
       "id": "GET /crm/configuration/draft",
@@ -2081,6 +2083,17 @@
       "controller": "getDraft",
       "roles": [],
       "owner": "SYS-CRM",
+      "status": "compatibility-facade",
+      "file": "server/src/crm/crm-configuration.controller.ts",
+      "line": 42
+    },
+    {
+      "id": "GET /crm/configuration/lesson-decisions",
+      "verb": "GET",
+      "route": "/crm/configuration/lesson-decisions",
+      "controller": "getLessonDecisionCatalog",
+      "roles": [],
+      "owner": "SYS-SCHEDULE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-configuration.controller.ts",
       "line": 34
@@ -2152,15 +2165,15 @@
       "line": 50
     },
     {
-      "id": "POST /crm/families",
+      "id": "POST /crm/contacts/save-from-chat",
       "verb": "POST",
-      "route": "/crm/families",
-      "controller": "createFamily",
+      "route": "/crm/contacts/save-from-chat",
+      "controller": "saveContactFromChat",
       "roles": [],
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-contacts.controller.ts",
-      "line": 61
+      "line": 53
     },
     {
       "id": "POST /auth/password-reset/confirm",
@@ -2588,50 +2601,37 @@
       "line": 123
     },
     {
-      "id": "PATCH /settings/admin-chat-avatar",
-      "verb": "PATCH",
-      "route": "/settings/admin-chat-avatar",
-      "controller": "updateAdminChatAvatar",
-      "roles": [
-        "admin"
-      ],
-      "owner": "SYS-CRM",
-      "status": "compatibility-facade",
-      "file": "server/src/settings/settings.controller.ts",
-      "line": 32
-    },
-    {
-      "id": "POST /crm/families/:familyId/members",
-      "verb": "POST",
-      "route": "/crm/families/:familyId/members",
-      "controller": "addFamilyMember",
-      "roles": [],
-      "owner": "SYS-CRM",
-      "status": "compatibility-facade",
-      "file": "server/src/crm/crm-contacts.controller.ts",
-      "line": 66
-    },
-    {
-      "id": "DELETE /crm/family-members/:memberId",
-      "verb": "DELETE",
-      "route": "/crm/family-members/:memberId",
-      "controller": "removeFamilyMember",
-      "roles": [],
-      "owner": "SYS-CRM",
-      "status": "compatibility-facade",
-      "file": "server/src/crm/crm-contacts.controller.ts",
-      "line": 84
-    },
-    {
-      "id": "GET /crm/leads/:id/applications",
+      "id": "GET /crm/reports/teacher-stats",
       "verb": "GET",
-      "route": "/crm/leads/:id/applications",
-      "controller": "listLeadApplications",
+      "route": "/crm/reports/teacher-stats",
+      "controller": "getTeacherStats",
+      "roles": [],
+      "owner": "SYS-REPORTING",
+      "status": "compatibility-facade",
+      "file": "server/src/crm/crm-people.controller.ts",
+      "line": 99
+    },
+    {
+      "id": "POST /crm/families",
+      "verb": "POST",
+      "route": "/crm/families",
+      "controller": "createFamily",
       "roles": [],
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
-      "file": "server/src/crm/crm-leads.controller.ts",
-      "line": 85
+      "file": "server/src/crm/crm-contacts.controller.ts",
+      "line": 61
+    },
+    {
+      "id": "GET /crm/families/by-entity/:entityType/:entityId",
+      "verb": "GET",
+      "route": "/crm/families/by-entity/:entityType/:entityId",
+      "controller": "getFamilyForEntity",
+      "roles": [],
+      "owner": "SYS-CRM",
+      "status": "compatibility-facade",
+      "file": "server/src/crm/crm-contacts.controller.ts",
+      "line": 75
     },
     {
       "id": "GET /crm/leads/:id/card",
@@ -2788,17 +2788,6 @@
       "line": 74
     },
     {
-      "id": "GET /crm/leads/:leadId/status-history",
-      "verb": "GET",
-      "route": "/crm/leads/:leadId/status-history",
-      "controller": "listLeadStatusHistory",
-      "roles": [],
-      "owner": "SYS-CRM",
-      "status": "compatibility-facade",
-      "file": "server/src/crm/crm-leads.controller.ts",
-      "line": 93
-    },
-    {
       "id": "POST /crm/payments",
       "verb": "POST",
       "route": "/crm/payments",
@@ -2810,37 +2799,48 @@
       "line": 66
     },
     {
-      "id": "POST /crm/leads",
-      "verb": "POST",
-      "route": "/crm/leads",
-      "controller": "createLead",
+      "id": "GET /crm/leads/:id/applications",
+      "verb": "GET",
+      "route": "/crm/leads/:id/applications",
+      "controller": "listLeadApplications",
       "roles": [],
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-leads.controller.ts",
-      "line": 101
+      "line": 85
     },
     {
-      "id": "POST /crm/leads/:id/link-student",
-      "verb": "POST",
-      "route": "/crm/leads/:id/link-student",
-      "controller": "linkStudentToLead",
+      "id": "GET /crm/subscriptions",
+      "verb": "GET",
+      "route": "/crm/subscriptions",
+      "controller": "listSubscriptions",
+      "roles": [],
+      "owner": "SYS-COMMERCE",
+      "status": "compatibility-facade",
+      "file": "server/src/crm/crm-finance.controller.ts",
+      "line": 58
+    },
+    {
+      "id": "GET /crm/leads/:leadId/status-history",
+      "verb": "GET",
+      "route": "/crm/leads/:leadId/status-history",
+      "controller": "listLeadStatusHistory",
       "roles": [],
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-leads.controller.ts",
-      "line": 134
+      "line": 93
     },
     {
-      "id": "POST /crm/teachers/:id/rates",
+      "id": "POST /crm/leads/:leadId/subscriptions/issue",
       "verb": "POST",
-      "route": "/crm/teachers/:id/rates",
-      "controller": "setTeacherRate",
+      "route": "/crm/leads/:leadId/subscriptions/issue",
+      "controller": "issueLeadSubscription",
       "roles": [],
-      "owner": "SYS-CRM",
+      "owner": "SYS-COMMERCE",
       "status": "compatibility-facade",
-      "file": "server/src/crm/crm-people.controller.ts",
-      "line": 90
+      "file": "server/src/crm/crm-leads.controller.ts",
+      "line": 123
     },
     {
       "id": "POST /crm/teachers/:id/payouts",
@@ -2997,59 +2997,59 @@
       "line": 145
     },
     {
-      "id": "POST /crm/leads/:leadId/subscriptions/issue",
+      "id": "POST /crm/leads/:id/link-student",
       "verb": "POST",
-      "route": "/crm/leads/:leadId/subscriptions/issue",
-      "controller": "issueLeadSubscription",
+      "route": "/crm/leads/:id/link-student",
+      "controller": "linkStudentToLead",
       "roles": [],
-      "owner": "SYS-COMMERCE",
+      "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-leads.controller.ts",
-      "line": 123
+      "line": 134
     },
     {
-      "id": "GET /crm/families/by-entity/:entityType/:entityId",
-      "verb": "GET",
-      "route": "/crm/families/by-entity/:entityType/:entityId",
-      "controller": "getFamilyForEntity",
+      "id": "POST /crm/leads",
+      "verb": "POST",
+      "route": "/crm/leads",
+      "controller": "createLead",
+      "roles": [],
+      "owner": "SYS-CRM",
+      "status": "compatibility-facade",
+      "file": "server/src/crm/crm-leads.controller.ts",
+      "line": 101
+    },
+    {
+      "id": "POST /crm/families/:familyId/members",
+      "verb": "POST",
+      "route": "/crm/families/:familyId/members",
+      "controller": "addFamilyMember",
       "roles": [],
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-contacts.controller.ts",
-      "line": 75
+      "line": 66
     },
     {
-      "id": "GET /crm/subscriptions",
+      "id": "GET /crm/expected-payments",
       "verb": "GET",
-      "route": "/crm/subscriptions",
-      "controller": "listSubscriptions",
+      "route": "/crm/expected-payments",
+      "controller": "listExpectedPayments",
       "roles": [],
       "owner": "SYS-COMMERCE",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-finance.controller.ts",
-      "line": 58
+      "line": 50
     },
     {
-      "id": "GET /crm/payments",
-      "verb": "GET",
-      "route": "/crm/payments",
-      "controller": "listPayments",
-      "roles": [],
-      "owner": "SYS-COMMERCE",
-      "status": "compatibility-facade",
-      "file": "server/src/crm/crm-finance.controller.ts",
-      "line": 42
-    },
-    {
-      "id": "GET /crm/homeworks",
-      "verb": "GET",
-      "route": "/crm/homeworks",
-      "controller": "listHomeworks",
+      "id": "DELETE /crm/groups/:id/students/:studentId",
+      "verb": "DELETE",
+      "route": "/crm/groups/:id/students/:studentId",
+      "controller": "removeGroupStudent",
       "roles": [],
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
-      "file": "server/src/crm/crm-engagement.controller.ts",
-      "line": 113
+      "file": "server/src/crm/crm-facilities.controller.ts",
+      "line": 150
     },
     {
       "id": "PATCH /crm/comments/:id/visibility",
@@ -3206,6 +3206,39 @@
       "line": 92
     },
     {
+      "id": "DELETE /crm/family-members/:memberId",
+      "verb": "DELETE",
+      "route": "/crm/family-members/:memberId",
+      "controller": "removeFamilyMember",
+      "roles": [],
+      "owner": "SYS-CRM",
+      "status": "compatibility-facade",
+      "file": "server/src/crm/crm-contacts.controller.ts",
+      "line": 84
+    },
+    {
+      "id": "GET /crm/homeworks",
+      "verb": "GET",
+      "route": "/crm/homeworks",
+      "controller": "listHomeworks",
+      "roles": [],
+      "owner": "SYS-CRM",
+      "status": "compatibility-facade",
+      "file": "server/src/crm/crm-engagement.controller.ts",
+      "line": 113
+    },
+    {
+      "id": "GET /crm/payments",
+      "verb": "GET",
+      "route": "/crm/payments",
+      "controller": "listPayments",
+      "roles": [],
+      "owner": "SYS-COMMERCE",
+      "status": "compatibility-facade",
+      "file": "server/src/crm/crm-finance.controller.ts",
+      "line": 42
+    },
+    {
       "id": "POST /crm/homeworks",
       "verb": "POST",
       "route": "/crm/homeworks",
@@ -3217,48 +3250,15 @@
       "line": 121
     },
     {
-      "id": "GET /crm/expected-payments",
-      "verb": "GET",
-      "route": "/crm/expected-payments",
-      "controller": "listExpectedPayments",
-      "roles": [],
-      "owner": "SYS-COMMERCE",
-      "status": "compatibility-facade",
-      "file": "server/src/crm/crm-finance.controller.ts",
-      "line": 50
-    },
-    {
-      "id": "PATCH /crm/homeworks/:id",
-      "verb": "PATCH",
-      "route": "/crm/homeworks/:id",
-      "controller": "updateHomework",
-      "roles": [],
-      "owner": "SYS-CRM",
-      "status": "compatibility-facade",
-      "file": "server/src/crm/crm-engagement.controller.ts",
-      "line": 129
-    },
-    {
-      "id": "POST /crm/homeworks/:id/attachments",
+      "id": "POST /crm/homeworks/:id/submit",
       "verb": "POST",
-      "route": "/crm/homeworks/:id/attachments",
-      "controller": "addHomeworkAttachment",
+      "route": "/crm/homeworks/:id/submit",
+      "controller": "submitHomework",
       "roles": [],
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-engagement.controller.ts",
-      "line": 146
-    },
-    {
-      "id": "DELETE /crm/groups/:id/students/:studentId",
-      "verb": "DELETE",
-      "route": "/crm/groups/:id/students/:studentId",
-      "controller": "removeGroupStudent",
-      "roles": [],
-      "owner": "SYS-CRM",
-      "status": "compatibility-facade",
-      "file": "server/src/crm/crm-facilities.controller.ts",
-      "line": 150
+      "line": 138
     },
     {
       "id": "POST /crm/groups/:id/students",
@@ -3415,15 +3415,26 @@
       "line": 39
     },
     {
-      "id": "POST /crm/homeworks/:id/submit",
+      "id": "POST /crm/homeworks/:id/attachments",
       "verb": "POST",
-      "route": "/crm/homeworks/:id/submit",
-      "controller": "submitHomework",
+      "route": "/crm/homeworks/:id/attachments",
+      "controller": "addHomeworkAttachment",
       "roles": [],
       "owner": "SYS-CRM",
       "status": "compatibility-facade",
       "file": "server/src/crm/crm-engagement.controller.ts",
-      "line": 138
+      "line": 146
+    },
+    {
+      "id": "PATCH /crm/homeworks/:id",
+      "verb": "PATCH",
+      "route": "/crm/homeworks/:id",
+      "controller": "updateHomework",
+      "roles": [],
+      "owner": "SYS-CRM",
+      "status": "compatibility-facade",
+      "file": "server/src/crm/crm-engagement.controller.ts",
+      "line": 129
     },
     {
       "id": "PATCH /settings/crm-custom-fields",
@@ -3740,6 +3751,15 @@
     {
       "kind": "policy-call",
       "receiver": "this.policy",
+      "call": "assertCanManageClientConfiguration",
+      "owner": "SYS-CRM",
+      "status": "policy-protected",
+      "file": "server/src/crm/clients/client-config.service.ts",
+      "line": 194
+    },
+    {
+      "kind": "policy-call",
+      "receiver": "this.policy",
       "call": "assertCanWriteCrm",
       "owner": "SYS-CRM",
       "status": "policy-protected",
@@ -3839,11 +3859,11 @@
     {
       "kind": "policy-call",
       "receiver": "this.policy",
-      "call": "assertCanManageClientConfiguration",
-      "owner": "SYS-CRM",
+      "call": "assertCanWriteCrm",
+      "owner": "SYS-COMMERCE",
       "status": "policy-protected",
-      "file": "server/src/crm/clients/client-config.service.ts",
-      "line": 194
+      "file": "server/src/crm/commerce/payment-reversal.service.ts",
+      "line": 114
     },
     {
       "kind": "policy-call",
@@ -3851,8 +3871,8 @@
       "call": "assertCanWriteCrm",
       "owner": "SYS-COMMERCE",
       "status": "policy-protected",
-      "file": "server/src/crm/commerce/payment-reversal.service.ts",
-      "line": 114
+      "file": "server/src/crm/commerce/subscription-issue.service.ts",
+      "line": 84
     },
     {
       "kind": "policy-call",
@@ -3956,20 +3976,20 @@
     {
       "kind": "policy-call",
       "receiver": "this.policy",
-      "call": "assertCanWriteCrm",
-      "owner": "SYS-COMMERCE",
-      "status": "policy-protected",
-      "file": "server/src/crm/commerce/subscription-issue.service.ts",
-      "line": 84
-    },
-    {
-      "kind": "policy-call",
-      "receiver": "this.policy",
       "call": "assertCanManageClientConfiguration",
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/clients/client-config.service.ts",
       "line": 151
+    },
+    {
+      "kind": "policy-call",
+      "receiver": "this.policy",
+      "call": "assertCanWriteCrm",
+      "owner": "SYS-SCHEDULE",
+      "status": "policy-protected",
+      "file": "server/src/crm/schedule/lesson-command.service.ts",
+      "line": 89
     },
     {
       "kind": "policy-call",
@@ -3987,7 +4007,16 @@
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/clients/client-config.service.ts",
-      "line": 84
+      "line": 52
+    },
+    {
+      "kind": "policy-call",
+      "receiver": "this.policy",
+      "call": "assertCanWriteCrm",
+      "owner": "SYS-SCHEDULE",
+      "status": "policy-protected",
+      "file": "server/src/crm/schedule.service.ts",
+      "line": 1780
     },
     {
       "kind": "policy-call",
@@ -4212,7 +4241,7 @@
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/clients/client-config.service.ts",
-      "line": 52
+      "line": 84
     },
     {
       "kind": "policy-call",
@@ -4220,8 +4249,8 @@
       "call": "assertCanWriteCrm",
       "owner": "SYS-SCHEDULE",
       "status": "policy-protected",
-      "file": "server/src/crm/schedule/lesson-command.service.ts",
-      "line": 89
+      "file": "server/src/crm/schedule.service.ts",
+      "line": 1635
     },
     {
       "kind": "policy-call",
@@ -4231,15 +4260,6 @@
       "status": "policy-protected",
       "file": "server/src/crm/schedule/lesson-command.service.ts",
       "line": 181
-    },
-    {
-      "kind": "policy-call",
-      "receiver": "this.policy",
-      "call": "assertCanWriteCrm",
-      "owner": "SYS-SCHEDULE",
-      "status": "policy-protected",
-      "file": "server/src/crm/schedule/lesson-series-command.service.ts",
-      "line": 58
     },
     {
       "kind": "policy-call",
@@ -4490,8 +4510,8 @@
       "call": "assertCanWriteCrm",
       "owner": "SYS-SCHEDULE",
       "status": "policy-protected",
-      "file": "server/src/crm/schedule.service.ts",
-      "line": 1780
+      "file": "server/src/crm/schedule/lesson-series-command.service.ts",
+      "line": 58
     },
     {
       "kind": "policy-call",
@@ -4748,11 +4768,11 @@
     {
       "kind": "policy-call",
       "receiver": "this.policy",
-      "call": "assertCanWriteCrm",
-      "owner": "SYS-SCHEDULE",
+      "call": "assertCanListProfiles",
+      "owner": "SYS-ACCESS",
       "status": "policy-protected",
-      "file": "server/src/crm/schedule.service.ts",
-      "line": 1635
+      "file": "server/src/profile/profile.service.ts",
+      "line": 514
     },
     {
       "kind": "policy-call",
@@ -4766,11 +4786,20 @@
     {
       "kind": "policy-call",
       "receiver": "this.policy",
-      "call": "assertCanWriteCrm",
+      "call": "assertCanReadOperationalData",
       "owner": "SYS-SCHEDULE",
       "status": "policy-protected",
       "file": "server/src/crm/schedule.service.ts",
-      "line": 1399
+      "line": 1346
+    },
+    {
+      "kind": "policy-call",
+      "receiver": "this.policy",
+      "call": "assertCanWriteCrm",
+      "owner": "SYS-CRM",
+      "status": "policy-protected",
+      "file": "server/src/crm/crm.service.ts",
+      "line": 829
     },
     {
       "kind": "policy-call",
@@ -4991,33 +5020,6 @@
     {
       "kind": "policy-call",
       "receiver": "this.policy",
-      "call": "assertCanReadSchoolFinance",
-      "owner": "SYS-COMMERCE",
-      "status": "policy-protected",
-      "file": "server/src/crm/finance.service.ts",
-      "line": 786
-    },
-    {
-      "kind": "policy-call",
-      "receiver": "this.policy",
-      "call": "assertCanWriteCrm",
-      "owner": "SYS-CRM",
-      "status": "policy-protected",
-      "file": "server/src/crm/crm.service.ts",
-      "line": 829
-    },
-    {
-      "kind": "policy-call",
-      "receiver": "this.policy",
-      "call": "assertCanReadSchoolFinance",
-      "owner": "SYS-COMMERCE",
-      "status": "policy-protected",
-      "file": "server/src/crm/finance.service.ts",
-      "line": 823
-    },
-    {
-      "kind": "policy-call",
-      "receiver": "this.policy",
       "call": "assertCanWriteCrm",
       "owner": "SYS-CRM",
       "status": "policy-protected",
@@ -5027,11 +5029,29 @@
     {
       "kind": "policy-call",
       "receiver": "this.policy",
+      "call": "assertCanReadSchoolFinance",
+      "owner": "SYS-COMMERCE",
+      "status": "policy-protected",
+      "file": "server/src/crm/finance.service.ts",
+      "line": 786
+    },
+    {
+      "kind": "policy-call",
+      "receiver": "this.policy",
       "call": "assertCanReadStudent",
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/crm.service.ts",
-      "line": 488
+      "line": 586
+    },
+    {
+      "kind": "policy-call",
+      "receiver": "this.policy",
+      "call": "assertCanReadStudent",
+      "owner": "SYS-CRM",
+      "status": "policy-protected",
+      "file": "server/src/crm/crm.service.ts",
+      "line": 478
     },
     {
       "kind": "policy-call",
@@ -5216,11 +5236,20 @@
     {
       "kind": "policy-call",
       "receiver": "this.policy",
+      "call": "assertCanWriteCrm",
+      "owner": "SYS-CRM",
+      "status": "policy-protected",
+      "file": "server/src/crm/crm-configuration.service.ts",
+      "line": 213
+    },
+    {
+      "kind": "policy-call",
+      "receiver": "this.policy",
       "call": "assertCanManageSystemSettings",
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/crm-configuration.service.ts",
-      "line": 464
+      "line": 484
     },
     {
       "kind": "policy-call",
@@ -5256,25 +5285,16 @@
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/crm.service.ts",
-      "line": 478
+      "line": 488
     },
     {
       "kind": "policy-call",
       "receiver": "this.policy",
-      "call": "assertCanReadStudent",
-      "owner": "SYS-CRM",
+      "call": "assertCanWriteCrm",
+      "owner": "SYS-SCHEDULE",
       "status": "policy-protected",
-      "file": "server/src/crm/crm.service.ts",
-      "line": 586
-    },
-    {
-      "kind": "policy-call",
-      "receiver": "this.policy",
-      "call": "assertCanListProfiles",
-      "owner": "SYS-ACCESS",
-      "status": "policy-protected",
-      "file": "server/src/profile/profile.service.ts",
-      "line": 514
+      "file": "server/src/crm/schedule.service.ts",
+      "line": 1399
     },
     {
       "kind": "policy-call",
@@ -5283,7 +5303,7 @@
       "owner": "SYS-COMMERCE",
       "status": "policy-protected",
       "file": "server/src/crm/finance.service.ts",
-      "line": 862
+      "line": 823
     },
     {
       "kind": "policy-call",
@@ -5292,7 +5312,16 @@
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/groups.service.ts",
-      "line": 109
+      "line": 71
+    },
+    {
+      "kind": "policy-call",
+      "receiver": "this.policy",
+      "call": "assertCanReadOperationalData",
+      "owner": "SYS-CRM",
+      "status": "policy-protected",
+      "file": "server/src/crm/phone-review.service.ts",
+      "line": 27
     },
     {
       "kind": "policy-call",
@@ -5514,33 +5543,6 @@
       "kind": "policy-call",
       "receiver": "this.policy",
       "call": "assertCanReadOperationalData",
-      "owner": "SYS-SCHEDULE",
-      "status": "policy-protected",
-      "file": "server/src/crm/schedule.service.ts",
-      "line": 1346
-    },
-    {
-      "kind": "policy-call",
-      "receiver": "this.policy",
-      "call": "assertCanReadOperationalData",
-      "owner": "SYS-CRM",
-      "status": "policy-protected",
-      "file": "server/src/crm/phone-review.service.ts",
-      "line": 27
-    },
-    {
-      "kind": "policy-call",
-      "receiver": "this.policy",
-      "call": "assertCanReadOperationalData",
-      "owner": "SYS-CRM",
-      "status": "policy-protected",
-      "file": "server/src/crm/groups.service.ts",
-      "line": 71
-    },
-    {
-      "kind": "policy-call",
-      "receiver": "this.policy",
-      "call": "assertCanReadOperationalData",
       "owner": "SYS-CRM",
       "status": "policy-protected",
       "file": "server/src/crm/phone-review.service.ts",
@@ -5549,11 +5551,38 @@
     {
       "kind": "policy-call",
       "receiver": "this.policy",
+      "call": "assertCanReadSchoolFinance",
+      "owner": "SYS-COMMERCE",
+      "status": "policy-protected",
+      "file": "server/src/crm/finance.service.ts",
+      "line": 862
+    },
+    {
+      "kind": "policy-call",
+      "receiver": "this.policy",
       "call": "assertCanReadPayroll",
       "owner": "SYS-COMMERCE",
       "status": "policy-protected",
       "file": "server/src/crm/payroll.service.ts",
-      "line": 380
+      "line": 419
+    },
+    {
+      "kind": "policy-call",
+      "receiver": "this.policy",
+      "call": "assertCanReadPayroll",
+      "owner": "SYS-COMMERCE",
+      "status": "policy-protected",
+      "file": "server/src/crm/payroll.service.ts",
+      "line": 332
+    },
+    {
+      "kind": "policy-call",
+      "receiver": "this.policy",
+      "call": "assertCanReadOperationalData",
+      "owner": "SYS-CRM",
+      "status": "policy-protected",
+      "file": "server/src/crm/groups.service.ts",
+      "line": 109
     },
     {
       "kind": "policy-call",
@@ -5778,16 +5807,7 @@
       "owner": "SYS-COMMERCE",
       "status": "policy-protected",
       "file": "server/src/crm/payroll.service.ts",
-      "line": 332
-    },
-    {
-      "kind": "policy-call",
-      "receiver": "this.policy",
-      "call": "assertCanReadPayroll",
-      "owner": "SYS-COMMERCE",
-      "status": "policy-protected",
-      "file": "server/src/crm/payroll.service.ts",
-      "line": 419
+      "line": 380
     },
     {
       "kind": "policy-call",
@@ -15901,7 +15921,7 @@
       "owner": "SYS-APP",
       "status": "legacy-review-required",
       "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 565
+      "line": 566
     },
     {
       "kind": "role-check",
@@ -16005,7 +16025,7 @@
       "owner": "SYS-APP",
       "status": "legacy-review-required",
       "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 560
+      "line": 561
     },
     {
       "kind": "role-check",
@@ -16013,7 +16033,7 @@
       "owner": "SYS-APP",
       "status": "legacy-review-required",
       "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 563
+      "line": 564
     },
     {
       "kind": "role-check",
@@ -16911,7 +16931,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/crm/presentation/client_card/student_schedule_section.dart",
-      "line": 573
+      "line": 578
     },
     {
       "kind": "navigation-source",
@@ -16919,7 +16939,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/crm/presentation/client_card/student_schedule_section.dart",
-      "line": 569
+      "line": 574
     },
     {
       "kind": "navigation-source",
@@ -16943,7 +16963,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 296
+      "line": 297
     },
     {
       "kind": "navigation-source",
@@ -16951,7 +16971,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 279
+      "line": 280
     },
     {
       "kind": "navigation-source",
@@ -16959,7 +16979,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 274
+      "line": 275
     },
     {
       "kind": "navigation-source",
@@ -16967,7 +16987,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 37
+      "line": 38
     },
     {
       "kind": "navigation-source",
@@ -18795,31 +18815,7 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx, false),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/manage_entities_facilities.dart",
-      "line": 321
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(context, true),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
-      "line": 253
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(context, false),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
-      "line": 248
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "if (surfaceContext.mounted) Navigator.pop(surfaceContext);",
+      "expression": "Navigator.pop(surfaceContext);",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
@@ -18831,7 +18827,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
-      "line": 215
+      "line": 217
     },
     {
       "kind": "navigation-source",
@@ -18839,7 +18835,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
-      "line": 184
+      "line": 185
     },
     {
       "kind": "navigation-source",
@@ -18848,6 +18844,22 @@
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
       "line": 4
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: _busy ? null : () => Navigator.pop(context, false),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/lesson_decision_flow.dart",
+      "line": 482
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "if (mounted) Navigator.pop(context, true);",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/lesson_decision_flow.dart",
+      "line": 360
     },
     {
       "kind": "navigation-source",
@@ -18915,6 +18927,30 @@
     },
     {
       "kind": "navigation-source",
+      "expression": "if (mounted) Navigator.pop(context, true);",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/create_teacher_dialog.dart",
+      "line": 61
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "Navigator.pop(surfaceContext);",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
+      "line": 237
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(ctx, false),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/manage_entities_facilities.dart",
+      "line": 321
+    },
+    {
+      "kind": "navigation-source",
       "expression": "onPressed: () => Navigator.pop(ctx, true),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
@@ -18931,27 +18967,11 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "Navigator.pop(context, false);",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/manage_entities_facilities.dart",
-      "line": 542
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: _saving ? null : () => Navigator.pop(context),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/manage_entities_facilities.dart",
-      "line": 718
-    },
-    {
-      "kind": "navigation-source",
       "expression": "ref.listen(scheduleNavigationProvider, (prev, next) {",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/schedule_widget.dart",
-      "line": 360
+      "line": 359
     },
     {
       "kind": "navigation-source",
@@ -18959,7 +18979,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/schedule_widget.dart",
-      "line": 192
+      "line": 191
     },
     {
       "kind": "navigation-source",
@@ -18967,23 +18987,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/schedule_widget.dart",
-      "line": 9
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
-      "line": 402
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
-      "line": 369
+      "line": 8
     },
     {
       "kind": "navigation-source",
@@ -19003,14 +19007,6 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "if (mounted) Navigator.pop(context, true);",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/create_teacher_dialog.dart",
-      "line": 61
-    },
-    {
-      "kind": "navigation-source",
       "expression": "onPressed: () => Navigator.pop(ctx, selected),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
@@ -19019,19 +19015,27 @@
     },
     {
       "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(ctx),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/schedule_timezone_dialog.dart",
+      "line": 53
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: _saving ? null : () => Navigator.pop(context),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/create_room_dialog.dart",
+      "line": 194
+    },
+    {
+      "kind": "navigation-source",
       "expression": "onPressed: () => Navigator.of(ctx).pop(value),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/schedule_search_dialog.dart",
       "line": 35
-    },
-    {
-      "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.of(ctx).pop(),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/schedule_search_dialog.dart",
-      "line": 31
     },
     {
       "kind": "navigation-source",
@@ -19075,19 +19079,27 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/schedule_timezone_dialog.dart",
-      "line": 53
-    },
-    {
-      "kind": "navigation-source",
       "expression": "onPressed: _saving ? null : () => Navigator.pop(context),",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/create_room_dialog.dart",
-      "line": 194
+      "file": "lib/features/admin/presentation/widgets/manage_entities_facilities.dart",
+      "line": 718
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "Navigator.pop(context, false);",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/manage_entities_facilities.dart",
+      "line": 542
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.of(ctx).pop(),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/schedule_search_dialog.dart",
+      "line": 31
     },
     {
       "kind": "navigation-source",
@@ -19104,6 +19116,14 @@
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/create_room_dialog.dart",
       "line": 114
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "onPressed: () => Navigator.pop(ctx, false),",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/create_room_dialog.dart",
+      "line": 110
     },
     {
       "kind": "navigation-source",
@@ -19267,14 +19287,6 @@
     },
     {
       "kind": "navigation-source",
-      "expression": "onPressed: () => Navigator.pop(ctx, false),",
-      "owner": "SYS-APP",
-      "status": "workspace-migration-pending",
-      "file": "lib/features/admin/presentation/widgets/create_room_dialog.dart",
-      "line": 110
-    },
-    {
-      "kind": "navigation-source",
       "expression": "if (mounted) Navigator.pop(context, true);",
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
@@ -19287,7 +19299,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 866
+      "line": 879
     },
     {
       "kind": "navigation-source",
@@ -19295,7 +19307,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 556
+      "line": 569
     },
     {
       "kind": "navigation-source",
@@ -19303,7 +19315,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 555
+      "line": 568
     },
     {
       "kind": "navigation-source",
@@ -19311,7 +19323,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 553
+      "line": 566
     },
     {
       "kind": "navigation-source",
@@ -19319,7 +19331,15 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 515
+      "line": 528
+    },
+    {
+      "kind": "navigation-source",
+      "expression": "Navigator.pop(context, true);",
+      "owner": "SYS-APP",
+      "status": "workspace-migration-pending",
+      "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
+      "line": 417
     },
     {
       "kind": "navigation-source",
@@ -19335,7 +19355,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 403
+      "line": 394
     },
     {
       "kind": "navigation-source",
@@ -19343,7 +19363,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 83
+      "line": 85
     },
     {
       "kind": "navigation-source",
@@ -19399,7 +19419,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 280
+      "line": 282
     },
     {
       "kind": "navigation-source",
@@ -19421,6 +19441,38 @@
     },
     {
       "kind": "backend-route",
+      "expression": "POST /crm/lessons/:id/cancel/preview",
+      "owner": "SYS-SCHEDULE",
+      "status": "legacy-unified-service-pending",
+      "file": "server/src/crm/crm-schedule.controller.ts",
+      "line": 240
+    },
+    {
+      "kind": "backend-route",
+      "expression": "POST /crm/lessons/:id/cancel",
+      "owner": "SYS-SCHEDULE",
+      "status": "legacy-unified-service-pending",
+      "file": "server/src/crm/crm-schedule.controller.ts",
+      "line": 250
+    },
+    {
+      "kind": "backend-route",
+      "expression": "POST /crm/lessons/:id/settle/preview",
+      "owner": "SYS-SCHEDULE",
+      "status": "legacy-unified-service-pending",
+      "file": "server/src/crm/crm-schedule.controller.ts",
+      "line": 265
+    },
+    {
+      "kind": "backend-route",
+      "expression": "POST /crm/lessons/:id/settle",
+      "owner": "SYS-SCHEDULE",
+      "status": "legacy-unified-service-pending",
+      "file": "server/src/crm/crm-schedule.controller.ts",
+      "line": 275
+    },
+    {
+      "kind": "backend-route",
       "expression": "DELETE /crm/lessons/:id",
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
@@ -19437,19 +19489,19 @@
     },
     {
       "kind": "backend-route",
+      "expression": "POST /crm/lessons/:id/reschedule",
+      "owner": "SYS-SCHEDULE",
+      "status": "legacy-unified-service-pending",
+      "file": "server/src/crm/crm-schedule.controller.ts",
+      "line": 225
+    },
+    {
+      "kind": "backend-route",
       "expression": "PUT /crm/schedule-reference/branches/:branchId/hours",
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "server/src/crm/schedule/availability.controller.ts",
       "line": 39
-    },
-    {
-      "kind": "backend-route",
-      "expression": "PUT /crm/schedule-reference/teachers/:teacherId/branches",
-      "owner": "SYS-SCHEDULE",
-      "status": "legacy-unified-service-pending",
-      "file": "server/src/crm/schedule/availability.controller.ts",
-      "line": 49
     },
     {
       "kind": "backend-route",
@@ -19469,27 +19521,11 @@
     },
     {
       "kind": "flutter-call",
-      "expression": "Future<Map<String, dynamic>> updateLesson(",
+      "expression": "Future<Map<String, dynamic>> createScheduleSeries({",
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "lib/core/services/magic_crm_service_schedule.dart",
-      "line": 375
-    },
-    {
-      "kind": "backend-route",
-      "expression": "POST /crm/lessons/:id/settle",
-      "owner": "SYS-SCHEDULE",
-      "status": "legacy-unified-service-pending",
-      "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 275
-    },
-    {
-      "kind": "flutter-call",
-      "expression": "Future<void> deleteLesson(String id) async {",
-      "owner": "SYS-SCHEDULE",
-      "status": "legacy-unified-service-pending",
-      "file": "lib/core/services/magic_crm_service_schedule.dart",
-      "line": 408
+      "line": 575
     },
     {
       "kind": "flutter-call",
@@ -19497,87 +19533,55 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "lib/core/services/magic_crm_service_schedule.dart",
-      "line": 646
+      "line": 609
     },
     {
       "kind": "flutter-call",
-      "expression": ".updateLesson(",
+      "expression": "onCancel: () => _cancelLesson(lesson),",
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
-      "line": 258
+      "line": 575
     },
     {
       "kind": "flutter-call",
-      "expression": ".updateLesson(",
+      "expression": "Future<void> _cancelLesson(Map<String, dynamic> lesson) async {",
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
-      "line": 445
-    },
-    {
-      "kind": "flutter-call",
-      "expression": ".updateLesson(",
-      "owner": "SYS-SCHEDULE",
-      "status": "legacy-unified-service-pending",
-      "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
-      "line": 513
-    },
-    {
-      "kind": "flutter-call",
-      "expression": "onDelete: () => _deleteLesson(lessonId!),",
-      "owner": "SYS-SCHEDULE",
-      "status": "legacy-unified-service-pending",
-      "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
-      "line": 870
-    },
-    {
-      "kind": "flutter-call",
-      "expression": "Future<void> _deleteLesson(String lessonId) async {",
-      "owner": "SYS-SCHEDULE",
-      "status": "legacy-unified-service-pending",
-      "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
-      "line": 880
-    },
-    {
-      "kind": "flutter-call",
-      "expression": "await ref.read(magicCrmServiceProvider).deleteLesson(lessonId);",
-      "owner": "SYS-SCHEDULE",
-      "status": "legacy-unified-service-pending",
-      "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
-      "line": 884
-    },
-    {
-      "kind": "flutter-call",
-      "expression": "Future<Map<String, dynamic>> createScheduleSeries({",
-      "owner": "SYS-SCHEDULE",
-      "status": "legacy-unified-service-pending",
-      "file": "lib/core/services/magic_crm_service_schedule.dart",
-      "line": 612
+      "line": 589
     },
     {
       "kind": "backend-route",
-      "expression": "POST /crm/lessons/:id/settle/preview",
+      "expression": "PUT /crm/schedule-reference/teachers/:teacherId/branches",
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
-      "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 265
+      "file": "server/src/crm/schedule/availability.controller.ts",
+      "line": 49
+    },
+    {
+      "kind": "flutter-call",
+      "expression": "await crm.updateScheduleSeries(",
+      "owner": "SYS-SCHEDULE",
+      "status": "legacy-unified-service-pending",
+      "file": "lib/features/crm/presentation/client_card/student_schedule_section.dart",
+      "line": 504
     },
     {
       "kind": "backend-route",
-      "expression": "POST /crm/lessons/:id/cancel",
+      "expression": "POST /crm/lessons/:id/reschedule/preview",
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 250
+      "line": 215
     },
     {
       "kind": "backend-route",
-      "expression": "POST /crm/lessons/:id/cancel/preview",
+      "expression": "POST /crm/lessons/transitions/bulk/preview",
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 240
+      "line": 192
     },
     {
       "kind": "backend-route",
@@ -19586,6 +19590,14 @@
       "status": "legacy-unified-service-pending",
       "file": "server/src/analytics/analytics.controller.ts",
       "line": 58
+    },
+    {
+      "kind": "backend-route",
+      "expression": "GET /crm/configuration/lesson-decisions",
+      "owner": "SYS-SCHEDULE",
+      "status": "legacy-unified-service-pending",
+      "file": "server/src/crm/crm-configuration.controller.ts",
+      "line": 34
     },
     {
       "kind": "backend-route",
@@ -19621,19 +19633,19 @@
     },
     {
       "kind": "backend-route",
+      "expression": "POST /crm/lessons/transitions/bulk",
+      "owner": "SYS-SCHEDULE",
+      "status": "legacy-unified-service-pending",
+      "file": "server/src/crm/crm-schedule.controller.ts",
+      "line": 201
+    },
+    {
+      "kind": "backend-route",
       "expression": "GET /crm/lessons",
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "server/src/crm/crm-schedule.controller.ts",
       "line": 108
-    },
-    {
-      "kind": "backend-route",
-      "expression": "GET /crm/schedule/matrix",
-      "owner": "SYS-SCHEDULE",
-      "status": "legacy-unified-service-pending",
-      "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 116
     },
     {
       "kind": "backend-route",
@@ -19685,43 +19697,11 @@
     },
     {
       "kind": "backend-route",
-      "expression": "POST /crm/lessons/transitions/bulk/preview",
+      "expression": "GET /crm/schedule/matrix",
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 192
-    },
-    {
-      "kind": "backend-route",
-      "expression": "POST /crm/lessons/transitions/bulk",
-      "owner": "SYS-SCHEDULE",
-      "status": "legacy-unified-service-pending",
-      "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 201
-    },
-    {
-      "kind": "backend-route",
-      "expression": "POST /crm/lessons/:id/reschedule/preview",
-      "owner": "SYS-SCHEDULE",
-      "status": "legacy-unified-service-pending",
-      "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 215
-    },
-    {
-      "kind": "backend-route",
-      "expression": "POST /crm/lessons/:id/reschedule",
-      "owner": "SYS-SCHEDULE",
-      "status": "legacy-unified-service-pending",
-      "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 225
-    },
-    {
-      "kind": "flutter-call",
-      "expression": "await crm.updateScheduleSeries(",
-      "owner": "SYS-SCHEDULE",
-      "status": "legacy-unified-service-pending",
-      "file": "lib/features/crm/presentation/client_card/student_schedule_section.dart",
-      "line": 499
+      "line": 116
     },
     {
       "kind": "flutter-call",
@@ -19729,7 +19709,7 @@
       "owner": "SYS-SCHEDULE",
       "status": "legacy-unified-service-pending",
       "file": "lib/features/crm/presentation/client_card/student_schedule_section.dart",
-      "line": 515
+      "line": 520
     }
   ],
   "attendance_mutations": [],

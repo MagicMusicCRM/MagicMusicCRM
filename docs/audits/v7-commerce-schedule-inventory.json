@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "task": "T1.1.1",
-  "source_digest": "2206fc4d10efcc92bee3bf4cb2acb2c4ef3f9c0562a4e607dfa42b43afd7e0ea",
+  "source_digest": "c9e1a17e69986c5aca48789c08580ce37e03a132ff9506cee42178f071358417",
   "summary": {
     "matched_source_files": 49,
     "finance_callsites": 243,
@@ -18,7 +18,7 @@
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 166
+      "line": 175
     },
     {
       "kind": "wire",
@@ -634,7 +634,7 @@
       "operation": "call",
       "owner": "SYS-APP-EXPERIENCE",
       "file": "lib/core/services/magic_crm_service_schedule.dart",
-      "line": 530
+      "line": 493
     },
     {
       "kind": "wire",
@@ -682,7 +682,7 @@
       "operation": "call",
       "owner": "SYS-CRM-WORKSPACE",
       "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 29
+      "line": 30
     },
     {
       "kind": "wire",
@@ -690,7 +690,7 @@
       "operation": "call",
       "owner": "SYS-CRM-WORKSPACE",
       "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 30
+      "line": 31
     },
     {
       "kind": "wire",
@@ -1242,7 +1242,7 @@
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 167
+      "line": 176
     },
     {
       "kind": "wire",
@@ -1250,7 +1250,7 @@
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 194
+      "line": 203
     },
     {
       "kind": "wire",
@@ -1258,7 +1258,7 @@
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 195
+      "line": 204
     },
     {
       "kind": "wire",
@@ -1266,7 +1266,7 @@
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 221
+      "line": 230
     },
     {
       "kind": "wire",
@@ -1274,7 +1274,7 @@
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 222
+      "line": 231
     },
     {
       "kind": "wire",
@@ -1282,7 +1282,7 @@
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 235
+      "line": 244
     },
     {
       "kind": "wire",
@@ -1290,7 +1290,7 @@
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 236
+      "line": 245
     },
     {
       "kind": "wire",
@@ -1298,7 +1298,7 @@
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 237
+      "line": 246
     },
     {
       "kind": "wire",
@@ -1306,7 +1306,7 @@
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 239
+      "line": 248
     },
     {
       "kind": "sql-table",

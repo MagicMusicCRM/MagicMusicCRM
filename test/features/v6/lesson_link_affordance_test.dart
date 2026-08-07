@@ -79,7 +79,7 @@ void main() {
                       conflicts: const [],
                       lessonId: 'lesson-1',
                       onEdit: () {},
-                      onDelete: () async {},
+                      onCancel: () async {},
                     ),
                     child: const Text('Открыть занятие'),
                   ),

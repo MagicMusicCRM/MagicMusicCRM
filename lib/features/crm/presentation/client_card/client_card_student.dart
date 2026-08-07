@@ -102,6 +102,7 @@ extension _ClientCardStudent on _ClientCardState {
             )['preferredSchedule']?.toString(),
             canWrite: canWriteSchedule,
             onChanged: _fetchStudentData,
+            onOpenLesson: _openClientTrayLesson,
           ),
           const SizedBox(height: AppSpace.xl),
           if (!canReadSchedule)
@@ -137,6 +138,11 @@ extension _ClientCardStudent on _ClientCardState {
         ],
       );
     });
+  }
+
+  Future<void> _openClientTrayLesson(Map<String, dynamic> lesson) async {
+    final changed = await CreateLessonDialog.show(context, lesson: lesson);
+    if (changed == true && mounted) await _fetchStudentData();
   }
 
   // ── Student tab: Оплаты ──────────────────────────────────────────────────

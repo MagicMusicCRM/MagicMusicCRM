@@ -13,6 +13,8 @@ import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_conflicts_api.dart';
 import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
 
+import 'lesson_decision_flow.dart';
+
 /// Unified v4 create/edit form.
 ///
 /// A lesson always points at exactly one typed ClientRef. Trial is an
@@ -339,7 +341,9 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     final chargeValue = _parseAmount(_clientChargeController.text);
     final compensationValue = _parseAmount(_teacherCompensationController.text);
     final missingSubscription =
-        _clientChargeType == 'subscription' && _selectedSubscriptionId == null;
+        !_isEdit &&
+        _clientChargeType == 'subscription' &&
+        _selectedSubscriptionId == null;
     final version = (widget.lesson?['version'] as num?)?.toInt();
 
     if (clientId == null ||
@@ -347,8 +351,8 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         _selectedTeacherId == null ||
         _selectedBranchId == null ||
         _selectedRoomId == null ||
-        chargeValue == null ||
-        compensationValue == null ||
+        (!_isEdit && chargeValue == null) ||
+        (!_isEdit && compensationValue == null) ||
         missingSubscription ||
         (_isEdit && version == null)) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -372,26 +376,36 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         _selectedTime.hour - 3,
         _selectedTime.minute,
       );
+      final payload = _lessonPayload(
+        scheduledAt: startsAt.toIso8601String(),
+        chargeValue: chargeValue ?? 0,
+        compensationValue: compensationValue ?? 0,
+      );
+      final api = ref.read(magicApiClientProvider);
+      if (_isEdit) {
+        final changed = await showLessonDecisionFlow(
+          context,
+          api: api,
+          operation: LessonDecisionOperation.reschedule,
+          lesson: widget.lesson!,
+          successor: payload,
+        );
+        if (changed != true || !mounted) return;
+        Navigator.pop(context, true);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_savedMessage)));
+        return;
+      }
+
       final canSave = await _previewConstraintsBeforeSave(
         startsAt,
         clientType,
         clientId,
       );
       if (!canSave || !mounted) return;
-
-      final payload = _lessonPayload(
-        scheduledAt: startsAt.toIso8601String(),
-        chargeValue: chargeValue,
-        compensationValue: compensationValue,
-        expectedVersion: version,
-      );
-      final api = ref.read(magicApiClientProvider);
       try {
-        if (_isEdit) {
-          await api.updateLessonRaw(widget.lesson!['id'].toString(), payload);
-        } else {
-          await api.createLessonRaw(payload);
-        }
+        await api.createLessonRaw(payload);
       } on MagicApiException catch (error) {
         final violations = lessonConstraintViolations(error);
         if (violations == null || violations.isEmpty) rethrow;
@@ -424,7 +438,6 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     required String scheduledAt,
     required num chargeValue,
     required num compensationValue,
-    required int? expectedVersion,
   }) {
     final mutable = <String, dynamic>{
       'teacherId': _selectedTeacherId,
@@ -434,7 +447,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
       'durationMinutes': _durationMinutes,
     };
     if (_isEdit) {
-      return {...mutable, 'expectedVersion': expectedVersion};
+      return mutable;
     }
     return {
       ...mutable,

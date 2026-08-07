@@ -266,7 +266,7 @@ graph TD
   - **Зависимости**: T3.1.3, T1.1.1.
   - **Приоритет**: P0.
 
-- [ ] **T3.1.5** [REQ-SCHEDULE-101]: Подключить единый Flutter LessonDecision flow
+- [x] **T3.1.5** [REQ-SCHEDULE-101]: Подключить единый Flutter LessonDecision flow
   - **Описание**: Один controller/adaptive form для drag/editor/details/client tray, rich preview и non-color markers; удалить updateLesson для protected fields.
   - **Входные данные**: T3.1.4, [`schedule_v7.md` §9](04_SYSTEM_DESIGN/schedule_v7.md).
   - **Выходные данные**: Flutter models/service/controller/surfaces/callsite migration.

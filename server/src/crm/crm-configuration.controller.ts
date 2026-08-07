@@ -31,6 +31,14 @@ export class CrmConfigurationController {
     return this.configuration.getEffective(actor, query.branchId);
   }
 
+  @Get("lesson-decisions")
+  getLessonDecisionCatalog(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: CrmConfigurationQuery,
+  ) {
+    return this.configuration.getLessonDecisionCatalog(actor, query.branchId);
+  }
+
   @Get("draft")
   getDraft(
     @CurrentActor() actor: ActorContext,

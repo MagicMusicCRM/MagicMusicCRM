@@ -372,43 +372,6 @@ extension MagicCrmSchedule on MagicCrmService {
     return updated is num ? updated.toInt() : 0;
   }
 
-  Future<Map<String, dynamic>> updateLesson(
-    String id, {
-    required int expectedVersion,
-    String? studentId,
-    String? groupId,
-    String? teacherId,
-    String? branchId,
-    String? roomId,
-    String? scheduledAt,
-    int? durationMinutes,
-    bool? isTrial,
-    String? notes,
-    num? teacherRate,
-  }) async {
-    final data = <String, dynamic>{'expectedVersion': expectedVersion};
-    if (studentId != null) data['studentId'] = studentId;
-    if (groupId != null) data['groupId'] = groupId;
-    if (teacherId != null) data['teacherId'] = teacherId;
-    if (branchId != null) data['branchId'] = branchId;
-    if (roomId != null) data['roomId'] = roomId;
-    if (scheduledAt != null) data['scheduledAt'] = scheduledAt;
-    if (durationMinutes != null) data['durationMinutes'] = durationMinutes;
-    if (isTrial != null) data['isTrial'] = isTrial;
-    if (notes != null) data['notes'] = notes.trim();
-    if (teacherRate != null) data['teacherRate'] = teacherRate;
-
-    final response = await _api.patch<Map<String, dynamic>>(
-      '/crm/lessons/$id',
-      data: data,
-    );
-    return _legacyLesson(response);
-  }
-
-  Future<void> deleteLesson(String id) async {
-    await _api.delete<Map<String, dynamic>>('/crm/lessons/$id');
-  }
-
   Future<List<Map<String, dynamic>>> listTimeline({
     required String entityType,
     required String entityId,

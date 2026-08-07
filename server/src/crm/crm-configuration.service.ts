@@ -209,6 +209,26 @@ export class CrmConfigurationService {
     };
   }
 
+  async getLessonDecisionCatalog(actor: ActorContext, branchId?: string) {
+    this.policy.assertCanWriteCrm(actor);
+    if (actor.role === "manager") {
+      await this.assertScope(actor, branchId);
+    } else if (branchId) {
+      await this.assertBranch(this.database, branchId);
+    }
+    const effective = await this.resolveEffective(this.database, branchId);
+    return {
+      branchId: branchId ?? null,
+      settlementTypes: effective.snapshot.lessonSettlementTypes.filter(
+        (type) => type.active,
+      ),
+      teacherCompensationRules:
+        effective.snapshot.teacherCompensationRules.filter(
+          (rule) => rule.active,
+        ),
+    };
+  }
+
   async getDraft(actor: ActorContext, branchId?: string) {
     await this.assertScope(actor, branchId);
     const result = await this.database.query<{

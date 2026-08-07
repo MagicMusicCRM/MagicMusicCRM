@@ -117,6 +117,15 @@ export function resolveCapabilityRoutePolicy(
     );
   }
 
+  if (read && path === "/crm/configuration/lesson-decisions") {
+    return policy(
+      "schedule.lesson.write",
+      "branch",
+      staffRoles,
+      "Read-only effective lesson decision catalog for schedule mutations",
+    );
+  }
+
   if (path.startsWith("/crm/configuration")) {
     const capabilityKey = read
       ? "config.crm.read"

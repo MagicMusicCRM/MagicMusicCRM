@@ -30,13 +30,14 @@ void main() {
     );
   });
 
-  testWidgets('lesson quick view expands and confirmation stays concise', (
+  testWidgets('lesson quick view exposes unified lifecycle actions', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    var deleted = 0;
+    var cancelled = 0;
+    var settled = 0;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -52,7 +53,8 @@ void main() {
                 conflicts: const [],
                 lessonId: 'lesson-1',
                 onEdit: () {},
-                onDelete: () async => deleted++,
+                onCancel: () async => cancelled++,
+                onSettle: () async => settled++,
               ),
               child: const Text('Открыть занятие'),
             ),
@@ -67,14 +69,13 @@ void main() {
     expect(find.text('Развернуть'), findsOneWidget);
     expect(find.text('Анна Смирнова'), findsNWidgets(2));
 
-    await tester.tap(find.text('Удалить занятие'));
+    expect(find.text('Зафиксировать результат'), findsOneWidget);
+    expect(find.text('Перенести или изменить'), findsOneWidget);
+    await tester.tap(find.text('Отменить занятие'));
     await tester.pumpAndSettle();
-    expect(find.byType(AlertDialog), findsOneWidget);
-    expect(find.text('Удалить занятие?'), findsOneWidget);
-    await tester.tap(find.text('Оставить'));
-    await tester.pumpAndSettle();
-    expect(deleted, 0);
-    expect(find.byKey(const ValueKey('magic-sheet-mobile')), findsOneWidget);
+    expect(cancelled, 1);
+    expect(settled, 0);
+    expect(find.byKey(const ValueKey('magic-sheet-mobile')), findsNothing);
   });
 
   testWidgets('selection uses sheet on compact and drawer on desktop', (

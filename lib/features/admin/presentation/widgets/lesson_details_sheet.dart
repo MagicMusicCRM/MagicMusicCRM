@@ -134,7 +134,7 @@ Widget _referenceRow(
 }
 
 /// Lesson details bottom sheet: student/teacher/room/time/status + conflicts,
-/// with read-only lifecycle state plus Edit / Delete actions.
+/// with read-only lifecycle state plus unified edit/cancel/settle actions.
 /// Extracted from _ScheduleWidgetState._showLessonDetails — presentation only,
 /// the caller precomputes the display values and supplies the actions.
 Future<void> showLessonDetailsSheet(
@@ -150,7 +150,8 @@ Future<void> showLessonDetailsSheet(
   required List<String> conflicts,
   required String? lessonId,
   required VoidCallback onEdit,
-  required Future<void> Function() onDelete,
+  required Future<void> Function() onCancel,
+  Future<void> Function()? onSettle,
 }) {
   return showMagicAdaptiveSurface<void>(
     context,
@@ -210,49 +211,37 @@ Future<void> showLessonDetailsSheet(
         ],
         if (lessonId != null) ...[
           const SizedBox(height: AppSpace.lg),
-          FilledButton.icon(
+          if (onSettle != null) ...[
+            FilledButton.icon(
+              onPressed: () async {
+                Navigator.pop(surfaceContext);
+                await onSettle();
+              },
+              icon: const Icon(Icons.fact_check_outlined, size: 18),
+              label: const Text('Зафиксировать результат'),
+            ),
+            const SizedBox(height: AppSpace.sm),
+          ],
+          OutlinedButton.icon(
             onPressed: () {
               Navigator.pop(surfaceContext);
               onEdit();
             },
             icon: const Icon(Icons.edit_outlined, size: 18),
-            label: const Text('Изменить занятие'),
+            label: const Text('Перенести или изменить'),
           ),
           const SizedBox(height: AppSpace.sm),
           TextButton.icon(
             style: TextButton.styleFrom(foregroundColor: AppColor.danger),
             onPressed: () async {
-              final confirmed = await _confirmLessonDelete(surfaceContext);
-              if (confirmed != true) return;
-              if (surfaceContext.mounted) Navigator.pop(surfaceContext);
-              await onDelete();
+              Navigator.pop(surfaceContext);
+              await onCancel();
             },
-            icon: const Icon(Icons.delete_outline_rounded, size: 18),
-            label: const Text('Удалить занятие'),
+            icon: const Icon(Icons.event_busy_outlined, size: 18),
+            label: const Text('Отменить занятие'),
           ),
         ],
       ],
     ),
-  );
-}
-
-Future<bool?> _confirmLessonDelete(BuildContext context) {
-  return showMagicAdaptiveSurface<bool>(
-    context,
-    kind: AppSurfaceKind.confirmation,
-    title: 'Удалить занятие?',
-    builder: (_) =>
-        const Text('Занятие будет удалено из расписания безвозвратно.'),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context, false),
-        child: const Text('Оставить'),
-      ),
-      FilledButton(
-        style: FilledButton.styleFrom(backgroundColor: AppColor.danger),
-        onPressed: () => Navigator.pop(context, true),
-        child: const Text('Удалить'),
-      ),
-    ],
   );
 }

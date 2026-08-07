@@ -7,9 +7,9 @@
     "explicit_scrollbars": 13,
     "visible_thumb_sites": 2,
     "scroll_sites_without_file_controller_evidence": 118,
-    "back_exit_sites": 196,
-    "production_back_exit_sites": 196,
-    "predictive_back_sites": 43,
+    "back_exit_sites": 199,
+    "production_back_exit_sites": 199,
+    "predictive_back_sites": 46,
     "legacy_back_sites": 0,
     "unowned": 0
   },
@@ -221,7 +221,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/crm/presentation/client_card/student_schedule_section.dart",
-      "line": 310
+      "line": 312
     },
     {
       "kind": "ListView.builder",
@@ -925,7 +925,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 493
+      "line": 506
     },
     {
       "kind": "SingleChildScrollView",
@@ -936,7 +936,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 614
+      "line": 627
     },
     {
       "kind": "ListView",
@@ -1605,6 +1605,24 @@
       "ahead_of_time": true,
       "status": "predictive-back-capable",
       "file": "lib/features/crm/presentation/client_card/client_payment_form.dart",
+      "line": 165
+    },
+    {
+      "kind": "Form",
+      "owner": "SYS-CRM-WORKSPACE",
+      "production_reachable": true,
+      "ahead_of_time": true,
+      "status": "predictive-back-capable",
+      "file": "lib/features/crm/presentation/client_card/client_payment_form.dart",
+      "line": 443
+    },
+    {
+      "kind": "Form",
+      "owner": "SYS-CRM-WORKSPACE",
+      "production_reachable": true,
+      "ahead_of_time": true,
+      "status": "predictive-back-capable",
+      "file": "lib/features/crm/presentation/client_card/client_payment_form.dart",
       "line": 528
     },
     {
@@ -1614,7 +1632,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/crm/presentation/client_card/student_schedule_section.dart",
-      "line": 569
+      "line": 574
     },
     {
       "kind": "imperative-exit",
@@ -1623,7 +1641,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/crm/presentation/client_card/student_schedule_section.dart",
-      "line": 573
+      "line": 578
     },
     {
       "kind": "Form",
@@ -1680,15 +1698,6 @@
       "line": 76
     },
     {
-      "kind": "Form",
-      "owner": "SYS-CRM-WORKSPACE",
-      "production_reachable": true,
-      "ahead_of_time": true,
-      "status": "predictive-back-capable",
-      "file": "lib/features/crm/presentation/client_card/client_payment_form.dart",
-      "line": 443
-    },
-    {
       "kind": "imperative-exit",
       "owner": "SYS-CRM-WORKSPACE",
       "production_reachable": true,
@@ -1696,6 +1705,15 @@
       "status": "exit-review",
       "file": "lib/features/crm/presentation/client_card/subscription_issue_sheet.dart",
       "line": 355
+    },
+    {
+      "kind": "Form",
+      "owner": "SYS-CRM-WORKSPACE",
+      "production_reachable": true,
+      "ahead_of_time": true,
+      "status": "predictive-back-capable",
+      "file": "lib/features/crm/presentation/client_card/subscription_issue_sheet.dart",
+      "line": 390
     },
     {
       "kind": "Form",
@@ -1770,33 +1788,6 @@
       "line": 343
     },
     {
-      "kind": "imperative-exit",
-      "owner": "SYS-APP-EXPERIENCE",
-      "production_reachable": true,
-      "ahead_of_time": false,
-      "status": "exit-review",
-      "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1154
-    },
-    {
-      "kind": "Form",
-      "owner": "SYS-CRM-WORKSPACE",
-      "production_reachable": true,
-      "ahead_of_time": true,
-      "status": "predictive-back-capable",
-      "file": "lib/features/crm/presentation/client_card/subscription_issue_sheet.dart",
-      "line": 390
-    },
-    {
-      "kind": "Form",
-      "owner": "SYS-CRM-WORKSPACE",
-      "production_reachable": true,
-      "ahead_of_time": true,
-      "status": "predictive-back-capable",
-      "file": "lib/features/crm/presentation/client_card/client_payment_form.dart",
-      "line": 165
-    },
-    {
       "kind": "Form",
       "owner": "SYS-CRM-WORKSPACE",
       "production_reachable": true,
@@ -1806,13 +1797,49 @@
       "line": 33
     },
     {
+      "kind": "imperative-exit",
+      "owner": "SYS-APP-EXPERIENCE",
+      "production_reachable": true,
+      "ahead_of_time": false,
+      "status": "exit-review",
+      "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
+      "line": 1154
+    },
+    {
       "kind": "PopScope",
       "owner": "SYS-CRM-WORKSPACE",
       "production_reachable": true,
       "ahead_of_time": true,
       "status": "predictive-back-capable",
       "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 649
+      "line": 650
+    },
+    {
+      "kind": "imperative-exit",
+      "owner": "SYS-CRM-WORKSPACE",
+      "production_reachable": true,
+      "ahead_of_time": false,
+      "status": "exit-review",
+      "file": "lib/features/crm/presentation/client_card/client_card.dart",
+      "line": 280
+    },
+    {
+      "kind": "Form",
+      "owner": "SYS-ACCESS-SCOPE",
+      "production_reachable": true,
+      "ahead_of_time": true,
+      "status": "predictive-back-capable",
+      "file": "lib/features/auth/presentation/screens/onboarding_screen.dart",
+      "line": 258
+    },
+    {
+      "kind": "Form",
+      "owner": "SYS-ACCESS-SCOPE",
+      "production_reachable": true,
+      "ahead_of_time": true,
+      "status": "predictive-back-capable",
+      "file": "lib/features/auth/presentation/screens/onboarding_screen.dart",
+      "line": 259
     },
     {
       "kind": "Form",
@@ -1983,7 +2010,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 274
+      "line": 275
     },
     {
       "kind": "imperative-exit",
@@ -1992,16 +2019,16 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 279
+      "line": 297
     },
     {
-      "kind": "imperative-exit",
-      "owner": "SYS-CRM-WORKSPACE",
+      "kind": "Form",
+      "owner": "SYS-ACCESS-SCOPE",
       "production_reachable": true,
-      "ahead_of_time": false,
-      "status": "exit-review",
-      "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 296
+      "ahead_of_time": true,
+      "status": "predictive-back-capable",
+      "file": "lib/features/auth/presentation/screens/onboarding_screen.dart",
+      "line": 174
     },
     {
       "kind": "imperative-exit",
@@ -2013,31 +2040,22 @@
       "line": 1261
     },
     {
-      "kind": "Form",
-      "owner": "SYS-ACCESS-SCOPE",
-      "production_reachable": true,
-      "ahead_of_time": true,
-      "status": "predictive-back-capable",
-      "file": "lib/features/auth/presentation/screens/onboarding_screen.dart",
-      "line": 259
-    },
-    {
       "kind": "imperative-exit",
       "owner": "SYS-APP-EXPERIENCE",
       "production_reachable": true,
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1272
+      "line": 1348
     },
     {
       "kind": "imperative-exit",
-      "owner": "SYS-APP-EXPERIENCE",
+      "owner": "SYS-SCHEDULE",
       "production_reachable": true,
       "ahead_of_time": false,
       "status": "exit-review",
-      "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1368
+      "file": "lib/features/manager/presentation/widgets/teacher_stats_widget.dart",
+      "line": 196
     },
     {
       "kind": "imperative-exit",
@@ -2122,12 +2140,12 @@
     },
     {
       "kind": "imperative-exit",
-      "owner": "SYS-SCHEDULE",
+      "owner": "SYS-APP-EXPERIENCE",
       "production_reachable": true,
       "ahead_of_time": false,
       "status": "exit-review",
-      "file": "lib/features/manager/presentation/widgets/teacher_stats_widget.dart",
-      "line": 196
+      "file": "lib/features/messenger/presentation/screens/messenger_screen_actions.dart",
+      "line": 374
     },
     {
       "kind": "imperative-exit",
@@ -2135,8 +2153,8 @@
       "production_reachable": true,
       "ahead_of_time": false,
       "status": "exit-review",
-      "file": "lib/features/messenger/presentation/screens/messenger_screen_actions.dart",
-      "line": 374
+      "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
+      "line": 119
     },
     {
       "kind": "imperative-exit",
@@ -2220,15 +2238,6 @@
       "line": 293
     },
     {
-      "kind": "imperative-exit",
-      "owner": "SYS-APP-EXPERIENCE",
-      "production_reachable": true,
-      "ahead_of_time": false,
-      "status": "exit-review",
-      "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
-      "line": 119
-    },
-    {
       "kind": "PopScope",
       "owner": "SYS-CRM-WORKSPACE",
       "production_reachable": true,
@@ -2236,6 +2245,15 @@
       "status": "predictive-back-capable",
       "file": "lib/features/manager/presentation/widgets/student_funnel_editor.dart",
       "line": 385
+    },
+    {
+      "kind": "imperative-exit",
+      "owner": "SYS-APP-EXPERIENCE",
+      "production_reachable": true,
+      "ahead_of_time": false,
+      "status": "exit-review",
+      "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
+      "line": 1272
     },
     {
       "kind": "imperative-exit",
@@ -2253,7 +2271,16 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/manager/presentation/widgets/student_funnel_editor.dart",
-      "line": 361
+      "line": 343
+    },
+    {
+      "kind": "imperative-exit",
+      "owner": "SYS-APP-EXPERIENCE",
+      "production_reachable": true,
+      "ahead_of_time": false,
+      "status": "exit-review",
+      "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
+      "line": 1368
     },
     {
       "kind": "imperative-exit",
@@ -2442,34 +2469,16 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/manager/presentation/widgets/student_funnel_editor.dart",
-      "line": 343
+      "line": 361
     },
     {
-      "kind": "imperative-exit",
+      "kind": "AppBackScope",
       "owner": "SYS-APP-EXPERIENCE",
       "production_reachable": true,
-      "ahead_of_time": false,
-      "status": "exit-review",
-      "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1348
-    },
-    {
-      "kind": "Form",
-      "owner": "SYS-ACCESS-SCOPE",
-      "production_reachable": true,
       "ahead_of_time": true,
       "status": "predictive-back-capable",
-      "file": "lib/features/auth/presentation/screens/onboarding_screen.dart",
-      "line": 258
-    },
-    {
-      "kind": "Form",
-      "owner": "SYS-ACCESS-SCOPE",
-      "production_reachable": true,
-      "ahead_of_time": true,
-      "status": "predictive-back-capable",
-      "file": "lib/features/auth/presentation/screens/onboarding_screen.dart",
-      "line": 174
+      "file": "lib/features/messenger/presentation/screens/messenger_screen.dart",
+      "line": 409
     },
     {
       "kind": "Form",
@@ -2479,6 +2488,15 @@
       "status": "predictive-back-capable",
       "file": "lib/features/auth/presentation/screens/login_screen.dart",
       "line": 141
+    },
+    {
+      "kind": "Form",
+      "owner": "SYS-SCHEDULE",
+      "production_reachable": true,
+      "ahead_of_time": true,
+      "status": "predictive-back-capable",
+      "file": "lib/features/admin/presentation/widgets/teacher_detail_widgets.dart",
+      "line": 60
     },
     {
       "kind": "imperative-exit",
@@ -2562,13 +2580,13 @@
       "line": 360
     },
     {
-      "kind": "imperative-exit",
-      "owner": "SYS-PLATFORM-QUALITY",
+      "kind": "Form",
+      "owner": "SYS-APP-EXPERIENCE",
       "production_reachable": true,
-      "ahead_of_time": false,
-      "status": "exit-review",
-      "file": "lib/core/widgets/telegram/message_bubble.dart",
-      "line": 568
+      "ahead_of_time": true,
+      "status": "predictive-back-capable",
+      "file": "lib/core/workspace/workspace_controller.dart",
+      "line": 383
     },
     {
       "kind": "Form",
@@ -2577,7 +2595,7 @@
       "ahead_of_time": true,
       "status": "predictive-back-capable",
       "file": "lib/core/workspace/workspace_controller.dart",
-      "line": 383
+      "line": 408
     },
     {
       "kind": "Form",
@@ -2661,13 +2679,31 @@
       "line": 148
     },
     {
-      "kind": "Form",
-      "owner": "SYS-APP-EXPERIENCE",
+      "kind": "imperative-exit",
+      "owner": "SYS-PLATFORM-QUALITY",
       "production_reachable": true,
-      "ahead_of_time": true,
-      "status": "predictive-back-capable",
-      "file": "lib/core/workspace/workspace_controller.dart",
-      "line": 408
+      "ahead_of_time": false,
+      "status": "exit-review",
+      "file": "lib/features/admin/presentation/widgets/create_group_dialog.dart",
+      "line": 259
+    },
+    {
+      "kind": "imperative-exit",
+      "owner": "SYS-PLATFORM-QUALITY",
+      "production_reachable": true,
+      "ahead_of_time": false,
+      "status": "exit-review",
+      "file": "lib/core/widgets/telegram/message_bubble.dart",
+      "line": 568
+    },
+    {
+      "kind": "imperative-exit",
+      "owner": "SYS-SCHEDULE",
+      "production_reachable": true,
+      "ahead_of_time": false,
+      "status": "exit-review",
+      "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
+      "line": 282
     },
     {
       "kind": "imperative-exit",
@@ -2677,15 +2713,6 @@
       "status": "exit-review",
       "file": "lib/core/widgets/telegram/message_bubble.dart",
       "line": 553
-    },
-    {
-      "kind": "imperative-exit",
-      "owner": "SYS-PLATFORM-QUALITY",
-      "production_reachable": true,
-      "ahead_of_time": false,
-      "status": "exit-review",
-      "file": "lib/core/widgets/telegram/message_bubble.dart",
-      "line": 544
     },
     {
       "kind": "imperative-exit",
@@ -2891,8 +2918,17 @@
       "production_reachable": true,
       "ahead_of_time": false,
       "status": "exit-review",
-      "file": "lib/features/admin/presentation/widgets/create_group_dialog.dart",
-      "line": 259
+      "file": "lib/core/widgets/telegram/message_bubble.dart",
+      "line": 544
+    },
+    {
+      "kind": "imperative-exit",
+      "owner": "SYS-SCHEDULE",
+      "production_reachable": true,
+      "ahead_of_time": false,
+      "status": "exit-review",
+      "file": "lib/features/admin/presentation/widgets/teacher_detail_widgets.dart",
+      "line": 102
     },
     {
       "kind": "imperative-exit",
@@ -2901,7 +2937,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 280
+      "line": 394
     },
     {
       "kind": "imperative-exit",
@@ -2910,7 +2946,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 403
+      "line": 528
     },
     {
       "kind": "imperative-exit",
@@ -2918,8 +2954,35 @@
       "production_reachable": true,
       "ahead_of_time": false,
       "status": "exit-review",
-      "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 515
+      "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
+      "line": 227
+    },
+    {
+      "kind": "imperative-exit",
+      "owner": "SYS-SCHEDULE",
+      "production_reachable": true,
+      "ahead_of_time": false,
+      "status": "exit-review",
+      "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
+      "line": 237
+    },
+    {
+      "kind": "imperative-exit",
+      "owner": "SYS-PLATFORM-QUALITY",
+      "production_reachable": true,
+      "ahead_of_time": false,
+      "status": "exit-review",
+      "file": "lib/features/admin/presentation/widgets/manage_entities_facilities.dart",
+      "line": 321
+    },
+    {
+      "kind": "imperative-exit",
+      "owner": "SYS-PLATFORM-QUALITY",
+      "production_reachable": true,
+      "ahead_of_time": false,
+      "status": "exit-review",
+      "file": "lib/features/admin/presentation/widgets/manage_entities_facilities.dart",
+      "line": 325
     },
     {
       "kind": "Form",
@@ -3012,24 +3075,6 @@
       "line": 57
     },
     {
-      "kind": "imperative-exit",
-      "owner": "SYS-SCHEDULE",
-      "production_reachable": true,
-      "ahead_of_time": false,
-      "status": "exit-review",
-      "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
-      "line": 369
-    },
-    {
-      "kind": "imperative-exit",
-      "owner": "SYS-SCHEDULE",
-      "production_reachable": true,
-      "ahead_of_time": false,
-      "status": "exit-review",
-      "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
-      "line": 402
-    },
-    {
       "kind": "Form",
       "owner": "SYS-PLATFORM-QUALITY",
       "production_reachable": true,
@@ -3093,49 +3138,22 @@
       "line": 42
     },
     {
-      "kind": "Form",
-      "owner": "SYS-SCHEDULE",
-      "production_reachable": true,
-      "ahead_of_time": true,
-      "status": "predictive-back-capable",
-      "file": "lib/features/admin/presentation/widgets/teacher_detail_widgets.dart",
-      "line": 60
-    },
-    {
       "kind": "imperative-exit",
       "owner": "SYS-SCHEDULE",
       "production_reachable": true,
       "ahead_of_time": false,
       "status": "exit-review",
-      "file": "lib/features/admin/presentation/widgets/teacher_detail_widgets.dart",
-      "line": 102
+      "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
+      "line": 217
     },
     {
       "kind": "imperative-exit",
-      "owner": "SYS-PLATFORM-QUALITY",
+      "owner": "SYS-SCHEDULE",
       "production_reachable": true,
       "ahead_of_time": false,
       "status": "exit-review",
-      "file": "lib/features/admin/presentation/widgets/manage_entities_facilities.dart",
-      "line": 325
-    },
-    {
-      "kind": "AppBackScope",
-      "owner": "SYS-APP-EXPERIENCE",
-      "production_reachable": true,
-      "ahead_of_time": true,
-      "status": "predictive-back-capable",
-      "file": "lib/features/messenger/presentation/screens/messenger_screen.dart",
-      "line": 409
-    },
-    {
-      "kind": "imperative-exit",
-      "owner": "SYS-PLATFORM-QUALITY",
-      "production_reachable": true,
-      "ahead_of_time": false,
-      "status": "exit-review",
-      "file": "lib/features/admin/presentation/widgets/manage_entities_facilities.dart",
-      "line": 321
+      "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
+      "line": 417
     },
     {
       "kind": "imperative-exit",
@@ -3144,7 +3162,16 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
-      "line": 248
+      "line": 185
+    },
+    {
+      "kind": "Form",
+      "owner": "SYS-SCHEDULE",
+      "production_reachable": true,
+      "ahead_of_time": true,
+      "status": "predictive-back-capable",
+      "file": "lib/features/admin/presentation/widgets/lesson_decision_flow.dart",
+      "line": 382
     },
     {
       "kind": "imperative-exit",
@@ -3153,7 +3180,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 555
+      "line": 568
     },
     {
       "kind": "imperative-exit",
@@ -3162,7 +3189,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 556
+      "line": 569
     },
     {
       "kind": "imperative-exit",
@@ -3171,7 +3198,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 866
+      "line": 879
     },
     {
       "kind": "imperative-exit",
@@ -3309,13 +3336,22 @@
       "line": 275
     },
     {
-      "kind": "imperative-exit",
+      "kind": "Form",
       "owner": "SYS-SCHEDULE",
       "production_reachable": true,
-      "ahead_of_time": false,
-      "status": "exit-review",
-      "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
-      "line": 184
+      "ahead_of_time": true,
+      "status": "predictive-back-capable",
+      "file": "lib/features/admin/presentation/widgets/lesson_decision_flow.dart",
+      "line": 205
+    },
+    {
+      "kind": "Form",
+      "owner": "SYS-SCHEDULE",
+      "production_reachable": true,
+      "ahead_of_time": true,
+      "status": "predictive-back-capable",
+      "file": "lib/features/admin/presentation/widgets/lesson_decision_flow.dart",
+      "line": 210
     },
     {
       "kind": "imperative-exit",
@@ -3323,8 +3359,8 @@
       "production_reachable": true,
       "ahead_of_time": false,
       "status": "exit-review",
-      "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
-      "line": 215
+      "file": "lib/features/admin/presentation/widgets/lesson_decision_flow.dart",
+      "line": 360
     },
     {
       "kind": "imperative-exit",
@@ -3332,17 +3368,8 @@
       "production_reachable": true,
       "ahead_of_time": false,
       "status": "exit-review",
-      "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
-      "line": 227
-    },
-    {
-      "kind": "imperative-exit",
-      "owner": "SYS-SCHEDULE",
-      "production_reachable": true,
-      "ahead_of_time": false,
-      "status": "exit-review",
-      "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
-      "line": 253
+      "file": "lib/features/admin/presentation/widgets/lesson_decision_flow.dart",
+      "line": 482
     },
     {
       "kind": "Form",

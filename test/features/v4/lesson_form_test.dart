@@ -51,7 +51,8 @@ class _FakeApiClient extends MagicApiClient {
   MagicApiException? createError;
   Completer<void>? createGate;
   final lessonPosts = <Map<String, dynamic>>[];
-  final lessonPatches = <Map<String, dynamic>>[];
+  final decisionPreviews = <Map<String, dynamic>>[];
+  final decisionCommits = <Map<String, dynamic>>[];
 
   @override
   Future<T> get<T>(
@@ -114,6 +115,30 @@ class _FakeApiClient extends MagicApiClient {
             as T;
       case '/crm/subscriptions':
         return <String, dynamic>{'items': const []} as T;
+      case '/crm/configuration/lesson-decisions':
+        return <String, dynamic>{
+              'settlementTypes': const [
+                {
+                  'stableKey': 'free_lesson',
+                  'label': 'Бесплатное занятие',
+                  'colorToken': 'warning',
+                  'allowedContexts': ['cancel', 'reschedule', 'settle'],
+                  'active': true,
+                  'order': 0,
+                },
+              ],
+              'teacherCompensationRules': const [
+                {
+                  'stableKey': 'none',
+                  'label': 'Не оплачивать',
+                  'mode': 'none',
+                  'value': '0',
+                  'active': true,
+                  'order': 0,
+                },
+              ],
+            }
+            as T;
       default:
         return <String, dynamic>{'items': const []} as T;
     }
@@ -135,21 +160,55 @@ class _FakeApiClient extends MagicApiClient {
       if (createError case final error?) throw error;
       return <String, dynamic>{'id': 'lesson-1', 'version': 1} as T;
     }
+    if (path.endsWith('/reschedule/preview')) {
+      decisionPreviews.add(Map<String, dynamic>.from(data as Map));
+      return <String, dynamic>{
+            'operation': 'reschedule',
+            'source': {
+              'id': '66666666-6666-6666-6666-666666666666',
+              'version': 7,
+              'state': 'scheduled',
+            },
+            'successor': const {},
+            'financialDecision': const {},
+            'violations': const [],
+            'canConfirm': true,
+            'confirmRequired': true,
+            'financialPreview': {
+              'clientFacts': const [
+                {
+                  'settlementTypeKey': 'free_lesson',
+                  'settlementLabel': 'Бесплатное занятие',
+                  'amountMinor': '0',
+                  'units': '0.00',
+                },
+              ],
+              'teacherFact': const {
+                'compensationRuleKey': 'none',
+                'compensationRuleLabel': 'Не оплачивать',
+                'amountMinor': '0',
+              },
+            },
+            'previewToken': 'signed-lesson-preview',
+          }
+          as T;
+    }
     throw UnimplementedError('POST $path');
   }
 
   @override
-  Future<T> patch<T>(
+  Future<T> postIdempotent<T>(
     String path, {
+    required MagicMutationIdentity identity,
     Object? data,
     Map<String, dynamic>? queryParameters,
     bool authenticated = true,
   }) async {
-    if (path.startsWith('/crm/lessons/')) {
-      lessonPatches.add(Map<String, dynamic>.from(data as Map));
-      return <String, dynamic>{'id': 'lesson-1', 'version': 8} as T;
+    if (path.endsWith('/reschedule')) {
+      decisionCommits.add(Map<String, dynamic>.from(data as Map));
+      return <String, dynamic>{'transitionId': 'transition-1'} as T;
     }
-    throw UnimplementedError('PATCH $path');
+    throw UnimplementedError('POST IDEMPOTENT $path');
   }
 }
 
@@ -339,7 +398,7 @@ void main() {
     },
   );
 
-  testWidgets('edit отправляет expectedVersion и не меняет snapshot', (
+  testWidgets('edit проходит общий decision preview и не меняет snapshot', (
     tester,
   ) async {
     final client = _FakeApiClient();
@@ -365,16 +424,55 @@ void main() {
 
     await tester.ensureVisible(find.text('Сохранить'));
     await tester.tap(find.text('Сохранить'));
+    for (var frame = 0; frame < 6; frame++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    expect(find.text('Перенос занятия'), findsOneWidget);
+    expect(find.byKey(const Key('lesson-decision-reason')), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const Key('lesson-decision-reason')),
+      'Клиент попросил другое время',
+    );
+    await tester.tap(find.byKey(const Key('lesson-decision-settlement')));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.text('Бесплатное занятие').last);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.ensureVisible(
+      find.byKey(const Key('lesson-decision-compensation')),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('lesson-decision-compensation')));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.text('Не оплачивать').last);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.ensureVisible(find.byKey(const Key('lesson-decision-submit')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('lesson-decision-submit')));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(client.decisionPreviews, hasLength(1));
+    expect(find.byKey(const Key('lesson-decision-preview')), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('lesson-decision-submit')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('lesson-decision-submit')));
     await tester.pumpAndSettle();
 
-    expect(client.lessonPatches, hasLength(1));
-    final body = client.lessonPatches.single;
+    expect(client.decisionCommits, hasLength(1));
+    final body = client.decisionCommits.single;
     expect(body['expectedVersion'], 7);
-    expect(body['teacherId'], _teacherId);
-    expect(body['roomId'], _roomId);
-    expect(body, isNot(contains('clientRef')));
-    expect(body, isNot(contains('isTrial')));
-    expect(body, isNot(contains('completionType')));
-    expect(body, isNot(contains('force')));
+    expect(body['reasonText'], 'Клиент попросил другое время');
+    expect(body['financialDecision'], {
+      'settlementTypeKey': 'free_lesson',
+      'teacherCompensationRuleKey': 'none',
+    });
+    expect(body['successor']['teacherId'], _teacherId);
+    expect(body['successor']['roomId'], _roomId);
+    expect(body['successor'], isNot(contains('clientRef')));
+    expect(body['successor'], isNot(contains('isTrial')));
+    expect(body['successor'], isNot(contains('completionType')));
+    expect(body['successor'], isNot(contains('force')));
+    expect(body['previewToken'], 'signed-lesson-preview');
+    expect(body['confirm'], isTrue);
   });
 }

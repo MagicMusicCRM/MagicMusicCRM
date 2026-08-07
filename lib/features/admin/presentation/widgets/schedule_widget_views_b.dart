@@ -126,53 +126,9 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
         : _fetchDayLessons(_selectedDate);
   }
 
-  Future<bool> _previewLessonChange(
-    Map<String, dynamic> lesson, {
-    required String scheduledAt,
-    String? teacherId,
-    String? roomId,
-    int? durationMinutes,
-  }) async {
-    final studentId = lesson['student_id']?.toString();
-    final leadId = lesson['lead_id']?.toString();
-    final clientId = leadId?.isNotEmpty == true ? leadId : studentId;
-    final clientType = leadId?.isNotEmpty == true ? 'lead' : 'student';
-    final resolvedTeacherId = teacherId ?? lesson['teacher_id']?.toString();
-    final branchId = lesson['branch_id']?.toString();
-    final resolvedRoomId = roomId ?? lesson['room_id']?.toString();
-    if (clientId == null ||
-        resolvedTeacherId == null ||
-        branchId == null ||
-        resolvedRoomId == null) {
-      return true;
-    }
-    try {
-      final violations = await ref
-          .read(magicApiClientProvider)
-          .previewLessonConstraints(
-            clientType: clientType,
-            clientId: clientId,
-            teacherId: resolvedTeacherId,
-            branchId: branchId,
-            roomId: resolvedRoomId,
-            scheduledAt: scheduledAt,
-            durationMinutes: durationMinutes ?? _durationMinutes(lesson),
-            excludeLessonId: lesson['id']?.toString(),
-          );
-      if (violations.isEmpty) return true;
-      if (mounted) await _showScheduleViolations(violations);
-      return false;
-    } catch (error) {
-      debugPrint('Schedule constraints preview failed: $error');
-      return true;
-    }
-  }
-
-  // ── Optimistic move + rollback + undo (KVA-195) ────────────────────────────
-  // Vertical drop → new time; horizontal drop → new room. The block jumps to the
-  // new slot immediately (the rest of the grid stays put), then the move commits
-  // via the SAME `updateLesson` PATCH the app already used. On error we roll the
-  // block back; on success a short «Отменить» snackbar reverts it.
+  // Drag/drop never mutates the local card before the shared financial decision
+  // is previewed and confirmed. A failed or dismissed flow therefore leaves the
+  // source lesson exactly where it was.
   Future<void> _moveLessonOptimistic(
     Map<String, dynamic> lesson,
     DateTime newStartLocal,
@@ -214,20 +170,6 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
       newStartLocal.minute,
     ).subtract(Duration(minutes: offset));
     final newScheduledAtIso = utc.toIso8601String();
-    final canMove = await _previewLessonChange(
-      lesson,
-      scheduledAt: newScheduledAtIso,
-      teacherId: targetTeacherId,
-      roomId: targetRoomId,
-    );
-    if (!canMove || !mounted) return;
-
-    // Snapshot for rollback / undo BEFORE the in-place patch.
-    final prevScheduledAt = lesson['scheduled_at'];
-    final prevRoomId = lesson['room_id'];
-    final prevTeacherId = lesson['teacher_id'];
-    final prevTeacherName = lesson['teacher_name'];
-    final prevConflicts = lesson['conflict_types'];
     final roomChanged =
         !preserveRoom && targetRoomId != null && targetRoomId != currentRoomId;
     final teacherChanged =
@@ -235,99 +177,30 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
         targetTeacherId != null &&
         targetTeacherId != currentTeacherId;
 
-    _emitState(() {
-      _movingLesson = true;
-      lesson['scheduled_at'] = newScheduledAtIso;
-      // Drop the stale conflict flag immediately — the slot changed, so the old
-      // verdict no longer applies. The refetch below re-derives it server-side
-      // and re-flags only if the new slot genuinely conflicts.
-      lesson['conflict_types'] = const <String>[];
-      if (roomChanged) {
-        lesson['room_id'] = targetRoomId;
-        lesson['room_name'] = _roomNames[targetRoomId];
-      }
-      if (teacherChanged) {
-        lesson['teacher_id'] = targetTeacherId;
-        lesson['teacher_name'] = _teacherNames[targetTeacherId];
-      }
-    });
-
+    _emitState(() => _movingLesson = true);
     try {
-      await ref
-          .read(magicCrmServiceProvider)
-          .updateLesson(
-            lessonId,
-            expectedVersion: (lesson['version'] as num?)?.toInt() ?? 1,
-            scheduledAt: newScheduledAtIso,
-            roomId: roomChanged ? targetRoomId : null,
-            teacherId: teacherChanged ? targetTeacherId : null,
-          );
-      if (!mounted) return;
-      await _refreshEditedSchedule(); // server re-derives conflicts
-      if (!mounted) return;
-      final moved = _lessons.firstWhere(
-        (l) => l['id']?.toString() == lessonId,
-        orElse: () => const <String, dynamic>{},
+      final changed = await showLessonDecisionFlow(
+        context,
+        api: ref.read(magicApiClientProvider),
+        operation: LessonDecisionOperation.reschedule,
+        lesson: lesson,
+        successor: {
+          'scheduledAt': newScheduledAtIso,
+          if (roomChanged) 'roomId': targetRoomId,
+          if (teacherChanged) 'teacherId': targetTeacherId,
+        },
       );
-      final conflicts = conflictTypes(moved['conflict_types']);
-      if (conflicts.isNotEmpty) {
-        MagicToast.show(
-          context,
-          'Перенесено, но есть конфликт',
-          detail: conflicts.map(conflictLabel).join(', '),
-          type: MagicToastType.danger,
-        );
-      } else if ((prevRoomId != null || !roomChanged) &&
-          (prevTeacherId != null || !teacherChanged)) {
-        // Undo restores time + room. Clearing a room back to «Без аудитории»
-        // isn't expressible via the PATCH contract, so only offer undo when the
-        // previous room is reversible (a real room, or the room didn't change).
-        _showUndoableMove(lessonId, prevScheduledAt, prevRoomId, prevTeacherId);
-      } else {
+      if (changed == true && mounted) {
+        await _refreshEditedSchedule();
+        if (!mounted) return;
         MagicToast.show(
           context,
           'Занятие перенесено',
           type: MagicToastType.success,
         );
       }
-    } on MagicApiException catch (e) {
-      if (!mounted) return;
-      _emitState(() {
-        lesson['scheduled_at'] = prevScheduledAt;
-        lesson['room_id'] = prevRoomId;
-        lesson['room_name'] = prevRoomId == null
-            ? null
-            : _roomNames[prevRoomId.toString()];
-        lesson['teacher_id'] = prevTeacherId;
-        lesson['teacher_name'] = prevTeacherName;
-        lesson['conflict_types'] = prevConflicts;
-      });
-      final violations = lessonConstraintViolations(e);
-      final conflicts = scheduleConflictsFrom409(e);
-      if (violations != null && violations.isNotEmpty) {
-        await _showScheduleViolations(violations);
-      } else if (conflicts != null) {
-        await _confirmScheduleBusy(conflicts);
-      } else {
-        MagicToast.show(
-          context,
-          'Не удалось перенести занятие',
-          detail: '$e',
-          type: MagicToastType.danger,
-        );
-      }
     } catch (e) {
       if (mounted) {
-        _emitState(() {
-          lesson['scheduled_at'] = prevScheduledAt;
-          lesson['room_id'] = prevRoomId;
-          lesson['room_name'] = prevRoomId == null
-              ? null
-              : _roomNames[prevRoomId.toString()];
-          lesson['teacher_id'] = prevTeacherId;
-          lesson['teacher_name'] = prevTeacherName;
-          lesson['conflict_types'] = prevConflicts;
-        });
         MagicToast.show(
           context,
           'Не удалось перенести занятие',
@@ -340,137 +213,9 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
     }
   }
 
-  Future<void> _confirmScheduleBusy(List<ScheduleConflictInfo> conflicts) {
-    return showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        icon: const Icon(Icons.warning_amber_rounded, color: AppColor.danger),
-        title: const Text('Время занято'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('В этот слот уже есть занятия:'),
-            const SizedBox(height: 8),
-            for (final conflict in conflicts.take(5))
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
-                  '• ${conflict.label()}',
-                  style: const TextStyle(fontSize: 13),
-                ),
-              ),
-            const SizedBox(height: 4),
-            const Text('Выберите другой слот: обход конфликтов недоступен.'),
-          ],
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Исправить'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _showScheduleViolations(
-    List<LessonConstraintViolation> violations,
-  ) {
-    return showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        icon: const Icon(Icons.rule_rounded, color: AppColor.danger),
-        title: const Text('Изменение не сохранено'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (final violation in violations)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Text(
-                  '• ${violation.title}\n'
-                  '  ${violation.resourceLabel}: ${violation.resourceId}',
-                ),
-              ),
-            const Text('Исправьте все ограничения и повторите действие.'),
-          ],
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Исправить'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showUndoableMove(
-    String lessonId,
-    dynamic prevScheduledAt,
-    dynamic prevRoomId,
-    dynamic prevTeacherId,
-  ) {
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.clearSnackBars();
-    messenger.showSnackBar(
-      SnackBar(
-        content: const Text('Занятие перенесено'),
-        backgroundColor: AppColor.success,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
-        action: SnackBarAction(
-          label: 'Отменить',
-          textColor: Colors.white,
-          onPressed: () =>
-              _undoMove(lessonId, prevScheduledAt, prevRoomId, prevTeacherId),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _undoMove(
-    String lessonId,
-    dynamic prevScheduledAt,
-    dynamic prevRoomId,
-    dynamic prevTeacherId,
-  ) async {
-    if (!widget.canWrite) return;
-    if (prevScheduledAt == null) return;
-    try {
-      await ref
-          .read(magicCrmServiceProvider)
-          .updateLesson(
-            lessonId,
-            expectedVersion:
-                (_lessons.firstWhere(
-                          (row) => row['id']?.toString() == lessonId,
-                          orElse: () => const <String, dynamic>{},
-                        )['version']
-                        as num?)
-                    ?.toInt() ??
-                1,
-            scheduledAt: prevScheduledAt.toString(),
-            roomId: prevRoomId?.toString(),
-            teacherId: prevTeacherId?.toString(),
-          );
-      if (mounted) await _refreshEditedSchedule();
-    } catch (e) {
-      if (!mounted) return;
-      MagicToast.show(
-        context,
-        'Не удалось отменить перенос',
-        detail: '$e',
-        type: MagicToastType.danger,
-      );
-    }
-  }
-
   // ── Resize via hover/focus edge handles (KVA-195) ──────────────────────────
-  // Top handle moves the start, bottom handle moves the end. Committed on release
-  // through the existing `updateLesson` PATCH — never opens the editor.
+  // Top handle moves the start, bottom handle moves the end. The shared decision
+  // surface owns preview, conflicts, settlement and final commit.
   Future<void> _resizeLesson(
     Map<String, dynamic> lesson,
     DateTime newStartLocal,
@@ -489,69 +234,29 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
       newStartLocal.minute,
     ).subtract(Duration(minutes: offset));
     final newScheduledAtIso = utc.toIso8601String();
-    final canResize = await _previewLessonChange(
-      lesson,
-      scheduledAt: newScheduledAtIso,
-      durationMinutes: newDurationMinutes,
-    );
-    if (!canResize || !mounted) return;
-
-    final prevScheduledAt = lesson['scheduled_at'];
-    final prevDuration = lesson['duration_minutes'];
-    final prevConflicts = lesson['conflict_types'];
-
-    _emitState(() {
-      _movingLesson = true;
-      lesson['scheduled_at'] = newScheduledAtIso;
-      lesson['duration_minutes'] = newDurationMinutes;
-      lesson['conflict_types'] = const <String>[];
-    });
-
+    _emitState(() => _movingLesson = true);
     try {
-      await ref
-          .read(magicCrmServiceProvider)
-          .updateLesson(
-            lessonId,
-            expectedVersion: (lesson['version'] as num?)?.toInt() ?? 1,
-            scheduledAt: newScheduledAtIso,
-            durationMinutes: newDurationMinutes,
-          );
-      if (!mounted) return;
-      await _refreshEditedSchedule();
-      if (!mounted) return;
-      MagicToast.show(
+      final changed = await showLessonDecisionFlow(
         context,
-        'Длительность обновлена',
-        type: MagicToastType.success,
+        api: ref.read(magicApiClientProvider),
+        operation: LessonDecisionOperation.reschedule,
+        lesson: lesson,
+        successor: {
+          'scheduledAt': newScheduledAtIso,
+          'durationMinutes': newDurationMinutes,
+        },
       );
-    } on MagicApiException catch (e) {
-      if (!mounted) return;
-      _emitState(() {
-        lesson['scheduled_at'] = prevScheduledAt;
-        lesson['duration_minutes'] = prevDuration;
-        lesson['conflict_types'] = prevConflicts;
-      });
-      final violations = lessonConstraintViolations(e);
-      final conflicts = scheduleConflictsFrom409(e);
-      if (violations != null && violations.isNotEmpty) {
-        await _showScheduleViolations(violations);
-      } else if (conflicts != null) {
-        await _confirmScheduleBusy(conflicts);
-      } else {
+      if (changed == true && mounted) {
+        await _refreshEditedSchedule();
+        if (!mounted) return;
         MagicToast.show(
           context,
-          'Не удалось изменить длительность',
-          detail: '$e',
-          type: MagicToastType.danger,
+          'Длительность обновлена',
+          type: MagicToastType.success,
         );
       }
     } catch (e) {
       if (mounted) {
-        _emitState(() {
-          lesson['scheduled_at'] = prevScheduledAt;
-          lesson['duration_minutes'] = prevDuration;
-          lesson['conflict_types'] = prevConflicts;
-        });
         MagicToast.show(
           context,
           'Не удалось изменить длительность',
@@ -867,7 +572,11 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
       conflicts: conflicts,
       lessonId: widget.canWrite ? lessonId : null,
       onEdit: () => _editLesson(lesson),
-      onDelete: () => _deleteLesson(lessonId!),
+      onCancel: () => _cancelLesson(lesson),
+      onSettle:
+          currentStatus == 'scheduled' || currentStatus == 'settlement_pending'
+          ? () => _settleLesson(lesson)
+          : null,
     );
   }
 
@@ -877,27 +586,40 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
     if (changed == true) _fetchAll();
   }
 
-  Future<void> _deleteLesson(String lessonId) async {
+  Future<void> _cancelLesson(Map<String, dynamic> lesson) async {
     if (!widget.canWrite) return;
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await ref.read(magicCrmServiceProvider).deleteLesson(lessonId);
+    final changed = await showLessonDecisionFlow(
+      context,
+      api: ref.read(magicApiClientProvider),
+      operation: LessonDecisionOperation.cancel,
+      lesson: lesson,
+    );
+    if (changed == true && mounted) {
+      await _refreshEditedSchedule();
       if (!mounted) return;
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Занятие удалено'),
-          backgroundColor: AppColor.success,
-          behavior: SnackBarBehavior.floating,
-        ),
+      MagicToast.show(
+        context,
+        'Занятие отменено',
+        type: MagicToastType.success,
       );
-      _fetchAll();
-    } catch (e) {
+    }
+  }
+
+  Future<void> _settleLesson(Map<String, dynamic> lesson) async {
+    if (!widget.canWrite) return;
+    final changed = await showLessonDecisionFlow(
+      context,
+      api: ref.read(magicApiClientProvider),
+      operation: LessonDecisionOperation.settle,
+      lesson: lesson,
+    );
+    if (changed == true && mounted) {
+      await _refreshEditedSchedule();
       if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Не удалось удалить занятие: $e'),
-          backgroundColor: AppColor.danger,
-        ),
+      MagicToast.show(
+        context,
+        'Результат занятия зафиксирован',
+        type: MagicToastType.success,
       );
     }
   }

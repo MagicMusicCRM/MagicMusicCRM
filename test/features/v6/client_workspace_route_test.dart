@@ -149,11 +149,23 @@ void main() {
       final api = FakeCardApiClient(
         role: 'manager',
         student: _student,
+        branches: const [
+          {'id': 'branch-1', 'name': 'Главный'},
+        ],
+        teachers: const [
+          {'id': 'teacher-1', 'firstName': 'Мария', 'lastName': 'Иванова'},
+        ],
         studentLessons: const [
           {
             'id': 'lesson-1',
+            'studentId': 'student-1',
+            'studentName': 'Анна Смирнова',
+            'branchId': 'branch-1',
+            'teacherId': 'teacher-1',
             'scheduledAt': '2026-08-08T12:00:00.000Z',
+            'durationMinutes': 60,
             'status': 'scheduled',
+            'version': 1,
           },
         ],
       );
@@ -172,6 +184,7 @@ void main() {
                 'crm.client.read.basic',
                 'commerce.client_finance.read',
                 'schedule.lesson.read.assigned',
+                'schedule.lesson.write',
               },
               scopes: {},
             ),
@@ -209,6 +222,14 @@ void main() {
         tester.getTopLeft(find.text('Оплаты')).dy,
         tester.getTopLeft(find.text('Абонементы')).dy,
       );
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('client-lesson-lesson-1')),
+      );
+      await tester.tap(find.byKey(const ValueKey('client-lesson-lesson-1')));
+      await tester.pumpAndSettle();
+      expect(find.text('Редактировать занятие'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
       expect(
         tester.getTopLeft(find.text('Предпочтительное расписание')).dy,
         lessThan(

@@ -61,8 +61,8 @@
   - Проверки: `flutter analyze` чисто, `flutter test` 163/163, `git diff server/`+`lib/core/services/` пусто.
   - Осталось: **P1-7** сетевой baseline (нужен seeded backend). Follow-up: вынести `_V7Field`/`_V7PrimaryButton` в общий файл; выверить текст онбординг-слайдов; owner-визуальная приёмка.
 
-**▶ Следующий шаг:** `/forge` по `.anws/v7/05_TASKS.md`: `T2.1.3` — reversal,
-техническое удаление и единый reporting exclusion.
+**▶ Следующий шаг:** `/forge` по `.anws/v7/05_TASKS.md`: `INT-S2` — сквозная
+проверка Lesson Integrity без обходов.
 
 ---
 
@@ -122,7 +122,7 @@
 > **Примечание**: Этот блок автоматически поддерживается процессами `/genesis`, `/blueprint` и `/forge`.
 
 - **Последняя версия архитектуры**: `.anws/v7` (Financial & Lesson Integrity)
-- **Активный список задач**: `.anws/v7/05_TASKS.md` — следующая задача `T3.1.5`
+- **Активный список задач**: `.anws/v7/05_TASKS.md` — следующая задача `INT-S2`
 - **Фаза**: `/genesis`, `/design-system` и `/blueprint` завершены; выполняется `/forge`
 - **Последнее обновление**: `2026-08-07`
 
@@ -256,6 +256,17 @@ backend 154/154 suites и 1209/1209 tests, typecheck/build, Flutter analyze и
 palette 7/7, access 290/290, inventory routes=302/DTO=739/finance=243/lesson
 mutations=7/unknown=0/unowned=0 (`docs/audits/v7-lesson-no-bypass.md`).
 Следующий шаг `/forge`: `T3.1.5`._
+
+_`T3.1.5` закрыта 2026-08-07: drag/drop, resize, editor, details и Client Card
+tray используют один adaptive `LessonDecisionController` с обязательными
+reason, settlement и независимой оплатой преподавателю до mutation. Preview
+показывает source/successor, client hours/money, teacher amount, conflicts и
+non-color markers; retry сохраняет ввод и idempotency identity. Старые Flutter
+`updateLesson`/raw PATCH/direct delete/optimistic undo удалены. Gate: targeted
+schedule/client 72/72, Flutter analyze clean, backend catalog/RBAC 60/60,
+typecheck/build, inventory routes=303/reachable=255/lesson mutations=7/
+unknown=0/unowned=0 (`docs/audits/v7-lesson-decision-flow.md`). Следующий шаг
+`/forge`: `INT-S2`._
 
 ### 🌊 Wave v6/S0 — Evidence & UX Foundation ✅
 _Owner подтвердил полное выполнение v6. `V6-001..005` и `INT-S0` закрыты 2026-08-04: воспроизводимый generator покрывает 21 GoRouter route, 248/259 production-reachable Dart files, 256/256 service calls, route/surface/navigation/input/back ownership с unowned=0; v4 inventory обновлён и снова проходит stale-check. Baseline: Flutter analyze clean и 486/486 tests, backend typecheck/build clean, 150/150 suites и 1160/1160 tests, actor/payload 9/9, targeted workflow contracts 68/68 (`docs/audits/v6-s0-baseline.md`). Следующий шаг `/forge`: `V6-101` canonical location adapter._
