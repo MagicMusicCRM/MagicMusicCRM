@@ -4,11 +4,11 @@
 
 | Slice | Count |
 |---|---:|
-| Production scroll sites | 146 |
+| Production scroll sites | 148 |
 | Explicit scrollbar callsites | 13 |
 | Files with visible-thumb evidence | 2 |
-| Scroll sites without file-level controller evidence | 121 |
-| Production Back/exit sites | 211 |
+| Scroll sites without file-level controller evidence | 123 |
+| Production Back/exit sites | 214 |
 | Ahead-of-time predictive Back sites | 54 |
 | Legacy WillPopScope sites | 0 |
 | Unowned | 0 |

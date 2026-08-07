@@ -398,7 +398,7 @@ graph TD
   - **Зависимости**: T5.1.1, T5.1.2, T4.1.3.
   - **Приоритет**: P1.
 
-- [ ] **T5.1.4** [REQ-LESSON-101, REQ-LESSON-102]: Director commerce catalog UI
+- [x] **T5.1.4** [REQ-LESSON-101, REQ-LESSON-102]: Director commerce catalog UI
   - **Описание**: Встроить два независимых каталога в unified Configuration с colors/non-color preview, archive/reorder and impact publish.
   - **Входные данные**: T3.1.1, [`commerce_integrity.md` §4](04_SYSTEM_DESIGN/commerce_integrity.md).
   - **Выходные данные**: Flutter config models/sections/editors/tests.

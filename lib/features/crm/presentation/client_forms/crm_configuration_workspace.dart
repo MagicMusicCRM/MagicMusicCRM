@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
+import 'package:magic_music_crm/core/widgets/v7/dirty_form_exit.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/student_funnel_editor.dart';
 
 import 'client_forms_api.dart';
@@ -15,6 +17,30 @@ const _selectionFieldTypes = {
   'radio',
   'multi_select',
   'checkbox_group',
+};
+
+const _decisionColorLabels = <String, String>{
+  'neutral': 'Серый',
+  'success': 'Зелёный',
+  'warning': 'Жёлтый',
+  'info': 'Голубой',
+  'blue': 'Синий',
+  'cyan': 'Бирюзовый',
+  'violet': 'Сиреневый',
+};
+
+const _settlementContextLabels = <String, String>{
+  'settle': 'Завершение',
+  'reschedule': 'Перенос',
+  'cancel': 'Отмена',
+};
+
+const _compensationModeLabels = <String, String>{
+  'none': 'Не оплачивать',
+  'standard': 'Стандартная ставка',
+  'percent': 'Процент ставки',
+  'fixed': 'Фиксированная сумма',
+  'hourly': 'Почасовая сумма',
 };
 
 typedef _FieldEditorResult = ({
@@ -61,12 +87,11 @@ class CrmConfigurationWorkspace extends ConsumerStatefulWidget {
 
 class _CrmConfigurationWorkspaceState
     extends ConsumerState<CrmConfigurationWorkspace> {
-  static const _areas = <(String, String, IconData)>[
+  static const _commonAreas = <(String, String, IconData)>[
     ('fields', 'Поля и категории', Icons.dynamic_form_outlined),
     ('options', 'Варианты для полей', Icons.list_alt_outlined),
     ('settings', 'Бизнес-параметры', Icons.tune_rounded),
     ('funnel', 'Воронки клиентов', Icons.view_kanban_outlined),
-    ('history', 'История версий', Icons.history_rounded),
   ];
   static const _fieldTypes = <String, String>{
     'text': 'Текст',
@@ -98,17 +123,36 @@ class _CrmConfigurationWorkspaceState
   bool _loading = true;
   bool _busy = false;
   String? _error;
+  late final DirtyFormExitController _exitController;
 
   CapabilitySnapshot? get _access =>
       ref.read(capabilitySnapshotProvider).asData?.value;
   bool get _canEdit => _access?.allows('config.crm.edit') == true;
   bool get _canPublish => _access?.allows('config.crm.publish') == true;
   bool get _isManager => _access?.role == 'manager';
+  bool get _canSeeCommerceCatalogs =>
+      const {'director', 'system_admin'}.contains(_access?.role) &&
+      _access?.allows('config.crm.read') == true;
+  bool get _canManageCommerceCatalogs =>
+      _canSeeCommerceCatalogs && _canEdit && _canPublish;
+  List<(String, String, IconData)> get _areas => [
+    ..._commonAreas,
+    if (_canSeeCommerceCatalogs)
+      ('commerce', 'Занятия и оплата', Icons.price_change_outlined),
+    ('history', 'История версий', Icons.history_rounded),
+  ];
 
   @override
   void initState() {
     super.initState();
+    _exitController = DirtyFormExitController(onSave: _saveDraft);
     _loadInitial();
+  }
+
+  @override
+  void dispose() {
+    _exitController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadInitial() async {
@@ -148,6 +192,11 @@ class _CrmConfigurationWorkspaceState
         _loading = false;
         _busy = false;
       });
+      if (migratedInlineOptions) {
+        _exitController.markDirty();
+      } else {
+        _exitController.markClean();
+      }
     } catch (error) {
       _fail(error);
     }
@@ -177,10 +226,11 @@ class _CrmConfigurationWorkspaceState
       _snapshot = {...?_snapshot, key: items};
       _dirty = true;
     });
+    _exitController.markDirty();
   }
 
-  Future<void> _saveDraft() async {
-    if (_snapshot == null || !_canEdit) return;
+  Future<bool> _saveDraft() async {
+    if (_snapshot == null || !_canEdit) return false;
     setState(() => _busy = true);
     try {
       await ref
@@ -190,14 +240,17 @@ class _CrmConfigurationWorkspaceState
             baseVersion: _baseVersion,
             snapshot: _snapshot!,
           );
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _busy = false;
         _dirty = true;
       });
+      _exitController.markClean();
       _toast('Черновик сохранён');
+      return true;
     } catch (error) {
       _fail(error);
+      return false;
     }
   }
 
@@ -256,8 +309,20 @@ class _CrmConfigurationWorkspaceState
                   'изменено: ${changes['fieldsUpdated'] ?? 0} · '
                   'архивировано: ${changes['fieldsArchived'] ?? 0}',
                 ),
+                const SizedBox(height: AppSpace.xs),
+                Text(
+                  'Типов списания изменено: '
+                  '${changes['settlementTypesChanged'] ?? 0} · '
+                  'типов оплаты преподавателю: '
+                  '${changes['compensationRulesChanged'] ?? 0}',
+                ),
                 const SizedBox(height: AppSpace.sm),
                 Text('Затронутые экраны: ${screens.isEmpty ? 'нет' : screens}'),
+                for (final warning in (impact['warnings'] as List? ?? const []))
+                  Padding(
+                    padding: const EdgeInsets.only(top: AppSpace.sm),
+                    child: Text('• $warning'),
+                  ),
                 for (final issue
                     in (impact['blockingIssues'] as List? ?? const []))
                   Padding(
@@ -369,17 +434,20 @@ class _CrmConfigurationWorkspaceState
         ),
       );
     }
-    return Column(
-      children: [
-        _toolbar(),
-        if (_busy) const LinearProgressIndicator(minHeight: 2),
-        Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) =>
-                constraints.maxWidth >= 900 ? _desktop() : _compact(),
+    return DirtyFormExitScope(
+      controller: _exitController,
+      child: Column(
+        children: [
+          _toolbar(),
+          if (_busy) const LinearProgressIndicator(minHeight: 2),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) =>
+                  constraints.maxWidth >= 900 ? _desktop() : _compact(),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -515,6 +583,7 @@ class _CrmConfigurationWorkspaceState
     'options' => _optionSetList(),
     'settings' => _settingList(),
     'funnel' => _funnelEntry(),
+    'commerce' => _commerceCatalogList(),
     'history' => _historyList(),
     _ => const SizedBox.shrink(),
   };
@@ -612,6 +681,249 @@ class _CrmConfigurationWorkspaceState
         );
       }).toList(),
     );
+  }
+
+  Widget _commerceCatalogList() {
+    final settlementTypes = _items('lessonSettlementTypes')
+      ..sort(_byCatalogOrder);
+    final compensationRules = _items('teacherCompensationRules')
+      ..sort(_byCatalogOrder);
+    return _listPane(
+      title: 'Занятия и оплата преподавателю',
+      children: [
+        ListTile(
+          title: const Text('Типы списания занятия'),
+          subtitle: const Text('Цвет всегда сопровождается названием'),
+          trailing: _canManageCommerceCatalogs
+              ? IconButton(
+                  key: const ValueKey('add-settlement-type'),
+                  tooltip: 'Добавить тип списания',
+                  onPressed: () =>
+                      _editCommerceCatalog('lessonSettlementTypes', null),
+                  icon: const Icon(Icons.add_rounded),
+                )
+              : null,
+        ),
+        for (var index = 0; index < settlementTypes.length; index++)
+          _commerceCatalogTile(
+            listKey: 'lessonSettlementTypes',
+            item: settlementTypes[index],
+            index: index,
+            count: settlementTypes.length,
+          ),
+        const Divider(),
+        ListTile(
+          title: const Text('Типы оплаты преподавателю'),
+          subtitle: const Text(
+            'Сотрудник всегда выбирает тип вручную и независимо от списания',
+          ),
+          trailing: _canManageCommerceCatalogs
+              ? IconButton(
+                  key: const ValueKey('add-compensation-rule'),
+                  tooltip: 'Добавить тип оплаты преподавателю',
+                  onPressed: () =>
+                      _editCommerceCatalog('teacherCompensationRules', null),
+                  icon: const Icon(Icons.add_rounded),
+                )
+              : null,
+        ),
+        for (var index = 0; index < compensationRules.length; index++)
+          _commerceCatalogTile(
+            listKey: 'teacherCompensationRules',
+            item: compensationRules[index],
+            index: index,
+            count: compensationRules.length,
+          ),
+      ],
+    );
+  }
+
+  Widget _commerceCatalogTile({
+    required String listKey,
+    required Map<String, dynamic> item,
+    required int index,
+    required int count,
+  }) {
+    final settlement = listKey == 'lessonSettlementTypes';
+    final stableKey = item['stableKey']?.toString() ?? '';
+    final selection =
+        '${settlement ? 'settlement' : 'compensation'}:$stableKey';
+    return ListTile(
+      selected: _selectedKey == selection,
+      leading: Icon(
+        settlement ? Icons.sell_outlined : Icons.payments_outlined,
+        color: settlement
+            ? lessonDecisionColorToken(item['colorToken']?.toString())
+            : null,
+      ),
+      title: Text(item['label']?.toString() ?? stableKey),
+      subtitle: Text(
+        '${item['active'] == true ? 'Активно' : 'В архиве'} · $stableKey',
+      ),
+      onTap: () => setState(() => _selectedKey = selection),
+      trailing: !_canManageCommerceCatalogs
+          ? null
+          : SizedBox(
+              width: 80,
+              child: Row(
+                children: [
+                  IconButton(
+                    tooltip: 'Выше',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: index == 0
+                        ? null
+                        : () => _reorderCommerceCatalog(listKey, stableKey, -1),
+                    icon: const Icon(Icons.arrow_upward_rounded, size: 18),
+                  ),
+                  IconButton(
+                    tooltip: 'Ниже',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: index == count - 1
+                        ? null
+                        : () => _reorderCommerceCatalog(listKey, stableKey, 1),
+                    icon: const Icon(Icons.arrow_downward_rounded, size: 18),
+                  ),
+                ],
+              ),
+            ),
+    );
+  }
+
+  Widget _commerceCatalogPreview() {
+    final parts = _selectedKey?.split(':') ?? const <String>[];
+    if (parts.length != 2) {
+      return const Center(
+        child: Text('Выберите тип списания или оплаты преподавателю'),
+      );
+    }
+    final settlement = parts.first == 'settlement';
+    final listKey = settlement
+        ? 'lessonSettlementTypes'
+        : 'teacherCompensationRules';
+    final item = _items(
+      listKey,
+    ).where((row) => row['stableKey']?.toString() == parts.last).firstOrNull;
+    if (item == null) return const SizedBox.shrink();
+    final accent = settlement
+        ? lessonDecisionColorToken(item['colorToken']?.toString())
+        : Theme.of(context).colorScheme.primary;
+    return ListView(
+      padding: const EdgeInsets.all(AppSpace.lg),
+      children: [
+        Row(
+          children: [
+            Icon(
+              settlement ? Icons.sell_outlined : Icons.payments_outlined,
+              color: accent,
+            ),
+            const SizedBox(width: AppSpace.sm),
+            Expanded(
+              child: Text(
+                item['label']?.toString() ?? '',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+            ),
+            if (_canManageCommerceCatalogs)
+              OutlinedButton.icon(
+                key: const ValueKey('edit-commerce-catalog-item'),
+                onPressed: () => _editCommerceCatalog(listKey, item),
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('Изменить'),
+              ),
+          ],
+        ),
+        const SizedBox(height: AppSpace.lg),
+        _property('Стабильный ключ', item['stableKey']),
+        _property('Состояние', item['active'] == true ? 'Активно' : 'В архиве'),
+        if (settlement) ...[
+          _property(
+            'Цветовая метка',
+            _decisionColorLabels[item['colorToken']] ?? item['colorToken'],
+          ),
+          _property(
+            'Доля списания',
+            '${((item['hourShareBasisPoints'] as num?) ?? 0) / 100}%',
+          ),
+          if (item['fixedPenaltyMinor'] != null)
+            _property('Штраф', '${_minorToMajor(item['fixedPenaltyMinor'])} ₽'),
+          _property(
+            'Сценарии',
+            (item['allowedContexts'] as List? ?? const [])
+                .map((value) => _settlementContextLabels[value] ?? value)
+                .join(', '),
+          ),
+          const SizedBox(height: AppSpace.md),
+          Semantics(
+            label: 'Предпросмотр: ${item['label']}',
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.12),
+                border: Border.all(color: accent),
+                borderRadius: BorderRadius.circular(AppRadius.control),
+              ),
+              child: ListTile(
+                leading: Icon(Icons.sell_outlined, color: accent),
+                title: Text(item['label']?.toString() ?? ''),
+                subtitle: const Text('Так метка выглядит в занятии'),
+              ),
+            ),
+          ),
+        ] else ...[
+          _property(
+            'Расчёт',
+            _compensationModeLabels[item['mode']] ?? item['mode'],
+          ),
+          _property('Значение', _compensationValueLabel(item)),
+          const SizedBox(height: AppSpace.md),
+          const Text(
+            'Тип выбирается сотрудником вручную для каждого решения по занятию.',
+          ),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _editCommerceCatalog(
+    String listKey,
+    Map<String, dynamic>? current,
+  ) async {
+    if (!_canManageCommerceCatalogs) return;
+    final items = _items(listKey)..sort(_byCatalogOrder);
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => _CommerceCatalogEditorDialog(
+        settlement: listKey == 'lessonSettlementTypes',
+        item: current,
+        nextOrder: items.length,
+      ),
+    );
+    if (result == null) return;
+    final index = current == null
+        ? -1
+        : items.indexWhere((item) => item['stableKey'] == current['stableKey']);
+    if (index < 0) {
+      items.add(result);
+    } else {
+      items[index] = result;
+    }
+    _replaceItems(listKey, items);
+    final prefix = listKey == 'lessonSettlementTypes'
+        ? 'settlement'
+        : 'compensation';
+    setState(() => _selectedKey = '$prefix:${result['stableKey']}');
+  }
+
+  void _reorderCommerceCatalog(String listKey, String stableKey, int delta) {
+    final items = _items(listKey)..sort(_byCatalogOrder);
+    final from = items.indexWhere((item) => item['stableKey'] == stableKey);
+    final to = from + delta;
+    if (from < 0 || to < 0 || to >= items.length) return;
+    final moved = items.removeAt(from);
+    items.insert(to, moved);
+    for (var index = 0; index < items.length; index++) {
+      items[index] = {...items[index], 'order': index};
+    }
+    _replaceItems(listKey, items);
   }
 
   Widget _funnelEntry() {
@@ -717,6 +1029,7 @@ class _CrmConfigurationWorkspaceState
           ? const SizedBox.shrink()
           : _settingEditor(setting);
     }
+    if (_area == 'commerce') return _commerceCatalogPreview();
     return const SizedBox.shrink();
   }
 
@@ -833,6 +1146,7 @@ class _CrmConfigurationWorkspaceState
               _snapshot = {...?_snapshot, 'businessSettings': items};
               _dirty = true;
             });
+            _exitController.markDirty();
           },
         ),
         if (_branchId != null)
@@ -930,6 +1244,272 @@ class _CrmConfigurationWorkspaceState
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
+class _CommerceCatalogEditorDialog extends StatefulWidget {
+  const _CommerceCatalogEditorDialog({
+    required this.settlement,
+    required this.item,
+    required this.nextOrder,
+  });
+
+  final bool settlement;
+  final Map<String, dynamic>? item;
+  final int nextOrder;
+
+  @override
+  State<_CommerceCatalogEditorDialog> createState() =>
+      _CommerceCatalogEditorDialogState();
+}
+
+class _CommerceCatalogEditorDialogState
+    extends State<_CommerceCatalogEditorDialog> {
+  late final _key = TextEditingController(
+    text: widget.item?['stableKey']?.toString() ?? '',
+  );
+  late final _label = TextEditingController(
+    text: widget.item?['label']?.toString() ?? '',
+  );
+  late final _share = TextEditingController(
+    text: _hundredthsToDecimal(widget.item?['hourShareBasisPoints'] ?? 10000),
+  );
+  late final _penalty = TextEditingController(
+    text: widget.item?['fixedPenaltyMinor'] == null
+        ? ''
+        : _hundredthsToDecimal(widget.item!['fixedPenaltyMinor']),
+  );
+  late final _value = TextEditingController(
+    text: _hundredthsToDecimal(widget.item?['value'] ?? '0'),
+  );
+  late String _color = widget.item?['colorToken']?.toString() ?? 'neutral';
+  late String _mode = widget.item?['mode']?.toString() ?? 'none';
+  late final Set<String> _contexts = {
+    for (final context
+        in (widget.item?['allowedContexts'] as List? ?? const ['settle']))
+      context.toString(),
+  };
+  late bool _active = widget.item?['active'] != false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _key.dispose();
+    _label.dispose();
+    _share.dispose();
+    _penalty.dispose();
+    _value.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(
+      widget.item == null
+          ? widget.settlement
+                ? 'Новый тип списания'
+                : 'Новый тип оплаты преподавателю'
+          : 'Настройка типа',
+    ),
+    content: SizedBox(
+      width: 560,
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: _label,
+              decoration: const InputDecoration(labelText: 'Название *'),
+            ),
+            const SizedBox(height: AppSpace.sm),
+            TextField(
+              controller: _key,
+              enabled: widget.item == null,
+              decoration: const InputDecoration(
+                labelText: 'Стабильный ключ *',
+                helperText: 'После публикации ключ нельзя переименовать',
+              ),
+            ),
+            const SizedBox(height: AppSpace.sm),
+            if (widget.settlement) ...[
+              DropdownButtonFormField<String>(
+                key: const ValueKey('commerce-settlement-color'),
+                initialValue: _color,
+                decoration: const InputDecoration(labelText: 'Цвет метки *'),
+                items: [
+                  for (final entry in _decisionColorLabels.entries)
+                    DropdownMenuItem(
+                      value: entry.key,
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.sell_outlined,
+                            size: 18,
+                            color: lessonDecisionColorToken(entry.key),
+                          ),
+                          const SizedBox(width: AppSpace.sm),
+                          Text(entry.value),
+                        ],
+                      ),
+                    ),
+                ],
+                onChanged: (value) => setState(() => _color = value!),
+              ),
+              const SizedBox(height: AppSpace.sm),
+              TextField(
+                controller: _share,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Доля списания, % *',
+                  helperText: 'От 0 до 200%',
+                ),
+              ),
+              const SizedBox(height: AppSpace.sm),
+              TextField(
+                controller: _penalty,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Дополнительный штраф, ₽',
+                ),
+              ),
+              const SizedBox(height: AppSpace.sm),
+              Text(
+                'Доступно при',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              for (final entry in _settlementContextLabels.entries)
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: _contexts.contains(entry.key),
+                  title: Text(entry.value),
+                  onChanged: (selected) => setState(() {
+                    selected == true
+                        ? _contexts.add(entry.key)
+                        : _contexts.remove(entry.key);
+                  }),
+                ),
+            ] else ...[
+              DropdownButtonFormField<String>(
+                key: const ValueKey('commerce-compensation-mode'),
+                initialValue: _mode,
+                decoration: const InputDecoration(labelText: 'Расчёт *'),
+                items: [
+                  for (final entry in _compensationModeLabels.entries)
+                    DropdownMenuItem(
+                      value: entry.key,
+                      child: Text(entry.value),
+                    ),
+                ],
+                onChanged: (value) => setState(() {
+                  _mode = value!;
+                  if (const {'none', 'standard'}.contains(_mode)) {
+                    _value.text = '0';
+                  }
+                }),
+              ),
+              if (!const {'none', 'standard'}.contains(_mode)) ...[
+                const SizedBox(height: AppSpace.sm),
+                TextField(
+                  controller: _value,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: _mode == 'percent'
+                        ? 'Процент ставки, % *'
+                        : 'Сумма, ₽ *',
+                    helperText: _mode == 'percent' ? 'От 0 до 200%' : null,
+                  ),
+                ),
+              ],
+              const Padding(
+                padding: EdgeInsets.only(top: AppSpace.md),
+                child: Text(
+                  'Этот тип не связывается автоматически с типом списания.',
+                ),
+              ),
+            ],
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _active,
+              title: Text(_active ? 'Активно' : 'В архиве'),
+              subtitle: const Text('Архив сохраняет прежние факты и историю'),
+              onChanged: (value) => setState(() => _active = value),
+            ),
+            if (_error != null)
+              Text(_error!, style: const TextStyle(color: AppColor.danger)),
+          ],
+        ),
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Отмена'),
+      ),
+      FilledButton(onPressed: _submit, child: const Text('Сохранить')),
+    ],
+  );
+
+  void _submit() {
+    final key = _key.text.trim();
+    final label = _label.text.trim();
+    if (!RegExp(r'^[A-Za-z][A-Za-z0-9_-]{0,63}$').hasMatch(key) ||
+        label.isEmpty) {
+      setState(
+        () => _error = 'Заполните название и корректный стабильный ключ.',
+      );
+      return;
+    }
+    if (widget.settlement) {
+      final share = _decimalToHundredths(_share.text);
+      final penalty = _penalty.text.trim().isEmpty
+          ? null
+          : _decimalToHundredths(_penalty.text);
+      if (share == null ||
+          BigInt.parse(share) > BigInt.from(20000) ||
+          (penalty == null && _penalty.text.trim().isNotEmpty) ||
+          _contexts.isEmpty) {
+        setState(() {
+          _error =
+              'Укажите долю 0–200%, корректный штраф и хотя бы один сценарий.';
+        });
+        return;
+      }
+      final contexts = _contexts.toList()..sort();
+      Navigator.pop(context, <String, dynamic>{
+        'stableKey': key,
+        'label': label,
+        'colorToken': _color,
+        'hourShareBasisPoints': int.parse(share),
+        'fixedPenaltyMinor': ?penalty,
+        'allowedContexts': contexts,
+        'active': _active,
+        'order': widget.item?['order'] ?? widget.nextOrder,
+      });
+      return;
+    }
+    final rawValue = const {'none', 'standard'}.contains(_mode)
+        ? '0'
+        : _decimalToHundredths(_value.text);
+    if (rawValue == null ||
+        (_mode == 'percent' && BigInt.parse(rawValue) > BigInt.from(20000))) {
+      setState(() => _error = 'Укажите корректное значение от 0 до 200%.');
+      return;
+    }
+    Navigator.pop(context, <String, dynamic>{
+      'stableKey': key,
+      'label': label,
+      'mode': _mode,
+      'value': rawValue,
+      'active': _active,
+      'order': widget.item?['order'] ?? widget.nextOrder,
+    });
   }
 }
 
@@ -1456,6 +2036,45 @@ String _stableOptionKey(String label, int index) {
   final base = normalized.isEmpty ? 'option' : normalized;
   return '${base.substring(0, base.length.clamp(0, 64 - suffix.length))}$suffix';
 }
+
+int _byCatalogOrder(Map<String, dynamic> left, Map<String, dynamic> right) {
+  final order = ((left['order'] as num?)?.toInt() ?? 0).compareTo(
+    (right['order'] as num?)?.toInt() ?? 0,
+  );
+  return order != 0
+      ? order
+      : (left['stableKey']?.toString() ?? '').compareTo(
+          right['stableKey']?.toString() ?? '',
+        );
+}
+
+String? _decimalToHundredths(String raw) {
+  final normalized = raw.trim().replaceAll(',', '.');
+  final match = RegExp(r'^(\d+)(?:\.(\d{1,2}))?$').firstMatch(normalized);
+  if (match == null) return null;
+  final whole = BigInt.parse(match.group(1)!);
+  final fraction = (match.group(2) ?? '').padRight(2, '0');
+  return (whole * BigInt.from(100) + BigInt.parse(fraction)).toString();
+}
+
+String _hundredthsToDecimal(Object? raw) {
+  final value = BigInt.tryParse(raw?.toString() ?? '') ?? BigInt.zero;
+  final whole = value ~/ BigInt.from(100);
+  final fraction = (value.remainder(BigInt.from(100)).abs()).toString().padLeft(
+    2,
+    '0',
+  );
+  return fraction == '00' ? '$whole' : '$whole.$fraction';
+}
+
+String _minorToMajor(Object? raw) => _hundredthsToDecimal(raw);
+
+String _compensationValueLabel(Map<String, dynamic> item) =>
+    switch (item['mode']?.toString()) {
+      'percent' => '${_hundredthsToDecimal(item['value'])}%',
+      'fixed' || 'hourly' => '${_hundredthsToDecimal(item['value'])} ₽',
+      _ => 'Не требуется',
+    };
 
 String _message(Object error) {
   if (error is MagicApiException && error.statusCode == 403) {

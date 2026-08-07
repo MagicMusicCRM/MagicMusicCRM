@@ -2,12 +2,12 @@
   "schema_version": 1,
   "task": "V6-002",
   "summary": {
-    "navigation_sites": 262,
-    "production_navigation_sites": 262,
+    "navigation_sites": 265,
+    "production_navigation_sites": 265,
     "typed_entity_usages": 21,
     "workspace_production_usages": 2,
     "entity_link_types": 19,
-    "pending_direct_sites": 236,
+    "pending_direct_sites": 239,
     "display_name_route_candidates": 1,
     "unowned": 0
   },
@@ -42,16 +42,6 @@
       "status": "overlay-or-local-navigation-review",
       "file": "lib/core/navigation/app_back_policy.dart",
       "line": 37
-    },
-    {
-      "kind": "navigator",
-      "expression": "Navigator.of(",
-      "owner": "SYS-APP-EXPERIENCE",
-      "production_reachable": true,
-      "definition_only": false,
-      "status": "overlay-or-local-navigation-review",
-      "file": "lib/features/crm/presentation/client_card/recurring_schedule_plan_section.dart",
-      "line": 737
     },
     {
       "kind": "navigator",
@@ -180,8 +170,8 @@
       "production_reachable": true,
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
-      "file": "lib/features/crm/presentation/client_card/preferred_schedule_editor.dart",
-      "line": 219
+      "file": "lib/features/crm/presentation/client_forms/client_configuration_dialog.dart",
+      "line": 466
     },
     {
       "kind": "navigator",
@@ -191,7 +181,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/crm/presentation/client_forms/client_configuration_dialog.dart",
-      "line": 466
+      "line": 542
     },
     {
       "kind": "navigator",
@@ -251,7 +241,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 286
+      "line": 351
     },
     {
       "kind": "navigator",
@@ -261,7 +251,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 293
+      "line": 358
     },
     {
       "kind": "navigator",
@@ -271,7 +261,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 337
+      "line": 402
     },
     {
       "kind": "navigator",
@@ -281,7 +271,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 343
+      "line": 408
     },
     {
       "kind": "navigator",
@@ -291,7 +281,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1154
+      "line": 1452
     },
     {
       "kind": "navigator",
@@ -301,7 +291,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1261
+      "line": 1485
     },
     {
       "kind": "navigator",
@@ -311,7 +301,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1272
+      "line": 1505
     },
     {
       "kind": "navigator",
@@ -321,7 +311,27 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1348
+      "line": 1734
+    },
+    {
+      "kind": "navigator",
+      "expression": "Navigator.pop(",
+      "owner": "SYS-APP-EXPERIENCE",
+      "production_reachable": true,
+      "definition_only": false,
+      "status": "overlay-or-local-navigation-review",
+      "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
+      "line": 1841
+    },
+    {
+      "kind": "navigator",
+      "expression": "Navigator.pop(",
+      "owner": "SYS-APP-EXPERIENCE",
+      "production_reachable": true,
+      "definition_only": false,
+      "status": "overlay-or-local-navigation-review",
+      "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
+      "line": 1852
     },
     {
       "kind": "navigator",
@@ -330,8 +340,8 @@
       "production_reachable": true,
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
-      "file": "lib/features/crm/presentation/client_forms/client_configuration_dialog.dart",
-      "line": 542
+      "file": "lib/features/crm/presentation/client_card/recurring_schedule_plan_section.dart",
+      "line": 737
     },
     {
       "kind": "navigator",
@@ -340,8 +350,18 @@
       "production_reachable": true,
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
-      "file": "lib/features/crm/presentation/client_card/client_payment_form.dart",
-      "line": 863
+      "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
+      "line": 1928
+    },
+    {
+      "kind": "navigator",
+      "expression": "Navigator.of(",
+      "owner": "SYS-APP-EXPERIENCE",
+      "production_reachable": true,
+      "definition_only": false,
+      "status": "overlay-or-local-navigation-review",
+      "file": "lib/features/crm/presentation/client_card/preferred_schedule_editor.dart",
+      "line": 219
     },
     {
       "kind": "navigator",
@@ -352,26 +372,6 @@
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/crm/presentation/client_card/client_payment_form.dart",
       "line": 808
-    },
-    {
-      "kind": "navigator",
-      "expression": "Navigator.pop(",
-      "owner": "SYS-APP-EXPERIENCE",
-      "production_reachable": true,
-      "definition_only": false,
-      "status": "overlay-or-local-navigation-review",
-      "file": "lib/features/crm/presentation/client_card/client_payment_form.dart",
-      "line": 726
-    },
-    {
-      "kind": "go-router",
-      "expression": "context.go(",
-      "owner": "SYS-APP-EXPERIENCE",
-      "production_reachable": true,
-      "definition_only": false,
-      "status": "route-navigation-review",
-      "file": "lib/features/auth/presentation/screens/password_reset_screen.dart",
-      "line": 104
     },
     {
       "kind": "go-router",
@@ -660,8 +660,28 @@
       "production_reachable": true,
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
+      "file": "lib/features/crm/presentation/client_card/client_payment_form.dart",
+      "line": 726
+    },
+    {
+      "kind": "navigator",
+      "expression": "Navigator.pop(",
+      "owner": "SYS-APP-EXPERIENCE",
+      "production_reachable": true,
+      "definition_only": false,
+      "status": "overlay-or-local-navigation-review",
+      "file": "lib/features/crm/presentation/client_card/client_payment_form.dart",
+      "line": 863
+    },
+    {
+      "kind": "navigator",
+      "expression": "Navigator.pop(",
+      "owner": "SYS-APP-EXPERIENCE",
+      "production_reachable": true,
+      "definition_only": false,
+      "status": "overlay-or-local-navigation-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1368
+      "line": 1948
     },
     {
       "kind": "typed-entity",
@@ -682,16 +702,6 @@
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/manager/presentation/widgets/access_editor_sheet.dart",
       "line": 294
-    },
-    {
-      "kind": "navigator",
-      "expression": "Navigator.pop(",
-      "owner": "SYS-APP-EXPERIENCE",
-      "production_reachable": true,
-      "definition_only": false,
-      "status": "overlay-or-local-navigation-review",
-      "file": "lib/features/manager/presentation/widgets/client_app_user_panel.dart",
-      "line": 120
     },
     {
       "kind": "navigator",
@@ -994,16 +1004,6 @@
       "line": 263
     },
     {
-      "kind": "go-router",
-      "expression": "context.go(",
-      "owner": "SYS-APP-EXPERIENCE",
-      "production_reachable": true,
-      "definition_only": false,
-      "status": "route-navigation-review",
-      "file": "lib/features/auth/presentation/screens/onboarding_screen.dart",
-      "line": 96
-    },
-    {
       "kind": "navigator",
       "expression": "Navigator.pop(",
       "owner": "SYS-APP-EXPERIENCE",
@@ -1015,6 +1015,16 @@
     },
     {
       "kind": "navigator",
+      "expression": "Navigator.pop(",
+      "owner": "SYS-APP-EXPERIENCE",
+      "production_reachable": true,
+      "definition_only": false,
+      "status": "overlay-or-local-navigation-review",
+      "file": "lib/features/manager/presentation/widgets/teacher_stats_widget.dart",
+      "line": 196
+    },
+    {
+      "kind": "navigator",
       "expression": "Navigator.of(",
       "owner": "SYS-APP-EXPERIENCE",
       "production_reachable": true,
@@ -1022,6 +1032,16 @@
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/manager/presentation/widgets/student_funnel_editor.dart",
       "line": 496
+    },
+    {
+      "kind": "navigator",
+      "expression": "Navigator.pop(",
+      "owner": "SYS-APP-EXPERIENCE",
+      "production_reachable": true,
+      "definition_only": false,
+      "status": "overlay-or-local-navigation-review",
+      "file": "lib/features/manager/presentation/widgets/client_app_user_panel.dart",
+      "line": 120
     },
     {
       "kind": "navigator",
@@ -1154,14 +1174,14 @@
       "line": 159
     },
     {
-      "kind": "typed-entity",
-      "expression": "openEntityLink",
+      "kind": "go-router",
+      "expression": "context.go(",
       "owner": "SYS-APP-EXPERIENCE",
       "production_reachable": true,
       "definition_only": false,
-      "status": "typed-context",
-      "file": "lib/features/manager/presentation/widgets/reports_widget.dart",
-      "line": 252
+      "status": "route-navigation-review",
+      "file": "lib/features/auth/presentation/screens/password_reset_screen.dart",
+      "line": 104
     },
     {
       "kind": "typed-entity",
@@ -1170,8 +1190,8 @@
       "production_reachable": true,
       "definition_only": false,
       "status": "typed-context",
-      "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
-      "line": 622
+      "file": "lib/features/manager/presentation/widgets/reports_widget.dart",
+      "line": 252
     },
     {
       "kind": "navigator",
@@ -1314,14 +1334,14 @@
       "line": 371
     },
     {
-      "kind": "navigator",
-      "expression": "Navigator.pop(",
+      "kind": "typed-entity",
+      "expression": "openEntityLink",
       "owner": "SYS-APP-EXPERIENCE",
       "production_reachable": true,
       "definition_only": false,
-      "status": "overlay-or-local-navigation-review",
-      "file": "lib/features/manager/presentation/widgets/teacher_stats_widget.dart",
-      "line": 196
+      "status": "typed-context",
+      "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
+      "line": 622
     },
     {
       "kind": "go-router",
@@ -1330,8 +1350,18 @@
       "production_reachable": true,
       "definition_only": false,
       "status": "route-navigation-review",
-      "file": "lib/features/auth/presentation/screens/login_screen.dart",
-      "line": 262
+      "file": "lib/features/profile/presentation/screens/profile_screen.dart",
+      "line": 514
+    },
+    {
+      "kind": "go-router",
+      "expression": "context.go(",
+      "owner": "SYS-APP-EXPERIENCE",
+      "production_reachable": true,
+      "definition_only": false,
+      "status": "route-navigation-review",
+      "file": "lib/features/auth/presentation/screens/onboarding_screen.dart",
+      "line": 96
     },
     {
       "kind": "go-router",
@@ -1342,16 +1372,6 @@
       "status": "route-navigation-review",
       "file": "lib/features/auth/presentation/screens/login_screen.dart",
       "line": 214
-    },
-    {
-      "kind": "go-router",
-      "expression": "context.go(",
-      "owner": "SYS-APP-EXPERIENCE",
-      "production_reachable": true,
-      "definition_only": false,
-      "status": "route-navigation-review",
-      "file": "lib/features/auth/presentation/screens/login_screen.dart",
-      "line": 70
     },
     {
       "kind": "navigator",
@@ -1984,16 +2004,6 @@
       "line": 436
     },
     {
-      "kind": "go-router",
-      "expression": "context.push(",
-      "owner": "SYS-APP-EXPERIENCE",
-      "production_reachable": true,
-      "definition_only": false,
-      "status": "route-navigation-review",
-      "file": "lib/features/profile/presentation/screens/profile_screen.dart",
-      "line": 514
-    },
-    {
       "kind": "navigator",
       "expression": "Navigator.pop(",
       "owner": "SYS-APP-EXPERIENCE",
@@ -2011,7 +2021,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/admin/presentation/widgets/create_employee_dialog.dart",
-      "line": 164
+      "line": 77
     },
     {
       "kind": "navigator",
@@ -2020,8 +2030,8 @@
       "production_reachable": true,
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
-      "file": "lib/features/admin/presentation/widgets/manage_entities_facilities.dart",
-      "line": 542
+      "file": "lib/features/admin/presentation/widgets/create_employee_dialog.dart",
+      "line": 164
     },
     {
       "kind": "navigator",
@@ -2304,14 +2314,14 @@
       "line": 53
     },
     {
-      "kind": "navigator",
-      "expression": "Navigator.pop(",
+      "kind": "go-router",
+      "expression": "context.go(",
       "owner": "SYS-APP-EXPERIENCE",
       "production_reachable": true,
       "definition_only": false,
-      "status": "overlay-or-local-navigation-review",
-      "file": "lib/features/admin/presentation/widgets/manage_entities_facilities.dart",
-      "line": 496
+      "status": "route-navigation-review",
+      "file": "lib/features/auth/presentation/screens/login_screen.dart",
+      "line": 70
     },
     {
       "kind": "navigator",
@@ -2320,8 +2330,18 @@
       "production_reachable": true,
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
-      "file": "lib/features/admin/presentation/widgets/create_employee_dialog.dart",
-      "line": 77
+      "file": "lib/features/admin/presentation/widgets/manage_entities_facilities.dart",
+      "line": 542
+    },
+    {
+      "kind": "navigator",
+      "expression": "Navigator.pop(",
+      "owner": "SYS-APP-EXPERIENCE",
+      "production_reachable": true,
+      "definition_only": false,
+      "status": "overlay-or-local-navigation-review",
+      "file": "lib/features/admin/presentation/widgets/manage_entities_facilities.dart",
+      "line": 496
     },
     {
       "kind": "navigator",
@@ -2340,8 +2360,8 @@
       "production_reachable": true,
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
-      "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
-      "line": 237
+      "file": "lib/features/admin/presentation/widgets/manage_entities_facilities.dart",
+      "line": 321
     },
     {
       "kind": "navigator",
@@ -2484,14 +2504,14 @@
       "line": 131
     },
     {
-      "kind": "navigator",
-      "expression": "Navigator.pop(",
+      "kind": "go-router",
+      "expression": "context.push(",
       "owner": "SYS-APP-EXPERIENCE",
       "production_reachable": true,
       "definition_only": false,
-      "status": "overlay-or-local-navigation-review",
-      "file": "lib/features/admin/presentation/widgets/create_room_dialog.dart",
-      "line": 194
+      "status": "route-navigation-review",
+      "file": "lib/features/auth/presentation/screens/login_screen.dart",
+      "line": 262
     },
     {
       "kind": "navigator",
@@ -2500,8 +2520,8 @@
       "production_reachable": true,
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
-      "file": "lib/features/admin/presentation/widgets/create_teacher_dialog.dart",
-      "line": 61
+      "file": "lib/features/admin/presentation/widgets/create_room_dialog.dart",
+      "line": 194
     },
     {
       "kind": "navigator",
@@ -2591,7 +2611,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/admin/presentation/widgets/lesson_decision_flow.dart",
-      "line": 360
+      "line": 361
     },
     {
       "kind": "navigator",
@@ -2601,7 +2621,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/admin/presentation/widgets/lesson_decision_flow.dart",
-      "line": 482
+      "line": 483
     },
     {
       "kind": "navigator",
@@ -2640,8 +2660,18 @@
       "production_reachable": true,
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
-      "file": "lib/features/admin/presentation/widgets/manage_entities_facilities.dart",
-      "line": 321
+      "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
+      "line": 237
+    },
+    {
+      "kind": "navigator",
+      "expression": "Navigator.pop(",
+      "owner": "SYS-APP-EXPERIENCE",
+      "production_reachable": true,
+      "definition_only": false,
+      "status": "overlay-or-local-navigation-review",
+      "file": "lib/features/admin/presentation/widgets/create_teacher_dialog.dart",
+      "line": 61
     },
     {
       "kind": "go-router",

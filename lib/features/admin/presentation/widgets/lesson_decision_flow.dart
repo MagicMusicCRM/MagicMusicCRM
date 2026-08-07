@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 
 enum LessonDecisionOperation { reschedule, cancel, settle }
@@ -558,7 +559,7 @@ class _CatalogLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = _tokenColor(item.colorToken);
+    final color = lessonDecisionColorToken(item.colorToken);
     return Row(
       children: [
         Icon(Icons.sell_outlined, size: 17, color: color),
@@ -738,11 +739,3 @@ String _violationLabel(Map<String, dynamic> value) =>
       final code? => code,
       _ => 'Ограничение расписания',
     };
-
-Color _tokenColor(String? token) => switch (token) {
-  'success' => AppColor.success,
-  'warning' => AppColor.warning,
-  'info' || 'blue' || 'cyan' => AppColor.actionBlue,
-  'violet' => const Color(0xFF7C5CBF),
-  _ => AppColor.text2,
-};

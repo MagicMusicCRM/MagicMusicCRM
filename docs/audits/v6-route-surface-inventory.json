@@ -295,7 +295,7 @@
       "state_contract": "data",
       "state_na_reason": null,
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 25
+      "line": 51
     },
     {
       "name": "ClientCardRouteScreen",
@@ -725,7 +725,7 @@
         "retry": true
       },
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 241
+      "line": 294
     },
     {
       "kind": "magic-sheet",
@@ -917,7 +917,7 @@
         "retry": true
       },
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 327
+      "line": 392
     },
     {
       "kind": "dialog",
@@ -933,7 +933,7 @@
         "retry": true
       },
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 851
+      "line": 1165
     },
     {
       "kind": "drawer",
@@ -1941,7 +1941,7 @@
         "retry": true
       },
       "file": "lib/features/admin/presentation/widgets/lesson_decision_flow.dart",
-      "line": 199
+      "line": 200
     },
     {
       "kind": "dialog",

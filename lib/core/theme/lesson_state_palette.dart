@@ -83,3 +83,12 @@ extension LessonStateTokenColors on LessonStateToken {
     LessonStateToken.rescheduled => AppColor.dangerSoft,
   };
 }
+
+/// Shared non-semantic color preview for configurable lesson decisions.
+Color lessonDecisionColorToken(String? token) => switch (token) {
+  'success' => AppColor.success,
+  'warning' => AppColor.warning,
+  'info' || 'blue' || 'cyan' => AppColor.actionBlue,
+  'violet' => const Color(0xFF7C5CBF),
+  _ => AppColor.text2,
+};

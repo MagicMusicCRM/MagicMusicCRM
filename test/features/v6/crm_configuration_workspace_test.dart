@@ -19,6 +19,8 @@ class _ConfigurationApi extends MagicApiClient {
   final Map<String, dynamic> snapshot;
   int configurationReads = 0;
   int publishes = 0;
+  int draftSaves = 0;
+  int rollbacks = 0;
   Map<String, dynamic>? submittedSnapshot;
 
   @override
@@ -58,6 +60,7 @@ class _ConfigurationApi extends MagicApiClient {
       return <String, dynamic>{
             'items': const [
               {'id': 'revision-1', 'version': 1, 'reason': 'Базовая версия'},
+              {'id': 'revision-0', 'version': 0, 'reason': 'Исходная версия'},
             ],
           }
           as T;
@@ -85,7 +88,12 @@ class _ConfigurationApi extends MagicApiClient {
               'fieldsUpdated': 1,
               'fieldsArchived': 0,
               'settingsChanged': 0,
+              'settlementTypesChanged': 1,
+              'compensationRulesChanged': 1,
             },
+            'warnings': const [
+              'Новые правила применятся только к будущим решениям.',
+            ],
           }
           as T;
     }
@@ -93,7 +101,28 @@ class _ConfigurationApi extends MagicApiClient {
       publishes++;
       return <String, dynamic>{'version': 2} as T;
     }
+    if (path == '/crm/configuration/rollback') {
+      rollbacks++;
+      return <String, dynamic>{'version': 2, 'rollbackFromVersion': 0} as T;
+    }
     throw StateError('Unexpected POST $path');
+  }
+
+  @override
+  Future<T> put<T>(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) async {
+    if (path == '/crm/configuration/draft') {
+      draftSaves++;
+      submittedSnapshot = Map<String, dynamic>.from(
+        (data as Map)['snapshot'] as Map,
+      );
+      return <String, dynamic>{'saved': true} as T;
+    }
+    throw StateError('Unexpected PUT $path');
   }
 
   static const _defaultSnapshot = <String, dynamic>{
@@ -128,6 +157,44 @@ class _ConfigurationApi extends MagicApiClient {
         'max': 60,
         'value': 3,
         'branchOverridable': true,
+      },
+    ],
+    'lessonSettlementTypes': [
+      {
+        'stableKey': 'lesson',
+        'label': 'Занятие',
+        'colorToken': 'success',
+        'hourShareBasisPoints': 10000,
+        'allowedContexts': ['settle'],
+        'active': true,
+        'order': 0,
+      },
+      {
+        'stableKey': 'free_lesson',
+        'label': 'Бесплатное занятие',
+        'colorToken': 'warning',
+        'hourShareBasisPoints': 0,
+        'allowedContexts': ['cancel', 'reschedule', 'settle'],
+        'active': true,
+        'order': 1,
+      },
+    ],
+    'teacherCompensationRules': [
+      {
+        'stableKey': 'none',
+        'label': 'Не оплачивать',
+        'mode': 'none',
+        'value': '0',
+        'active': true,
+        'order': 0,
+      },
+      {
+        'stableKey': 'standard',
+        'label': 'Полная стандартная ставка',
+        'mode': 'standard',
+        'value': '0',
+        'active': true,
+        'order': 1,
       },
     ],
   };
@@ -197,6 +264,170 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'director configures independent lesson and teacher catalogs and publishes impact',
+    (tester) async {
+      final api = _ConfigurationApi(
+        role: 'director',
+        capabilities: const [
+          'config.crm.read',
+          'config.crm.edit',
+          'config.crm.publish',
+        ],
+      );
+      await _pump(tester, api);
+
+      await tester.tap(find.text('Занятия и оплата'));
+      await tester.pumpAndSettle();
+      expect(find.text('Типы списания занятия'), findsOneWidget);
+      expect(find.text('Типы оплаты преподавателю'), findsOneWidget);
+
+      await tester.tap(find.text('Бесплатное занятие'));
+      await tester.pumpAndSettle();
+      expect(find.text('Так метка выглядит в занятии'), findsOneWidget);
+      await tester.tap(
+        find.byKey(const ValueKey('edit-commerce-catalog-item')),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Название *'),
+        'Бесплатное занятие без списания',
+      );
+      await tester.tap(find.widgetWithText(SwitchListTile, 'Активно'));
+      await tester.tap(find.text('Сохранить'));
+      await tester.pumpAndSettle();
+      final freeLessonTile = find
+          .ancestor(
+            of: find.text('Бесплатное занятие без списания').first,
+            matching: find.byType(ListTile),
+          )
+          .first;
+      await tester.ensureVisible(freeLessonTile);
+      await tester.tap(
+        find.descendant(of: freeLessonTile, matching: find.byTooltip('Выше')),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Полная стандартная ставка'));
+      await tester.tap(find.text('Полная стандартная ставка'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('edit-commerce-catalog-item')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('commerce-compensation-mode')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Фиксированная сумма').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Сумма, ₽ *'),
+        '1500,50',
+      );
+      await tester.tap(find.text('Сохранить'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('configuration-publish')));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Типов списания изменено: 1 · типов оплаты преподавателю: 1'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('• Новые правила применятся только к будущим решениям.'),
+        findsOneWidget,
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Причина публикации *'),
+        'Обновили правила занятия и оплаты',
+      );
+      await tester.tap(find.text('Опубликовать'));
+      await tester.pumpAndSettle();
+
+      final submitted = api.submittedSnapshot!;
+      final settlements = submitted['lessonSettlementTypes'] as List;
+      expect((settlements.first as Map)['stableKey'], 'free_lesson');
+      expect((settlements.first as Map)['active'], isFalse);
+      final compensation = (submitted['teacherCompensationRules'] as List)
+          .cast<Map>()
+          .singleWhere((item) => item['stableKey'] == 'standard');
+      expect(compensation['mode'], 'fixed');
+      expect(compensation['value'], '150050');
+      expect(api.publishes, 1);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'local catalog changes are guarded by Save Discard Cancel back flow',
+    (tester) async {
+      final api = _ConfigurationApi(
+        role: 'director',
+        capabilities: const [
+          'config.crm.read',
+          'config.crm.edit',
+          'config.crm.publish',
+        ],
+      );
+      await _pump(tester, api);
+      await tester.tap(find.text('Занятия и оплата'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Занятие'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('edit-commerce-catalog-item')),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Название *'),
+        'Обычное занятие',
+      );
+      await tester.tap(find.text('Сохранить'));
+      await tester.pumpAndSettle();
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('Сохранить изменения?'), findsOneWidget);
+      expect(find.text('Остаться'), findsOneWidget);
+      expect(find.text('Не сохранять'), findsOneWidget);
+      await tester.tap(find.text('Сохранить').last);
+      await tester.pumpAndSettle();
+      expect(api.draftSaves, 1);
+      expect(
+        ((api.submittedSnapshot!['lessonSettlementTypes'] as List).first
+            as Map)['label'],
+        'Обычное занятие',
+      );
+    },
+  );
+
+  testWidgets('director can publish rollback as a new configuration revision', (
+    tester,
+  ) async {
+    final api = _ConfigurationApi(
+      role: 'director',
+      capabilities: const [
+        'config.crm.read',
+        'config.crm.edit',
+        'config.crm.publish',
+      ],
+    );
+    await _pump(tester, api);
+    await tester.tap(find.text('История версий'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Опубликовать откат к этой версии'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Причина *'),
+      'Возвращаем утверждённую версию',
+    );
+    await tester.tap(find.text('Продолжить'));
+    await tester.pumpAndSettle();
+    expect(api.rollbacks, 1);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('delegated manager is branch-only and cannot publish', (
     tester,
   ) async {
@@ -208,24 +439,28 @@ void main() {
 
     expect(find.text('Вся школа'), findsNothing);
     expect(find.text('Сокол'), findsOneWidget);
+    expect(find.text('Занятия и оплата'), findsNothing);
+    expect(find.byKey(const ValueKey('add-settlement-type')), findsNothing);
     expect(find.byKey(const ValueKey('configuration-publish')), findsNothing);
     expect(api.configurationReads, 1);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-    'admin sees forbidden state and issues no configuration request',
-    (tester) async {
-      final api = _ConfigurationApi(role: 'admin', capabilities: const []);
+  for (final role in const ['admin', 'teacher', 'client']) {
+    testWidgets('$role sees forbidden state and issues no configuration request', (
+      tester,
+    ) async {
+      final api = _ConfigurationApi(role: role, capabilities: const []);
       await _pump(tester, api);
 
       expect(
         find.text('Недостаточно прав для конфигурации CRM.'),
         findsOneWidget,
       );
+      expect(find.text('Занятия и оплата'), findsNothing);
       expect(api.configurationReads, 0);
-    },
-  );
+    });
+  }
 
   testWidgets('inline field options migrate losslessly to one option set', (
     tester,
