@@ -127,6 +127,8 @@ void main() {
         expect(find.text('Контакты'), findsOneWidget);
         expect(find.text('Документы'), findsOneWidget);
         expect(find.text('Доп. поля'), findsNothing);
+        expect(api.getRequests, isNot(contains('/crm/schedule-plans')));
+        expect(api.getRequests, isNot(contains('/crm/schedule-series')));
         expect(
           find.byKey(
             const Key('client-custom-fields-expansion'),
@@ -168,6 +170,53 @@ void main() {
             'version': 1,
           },
         ],
+        schedulePlans: const [
+          {
+            'id': 'plan-1',
+            'kind': 'individual',
+            'title': 'Индивидуальный вокал',
+            'studentId': 'student-1',
+            'activeFrom': '2026-08-01',
+            'activeUntil': null,
+            'status': 'active',
+            'version': 1,
+            'rows': [
+              {
+                'id': 'series-1',
+                'teacherId': 'teacher-1',
+                'teacherName': 'Мария Иванова',
+                'branchId': 'branch-1',
+                'branchName': 'Главный',
+                'weekday': 6,
+                'beginTime': '12:00',
+                'durationMinutes': 60,
+                'validFrom': '2026-08-01',
+                'validUntil': null,
+                'active': true,
+              },
+            ],
+          },
+        ],
+        schedulePlanTrays: {
+          'plan-1': {
+            'planId': 'plan-1',
+            'items': [
+              {
+                'id': 'lesson-1',
+                'scheduledAt': '2026-08-08T12:00:00.000Z',
+                'localDate': '2026-08-08',
+                'localTime': '12:00',
+                'state': 'scheduled',
+                'settlementMarkers': [],
+                'relationMarker': 'none',
+                'teacher': {'id': 'teacher-1', 'name': 'Мария Иванова'},
+                'room': null,
+              },
+            ],
+            'hasPrevious': false,
+            'hasNext': false,
+          },
+        },
       );
       await tester.pumpWidget(
         _app(
@@ -210,6 +259,8 @@ void main() {
         findsOneWidget,
       );
       expect(find.byKey(const Key('client-calendar-widget')), findsNothing);
+      expect(find.text('Постоянные расписания'), findsOneWidget);
+      expect(find.text('Индивидуальный вокал'), findsOneWidget);
       expect(find.byKey(const Key('client-lesson-date-tray')), findsOneWidget);
       expect(find.text('Фактические занятия'), findsNothing);
       expect(find.text('Предстоящие'), findsNothing);

@@ -7,6 +7,7 @@ import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 
 import 'preferred_schedule_editor.dart';
+import 'recurring_schedule_plan_section.dart';
 
 /// KVA-236: «График занятий» в карточке ученика — серии постоянного
 /// расписания (UX HolliHop image2/3: строка «день · время · педагог ·
@@ -20,6 +21,7 @@ class StudentScheduleSection extends ConsumerStatefulWidget {
   final List<Map<String, dynamic>> branches;
   final String? defaultBranchId;
   final String? legacyPreference;
+  final List<Map<String, dynamic>> subscriptions;
   final bool canWrite;
   final VoidCallback onChanged;
   final ValueChanged<Map<String, dynamic>>? onOpenLesson;
@@ -33,6 +35,7 @@ class StudentScheduleSection extends ConsumerStatefulWidget {
     required this.defaultBranchId,
     required this.canWrite,
     this.legacyPreference,
+    this.subscriptions = const [],
     required this.onChanged,
     this.onOpenLesson,
   });
@@ -176,8 +179,21 @@ class _StudentScheduleSectionState
           },
         ),
         const SizedBox(height: AppSpace.md),
-        _lessonStrip(cs),
-        _paidLegend(cs),
+        if (widget.clientType == 'student')
+          RecurringSchedulePlanSection(
+            studentId: widget.clientId,
+            fallbackLessons: widget.lessons,
+            branches: widget.branches,
+            defaultBranchId: widget.defaultBranchId,
+            subscriptions: widget.subscriptions,
+            canWrite: widget.canWrite,
+            onChanged: widget.onChanged,
+            onOpenLesson: widget.onOpenLesson,
+          )
+        else ...[
+          _lessonStrip(cs),
+          _paidLegend(cs),
+        ],
       ],
     );
   }

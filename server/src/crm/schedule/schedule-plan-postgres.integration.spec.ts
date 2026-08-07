@@ -238,6 +238,21 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
           ]),
         }),
       ]);
+      const participantProjection = await plans.list(actor, {
+        studentId: fixture.studentIds[0],
+        includeEnded: true,
+      });
+      expect(participantProjection.items).toEqual([
+        expect.objectContaining({
+          id: created.id,
+          kind: "group",
+          rows: [expect.objectContaining({
+            teacherName: "Plan Teacher",
+            roomName: expect.stringContaining("Plan room"),
+            branchName: expect.stringContaining("Plan branch"),
+          })],
+        }),
+      ]);
       const updated = await plans.update(actor, created.id, {
         expectedVersion: 1,
         effectiveFrom: fixture.effectiveFrom,

@@ -91,20 +91,33 @@ extension _ClientCardStudent on _ClientCardState {
             ),
             const SizedBox(height: AppSpace.xl),
           ],
-          StudentScheduleSection(
-            clientType: 'student',
-            clientId: _studentId,
-            lessons: _lessons.map((lesson) => lesson.raw).toList(),
-            branches: _branches,
-            defaultBranchId: _clientBranchId,
-            legacyPreference: _customDataForEntity(
-              'students',
-            )['preferredSchedule']?.toString(),
-            canWrite: canWriteSchedule,
-            onChanged: _fetchStudentData,
-            onOpenLesson: _openClientTrayLesson,
-          ),
-          const SizedBox(height: AppSpace.xl),
+          if (canReadSchedule) ...[
+            StudentScheduleSection(
+              clientType: 'student',
+              clientId: _studentId,
+              lessons: _lessons.map((lesson) => lesson.raw).toList(),
+              branches: _branches,
+              defaultBranchId: _clientBranchId,
+              legacyPreference: _customDataForEntity(
+                'students',
+              )['preferredSchedule']?.toString(),
+              subscriptions: [
+                for (final subscription in _subscriptions)
+                  if (subscription.isActive && subscription.id != null)
+                    {
+                      'id': subscription.id,
+                      'label':
+                          subscription.packageName ??
+                          subscription.type ??
+                          'Абонемент',
+                    },
+              ],
+              canWrite: canWriteSchedule,
+              onChanged: _fetchStudentData,
+              onOpenLesson: _openClientTrayLesson,
+            ),
+            const SizedBox(height: AppSpace.xl),
+          ],
           if (!canReadSchedule)
             const MagicPageState(
               kind: MagicPageStateKind.forbidden,

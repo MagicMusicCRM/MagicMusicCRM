@@ -529,6 +529,125 @@ extension MagicCrmSchedule on MagicCrmService {
     };
   }
 
+  Future<List<SchedulePlan>> listSchedulePlans({
+    String? studentId,
+    String? groupId,
+    bool includeEnded = true,
+  }) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/schedule-plans',
+      queryParameters: {
+        'studentId': ?studentId,
+        'groupId': ?groupId,
+        if (includeEnded) 'includeEnded': 'true',
+      },
+    );
+    return _items(response).map(SchedulePlan.fromMap).toList(growable: false);
+  }
+
+  Future<SchedulePlanTrayPage> getSchedulePlanTray(
+    String planId, {
+    String? cursor,
+    String? direction,
+    int limit = 24,
+  }) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/schedule-plans/$planId/tray',
+      queryParameters: {
+        'cursor': ?cursor,
+        if (cursor != null && direction != null) 'direction': direction,
+        'limit': limit.clamp(1, 40),
+      },
+    );
+    return SchedulePlanTrayPage.fromMap(response);
+  }
+
+  Future<Map<String, dynamic>> createSchedulePlan({
+    required MagicMutationIdentity identity,
+    required String title,
+    required String studentId,
+    required String subscriptionId,
+    required String activeFrom,
+    required String? activeUntil,
+    required List<Map<String, dynamic>> rows,
+  }) {
+    return _api.postIdempotent<Map<String, dynamic>>(
+      '/crm/schedule-plans',
+      identity: identity,
+      data: {
+        'kind': 'individual',
+        'title': title.trim(),
+        'studentId': studentId,
+        'subscriptionId': subscriptionId,
+        'activeFrom': activeFrom,
+        'activeUntil': activeUntil,
+        'rows': rows,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> updateSchedulePlan(
+    String planId, {
+    required MagicMutationIdentity identity,
+    required int expectedVersion,
+    required String effectiveFrom,
+    required String title,
+    String? subscriptionId,
+    required String? activeUntil,
+    required List<Map<String, dynamic>> rows,
+  }) {
+    return _api.patchIdempotent<Map<String, dynamic>>(
+      '/crm/schedule-plans/$planId',
+      identity: identity,
+      data: {
+        'expectedVersion': expectedVersion,
+        'effectiveFrom': effectiveFrom,
+        'title': title.trim(),
+        'subscriptionId': ?subscriptionId,
+        'activeUntil': activeUntil,
+        'rows': rows,
+      },
+    );
+  }
+
+  Future<SchedulePlanEndPreview> previewSchedulePlanEnd(
+    String planId, {
+    required int expectedVersion,
+    required String lastDate,
+    required String reasonText,
+  }) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/crm/schedule-plans/$planId/end/preview',
+      data: {
+        'expectedVersion': expectedVersion,
+        'lastDate': lastDate,
+        'reasonText': reasonText.trim(),
+      },
+    );
+    return SchedulePlanEndPreview.fromMap(response);
+  }
+
+  Future<Map<String, dynamic>> endSchedulePlan(
+    String planId, {
+    required MagicMutationIdentity identity,
+    required int expectedVersion,
+    required String lastDate,
+    required String reasonText,
+    required String previewToken,
+  }) {
+    return _api.postIdempotent<Map<String, dynamic>>(
+      '/crm/schedule-plans/$planId/end',
+      identity: identity,
+      data: {
+        'expectedVersion': expectedVersion,
+        'lastDate': lastDate,
+        'reasonText': reasonText.trim(),
+        'previewToken': previewToken,
+        'confirm': true,
+      },
+    );
+  }
+
   /// KVA-236: серии постоянного расписания.
   Future<List<Map<String, dynamic>>> listScheduleSeries({
     String? clientType,

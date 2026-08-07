@@ -367,19 +367,21 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
       physics: embedded ? const NeverScrollableScrollPhysics() : null,
       padding: const EdgeInsets.all(AppSpace.xl),
       children: [
-        StudentScheduleSection(
-          clientType: 'lead',
-          clientId: _leadId,
-          lessons: const [],
-          branches: _branches,
-          defaultBranchId: _clientBranchId,
-          legacyPreference: _customDataForEntity(
-            'leads',
-          )['preferredSchedule']?.toString(),
-          canWrite: canWriteSchedule,
-          onChanged: () {},
-        ),
-        const SizedBox(height: AppSpace.lg),
+        if (canReadSchedule) ...[
+          StudentScheduleSection(
+            clientType: 'lead',
+            clientId: _leadId,
+            lessons: const [],
+            branches: _branches,
+            defaultBranchId: _clientBranchId,
+            legacyPreference: _customDataForEntity(
+              'leads',
+            )['preferredSchedule']?.toString(),
+            canWrite: canWriteSchedule,
+            onChanged: () {},
+          ),
+          const SizedBox(height: AppSpace.lg),
+        ],
         if (!canReadSchedule)
           const MagicPageState(
             kind: MagicPageStateKind.forbidden,

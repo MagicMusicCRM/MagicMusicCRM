@@ -208,6 +208,23 @@ class MagicApiClient {
     );
   }
 
+  Future<T> patchIdempotent<T>(
+    String path, {
+    required MagicMutationIdentity identity,
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) {
+    return request<T>(
+      'PATCH',
+      path,
+      data: data,
+      queryParameters: queryParameters,
+      authenticated: authenticated,
+      mutationIdentity: identity,
+    );
+  }
+
   Future<List<int>> postBytes(
     String path, {
     Object? data,

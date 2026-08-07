@@ -4,8 +4,8 @@
   "evidence_level": "static call inventory + seeded actor/payload and Flutter service-contract baseline; see v6-s0-baseline.md",
   "summary": {
     "service_files": 34,
-    "wire_calls": 262,
-    "production_wire_calls": 262,
+    "wire_calls": 267,
+    "production_wire_calls": 267,
     "process_roots": 2,
     "spawn_sites": 2,
     "unowned": 0
@@ -48,7 +48,25 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/api/magic_api_client.dart",
-      "line": 352
+      "line": 369
+    },
+    {
+      "verb": "PATCH",
+      "expression": "return _api.patch<Map<String, dynamic>>(",
+      "owner": "SYS-SCHEDULE",
+      "production_reachable": true,
+      "status": "static-wire-baseline",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 753
+    },
+    {
+      "verb": "DELETE",
+      "expression": "return _api.delete<Map<String, dynamic>>(",
+      "owner": "SYS-SCHEDULE",
+      "production_reachable": true,
+      "status": "static-wire-baseline",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 763
     },
     {
       "verb": "GET",
@@ -168,15 +186,6 @@
       "line": 147
     },
     {
-      "verb": "DELETE",
-      "expression": "return _api.delete<Map<String, dynamic>>(",
-      "owner": "SYS-SCHEDULE",
-      "production_reachable": true,
-      "status": "static-wire-baseline",
-      "file": "lib/core/services/magic_crm_service_schedule.dart",
-      "line": 644
-    },
-    {
       "verb": "GET",
       "expression": "final response = await _api.get<Map<String, dynamic>>(",
       "owner": "SYS-APP-EXPERIENCE",
@@ -184,6 +193,15 @@
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_messenger_service.dart",
       "line": 161
+    },
+    {
+      "verb": "POST",
+      "expression": "final response = await _api.post<Map<String, dynamic>>(",
+      "owner": "SYS-APP-EXPERIENCE",
+      "production_reachable": true,
+      "status": "static-wire-baseline",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 184
     },
     {
       "verb": "DELETE",
@@ -294,40 +312,13 @@
       "line": 306
     },
     {
-      "verb": "GET",
-      "expression": "final response = await _api.get<Map<String, dynamic>>(",
-      "owner": "SYS-APP-EXPERIENCE",
-      "production_reachable": true,
-      "status": "static-wire-baseline",
-      "file": "lib/core/services/magic_messenger_service.dart",
-      "line": 320
-    },
-    {
-      "verb": "POST",
-      "expression": "final response = await _api.post<Map<String, dynamic>>(",
-      "owner": "SYS-APP-EXPERIENCE",
-      "production_reachable": true,
-      "status": "static-wire-baseline",
-      "file": "lib/core/services/magic_messenger_service.dart",
-      "line": 184
-    },
-    {
-      "verb": "PATCH",
-      "expression": "return _api.patch<Map<String, dynamic>>(",
-      "owner": "SYS-SCHEDULE",
-      "production_reachable": true,
-      "status": "static-wire-baseline",
-      "file": "lib/core/services/magic_crm_service_schedule.dart",
-      "line": 634
-    },
-    {
       "verb": "POST",
       "expression": "return _api.post<Map<String, dynamic>>('/crm/schedule-series', data: data);",
       "owner": "SYS-SCHEDULE",
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_schedule.dart",
-      "line": 606
+      "line": 725
     },
     {
       "verb": "GET",
@@ -336,25 +327,25 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_schedule.dart",
-      "line": 546
+      "line": 665
     },
     {
-      "verb": "GET",
-      "expression": "final response = await _api.get<Map<String, dynamic>>('/crm/groups/$id');",
-      "owner": "SYS-CRM-WORKSPACE",
+      "verb": "POSTIDEMPOTENT",
+      "expression": "return _api.postIdempotent<Map<String, dynamic>>(",
+      "owner": "SYS-SCHEDULE",
       "production_reachable": true,
       "status": "static-wire-baseline",
-      "file": "lib/core/services/magic_crm_service_org.dart",
-      "line": 191
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 638
     },
     {
       "verb": "POST",
       "expression": "final response = await _api.post<Map<String, dynamic>>(",
-      "owner": "SYS-CRM-WORKSPACE",
+      "owner": "SYS-SCHEDULE",
       "production_reachable": true,
       "status": "static-wire-baseline",
-      "file": "lib/core/services/magic_crm_service_org.dart",
-      "line": 217
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 619
     },
     {
       "verb": "PATCH",
@@ -483,6 +474,15 @@
       "line": 171
     },
     {
+      "verb": "GET",
+      "expression": "final response = await _api.get<Map<String, dynamic>>(",
+      "owner": "SYS-APP-EXPERIENCE",
+      "production_reachable": true,
+      "status": "static-wire-baseline",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 320
+    },
+    {
       "verb": "POSTIDEMPOTENT",
       "expression": "return _api.postIdempotent<Map<String, dynamic>>(",
       "owner": "SYS-SCHEDULE",
@@ -490,15 +490,6 @@
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_schedule.dart",
       "line": 184
-    },
-    {
-      "verb": "GET",
-      "expression": "final response = await _api.get<Map<String, dynamic>>(",
-      "owner": "SYS-SCHEDULE",
-      "production_reachable": true,
-      "status": "static-wire-baseline",
-      "file": "lib/core/services/magic_crm_service_schedule.dart",
-      "line": 221
     },
     {
       "verb": "GET",
@@ -600,6 +591,51 @@
       "line": 508
     },
     {
+      "verb": "GET",
+      "expression": "final response = await _api.get<Map<String, dynamic>>(",
+      "owner": "SYS-SCHEDULE",
+      "production_reachable": true,
+      "status": "static-wire-baseline",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 537
+    },
+    {
+      "verb": "GET",
+      "expression": "final response = await _api.get<Map<String, dynamic>>(",
+      "owner": "SYS-SCHEDULE",
+      "production_reachable": true,
+      "status": "static-wire-baseline",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 554
+    },
+    {
+      "verb": "POSTIDEMPOTENT",
+      "expression": "return _api.postIdempotent<Map<String, dynamic>>(",
+      "owner": "SYS-SCHEDULE",
+      "production_reachable": true,
+      "status": "static-wire-baseline",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 574
+    },
+    {
+      "verb": "GET",
+      "expression": "final response = await _api.get<Map<String, dynamic>>(",
+      "owner": "SYS-SCHEDULE",
+      "production_reachable": true,
+      "status": "static-wire-baseline",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 221
+    },
+    {
+      "verb": "POST",
+      "expression": "final response = await _api.post<Map<String, dynamic>>(",
+      "owner": "SYS-CRM-WORKSPACE",
+      "production_reachable": true,
+      "status": "static-wire-baseline",
+      "file": "lib/core/services/magic_crm_service_org.dart",
+      "line": 217
+    },
+    {
       "verb": "POST",
       "expression": "final response = await _api.post<Map<String, dynamic>>(",
       "owner": "SYS-APP-EXPERIENCE",
@@ -609,15 +645,6 @@
       "line": 332
     },
     {
-      "verb": "GET",
-      "expression": "final response = await _api.get<Map<String, dynamic>>(",
-      "owner": "SYS-PLATFORM-QUALITY",
-      "production_reachable": true,
-      "status": "static-wire-baseline",
-      "file": "lib/core/services/magic_notifications_service.dart",
-      "line": 28
-    },
-    {
       "verb": "POST",
       "expression": "await _api.post<Map<String, dynamic>>('/notifications/read-all');",
       "owner": "SYS-PLATFORM-QUALITY",
@@ -625,15 +652,6 @@
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_notifications_service.dart",
       "line": 38
-    },
-    {
-      "verb": "GET",
-      "expression": "final response = await _api.get<Map<String, dynamic>>(",
-      "owner": "SYS-PLATFORM-QUALITY",
-      "production_reachable": true,
-      "status": "static-wire-baseline",
-      "file": "lib/core/services/magic_notifications_service.dart",
-      "line": 44
     },
     {
       "verb": "GET",
@@ -906,15 +924,6 @@
       "line": 265
     },
     {
-      "verb": "GET",
-      "expression": "final response = await _api.get<Map<String, dynamic>>(",
-      "owner": "SYS-CRM-WORKSPACE",
-      "production_reachable": true,
-      "status": "static-wire-baseline",
-      "file": "lib/core/services/magic_crm_service_org.dart",
-      "line": 181
-    },
-    {
       "verb": "POST",
       "expression": "return _api.post<void>(",
       "owner": "SYS-ACCESS-SCOPE",
@@ -925,12 +934,30 @@
     },
     {
       "verb": "POST",
+      "expression": "return _api.post<void>(",
+      "owner": "SYS-ACCESS-SCOPE",
+      "production_reachable": true,
+      "status": "static-wire-baseline",
+      "file": "lib/features/auth/data/services/magic_auth_service.dart",
+      "line": 246
+    },
+    {
+      "verb": "POST",
       "expression": "final response = await _api.post<Map<String, dynamic>>(",
       "owner": "SYS-ACCESS-SCOPE",
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/features/auth/data/services/magic_auth_service.dart",
       "line": 221
+    },
+    {
+      "verb": "GET",
+      "expression": "final response = await _api.get<Map<String, dynamic>>(",
+      "owner": "SYS-PLATFORM-QUALITY",
+      "production_reachable": true,
+      "status": "static-wire-baseline",
+      "file": "lib/core/services/magic_notifications_service.dart",
+      "line": 44
     },
     {
       "verb": "PUT",
@@ -1050,13 +1077,13 @@
       "line": 117
     },
     {
-      "verb": "POST",
-      "expression": "return _api.post<Map<String, dynamic>>(",
+      "verb": "GET",
+      "expression": "final response = await _api.get<Map<String, dynamic>>(",
       "owner": "SYS-PLATFORM-QUALITY",
       "production_reachable": true,
       "status": "static-wire-baseline",
-      "file": "lib/core/services/magic_profile_admin_service.dart",
-      "line": 129
+      "file": "lib/core/services/magic_notifications_service.dart",
+      "line": 28
     },
     {
       "verb": "POST",
@@ -1065,7 +1092,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_profile_admin_service.dart",
-      "line": 139
+      "line": 129
     },
     {
       "verb": "GET",
@@ -1195,12 +1222,30 @@
     },
     {
       "verb": "POST",
-      "expression": "return _api.post<void>(",
-      "owner": "SYS-ACCESS-SCOPE",
+      "expression": "return _api.post<Map<String, dynamic>>(",
+      "owner": "SYS-PLATFORM-QUALITY",
       "production_reachable": true,
       "status": "static-wire-baseline",
-      "file": "lib/features/auth/data/services/magic_auth_service.dart",
-      "line": 246
+      "file": "lib/core/services/magic_profile_admin_service.dart",
+      "line": 139
+    },
+    {
+      "verb": "PATCH",
+      "expression": "return _api.patch<Map<String, dynamic>>(",
+      "owner": "SYS-CRM-WORKSPACE",
+      "production_reachable": true,
+      "status": "static-wire-baseline",
+      "file": "lib/features/crm/presentation/client_forms/client_forms_api.dart",
+      "line": 244
+    },
+    {
+      "verb": "GET",
+      "expression": "final response = await _api.get<Map<String, dynamic>>('/crm/groups/$id');",
+      "owner": "SYS-CRM-WORKSPACE",
+      "production_reachable": true,
+      "status": "static-wire-baseline",
+      "file": "lib/core/services/magic_crm_service_org.dart",
+      "line": 191
     },
     {
       "verb": "DELETE",
@@ -1210,33 +1255,6 @@
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_org.dart",
       "line": 171
-    },
-    {
-      "verb": "PATCH",
-      "expression": "final response = await _api.patch<Map<String, dynamic>>(",
-      "owner": "SYS-CRM-WORKSPACE",
-      "production_reachable": true,
-      "status": "static-wire-baseline",
-      "file": "lib/core/services/magic_crm_service_org.dart",
-      "line": 163
-    },
-    {
-      "verb": "POST",
-      "expression": "final response = await _api.post<Map<String, dynamic>>(",
-      "owner": "SYS-CRM-WORKSPACE",
-      "production_reachable": true,
-      "status": "static-wire-baseline",
-      "file": "lib/core/services/magic_crm_service_org.dart",
-      "line": 145
-    },
-    {
-      "verb": "POST",
-      "expression": "final response = await _api.post<Map<String, dynamic>>(",
-      "owner": "SYS-CRM-WORKSPACE",
-      "production_reachable": true,
-      "status": "static-wire-baseline",
-      "file": "lib/core/services/magic_crm_service_core.dart",
-      "line": 374
     },
     {
       "verb": "PATCH",
@@ -1491,15 +1509,6 @@
       "line": 1110
     },
     {
-      "verb": "GET",
-      "expression": "final response = await _api.get<Map<String, dynamic>>('/crm/teachers/$id');",
-      "owner": "SYS-CRM-WORKSPACE",
-      "production_reachable": true,
-      "status": "static-wire-baseline",
-      "file": "lib/core/services/magic_crm_service_core.dart",
-      "line": 349
-    },
-    {
       "verb": "POST",
       "expression": "return _api.post<Map<String, dynamic>>('/crm/expenses', data: data);",
       "owner": "SYS-CRM-WORKSPACE",
@@ -1507,6 +1516,24 @@
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_finance.dart",
       "line": 1124
+    },
+    {
+      "verb": "POST",
+      "expression": "final response = await _api.post<Map<String, dynamic>>(",
+      "owner": "SYS-CRM-WORKSPACE",
+      "production_reachable": true,
+      "status": "static-wire-baseline",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 374
+    },
+    {
+      "verb": "GET",
+      "expression": "final response = await _api.get<Map<String, dynamic>>('/crm/teachers/$id');",
+      "owner": "SYS-CRM-WORKSPACE",
+      "production_reachable": true,
+      "status": "static-wire-baseline",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 349
     },
     {
       "verb": "GET",
@@ -1518,13 +1545,13 @@
       "line": 339
     },
     {
-      "verb": "DELETE",
-      "expression": "await _api.delete<Map<String, dynamic>>('/crm/students/$id');",
+      "verb": "POST",
+      "expression": "return _api.post<Map<String, dynamic>>('/crm/students/$id/return-to-lead');",
       "owner": "SYS-CRM-WORKSPACE",
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_core.dart",
-      "line": 296
+      "line": 300
     },
     {
       "verb": "POST",
@@ -1533,7 +1560,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/api/magic_api_client.dart",
-      "line": 442
+      "line": 459
     },
     {
       "verb": "DELETE",
@@ -1654,21 +1681,21 @@
     },
     {
       "verb": "GET",
+      "expression": "final res = await _api.get<Map<String, dynamic>>(",
+      "owner": "SYS-CRM-WORKSPACE",
+      "production_reachable": true,
+      "status": "static-wire-baseline",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1137
+    },
+    {
+      "verb": "GET",
       "expression": "final response = await _api.get<Map<String, dynamic>>(",
       "owner": "SYS-CRM-WORKSPACE",
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_core.dart",
       "line": 20
-    },
-    {
-      "verb": "POST",
-      "expression": "return _api.post<Map<String, dynamic>>(",
-      "owner": "SYS-CRM-WORKSPACE",
-      "production_reachable": true,
-      "status": "static-wire-baseline",
-      "file": "lib/core/services/magic_crm_service_core.dart",
-      "line": 35
     },
     {
       "verb": "POST",
@@ -1788,40 +1815,22 @@
       "line": 287
     },
     {
-      "verb": "POST",
-      "expression": "return _api.post<Map<String, dynamic>>('/crm/students/$id/return-to-lead');",
+      "verb": "DELETE",
+      "expression": "await _api.delete<Map<String, dynamic>>('/crm/students/$id');",
       "owner": "SYS-CRM-WORKSPACE",
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_core.dart",
-      "line": 300
+      "line": 296
     },
     {
-      "verb": "PATCH",
-      "expression": "return _api.patch<Map<String, dynamic>>(",
+      "verb": "POST",
+      "expression": "return _api.post<Map<String, dynamic>>(",
       "owner": "SYS-CRM-WORKSPACE",
       "production_reachable": true,
       "status": "static-wire-baseline",
-      "file": "lib/features/crm/presentation/client_forms/client_forms_api.dart",
-      "line": 244
-    },
-    {
-      "verb": "GET",
-      "expression": "final res = await _api.get<Map<String, dynamic>>(",
-      "owner": "SYS-CRM-WORKSPACE",
-      "production_reachable": true,
-      "status": "static-wire-baseline",
-      "file": "lib/core/services/magic_crm_service_finance.dart",
-      "line": 1137
-    },
-    {
-      "verb": "PATCH",
-      "expression": "return _api.patch<Map<String, dynamic>>(",
-      "owner": "SYS-CRM-WORKSPACE",
-      "production_reachable": true,
-      "status": "static-wire-baseline",
-      "file": "lib/core/services/magic_crm_service_finance.dart",
-      "line": 1181
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 35
     },
     {
       "verb": "GET",
@@ -1829,17 +1838,26 @@
       "owner": "SYS-CRM-WORKSPACE",
       "production_reachable": true,
       "status": "static-wire-baseline",
-      "file": "lib/core/services/magic_crm_service_leads.dart",
-      "line": 173
+      "file": "lib/core/services/magic_crm_service_org.dart",
+      "line": 181
     },
     {
       "verb": "POST",
-      "expression": "return _api.post<Map<String, dynamic>>('/crm/families', data: data);",
+      "expression": "return _api.post<Map<String, dynamic>>(",
       "owner": "SYS-CRM-WORKSPACE",
       "production_reachable": true,
       "status": "static-wire-baseline",
-      "file": "lib/core/services/magic_crm_service_leads.dart",
-      "line": 192
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1166
+    },
+    {
+      "verb": "DELETE",
+      "expression": "return _api.delete<Map<String, dynamic>>(",
+      "owner": "SYS-CRM-WORKSPACE",
+      "production_reachable": true,
+      "status": "static-wire-baseline",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1191
     },
     {
       "verb": "POST",
@@ -2085,6 +2103,42 @@
       "line": 123
     },
     {
+      "verb": "POST",
+      "expression": "final response = await _api.post<Map<String, dynamic>>(",
+      "owner": "SYS-CRM-WORKSPACE",
+      "production_reachable": true,
+      "status": "static-wire-baseline",
+      "file": "lib/core/services/magic_crm_service_org.dart",
+      "line": 145
+    },
+    {
+      "verb": "PATCH",
+      "expression": "final response = await _api.patch<Map<String, dynamic>>(",
+      "owner": "SYS-CRM-WORKSPACE",
+      "production_reachable": true,
+      "status": "static-wire-baseline",
+      "file": "lib/core/services/magic_crm_service_org.dart",
+      "line": 163
+    },
+    {
+      "verb": "POST",
+      "expression": "return _api.post<Map<String, dynamic>>('/crm/families', data: data);",
+      "owner": "SYS-CRM-WORKSPACE",
+      "production_reachable": true,
+      "status": "static-wire-baseline",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 192
+    },
+    {
+      "verb": "GET",
+      "expression": "final response = await _api.get<Map<String, dynamic>>(",
+      "owner": "SYS-CRM-WORKSPACE",
+      "production_reachable": true,
+      "status": "static-wire-baseline",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 173
+    },
+    {
       "verb": "GET",
       "expression": "final response = await _api.get<Map<String, dynamic>>(",
       "owner": "SYS-CRM-WORKSPACE",
@@ -2094,15 +2148,6 @@
       "line": 151
     },
     {
-      "verb": "POST",
-      "expression": "return _api.post<Map<String, dynamic>>(",
-      "owner": "SYS-CRM-WORKSPACE",
-      "production_reachable": true,
-      "status": "static-wire-baseline",
-      "file": "lib/core/services/magic_crm_service_finance.dart",
-      "line": 1166
-    },
-    {
       "verb": "GET",
       "expression": "final response = await _api.get<Map<String, dynamic>>(",
       "owner": "SYS-CRM-WORKSPACE",
@@ -2110,24 +2155,6 @@
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_leads.dart",
       "line": 143
-    },
-    {
-      "verb": "POST",
-      "expression": "return _api.post<Map<String, dynamic>>(",
-      "owner": "SYS-CRM-WORKSPACE",
-      "production_reachable": true,
-      "status": "static-wire-baseline",
-      "file": "lib/core/services/magic_crm_service_leads.dart",
-      "line": 112
-    },
-    {
-      "verb": "DELETE",
-      "expression": "return _api.delete<Map<String, dynamic>>(",
-      "owner": "SYS-CRM-WORKSPACE",
-      "production_reachable": true,
-      "status": "static-wire-baseline",
-      "file": "lib/core/services/magic_crm_service_finance.dart",
-      "line": 1191
     },
     {
       "verb": "POST",
@@ -2256,13 +2283,13 @@
       "line": 1389
     },
     {
-      "verb": "GET",
-      "expression": "return _api.get<Map<String, dynamic>>(",
+      "verb": "PATCH",
+      "expression": "return _api.patch<Map<String, dynamic>>(",
       "owner": "SYS-CRM-WORKSPACE",
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_finance.dart",
-      "line": 1405
+      "line": 1181
     },
     {
       "verb": "GET",
@@ -2271,7 +2298,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_finance.dart",
-      "line": 1416
+      "line": 1405
     },
     {
       "verb": "GET",
@@ -2382,6 +2409,15 @@
       "line": 87
     },
     {
+      "verb": "POST",
+      "expression": "return _api.post<Map<String, dynamic>>(",
+      "owner": "SYS-CRM-WORKSPACE",
+      "production_reachable": true,
+      "status": "static-wire-baseline",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 112
+    },
+    {
       "verb": "PATCH",
       "expression": "return _api.patch<Map<String, dynamic>>(",
       "owner": "SYS-CRM-WORKSPACE",
@@ -2389,6 +2425,15 @@
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_leads.dart",
       "line": 133
+    },
+    {
+      "verb": "GET",
+      "expression": "return _api.get<Map<String, dynamic>>(",
+      "owner": "SYS-CRM-WORKSPACE",
+      "production_reachable": true,
+      "status": "static-wire-baseline",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1416
     },
     {
       "verb": "DELETE",

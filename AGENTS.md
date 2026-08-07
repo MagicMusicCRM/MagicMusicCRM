@@ -61,8 +61,8 @@
   - Проверки: `flutter analyze` чисто, `flutter test` 163/163, `git diff server/`+`lib/core/services/` пусто.
   - Осталось: **P1-7** сетевой baseline (нужен seeded backend). Follow-up: вынести `_V7Field`/`_V7PrimaryButton` в общий файл; выверить текст онбординг-слайдов; owner-визуальная приёмка.
 
-**▶ Следующий шаг:** `/forge` по `.anws/v7/05_TASKS.md`: `T4.1.3` — production
-Client Card section для постоянных расписаний и bounded tray.
+**▶ Следующий шаг:** `/forge` по `.anws/v7/05_TASKS.md`: `INT-S3` — полный
+integration/smoke gate постоянных расписаний на desktop и mobile.
 
 ---
 
@@ -122,7 +122,7 @@ Client Card section для постоянных расписаний и bounded 
 > **Примечание**: Этот блок автоматически поддерживается процессами `/genesis`, `/blueprint` и `/forge`.
 
 - **Последняя версия архитектуры**: `.anws/v7` (Financial & Lesson Integrity)
-- **Активный список задач**: `.anws/v7/05_TASKS.md` — следующая задача `T4.1.2`
+- **Активный список задач**: `.anws/v7/05_TASKS.md` — следующая задача `INT-S3`
 - **Фаза**: `/genesis`, `/design-system` и `/blueprint` завершены; выполняется `/forge`
 - **Последнее обновление**: `2026-08-07`
 
@@ -305,6 +305,22 @@ hidden finance и no duplicates; list ограничивает ended history д�
 shadow unexplained=0, inventories routes=309/DTO=776/finance=246/lesson
 mutations=7/unknown=0/unowned=0 (`docs/audits/v7-schedule-plan-end-tray.md`).
 Следующий шаг `/forge`: `T4.1.3`._
+
+_`T4.1.3` закрыта 2026-08-07: каноническая карточка Student показывает
+active expanded/ended collapsed individual и group планы сразу после
+предпочтительного расписания; отсутствие предпочтения не скрывает планы или
+fallback Lessons. Каждому плану принадлежит bounded двухстрочная tray с
+authoritative lifecycle/settlement/relation markers и cursor arrows. Create,
+effective edit и end переиспользуют существующие v7 adaptive surfaces и один
+`PreferredScheduleEditor`; end требует reason, impact preview и стабильный
+idempotency identity. Forbidden role не создаёт provider и не делает schedule
+requests. Group plan доступен участнику одним SQL projection с teacher/room/
+branch labels без N+1. Gate: responsive widget 6/6 (360/840/1200, text 1.25),
+Flutter full 632/632 и analyze clean; Plan PostgreSQL 6/6, backend full 155/155
+suites и 1223/1223 tests, typecheck/build; access 297/297, shadow access=1782/
+schedule=2000/unexplained=0, reconcile `issues=[]`, inventories unowned=0
+(`docs/audits/v7-client-card-recurring-plans.md`). Следующий шаг `/forge`:
+`INT-S3`._
 
 ### 🌊 Wave v6/S0 — Evidence & UX Foundation ✅
 _Owner подтвердил полное выполнение v6. `V6-001..005` и `INT-S0` закрыты 2026-08-04: воспроизводимый generator покрывает 21 GoRouter route, 248/259 production-reachable Dart files, 256/256 service calls, route/surface/navigation/input/back ownership с unowned=0; v4 inventory обновлён и снова проходит stale-check. Baseline: Flutter analyze clean и 486/486 tests, backend typecheck/build clean, 150/150 suites и 1160/1160 tests, actor/payload 9/9, targeted workflow contracts 68/68 (`docs/audits/v6-s0-baseline.md`). Следующий шаг `/forge`: `V6-101` canonical location adapter._

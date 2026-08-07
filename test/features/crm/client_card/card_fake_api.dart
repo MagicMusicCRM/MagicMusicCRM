@@ -40,6 +40,8 @@ class FakeCardApiClient extends MagicApiClient {
     this.teachers = const [],
     this.rooms = const [],
     this.scheduleSeries = const [],
+    this.schedulePlans = const [],
+    this.schedulePlanTrays = const {},
     this.scheduleMatrix = const [],
     this.replacementPreview,
     this.replacementResult,
@@ -73,6 +75,8 @@ class FakeCardApiClient extends MagicApiClient {
   final List<Map<String, dynamic>> teachers;
   final List<Map<String, dynamic>> rooms;
   final List<Map<String, dynamic>> scheduleSeries;
+  final List<Map<String, dynamic>> schedulePlans;
+  final Map<String, Map<String, dynamic>> schedulePlanTrays;
   final List<Map<String, dynamic>> scheduleMatrix;
   final Map<String, dynamic>? replacementPreview;
   final Map<String, dynamic>? replacementResult;
@@ -124,6 +128,27 @@ class FakeCardApiClient extends MagicApiClient {
     }
     if (path == '/crm/schedule-series') {
       return <String, dynamic>{'items': scheduleSeries} as T;
+    }
+    if (path == '/crm/schedule-plans') {
+      return <String, dynamic>{'items': schedulePlans} as T;
+    }
+    final trayMatch = RegExp(
+      r'^/crm/schedule-plans/([^/]+)/tray$',
+    ).firstMatch(path);
+    if (trayMatch != null) {
+      final planId = trayMatch.group(1)!;
+      return Map<String, dynamic>.from(
+            schedulePlanTrays[planId] ??
+                {
+                  'planId': planId,
+                  'items': <dynamic>[],
+                  'hasPrevious': false,
+                  'hasNext': false,
+                  'previousCursor': null,
+                  'nextCursor': null,
+                },
+          )
+          as T;
     }
     if (path == '/crm/clients/search') {
       final query = queryParameters?['q']?.toString().toLowerCase() ?? '';
@@ -382,7 +407,24 @@ class FakeCardApiClient extends MagicApiClient {
       updateStudentBody = Map<String, dynamic>.from(data as Map);
       return <String, dynamic>{'id': student!['id']} as T;
     }
+    if (RegExp(r'^/crm/schedule-plans/[^/]+$').hasMatch(path)) {
+      return <String, dynamic>{'version': 2} as T;
+    }
     return <String, dynamic>{} as T;
+  }
+
+  @override
+  Future<T> patchIdempotent<T>(
+    String path, {
+    required MagicMutationIdentity identity,
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) async {
+    final body = Map<String, dynamic>.from(data as Map);
+    idempotentRequests.add((path: path, data: body, identity: identity));
+    requests.add('PATCH $path');
+    return <String, dynamic>{'version': 2} as T;
   }
 
   @override
@@ -402,6 +444,22 @@ class FakeCardApiClient extends MagicApiClient {
     }
     if (cancellationPreview != null && path.endsWith('/cancel/preview')) {
       return Map<String, dynamic>.from(cancellationPreview!) as T;
+    }
+    if (path.endsWith('/end/preview')) {
+      return <String, dynamic>{
+            'previewToken': 'schedule-plan-preview-token',
+            'previewExpiresAt': '2026-08-07T12:00:00.000Z',
+            'impact': {
+              'futureUnsettledLessons': 2,
+              'activeReservations': 2,
+              'reservedUnits': '2.00',
+              'preservedTerminalLessons': 3,
+            },
+          }
+          as T;
+    }
+    if (path == '/crm/schedule-plans') {
+      return <String, dynamic>{'id': 'created-plan', 'version': 1} as T;
     }
     if (lead != null &&
         path == '/crm/leads/${lead!['id']}/subscriptions/issue') {
@@ -447,6 +505,9 @@ class FakeCardApiClient extends MagicApiClient {
             cancellationResult ?? const <String, dynamic>{},
           )
           as T;
+    }
+    if (path.endsWith('/end')) {
+      return <String, dynamic>{'status': 'ended', 'version': 2} as T;
     }
     return <String, dynamic>{} as T;
   }

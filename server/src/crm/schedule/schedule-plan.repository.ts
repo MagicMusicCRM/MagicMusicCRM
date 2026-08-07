@@ -75,7 +75,11 @@ export class SchedulePlanRepository {
               order by plan.active_from desc, plan.id
             ) as status_rank
           from app.schedule_plans plan
-          where ($3::uuid is null or plan.student_id = $3)
+          where ($3::uuid is null or plan.student_id = $3 or exists (
+              select 1 from app.schedule_plan_participants student_participant
+              where student_participant.plan_id = plan.id
+                and student_participant.student_id = $3
+            ))
             and ($4::uuid is null or plan.group_id = $4)
             and (
               $1::text = any(array['admin','manager','director','system_admin'])
@@ -108,8 +112,12 @@ export class SchedulePlanRepository {
             select jsonb_agg(jsonb_build_object(
               'id', series.id,
               'teacherId', series.teacher_id,
+              'teacherName', nullif(trim(coalesce(teacher_profile.first_name, '') || ' ' ||
+                coalesce(teacher_profile.last_name, '')), ''),
               'roomId', series.room_id,
+              'roomName', room.name,
               'branchId', series.branch_id,
+              'branchName', branch.name,
               'weekday', series.weekday,
               'beginTime', to_char(series.begin_time, 'HH24:MI'),
               'durationMinutes', series.duration_minutes,
@@ -119,7 +127,12 @@ export class SchedulePlanRepository {
               'supersededBy', series.superseded_by,
               'active', series.deleted_at is null and series.superseded_by is null
             ) order by series.valid_from, series.weekday, series.begin_time, series.id)
-            from app.schedule_series series where series.plan_id = plan.id
+            from app.schedule_series series
+            left join app.teachers teacher on teacher.id = series.teacher_id
+            left join app.profiles teacher_profile on teacher_profile.id = teacher.profile_id
+            left join app.rooms room on room.id = series.room_id
+            left join app.branches branch on branch.id = series.branch_id
+            where series.plan_id = plan.id
           ), '[]'::jsonb) as series,
           coalesce((
             select jsonb_agg(jsonb_build_object(

@@ -325,7 +325,7 @@ graph TD
   - **Зависимости**: T4.1.1.
   - **Приоритет**: P0.
 
-- [ ] **T4.1.3** [REQ-SCHEDULE-102]: Client Card plan section
+- [x] **T4.1.3** [REQ-SCHEDULE-102]: Client Card plan section
   - **Описание**: Render active expanded/ended collapsed plans, rows and own two-row tray; shared adaptive create/edit/end surfaces.
   - **Входные данные**: T4.1.2, [`crm_workspace_v7.md` §3](04_SYSTEM_DESIGN/crm_workspace_v7.md).
   - **Выходные данные**: Flutter service models/controller/section/tests.

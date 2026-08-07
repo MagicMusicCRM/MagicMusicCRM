@@ -17,6 +17,9 @@ class PreferredScheduleDraft {
     required this.teacherId,
     required this.roomId,
     required this.notes,
+    this.title,
+    this.subscriptionId,
+    this.openEnded = false,
   });
 
   final String branchId;
@@ -29,6 +32,9 @@ class PreferredScheduleDraft {
   final String teacherId;
   final String roomId;
   final String notes;
+  final String? title;
+  final String? subscriptionId;
+  final bool openEnded;
 }
 
 class PreferredScheduleEditor extends StatefulWidget {
@@ -38,6 +44,12 @@ class PreferredScheduleEditor extends StatefulWidget {
     required this.rooms,
     required this.defaultBranchId,
     this.series,
+    this.planMode = false,
+    this.initialTitle,
+    this.subscriptionOptions = const [],
+    this.initialSubscriptionId,
+    this.requireSubscription = false,
+    this.allowOpenEnded = false,
     super.key,
   });
 
@@ -46,6 +58,12 @@ class PreferredScheduleEditor extends StatefulWidget {
   final List<Map<String, dynamic>> rooms;
   final String? defaultBranchId;
   final Map<String, dynamic>? series;
+  final bool planMode;
+  final String? initialTitle;
+  final List<Map<String, dynamic>> subscriptionOptions;
+  final String? initialSubscriptionId;
+  final bool requireSubscription;
+  final bool allowOpenEnded;
 
   @override
   State<PreferredScheduleEditor> createState() =>
@@ -57,6 +75,7 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
 
   late final DirtyFormExitController _exitController;
   late final TextEditingController _notesController;
+  late final TextEditingController _titleController;
   late String _branchId;
   late Set<int> _weekdays;
   late String _beginTime;
@@ -66,6 +85,8 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
   late DateTime _validUntil;
   String? _teacherId;
   String? _roomId;
+  String? _subscriptionId;
+  late bool _openEnded;
   String? _error;
 
   bool get _isEdit => widget.series != null;
@@ -89,14 +110,29 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
     _beginTime = series?['begin_time']?.toString() ?? '15:00';
     _durationMinutes = (series?['duration_minutes'] as num?)?.toInt() ?? 60;
     _lessonsPerDay = 1;
-    _validFrom =
-        _date(series?['valid_from']) ??
-        DateUtils.dateOnly(DateTime.now().add(const Duration(days: 1)));
+    final today = DateUtils.dateOnly(DateTime.now());
+    final requestedStart =
+        _date(series?['valid_from']) ?? today.add(const Duration(days: 1));
+    _validFrom = _isEdit && requestedStart.isBefore(today)
+        ? today
+        : requestedStart;
     _validUntil =
         _date(series?['valid_until']) ??
         _validFrom.add(const Duration(days: 90));
+    if (_validUntil.isBefore(_validFrom)) {
+      _validUntil = _validFrom.add(const Duration(days: 90));
+    }
     _teacherId = series?['teacher_id']?.toString();
     _roomId = series?['room_id']?.toString();
+    _subscriptionId = widget.initialSubscriptionId;
+    if (!widget.subscriptionOptions.any(
+      (option) => option['id']?.toString() == _subscriptionId,
+    )) {
+      _subscriptionId = widget.subscriptionOptions.isEmpty
+          ? null
+          : widget.subscriptionOptions.first['id']?.toString();
+    }
+    _openEnded = widget.allowOpenEnded && series?['valid_until'] == null;
     if (!widget.rooms.any(
       (room) =>
           room['id']?.toString() == _roomId &&
@@ -107,6 +143,7 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
     _notesController = TextEditingController(
       text: series?['notes']?.toString() ?? '',
     );
+    _titleController = TextEditingController(text: widget.initialTitle ?? '');
     _exitController = DirtyFormExitController(onSave: _validate);
   }
 
@@ -114,6 +151,7 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
   void dispose() {
     _exitController.dispose();
     _notesController.dispose();
+    _titleController.dispose();
     super.dispose();
   }
 
@@ -133,6 +171,9 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
     teacherId: _teacherId ?? '',
     roomId: _roomId ?? '',
     notes: _notesController.text.trim(),
+    title: widget.planMode ? _titleController.text.trim() : null,
+    subscriptionId: _subscriptionId,
+    openEnded: _openEnded,
   );
 
   void _changed(VoidCallback change) {
@@ -147,13 +188,17 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
     String? error;
     if (_branchId.isEmpty) {
       error = 'Выберите филиал.';
+    } else if (widget.planMode && _titleController.text.trim().isEmpty) {
+      error = 'Укажите название расписания.';
+    } else if (widget.requireSubscription && _subscriptionId == null) {
+      error = 'Выберите абонемент.';
     } else if (_weekdays.isEmpty) {
       error = 'Выберите хотя бы один день недели.';
     } else if (_teacherId == null || _teacherId!.isEmpty) {
       error = 'Выберите педагога.';
     } else if (_roomId == null || _roomId!.isEmpty) {
       error = 'Выберите аудиторию.';
-    } else if (_validUntil.isBefore(_validFrom)) {
+    } else if (!_openEnded && _validUntil.isBefore(_validFrom)) {
       error = 'Дата окончания не может быть раньше даты начала.';
     } else {
       final parts = _beginTime.split(':');
@@ -228,6 +273,32 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (widget.planMode) ...[
+            TextField(
+              key: const ValueKey('schedule-plan-title'),
+              controller: _titleController,
+              maxLength: 160,
+              decoration: const InputDecoration(labelText: 'Название'),
+              onChanged: (_) => _changed(() {}),
+            ),
+            if (widget.requireSubscription) ...[
+              const SizedBox(height: AppSpace.md),
+              DropdownButtonFormField<String>(
+                key: const ValueKey('schedule-plan-subscription'),
+                initialValue: _subscriptionId,
+                decoration: const InputDecoration(labelText: 'Абонемент'),
+                items: [
+                  for (final option in widget.subscriptionOptions)
+                    DropdownMenuItem(
+                      value: option['id']?.toString(),
+                      child: Text(option['label']?.toString() ?? 'Абонемент'),
+                    ),
+                ],
+                onChanged: (value) => _changed(() => _subscriptionId = value),
+              ),
+            ],
+            const SizedBox(height: AppSpace.md),
+          ],
           DropdownButtonFormField<String>(
             key: const ValueKey('preferred-schedule-branch'),
             initialValue: _branchId.isEmpty ? null : _branchId,
@@ -399,24 +470,37 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
                 value: _validUntil,
                 onTap: () => _pickDate(start: false),
               );
+              final fields = [start, if (!_openEnded) end];
               if (constraints.maxWidth < 520) {
                 return Column(
                   children: [
-                    start,
-                    const SizedBox(height: AppSpace.md),
-                    end,
+                    for (var index = 0; index < fields.length; index++) ...[
+                      if (index > 0) const SizedBox(height: AppSpace.md),
+                      fields[index],
+                    ],
                   ],
                 );
               }
               return Row(
                 children: [
-                  Expanded(child: start),
-                  const SizedBox(width: AppSpace.sm),
-                  Expanded(child: end),
+                  for (var index = 0; index < fields.length; index++) ...[
+                    if (index > 0) const SizedBox(width: AppSpace.sm),
+                    Expanded(child: fields[index]),
+                  ],
                 ],
               );
             },
           ),
+          if (widget.allowOpenEnded) ...[
+            const SizedBox(height: AppSpace.sm),
+            SwitchListTile.adaptive(
+              key: const ValueKey('schedule-plan-open-ended'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Без даты окончания'),
+              value: _openEnded,
+              onChanged: (value) => _changed(() => _openEnded = value),
+            ),
+          ],
           const SizedBox(height: AppSpace.md),
           TextField(
             key: const ValueKey('preferred-schedule-notes'),

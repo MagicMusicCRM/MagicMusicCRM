@@ -61,7 +61,7 @@ void main() {
     await tester.tap(find.text('Занятия'));
     await tester.pumpAndSettle();
     expect(find.text('Остаток занятий · 1 активный'), findsOneWidget);
-    expect(find.text('3'), findsWidgets);
+    expect(find.text('2'), findsWidgets);
     await tester.tap(find.byKey(const Key('lesson-balance-subscriptions')));
     await tester.pumpAndSettle();
     expect(find.text('Выданные абонементы'), findsOneWidget);
