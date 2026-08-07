@@ -206,7 +206,7 @@ export class PlatformIntegrityRepository {
       requestId: string;
     },
   ): Promise<string> {
-    const id = randomUUID();
+    const id = input.id ?? randomUUID();
     await client.query(
       `
         insert into app.audit_events (

@@ -51,6 +51,7 @@ const requiredMigrations = [
   "0098_admin_persona_boundary",
   "0103_v7_client_commerce",
   "0106_v7_payment_lifecycle",
+  "0107_v7_payment_reversal",
 ];
 
 const invariantSql: ReadonlyArray<{ id: string; sql: string }> = [

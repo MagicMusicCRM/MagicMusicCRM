@@ -558,7 +558,7 @@ describe("SubscriptionsService", () => {
       const sql = String(query.mock.calls[0][0]);
       // Строки в этих тестах замоканы, SQL не исполняется — поэтому сам запрос
       // проверяем текстом: и join, и то, что сумма берётся именно из прихода.
-      expect(sql).toContain("left join app.payments pay on pay.id = sub.payment_id");
+      expect(sql).toContain("left join app.commerce_ordinary_payments pay");
       expect(sql).toContain("pay.amount as paid_amount");
       // Отменённый платёж — не оплата.
       expect(sql).toContain("pay.deleted_at is null");

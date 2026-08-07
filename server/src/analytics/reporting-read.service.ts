@@ -185,7 +185,7 @@ export class ReportingReadService {
           select
             date_trunc('month', payment.payment_date) as month_start,
             coalesce(sum(payment.amount_minor), 0)::bigint as revenue_minor
-          from app.payments payment
+          from app.commerce_ordinary_payments payment
           where payment.deleted_at is null
             and payment.payment_date >= $1::timestamptz
             and payment.payment_date < $2::timestamptz

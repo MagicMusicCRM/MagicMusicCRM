@@ -115,6 +115,10 @@ export class CommerceProjectionFactory {
         subscriptionName: movement.subscriptionName ?? null,
         sourcePaymentId: movement.sourcePaymentId ?? null,
       })),
+      technicalHistory:
+        actor.role === "client"
+          ? []
+          : (source.technicalHistory ?? []).map((event) => ({ ...event })),
       lessonBalance: this.lessonBalance(subscriptions),
     };
   }

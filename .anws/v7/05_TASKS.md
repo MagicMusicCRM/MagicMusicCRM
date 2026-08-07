@@ -151,7 +151,7 @@ graph TD
   - **Зависимости**: INT-S0.
   - **Приоритет**: P0.
 
-- [ ] **T2.1.3** [REQ-PAYMENT-102, REQ-REPORT-101]: Payment reversal и единый reporting exclusion
+- [x] **T2.1.3** [REQ-PAYMENT-102, REQ-REPORT-101]: Payment reversal и единый reporting exclusion
   - **Описание**: Добавить preview/storno, status-aware void и общий exclusion predicate/view во все consumers из T1.1.1.
   - **Входные данные**: T2.1.2, [`commerce_integrity.detail.md` §4/8](04_SYSTEM_DESIGN/commerce_integrity.detail.md), CH-V7-04.
   - **Выходные данные**: reversal service/API, shared report predicate, updated queries/exports.

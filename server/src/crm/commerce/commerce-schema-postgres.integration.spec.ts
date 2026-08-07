@@ -393,6 +393,11 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
     const client = await pool.connect();
     await client.query("begin");
     try {
+      await client.query(`
+        drop view app.commerce_ordinary_payments,
+          app.commerce_ordinary_account_adjustments,
+          app.commerce_ordinary_payment_records
+      `);
       const fixture = await createClientFixture(client);
       await client.query("drop trigger if exists payments_immutable on app.payments");
       await client.query(
@@ -490,6 +495,11 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
     await client.query("begin");
     try {
       const migrationRoot = resolve(process.cwd(), "db/migrations");
+      await client.query(`
+        drop view app.commerce_ordinary_payments,
+          app.commerce_ordinary_account_adjustments,
+          app.commerce_ordinary_payment_records
+      `);
       await client.query(
         readFileSync(
           resolve(migrationRoot, "0103_v7_client_commerce.down.sql"),
@@ -524,6 +534,44 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
         "commerce.client_finance.write",
         "config.commerce.manage",
       ]);
+    } finally {
+      await client.query("rollback");
+      client.release();
+    }
+  });
+
+  it("rolls the empty payment reversal boundary down and up losslessly", async () => {
+    const client = await pool.connect();
+    await client.query("begin");
+    try {
+      const migrationRoot = resolve(process.cwd(), "db/migrations");
+      await client.query(
+        readFileSync(
+          resolve(migrationRoot, "0107_v7_payment_reversal.down.sql"),
+          "utf8",
+        ),
+      );
+      expect(
+        (
+          await client.query(
+            "select to_regclass('app.commerce_ordinary_payments') as value",
+          )
+        ).rows[0]?.value,
+      ).toBeNull();
+
+      await client.query(
+        readFileSync(
+          resolve(migrationRoot, "0107_v7_payment_reversal.up.sql"),
+          "utf8",
+        ),
+      );
+      expect(
+        (
+          await client.query(
+            "select to_regclass('app.commerce_ordinary_payments') as value",
+          )
+        ).rows[0]?.value,
+      ).toBe("app.commerce_ordinary_payments");
     } finally {
       await client.query("rollback");
       client.release();

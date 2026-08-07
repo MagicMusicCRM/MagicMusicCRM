@@ -127,7 +127,7 @@ export class DashboardService {
           ) as new_leads_count,
           (
             select coalesce(sum(p.amount), 0)
-            from app.payments p, bounds b
+            from app.commerce_ordinary_payments p, bounds b
             where p.deleted_at is null and p.payment_date >= b.month_start
           ) as revenue_month
       `,
@@ -161,7 +161,7 @@ export class DashboardService {
         select
           case when $5::boolean then (
             select coalesce(sum(p.amount), 0)
-            from app.payments p
+            from app.commerce_ordinary_payments p
             join app.students s on s.id = p.student_id and s.deleted_at is null
             where p.deleted_at is null
               and p.payment_date >= $1::timestamptz
@@ -189,7 +189,7 @@ export class DashboardService {
               from app.students st
               left join (
                 select p.student_id, sum(p.amount) as total_paid
-                from app.payments p
+                from app.commerce_ordinary_payments p
                 where p.deleted_at is null
                 group by p.student_id
               ) pay on pay.student_id = st.id
@@ -226,7 +226,8 @@ export class DashboardService {
                 left join app.groups g on g.id = l.group_id and g.deleted_at is null
                 left join app.subscriptions sub on sub.id = lp.subscription_id
                 left join app.subscription_packages pkg on pkg.id = sub.package_id
-                left join app.payments sub_pay on sub_pay.id = sub.payment_id
+                left join app.commerce_ordinary_payments sub_pay
+                  on sub_pay.id = sub.payment_id
                 where l.deleted_at is null
                   and l.status in ('completed', 'done')
                   and l.is_trial = false
@@ -235,7 +236,7 @@ export class DashboardService {
               ) cost on cost.student_id = st.id
               left join (
                 select adj.student_id, sum(adj.amount) as total_adjustments
-                from app.account_adjustments adj
+                from app.commerce_ordinary_account_adjustments adj
                 -- Отменённая запись не деньги — см. тот же фильтр в
                 -- FinanceService.listStudentBalances.
                 where adj.deleted_at is null and adj.status <> 'void'
@@ -418,7 +419,7 @@ export class DashboardService {
           select
             date_trunc('month', p.payment_date) as month_start,
             coalesce(sum(p.amount), 0) as revenue
-          from app.payments p
+          from app.commerce_ordinary_payments p
           where p.deleted_at is null
             and p.payment_date >= $1::timestamptz
             and p.payment_date < $2::timestamptz

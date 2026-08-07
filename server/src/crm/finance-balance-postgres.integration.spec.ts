@@ -69,6 +69,10 @@ describe("FinanceService subscription-backed lesson costs", () => {
           occurred_at timestamptz not null default now(),
           status text not null default 'paid', deleted_at timestamptz
         );
+        create view app.commerce_ordinary_payments as
+          select * from app.payments;
+        create view app.commerce_ordinary_account_adjustments as
+          select * from app.account_adjustments;
 
         insert into app.profiles (id, first_name) values
           ('00000000-0000-0000-0000-000000000101', 'Owner'),

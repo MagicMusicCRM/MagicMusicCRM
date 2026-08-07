@@ -232,7 +232,7 @@ export class CrmService {
           ) as lessons_count,
           (
             select coalesce(sum(payment.amount), 0)
-            from app.payments payment
+            from app.commerce_ordinary_payments payment
             where payment.student_id = s.id
               and payment.deleted_at is null
           ) as payments_total,

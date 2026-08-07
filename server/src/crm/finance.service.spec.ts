@@ -159,7 +159,9 @@ describe("FinanceService", () => {
     const sql = String(query.mock.calls[0][0]);
     expect(sql).toContain("left join app.subscriptions sub on sub.id = lp.subscription_id");
     expect(sql).toContain("left join app.subscription_packages pkg on pkg.id = sub.package_id");
-    expect(sql).toContain("left join app.payments sub_pay on sub_pay.id = sub.payment_id");
+    expect(sql).toContain(
+      "left join app.commerce_ordinary_payments sub_pay",
+    );
     expect(sql).toContain("coalesce(sub_pay.amount, pkg.price)");
     expect(sql).toContain("/ nullif(sub.lessons_total, 0)");
     expect(sql).toContain("* lp.charged_hours");
@@ -558,7 +560,9 @@ describe("FinanceService", () => {
       } as never);
 
       expect(result.lessonId).toBeNull();
-      expect(String(query.mock.calls[1][0])).toContain("from app.payments");
+      expect(String(query.mock.calls[1][0])).toContain(
+        "from app.commerce_ordinary_payments",
+      );
     });
   });
 

@@ -140,7 +140,7 @@ describe("ScheduleService", () => {
       await service.listLessons(actor, { limit: 10 });
 
       const sql = String(query.mock.calls[0][0]);
-      expect(sql).toContain("from app.payments pay");
+      expect(sql).toContain("from app.commerce_ordinary_payments pay");
       expect(sql).toContain("pay.lesson_id = l.id");
       // Отменённый платёж — не оплата.
       expect(sql).toContain("pay.deleted_at is null");

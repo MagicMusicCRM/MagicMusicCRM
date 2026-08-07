@@ -448,7 +448,7 @@ export class ScheduleService {
     const paidSql = canSeePayments
       ? `(
             select sum(pay.amount)
-            from app.payments pay
+            from app.commerce_ordinary_payments pay
             where pay.lesson_id = l.id and pay.deleted_at is null
           )`
       : `null::numeric`;

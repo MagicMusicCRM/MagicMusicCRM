@@ -108,7 +108,7 @@ export class AnalyticsService {
       completed_lessons: string;
     }>(
       `select b.id as branch_id, b.name,
-         (select coalesce(sum(p.amount), 0) from app.payments p
+         (select coalesce(sum(p.amount), 0) from app.commerce_ordinary_payments p
             join app.students s on s.id = p.student_id and s.deleted_at is null
            where p.deleted_at is null and p.payment_date >= $1::timestamptz and p.payment_date < $2::timestamptz
              and ${branchIdExpr("s")} = b.id::text) as revenue,

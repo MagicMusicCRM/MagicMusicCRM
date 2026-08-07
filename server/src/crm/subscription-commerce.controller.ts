@@ -12,6 +12,7 @@ import { CurrentActor } from "../common/security/current-actor.decorator";
 import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
 import { ActualPaymentService } from "./commerce/actual-payment.service";
 import { PaymentLifecycleService } from "./commerce/payment-lifecycle.service";
+import { PaymentReversalService } from "./commerce/payment-reversal.service";
 import { SubscriptionLifecycleService } from "./commerce/subscription-lifecycle.service";
 import { SubscriptionIssueService } from "./commerce/subscription-issue.service";
 import {
@@ -22,6 +23,8 @@ import {
 import { RecordActualPaymentDto } from "./dto/record-actual-payment.dto";
 import {
   CreatePaymentRecordDto,
+  PreviewPaymentReversalDto,
+  ReversePaymentDto,
   TransitionPaymentRecordDto,
 } from "./dto/payment-lifecycle.dto";
 import {
@@ -41,6 +44,7 @@ export class SubscriptionCommerceController {
     private readonly paymentService: ActualPaymentService,
     private readonly lifecycleService: SubscriptionLifecycleService,
     private readonly paymentLifecycle: PaymentLifecycleService,
+    private readonly paymentReversal: PaymentReversalService,
   ) {}
 
   @Post(":studentId/subscriptions/issue")
@@ -55,6 +59,42 @@ export class SubscriptionCommerceController {
       idempotencyKey: idempotencyKey ?? "",
       requestId: requestId ?? "",
     });
+  }
+
+  @Post(":studentId/payment-records/:paymentRecordId/reversal/preview")
+  previewPaymentReversal(
+    @CurrentActor() actor: ActorContext,
+    @Param("studentId", ParseUUIDPipe) studentId: string,
+    @Param("paymentRecordId", ParseUUIDPipe) paymentRecordId: string,
+    @Body() dto: PreviewPaymentReversalDto,
+  ) {
+    return this.paymentReversal.preview(
+      actor,
+      studentId,
+      paymentRecordId,
+      dto,
+    );
+  }
+
+  @Post(":studentId/payment-records/:paymentRecordId/reversal")
+  reversePayment(
+    @CurrentActor() actor: ActorContext,
+    @Param("studentId", ParseUUIDPipe) studentId: string,
+    @Param("paymentRecordId", ParseUUIDPipe) paymentRecordId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+    @Body() dto: ReversePaymentDto,
+  ) {
+    return this.paymentReversal.reverse(
+      actor,
+      studentId,
+      paymentRecordId,
+      dto,
+      {
+        idempotencyKey: idempotencyKey ?? "",
+        requestId: requestId ?? "",
+      },
+    );
   }
 
   @Post(":studentId/payment-records")

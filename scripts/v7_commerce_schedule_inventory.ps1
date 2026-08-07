@@ -62,7 +62,7 @@ $serverFiles = @(Get-ChildItem (Join-Path $repoRoot 'server/src') -Recurse -File
   Where-Object { $_.Name -notlike '*.spec.ts' -and $_.Name -notlike '*.d.ts' })
 $flutterFiles = @(Get-ChildItem (Join-Path $repoRoot 'lib') -Recurse -File -Filter '*.dart')
 $sourceFiles = @($serverFiles + $flutterFiles)
-$financeTables = 'app\.(?<table>payments|account_adjustments|subscription_obligation_facts|expected_payments)\b'
+$financeTables = 'app\.(?<table>commerce_ordinary_payments|commerce_ordinary_account_adjustments|commerce_ordinary_payment_records|commerce_reporting_exclusions|client_payment_records|payments|account_adjustments|subscription_obligation_facts|expected_payments)\b'
 $financeWire = '(?i)(?<wire>/(?:[^''"\s]*/)?(?:payments?|finance|subscriptions?|account-adjustments)(?:/[^''"\s]*)?)'
 $lessonWrite = '(?is)(?<statement>(?:update\s+app\.lessons\b|insert\s+into\s+app\.lessons\b).{0,900}?(?:scheduled_at|duration_minutes))'
 $lessonWire = '(?i)(?<wire>/(?:[^''"\s]*/)?lessons?/(?:[^''"\s]*/)?(?:move|reschedule|transition)|\b(?:moveLesson|rescheduleLesson|updateLessonTime)\s*\()'
@@ -132,6 +132,9 @@ $artifact = [ordered]@{
     matched_source_files = $matchedFiles.Count
     finance_callsites = $financeSites.Count
     ordinary_finance_reads = @($financeSites | Where-Object operation -eq 'read').Count
+    reporting_safe_finance_reads = @($financeSites | Where-Object {
+      $_.operation -eq 'read' -and $_.subject -like 'commerce_ordinary_*'
+    }).Count
     lesson_temporal_mutations = $lessonSites.Count
     unowned = $unowned.Count
   }
@@ -152,6 +155,7 @@ $markdown = @"
 | Matched production source files | $($artifact.summary.matched_source_files) |
 | Finance SQL/wire callsites | $($artifact.summary.finance_callsites) |
 | Ordinary finance reads | $($artifact.summary.ordinary_finance_reads) |
+| Reporting-safe finance reads | $($artifact.summary.reporting_safe_finance_reads) |
 | Protected lesson temporal mutations | $($artifact.summary.lesson_temporal_mutations) |
 | Unowned | $($artifact.summary.unowned) |
 

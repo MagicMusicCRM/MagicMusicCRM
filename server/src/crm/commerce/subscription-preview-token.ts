@@ -7,6 +7,26 @@ const CANCEL_TOKEN_DOMAIN =
   "magicmusiccrm:subscription-cancel-preview:v1";
 const PURCHASE_TOKEN_DOMAIN =
   "magicmusiccrm:subscription-purchase-preview:v1";
+const PAYMENT_REVERSAL_TOKEN_DOMAIN =
+  "magicmusiccrm:payment-reversal-preview:v1";
+
+export interface PaymentReversalPreviewTokenPayload {
+  kind: "payment.reversal";
+  actorUserId: string;
+  studentId: string;
+  recipientStudentId: string;
+  paymentRecordId: string;
+  expectedVersion: number;
+  status: "unpaid" | "posted_pending" | "paid";
+  actualPaymentId: string | null;
+  issuedSubscriptionId: string | null;
+  amountMinor: string;
+  currencyCode: string;
+  walletBalanceMinor: string;
+  resultingBalanceMinor: string;
+  issuedAtSeconds: number;
+  expiresAtSeconds: number;
+}
 
 export interface SubscriptionPurchasePreviewTokenPayload {
   kind: "subscription.purchase";
@@ -166,6 +186,32 @@ export function verifySubscriptionPurchasePreview(
     token,
     nowSeconds,
     assertPurchasePayload,
+  );
+}
+
+export function signPaymentReversalPreview(
+  secret: string,
+  payload: PaymentReversalPreviewTokenPayload,
+): string {
+  return signPayload(
+    secret,
+    PAYMENT_REVERSAL_TOKEN_DOMAIN,
+    payload,
+    assertPaymentReversalPayload,
+  );
+}
+
+export function verifyPaymentReversalPreview(
+  secret: string,
+  token: string,
+  nowSeconds: number,
+): PaymentReversalPreviewTokenPayload {
+  return verifyPayload(
+    secret,
+    PAYMENT_REVERSAL_TOKEN_DOMAIN,
+    token,
+    nowSeconds,
+    assertPaymentReversalPayload,
   );
 }
 
@@ -428,6 +474,57 @@ function assertPurchasePayload(
     ) ||
     typeof payload.purchaseFingerprint !== "string" ||
     !/^[a-f0-9]{64}$/.test(payload.purchaseFingerprint) ||
+    !isPositiveInteger(payload.issuedAtSeconds) ||
+    !isPositiveInteger(payload.expiresAtSeconds) ||
+    payload.expiresAtSeconds < payload.issuedAtSeconds
+  ) {
+    throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
+  }
+}
+
+function assertPaymentReversalPayload(
+  value: unknown,
+): asserts value is PaymentReversalPreviewTokenPayload {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
+  }
+  const payload = value as Record<string, unknown>;
+  const exactKeys = [
+    "kind",
+    "actorUserId",
+    "studentId",
+    "recipientStudentId",
+    "paymentRecordId",
+    "expectedVersion",
+    "status",
+    "actualPaymentId",
+    "issuedSubscriptionId",
+    "amountMinor",
+    "currencyCode",
+    "walletBalanceMinor",
+    "resultingBalanceMinor",
+    "issuedAtSeconds",
+    "expiresAtSeconds",
+  ];
+  if (
+    Object.keys(payload).length !== exactKeys.length ||
+    exactKeys.some((key) => !(key in payload)) ||
+    payload.kind !== "payment.reversal" ||
+    !isUuid(payload.actorUserId) ||
+    !isUuid(payload.studentId) ||
+    !isUuid(payload.recipientStudentId) ||
+    !isUuid(payload.paymentRecordId) ||
+    !isPositiveInteger(payload.expectedVersion) ||
+    !["unpaid", "posted_pending", "paid"].includes(payload.status as string) ||
+    (payload.actualPaymentId !== null && !isUuid(payload.actualPaymentId)) ||
+    (payload.issuedSubscriptionId !== null &&
+      !isUuid(payload.issuedSubscriptionId)) ||
+    !isMinor(payload.amountMinor) ||
+    payload.amountMinor === "0" ||
+    typeof payload.currencyCode !== "string" ||
+    !/^[A-Z]{3}$/.test(payload.currencyCode) ||
+    !isSignedMinor(payload.walletBalanceMinor) ||
+    !isSignedMinor(payload.resultingBalanceMinor) ||
     !isPositiveInteger(payload.issuedAtSeconds) ||
     !isPositiveInteger(payload.expiresAtSeconds) ||
     payload.expiresAtSeconds < payload.issuedAtSeconds

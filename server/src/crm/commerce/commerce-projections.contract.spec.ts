@@ -119,6 +119,24 @@ const source = {
       sourceRef: "must-not-leak",
     },
   ],
+  technicalHistory: [
+    {
+      id: "66666666-6666-4666-8666-666666666666",
+      eventType: "monetary_reversal",
+      paymentRecordId: "77777777-7777-4777-8777-777777777777",
+      previousStatus: "paid",
+      amountMinor: "640000",
+      currencyCode: "RUB",
+      sourceKind: "payment",
+      sourceId: "44444444-4444-4444-8444-444444444444",
+      counterpartKind: "account_adjustment",
+      counterpartId: "88888888-8888-4888-8888-888888888888",
+      reason: "Ошибочная оплата",
+      actorUserId: "user-manager",
+      actorName: "Управляющий",
+      occurredAt: "2026-07-29T11:00:00.000Z",
+    },
+  ],
   scope,
   internal: "must-not-leak",
 } as unknown as CommerceProjectionSource;
@@ -164,6 +182,14 @@ describe("v4 commerce projections contract", () => {
       percentBasisPoints: 2000,
       reason: "Льгота",
     });
+    expect(clientProjection.technicalHistory).toEqual([]);
+    expect(staffProjection.technicalHistory).toEqual([
+      expect.objectContaining({
+        eventType: "monetary_reversal",
+        reason: "Ошибочная оплата",
+        actorName: "Управляющий",
+      }),
+    ]);
     expect(clientProjection.lessonBalance).toMatchObject({
       activeSubscriptionCount: 1,
       paid: "6",
@@ -377,12 +403,14 @@ describe("v4 commerce projections contract", () => {
     expect(sql).toContain("app.subscriptions");
     expect(sql).toContain("commercial_snapshot");
     expect(sql).toContain("app.subscription_installments");
-    expect(sql).toContain("app.payments");
+    expect(sql).toContain("app.commerce_ordinary_payments");
     expect(sql).toContain("payment.amount_minor");
     expect(sql).toContain("app.subscription_obligation_facts");
     expect(sql).toContain("app.lesson_client_charge_facts");
     expect(sql).toContain("app.lesson_reservations");
-    expect(sql).toContain("app.account_adjustments");
+    expect(sql).toContain("app.commerce_ordinary_account_adjustments");
+    expect(sql).toContain("app.commerce_ordinary_payment_records");
+    expect(sql).toContain("app.commerce_reporting_exclusions");
     expect(sql).toContain("app.subscription_lifecycle_events");
     expect(sql).not.toMatch(
       /expected_payments|subscription_packages|lesson_participation|attendance/i,

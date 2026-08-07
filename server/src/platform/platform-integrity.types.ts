@@ -1,6 +1,7 @@
 import { PoolClient } from "pg";
 
 export interface PlatformAuditInput {
+  id?: string;
   action: string;
   entityType: string;
   entityId?: string;

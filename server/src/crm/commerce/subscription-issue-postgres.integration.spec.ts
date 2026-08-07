@@ -22,6 +22,8 @@ import { CommerceProjectionRepository } from "./commerce-projection.repository";
 import { InstallmentDueWorker } from "./installment-due.worker";
 import { PaymentLifecycleRepository } from "./payment-lifecycle.repository";
 import { PaymentLifecycleService } from "./payment-lifecycle.service";
+import { PaymentReversalRepository } from "./payment-reversal.repository";
+import { PaymentReversalService } from "./payment-reversal.service";
 import { SubscriptionIssueRepository } from "./subscription-issue.repository";
 import { SubscriptionIssueService } from "./subscription-issue.service";
 import { SubscriptionPreviewTokenService } from "./subscription-preview-token.service";
@@ -64,6 +66,7 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
   let issueService: SubscriptionIssueService;
   let paymentService: ActualPaymentService;
   let paymentLifecycle: PaymentLifecycleService;
+  let paymentReversal: PaymentReversalService;
   let dueWorker: InstallmentDueWorker;
   let commerceRepository: CommerceProjectionRepository;
   let actors: Record<UserRole, ActorContext>;
@@ -96,15 +99,16 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
         emitFinanceChanged: jest.fn(),
       } as unknown as RealtimeBus,
     );
+    const previewTokens = new SubscriptionPreviewTokenService({
+      get: (key: string, fallback?: string) =>
+        key === "COMMERCE_PREVIEW_SECRET" ? previewSecret : fallback,
+    } as unknown as ConfigService);
     issueService = new SubscriptionIssueService(
       issueRepository,
       policy,
       integrity,
       reservations,
-      new SubscriptionPreviewTokenService({
-        get: (key: string, fallback?: string) =>
-          key === "COMMERCE_PREVIEW_SECRET" ? previewSecret : fallback,
-      } as unknown as ConfigService),
+      previewTokens,
     );
     commerceRepository = new CommerceProjectionRepository(database);
     const paymentRepository = new PaymentLifecycleRepository(
@@ -117,6 +121,15 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       policy,
       integrity,
       commerceRepository,
+      reservations,
+    );
+    paymentReversal = new PaymentReversalService(
+      new PaymentReversalRepository(database),
+      issueRepository,
+      commerceRepository,
+      policy,
+      integrity,
+      previewTokens,
       reservations,
     );
     dueWorker = new InstallmentDueWorker(paymentRepository, reservations);
@@ -569,6 +582,213 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
         balanceMinor: "0",
       }),
     ]);
+  });
+
+  it("reverses one paid fact exactly once and excludes it from ordinary reads", async () => {
+    const created = await paymentLifecycle.create(
+      actors.admin,
+      studentId,
+      {
+        amountMinor: "23456",
+        currencyCode: "RUB",
+        status: "paid",
+        method: "cashless",
+        externalIdentifier: `${marker}-reversal-payment`,
+        occurredAt: "2026-08-07T12:00:00.000Z",
+        reason: "Оплата для проверки сторно",
+      },
+      mutationMetadata("reversal-paid-source"),
+    );
+    const preview = await paymentReversal.preview(
+      actors.admin,
+      studentId,
+      created.paymentRecord.id,
+      { expectedVersion: 1 },
+      new Date("2026-08-07T12:01:00.000Z"),
+    );
+    expect(preview).toMatchObject({
+      paymentRecordId: created.paymentRecord.id,
+      operation: "monetary_reversal",
+      walletDeltaMinor: "-23456",
+    });
+    const commands = [
+      mutationMetadata("reversal-paid-admin"),
+      mutationMetadata("reversal-paid-manager"),
+    ];
+    const attempts = await Promise.allSettled(
+      commands.map((metadata) =>
+        paymentReversal.reverse(
+          actors.admin,
+          studentId,
+          created.paymentRecord.id,
+          {
+            previewToken: preview.previewToken,
+            confirm: true,
+            reason: "Дублирующая ошибочная оплата",
+          },
+          metadata,
+        ),
+      ),
+    );
+    expect(attempts.filter((item) => item.status === "fulfilled")).toHaveLength(1);
+    expect(attempts.filter((item) => item.status === "rejected")).toHaveLength(1);
+    const winnerIndex = attempts.findIndex((item) => item.status === "fulfilled");
+    const winner = attempts[winnerIndex] as PromiseFulfilledResult<{
+      exclusion: { id: string; auditEventId: string };
+    }>;
+    const winningActor = actors.admin;
+    const replay = await paymentReversal.reverse(
+      winningActor,
+      studentId,
+      created.paymentRecord.id,
+      {
+        previewToken: preview.previewToken,
+        confirm: true,
+        reason: "Дублирующая ошибочная оплата",
+      },
+      commands[winnerIndex]!,
+    );
+    expect(replay).toMatchObject({
+      operation: "monetary_reversal",
+      replayed: true,
+      exclusion: { id: winner.value.exclusion.id },
+    });
+
+    const facts = await pool.query<{
+      payments: string;
+      adjustments: string;
+      exclusions: string;
+      ordinary_payments: string;
+      ordinary_adjustments: string;
+      ordinary_records: string;
+      audits: string;
+    }>(
+      `
+        select
+          (select count(*)::text from app.payments
+           where id = $1) as payments,
+          (select count(*)::text from app.account_adjustments
+           where source_payment_id = $1) as adjustments,
+          (select count(*)::text from app.commerce_reporting_exclusions
+           where source_kind = 'payment' and source_id = $1) as exclusions,
+          (select count(*)::text from app.commerce_ordinary_payments
+           where id = $1) as ordinary_payments,
+          (select count(*)::text from app.commerce_ordinary_account_adjustments
+           where source_payment_id = $1) as ordinary_adjustments,
+          (select count(*)::text from app.commerce_ordinary_payment_records
+           where id = $2) as ordinary_records,
+          (select count(*)::text from app.audit_events
+           where id = $3 and action = 'crm.payment_reversed') as audits
+      `,
+      [
+        created.actualPayment!.id,
+        created.paymentRecord.id,
+        winner.value.exclusion.auditEventId,
+      ],
+    );
+    expect(facts.rows[0]).toEqual({
+      payments: "1",
+      adjustments: "1",
+      exclusions: "1",
+      ordinary_payments: "0",
+      ordinary_adjustments: "0",
+      ordinary_records: "0",
+      audits: "1",
+    });
+    const scope = await commerceRepository.resolveStudentScope(
+      actors.director,
+      studentId,
+    );
+    const [projection] = await commerceRepository.loadProjection(
+      actors.director,
+      [scope],
+    );
+    expect(
+      projection!.movements.some((item) =>
+        [created.paymentRecord.id, created.actualPayment!.id].includes(item.id),
+      ),
+    ).toBe(false);
+    expect(projection!.technicalHistory).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          paymentRecordId: created.paymentRecord.id,
+          eventType: "monetary_reversal",
+          reason: "Дублирующая ошибочная оплата",
+          actorUserId: winningActor.userId,
+        }),
+      ]),
+    );
+    await expect(
+      paymentLifecycle.transition(
+        actors.admin,
+        studentId,
+        created.paymentRecord.id,
+        {
+          expectedVersion: 1,
+          targetStatus: "unpaid",
+          reason: "Попытка изменить удалённую оплату",
+        },
+        mutationMetadata("reversal-paid-transition"),
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it("technically voids a due marker and materializes one replacement", async () => {
+    const issued = await issueService.issue(
+      actors.director,
+      studentId,
+      {
+        packageId,
+        installments: [
+          { dueAt: "2040-01-01T09:00:00.000Z", amountMinor: "400000" },
+          { dueAt: "2041-01-01T09:00:00.000Z", amountMinor: "400000" },
+        ],
+      },
+      mutationMetadata("reversal-due-subscription"),
+    );
+    const dueAt = new Date("2040-02-01T00:00:00.000Z");
+    await dueWorker.runOnce(dueAt, 100);
+    const first = await pool.query<{ id: string }>(
+      `select id from app.commerce_ordinary_payment_records
+       where installment_id = $1`,
+      [issued.installments[0]!.id],
+    );
+    const preview = await paymentReversal.preview(
+      actors.manager,
+      studentId,
+      first.rows[0]!.id,
+      { expectedVersion: 1 },
+      dueAt,
+    );
+    expect(preview.operation).toBe("technical_void");
+    await paymentReversal.reverse(
+      actors.manager,
+      studentId,
+      first.rows[0]!.id,
+      {
+        previewToken: preview.previewToken,
+        confirm: true,
+        reason: "Неверно созданная часть рассрочки",
+      },
+      mutationMetadata("reversal-due-marker"),
+    );
+    await dueWorker.runOnce(dueAt, 100);
+    const records = await pool.query<{ id: string; ordinary: boolean }>(
+      `
+        select record.id, ordinary.id is not null as ordinary
+        from app.client_payment_records record
+        left join app.commerce_ordinary_payment_records ordinary
+          on ordinary.id = record.id
+        where record.installment_id = $1
+        order by record.created_at, record.id
+      `,
+      [issued.installments[0]!.id],
+    );
+    expect(records.rows).toHaveLength(2);
+    expect(records.rows.filter((row) => row.ordinary)).toHaveLength(1);
+    expect(records.rows.find((row) => row.ordinary)!.id).not.toBe(
+      first.rows[0]!.id,
+    );
   });
 
   it("purchases once from another client personal account and replays safely", async () => {
@@ -1431,6 +1651,13 @@ async function cleanupFixture(
       ...adjustmentIds,
       ...paymentRecordIds,
     ];
+
+    await client.query(
+      `delete from app.commerce_reporting_exclusions
+       where source_id = any($1::uuid[])
+          or counterpart_id = any($1::uuid[])`,
+      [[...paymentIds, ...adjustmentIds, ...paymentRecordIds]],
+    );
 
     await deleteByIds(
       client,

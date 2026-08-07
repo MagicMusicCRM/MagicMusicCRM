@@ -99,6 +99,8 @@ import { CrmConfigurationService } from "./crm-configuration.service";
 import { InstallmentDueWorker } from "./commerce/installment-due.worker";
 import { PaymentLifecycleRepository } from "./commerce/payment-lifecycle.repository";
 import { PaymentLifecycleService } from "./commerce/payment-lifecycle.service";
+import { PaymentReversalRepository } from "./commerce/payment-reversal.repository";
+import { PaymentReversalService } from "./commerce/payment-reversal.service";
 
 @Module({
   imports: [
@@ -197,6 +199,8 @@ import { PaymentLifecycleService } from "./commerce/payment-lifecycle.service";
     SubscriptionReservationService,
     PaymentLifecycleRepository,
     PaymentLifecycleService,
+    PaymentReversalRepository,
+    PaymentReversalService,
     InstallmentDueWorker,
     SharedTaskRepository,
     SharedTaskService,

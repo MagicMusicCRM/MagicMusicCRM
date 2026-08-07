@@ -183,7 +183,7 @@ export class TimelineService {
             pp.first_name as actor_first_name,
             pp.last_name as actor_last_name,
             pay.payment_date as occurred_at
-          from app.payments pay
+          from app.commerce_ordinary_payments pay
           left join app.users pu on pu.id = pay.created_by and pu.deleted_at is null
           left join app.profiles pp on pp.user_id = pu.id and pp.deleted_at is null
           where pay.deleted_at is null

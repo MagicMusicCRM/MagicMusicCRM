@@ -28,6 +28,7 @@ export interface PaymentRecordRow {
   verified_by_name?: string | null;
   subscription_name?: string | null;
   recipient_student_id?: string | null;
+  exclusion_id?: string | null;
 }
 
 export interface PaymentStatusEventRow {
@@ -50,6 +51,7 @@ export interface PaymentTargetRow {
   currency_code: string;
   due_at: Date | string | null;
   recipient_student_id: string;
+  existing_payment_record_id: string | null;
 }
 
 interface DueInstallmentRow {
@@ -60,6 +62,7 @@ interface DueInstallmentRow {
   currency_code: string;
   due_at: Date | string;
   recipient_student_id: string;
+  attempt_number: number | string;
 }
 
 export interface MaterializedDuePayment {
@@ -89,7 +92,14 @@ export class PaymentLifecycleRepository {
           installment.amount_minor::text,
           subscription.currency_code,
           installment.due_at,
-          subscription.student_id as recipient_student_id
+          subscription.student_id as recipient_student_id,
+          (
+            select record.id
+            from app.commerce_ordinary_payment_records record
+            where record.installment_id = installment.id
+            order by record.created_at desc, record.id desc
+            limit 1
+          ) as existing_payment_record_id
         from app.subscriptions subscription
         left join app.subscription_installments installment
           on installment.issued_subscription_id = subscription.id
@@ -124,7 +134,8 @@ export class PaymentLifecycleRepository {
           null::text as amount_minor,
           subscription.currency_code,
           null::timestamptz as due_at,
-          subscription.student_id as recipient_student_id
+          subscription.student_id as recipient_student_id,
+          null::uuid as existing_payment_record_id
         from app.subscriptions subscription
         where subscription.id = $1
           and coalesce(
@@ -153,7 +164,14 @@ export class PaymentLifecycleRepository {
           installment.amount_minor::text,
           installment.currency_code,
           installment.due_at,
-          subscription.student_id as recipient_student_id
+          subscription.student_id as recipient_student_id,
+          (
+            select record.id
+            from app.commerce_ordinary_payment_records record
+            where record.installment_id = installment.id
+            order by record.created_at desc, record.id desc
+            limit 1
+          ) as existing_payment_record_id
         from app.subscription_installments installment
         join app.subscriptions subscription
           on subscription.id = installment.issued_subscription_id
@@ -250,10 +268,16 @@ export class PaymentLifecycleRepository {
   ): Promise<PaymentRecordRow | null> {
     const result = await client.query<PaymentRecordRow>(
       `
-        select *
-        from app.client_payment_records
-        where id = $1 and student_id = $2
-        for update
+        select record.*, exclusion.id as exclusion_id
+        from app.client_payment_records record
+        left join app.commerce_reporting_exclusions exclusion
+          on (exclusion.source_kind = 'payment_record'
+            and exclusion.source_id = record.id)
+          or (record.actual_payment_id is not null
+            and exclusion.source_kind = 'payment'
+            and exclusion.source_id = record.actual_payment_id)
+        where record.id = $1 and record.student_id = $2
+        for update of record
       `,
       [paymentRecordId, studentId],
     );
@@ -374,7 +398,8 @@ export class PaymentLifecycleRepository {
           ), '') as verified_by_name,
           subscription.commercial_snapshot ->> 'displayName'
             as subscription_name,
-          subscription.student_id as recipient_student_id
+          subscription.student_id as recipient_student_id,
+          exclusion.id as exclusion_id
         from app.client_payment_records record
         left join app.users creator on creator.id = record.created_by
         left join app.profiles creator_profile
@@ -384,6 +409,12 @@ export class PaymentLifecycleRepository {
           on verifier_profile.user_id = verifier.id
         left join app.subscriptions subscription
           on subscription.id = record.issued_subscription_id
+        left join app.commerce_reporting_exclusions exclusion
+          on (exclusion.source_kind = 'payment_record'
+            and exclusion.source_id = record.id)
+          or (record.actual_payment_id is not null
+            and exclusion.source_kind = 'payment'
+            and exclusion.source_id = record.actual_payment_id)
         where record.id = $1
       `,
       [paymentRecordId],
@@ -430,7 +461,12 @@ export class PaymentLifecycleRepository {
             installment.amount_minor::text,
             installment.currency_code,
             installment.due_at,
-            subscription.student_id as recipient_student_id
+            subscription.student_id as recipient_student_id,
+            (
+              select count(*) + 1
+              from app.client_payment_records history
+              where history.installment_id = installment.id
+            ) as attempt_number
           from app.subscription_installments installment
           join app.subscriptions subscription
             on subscription.id = installment.issued_subscription_id
@@ -439,20 +475,20 @@ export class PaymentLifecycleRepository {
             and subscription.status = 'active'
             and not exists (
               select 1
-              from app.client_payment_records record
+              from app.commerce_ordinary_payment_records record
               where record.installment_id = installment.id
             )
             and (
               coalesce((
                 select sum(payment.amount_minor)
-                from app.payments payment
+                from app.commerce_ordinary_payments payment
                 where payment.issued_subscription_id = subscription.id
                   and payment.deleted_at is null
               ), 0)
               + coalesce((
                 select sum(adjustment.amount_minor)
-                from app.account_adjustments adjustment
-                join app.payments source
+                from app.commerce_ordinary_account_adjustments adjustment
+                join app.commerce_ordinary_payments source
                   on source.id = adjustment.source_payment_id
                 where source.issued_subscription_id = subscription.id
                   and adjustment.deleted_at is null
@@ -473,7 +509,10 @@ export class PaymentLifecycleRepository {
       );
       const materialized: MaterializedDuePayment[] = [];
       for (const candidate of candidates.rows) {
-        const id = deterministicDueId(candidate.installment_id);
+        const id = deterministicDueId(
+          candidate.installment_id,
+          Number(candidate.attempt_number),
+        );
         const inserted = await client.query<PaymentRecordRow>(
           `
             insert into app.client_payment_records (
@@ -484,7 +523,7 @@ export class PaymentLifecycleRepository {
               $1, $2, $3, $4, $5::bigint, $6,
               'posted_pending', $7, 'Проверить оплату за рассрочку', 1
             )
-            on conflict (installment_id) do nothing
+            on conflict (id) do nothing
             returning *
           `,
           [
@@ -553,9 +592,13 @@ export class PaymentLifecycleRepository {
   }
 }
 
-function deterministicDueId(installmentId: string): string {
+function deterministicDueId(installmentId: string, attemptNumber = 1): string {
   const hex = createHash("sha256")
-    .update(`magicmusiccrm\0installment-due\0${installmentId}`)
+    .update(
+      attemptNumber === 1
+        ? `magicmusiccrm\0installment-due\0${installmentId}`
+        : `magicmusiccrm\0installment-due\0${installmentId}\0${attemptNumber}`,
+    )
     .digest("hex")
     .slice(0, 32)
     .split("");

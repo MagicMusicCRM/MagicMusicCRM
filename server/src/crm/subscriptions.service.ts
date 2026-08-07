@@ -198,7 +198,8 @@ export class SubscriptionsService {
         from app.subscriptions sub
         join app.students s on s.id = sub.student_id and s.deleted_at is null
         left join app.subscription_packages pkg on pkg.id = sub.package_id
-        left join app.payments pay on pay.id = sub.payment_id and pay.deleted_at is null
+        left join app.commerce_ordinary_payments pay
+          on pay.id = sub.payment_id and pay.deleted_at is null
         left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
         where ($3::uuid is null or sub.student_id = $3)
           and (

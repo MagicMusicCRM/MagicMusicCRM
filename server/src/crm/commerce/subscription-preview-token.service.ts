@@ -5,6 +5,8 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import {
+  PaymentReversalPreviewTokenPayload,
+  signPaymentReversalPreview,
   signSubscriptionCancelPreview,
   signSubscriptionPurchasePreview,
   signSubscriptionReplacePreview,
@@ -12,6 +14,7 @@ import {
   SubscriptionPurchasePreviewTokenPayload,
   SubscriptionPreviewTokenError,
   SubscriptionReplacePreviewTokenPayload,
+  verifyPaymentReversalPreview,
   verifySubscriptionCancelPreview,
   verifySubscriptionPurchasePreview,
   verifySubscriptionReplacePreview,
@@ -160,6 +163,53 @@ export class SubscriptionPreviewTokenService {
           error.code === "PREVIEW_TOKEN_EXPIRED"
             ? "Предпросмотр покупки устарел. Обновите расчёт."
             : "Подписанный предпросмотр покупки недействителен.",
+      });
+    }
+  }
+
+  issuePaymentReversal(
+    payload: Omit<
+      PaymentReversalPreviewTokenPayload,
+      "issuedAtSeconds" | "expiresAtSeconds"
+    >,
+    now = new Date(),
+  ): {
+    token: string;
+    expiresAt: string;
+    payload: PaymentReversalPreviewTokenPayload;
+  } {
+    const issuedAtSeconds = Math.floor(now.getTime() / 1000);
+    const complete: PaymentReversalPreviewTokenPayload = {
+      ...payload,
+      issuedAtSeconds,
+      expiresAtSeconds:
+        issuedAtSeconds + SUBSCRIPTION_PREVIEW_TTL_SECONDS,
+    };
+    return {
+      token: signPaymentReversalPreview(this.secret(), complete),
+      expiresAt: new Date(complete.expiresAtSeconds * 1000).toISOString(),
+      payload: complete,
+    };
+  }
+
+  verifyPaymentReversal(
+    token: string,
+    now = new Date(),
+  ): PaymentReversalPreviewTokenPayload {
+    try {
+      return verifyPaymentReversalPreview(
+        this.secret(),
+        token,
+        Math.floor(now.getTime() / 1000),
+      );
+    } catch (error) {
+      if (!(error instanceof SubscriptionPreviewTokenError)) throw error;
+      throw new UnprocessableEntityException({
+        code: error.code,
+        message:
+          error.code === "PREVIEW_TOKEN_EXPIRED"
+            ? "Предпросмотр удаления оплаты устарел. Обновите расчёт."
+            : "Подписанный предпросмотр удаления оплаты недействителен.",
       });
     }
   }

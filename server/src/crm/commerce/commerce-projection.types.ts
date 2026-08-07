@@ -115,6 +115,23 @@ export interface CommerceMovementDto {
   sourcePaymentId?: string | null;
 }
 
+export interface CommerceTechnicalFinanceEventDto {
+  id: string;
+  eventType: "monetary_reversal" | "technical_void";
+  paymentRecordId: string;
+  previousStatus: "unpaid" | "posted_pending" | "paid";
+  amountMinor: string;
+  currencyCode: string;
+  sourceKind: "payment" | "payment_record" | "account_adjustment";
+  sourceId: string;
+  counterpartKind: "payment" | "payment_record" | "account_adjustment" | null;
+  counterpartId: string | null;
+  reason: string;
+  actorUserId: string;
+  actorName: string | null;
+  occurredAt: string;
+}
+
 export interface CommerceLessonBalanceDto {
   activeSubscriptionCount: number;
   total: string;
@@ -132,6 +149,7 @@ export interface CommerceStudentDto {
   accounts: CommerceAccountDto[];
   subscriptions: CommerceSubscriptionDto[];
   movements: CommerceMovementDto[];
+  technicalHistory: CommerceTechnicalFinanceEventDto[];
   lessonBalance: CommerceLessonBalanceDto;
 }
 
@@ -140,6 +158,7 @@ export interface CommerceProjectionSource {
   accounts: CommerceAccountDto[];
   subscriptions: CommerceSubscriptionDto[];
   movements: CommerceMovementDto[];
+  technicalHistory: CommerceTechnicalFinanceEventDto[];
   scope: CommerceProjectionScope;
 }
 

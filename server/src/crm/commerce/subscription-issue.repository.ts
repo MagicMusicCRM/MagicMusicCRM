@@ -234,7 +234,7 @@ export class SubscriptionIssueRepository {
       `
         with facts(amount_minor) as (
           select payment.amount_minor::numeric
-          from app.payments payment
+          from app.commerce_ordinary_payments payment
           where payment.student_id = $1
             and payment.currency = $2
             and payment.deleted_at is null
@@ -256,7 +256,7 @@ export class SubscriptionIssueRepository {
             and charge.currency_code = $2
           union all
           select adjustment.amount_minor::numeric
-          from app.account_adjustments adjustment
+          from app.commerce_ordinary_account_adjustments adjustment
           where adjustment.student_id = $1
             and adjustment.currency_code = $2
             and adjustment.deleted_at is null
@@ -794,13 +794,19 @@ export class SubscriptionIssueRepository {
           where id = $1
             and student_id = $2
             and deleted_at is null
+            and not exists (
+              select 1
+              from app.commerce_reporting_exclusions exclusion
+              where exclusion.source_kind = 'payment'
+                and exclusion.source_id = app.payments.id
+            )
           for share
         )
         select
           source.*,
           coalesce((
             select sum(adjustment.amount_minor)
-            from app.account_adjustments adjustment
+            from app.commerce_ordinary_account_adjustments adjustment
             where adjustment.source_payment_id = source.id
               and adjustment.deleted_at is null
               and adjustment.status = 'paid'

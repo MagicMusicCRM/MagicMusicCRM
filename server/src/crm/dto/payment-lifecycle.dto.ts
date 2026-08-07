@@ -1,6 +1,7 @@
 import { Type } from "class-transformer";
 import {
   IsDateString,
+  IsBoolean,
   IsIn,
   IsInt,
   IsOptional,
@@ -93,6 +94,26 @@ export class TransitionPaymentRecordDto {
   @IsString()
   @MaxLength(1000)
   verificationNote?: string;
+
+  @IsString()
+  @MaxLength(1000)
+  reason: string;
+}
+
+export class PreviewPaymentReversalDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion: number;
+}
+
+export class ReversePaymentDto {
+  @IsString()
+  @MaxLength(16384)
+  previewToken: string;
+
+  @IsBoolean()
+  confirm: boolean;
 
   @IsString()
   @MaxLength(1000)

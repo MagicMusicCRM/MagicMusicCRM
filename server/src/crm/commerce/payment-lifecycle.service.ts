@@ -240,6 +240,7 @@ export class PaymentLifecycleService {
     if (!scopedRecord || scopedRecord.student_id !== studentId) {
       throw new NotFoundException("Оплата не найдена.");
     }
+    this.assertNotVoided(scopedRecord);
     const recipientStudentId =
       scopedRecord.recipient_student_id ?? scopedRecord.student_id;
     await this.commerce.resolveStudentScope(actor, recipientStudentId);
@@ -303,6 +304,7 @@ export class PaymentLifecycleService {
             if (!current) {
               throw new NotFoundException("Оплата не найдена.");
             }
+            this.assertNotVoided(current);
             this.assertTransition(current, dto);
             if (actualPaymentId) {
               await this.issueRepository.createActualPayment(client, {
@@ -499,6 +501,12 @@ export class PaymentLifecycleService {
     if (dto.installmentId && !target?.installment_id) {
       throw new NotFoundException("Платёж рассрочки не найден.");
     }
+    if (target?.existing_payment_record_id) {
+      throw new ConflictException({
+        code: "INSTALLMENT_PAYMENT_RECORD_EXISTS",
+        message: "Для этой части рассрочки оплата уже зафиксирована.",
+      });
+    }
   }
 
   private assertTransition(
@@ -643,6 +651,15 @@ export class PaymentLifecycleService {
       throw new BadRequestException({
         code: "INVALID_REQUEST_ID",
         message: "X-Request-Id обязателен и не должен превышать 128 символов.",
+      });
+    }
+  }
+
+  private assertNotVoided(record: PaymentRecordRow): void {
+    if (record.exclusion_id) {
+      throw new ConflictException({
+        code: "PAYMENT_ALREADY_REVERSED",
+        message: "Оплата уже удалена из обычного учёта.",
       });
     }
   }

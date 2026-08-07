@@ -234,7 +234,7 @@ const replacementContextSql = `
   ),
   payment_total as (
     select coalesce(sum(payment.amount_minor), 0)::bigint as amount_minor
-    from app.payments payment
+    from app.commerce_ordinary_payments payment
     where payment.deleted_at is null
       and payment.issued_subscription_id in (
         select id from lifecycle_chain
@@ -317,7 +317,7 @@ const cancellationContextSql = `
       payment.id,
       payment.amount_minor,
       payment.payment_date
-    from app.payments payment
+    from app.commerce_ordinary_payments payment
     where payment.deleted_at is null
       and payment.issued_subscription_id in (
         select id from lifecycle_chain

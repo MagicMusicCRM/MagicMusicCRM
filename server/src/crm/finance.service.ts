@@ -107,7 +107,7 @@ export class FinanceService {
           pay.amount, pay.currency, pay.payment_date, pay.method,
           pay.external_id, pay.notes, pay.created_by, pay.created_at,
           pay.lesson_id
-        from app.payments pay
+        from app.commerce_ordinary_payments pay
         join app.students s on s.id = pay.student_id and s.deleted_at is null
         left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
         where pay.deleted_at is null
@@ -173,7 +173,7 @@ export class FinanceService {
           p.first_name as student_first_name, p.last_name as student_last_name, pay.amount,
           pay.currency, pay.payment_date, pay.method, pay.external_id,
           pay.notes, pay.created_by, pay.created_at, pay.lesson_id
-        from app.payments pay
+        from app.commerce_ordinary_payments pay
         join app.students s on s.id = pay.student_id and s.deleted_at is null
         left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
         where pay.deleted_at is null
@@ -218,7 +218,7 @@ export class FinanceService {
       `
         select coalesce(sum(pay.amount), 0)::text as total_amount,
           count(*)::text as total_count
-        from app.payments pay
+        from app.commerce_ordinary_payments pay
         join app.students s on s.id = pay.student_id and s.deleted_at is null
         left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
         where pay.deleted_at is null
@@ -339,7 +339,8 @@ export class FinanceService {
           left join app.groups g on g.id = l.group_id and g.deleted_at is null
           left join app.subscriptions sub on sub.id = lp.subscription_id
           left join app.subscription_packages pkg on pkg.id = sub.package_id
-          left join app.payments sub_pay on sub_pay.id = sub.payment_id
+          left join app.commerce_ordinary_payments sub_pay
+            on sub_pay.id = sub.payment_id
           where l.deleted_at is null
             and l.status in ('completed', 'done')
             and l.is_trial = false
@@ -351,7 +352,7 @@ export class FinanceService {
             p.student_id,
             sum(p.amount) as total_paid,
             max(coalesce(p.created_at, p.payment_date)) as updated_at
-          from app.payments p
+          from app.commerce_ordinary_payments p
           where p.deleted_at is null
           group by p.student_id
         ),
@@ -360,7 +361,7 @@ export class FinanceService {
             adj.student_id,
             sum(adj.amount) as total_adjustments,
             max(adj.occurred_at) as updated_at
-          from app.account_adjustments adj
+          from app.commerce_ordinary_account_adjustments adj
           -- Отменённая (status='void') запись не деньги: без этого условия
           -- сторнирование не меняло бы баланс, и отмена ничего бы не отменяла.
           where adj.deleted_at is null and adj.status <> 'void'
@@ -433,7 +434,7 @@ export class FinanceService {
             -- Платёж существует только когда он получен.
             'paid'::text as status,
             false as editable
-          from app.payments p
+          from app.commerce_ordinary_payments p
           left join app.students st on st.id = p.student_id
           left join app.branches b on b.id = st.branch_id
           left join app.users u on u.id = p.created_by and u.deleted_at is null
@@ -485,7 +486,8 @@ export class FinanceService {
           left join app.groups g on g.id = l.group_id and g.deleted_at is null
           left join app.subscriptions sub on sub.id = lp.subscription_id
           left join app.subscription_packages pkg on pkg.id = sub.package_id
-          left join app.payments sub_pay on sub_pay.id = sub.payment_id
+          left join app.commerce_ordinary_payments sub_pay
+            on sub_pay.id = sub.payment_id
           left join app.branches b on b.id = l.branch_id
           where l.deleted_at is null
             and l.status in ('completed', 'done')
@@ -507,7 +509,7 @@ export class FinanceService {
             adj.invoice_number,
             adj.status,
             true as editable
-          from app.account_adjustments adj
+          from app.commerce_ordinary_account_adjustments adj
           left join app.branches b on b.id = adj.branch_id
           left join app.users u on u.id = adj.created_by and u.deleted_at is null
           left join app.profiles author on author.user_id = u.id and author.deleted_at is null
@@ -667,7 +669,7 @@ export class FinanceService {
           null::text as student_first_name, null::text as student_last_name,
           currency, payment_date, method, external_id, notes, created_by, created_at,
           lesson_id
-        from app.payments
+        from app.commerce_ordinary_payments
         where student_id = $1 and amount = $2 and created_by = $3
           and coalesce(method, '') = coalesce($4, '')
           and payment_date = $5 and deleted_at is null

@@ -12,6 +12,7 @@ import {
   CommerceProjectionScope,
   CommerceProjectionSource,
   CommerceSubscriptionDto,
+  CommerceTechnicalFinanceEventDto,
 } from "./commerce-projection.types";
 
 interface ScopeRow {
@@ -25,6 +26,7 @@ interface ProjectionRow {
   accounts: CommerceAccountDto[];
   subscriptions: CommerceSubscriptionDto[];
   movements: CommerceMovementDto[];
+  technical_history: CommerceTechnicalFinanceEventDto[];
 }
 
 @Injectable()
@@ -222,7 +224,9 @@ export class CommerceProjectionRepository {
           coalesce(account_projection.items, '[]'::jsonb) as accounts,
           coalesce(subscription_projection.items, '[]'::jsonb)
             as subscriptions,
-          coalesce(movement_projection.items, '[]'::jsonb) as movements
+          coalesce(movement_projection.items, '[]'::jsonb) as movements,
+          coalesce(technical_history_projection.items, '[]'::jsonb)
+            as technical_history
         from unnest($1::uuid[]) with ordinality
           as selected(student_id, position)
         left join lateral (
@@ -236,7 +240,7 @@ export class CommerceProjectionRepository {
               0::numeric as write_off_minor,
               0::numeric as pending_minor,
               0::numeric as debt_minor
-            from app.payments payment
+            from app.commerce_ordinary_payments payment
             where payment.student_id = selected.student_id
               and payment.deleted_at is null
               and payment.amount_minor is not null
@@ -283,7 +287,7 @@ export class CommerceProjectionRepository {
               0::numeric,
               0::numeric,
               0::numeric
-            from app.account_adjustments adjustment
+            from app.commerce_ordinary_account_adjustments adjustment
             where adjustment.student_id = selected.student_id
               and adjustment.deleted_at is null
               and adjustment.status = 'paid'
@@ -299,7 +303,7 @@ export class CommerceProjectionRepository {
                 then record.amount_minor::numeric else 0::numeric end,
               case when record.status = 'unpaid'
                 then record.amount_minor::numeric else 0::numeric end
-            from app.client_payment_records record
+            from app.commerce_ordinary_payment_records record
             where record.student_id = selected.student_id
           ),
           totals as (
@@ -452,7 +456,7 @@ export class CommerceProjectionRepository {
               select
                 coalesce((
                   select sum(payment.amount_minor)
-                  from app.payments payment
+                   from app.commerce_ordinary_payments payment
                   where payment.issued_subscription_id in (
                     select id from lifecycle_chain
                   )
@@ -460,8 +464,8 @@ export class CommerceProjectionRepository {
                 ), 0)::numeric
                 + coalesce((
                   select sum(adjustment.amount_minor)
-                  from app.account_adjustments adjustment
-                  join app.payments source_payment
+                   from app.commerce_ordinary_account_adjustments adjustment
+                   join app.commerce_ordinary_payments source_payment
                     on source_payment.id = adjustment.source_payment_id
                   where source_payment.issued_subscription_id in (
                     select id from lifecycle_chain
@@ -484,7 +488,7 @@ export class CommerceProjectionRepository {
                 ), 0)::numeric as obligation_minor,
                 coalesce((
                   select sum(record.amount_minor)
-                  from app.client_payment_records record
+                   from app.commerce_ordinary_payment_records record
                   where record.issued_subscription_id in (
                     select id from lifecycle_chain
                   )
@@ -492,7 +496,7 @@ export class CommerceProjectionRepository {
                 ), 0)::numeric as pending_minor,
                 coalesce((
                   select sum(record.amount_minor)
-                  from app.client_payment_records record
+                   from app.commerce_ordinary_payment_records record
                   where record.issued_subscription_id in (
                     select id from lifecycle_chain
                   )
@@ -542,7 +546,7 @@ export class CommerceProjectionRepository {
                 'currencyCode', installment.currency_code,
                 'status', coalesce((
                   select record.status
-                  from app.client_payment_records record
+                   from app.commerce_ordinary_payment_records record
                   where record.installment_id = installment.id
                 ), case
                   when installment.status = 'void' then 'void'
@@ -618,7 +622,7 @@ export class CommerceProjectionRepository {
                 subscription.commercial_snapshot ->> 'displayName'
                   as subscription_name,
                 null::uuid as source_payment_id
-              from app.payments payment
+              from app.commerce_ordinary_payments payment
               left join app.branches branch on branch.id = payment.branch_id
               left join app.subscriptions subscription
                 on subscription.id = payment.issued_subscription_id
@@ -651,7 +655,7 @@ export class CommerceProjectionRepository {
                 record.issued_subscription_id,
                 subscription.commercial_snapshot ->> 'displayName',
                 null::uuid
-              from app.client_payment_records record
+              from app.commerce_ordinary_payment_records record
               left join app.payments actual
                 on actual.id = record.actual_payment_id
               left join app.branches branch on branch.id = actual.branch_id
@@ -734,7 +738,7 @@ export class CommerceProjectionRepository {
                 source_payment.issued_subscription_id,
                 subscription.commercial_snapshot ->> 'displayName',
                 adjustment.source_payment_id
-              from app.account_adjustments adjustment
+              from app.commerce_ordinary_account_adjustments adjustment
               left join app.payments source_payment
                 on source_payment.id = adjustment.source_payment_id
               left join app.subscriptions subscription
@@ -749,6 +753,62 @@ export class CommerceProjectionRepository {
             limit 200
           ) movement
         ) movement_projection on true
+        left join lateral (
+          select jsonb_agg(
+            jsonb_build_object(
+              'id', event.id,
+              'eventType', event.event_type,
+              'paymentRecordId', event.payment_record_id,
+              'previousStatus', event.previous_status,
+              'amountMinor', event.amount_minor,
+              'currencyCode', event.currency_code,
+              'sourceKind', event.source_kind,
+              'sourceId', event.source_id,
+              'counterpartKind', event.counterpart_kind,
+              'counterpartId', event.counterpart_id,
+              'reason', event.reason,
+              'actorUserId', event.actor_user_id,
+              'actorName', event.actor_name,
+              'occurredAt', event.occurred_at
+            ) order by event.occurred_at desc, event.id desc
+          ) as items
+          from (
+            select
+              exclusion.id,
+              case when exclusion.counterpart_id is null
+                then 'technical_void'::text
+                else 'monetary_reversal'::text end as event_type,
+              record.id as payment_record_id,
+              record.status as previous_status,
+              record.amount_minor::text,
+              record.currency_code,
+              exclusion.source_kind,
+              exclusion.source_id,
+              exclusion.counterpart_kind,
+              exclusion.counterpart_id,
+              exclusion.reason,
+              exclusion.actor_user_id,
+              nullif(btrim(
+                coalesce(actor_profile.first_name, '') || ' ' ||
+                coalesce(actor_profile.last_name, '')
+              ), '') as actor_name,
+              exclusion.occurred_at
+            from app.commerce_reporting_exclusions exclusion
+            join app.client_payment_records record
+              on (exclusion.source_kind = 'payment_record'
+                and exclusion.source_id = record.id)
+              or (record.actual_payment_id is not null
+                and exclusion.source_kind = 'payment'
+                and exclusion.source_id = record.actual_payment_id)
+            left join app.users actor on actor.id = exclusion.actor_user_id
+            left join app.profiles actor_profile
+              on actor_profile.user_id = actor.id
+             and actor_profile.deleted_at is null
+            where record.student_id = selected.student_id
+            order by exclusion.occurred_at desc, exclusion.id desc
+            limit 200
+          ) event
+        ) technical_history_projection on true
         order by selected.position
       `,
       [scopes.map((scope) => scope.studentId)],
@@ -763,6 +823,7 @@ export class CommerceProjectionRepository {
               accounts: row.accounts,
               subscriptions: row.subscriptions,
               movements: row.movements,
+              technicalHistory: row.technical_history,
               scope,
             },
           ]

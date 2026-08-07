@@ -116,7 +116,7 @@ export class SectionViewsService {
           (select count(*) from app.lessons les, seen
             where les.deleted_at is null and les.created_at > seen.schedule_at) as schedule,
           (
-            (select count(*) from app.payments p, seen
+            (select count(*) from app.commerce_ordinary_payments p, seen
               where p.deleted_at is null and p.created_at > seen.finance_at)
             +
             (select count(*) from app.expenses e, seen
