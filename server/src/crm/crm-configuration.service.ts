@@ -8,6 +8,7 @@ import {
 import { isDeepStrictEqual } from "node:util";
 import { PoolClient, QueryResult, QueryResultRow } from "pg";
 import { AuditService } from "../audit/audit.service";
+import { authorizeCurrentCapability } from "../access-control/capability-request-authorizer";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
@@ -42,6 +43,14 @@ const settingDefinitions = {
   default_lesson_duration_minutes: { min: 15, max: 240 },
   payment_reminder_days: { min: 0, max: 60 },
 } as const;
+const settlementContexts = new Set(["settle", "reschedule", "cancel"]);
+const compensationModes = new Set([
+  "none",
+  "standard",
+  "percent",
+  "fixed",
+  "hourly",
+]);
 
 export interface ConfigCategory {
   key: string;
@@ -115,6 +124,12 @@ export interface ConfigSnapshot {
   fields: ConfigField[];
   optionSets: ConfigOptionSet[];
   businessSettings: ConfigSetting[];
+  lessonSettlementTypes: LessonSettlementTypeConfig[];
+  teacherCompensationRules: TeacherCompensationRuleConfig[];
+}
+
+export interface ConfigBranchPatch {
+  businessSettings: ConfigSetting[];
   lessonSettlementTypes?: LessonSettlementTypeConfig[];
   teacherCompensationRules?: TeacherCompensationRuleConfig[];
 }
@@ -123,7 +138,7 @@ interface RevisionRow {
   id: string;
   branch_id: string | null;
   version: number | string;
-  patch: ConfigSnapshot | { businessSettings: ConfigSetting[] };
+  patch: ConfigSnapshot | ConfigBranchPatch;
   effective_snapshot: ConfigSnapshot;
   impact: Record<string, unknown>;
   reason: string;
@@ -141,6 +156,8 @@ export interface ImpactReport {
     fieldsUpdated: number;
     fieldsArchived: number;
     settingsChanged: number;
+    settlementTypesChanged: number;
+    compensationRulesChanged: number;
   };
   affectedScreens: string[];
 }
@@ -239,6 +256,12 @@ export class CrmConfigurationService {
         currentVersion,
       });
     }
+    await this.assertCommerceCatalogAccess(
+      this.database,
+      actor,
+      snapshot,
+      current.snapshot,
+    );
     const conflictTarget = dto.branchId
       ? "(user_id, branch_id) where branch_id is not null"
       : "(user_id) where branch_id is null";
@@ -270,6 +293,12 @@ export class CrmConfigurationService {
     await this.assertScope(actor, dto.branchId);
     const snapshot = this.normalizeSnapshot(dto.snapshot);
     const effective = await this.resolveEffective(this.database, dto.branchId);
+    await this.assertCommerceCatalogAccess(
+      this.database,
+      actor,
+      snapshot,
+      effective.snapshot,
+    );
     return this.buildImpact(
       this.database,
       snapshot,
@@ -312,7 +341,7 @@ export class CrmConfigurationService {
     const snapshot = dto.branchId
       ? this.applyBranchPatch(
           (await this.resolveSchool(this.database)).snapshot,
-          revision.patch as { businessSettings: ConfigSetting[] },
+          revision.patch as ConfigBranchPatch,
         )
       : revision.effective_snapshot;
     return this.publishRevision(
@@ -357,6 +386,13 @@ export class CrmConfigurationService {
           currentVersion,
         });
       }
+      await this.assertCommerceCatalogAccess(
+        client,
+        actor,
+        requested,
+        effective.snapshot,
+        true,
+      );
       const impact = await this.buildImpact(
         client,
         requested,
@@ -480,7 +516,7 @@ export class CrmConfigurationService {
       snapshot: latest
         ? this.applyBranchPatch(
             school.snapshot,
-            latest.patch as { businessSettings: ConfigSetting[] },
+            latest.patch as ConfigBranchPatch,
           )
         : school.snapshot,
     };
@@ -538,6 +574,30 @@ export class CrmConfigurationService {
         field,
       ]),
     );
+    for (const [field, previous, following] of [
+      [
+        "lessonSettlementTypes",
+        current.lessonSettlementTypes,
+        next.lessonSettlementTypes,
+      ],
+      [
+        "teacherCompensationRules",
+        current.teacherCompensationRules,
+        next.teacherCompensationRules,
+      ],
+    ] as const) {
+      const nextKeys = new Set(following.map((item) => item.stableKey));
+      for (const item of previous) {
+        if (!nextKeys.has(item.stableKey)) {
+          blockingIssues.push({
+            field: `${field}.${item.stableKey}`,
+            code: "CATALOG_KEY_REMOVAL_FORBIDDEN",
+            message:
+              "Стабильный ключ нельзя удалить или переименовать; архивируйте тип.",
+          });
+        }
+      }
+    }
     const nextFields = new Map(
       next.fields.map((field) => [`${field.entityType}:${field.key}`, field]),
     );
@@ -579,6 +639,25 @@ export class CrmConfigurationService {
     const settingsChanged = next.businessSettings.filter(
       (setting) => settings.get(setting.key) !== setting.value,
     ).length;
+    const changedCatalogItems = <T extends { stableKey: string }>(
+      following: T[],
+      previous: T[],
+    ) => {
+      const previousByKey = new Map(
+        previous.map((item) => [item.stableKey, item]),
+      );
+      return following.filter(
+        (item) => !sameJson(item, previousByKey.get(item.stableKey)),
+      ).length;
+    };
+    const settlementTypesChanged = changedCatalogItems(
+      next.lessonSettlementTypes,
+      current.lessonSettlementTypes,
+    );
+    const compensationRulesChanged = changedCatalogItems(
+      next.teacherCompensationRules,
+      current.teacherCompensationRules,
+    );
     const fieldChange =
       next.fields.some(changed) ||
       current.fields.some(
@@ -587,10 +666,16 @@ export class CrmConfigurationService {
     return {
       valid: blockingIssues.length === 0,
       blockingIssues,
-      warnings:
-        settingsChanged > 0
+      warnings: [
+        ...(settingsChanged > 0
           ? ["Новые значения применятся только к будущим бизнес-снимкам."]
-          : [],
+          : []),
+        ...(settlementTypesChanged > 0 || compensationRulesChanged > 0
+          ? [
+              "Новые правила применятся только к будущим решениям; история сохранит прежние снимки.",
+            ]
+          : []),
+      ],
       changes: {
         fieldsCreated: next.fields.filter(
           (field) => !currentFields.has(`${field.entityType}:${field.key}`),
@@ -604,6 +689,8 @@ export class CrmConfigurationService {
           (field) => !nextFields.has(`${field.entityType}:${field.key}`),
         ).length,
         settingsChanged,
+        settlementTypesChanged,
+        compensationRulesChanged,
       },
       affectedScreens: [
         ...(fieldChange
@@ -611,6 +698,12 @@ export class CrmConfigurationService {
           : []),
         ...(settingsChanged
           ? ["schedule.lesson.create", "client.payments"]
+          : []),
+        ...(settlementTypesChanged > 0
+          ? ["schedule.lesson.decision"]
+          : []),
+        ...(compensationRulesChanged > 0
+          ? ["teacher.compensation"]
           : []),
       ],
     };
@@ -911,7 +1004,179 @@ export class CrmConfigurationService {
       "businessSettings",
       "DUPLICATE_SETTING",
     );
-    return { categories, fields, optionSets, businessSettings };
+    const lessonSettlementTypes = this.array(
+      raw.lessonSettlementTypes,
+      "lessonSettlementTypes",
+    )
+      .map((item, index) => {
+        const row = this.object(item, `lessonSettlementTypes.${index}`);
+        const allowedContexts = this.array(
+          row.allowedContexts,
+          `lessonSettlementTypes.${index}.allowedContexts`,
+        ).map((context, contextIndex) => {
+          const value = this.text(
+            context,
+            `lessonSettlementTypes.${index}.allowedContexts.${contextIndex}`,
+            32,
+          );
+          if (!settlementContexts.has(value)) {
+            this.invalid(
+              `lessonSettlementTypes.${index}.allowedContexts.${contextIndex}`,
+              "INVALID_SETTLEMENT_CONTEXT",
+              "Допустимы settle, reschedule и cancel.",
+            );
+          }
+          return value;
+        });
+        if (allowedContexts.length === 0) {
+          this.invalid(
+            `lessonSettlementTypes.${index}.allowedContexts`,
+            "SETTLEMENT_CONTEXT_REQUIRED",
+            "Укажите хотя бы один допустимый сценарий.",
+          );
+        }
+        return {
+          stableKey: this.key(
+            row.stableKey,
+            `lessonSettlementTypes.${index}.stableKey`,
+          ),
+          label: this.text(
+            row.label,
+            `lessonSettlementTypes.${index}.label`,
+            120,
+          ),
+          colorToken: this.token(
+            row.colorToken,
+            `lessonSettlementTypes.${index}.colorToken`,
+          ),
+          hourShareBasisPoints: this.integer(
+            row.hourShareBasisPoints,
+            `lessonSettlementTypes.${index}.hourShareBasisPoints`,
+            0,
+            20000,
+          ),
+          ...(row.fixedPenaltyMinor === undefined ||
+          row.fixedPenaltyMinor === null
+            ? {}
+            : {
+                fixedPenaltyMinor: this.minor(
+                  row.fixedPenaltyMinor,
+                  `lessonSettlementTypes.${index}.fixedPenaltyMinor`,
+                ),
+              }),
+          allowedContexts: [...new Set(allowedContexts)].sort(),
+          active: this.boolean(
+            row.active,
+            `lessonSettlementTypes.${index}.active`,
+          ),
+          order: this.integer(
+            row.order,
+            `lessonSettlementTypes.${index}.order`,
+            0,
+            1000,
+          ),
+        };
+      })
+      .sort(
+        (left, right) =>
+          left.order - right.order ||
+          left.stableKey.localeCompare(right.stableKey),
+      );
+    this.unique(
+      lessonSettlementTypes.map((type) => type.stableKey),
+      "lessonSettlementTypes",
+      "DUPLICATE_SETTLEMENT_TYPE",
+    );
+    if (!lessonSettlementTypes.some((type) => type.active)) {
+      this.invalid(
+        "lessonSettlementTypes",
+        "ACTIVE_SETTLEMENT_TYPE_REQUIRED",
+        "Оставьте активным хотя бы один тип списания.",
+      );
+    }
+    const teacherCompensationRules = this.array(
+      raw.teacherCompensationRules,
+      "teacherCompensationRules",
+    )
+      .map((item, index) => {
+        const row = this.object(item, `teacherCompensationRules.${index}`);
+        const mode = this.text(
+          row.mode,
+          `teacherCompensationRules.${index}.mode`,
+          16,
+        ) as TeacherCompensationRuleConfig["mode"];
+        if (!compensationModes.has(mode)) {
+          this.invalid(
+            `teacherCompensationRules.${index}.mode`,
+            "INVALID_COMPENSATION_MODE",
+            "Режим оплаты преподавателю не поддерживается.",
+          );
+        }
+        const value = this.minor(
+          row.value,
+          `teacherCompensationRules.${index}.value`,
+        );
+        if (
+          ((mode === "none" || mode === "standard") && value !== "0") ||
+          (mode === "percent" && BigInt(value) > 20000n)
+        ) {
+          this.invalid(
+            `teacherCompensationRules.${index}.value`,
+            "INVALID_COMPENSATION_VALUE",
+            mode === "percent"
+              ? "Процент задаётся в basis points от 0 до 20000."
+              : "Для none/standard значение должно быть равно нулю.",
+          );
+        }
+        return {
+          stableKey: this.key(
+            row.stableKey,
+            `teacherCompensationRules.${index}.stableKey`,
+          ),
+          label: this.text(
+            row.label,
+            `teacherCompensationRules.${index}.label`,
+            120,
+          ),
+          mode,
+          value,
+          active: this.boolean(
+            row.active,
+            `teacherCompensationRules.${index}.active`,
+          ),
+          order: this.integer(
+            row.order,
+            `teacherCompensationRules.${index}.order`,
+            0,
+            1000,
+          ),
+        };
+      })
+      .sort(
+        (left, right) =>
+          left.order - right.order ||
+          left.stableKey.localeCompare(right.stableKey),
+      );
+    this.unique(
+      teacherCompensationRules.map((rule) => rule.stableKey),
+      "teacherCompensationRules",
+      "DUPLICATE_COMPENSATION_RULE",
+    );
+    if (!teacherCompensationRules.some((rule) => rule.active)) {
+      this.invalid(
+        "teacherCompensationRules",
+        "ACTIVE_COMPENSATION_RULE_REQUIRED",
+        "Оставьте активным хотя бы один тип оплаты преподавателю.",
+      );
+    }
+    return {
+      categories,
+      fields,
+      optionSets,
+      businessSettings,
+      lessonSettlementTypes,
+      teacherCompensationRules,
+    };
   }
 
   private branchPatch(school: ConfigSnapshot, desired: ConfigSnapshot) {
@@ -922,12 +1187,24 @@ export class CrmConfigurationService {
       businessSettings: desired.businessSettings.filter(
         (setting) => setting.value !== defaults.get(setting.key)?.value,
       ),
+      ...(!sameJson(
+        desired.lessonSettlementTypes,
+        school.lessonSettlementTypes,
+      )
+        ? { lessonSettlementTypes: desired.lessonSettlementTypes }
+        : {}),
+      ...(!sameJson(
+        desired.teacherCompensationRules,
+        school.teacherCompensationRules,
+      )
+        ? { teacherCompensationRules: desired.teacherCompensationRules }
+        : {}),
     };
   }
 
   private applyBranchPatch(
     school: ConfigSnapshot,
-    patch: { businessSettings?: ConfigSetting[] },
+    patch: ConfigBranchPatch,
   ): ConfigSnapshot {
     const overrides = new Map(
       (patch.businessSettings ?? []).map((setting) => [setting.key, setting]),
@@ -937,6 +1214,10 @@ export class CrmConfigurationService {
       businessSettings: school.businessSettings.map(
         (setting) => overrides.get(setting.key) ?? setting,
       ),
+      lessonSettlementTypes:
+        patch.lessonSettlementTypes ?? school.lessonSettlementTypes,
+      teacherCompensationRules:
+        patch.teacherCompensationRules ?? school.teacherCompensationRules,
     };
   }
 
@@ -944,13 +1225,55 @@ export class CrmConfigurationService {
     const defaults = new Map(
       school.businessSettings.map((setting) => [setting.key, setting.value]),
     );
-    return Object.fromEntries(
-      snapshot.businessSettings.map((setting) => [
+    return Object.fromEntries([
+      ...snapshot.businessSettings.map((setting) => [
         setting.key,
         setting.value === defaults.get(setting.key)
           ? "school"
           : "branch_override",
       ]),
+      [
+        "lessonSettlementTypes",
+        sameJson(
+          snapshot.lessonSettlementTypes,
+          school.lessonSettlementTypes,
+        )
+          ? "school"
+          : "branch_override",
+      ],
+      [
+        "teacherCompensationRules",
+        sameJson(
+          snapshot.teacherCompensationRules,
+          school.teacherCompensationRules,
+        )
+          ? "school"
+          : "branch_override",
+      ],
+    ]);
+  }
+
+  private async assertCommerceCatalogAccess(
+    queryable: Queryable,
+    actor: ActorContext,
+    next: ConfigSnapshot,
+    current: ConfigSnapshot,
+    lockForCommit = false,
+  ): Promise<void> {
+    if (
+      sameJson(next.lessonSettlementTypes, current.lessonSettlementTypes) &&
+      sameJson(
+        next.teacherCompensationRules,
+        current.teacherCompensationRules,
+      )
+    ) {
+      return;
+    }
+    await authorizeCurrentCapability(
+      queryable,
+      actor,
+      "config.commerce.manage",
+      lockForCommit,
     );
   }
 
@@ -1008,6 +1331,29 @@ export class CrmConfigurationService {
       );
     }
     return (value as string).trim();
+  }
+
+  private token(value: unknown, field: string): string {
+    const token = this.text(value, field, 80);
+    if (!/^[A-Za-z][A-Za-z0-9._:-]{0,79}$/.test(token)) {
+      this.invalid(
+        field,
+        "INVALID_TOKEN",
+        "Токен должен начинаться с буквы и содержать только безопасные символы.",
+      );
+    }
+    return token;
+  }
+
+  private minor(value: unknown, field: string): string {
+    if (typeof value !== "string" || !/^(0|[1-9][0-9]{0,14})$/.test(value)) {
+      this.invalid(
+        field,
+        "INVALID_MINOR_VALUE",
+        "Значение указывается целым числом минимальных денежных единиц.",
+      );
+    }
+    return value as string;
   }
 
   private key(value: unknown, field: string): string {

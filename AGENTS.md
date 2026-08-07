@@ -122,7 +122,7 @@
 > **Примечание**: Этот блок автоматически поддерживается процессами `/genesis`, `/blueprint` и `/forge`.
 
 - **Последняя версия архитектуры**: `.anws/v7` (Financial & Lesson Integrity)
-- **Активный список задач**: `.anws/v7/05_TASKS.md` — следующая задача `T3.1.1`
+- **Активный список задач**: `.anws/v7/05_TASKS.md` — следующая задача `T3.1.2`
 - **Фаза**: `/genesis`, `/design-system` и `/blueprint` завершены; выполняется `/forge`
 - **Последнее обновление**: `2026-08-07`
 
@@ -208,6 +208,19 @@ preflight дали одинаковый digest при 19/19 checks и findings=0
 дали `issues=[]`, signed v4 reconciliation — drift=0. Route coverage 280/280,
 inventory finance=243/reporting-safe=51/lesson writes=13/unowned=0
 (`docs/audits/v7-int-s1-client-commerce.md`). Следующий шаг `/forge`: `T3.1.1`._
+
+### 🌊 Wave v7/S5 — Lesson Integrity 🚧
+_`T3.1.1` закрыта 2026-08-07: единый immutable CRM Configuration snapshot
+получил 7 типов списания и независимые 5 правил оплаты преподавателю, строгую
+нормализацию 0–200%, minor units, contexts, archive-only stable keys и impact.
+School default и sparse branch override versioned; Director publish/rollback
+приняты. Manager может публиковать обычную branch-настройку только при
+byte-equivalent защищённых сегментах; mixed publish отклоняется внутри
+транзакции с writes=0 по `config.commerce.manage`. Migration `0109` down→up и
+loss guard PASS. Gate: config 6/6, Actor Matrix/leak 9/9, full backend 152/152
+suites и 1191/1191 tests, typecheck/build, reconcile issues=0/drift=0,
+inventory finance=243/lesson writes=13/unowned=0
+(`docs/audits/v7-commerce-catalogs.md`). Следующий шаг `/forge`: `T3.1.2`._
 
 ### 🌊 Wave v6/S0 — Evidence & UX Foundation ✅
 _Owner подтвердил полное выполнение v6. `V6-001..005` и `INT-S0` закрыты 2026-08-04: воспроизводимый generator покрывает 21 GoRouter route, 248/259 production-reachable Dart files, 256/256 service calls, route/surface/navigation/input/back ownership с unowned=0; v4 inventory обновлён и снова проходит stale-check. Baseline: Flutter analyze clean и 486/486 tests, backend typecheck/build clean, 150/150 suites и 1160/1160 tests, actor/payload 9/9, targeted workflow contracts 68/68 (`docs/audits/v6-s0-baseline.md`). Следующий шаг `/forge`: `V6-101` canonical location adapter._

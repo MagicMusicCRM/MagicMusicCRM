@@ -210,7 +210,7 @@ graph TD
 
 ### SYS-COMMERCE-INTEGRITY + SYS-SCHEDULE / Core
 
-- [ ] **T3.1.1** [REQ-LESSON-101, REQ-LESSON-102]: Configurable settlement/pay catalogs
+- [x] **T3.1.1** [REQ-LESSON-101, REQ-LESSON-102]: Configurable settlement/pay catalogs
   - **Описание**: Расширить unified config snapshot/validation/impact/publish на два независимых каталога, seed 7+5 типов и защитить Director-only segments.
   - **Входные данные**: INT-S1, [`commerce_integrity.detail.md` §1](04_SYSTEM_DESIGN/commerce_integrity.detail.md), CH-V7-02.
   - **Выходные данные**: config types/normalizers/migration/projections/tests.

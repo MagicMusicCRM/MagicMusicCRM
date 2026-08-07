@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "task": "T8.1.5",
-  "generatedAt": "2026-08-07T04:05:17.305Z",
+  "generatedAt": "2026-08-07T04:19:38.687Z",
   "mode": "schema-compare",
   "source": "app",
   "target": "app",
@@ -225,9 +225,9 @@
   ],
   "signature": {
     "algorithm": "Ed25519",
-    "contentSha256": "cb27aae78909899ad135abc7d69ea7541efade3cba5cb6239be5819daa0f86d1",
-    "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA/jpiFA20wweZiVWuBGCzUUZWJ/dupgDTnBEi5Rymwis=\n-----END PUBLIC KEY-----\n",
-    "valueBase64": "NE3irFEhPVb35T+Bk/PdVSa8SggB06XP6vHBK4wTjmYwD5I1ec1oIRTmYALTyt2XPak+0HAWs4wuusOxDKpeAQ==",
+    "contentSha256": "61034ff8ab7f71574a4626dbee8f42aff21f69234c1423d895f7879b713cee08",
+    "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEArgTd2pe9kjSQZKqcqpzORY7whqJ6DDkjirMENfxwFh8=\n-----END PUBLIC KEY-----\n",
+    "valueBase64": "x/AwSqdKdMWlXrnuj3x2PbeKHMaV7MLjgbbixWSRrpInkY8hI2fjvHRSVRx4cdhD3X7JzbSKwZD20B4yku6MAg==",
     "verified": true
   }
 }

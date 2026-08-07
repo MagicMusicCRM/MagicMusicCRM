@@ -4,6 +4,8 @@ import {
   UnprocessableEntityException,
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { Pool, PoolClient } from "pg";
 import { AuditService } from "../audit/audit.service";
 import { ActorContext } from "../common/security/actor-context";
@@ -109,6 +111,34 @@ describe("Unified CRM configuration (PostgreSQL)", () => {
     const current = await service.getEffective(director);
     const baseVersion = current.schoolVersion as number;
     const snapshot = structuredClone(current.snapshot as ConfigSnapshot);
+    expect(snapshot.lessonSettlementTypes.map((type) => type.label)).toEqual([
+      "Занятие",
+      "Частично оплачиваемое занятие",
+      "Бесплатное занятие",
+      "Оплачиваемый пропуск",
+      "Частично оплачиваемый пропуск",
+      "Неоплачиваемый пропуск",
+      "Занятие со штрафом",
+    ]);
+    expect(
+      snapshot.teacherCompensationRules.map((rule) => rule.label),
+    ).toEqual([
+      "Не оплачивать",
+      "Полная стандартная ставка",
+      "Процент ставки",
+      "Фиксированная сумма",
+      "Почасовая сумма",
+    ]);
+    snapshot.lessonSettlementTypes = snapshot.lessonSettlementTypes.map(
+      (type) =>
+        type.stableKey === "partially_paid_lesson"
+          ? { ...type, hourShareBasisPoints: 6000 }
+          : type,
+    );
+    snapshot.teacherCompensationRules =
+      snapshot.teacherCompensationRules.map((rule) =>
+        rule.stableKey === "percent" ? { ...rule, value: "12500" } : rule,
+      );
     snapshot.categories.push({
       key: "v6_fields",
       label: "V6 поля",
@@ -170,7 +200,11 @@ describe("Unified CRM configuration (PostgreSQL)", () => {
     });
     expect(preview).toMatchObject({
       valid: true,
-      changes: { fieldsCreated: types.length },
+      changes: {
+        fieldsCreated: types.length,
+        settlementTypesChanged: 1,
+        compensationRulesChanged: 1,
+      },
       affectedScreens: expect.arrayContaining([
         "lead.create",
         "student.create",
@@ -186,6 +220,12 @@ describe("Unified CRM configuration (PostgreSQL)", () => {
       snapshot: snapshot as unknown as Record<string, unknown>,
     });
     expect(published.version).toBe(baseVersion + 1);
+    expect(
+      published.snapshot.lessonSettlementTypes.find(
+        (type: { stableKey: string }) =>
+          type.stableKey === "partially_paid_lesson",
+      )!.hourShareBasisPoints,
+    ).toBe(6000);
     const stored = await client.query<{
       value_type: string;
       category_label: string;
@@ -248,6 +288,27 @@ describe("Unified CRM configuration (PostgreSQL)", () => {
     await expect(service.getEffective(manager)).rejects.toBeInstanceOf(
       ForbiddenException,
     );
+    const protectedChange = structuredClone(
+      effective.snapshot as ConfigSnapshot,
+    );
+    protectedChange.lessonSettlementTypes =
+      protectedChange.lessonSettlementTypes.map((type) =>
+        type.stableKey === "paid_miss"
+          ? { ...type, label: "Платный пропуск — попытка Manager" }
+          : type,
+      );
+    const auditCalls = audit.record.mock.calls.length;
+    const realtimeCalls = realtime.emitSettingChanged.mock.calls.length;
+    await expect(
+      service.publish(manager, {
+        branchId,
+        baseVersion: 1,
+        reason: "Forbidden mixed catalog publish",
+        snapshot: protectedChange as unknown as Record<string, unknown>,
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(audit.record).toHaveBeenCalledTimes(auditCalls);
+    expect(realtime.emitSettingChanged).toHaveBeenCalledTimes(realtimeCalls);
     const invalid = structuredClone(effective.snapshot as ConfigSnapshot);
     invalid.categories.push({
       key: "branch_schema",
@@ -265,6 +326,68 @@ describe("Unified CRM configuration (PostgreSQL)", () => {
     ).rejects.toBeInstanceOf(UnprocessableEntityException);
     const revisions = await service.listRevisions(director, branchId);
     expect(revisions.items).toHaveLength(1);
+  });
+
+  it("versions and rolls back a Director branch catalog override", async () => {
+    const current = await service.getEffective(director, branchId);
+    const override = structuredClone(current.snapshot as ConfigSnapshot);
+    override.lessonSettlementTypes = override.lessonSettlementTypes.map(
+      (type) =>
+        type.stableKey === "paid_miss"
+          ? { ...type, colorToken: "branch_blue" }
+          : type,
+    );
+    const published = await service.publish(director, {
+      branchId,
+      baseVersion: current.branchVersion,
+      reason: "Branch settlement color override",
+      snapshot: override as unknown as Record<string, unknown>,
+    });
+    expect(published.version).toBe(2);
+    await expect(service.getEffective(director, branchId)).resolves.toMatchObject(
+      {
+        sources: { lessonSettlementTypes: "branch_override" },
+      },
+    );
+
+    const rollback = await service.rollback(director, {
+      branchId,
+      expectedVersion: 2,
+      targetVersion: 1,
+      reason: "Restore school settlement catalog",
+    });
+    expect(rollback).toMatchObject({ version: 3, rollbackFromVersion: 1 });
+    await expect(service.getEffective(director, branchId)).resolves.toMatchObject(
+      {
+        sources: { lessonSettlementTypes: "school" },
+      },
+    );
+  });
+
+  it("validates catalog bounds and requires stable-key archival", async () => {
+    const current = await service.getEffective(director);
+    const outOfRange = structuredClone(current.snapshot as ConfigSnapshot);
+    outOfRange.lessonSettlementTypes[0]!.hourShareBasisPoints = 20001;
+    await expect(
+      service.preview(director, {
+        baseVersion: current.schoolVersion,
+        snapshot: outOfRange as unknown as Record<string, unknown>,
+      }),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+
+    const removed = structuredClone(current.snapshot as ConfigSnapshot);
+    removed.lessonSettlementTypes = removed.lessonSettlementTypes.slice(1);
+    await expect(
+      service.preview(director, {
+        baseVersion: current.schoolVersion,
+        snapshot: removed as unknown as Record<string, unknown>,
+      }),
+    ).resolves.toMatchObject({
+      valid: false,
+      blockingIssues: expect.arrayContaining([
+        expect.objectContaining({ code: "CATALOG_KEY_REMOVAL_FORBIDDEN" }),
+      ]),
+    });
   });
 
   it("rejects the second stale publish and rolls back as a new immutable revision", async () => {
@@ -301,6 +424,17 @@ describe("Unified CRM configuration (PostgreSQL)", () => {
       version: beforeRollback + 1,
       rollbackFromVersion: target.version,
     });
+    expect(
+      rollback.snapshot.lessonSettlementTypes.find(
+        (type: { stableKey: string }) =>
+          type.stableKey === "partially_paid_lesson",
+      )!.hourShareBasisPoints,
+    ).toBe(5000);
+    expect(
+      rollback.snapshot.teacherCompensationRules.find(
+        (rule: { stableKey: string }) => rule.stableKey === "percent",
+      )!.value,
+    ).toBe("10000");
     await client.query("savepoint immutable_configuration_check");
     await expect(
       client.query(
@@ -309,5 +443,21 @@ describe("Unified CRM configuration (PostgreSQL)", () => {
       ),
     ).rejects.toMatchObject({ code: "23514" });
     await client.query("rollback to savepoint immutable_configuration_check");
+  });
+
+  it("blocks a down migration that would destroy configured catalogs", async () => {
+    await client.query("savepoint commerce_catalog_down_guard");
+    await expect(
+      client.query(
+        readFileSync(
+          resolve(
+            process.cwd(),
+            "db/migrations/0109_v7_commerce_catalogs.down.sql",
+          ),
+          "utf8",
+        ),
+      ),
+    ).rejects.toThrow("configured commerce catalogs would be destroyed");
+    await client.query("rollback to savepoint commerce_catalog_down_guard");
   });
 });
