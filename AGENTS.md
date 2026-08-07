@@ -61,8 +61,8 @@
   - Проверки: `flutter analyze` чисто, `flutter test` 163/163, `git diff server/`+`lib/core/services/` пусто.
   - Осталось: **P1-7** сетевой baseline (нужен seeded backend). Follow-up: вынести `_V7Field`/`_V7PrimaryButton` в общий файл; выверить текст онбординг-слайдов; owner-визуальная приёмка.
 
-**▶ Следующий шаг:** `/forge` по `.anws/v7/05_TASKS.md`: `INT-S4` —
-интеграционная приёмка Client Workspace на Windows/Android и аккаунтах 3/4/5.
+**▶ Следующий шаг:** `/forge` по `.anws/v7/05_TASKS.md`: `T6.1.1` — полный
+regression/security/reconciliation gate финального кандидата v7.
 
 ---
 
@@ -122,7 +122,7 @@
 > **Примечание**: Этот блок автоматически поддерживается процессами `/genesis`, `/blueprint` и `/forge`.
 
 - **Последняя версия архитектуры**: `.anws/v7` (Financial & Lesson Integrity)
-- **Активный список задач**: `.anws/v7/05_TASKS.md` — следующая задача `INT-S4`
+- **Активный список задач**: `.anws/v7/05_TASKS.md` — следующая задача `T6.1.1`
 - **Фаза**: `/genesis`, `/design-system` и `/blueprint` завершены; выполняется `/forge`
 - **Последнее обновление**: `2026-08-07`
 
@@ -359,6 +359,18 @@ Admin/Teacher/Client config requests=0. Gate: Flutter analyze clean и 642/642;
 configuration role/dirty/back 10/10, backend PostgreSQL 7/7; inventories
 unowned=0 (`docs/audits/v7-director-commerce-catalog-ui.md`). Следующий шаг
 `/forge`: `INT-S4`._
+
+_`INT-S4` закрыт 2026-08-07: одна production Client Card принята для
+Lead/Student и ролей 3/4/5. Реальные login/restart/logout/relogin прошли на
+Windows и Android 15, детерминированная card story — `3/3` на каждой
+платформе. Targeted Flutter `41/41`, backend PostgreSQL/RBAC `102/102`;
+Teacher forbidden requests=0, duplicate actions=0, причины и техистория
+видимы staff. Device gate нашёл и закрыл dialog overflow при IME-анимации;
+Android app logcat после повтора чист. Inventories routes=22,
+reachable=260/261, wire=274/274, finance=251, lesson mutations=7,
+unknown/unowned=0, server diff empty
+(`docs/audits/v7-int-s4-client-workspace.md`). Следующий шаг `/forge`:
+`T6.1.1`._
 
 ### 🌊 Wave v6/S0 — Evidence & UX Foundation ✅
 _Owner подтвердил полное выполнение v6. `V6-001..005` и `INT-S0` закрыты 2026-08-04: воспроизводимый generator покрывает 21 GoRouter route, 248/259 production-reachable Dart files, 256/256 service calls, route/surface/navigation/input/back ownership с unowned=0; v4 inventory обновлён и снова проходит stale-check. Baseline: Flutter analyze clean и 486/486 tests, backend typecheck/build clean, 150/150 suites и 1160/1160 tests, actor/payload 9/9, targeted workflow contracts 68/68 (`docs/audits/v6-s0-baseline.md`). Следующий шаг `/forge`: `V6-101` canonical location adapter._

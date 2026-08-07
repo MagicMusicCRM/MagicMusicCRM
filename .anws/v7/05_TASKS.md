@@ -412,7 +412,7 @@ graph TD
   - **Зависимости**: T3.1.1.
   - **Приоритет**: P1.
 
-- [ ] **INT-S4** [MILESTONE]: Интеграционная проверка S4 — Client Workspace
+- [x] **INT-S4** [MILESTONE]: Интеграционная проверка S4 — Client Workspace
   - **Описание**: Проверить одну production Client Card со всеми v7 flows и ролями.
   - **Входные данные**: T5.1.1–T5.1.4, INT-S3.
   - **Выходные данные**: `docs/audits/v7-int-s4-client-workspace.md`.
