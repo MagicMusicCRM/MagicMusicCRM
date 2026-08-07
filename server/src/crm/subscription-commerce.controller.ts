@@ -13,7 +13,11 @@ import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
 import { ActualPaymentService } from "./commerce/actual-payment.service";
 import { SubscriptionLifecycleService } from "./commerce/subscription-lifecycle.service";
 import { SubscriptionIssueService } from "./commerce/subscription-issue.service";
-import { IssueSubscriptionDto } from "./dto/issue-subscription.dto";
+import {
+  IssueSubscriptionDto,
+  PurchaseSubscriptionCommandDto,
+  PurchaseSubscriptionPreviewDto,
+} from "./dto/issue-subscription.dto";
 import { RecordActualPaymentDto } from "./dto/record-actual-payment.dto";
 import {
   SubscriptionCancelCommandDto,
@@ -42,6 +46,29 @@ export class SubscriptionCommerceController {
     @Body() dto: IssueSubscriptionDto,
   ) {
     return this.issueService.issue(actor, studentId, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
+  }
+
+  @Post(":studentId/subscriptions/purchase/preview")
+  previewSubscriptionPurchase(
+    @CurrentActor() actor: ActorContext,
+    @Param("studentId", ParseUUIDPipe) studentId: string,
+    @Body() dto: PurchaseSubscriptionPreviewDto,
+  ) {
+    return this.issueService.previewPurchase(actor, studentId, dto);
+  }
+
+  @Post(":studentId/subscriptions/purchase")
+  purchaseSubscription(
+    @CurrentActor() actor: ActorContext,
+    @Param("studentId", ParseUUIDPipe) studentId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+    @Body() dto: PurchaseSubscriptionCommandDto,
+  ) {
+    return this.issueService.purchase(actor, studentId, dto, {
       idempotencyKey: idempotencyKey ?? "",
       requestId: requestId ?? "",
     });

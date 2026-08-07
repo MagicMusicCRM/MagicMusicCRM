@@ -9,12 +9,15 @@ import { createHash } from "crypto";
 import { ActorContext } from "../../common/security/actor-context";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
 import { PlatformAuditInput } from "../../platform/platform-integrity.types";
+import { fingerprintPayload } from "../../platform/platform-integrity.util";
 import { CrmPolicy } from "../crm.policy";
 import {
   IssueSubscriptionDiscountDto,
   IssueSubscriptionDto,
   IssueSubscriptionInstallmentDto,
   IssueSubscriptionSurchargeDto,
+  PurchaseSubscriptionCommandDto,
+  PurchaseSubscriptionPreviewDto,
 } from "../dto/issue-subscription.dto";
 import {
   IssuedCommercialSnapshot,
@@ -25,8 +28,12 @@ import {
   IssueDiscountColumns,
   IssuePackageRow,
   PlannedInstallment,
+  PurchaseContext,
+  PurchaseStudentRow,
   SubscriptionIssueRepository,
 } from "./subscription-issue.repository";
+import { SubscriptionPurchasePreviewTokenPayload } from "./subscription-preview-token";
+import { SubscriptionPreviewTokenService } from "./subscription-preview-token.service";
 import { SubscriptionReservationService } from "./subscription-reservation.service";
 
 export interface CommerceMutationMetadata {
@@ -50,6 +57,15 @@ interface NormalizedSurcharge {
   amountMinor: string;
 }
 
+interface NormalizedPurchase {
+  discount: NormalizedDiscount;
+  surcharge: NormalizedSurcharge;
+  finalPriceMinor: string;
+  installments: PlannedInstallment[];
+  snapshot: IssuedCommercialSnapshot;
+  purchaseReason: string | null;
+}
+
 @Injectable()
 export class SubscriptionIssueService {
   constructor(
@@ -57,7 +73,239 @@ export class SubscriptionIssueService {
     private readonly policy: CrmPolicy,
     private readonly integrity: PlatformIntegrityService,
     private readonly reservations: SubscriptionReservationService,
+    private readonly previewTokens: SubscriptionPreviewTokenService,
   ) {}
+
+  async previewPurchase(
+    actor: ActorContext,
+    recipientStudentId: string,
+    dto: PurchaseSubscriptionPreviewDto,
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    this.assertPaymentMethod(dto.paymentMethod);
+    const context = await this.repository.readPurchasePreviewContext(
+      actor,
+      recipientStudentId,
+      dto.payerStudentId,
+      dto.packageId,
+    );
+    const normalized = this.normalizePurchase(
+      recipientStudentId,
+      dto,
+      this.assertPurchaseContext(
+        context,
+        recipientStudentId,
+        dto.payerStudentId,
+      ),
+    );
+    const tokenPayload = this.createPurchaseTokenPayload(
+      actor,
+      recipientStudentId,
+      dto,
+      context,
+      normalized,
+    );
+    const signed = this.previewTokens.issuePurchase(tokenPayload);
+    const shortageMinor =
+      dto.fundingMode === "personal_account"
+        ? (
+            BigInt(normalized.finalPriceMinor) -
+            BigInt(context.payerBalanceMinor)
+          )
+        : 0n;
+    return {
+      recipientStudentId,
+      payerStudentId: dto.payerStudentId,
+      packageId: dto.packageId,
+      packageVersion: Number(context.package!.version),
+      fundingMode: dto.fundingMode,
+      currencyCode: context.package!.currency_code,
+      finalPriceMinor: normalized.finalPriceMinor,
+      payerBalanceMinor: context.payerBalanceMinor,
+      balanceAfterMinor: (
+        BigInt(context.payerBalanceMinor) -
+        BigInt(normalized.finalPriceMinor)
+      ).toString(),
+      canCommit: shortageMinor <= 0n,
+      shortageMinor: shortageMinor > 0n ? shortageMinor.toString() : "0",
+      installments: normalized.snapshot.installments ?? [],
+      previewToken: signed.token,
+      previewExpiresAt: signed.expiresAt,
+    };
+  }
+
+  async purchase(
+    actor: ActorContext,
+    recipientStudentId: string,
+    dto: PurchaseSubscriptionCommandDto,
+    metadata: CommerceMutationMetadata,
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    this.assertMetadata(metadata);
+    this.assertPaymentMethod(dto.paymentMethod);
+    const subscriptionId = this.deterministicId(
+      actor.userId,
+      "crm.subscription.purchase",
+      metadata.idempotencyKey,
+    );
+    const audit: PlatformAuditInput = {
+      action: "crm.subscription_purchased",
+      entityType: "subscription",
+      entityId: subscriptionId,
+      reason: "subscription_purchase",
+      metadata: {
+        recipientStudentId,
+        payerStudentId: dto.payerStudentId,
+        packageId: dto.packageId,
+        fundingMode: dto.fundingMode,
+      },
+    };
+    const result =
+      await this.integrity.executeVersionedMutation<IssueMutationResult>({
+        actorKey: actor.userId,
+        actorUserId: actor.userId,
+        operation: "crm.subscription.purchase",
+        idempotencyKey: metadata.idempotencyKey,
+        requestId: metadata.requestId,
+        aggregateType: "commerce:issued-subscription",
+        aggregateId: subscriptionId,
+        expectedVersion: 0,
+        payload: {
+          recipientStudentId,
+          payerStudentId: dto.payerStudentId,
+          fundingMode: dto.fundingMode,
+          commandFingerprint: fingerprintPayload(dto),
+        },
+        audit,
+        outbox: {
+          type: "commerce.subscription.changed",
+          payload: {
+            entityId: subscriptionId,
+            state: "active",
+            invalidates: ["student-finance", "subscription"],
+          },
+        },
+        mutate: async (client, nextVersion) => {
+          const signedPayload = this.previewTokens.verifyPurchase(
+            dto.previewToken,
+          );
+          this.assertPurchaseTokenBinding(
+            signedPayload,
+            actor,
+            recipientStudentId,
+            dto,
+          );
+          const students = await this.repository.lockPurchaseStudents(
+            client,
+            actor,
+            [recipientStudentId, dto.payerStudentId],
+          );
+          const packageRow =
+            await this.repository.findActivePackageForShare(
+              client,
+              dto.packageId,
+            );
+          const context: PurchaseContext = {
+            students,
+            package: packageRow,
+            payerBalanceMinor: packageRow
+              ? await this.repository.readAccountBalance(
+                  client,
+                  dto.payerStudentId,
+                  packageRow.currency_code,
+                )
+              : "0",
+          };
+          const activePackage = this.assertPurchaseContext(
+            context,
+            recipientStudentId,
+            dto.payerStudentId,
+          );
+          const normalized = this.normalizePurchase(
+            recipientStudentId,
+            dto,
+            activePackage,
+          );
+          this.assertPurchasePreviewStillCurrent(
+            signedPayload,
+            this.createPurchaseTokenPayload(
+              actor,
+              recipientStudentId,
+              dto,
+              context,
+              normalized,
+            ),
+          );
+          if (
+            dto.fundingMode === "personal_account" &&
+            BigInt(context.payerBalanceMinor) <
+              BigInt(normalized.finalPriceMinor)
+          ) {
+            throw new UnprocessableEntityException({
+              code: "INSUFFICIENT_PERSONAL_ACCOUNT_BALANCE",
+              message:
+                "На личном счёте плательщика недостаточно средств для полной покупки.",
+              availableMinor: context.payerBalanceMinor,
+              requiredMinor: normalized.finalPriceMinor,
+            });
+          }
+          const subscription =
+            await this.repository.createIssuedSubscription(client, {
+              id: subscriptionId,
+              studentId: recipientStudentId,
+              payerStudentId: dto.payerStudentId,
+              fundingMode: dto.fundingMode,
+              purchaseReason: normalized.purchaseReason,
+              package: activePackage,
+              snapshot: normalized.snapshot,
+              discount: normalized.discount.columns,
+              finalPriceMinor: normalized.finalPriceMinor,
+              version: nextVersion,
+            });
+          await this.repository.createInstallments(client, {
+            issuedSubscriptionId: subscription.id,
+            currencyCode: activePackage.currency_code,
+            installments: normalized.installments,
+          });
+          await this.repository.createObligations(client, {
+            studentId: dto.payerStudentId,
+            issuedSubscriptionId: subscription.id,
+            currencyCode: activePackage.currency_code,
+            finalPriceMinor: normalized.finalPriceMinor,
+            installments: normalized.installments,
+            singlePurchaseDebit: true,
+          });
+          await this.repository.createIssueLifecycle(client, {
+            issuedSubscriptionId: subscription.id,
+            actorUserId: actor.userId,
+            version: nextVersion,
+            reason:
+              normalized.purchaseReason ?? "Покупка абонемента",
+          });
+          audit.afterRef = {
+            subscriptionId: subscription.id,
+            subscriptionVersion: nextVersion,
+            recipientStudentId,
+            payerStudentId: dto.payerStudentId,
+            packageId: activePackage.id,
+            packageVersion: Number(activePackage.version),
+          };
+          return { entityId: subscription.id, version: nextVersion };
+        },
+      });
+    const response = await this.loadStableIssueResult(
+      result.resultRef.entityId,
+      result.resultRef.version,
+    );
+    if (!result.replayed) {
+      await this.reservations.publishPostCommit({
+        studentId: recipientStudentId,
+        payerStudentId: dto.payerStudentId,
+        subscriptionId: result.resultRef.entityId,
+      });
+    }
+    return response;
+  }
 
   async issue(
     actor: ActorContext,
@@ -141,6 +389,9 @@ export class SubscriptionIssueService {
             await this.repository.createIssuedSubscription(client, {
               id: subscriptionId,
               studentId,
+              payerStudentId: studentId,
+              fundingMode: "legacy",
+              purchaseReason: null,
               package: packageRow,
               snapshot,
               discount: discount.columns,
@@ -187,6 +438,217 @@ export class SubscriptionIssueService {
       });
     }
     return response;
+  }
+
+  private normalizePurchase(
+    recipientStudentId: string,
+    dto: PurchaseSubscriptionPreviewDto,
+    packageRow: IssuePackageRow,
+  ): NormalizedPurchase {
+    const purchaseReason = dto.purchaseReason?.trim() || null;
+    if (
+      dto.payerStudentId !== recipientStudentId &&
+      purchaseReason === null
+    ) {
+      throw new UnprocessableEntityException({
+        code: "PURCHASE_REASON_REQUIRED",
+        field: "purchaseReason",
+        message:
+          "При оплате со счёта другого клиента обязательно укажите причину.",
+      });
+    }
+    if (
+      dto.fundingMode !== "personal_account" &&
+      dto.fundingMode !== "installment"
+    ) {
+      throw new UnprocessableEntityException({
+        code: "FUNDING_MODE_INVALID",
+        field: "fundingMode",
+        message: "Выберите личный счёт или рассрочку.",
+      });
+    }
+    if (
+      dto.fundingMode === "personal_account" &&
+      dto.installments !== undefined
+    ) {
+      throw new UnprocessableEntityException({
+        code: "PERSONAL_ACCOUNT_INSTALLMENTS_FORBIDDEN",
+        field: "installments",
+        message: "При покупке с личного счёта рассрочка не применяется.",
+      });
+    }
+    if (
+      dto.fundingMode === "installment" &&
+      dto.installments === undefined
+    ) {
+      throw new UnprocessableEntityException({
+        code: "INSTALLMENTS_REQUIRED",
+        field: "installments",
+        message: "Для рассрочки укажите график платежей.",
+      });
+    }
+    const discount = this.normalizeDiscount(
+      dto.discount,
+      packageRow.base_price_minor,
+    );
+    const surcharge = this.normalizeSurcharge(dto.surcharge);
+    const finalPriceMinor = (
+      BigInt(discount.finalPriceMinor) + BigInt(surcharge.amountMinor)
+    ).toString();
+    const installments = this.normalizeInstallments(
+      dto.installments,
+      finalPriceMinor,
+    );
+    const snapshot = this.createSnapshot(
+      packageRow,
+      discount,
+      surcharge,
+      finalPriceMinor,
+      installments,
+      dto.paymentMethod ?? null,
+    );
+    snapshot.commercialRules = {
+      fundingMode: dto.fundingMode,
+      payerStudentId: dto.payerStudentId,
+    };
+    return {
+      discount,
+      surcharge,
+      finalPriceMinor,
+      installments,
+      snapshot,
+      purchaseReason,
+    };
+  }
+
+  private assertPurchaseContext(
+    context: PurchaseContext,
+    recipientStudentId: string,
+    payerStudentId: string,
+  ): IssuePackageRow {
+    const expected = new Set([recipientStudentId, payerStudentId]);
+    const found = new Set(context.students.map((student) => student.id));
+    if (found.size !== expected.size || [...expected].some((id) => !found.has(id))) {
+      throw new NotFoundException(
+        "Получатель или плательщик не найден в доступной области.",
+      );
+    }
+    const packageRow = context.package;
+    if (!packageRow) {
+      throw new NotFoundException(
+        "Абонемент не найден или находится в архиве.",
+      );
+    }
+    const recipient = this.purchaseStudent(context.students, recipientStudentId);
+    if (
+      packageRow.branch_id !== null &&
+      packageRow.branch_id !== recipient.branch_id
+    ) {
+      throw new NotFoundException(
+        "Абонемент недоступен в филиале получателя.",
+      );
+    }
+    return packageRow;
+  }
+
+  private createPurchaseTokenPayload(
+    actor: ActorContext,
+    recipientStudentId: string,
+    dto: PurchaseSubscriptionPreviewDto,
+    context: PurchaseContext,
+    normalized: NormalizedPurchase,
+  ): Omit<
+    SubscriptionPurchasePreviewTokenPayload,
+    "issuedAtSeconds" | "expiresAtSeconds"
+  > {
+    const recipient = this.purchaseStudent(
+      context.students,
+      recipientStudentId,
+    );
+    const payer = this.purchaseStudent(
+      context.students,
+      dto.payerStudentId,
+    );
+    const packageRow = context.package!;
+    return {
+      kind: "subscription.purchase",
+      actorUserId: actor.userId,
+      recipientStudentId,
+      payerStudentId: dto.payerStudentId,
+      recipientVersion: Number(recipient.version),
+      payerVersion: Number(payer.version),
+      recipientBranchId: recipient.branch_id,
+      payerBranchId: payer.branch_id,
+      packageId: packageRow.id,
+      packageVersion: Number(packageRow.version),
+      currencyCode: packageRow.currency_code,
+      finalPriceMinor: normalized.finalPriceMinor,
+      payerBalanceMinor: context.payerBalanceMinor,
+      fundingMode: dto.fundingMode,
+      purchaseFingerprint: fingerprintPayload({
+        recipientStudentId,
+        payerStudentId: dto.payerStudentId,
+        packageId: packageRow.id,
+        packageVersion: Number(packageRow.version),
+        fundingMode: dto.fundingMode,
+        purchaseReason: normalized.purchaseReason,
+        discount: normalized.discount.snapshot,
+        surcharge: normalized.surcharge.snapshot,
+        finalPriceMinor: normalized.finalPriceMinor,
+        installments: normalized.installments,
+        paymentMethod: dto.paymentMethod ?? null,
+      }),
+    };
+  }
+
+  private assertPurchaseTokenBinding(
+    payload: SubscriptionPurchasePreviewTokenPayload,
+    actor: ActorContext,
+    recipientStudentId: string,
+    dto: PurchaseSubscriptionPreviewDto,
+  ): void {
+    if (
+      payload.actorUserId !== actor.userId ||
+      payload.recipientStudentId !== recipientStudentId ||
+      payload.payerStudentId !== dto.payerStudentId ||
+      payload.packageId !== dto.packageId ||
+      payload.fundingMode !== dto.fundingMode
+    ) {
+      throw new UnprocessableEntityException({
+        code: "PREVIEW_TOKEN_SCOPE_MISMATCH",
+        message: "Предпросмотр создан для другой покупки или сотрудника.",
+      });
+    }
+  }
+
+  private assertPurchasePreviewStillCurrent(
+    signed: SubscriptionPurchasePreviewTokenPayload,
+    current: Omit<
+      SubscriptionPurchasePreviewTokenPayload,
+      "issuedAtSeconds" | "expiresAtSeconds"
+    >,
+  ): void {
+    const {
+      issuedAtSeconds: _issuedAtSeconds,
+      expiresAtSeconds: _expiresAtSeconds,
+      ...signedFacts
+    } = signed;
+    if (fingerprintPayload(signedFacts) !== fingerprintPayload(current)) {
+      throw new ConflictException({
+        code: "PURCHASE_PREVIEW_STALE",
+        message:
+          "После предпросмотра изменились счёт, клиент, филиал или условия абонемента.",
+      });
+    }
+  }
+
+  private purchaseStudent(
+    students: PurchaseStudentRow[],
+    studentId: string,
+  ): PurchaseStudentRow {
+    const student = students.find((item) => item.id === studentId);
+    if (!student) throw new NotFoundException("Клиент не найден.");
+    return student;
   }
 
   private normalizeDiscount(
@@ -421,6 +883,9 @@ export class SubscriptionIssueService {
       subscription: {
         id: subscription.id,
         studentId: subscription.student_id,
+        payerStudentId: subscription.payer_student_id,
+        fundingMode: subscription.funding_mode,
+        purchaseReason: subscription.purchase_reason,
         packageId: subscription.package_id,
         unitCount: Number(subscription.lessons_total),
         unitsUsed: 0,

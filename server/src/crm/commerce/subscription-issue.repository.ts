@@ -1,6 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import { PoolClient } from "pg";
+import { ActorContext } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
+import { branchIdExpr } from "../branch-scope";
 import { IssuedCommercialSnapshot } from "./commerce-schema.types";
 
 export interface IssuePackageRow {
@@ -17,6 +19,9 @@ export interface IssuePackageRow {
 export interface IssuedSubscriptionRow {
   id: string;
   student_id: string;
+  payer_student_id: string | null;
+  funding_mode: "personal_account" | "installment" | "legacy" | null;
+  purchase_reason: string | null;
   package_id: string;
   lessons_total: string | number;
   lessons_used: string | number;
@@ -115,6 +120,18 @@ export interface PlannedInstallment {
   amountMinor: string;
 }
 
+export interface PurchaseStudentRow {
+  id: string;
+  version: number | string;
+  branch_id: string | null;
+}
+
+export interface PurchaseContext {
+  students: PurchaseStudentRow[];
+  package: IssuePackageRow | null;
+  payerBalanceMinor: string;
+}
+
 @Injectable()
 export class SubscriptionIssueRepository {
   constructor(private readonly database: DatabaseService) {}
@@ -133,6 +150,124 @@ export class SubscriptionIssueRepository {
       [studentId],
     );
     return result.rowCount === 1;
+  }
+
+  async readPurchasePreviewContext(
+    actor: ActorContext,
+    recipientStudentId: string,
+    payerStudentId: string,
+    packageId: string,
+  ): Promise<PurchaseContext> {
+    return this.database.transaction(async (client) => {
+      const students = await this.lockPurchaseStudents(client, actor, [
+        recipientStudentId,
+        payerStudentId,
+      ]);
+      const packageRow = await this.findActivePackageForShare(
+        client,
+        packageId,
+      );
+      return {
+        students,
+        package: packageRow,
+        payerBalanceMinor: packageRow
+          ? await this.readAccountBalance(
+              client,
+              payerStudentId,
+              packageRow.currency_code,
+            )
+          : "0",
+      };
+    });
+  }
+
+  async lockPurchaseStudents(
+    client: PoolClient,
+    actor: ActorContext,
+    studentIds: readonly string[],
+  ): Promise<PurchaseStudentRow[]> {
+    const ids = [...new Set(studentIds)].sort();
+    const unrestricted =
+      actor.role === "director" || actor.role === "system_admin";
+    const result = await client.query<PurchaseStudentRow>(
+      `
+        select
+          student.id,
+          student.version,
+          ${branchIdExpr("student")} as branch_id
+        from app.students student
+        where student.id = any($1::uuid[])
+          and student.deleted_at is null
+          ${
+            unrestricted
+              ? ""
+              : `and ${branchIdExpr("student")} is not null
+                 and exists (
+                   select 1
+                   from app.staff_members staff
+                   join app.profiles staff_profile
+                     on staff_profile.id = staff.profile_id
+                    and staff_profile.deleted_at is null
+                   join app.staff_branch_assignments assignment
+                     on assignment.staff_member_id = staff.id
+                    and assignment.deleted_at is null
+                   where staff.deleted_at is null
+                     and staff_profile.user_id = $2
+                     and assignment.branch_id::text =
+                       ${branchIdExpr("student")}
+                 )`
+          }
+        order by student.id
+        for update of student
+      `,
+      unrestricted ? [ids] : [ids, actor.userId],
+    );
+    return result.rows;
+  }
+
+  async readAccountBalance(
+    client: PoolClient,
+    studentId: string,
+    currencyCode: string,
+  ): Promise<string> {
+    const result = await client.query<{ balance_minor: string }>(
+      `
+        with facts(amount_minor) as (
+          select payment.amount_minor::numeric
+          from app.payments payment
+          where payment.student_id = $1
+            and payment.currency = $2
+            and payment.deleted_at is null
+            and payment.amount_minor is not null
+          union all
+          select case
+            when obligation.direction = 'credit'
+              then obligation.amount_minor::numeric
+            else -obligation.amount_minor::numeric
+          end
+          from app.subscription_obligation_facts obligation
+          where obligation.student_id = $1
+            and obligation.currency_code = $2
+          union all
+          select -charge.amount_minor::numeric
+          from app.lesson_client_charge_facts charge
+          where charge.client_type = 'student'
+            and charge.client_id = $1
+            and charge.currency_code = $2
+          union all
+          select adjustment.amount_minor::numeric
+          from app.account_adjustments adjustment
+          where adjustment.student_id = $1
+            and adjustment.currency_code = $2
+            and adjustment.deleted_at is null
+            and adjustment.status = 'paid'
+        )
+        select coalesce(sum(amount_minor), 0)::text as balance_minor
+        from facts
+      `,
+      [studentId, currencyCode],
+    );
+    return result.rows[0]!.balance_minor;
   }
 
   async findActivePackageForShare(
@@ -166,6 +301,9 @@ export class SubscriptionIssueRepository {
     input: {
       id: string;
       studentId: string;
+      payerStudentId: string;
+      fundingMode: "personal_account" | "installment" | "legacy";
+      purchaseReason: string | null;
       package: IssuePackageRow;
       snapshot: IssuedCommercialSnapshot;
       discount: IssueDiscountColumns;
@@ -197,7 +335,10 @@ export class SubscriptionIssueRepository {
           surcharge_minor,
           surcharge_reason,
           final_price_minor,
-          version
+          version,
+          payer_student_id,
+          funding_mode,
+          purchase_reason
         )
         values (
           $1,
@@ -224,11 +365,17 @@ export class SubscriptionIssueRepository {
           $14::text::bigint,
           $15,
           $16::bigint,
-          $17
+          $17,
+          $18,
+          $19,
+          $20
         )
         returning
           id,
           student_id,
+          payer_student_id,
+          funding_mode,
+          purchase_reason,
           package_id,
           lessons_total,
           lessons_used,
@@ -261,6 +408,9 @@ export class SubscriptionIssueRepository {
           : null,
         input.finalPriceMinor,
         input.version,
+        input.payerStudentId,
+        input.fundingMode,
+        input.purchaseReason,
       ],
     );
     return result.rows[0]!;
@@ -317,15 +467,18 @@ export class SubscriptionIssueRepository {
       currencyCode: string;
       finalPriceMinor: string;
       installments: PlannedInstallment[];
+      singlePurchaseDebit?: boolean;
     },
   ): Promise<ObligationRow[]> {
     const facts =
-      input.installments.length === 0
+      input.singlePurchaseDebit || input.installments.length === 0
         ? [
             {
               factType: "issue" as const,
               amountMinor: input.finalPriceMinor,
-              sourceType: "subscription.issue",
+              sourceType: input.singlePurchaseDebit
+                ? "subscription.purchase"
+                : "subscription.issue",
               sourceRef: input.issuedSubscriptionId,
             },
           ]
@@ -384,6 +537,7 @@ export class SubscriptionIssueRepository {
       issuedSubscriptionId: string;
       actorUserId: string;
       version: number;
+      reason?: string;
     },
   ): Promise<void> {
     await client.query(
@@ -397,12 +551,13 @@ export class SubscriptionIssueRepository {
           reason,
           aggregate_version
         )
-        values ($1, 'issue', null, $1, $2, 'Первичная выдача', $3)
+        values ($1, 'issue', null, $1, $2, $4, $3)
       `,
       [
         input.issuedSubscriptionId,
         input.actorUserId,
         input.version,
+        input.reason ?? "Первичная выдача",
       ],
     );
   }
@@ -415,6 +570,9 @@ export class SubscriptionIssueRepository {
         select
           id,
           student_id,
+          payer_student_id,
+          funding_mode,
+          purchase_reason,
           package_id,
           lessons_total,
           lessons_used,
@@ -475,6 +633,7 @@ export class SubscriptionIssueRepository {
         where issued_subscription_id = $1
           and source_type in (
             'subscription.issue',
+            'subscription.purchase',
             'subscription.installment'
           )
         order by occurred_at, id

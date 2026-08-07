@@ -5,6 +5,28 @@ const REPLACE_TOKEN_DOMAIN =
   "magicmusiccrm:subscription-replace-preview:v1";
 const CANCEL_TOKEN_DOMAIN =
   "magicmusiccrm:subscription-cancel-preview:v1";
+const PURCHASE_TOKEN_DOMAIN =
+  "magicmusiccrm:subscription-purchase-preview:v1";
+
+export interface SubscriptionPurchasePreviewTokenPayload {
+  kind: "subscription.purchase";
+  actorUserId: string;
+  recipientStudentId: string;
+  payerStudentId: string;
+  recipientVersion: number;
+  payerVersion: number;
+  recipientBranchId: string | null;
+  payerBranchId: string | null;
+  packageId: string;
+  packageVersion: number;
+  currencyCode: string;
+  finalPriceMinor: string;
+  payerBalanceMinor: string;
+  fundingMode: "personal_account" | "installment";
+  purchaseFingerprint: string;
+  issuedAtSeconds: number;
+  expiresAtSeconds: number;
+}
 
 export interface SubscriptionReplacePreviewTokenPayload {
   kind: "subscription.replace";
@@ -118,6 +140,32 @@ export function verifySubscriptionCancelPreview(
     token,
     nowSeconds,
     assertCancelPayload,
+  );
+}
+
+export function signSubscriptionPurchasePreview(
+  secret: string,
+  payload: SubscriptionPurchasePreviewTokenPayload,
+): string {
+  return signPayload(
+    secret,
+    PURCHASE_TOKEN_DOMAIN,
+    payload,
+    assertPurchasePayload,
+  );
+}
+
+export function verifySubscriptionPurchasePreview(
+  secret: string,
+  token: string,
+  nowSeconds: number,
+): SubscriptionPurchasePreviewTokenPayload {
+  return verifyPayload(
+    secret,
+    PURCHASE_TOKEN_DOMAIN,
+    token,
+    nowSeconds,
+    assertPurchasePayload,
   );
 }
 
@@ -323,6 +371,63 @@ function assertCancelPayload(
     !isUnits(payload.reservedUnits) ||
     typeof payload.impactFingerprint !== "string" ||
     !/^[a-f0-9]{64}$/.test(payload.impactFingerprint) ||
+    !isPositiveInteger(payload.issuedAtSeconds) ||
+    !isPositiveInteger(payload.expiresAtSeconds) ||
+    payload.expiresAtSeconds < payload.issuedAtSeconds
+  ) {
+    throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
+  }
+}
+
+function assertPurchasePayload(
+  value: unknown,
+): asserts value is SubscriptionPurchasePreviewTokenPayload {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
+  }
+  const payload = value as Record<string, unknown>;
+  const exactKeys = [
+    "kind",
+    "actorUserId",
+    "recipientStudentId",
+    "payerStudentId",
+    "recipientVersion",
+    "payerVersion",
+    "recipientBranchId",
+    "payerBranchId",
+    "packageId",
+    "packageVersion",
+    "currencyCode",
+    "finalPriceMinor",
+    "payerBalanceMinor",
+    "fundingMode",
+    "purchaseFingerprint",
+    "issuedAtSeconds",
+    "expiresAtSeconds",
+  ];
+  if (
+    Object.keys(payload).length !== exactKeys.length ||
+    exactKeys.some((key) => !(key in payload)) ||
+    payload.kind !== "subscription.purchase" ||
+    !isUuid(payload.actorUserId) ||
+    !isUuid(payload.recipientStudentId) ||
+    !isUuid(payload.payerStudentId) ||
+    !isPositiveInteger(payload.recipientVersion) ||
+    !isPositiveInteger(payload.payerVersion) ||
+    (payload.recipientBranchId !== null &&
+      !isUuid(payload.recipientBranchId)) ||
+    (payload.payerBranchId !== null && !isUuid(payload.payerBranchId)) ||
+    !isUuid(payload.packageId) ||
+    !isPositiveInteger(payload.packageVersion) ||
+    typeof payload.currencyCode !== "string" ||
+    !/^[A-Z]{3}$/.test(payload.currencyCode) ||
+    !isMinor(payload.finalPriceMinor) ||
+    !isSignedMinor(payload.payerBalanceMinor) ||
+    !["personal_account", "installment"].includes(
+      payload.fundingMode as string,
+    ) ||
+    typeof payload.purchaseFingerprint !== "string" ||
+    !/^[a-f0-9]{64}$/.test(payload.purchaseFingerprint) ||
     !isPositiveInteger(payload.issuedAtSeconds) ||
     !isPositiveInteger(payload.expiresAtSeconds) ||
     payload.expiresAtSeconds < payload.issuedAtSeconds

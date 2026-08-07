@@ -784,6 +784,18 @@ async function cleanupFixture(
             [packageIds],
           );
     const paymentIds = payments.rows.map((row) => row.id);
+    const paymentRecords = input.studentId
+      ? await client.query<{ id: string }>(
+          `
+            select id
+            from app.client_payment_records
+            where student_id = $1
+               or actual_payment_id = any($2::uuid[])
+          `,
+          [input.studentId, paymentIds],
+        )
+      : { rows: [] as { id: string }[] };
+    const paymentRecordIds = paymentRecords.rows.map((row) => row.id);
 
     await deleteByIds(
       client,
@@ -818,6 +830,20 @@ async function cleanupFixture(
       "app.subscription_package_versions",
       "package_id",
       packageIds,
+      "uuid",
+    );
+    await deleteByIds(
+      client,
+      "app.client_payment_status_events",
+      "payment_record_id",
+      paymentRecordIds,
+      "uuid",
+    );
+    await deleteByIds(
+      client,
+      "app.client_payment_records",
+      "id",
+      paymentRecordIds,
       "uuid",
     );
     await deleteByIds(

@@ -193,11 +193,22 @@ export class SubscriptionReservationService {
 
   async publishPostCommit(input: {
     studentId: string;
+    payerStudentId?: string;
     subscriptionId: string;
     lessonId?: string;
   }): Promise<void> {
     try {
-      const userIds = await this.clientUserIds(input.studentId);
+      const userIds = Array.from(
+        new Set(
+          (
+            await Promise.all(
+              [...new Set([input.studentId, input.payerStudentId])]
+                .filter((id): id is string => Boolean(id))
+                .map((id) => this.clientUserIds(id)),
+            )
+          ).flat(),
+        ),
+      );
       this.realtime.emitCrmChanged({
         entity: "lesson",
         action: "updated",

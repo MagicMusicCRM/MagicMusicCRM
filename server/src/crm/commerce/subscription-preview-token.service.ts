@@ -6,11 +6,14 @@ import {
 import { ConfigService } from "@nestjs/config";
 import {
   signSubscriptionCancelPreview,
+  signSubscriptionPurchasePreview,
   signSubscriptionReplacePreview,
   SubscriptionCancelPreviewTokenPayload,
+  SubscriptionPurchasePreviewTokenPayload,
   SubscriptionPreviewTokenError,
   SubscriptionReplacePreviewTokenPayload,
   verifySubscriptionCancelPreview,
+  verifySubscriptionPurchasePreview,
   verifySubscriptionReplacePreview,
 } from "./subscription-preview-token";
 
@@ -110,6 +113,53 @@ export class SubscriptionPreviewTokenService {
           error.code === "PREVIEW_TOKEN_EXPIRED"
             ? "Предпросмотр отмены устарел. Обновите расчёт."
             : "Подписанный предпросмотр отмены недействителен.",
+      });
+    }
+  }
+
+  issuePurchase(
+    payload: Omit<
+      SubscriptionPurchasePreviewTokenPayload,
+      "issuedAtSeconds" | "expiresAtSeconds"
+    >,
+    now = new Date(),
+  ): {
+    token: string;
+    expiresAt: string;
+    payload: SubscriptionPurchasePreviewTokenPayload;
+  } {
+    const issuedAtSeconds = Math.floor(now.getTime() / 1000);
+    const complete: SubscriptionPurchasePreviewTokenPayload = {
+      ...payload,
+      issuedAtSeconds,
+      expiresAtSeconds:
+        issuedAtSeconds + SUBSCRIPTION_PREVIEW_TTL_SECONDS,
+    };
+    return {
+      token: signSubscriptionPurchasePreview(this.secret(), complete),
+      expiresAt: new Date(complete.expiresAtSeconds * 1000).toISOString(),
+      payload: complete,
+    };
+  }
+
+  verifyPurchase(
+    token: string,
+    now = new Date(),
+  ): SubscriptionPurchasePreviewTokenPayload {
+    try {
+      return verifySubscriptionPurchasePreview(
+        this.secret(),
+        token,
+        Math.floor(now.getTime() / 1000),
+      );
+    } catch (error) {
+      if (!(error instanceof SubscriptionPreviewTokenError)) throw error;
+      throw new UnprocessableEntityException({
+        code: error.code,
+        message:
+          error.code === "PREVIEW_TOKEN_EXPIRED"
+            ? "Предпросмотр покупки устарел. Обновите расчёт."
+            : "Подписанный предпросмотр покупки недействителен.",
       });
     }
   }

@@ -73,6 +73,10 @@ describe("Subscription replacement preview/confirm", () => {
       policy,
       integrity,
       reservations,
+      new SubscriptionPreviewTokenService({
+        get: (key: string, fallback?: string) =>
+          key === "COMMERCE_PREVIEW_SECRET" ? previewSecret : fallback,
+      } as unknown as ConfigService),
     );
     paymentService = new ActualPaymentService(
       issueRepository,

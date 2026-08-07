@@ -1,6 +1,7 @@
 import {
   ConflictException,
   ForbiddenException,
+  NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -20,6 +21,7 @@ import { ActualPaymentService } from "./actual-payment.service";
 import { CommerceProjectionRepository } from "./commerce-projection.repository";
 import { SubscriptionIssueRepository } from "./subscription-issue.repository";
 import { SubscriptionIssueService } from "./subscription-issue.service";
+import { SubscriptionPreviewTokenService } from "./subscription-preview-token.service";
 import { SubscriptionReservationService } from "./subscription-reservation.service";
 
 const databaseUrl =
@@ -34,6 +36,7 @@ if (
 }
 
 const marker = `v4-subscription-issue-${randomUUID()}`;
+const previewSecret = "purchase-preview-test-secret-at-least-32-bytes";
 const roles: readonly UserRole[] = [
   "client",
   "teacher",
@@ -54,6 +57,7 @@ jest.setTimeout(120_000);
 describe("Subscription issue, discount, installments and ActualPayment", () => {
   let pool: Pool;
   let database: DatabaseService;
+  let issueRepository: SubscriptionIssueRepository;
   let issueService: SubscriptionIssueService;
   let paymentService: ActualPaymentService;
   let commerceRepository: CommerceProjectionRepository;
@@ -61,6 +65,12 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
   let studentId: string;
   let profileId: string;
   let packageId: string;
+  let payerStudentId: string;
+  let racePayerStudentId: string;
+  let outsideStudentId: string;
+  let extraProfileIds: string[];
+  let extraBranchIds: string[];
+  let extraUserIds: string[];
 
   beforeAll(async () => {
     pool = new Pool({ connectionString: databaseUrl });
@@ -68,7 +78,7 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
     database = new DatabaseService({
       getOrThrow: () => databaseUrl,
     } as unknown as ConfigService);
-    const repository = new SubscriptionIssueRepository(database);
+    issueRepository = new SubscriptionIssueRepository(database);
     const policy = new CrmPolicy();
     const integrity = new PlatformIntegrityService(
       database,
@@ -82,14 +92,18 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       } as unknown as RealtimeBus,
     );
     issueService = new SubscriptionIssueService(
-      repository,
+      issueRepository,
       policy,
       integrity,
       reservations,
+      new SubscriptionPreviewTokenService({
+        get: (key: string, fallback?: string) =>
+          key === "COMMERCE_PREVIEW_SECRET" ? previewSecret : fallback,
+      } as unknown as ConfigService),
     );
     commerceRepository = new CommerceProjectionRepository(database);
     paymentService = new ActualPaymentService(
-      repository,
+      issueRepository,
       policy,
       integrity,
       commerceRepository,
@@ -99,16 +113,28 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
     studentId = fixture.studentId;
     profileId = fixture.profileId;
     packageId = fixture.packageId;
+    payerStudentId = fixture.payerStudentId;
+    racePayerStudentId = fixture.racePayerStudentId;
+    outsideStudentId = fixture.outsideStudentId;
+    extraProfileIds = fixture.extraProfileIds;
+    extraBranchIds = fixture.extraBranchIds;
+    extraUserIds = fixture.extraUserIds;
   });
 
   afterAll(async () => {
     if (pool) {
       await cleanupFixture(pool, {
         actorUserIds: actors
-          ? roles.map((role) => actors[role].userId)
+          ? [
+              ...roles.map((role) => actors[role].userId),
+              ...(extraUserIds ?? []),
+            ]
           : [],
         studentId,
         profileId,
+        extraStudentIds: [payerStudentId, racePayerStudentId, outsideStudentId],
+        extraProfileIds,
+        extraBranchIds,
       });
     }
     if (database) await database.onModuleDestroy();
@@ -300,6 +326,252 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
         }),
       ]),
     );
+  });
+
+  it("purchases once from another client personal account and replays safely", async () => {
+    await fundWallet(payerStudentId, "cross-account", "800000");
+    const input = {
+      packageId,
+      payerStudentId,
+      fundingMode: "personal_account" as const,
+      purchaseReason: "Родитель оплачивает обучение ребёнка",
+      paymentMethod: "cashless" as const,
+    };
+    const preview = await issueService.previewPurchase(
+      actors.admin,
+      studentId,
+      input,
+    );
+    expect(preview).toMatchObject({
+      recipientStudentId: studentId,
+      payerStudentId,
+      finalPriceMinor: "800000",
+      payerBalanceMinor: "800000",
+      balanceAfterMinor: "0",
+      canCommit: true,
+      shortageMinor: "0",
+    });
+
+    const metadata = mutationMetadata("cross-account-purchase");
+    const command = {
+      ...input,
+      previewToken: preview.previewToken,
+      confirm: true as const,
+    };
+    const first = await issueService.purchase(
+      actors.admin,
+      studentId,
+      command,
+      metadata,
+    );
+    expect(
+      await issueService.purchase(
+        actors.admin,
+        studentId,
+        command,
+        metadata,
+      ),
+    ).toEqual(first);
+    expect(first.subscription).toMatchObject({
+      studentId,
+      payerStudentId,
+      fundingMode: "personal_account",
+      purchaseReason: "Родитель оплачивает обучение ребёнка",
+      unitCount: 10,
+    });
+    expect(first.obligations).toEqual([
+      expect.objectContaining({
+        factType: "issue",
+        amountMinor: "800000",
+        sourceType: "subscription.purchase",
+      }),
+    ]);
+    const facts = await pool.query<{
+      debit_count: string;
+      payer_student_id: string;
+    }>(
+      `
+        select count(obligation.id)::text as debit_count,
+               subscription.payer_student_id
+        from app.subscriptions subscription
+        join app.subscription_obligation_facts obligation
+          on obligation.issued_subscription_id = subscription.id
+        where subscription.id = $1
+        group by subscription.payer_student_id
+      `,
+      [first.subscription.id],
+    );
+    expect(facts.rows[0]).toEqual({
+      debit_count: "1",
+      payer_student_id: payerStudentId,
+    });
+  });
+
+  it("rejects an unfunded personal-account purchase without partial facts", async () => {
+    const input = {
+      packageId,
+      payerStudentId: outsideStudentId,
+      fundingMode: "personal_account" as const,
+      purchaseReason: "Проверка недостаточного остатка",
+    };
+    const preview = await issueService.previewPurchase(
+      actors.director,
+      studentId,
+      input,
+    );
+    expect(preview).toMatchObject({
+      canCommit: false,
+      payerBalanceMinor: "0",
+      shortageMinor: "800000",
+    });
+    const before = await countIssuedSubscriptions();
+    await expect(
+      issueService.purchase(
+        actors.director,
+        studentId,
+        { ...input, previewToken: preview.previewToken, confirm: true },
+        mutationMetadata("unfunded-purchase"),
+      ),
+    ).rejects.toMatchObject({
+      response: { code: "INSUFFICIENT_PERSONAL_ACCOUNT_BALANCE" },
+    });
+    expect(await countIssuedSubscriptions()).toBe(before);
+  });
+
+  it("serializes competing purchases so only one can spend the payer balance", async () => {
+    await fundWallet(racePayerStudentId, "race", "800000");
+    const input = {
+      packageId,
+      payerStudentId: racePayerStudentId,
+      fundingMode: "personal_account" as const,
+      purchaseReason: "Общий семейный счёт",
+    };
+    const [leftPreview, rightPreview] = await Promise.all([
+      issueService.previewPurchase(actors.director, studentId, input),
+      issueService.previewPurchase(actors.director, studentId, input),
+    ]);
+    const outcomes = await Promise.allSettled([
+      issueService.purchase(
+        actors.director,
+        studentId,
+        {
+          ...input,
+          previewToken: leftPreview.previewToken,
+          confirm: true,
+        },
+        mutationMetadata("race-left"),
+      ),
+      issueService.purchase(
+        actors.director,
+        studentId,
+        {
+          ...input,
+          previewToken: rightPreview.previewToken,
+          confirm: true,
+        },
+        mutationMetadata("race-right"),
+      ),
+    ]);
+    expect(outcomes.filter((item) => item.status === "fulfilled")).toHaveLength(
+      1,
+    );
+    const rejected = outcomes.find((item) => item.status === "rejected");
+    expect(rejected).toMatchObject({
+      reason: {
+        response: { code: "PURCHASE_PREVIEW_STALE" },
+      },
+    });
+    const debits = await pool.query<{ count: string }>(
+      `
+        select count(*)::text as count
+        from app.subscription_obligation_facts
+        where student_id = $1 and source_type = 'subscription.purchase'
+      `,
+      [racePayerStudentId],
+    );
+    expect(debits.rows[0]!.count).toBe("1");
+  });
+
+  it("locks reversed recipient/payer pairs in one order without deadlock", async () => {
+    const installments = [
+      { dueAt: "2026-10-01T09:00:00.000Z", amountMinor: "400000" },
+      { dueAt: "2026-11-01T09:00:00.000Z", amountMinor: "400000" },
+    ];
+    const left = {
+      packageId,
+      payerStudentId,
+      fundingMode: "installment" as const,
+      purchaseReason: "Семейная рассрочка A",
+      installments,
+    };
+    const right = {
+      packageId,
+      payerStudentId: studentId,
+      fundingMode: "installment" as const,
+      purchaseReason: "Семейная рассрочка B",
+      installments,
+    };
+    const [leftPreview, rightPreview] = await Promise.all([
+      issueService.previewPurchase(actors.director, studentId, left),
+      issueService.previewPurchase(actors.director, payerStudentId, right),
+    ]);
+    await expect(
+      Promise.all([
+        issueService.purchase(
+          actors.director,
+          studentId,
+          { ...left, previewToken: leftPreview.previewToken, confirm: true },
+          mutationMetadata("reverse-lock-left"),
+        ),
+        issueService.purchase(
+          actors.director,
+          payerStudentId,
+          { ...right, previewToken: rightPreview.previewToken, confirm: true },
+          mutationMetadata("reverse-lock-right"),
+        ),
+      ]),
+    ).resolves.toHaveLength(2);
+  });
+
+  it("rolls every purchase fact back on a fault and enforces both client scopes", async () => {
+    await expect(
+      issueService.previewPurchase(actors.admin, studentId, {
+        packageId,
+        payerStudentId: outsideStudentId,
+        fundingMode: "personal_account",
+        purchaseReason: "Чужой филиал",
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    const input = {
+      packageId,
+      payerStudentId,
+      fundingMode: "installment" as const,
+      purchaseReason: "Проверка атомарности",
+      installments: [
+        { dueAt: "2026-12-01T09:00:00.000Z", amountMinor: "400000" },
+        { dueAt: "2027-01-01T09:00:00.000Z", amountMinor: "400000" },
+      ],
+    };
+    const preview = await issueService.previewPurchase(
+      actors.director,
+      studentId,
+      input,
+    );
+    const before = await countIssuedSubscriptions();
+    const fault = jest
+      .spyOn(issueRepository, "createIssueLifecycle")
+      .mockRejectedValueOnce(new Error("fault after debit"));
+    await expect(
+      issueService.purchase(
+        actors.director,
+        studentId,
+        { ...input, previewToken: preview.previewToken, confirm: true },
+        mutationMetadata("atomic-fault"),
+      ),
+    ).rejects.toThrow("fault after debit");
+    fault.mockRestore();
+    expect(await countIssuedSubscriptions()).toBe(before);
   });
 
   it("reconciles a typed surcharge after a fixed discount", async () => {
@@ -593,6 +865,30 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
     }
   });
 
+  async function fundWallet(
+    targetStudentId: string,
+    suffix: string,
+    availableMinor: string,
+  ): Promise<void> {
+    const issued = await issueService.issue(
+      actors.director,
+      targetStudentId,
+      { packageId },
+      mutationMetadata(`${suffix}-funding-subscription`),
+    );
+    await paymentService.record(
+      actors.director,
+      targetStudentId,
+      {
+        issuedSubscriptionId: issued.subscription.id,
+        amountMinor: (800000n + BigInt(availableMinor)).toString(),
+        method: "cashless",
+        occurredAt: "2026-08-05T10:00:00.000Z",
+      },
+      mutationMetadata(`${suffix}-wallet-credit`),
+    );
+  }
+
   function mutationMetadata(suffix: string) {
     return {
       idempotencyKey: `${marker}:${suffix}`,
@@ -688,6 +984,12 @@ async function createFixture(pool: Pool): Promise<{
   studentId: string;
   profileId: string;
   packageId: string;
+  payerStudentId: string;
+  racePayerStudentId: string;
+  outsideStudentId: string;
+  extraProfileIds: string[];
+  extraBranchIds: string[];
+  extraUserIds: string[];
 }> {
   const client = await pool.connect();
   await client.query("begin");
@@ -708,6 +1010,11 @@ async function createFixture(pool: Pool): Promise<{
       `insert into app.branches (name, timezone_name)
        values ($1, 'Europe/Moscow') returning id`,
       [`${marker}-branch`],
+    );
+    const outsideBranch = await client.query<{ id: string }>(
+      `insert into app.branches (name, timezone_name)
+       values ($1, 'Europe/Moscow') returning id`,
+      [`${marker}-outside-branch`],
     );
     for (const role of ["admin", "manager"] as const) {
       const staffProfile = await client.query<{ id: string }>(
@@ -746,6 +1053,37 @@ async function createFixture(pool: Pool): Promise<{
       `,
       [profile.rows[0]!.id, branch.rows[0]!.id],
     );
+    const extraStudents: {
+      userId: string;
+      profileId: string;
+      studentId: string;
+    }[] = [];
+    for (const [label, branchId] of [
+      ["Payer", branch.rows[0]!.id],
+      ["RacePayer", branch.rows[0]!.id],
+      ["Outside", outsideBranch.rows[0]!.id],
+    ] as const) {
+      const extraUser = await client.query<{ id: string }>(
+        `insert into app.users (email, role, email_verified_at)
+         values ($1, 'client', now()) returning id`,
+        [`${marker}-${label.toLowerCase()}@example.test`],
+      );
+      const extraProfile = await client.query<{ id: string }>(
+        `insert into app.profiles (user_id, first_name, last_name)
+         values ($1, $2, 'Client') returning id`,
+        [extraUser.rows[0]!.id, `${marker}-${label}`],
+      );
+      const extraStudent = await client.query<{ id: string }>(
+        `insert into app.students (profile_id, status, branch_id)
+         values ($1, 'active', $2) returning id`,
+        [extraProfile.rows[0]!.id, branchId],
+      );
+      extraStudents.push({
+        userId: extraUser.rows[0]!.id,
+        profileId: extraProfile.rows[0]!.id,
+        studentId: extraStudent.rows[0]!.id,
+      });
+    }
     const packageResult = await client.query<{ id: string }>(
       `
         insert into app.subscription_packages (
@@ -768,6 +1106,12 @@ async function createFixture(pool: Pool): Promise<{
       profileId: profile.rows[0]!.id,
       studentId: student.rows[0]!.id,
       packageId: packageResult.rows[0]!.id,
+      payerStudentId: extraStudents[0]!.studentId,
+      racePayerStudentId: extraStudents[1]!.studentId,
+      outsideStudentId: extraStudents[2]!.studentId,
+      extraProfileIds: extraStudents.map((item) => item.profileId),
+      extraBranchIds: [outsideBranch.rows[0]!.id],
+      extraUserIds: extraStudents.map((item) => item.userId),
     };
   } catch (error) {
     await client.query("rollback");
@@ -783,6 +1127,9 @@ async function cleanupFixture(
     actorUserIds: string[];
     studentId?: string;
     profileId?: string;
+    extraStudentIds?: string[];
+    extraProfileIds?: string[];
+    extraBranchIds?: string[];
   },
 ): Promise<void> {
   const client = await pool.connect();
@@ -806,22 +1153,24 @@ async function cleanupFixture(
             [packageIds],
           );
     const subscriptionIds = subscriptions.rows.map((row) => row.id);
-    const payments = input.studentId
+    const studentIds = [input.studentId, ...(input.extraStudentIds ?? [])]
+      .filter((id): id is string => Boolean(id));
+    const payments = studentIds.length > 0
       ? await client.query<{ id: string }>(
           `
             select id
             from app.payments
-            where student_id = $1 and idempotency_ref is not null
+            where student_id = any($1::uuid[]) and idempotency_ref is not null
           `,
-          [input.studentId],
+          [studentIds],
         )
       : { rows: [] as { id: string }[] };
     const paymentIds = payments.rows.map((row) => row.id);
-    const adjustments = input.studentId
+    const adjustments = studentIds.length > 0
       ? await client.query<{ id: string }>(
           `select id from app.account_adjustments
-           where student_id = $1 and idempotency_ref is not null`,
-          [input.studentId],
+           where student_id = any($1::uuid[]) and idempotency_ref is not null`,
+          [studentIds],
         )
       : { rows: [] as { id: string }[] };
     const adjustmentIds = adjustments.rows.map((row) => row.id);
@@ -915,14 +1264,16 @@ async function cleanupFixture(
       packageIds,
       "uuid",
     );
-    if (input.studentId) {
-      await client.query("delete from app.students where id = $1", [
-        input.studentId,
+    if (studentIds.length > 0) {
+      await client.query("delete from app.students where id = any($1::uuid[])", [
+        studentIds,
       ]);
     }
-    if (input.profileId) {
-      await client.query("delete from app.profiles where id = $1", [
-        input.profileId,
+    const profileIds = [input.profileId, ...(input.extraProfileIds ?? [])]
+      .filter((id): id is string => Boolean(id));
+    if (profileIds.length > 0) {
+      await client.query("delete from app.profiles where id = any($1::uuid[])", [
+        profileIds,
       ]);
     }
     await client.query(
@@ -955,6 +1306,13 @@ async function cleanupFixture(
     await client.query("delete from app.branches where name = $1", [
       `${marker}-branch`,
     ]);
+    await deleteByIds(
+      client,
+      "app.branches",
+      "id",
+      input.extraBranchIds ?? [],
+      "uuid",
+    );
     await client.query("commit");
   } catch (error) {
     await client.query("rollback");

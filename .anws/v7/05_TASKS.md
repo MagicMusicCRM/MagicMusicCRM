@@ -123,7 +123,7 @@ graph TD
 
 ### SYS-COMMERCE-INTEGRITY / Core
 
-- [ ] **T2.1.1** [REQ-COMMERCE-101]: Атомарная purchase preview/commit с payer
+- [x] **T2.1.1** [REQ-COMMERCE-101]: Атомарная purchase preview/commit с payer
   - **Описание**: Развить issue flow в один purchase command, добавить two-client scope, balance guard, funding/installments, signed preview и post-commit invalidation.
   - **Входные данные**: INT-S0, [`commerce_integrity.detail.md` §2](04_SYSTEM_DESIGN/commerce_integrity.detail.md).
   - **Выходные данные**: DTO/controller/service/repository endpoints + tests.

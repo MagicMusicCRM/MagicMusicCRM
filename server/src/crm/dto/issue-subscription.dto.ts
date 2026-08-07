@@ -1,7 +1,9 @@
 import { Type } from "class-transformer";
 import {
   ArrayMinSize,
+  Equals,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsIn,
   IsNumber,
@@ -84,4 +86,27 @@ export class IssueSubscriptionDto {
   @IsOptional()
   @IsIn(["cash", "cashless"])
   paymentMethod?: "cash" | "cashless";
+}
+
+export class PurchaseSubscriptionPreviewDto extends IssueSubscriptionDto {
+  @IsUUID()
+  payerStudentId: string;
+
+  @IsIn(["personal_account", "installment"])
+  fundingMode: "personal_account" | "installment";
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  purchaseReason?: string;
+}
+
+export class PurchaseSubscriptionCommandDto extends PurchaseSubscriptionPreviewDto {
+  @IsString()
+  @MaxLength(16_384)
+  previewToken: string;
+
+  @IsBoolean()
+  @Equals(true)
+  confirm: true;
 }
