@@ -34,12 +34,24 @@ Fresh `--no-local` clone был обработан `git-filter-repo 2.47.0`:
 
 ## Production runbook после ротации ключа
 
-1. Подтвердить отзыв старого HolliHop key и установку нового значения вне Git.
+1. В HolliHop открыть `Настройки → Интеграция → API`, выпустить новый key и
+   подтвердить отзыв старого. Это официальный путь получения API key; если экран
+   не предлагает регенерацию/отзыв, операцию выполняет поддержка HolliHop.
+   Простое повторное копирование прежнего значения ротацией не считается.
+   Источник: <https://hollipedia.t8s.ru/books/api/page/hollihop-api-20>.
+   Новый key устанавливается только вне Git.
 2. Объявить короткий freeze на push; сохранить `git ls-remote --heads --tags origin` как expected ref map.
-3. Создать новый `--no-local` clone из актуального `origin`; убедиться, что source ref map не изменился после freeze.
+3. Создать новый `--no-local` clone из актуального локального repository, который
+   содержит ещё не опубликованную `codex/client-card-desktop-canvas`; сверить все
+   существующие remote refs с expected map и отдельно доказать отсутствие этой
+   новой release-ветки на `origin`.
 4. Повторить ровно проверенный filter для двух bugreport paths и трёх уникальных значений из нового unredacted transient scan.
 5. Проверить commit/head/tag counts, commit-map, byte-identical current HEAD tree и history-aware Gitleaks=0.
-6. Только после явного разрешения владельца добавить `origin` обратно и обновить каждую ветку с explicit expected-old-SHA lease; теги обновлять только после повторного remote ref comparison.
+6. Только после явного разрешения владельца добавить `origin` обратно и обновить
+   каждую существующую ветку с explicit expected-old-SHA lease. Санитизированная
+   `codex/client-card-desktop-canvas` создаётся как новый ref только если она всё
+   ещё отсутствует на remote. Теги обновлять только после повторного remote ref
+   comparison.
 7. Удалить transient unredacted reports и несанифицированные rehearsal clones; уведомить участников о mandatory fresh clone/rebase.
 8. На переписанном HEAD повторить полный T6.1.1 gate, затем Windows/Android release build, signature/install/launch, hashes и final smoke.
 

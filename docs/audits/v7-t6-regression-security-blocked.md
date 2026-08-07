@@ -52,6 +52,8 @@ History-aware Gitleaks gate остаётся красным. Скан 735 ком
 Изолированная репетиция rewrite уже прошла: 761/761 reachable commits, 4/4 heads,
 22/22 tags, byte-identical текущий HEAD tree и history-aware Gitleaks=0. Проверенный
 lease-based runbook записан в `docs/audits/v7-history-rewrite-rehearsal.md`.
+Официальный экран ключа HolliHop: `Настройки → Интеграция → API`; если на нём нет
+действия регенерации/отзыва, требуется обращение в поддержку HolliHop.
 
 ## Зафиксированные hardening-изменения
 
