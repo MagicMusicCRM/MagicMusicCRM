@@ -50,7 +50,7 @@ graph TD
 
 ### SYS-PLATFORM-QUALITY / Foundation
 
-- [ ] **T1.1.1** [REQ-PAYMENT-102]: Инвентаризировать все finance/lesson mutation и reporting consumers
+- [x] **T1.1.1** [REQ-PAYMENT-102]: Инвентаризировать все finance/lesson mutation и reporting consumers
   - **Описание**: Сгенерировать воспроизводимый список SQL/callsites, которые читают payments/adjustments/obligations или меняют temporal lesson fields; зафиксировать baseline CH-V7-04.
   - **Входные данные**: [`07_CHALLENGE_REPORT.md` §CH-V7-04](07_CHALLENGE_REPORT.md), [`commerce_integrity.detail.md` §8](04_SYSTEM_DESIGN/commerce_integrity.detail.md).
   - **Выходные данные**: generator + JSON/Markdown baseline с `unowned=0` либо явными владельцами.
