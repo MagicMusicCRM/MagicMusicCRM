@@ -61,7 +61,8 @@
   - Проверки: `flutter analyze` чисто, `flutter test` 163/163, `git diff server/`+`lib/core/services/` пусто.
   - Осталось: **P1-7** сетевой baseline (нужен seeded backend). Follow-up: вынести `_V7Field`/`_V7PrimaryButton` в общий файл; выверить текст онбординг-слайдов; owner-визуальная приёмка.
 
-**▶ Следующий шаг:** **P2 — Расписание (KVA-195)** — v7 block-drag бронь, липкие шапки/тайм-кол (K10), Год/Месяц/День, конфликты (matrix), посещаемость (v7p2-3). Фронт + 1 фикс данных (зависит от P6-4). Сервис-вызовы менять НЕЛЬЗЯ (`docs/migration/WIRE-TO-SERVICE-CHECKLIST.md`). Детальные подзадачи фаз — в Linear (P0-1…P7-4).
+**▶ Следующий шаг:** `/forge` по `.anws/v7/05_TASKS.md`, начиная с
+`T1.1.1`: inventory всех finance consumers и прямых temporal lesson writes.
 
 ---
 
@@ -120,10 +121,23 @@
 
 > **Примечание**: Этот блок автоматически поддерживается процессами `/genesis`, `/blueprint` и `/forge`.
 
-- **Последняя версия архитектуры**: `.anws/v6` (Configurable CRM & Product UX Completion)
-- **Активный список задач**: `.anws/v6/05_TASKS.md` — INT-S6 закрыт, следующая задача V6-701
-- **Количество задач v6 к выполнению**: 5 (4 implementation + 1 INT)
-- **Последнее обновление**: `2026-08-04`
+- **Последняя версия архитектуры**: `.anws/v7` (Financial & Lesson Integrity)
+- **Активный список задач**: `.anws/v7/05_TASKS.md` — следующая задача `T1.1.1`
+- **Фаза**: `/genesis`, `/design-system` и `/blueprint` завершены; выполняется `/forge`
+- **Последнее обновление**: `2026-08-07`
+
+### 🌊 Wave v7/S0 — Architecture Foundation ✅
+_PRD подтверждён владельцем 2026-08-07. Concept model, Architecture Overview и ADR-007..010 фиксируют один существующий Flutter/NestJS/PostgreSQL runtime, `SYS-COMMERCE-INTEGRITY`, append-only payment lifecycle/reversal/exclusion, единый атомарный lesson transition и узкие client-finance capabilities Admin/Manager/Director со staff-visible reasons. Новые зависимости и deployable не вводятся. Следующий шаг `/design-system`: детальный дизайн v7._
+
+### 🌊 Wave v7/S1 — Detailed Design ✅
+_Commerce, Schedule, Client Card и Access/Audit спроектированы в `.anws/v7/04_SYSTEM_DESIGN/`. Challenge исправил one-time refund funding, protected mixed configuration publish и auto-completion bypass; открытых Critical/High нет. CH-V7-04 требует inventory всех ordinary finance queries и единого reporting exclusion. Следующий шаг `/blueprint`._
+
+### 🌊 Wave v7/S2 — Blueprint ✅
+_План прошёл шесть passes task review: 24 implementation tasks + 6 INT gates,
+169 часов, прямое и обратное покрытие 11/11 требований и 11/11 stories,
+открытых Critical/High нет. Реализация идёт волнами data → commerce → lesson
+integrity → recurring plans → Client Card → release. Следующий шаг `/forge`:
+`T1.1.1`._
 
 ### 🌊 Wave v6/S0 — Evidence & UX Foundation ✅
 _Owner подтвердил полное выполнение v6. `V6-001..005` и `INT-S0` закрыты 2026-08-04: воспроизводимый generator покрывает 21 GoRouter route, 248/259 production-reachable Dart files, 256/256 service calls, route/surface/navigation/input/back ownership с unowned=0; v4 inventory обновлён и снова проходит stale-check. Baseline: Flutter analyze clean и 486/486 tests, backend typecheck/build clean, 150/150 suites и 1160/1160 tests, actor/payload 9/9, targeted workflow contracts 68/68 (`docs/audits/v6-s0-baseline.md`). Следующий шаг `/forge`: `V6-101` canonical location adapter._
@@ -305,28 +319,26 @@ _Последнее обновление 2026-07-19: `T9.5` закрыт. Пер
 _Последнее обновление 2026-07-18: `S9` завершён и готов к записи. Backend с migration `0072_demo_workflow_invariants` развернут на production и health green: лид сохраняется через пробное/ДЗ и атомарно конвертируется только при выдаче абонемента; обычное посещение списывает стоимость один раз, пробное не списывает; реальный PUSH подтверждён. Проверки: backend `96/96` suites, `907/907` tests, typecheck/build; Flutter analyze clean, `392/392` tests; demo runner `14/14` tests и полный dry-run сценария green. Подписанные APK/AAB `1.2.2+145` собраны, старая версия удалена и новая установлена на точные AVD `Client`, `Teacher`, `Admin`, `Manager`; вход четырёх аккаунтов в соответствующие роли подтверждён. Production fixture `magic1@gmail.com` очищена после проверенного backup. Сценарий содержит `43` автоматических шага с пятисекундными показами и единственный ручной guarded reset; мутационный запуск сохранён для OBS-дубля, чтобы запись начиналась с чистого состояния._
 
 ### Технологические решения
-- Язык/фреймворк: Dart + Flutter client, NestJS + TypeScript backend.
-- Backend: Owned HTTPS/WebSocket API, PostgreSQL, Redis, private local storage, workers.
-- State: Riverpod.
-- Quality Gates: `flutter analyze`, `flutter test`, backend unit/integration/security tests, actor-matrix, secrets/dependency/container scans, migration dry-runs, backup restore drill.
+- Dart/Flutter/Riverpod/GoRouter client и NestJS/TypeScript/PostgreSQL backend сохраняются без новых зависимостей.
+- Денежные и lesson-команды используют одну PostgreSQL-транзакцию, expected version, idempotency и append-only facts.
+- Quality Gates: targeted + full backend/Flutter, PostgreSQL concurrency/fault tests, Actor Matrix, migration down→up, reconciliation twice, Windows/Android smoke и owner UAT.
 
 ### Границы систем
-- **SYS-APP**: Flutter client, Russian UI, Riverpod state, API/WebSocket integration.
-- **SYS-API**: NestJS REST API, validation, auth guards, RBAC, audit.
-- **SYS-AUTH**: Email/password, OTP, refresh rotation, password reset, optional Google OAuth.
-- **SYS-DATA**: PostgreSQL schema, migrations, scoped repositories, constraints.
-- **SYS-MSG**: Messenger REST plus WebSocket realtime.
-- **SYS-FILES**: Private file storage and signed downloads.
-- **SYS-OPS**: Docker runtime, reverse proxy, TLS, backups, monitoring, runbooks.
-- **SYS-SEC**: Security gates, actor matrix, scans and launch evidence.
+- **SYS-APP-EXPERIENCE**: shell, routes, tabs, Back/deep-link и adaptive surfaces.
+- **SYS-UI-FOUNDATION**: v7 components, accessibility, input и responsive layout.
+- **SYS-ACCESS-SCOPE**: capabilities и actor/resource scope.
+- **SYS-CRM-WORKSPACE**: Lead/Student, Client Card и общая staff-note.
+- **SYS-SCHEDULE**: lessons, recurring plans, conflicts и temporal lifecycle.
+- **SYS-COMMERCE-INTEGRITY**: wallet, subscriptions, installments, reversals, settlement и teacher accrual.
+- **SYS-OPERATIONS**: tasks, dashboards, technical history и bounded drilldowns.
+- **SYS-PLATFORM-QUALITY**: transactions, audit/outbox, reconciliation, migrations и release gates.
 
 ### Активные ADR
-- ADR-001: Backend Stack — NestJS + TypeScript, PostgreSQL, Redis, Docker Compose.
-- ADR-002: Own Auth and Session Model — email/password primary, OTP, refresh rotation, optional Google OAuth.
-- ADR-003: Private File Storage — local NVMe storage behind backend authorization plus external encrypted backups.
-- ADR-004: Realtime and Messaging — owned WebSocket gateway with per-room authorization.
-- ADR-005: Deployment and Recovery — Moscow primary, external backups, restore drill and rollback runbook.
-- ADR-006: Security Gates — scans, actor matrix, 50-point checklist and release evidence block cutover.
+- ADR-001..006: наследованные v6 runtime/UX/navigation/access/release решения.
+- ADR-007: существующий Flutter/NestJS/PostgreSQL runtime без нового сервиса/event-store.
+- ADR-008: append-only клиентские финансы и reporting exclusion pair.
+- ADR-009: единый атомарный lesson transition через Commerce port.
+- ADR-010: client-finance capabilities Admin/Manager/Director и видимые причины.
 
 ---
 
@@ -335,14 +347,16 @@ _Последнее обновление 2026-07-18: `S9` завершён и г
 > **Примечание**: Поддерживается процессом `/genesis`.
 
 ```text
-.
-├── lib/                  (Flutter client)
-├── server/               (v3 NestJS backend; planned)
-│   ├── apps/api/         (HTTPS/WebSocket API)
-│   ├── modules/          (auth, profile, crm, messenger, files, legal)
-│   └── db/               (PostgreSQL migrations; planned)
-├── infra/                (Docker/reverse proxy/backups; planned)
-└── .anws/v3/             (Backend Independence architecture)
+MagicMusicCRM/
+├── lib/                      # Flutter: app/UI/CRM/Schedule/Operations
+├── server/
+│   ├── src/access-control/   # RBAC/resource scope
+│   ├── src/crm/commerce/     # money/hours integrity
+│   ├── src/crm/schedule/     # temporal lesson integrity
+│   └── db/migrations/        # PostgreSQL evolution
+├── test/                     # Flutter regression
+├── integration_test/         # device acceptance
+└── .anws/v7/                 # active architecture
 ```
 
 ---
@@ -351,13 +365,12 @@ _Последнее обновление 2026-07-18: `S9` завершён и г
 
 > **Примечание**: Поддерживается процессом `/genesis`.
 
-- **Обзор архитектуры**: `.anws/v3/02_ARCHITECTURE_OVERVIEW.md`
-- **ADR (Решения)**: `.anws/v3/03_ADR/` (Источник истины архитектурных решений)
-- **Детальный дизайн**: `.anws/v3/04_SYSTEM_DESIGN/`
-- **Задачи**: `.anws/v3/05_TASKS.md`
-- **Challenge Report**: `.anws/v3/07_CHALLENGE_REPORT.md`
-- **Cutover Readiness**: `.anws/v3/08_CUTOVER_READINESS_REPORT.md`
-- **S7 Release Evidence**: `.anws/v3/09_S7_RELEASE_EVIDENCE.md`
+- **Обзор архитектуры**: `.anws/v7/02_ARCHITECTURE_OVERVIEW.md`
+- **ADR**: `.anws/v7/03_ADR/` — источник истины кросс-системных решений.
+- **Детальный дизайн**: `.anws/v7/04_SYSTEM_DESIGN/`.
+- **Список задач**: `.anws/v7/05_TASKS.md` — активный `/forge` backlog.
+- **PRD**: `.anws/v7/01_PRD.md`.
+- **Concept model**: `.anws/v7/concept_model.json`.
 
 <!-- AUTO:END -->
 
