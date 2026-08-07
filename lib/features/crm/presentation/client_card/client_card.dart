@@ -572,6 +572,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
     });
 
     final cs = Theme.of(context).colorScheme;
+    final media = MediaQuery.of(context);
     final actorRole = ref.watch(releaseGateStatusProvider).asData?.value.role;
     final canReadClientFinance = crmHasClientCardFinanceAccess(actorRole ?? '');
     final canWriteSchedule =
@@ -597,12 +598,11 @@ class _ClientCardState extends ConsumerState<ClientCard>
     final card = Container(
       width: widget.routed
           ? double.infinity
-          : (MediaQuery.of(context).size.width * 0.92)
-                .clamp(0.0, 600.0)
-                .toDouble(),
-      height: widget.routed
-          ? double.infinity
-          : MediaQuery.of(context).size.height * 0.85,
+          : (media.size.width * 0.92).clamp(0.0, 600.0).toDouble(),
+      height: widget.routed ? double.infinity : null,
+      constraints: widget.routed
+          ? null
+          : BoxConstraints(maxHeight: media.size.height * 0.85),
       color: cs.surface,
       child: Column(
         children: [

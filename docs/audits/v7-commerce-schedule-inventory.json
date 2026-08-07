@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "task": "T1.1.1",
-  "source_digest": "476d776dae34749b2522d0a6123832eb43eb9ecc9ffe390f946a4d3a0643a9ea",
+  "source_digest": "fd172a1126bb464837244a8b5a7a82c68bdd0e32062227e918e77e710d404f86",
   "summary": {
     "matched_source_files": 51,
     "finance_callsites": 251,
