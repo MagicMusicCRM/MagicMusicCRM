@@ -297,7 +297,7 @@ graph TD
 
 ### SYS-SCHEDULE / Integration
 
-- [ ] **T4.1.1** [REQ-SCHEDULE-102]: Plan aggregate и create/effective edit
+- [x] **T4.1.1** [REQ-SCHEDULE-102]: Plan aggregate и create/effective edit
   - **Описание**: Реализовать named individual/group plan поверх existing series, participant subscriptions, version/idempotency and generation.
   - **Входные данные**: INT-S2, [`schedule_v7.detail.md` §3/4](04_SYSTEM_DESIGN/schedule_v7.detail.md).
   - **Выходные данные**: plan DTO/controller/service/repository/API.

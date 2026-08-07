@@ -37,6 +37,7 @@ describe("CrmScheduleController rollout boundary", () => {
         lessonSeriesCommands as never,
         lessonTransitions as never,
         flags,
+        {} as never,
       ),
       schedule,
       lessonCommands,

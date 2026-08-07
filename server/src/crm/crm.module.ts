@@ -100,6 +100,8 @@ import { PaymentLifecycleRepository } from "./commerce/payment-lifecycle.reposit
 import { PaymentLifecycleService } from "./commerce/payment-lifecycle.service";
 import { PaymentReversalRepository } from "./commerce/payment-reversal.repository";
 import { PaymentReversalService } from "./commerce/payment-reversal.service";
+import { SchedulePlanRepository } from "./schedule/schedule-plan.repository";
+import { SchedulePlanService } from "./schedule/schedule-plan.service";
 
 @Module({
   imports: [
@@ -177,6 +179,8 @@ import { PaymentReversalService } from "./commerce/payment-reversal.service";
     LessonRequiredFieldValidator,
     LessonCommandService,
     LessonSeriesCommandService,
+    SchedulePlanRepository,
+    SchedulePlanService,
     LessonTransitionService,
     LessonSettlementRepository,
     LessonSettlementService,

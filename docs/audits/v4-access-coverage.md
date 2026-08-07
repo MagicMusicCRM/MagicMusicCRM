@@ -7,9 +7,9 @@
 
 | Metric | Value |
 |---|---:|
-| inventory routes | 303 |
-| JWT private routes | 291 |
-| capability + resource-scope mapped | 291 |
+| inventory routes | 306 |
+| JWT private routes | 294 |
+| capability + resource-scope mapped | 294 |
 | public/external routes | 12 |
 | unmapped private routes | 0 |
 | missing resource scopes | 0 |
@@ -41,8 +41,8 @@ expand legacy access.
 | `crm.comment.read.shared` | 2 |
 | `report.export.xlsx` | 6 |
 | `report.status.read` | 17 |
-| `schedule.lesson.read.assigned` | 21 |
-| `schedule.lesson.write` | 24 |
+| `schedule.lesson.read.assigned` | 22 |
+| `schedule.lesson.write` | 26 |
 | `system.settings.manage` | 6 |
 | `workflow.task.read` | 4 |
 | `workflow.task.write` | 3 |
@@ -70,10 +70,10 @@ pwsh -File scripts/v4_inventory.ps1 -Check
 
 | Gate | Result |
 |---|---:|
-| Exact access coverage | 291/291 private routes |
+| Exact access coverage | 294/294 private routes |
 | Registry/resource-scope mapping | 100% / 100% |
 | Unmapped / unexplained allow | 0 / 0 |
 | Targeted capability/JWT/repository tests | 4/4 suites, 56/56 tests |
 | Backend typecheck/build | PASS / PASS |
 | Full backend regression | 110/110 suites, 1026/1026 tests |
-| Current-state inventory | 303 routes, 739 DTO fields, 0 unowned |
+| Current-state inventory | 306 routes, 768 DTO fields, 0 unowned |

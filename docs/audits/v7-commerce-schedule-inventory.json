@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
   "task": "T1.1.1",
-  "source_digest": "c9e1a17e69986c5aca48789c08580ce37e03a132ff9506cee42178f071358417",
+  "source_digest": "7424432d66de35bf66ad9d7136b39375537b3b1956240b5deb2d252b68ba7925",
   "summary": {
     "matched_source_files": 49,
-    "finance_callsites": 243,
+    "finance_callsites": 244,
     "ordinary_finance_reads": 96,
     "reporting_safe_finance_reads": 51,
     "lesson_temporal_mutations": 7,
@@ -842,7 +842,7 @@
       "operation": "call",
       "owner": "SYS-SCHEDULE",
       "file": "server/src/crm/schedule/lesson-series-command.service.ts",
-      "line": 21
+      "line": 22
     },
     {
       "kind": "wire",
@@ -974,19 +974,19 @@
     },
     {
       "kind": "wire",
-      "subject": "/features/manager/presentation/widgets/finance",
-      "operation": "call",
-      "owner": "SYS-OPERATIONS",
-      "file": "lib/features/manager/presentation/widgets/reports_widget.dart",
-      "line": 18
-    },
-    {
-      "kind": "wire",
       "subject": "/subscription",
       "operation": "call",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/commerce/installment-due.worker.ts",
       "line": 8
+    },
+    {
+      "kind": "wire",
+      "subject": "/payment",
+      "operation": "call",
+      "owner": "SYS-COMMERCE-INTEGRITY",
+      "file": "server/src/crm/commerce/installment-due.worker.ts",
+      "line": 7
     },
     {
       "kind": "sql-table",
@@ -1461,14 +1461,6 @@
       "line": 437
     },
     {
-      "kind": "wire",
-      "subject": "/payment",
-      "operation": "call",
-      "owner": "SYS-COMMERCE-INTEGRITY",
-      "file": "server/src/crm/commerce/installment-due.worker.ts",
-      "line": 7
-    },
-    {
       "kind": "sql-table",
       "subject": "commerce_ordinary_payments",
       "operation": "read",
@@ -1478,11 +1470,27 @@
     },
     {
       "kind": "sql-table",
+      "subject": "commerce_ordinary_account_adjustments",
+      "operation": "read",
+      "owner": "SYS-OPERATIONS",
+      "file": "server/src/crm/finance.service.ts",
+      "line": 512
+    },
+    {
+      "kind": "sql-table",
       "subject": "account_adjustments",
       "operation": "mutation",
       "owner": "SYS-OPERATIONS",
       "file": "server/src/crm/finance.service.ts",
       "line": 593
+    },
+    {
+      "kind": "sql-table",
+      "subject": "commerce_ordinary_payments",
+      "operation": "read",
+      "owner": "SYS-COMMERCE-INTEGRITY",
+      "file": "server/src/crm/timeline.service.ts",
+      "line": 186
     },
     {
       "kind": "sql-table",
@@ -1585,16 +1593,16 @@
       "subject": "commerce_ordinary_payments",
       "operation": "read",
       "owner": "SYS-COMMERCE-INTEGRITY",
-      "file": "server/src/crm/timeline.service.ts",
-      "line": 186
+      "file": "server/src/crm/commerce/commerce-projection.repository.ts",
+      "line": 465
     },
     {
       "kind": "sql-table",
-      "subject": "commerce_ordinary_payments",
+      "subject": "subscription_obligation_facts",
       "operation": "read",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/commerce/commerce-projection.repository.ts",
-      "line": 465
+      "line": 481
     },
     {
       "kind": "sql-table",
@@ -1693,20 +1701,20 @@
       "line": 333
     },
     {
-      "kind": "sql-table",
-      "subject": "subscription_obligation_facts",
-      "operation": "read",
-      "owner": "SYS-COMMERCE-INTEGRITY",
-      "file": "server/src/crm/commerce/commerce-projection.repository.ts",
-      "line": 481
-    },
-    {
       "kind": "wire",
       "subject": "/subscription",
       "operation": "call",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/subscriptions.service.ts",
       "line": 363
+    },
+    {
+      "kind": "wire",
+      "subject": "/features/manager/presentation/widgets/finance",
+      "operation": "call",
+      "owner": "SYS-OPERATIONS",
+      "file": "lib/features/manager/presentation/widgets/reports_widget.dart",
+      "line": 18
     },
     {
       "kind": "sql-table",
@@ -1722,7 +1730,7 @@
       "operation": "mutation",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/subscriptions.service.ts",
-      "line": 669
+      "line": 285
     },
     {
       "kind": "sql-table",
@@ -1754,7 +1762,15 @@
       "operation": "read",
       "owner": "SYS-SCHEDULE",
       "file": "server/src/crm/schedule.service.ts",
-      "line": 452
+      "line": 454
+    },
+    {
+      "kind": "wire",
+      "subject": "/commerce/subscription",
+      "operation": "call",
+      "owner": "SYS-SCHEDULE",
+      "file": "server/src/crm/schedule.service.ts",
+      "line": 31
     },
     {
       "kind": "sql-table",
@@ -1938,15 +1954,7 @@
       "operation": "mutation",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/subscriptions.service.ts",
-      "line": 285
-    },
-    {
-      "kind": "sql-table",
-      "subject": "commerce_ordinary_account_adjustments",
-      "operation": "read",
-      "owner": "SYS-OPERATIONS",
-      "file": "server/src/crm/finance.service.ts",
-      "line": 512
+      "line": 669
     },
     {
       "kind": "wire",
@@ -1963,28 +1971,28 @@
       "subject": "bulkLessonTransitions(",
       "owner": "SYS-SCHEDULE",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 202
+      "line": 244
     },
     {
       "kind": "wire-temporal-mutation",
       "subject": "rescheduleLesson(",
       "owner": "SYS-SCHEDULE",
       "file": "server/src/crm/crm-schedule.controller.ts",
-      "line": 226
+      "line": 268
     },
     {
       "kind": "sql-temporal-write",
       "subject": "insert into app.lessons ( student_id, group_id, lead_id, teacher_id, branch_id, room_id, scheduled_at, duration_minutes, status, is_trial, notes, teacher_rate )",
       "owner": "SYS-SCHEDULE",
       "file": "server/src/crm/schedule.service.ts",
-      "line": 980
+      "line": 982
     },
     {
       "kind": "sql-temporal-write",
       "subject": "insert into app.lessons ( student_id, group_id, teacher_id, branch_id, room_id, scheduled_at, duration_minutes, status, is_trial, series_id, series_date, created_by )",
       "owner": "SYS-SCHEDULE",
       "file": "server/src/crm/schedule.service.ts",
-      "line": 1153
+      "line": 1157
     },
     {
       "kind": "sql-temporal-write",
@@ -1998,7 +2006,7 @@
       "subject": "insert into app.lessons ( id, student_id, lead_id, teacher_id, branch_id, room_id, scheduled_at, duration_minutes, status, is_trial, notes, teacher_rate, series_id, series_date, cr",
       "owner": "SYS-SCHEDULE",
       "file": "server/src/crm/schedule/lesson-series-command.service.ts",
-      "line": 435
+      "line": 535
     },
     {
       "kind": "sql-temporal-write",

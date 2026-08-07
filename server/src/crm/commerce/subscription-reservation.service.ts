@@ -14,6 +14,7 @@ interface LockedSubscriptionRow {
   status: string;
   lessons_total: string;
   lessons_used: string;
+  starts_at: Date | string | null;
   expires_at: Date | string | null;
 }
 
@@ -79,13 +80,9 @@ export class SubscriptionReservationService {
       client,
       input.subscriptionId,
     );
-    if (
-      !subscription ||
-      subscription.status !== "active" ||
-      subscription.student_id !== input.clientId ||
-      (subscription.expires_at !== null &&
-        new Date(subscription.expires_at).getTime() < Date.now())
-    ) {
+    if (!subscription || subscription.status !== "active"
+      || subscription.student_id !== input.clientId
+      || !(await this.coversLesson(client, input.subscriptionId, input.lessonId))) {
       this.capacityViolation(input.subscriptionId, input.units, "0");
     }
 
@@ -368,6 +365,7 @@ export class SubscriptionReservationService {
           status,
           lessons_total,
           lessons_used,
+          starts_at,
           expires_at
         from app.subscriptions
         where id = $1
@@ -376,6 +374,31 @@ export class SubscriptionReservationService {
       [subscriptionId],
     );
     return result.rows[0] ?? null;
+  }
+
+  private async coversLesson(
+    client: PoolClient,
+    subscriptionId: string,
+    lessonId: string,
+  ): Promise<boolean> {
+    const result = await client.query<{ covered: boolean }>(
+      `select exists (
+         select 1
+         from app.subscriptions subscription
+         join app.lessons lesson on lesson.id = $2
+         left join app.schedule_series series on series.id = lesson.series_id
+         left join app.branches branch on branch.id = lesson.branch_id
+         where subscription.id = $1
+           and (subscription.starts_at is null or subscription.starts_at <=
+             timezone(coalesce(series.timezone_name, branch.timezone_name, 'Europe/Moscow'),
+               lesson.scheduled_at)::date)
+           and (subscription.expires_at is null or subscription.expires_at >=
+             timezone(coalesce(series.timezone_name, branch.timezone_name, 'Europe/Moscow'),
+               lesson.scheduled_at)::date)
+       ) as covered`,
+      [subscriptionId, lessonId],
+    );
+    return result.rows[0]?.covered === true;
   }
 
   private async clientUserIds(studentId: string): Promise<string[]> {

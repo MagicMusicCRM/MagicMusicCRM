@@ -5,7 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from "@nestjs/common";
-import type { QueryResult, QueryResultRow } from "pg";
+import type { PoolClient, QueryResult, QueryResultRow } from "pg";
 import { AuditEventInput, AuditService } from "../audit/audit.service";
 import {
   ActorContext,
@@ -28,6 +28,7 @@ import { BulkLessonRateDto } from "./dto/bulk-lesson-rate.dto";
 import { UpsertLessonDto } from "./dto/upsert-lesson.dto";
 import { LessonRow, formatLessonTimeMoscow, toLessonDto } from "./crm-mappers";
 import { assertLessonPatchUsesTransition } from "./schedule/lesson-protected-patch.guard";
+import { SubscriptionReservationService } from "./commerce/subscription-reservation.service";
 
 interface ScheduleLessonRow extends LessonRow {
   conflict_types: string[] | null;
@@ -115,6 +116,7 @@ export class ScheduleService {
     private readonly policy: CrmPolicy,
     private readonly notifications: NotificationsService,
     private readonly realtime: RealtimeBus,
+    private readonly reservations?: SubscriptionReservationService,
   ) {}
 
   async getScheduleMatrix(actor: ActorContext, query: ScheduleMatrixQuery) {
@@ -1080,9 +1082,11 @@ export class ScheduleService {
             greatest(s.valid_from, (now() at time zone 'Europe/Moscow')::date)::timestamp,
             least(
               coalesce(s.valid_until, (now() at time zone 'Europe/Moscow')::date
-                + case when s.group_id is null then $2::int else $3::int end),
+                + case when s.plan_id is not null or s.group_id is null
+                    then $2::int else $3::int end),
               (now() at time zone 'Europe/Moscow')::date
-                + case when s.group_id is null then $2::int else $3::int end
+                + case when s.plan_id is not null or s.group_id is null
+                    then $2::int else $3::int end
             )::timestamp,
             interval '1 day'
           ) as d
@@ -1164,9 +1168,11 @@ export class ScheduleService {
           greatest(s.valid_from, (now() at time zone 'Europe/Moscow')::date)::timestamp,
           least(
               coalesce(s.valid_until, (now() at time zone 'Europe/Moscow')::date
-                + case when s.group_id is null then $2::int else $3::int end),
+                + case when s.plan_id is not null or s.group_id is null
+                    then $2::int else $3::int end),
               (now() at time zone 'Europe/Moscow')::date
-                + case when s.group_id is null then $2::int else $3::int end
+                + case when s.plan_id is not null or s.group_id is null
+                    then $2::int else $3::int end
           )::timestamp,
           interval '1 day'
         ) as d
@@ -1275,16 +1281,116 @@ export class ScheduleService {
     );
     await executor.query(
       `
+        insert into app.lesson_snapshots (
+          lesson_id, client_type, client_id, completion_type,
+          client_charge_type, client_charge_value,
+          teacher_compensation_type, teacher_compensation_value,
+          subscription_id, trial, duration_minutes
+        )
+        select lesson.id, 'student', plan.student_id, 'scheduled',
+          'subscription', lesson.duration_minutes::numeric / 60,
+          'none', 0, plan.subscription_id, false, lesson.duration_minutes
+        from app.lessons lesson
+        join app.schedule_series series on series.id = lesson.series_id
+        join app.schedule_plans plan on plan.id = series.plan_id
+        where lesson.id = any($1::uuid[]) and plan.kind = 'individual'
+        on conflict (lesson_id) do nothing
+      `,
+      [lessonIds],
+    );
+    await executor.query(
+      `
+        insert into app.lesson_snapshots (
+          lesson_id, group_id, completion_type,
+          client_charge_type, client_charge_value,
+          teacher_compensation_type, teacher_compensation_value,
+          trial, duration_minutes
+        )
+        select lesson.id, plan.group_id, 'scheduled', 'none', 0,
+          'none', 0, false, lesson.duration_minutes
+        from app.lessons lesson
+        join app.schedule_series series on series.id = lesson.series_id
+        join app.schedule_plans plan on plan.id = series.plan_id
+        where lesson.id = any($1::uuid[]) and plan.kind = 'group'
+        on conflict (lesson_id) do nothing
+      `,
+      [lessonIds],
+    );
+    await executor.query(
+      `
+        insert into app.lesson_snapshot_participants (
+          lesson_id, student_id, charge_type, charge_value, subscription_id
+        )
+        select lesson.id, participant.student_id, 'subscription',
+          lesson.duration_minutes::numeric / 60, participant.subscription_id
+        from app.lessons lesson
+        join app.schedule_series series on series.id = lesson.series_id
+        join app.schedule_plan_participants participant
+          on participant.plan_id = series.plan_id
+         and participant.effective_from <= lesson.series_date
+         and (participant.effective_until is null
+           or participant.effective_until >= lesson.series_date)
+        where lesson.id = any($1::uuid[])
+        on conflict (lesson_id, student_id) do nothing
+      `,
+      [lessonIds],
+    );
+    await executor.query(
+      `
         insert into app.lesson_reservations (lesson_id, subscription_id, units)
         select snapshot.lesson_id, snapshot.subscription_id,
                snapshot.client_charge_value
           from app.lesson_snapshots snapshot
+          join app.lessons lesson on lesson.id = snapshot.lesson_id
+          join app.schedule_series series on series.id = lesson.series_id
          where snapshot.lesson_id = any($1::uuid[])
            and snapshot.client_charge_type = 'subscription'
+           and series.plan_id is null
         on conflict (lesson_id, subscription_id) do nothing
       `,
       [lessonIds],
     );
+    const planCharges = await executor.query<{
+      lesson_id: string;
+      student_id: string;
+      subscription_id: string;
+      units: string;
+    }>(
+      `
+        select snapshot.lesson_id, snapshot.client_id as student_id,
+          snapshot.subscription_id, snapshot.client_charge_value::text as units
+        from app.lesson_snapshots snapshot
+        join app.lessons lesson on lesson.id = snapshot.lesson_id
+        join app.schedule_series series on series.id = lesson.series_id
+        where snapshot.lesson_id = any($1::uuid[])
+          and series.plan_id is not null
+          and snapshot.client_charge_type = 'subscription'
+        union all
+        select participant.lesson_id, participant.student_id,
+          participant.subscription_id, participant.charge_value::text
+        from app.lesson_snapshot_participants participant
+        join app.lessons lesson on lesson.id = participant.lesson_id
+        join app.schedule_series series on series.id = lesson.series_id
+        where participant.lesson_id = any($1::uuid[])
+          and series.plan_id is not null
+          and participant.charge_type = 'subscription'
+        order by subscription_id, lesson_id
+      `,
+      [lessonIds],
+    );
+    if (planCharges.rows.length && !this.reservations) {
+      throw new Error("SubscriptionReservationService is required for plan generation.");
+    }
+    for (const charge of planCharges.rows) {
+      await this.reservations!.allocate(executor as PoolClient, {
+        lessonId: charge.lesson_id,
+        clientType: "student",
+        clientId: charge.student_id,
+        chargeType: "subscription",
+        subscriptionId: charge.subscription_id,
+        units: Number(charge.units),
+      });
+    }
     await executor.query(
       `update app.schedule_series
        set occurrence_count = coalesce(occurrence_count, 0) + $2,
@@ -1293,6 +1399,13 @@ export class ScheduleService {
       [seriesId, lessonIds.length],
     );
     return lessonIds.length;
+  }
+
+  materializePlanSeries(
+    client: PoolClient,
+    seriesId: string,
+  ): Promise<number> {
+    return this.materializeSeries(seriesId, client);
   }
 
   /** Продлить все живые серии (вкл. «до бесконечности») — вызывается воркером. */

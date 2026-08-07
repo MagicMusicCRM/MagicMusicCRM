@@ -18,6 +18,9 @@ describe("capability route policy", () => {
     ["GET", "/crm/comments", "crm.client.read.basic"],
     ["POST", "/crm/comments", "crm.comment.read.shared"],
     ["GET", "/crm/lessons", "schedule.lesson.read.assigned"],
+    ["GET", "/crm/schedule-plans", "schedule.lesson.read.assigned"],
+    ["POST", "/crm/schedule-plans", "schedule.lesson.write"],
+    ["PATCH", "/crm/schedule-plans/id", "schedule.lesson.write"],
     [
       "GET",
       "/crm/configuration/lesson-decisions",

@@ -44,6 +44,12 @@ import { LessonSeriesCommandService } from "./schedule/lesson-series-command.ser
 import { LessonTransitionService } from "./schedule/lesson-transition.service";
 import { V4DomainFlagsService } from "../platform/v4-domain-flags";
 import { assertLessonPatchUsesTransition } from "./schedule/lesson-protected-patch.guard";
+import {
+  CreateSchedulePlanDto,
+  SchedulePlanQuery,
+  UpdateSchedulePlanDto,
+} from "./dto/schedule-plan.dto";
+import { SchedulePlanService } from "./schedule/schedule-plan.service";
 
 @UseGuards(JwtAuthGuard)
 @Controller("crm")
@@ -54,7 +60,43 @@ export class CrmScheduleController {
     private readonly lessonSeriesCommands: LessonSeriesCommandService,
     private readonly lessonTransitions: LessonTransitionService,
     private readonly v4DomainFlags: V4DomainFlagsService,
+    private readonly schedulePlans: SchedulePlanService,
   ) {}
+
+  @Get("schedule-plans")
+  listSchedulePlans(
+    @CurrentActor() actor: ActorContext,
+    @Query() query: SchedulePlanQuery,
+  ) {
+    return this.schedulePlans.list(actor, query);
+  }
+
+  @Post("schedule-plans")
+  createSchedulePlan(
+    @CurrentActor() actor: ActorContext,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+    @Body() dto: CreateSchedulePlanDto,
+  ) {
+    return this.schedulePlans.create(actor, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
+  }
+
+  @Patch("schedule-plans/:id")
+  updateSchedulePlan(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+    @Body() dto: UpdateSchedulePlanDto,
+  ) {
+    return this.schedulePlans.update(actor, id, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
+  }
 
   @Get("schedule-series")
   listScheduleSeries(

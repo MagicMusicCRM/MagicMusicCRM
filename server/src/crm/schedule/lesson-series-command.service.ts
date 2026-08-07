@@ -10,6 +10,7 @@ import { ClientReferenceService } from "../clients/client-reference.service";
 import { CrmPolicy } from "../crm.policy";
 import { ClientRefDto } from "../dto/client-ref.dto";
 import { CreateScheduleSeriesDto } from "../dto/schedule-series.dto";
+import { SchedulePlanRowDto } from "../dto/schedule-plan.dto";
 import { UpsertLessonDto } from "../dto/upsert-lesson.dto";
 import { ScheduleConstraintEngine } from "./constraint-engine.service";
 import type { LessonCommandMetadata } from "./lesson-command.service";
@@ -144,6 +145,97 @@ export class LessonSeriesCommandService {
     };
   }
 
+  async validatePlanRow(
+    client: PoolClient,
+    row: SchedulePlanRowDto,
+    validFrom: string,
+    validUntil: string | null,
+    studentIds: string[],
+  ): Promise<void> {
+    const dto = Object.assign(new CreateScheduleSeriesDto(), {
+      teacherId: row.teacherId,
+      roomId: row.roomId,
+      branchId: row.branchId,
+      weekday: row.weekday,
+      beginTime: row.beginTime,
+      durationMinutes: row.durationMinutes ?? 60,
+      validFrom,
+      validUntil,
+    });
+    const occurrences = await this.expand(client, dto, true);
+    const validationOccurrences = occurrences.length > 0
+      ? occurrences
+      : [await this.firstPlanOccurrence(client, dto)];
+    for (const occurrence of validationOccurrences) {
+      for (const studentId of studentIds) {
+        const result = await this.constraints.validate(
+          {
+            clientRef: { type: "student", id: studentId },
+            teacherId: row.teacherId,
+            branchId: row.branchId,
+            roomId: row.roomId,
+            startAt: occurrence.startAt,
+            endAt: occurrence.endAt,
+          },
+          client,
+        );
+        if (!result.valid) {
+          throw new UnprocessableEntityException({
+            code: "SCHEDULE_PLAN_CONSTRAINT_VIOLATIONS",
+            message: "Schedule plan row violates schedule constraints.",
+            occurrence,
+            studentId,
+            violations: result.violations,
+          });
+        }
+      }
+    }
+  }
+
+  private async firstPlanOccurrence(
+    client: PoolClient,
+    dto: CreateScheduleSeriesDto,
+  ): Promise<SeriesOccurrence> {
+    const result = await client.query<SeriesOccurrenceRow>(
+      `select day::date::text as local_date,
+          (day::date + $5::time) at time zone branch.timezone_name as starts_at,
+          ((day::date + $5::time) at time zone branch.timezone_name
+            + $6::int * interval '1 minute') as ends_at,
+          branch.timezone_name
+       from app.branches branch
+       cross join lateral generate_series(
+         $2::date,
+         least(coalesce($3::date, $2::date + 6), $2::date + 6),
+         interval '1 day'
+       ) day
+       where branch.id = $1 and branch.deleted_at is null
+         and extract(isodow from day) = $4::int
+       order by day limit 1`,
+      [
+        dto.branchId,
+        dto.validFrom.slice(0, 10),
+        dto.validUntil?.slice(0, 10) ?? null,
+        dto.weekday,
+        dto.beginTime,
+        dto.durationMinutes ?? 60,
+      ],
+    );
+    const row = result.rows[0];
+    if (!row) {
+      throw new UnprocessableEntityException({
+        code: "SCHEDULE_PLAN_ROW_EMPTY",
+        fields: ["rows", "activeFrom", "activeUntil"],
+      });
+    }
+    return {
+      index: 0,
+      localDate: row.local_date,
+      startAt: new Date(row.starts_at).toISOString(),
+      endAt: new Date(row.ends_at).toISOString(),
+      timezone: row.timezone_name,
+    };
+  }
+
   private assertFiniteRecurrence(dto: CreateScheduleSeriesDto) {
     const datePattern = /^\d{4}-\d{2}-\d{2}$/;
     if (
@@ -180,6 +272,7 @@ export class LessonSeriesCommandService {
   private async expand(
     client: PoolClient,
     dto: CreateScheduleSeriesDto,
+    allowPlanRange = false,
   ): Promise<SeriesOccurrence[]> {
     const result = await client.query<SeriesOccurrenceRow>(
       `
@@ -198,7 +291,10 @@ export class LessonSeriesCommandService {
             timezone(branch.timezone_name, now())::date
           ),
           least(
-            $3::date,
+            coalesce(
+              $3::date,
+              timezone(branch.timezone_name, now())::date + $8::int
+            ),
             timezone(branch.timezone_name, now())::date + $8::int
           ),
           interval '1 day'
@@ -206,18 +302,22 @@ export class LessonSeriesCommandService {
         where branch.id = $1
           and branch.deleted_at is null
           and extract(isodow from day) = $4::int
-          and ($3::date - $2::date) between 0 and $7::int
+          and (
+            $9::boolean
+            or ($3::date - $2::date) between 0 and $7::int
+          )
         order by day
       `,
       [
         dto.branchId ?? null,
         dto.validFrom.slice(0, 10),
-        dto.validUntil!.slice(0, 10),
+        dto.validUntil?.slice(0, 10) ?? null,
         dto.weekday,
         dto.beginTime,
         dto.durationMinutes ?? 60,
         LessonSeriesCommandService.MAX_RANGE_DAYS,
         LessonSeriesCommandService.MATERIALIZATION_HORIZON_DAYS,
+        allowPlanRange,
       ],
     );
     return result.rows.map((row, index) => ({

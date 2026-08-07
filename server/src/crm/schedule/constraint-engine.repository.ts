@@ -113,6 +113,15 @@ export class ConstraintEngineRepository {
                 and lesson.student_id = candidate.client_id
               )
               or (
+                candidate.client_type = 'student'
+                and exists (
+                  select 1 from app.group_students membership
+                  where membership.group_id = lesson.group_id
+                    and membership.student_id = candidate.client_id
+                    and membership.left_at is null
+                )
+              )
+              or (
                 candidate.client_type = 'lead'
                 and lesson.lead_id = candidate.client_id
               )
