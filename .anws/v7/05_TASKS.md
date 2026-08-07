@@ -339,7 +339,7 @@ graph TD
   - **Зависимости**: T4.1.2.
   - **Приоритет**: P1.
 
-- [ ] **INT-S3** [MILESTONE]: Интеграционная проверка S3 — Recurring Plans
+- [x] **INT-S3** [MILESTONE]: Интеграционная проверка S3 — Recurring Plans
   - **Описание**: Пройти individual/group create/edit/end/history на backend и UI.
   - **Входные данные**: T4.1.1–T4.1.3.
   - **Выходные данные**: `docs/audits/v7-int-s3-recurring-plans.md`.

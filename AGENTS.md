@@ -61,8 +61,8 @@
   - Проверки: `flutter analyze` чисто, `flutter test` 163/163, `git diff server/`+`lib/core/services/` пусто.
   - Осталось: **P1-7** сетевой baseline (нужен seeded backend). Follow-up: вынести `_V7Field`/`_V7PrimaryButton` в общий файл; выверить текст онбординг-слайдов; owner-визуальная приёмка.
 
-**▶ Следующий шаг:** `/forge` по `.anws/v7/05_TASKS.md`: `INT-S3` — полный
-integration/smoke gate постоянных расписаний на desktop и mobile.
+**▶ Следующий шаг:** `/forge` по `.anws/v7/05_TASKS.md`: `T5.1.1` — commerce
+UI в профильных секциях канонической карточки клиента.
 
 ---
 
@@ -122,7 +122,7 @@ integration/smoke gate постоянных расписаний на desktop и
 > **Примечание**: Этот блок автоматически поддерживается процессами `/genesis`, `/blueprint` и `/forge`.
 
 - **Последняя версия архитектуры**: `.anws/v7` (Financial & Lesson Integrity)
-- **Активный список задач**: `.anws/v7/05_TASKS.md` — следующая задача `INT-S3`
+- **Активный список задач**: `.anws/v7/05_TASKS.md` — следующая задача `T5.1.1`
 - **Фаза**: `/genesis`, `/design-system` и `/blueprint` завершены; выполняется `/forge`
 - **Последнее обновление**: `2026-08-07`
 
@@ -277,7 +277,7 @@ preflight ×2 19/19 с одинаковым digest, access 291/291, shadow unexp
 inventories unknown/unowned=0 (`docs/audits/v7-int-s2-lesson-integrity.md`).
 Следующий шаг `/forge`: `T4.1.1`._
 
-### 🌊 Wave v7/S6 — Recurring Plans 🚧
+### 🌊 Wave v7/S6 — Recurring Plans ✅
 _`T4.1.1` закрыта 2026-08-07: один versioned/idempotent Plan aggregate
 атомарно создаёт named individual/group plan, N existing series, bounded
 unique Lessons и явные participant→subscription assignments. Open-ended plans
@@ -321,6 +321,21 @@ suites и 1223/1223 tests, typecheck/build; access 297/297, shadow access=1782/
 schedule=2000/unexplained=0, reconcile `issues=[]`, inventories unowned=0
 (`docs/audits/v7-client-card-recurring-plans.md`). Следующий шаг `/forge`:
 `INT-S3`._
+
+_`INT-S3` закрыт 2026-08-07: individual/group create, effective edit, end и
+history подтверждены одним Plan aggregate от PostgreSQL до Client Card.
+Targeted backend 6/6 и Flutter 28/28; Windows x64 и Android 15 API 35 прошли
+одинаковый on-device lifecycle 1/1, включая Back с сохранением раскрытого
+контекста, create/edit, reason→preview→commit и ended history. Android logcat
+без Flutter/FATAL exceptions. Двойной reconcile вернул `issues=[]`; полный
+baseline остаётся Flutter 632/632 и backend 155/155 suites, 1223/1223 tests,
+access 297/297, shadow unexplained=0, inventories unowned=0
+(`docs/audits/v7-int-s3-recurring-plans.md`)._
+
+### 🌊 Wave v7/S7 — Client Workspace 🚧
+
+_Следующий шаг `/forge`: `T5.1.1` — purchase payer/preview, три payment status,
+verification/reversal и cancel refund в профильных секциях одной Client Card._
 
 ### 🌊 Wave v6/S0 — Evidence & UX Foundation ✅
 _Owner подтвердил полное выполнение v6. `V6-001..005` и `INT-S0` закрыты 2026-08-04: воспроизводимый generator покрывает 21 GoRouter route, 248/259 production-reachable Dart files, 256/256 service calls, route/surface/navigation/input/back ownership с unowned=0; v4 inventory обновлён и снова проходит stale-check. Baseline: Flutter analyze clean и 486/486 tests, backend typecheck/build clean, 150/150 suites и 1160/1160 tests, actor/payload 9/9, targeted workflow contracts 68/68 (`docs/audits/v6-s0-baseline.md`). Следующий шаг `/forge`: `V6-101` canonical location adapter._
