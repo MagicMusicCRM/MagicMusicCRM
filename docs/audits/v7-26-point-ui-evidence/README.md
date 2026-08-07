@@ -14,7 +14,9 @@
 
 | Файл | Уровень | Что подтверждает |
 |---|---|---|
-| `01-live-release-window.png` | LIVE | rail, вкладки, Back/Forward, breadcrumb, длинная карточка; одновременно фиксирует 404 развёрнутого API |
+| `01-live-release-window.png` | LIVE, исторический blocker | rail, вкладки, Back/Forward, breadcrumb и прежний 404 до синхронизации backend |
+| `02-postdeploy-client-lessons-live.png` | LIVE post-deploy | production-раздел «Занятия», корректный empty state, без 404 |
+| `03-postdeploy-client-overview-live.png` | LIVE post-deploy | production-карточка, заметка, rail, вкладки и breadcrumb без 404 |
 | `real-role-1-client.png` … `real-role-5-director.png` | REAL ACCOUNT | пять реальных ролей и capability-проекция оболочки |
 | `real-role-2-teacher-schedule.png` | REAL ACCOUNT | отдельный read-only маршрут расписания преподавателя |
 | `windows-client-workspace-overview.png` | DEVICE RENDER | длинная desktop-карточка, заметка, секционные действия, история с причиной |
@@ -55,3 +57,5 @@
 - `18-director-dashboard-export-live.png`, `19-director-dashboard-export-live.png` — реальная мобильная аналитика, статусы и drilldown.
 - `21-notification-center-live.png` — центр уведомлений и просроченные задачи.
 - `22-final-apk-session-live.png` — финальный подписанный APK установлен поверх прежней версии; директорская сессия и production-данные сохранены.
+- `23-postdeploy-student-overview-live.png` — production-карточка после backend sync; заметка и основные поля загружены без 404.
+- `24-postdeploy-client-lessons-live.png` — production-раздел занятий после backend sync; корректный empty state постоянных расписаний без 404.

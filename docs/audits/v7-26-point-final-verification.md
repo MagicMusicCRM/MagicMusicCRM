@@ -3,31 +3,33 @@
 **Дата:** 2026-08-07
 **Кандидат:** `1.5.1+157`
 **Источник:** `pasted-text.txt`, пункты 1–26
-**Решение:** **ENGINEERING PASS 26/26; PRODUCTION ACCEPTANCE BLOCKED**
+**Решение:** **PRODUCTION PASS 26/26**
 
 ## Итог без приукрашивания
 
-Все 26 пунктов имеют production UI или, где требование чисто серверное, авторитетный backend-contract. Изменения карточки, расписания, финансов, задач, конфигурации и ролей подтверждены реальными рендерами Windows/Android. Пять production-аккаунтов и повторный вход проходят.
+Все 26 пунктов имеют production UI или, где требование чисто серверное,
+авторитетный backend-contract. Найденный deployment-разрыв устранён: production
+переведён с ревизии `0488e19` на `4f1cf3c`, миграции `0102..0113` применены,
+API healthy и проблемные v7 endpoints возвращают `200`. Полный deployment,
+backup и rollback evidence: [v7-production-backend-sync.md](v7-production-backend-sync.md).
 
-Но текущий развёрнутый API отстаёт от кандидата. На реальном директоре 2026-08-07 подтверждены `404` для:
-
-- `GET /crm/clients/student/:id/internal-note`;
-- `GET /crm/clients/student/:id/operational-history`;
-- `GET /crm/schedule-plans?clientType=student&clientId=:id`.
-
-Эти endpoints есть и проходят tests в текущем `server/`, но отсутствуют на `api.magicmusiccrm.ru`. Поэтому приложение **нельзя честно назвать окончательно готовым production-кандидатом до синхронного deployment backend/migrations**. Визуальные симптомы сохранены в [Windows LIVE](v7-26-point-ui-evidence/windows/01-live-release-window.png) и [Android Lessons LIVE](v7-26-point-ui-evidence/android/15-client-lessons-live.png).
+Повторные LIVE-кадры Windows и Android подтверждают, что карточка, заметка,
+история и постоянные расписания больше не падают с `404`. Рабочие данные ради
+демонстрации не изменялись: в production сейчас нет постоянных расписаний,
+поэтому LIVE показан честный empty state, а active/ended/tray подтверждены
+device renders и backend lifecycle tests.
 
 ## Матрица 1–26
 
 | # | Требование | Фактическое подтверждение | Статус |
 |---:|---|---|---|
-| 1 | Вкладки, per-tab history, связанные сущности, горизонтальный scroll | [LIVE desktop shell](v7-26-point-ui-evidence/windows/01-live-release-window.png), real-account role screenshots; compact direct-link regression | **PASS** |
+| 1 | Вкладки, per-tab history, связанные сущности, горизонтальный scroll | [LIVE desktop shell](v7-26-point-ui-evidence/windows/03-postdeploy-client-overview-live.png), real-account role screenshots; compact direct-link regression | **PASS** |
 | 2 | Конструктор CRM, обязательные ФИ/телефон/источник, CRUD options | [Lead form LIVE](v7-26-point-ui-evidence/android/16-lead-create-required-fields-live.png), [fields/options](v7-26-point-ui-evidence/windows/configuration-fields-option-sets.png) | **PASS** |
-| 3 | Полная карточка ученика как центр CRM | [desktop long canvas](v7-26-point-ui-evidence/windows/windows-client-workspace-overview.png), [compact LIVE](v7-26-point-ui-evidence/android/06b-student-card-overview-live.png) | **PASS локально / BLOCKED prod API** |
+| 3 | Полная карточка ученика как центр CRM | [desktop LIVE post-deploy](v7-26-point-ui-evidence/windows/03-postdeploy-client-overview-live.png), [Android LIVE post-deploy](v7-26-point-ui-evidence/android/23-postdeploy-student-overview-live.png), [long canvas](v7-26-point-ui-evidence/windows/windows-client-workspace-overview.png) | **PASS** |
 | 4 | Каталог/выдача/замена/отмена абонемента и остаток | [mobile purchase LIVE](v7-26-point-ui-evidence/android/13-subscription-purchase-expanded-live.png), [replace](v7-26-point-ui-evidence/windows/subscription-replace-financial-impact.png), [cancel](v7-26-point-ui-evidence/windows/subscription-cancel-financial-impact.png) | **PASS** |
 | 5 | Скидка, способ оплаты, рассрочка и история | [purchase LIVE](v7-26-point-ui-evidence/android/12-subscription-purchase-form-live.png), [payments LIVE](v7-26-point-ui-evidence/android/14-client-payments-default-collapsed-live.png), [status/reversal](v7-26-point-ui-evidence/windows/compact-client-payments.png) | **PASS** |
-| 6 | Создать расписание из карточки ученика | [card Lessons LIVE](v7-26-point-ui-evidence/android/15-client-lessons-live.png), [plan editor](v7-26-point-ui-evidence/windows/recurring-plan-editor-required-fields.png) | **PASS локально / BLOCKED prod API** |
-| 7 | Постоянные расписания, строки, недели, active/ended, tray | [active tray](v7-26-point-ui-evidence/windows/recurring-plan-active-tray.png), [end impact](v7-26-point-ui-evidence/windows/recurring-plan-end-impact.png) | **PASS локально / BLOCKED prod API** |
+| 6 | Создать расписание из карточки ученика | [Windows LIVE post-deploy](v7-26-point-ui-evidence/windows/02-postdeploy-client-lessons-live.png), [Android LIVE post-deploy](v7-26-point-ui-evidence/android/24-postdeploy-client-lessons-live.png), [plan editor](v7-26-point-ui-evidence/windows/recurring-plan-editor-required-fields.png) | **PASS** |
+| 7 | Постоянные расписания, строки, недели, active/ended, tray | [LIVE empty state](v7-26-point-ui-evidence/android/24-postdeploy-client-lessons-live.png), [active tray](v7-26-point-ui-evidence/windows/recurring-plan-active-tray.png), [end impact](v7-26-point-ui-evidence/windows/recurring-plan-end-impact.png) | **PASS** |
 | 8 | Обязательные поля занятия и server validation | [required plan/lesson fields](v7-26-point-ui-evidence/windows/recurring-plan-editor-required-fields.png), backend constraint suites | **PASS** |
 | 9 | Разделить Lead и Student lesson/create semantics | Отдельные [Lead](v7-26-point-ui-evidence/android/16-lead-create-required-fields-live.png) и [Student](v7-26-point-ui-evidence/android/17-student-create-fields-live.png) flows; typed `ClientRef` contracts | **PASS** |
 | 10 | Рабочее время/недоступность преподавателя | [schedule settings](v7-26-point-ui-evidence/windows/settings-teacher-branch-availability.png) + backend availability constraints | **PASS** |
@@ -46,7 +48,7 @@
 | 23 | Стабильная связь Lead→Student и видимый переход | [badge «Лид→Ученик»](v7-26-point-ui-evidence/windows/client-lead-student-link.png) + conversion-link tests | **PASS** |
 | 24 | Автоматическое завершение занятия без ручной команды | [quick view без «Завершить»](v7-26-point-ui-evidence/windows/lesson-quick-view.png) + completion worker replay/poison tests | **PASS** |
 | 25 | Валидный XLSX | [XLSX actions](v7-26-point-ui-evidence/windows/director-dashboard-xlsx-export.png) + OOXML workbook validation tests | **PASS** |
-| 26 | Перестроенный раздел «Занятия» и карточка без разрозненных дублей | [desktop card](v7-26-point-ui-evidence/windows/windows-client-workspace-overview.png), [compact tabs LIVE](v7-26-point-ui-evidence/android/15-client-lessons-live.png), [active tray](v7-26-point-ui-evidence/windows/recurring-plan-active-tray.png) | **PASS локально / BLOCKED prod API** |
+| 26 | Перестроенный раздел «Занятия» и карточка без разрозненных дублей | [desktop LIVE](v7-26-point-ui-evidence/windows/02-postdeploy-client-lessons-live.png), [compact LIVE](v7-26-point-ui-evidence/android/24-postdeploy-client-lessons-live.png), [active tray](v7-26-point-ui-evidence/windows/recurring-plan-active-tray.png) | **PASS** |
 
 ## Что дополнительно нашла эта перепроверка
 
@@ -66,7 +68,12 @@
 - Secure restart/logout/switch/same-account login — PASS.
 - Android release update-over-install — session preserved; compact direct link opens after fix.
 - Final signed APK `1.5.1+157` installed with `adb install -r` — PASS; authenticated session remained active ([final device capture](v7-26-point-ui-evidence/android/22-final-apk-session-live.png)).
-- Production API health — `200`; three required v7 routes above — `404`.
+- Production revision — `4f1cf3c`; migrations — `114/114`, latest `0113`.
+- Production API health — `200`; internal note, operational history,
+  schedule plans/series и commerce — **5/5 `200`**.
+- Production role matrix — **5/5**; Client → Director → Client relogin — PASS.
+- Production reconciliation twice — identical digest, `issues=[]`.
+- Post-deploy Windows/Android LIVE rows 3/6/7/26 — PASS; Android runtime error scan — `0`.
 
 ## Release artifacts
 
@@ -76,4 +83,7 @@
 
 ## Release decision
 
-**Не выпускать публичное обновление только фронтенда.** Сначала развернуть соответствующую текущему commit версию backend и migrations, затем повторить LIVE rows 3/6/7/26 на Windows и Android. Локальная инженерная реализация 26 пунктов подтверждена; интеграционная production-приёмка пока заблокирована объективным version skew.
+Backend и migrations синхронизированы, version skew устранён. Повторная LIVE
+проверка rows 3/6/7/26 на Windows и Android прошла; backend больше не блокирует
+кандидат `1.5.1+157`. Публичный update manifest в рамках этой серверной операции
+не изменялся.

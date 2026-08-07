@@ -399,6 +399,13 @@ byte-identical, history Gitleaks=0. `origin` не затронут. Production r
 использует ref freeze и explicit expected-old-SHA leases
 (`docs/audits/v7-history-rewrite-rehearsal.md`)._
 
+_Production backend синхронизирован 2026-08-07: ревизия `4f1cf3c`, migrations
+`0102..0113`, API healthy/restart=0, двойной reconcile `issues=[]`. Прежние 404
+Client Card/notes/history/schedule plans закрыты и повторно проверены LIVE на
+Windows/Android; 26-point pack получил PRODUCTION PASS 26/26
+(`docs/audits/v7-production-backend-sync.md`,
+`docs/audits/v7-26-point-final-verification.md`)._
+
 ### 🌊 Wave v6/S0 — Evidence & UX Foundation ✅
 _Owner подтвердил полное выполнение v6. `V6-001..005` и `INT-S0` закрыты 2026-08-04: воспроизводимый generator покрывает 21 GoRouter route, 248/259 production-reachable Dart files, 256/256 service calls, route/surface/navigation/input/back ownership с unowned=0; v4 inventory обновлён и снова проходит stale-check. Baseline: Flutter analyze clean и 486/486 tests, backend typecheck/build clean, 150/150 suites и 1160/1160 tests, actor/payload 9/9, targeted workflow contracts 68/68 (`docs/audits/v6-s0-baseline.md`). Следующий шаг `/forge`: `V6-101` canonical location adapter._
 
