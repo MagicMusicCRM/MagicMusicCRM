@@ -394,6 +394,16 @@ extension _ClientCardTabsA on _ClientCardState {
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (_internalContextAllowed) ...[
+          ClientInternalNoteCard(
+            loading: _internalContextLoading,
+            error: _internalContextError,
+            note: _internalNote,
+            onSave: _saveInternalNote,
+            onRetry: _fetchInternalContext,
+          ),
+          const SizedBox(height: AppSpace.lg),
+        ],
         _sectionTitle('Клиент'),
         if (_mode.hasLeadHalf) _buildStatusPicker(cs, curStatus),
         if (_mode.hasStudentHalf) _buildStudentStatusPicker(cs),

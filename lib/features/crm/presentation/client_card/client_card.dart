@@ -24,6 +24,7 @@ import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/models/types.dart';
 import 'package:magic_music_crm/core/models/comment.dart';
+import 'package:magic_music_crm/core/models/client_internal_context.dart';
 import 'package:magic_music_crm/core/models/commerce_projection.dart';
 import 'package:magic_music_crm/core/models/family_member.dart';
 import 'package:magic_music_crm/core/models/student_balance.dart';
@@ -49,6 +50,7 @@ import 'subscription_issue_sheet.dart';
 import 'subscription_replace_sheet.dart';
 import 'student_schedule_section.dart';
 import 'client_payment_form.dart';
+import 'client_internal_context_widgets.dart';
 
 part 'client_card_widgets.dart';
 part 'client_card_display.dart';
@@ -144,6 +146,13 @@ class _ClientCardState extends ConsumerState<ClientCard>
   late final ScrollController _desktopScrollController;
   bool _desktopCalendarExpanded = false;
   bool _customFieldsExpanded = false;
+  bool _internalContextAllowed = false;
+  bool _internalContextLoading = false;
+  bool _operationalHistoryLoadingMore = false;
+  String? _internalContextError;
+  ClientInternalNote? _internalNote;
+  List<ClientOperationalHistoryItem> _operationalHistory = const [];
+  String? _operationalHistoryCursor;
   final Map<String, GlobalKey> _desktopSectionKeys = {
     for (final section in [
       'overview',
@@ -426,6 +435,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
       if (widget.allStatuses == null) _fetchStatuses();
       _fetchMetadata();
       _fetchFamily();
+      _fetchInternalContext();
       _fetchStudentData(then: _resolveLeadCounterpart);
       return;
     }
@@ -440,6 +450,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
     _fetchDuplicateCandidates();
     _fetchStatusHistory();
     _fetchFamily();
+    _fetchInternalContext();
   }
 
   @override

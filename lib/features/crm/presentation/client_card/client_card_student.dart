@@ -314,25 +314,52 @@ extension _ClientCardStudent on _ClientCardState {
   // timeline (merged, de-duped by id, origin-badged). A plain student keeps the
   // Phase 2 view (its own tasks + comments).
   Widget _buildStudentHistoryTab(ColorScheme cs, {bool embedded = false}) {
-    if (_isConverted) {
-      return _studentGuard(
-        cs,
-        () => _mergedHistoryView(
-          cs,
-          loading: _loadingHistory,
-          items: _mergedHistory,
-          embedded: embedded,
-        ),
+    return _studentGuard(cs, () {
+      final content = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_internalContextAllowed) ...[
+            _buildOperationalHistory(),
+            const SizedBox(height: AppSpace.lg),
+          ],
+          if (_isConverted)
+            _mergedHistoryView(
+              cs,
+              loading: _loadingHistory,
+              items: _mergedHistory,
+              embedded: true,
+            )
+          else
+            _studentTimelineView(
+              cs,
+              tasks: _studentTasks,
+              comments: _studentComments,
+              embedded: true,
+            ),
+        ],
       );
-    }
-    return _studentGuard(
-      cs,
-      () => _studentTimelineView(
-        cs,
-        tasks: _studentTasks,
-        comments: _studentComments,
-        embedded: embedded,
-      ),
+      if (embedded) {
+        return Padding(
+          padding: const EdgeInsets.all(AppSpace.xl),
+          child: content,
+        );
+      }
+      return ListView(
+        padding: const EdgeInsets.all(AppSpace.xl),
+        children: [content],
+      );
+    });
+  }
+
+  Widget _buildOperationalHistory() {
+    return ClientOperationalHistoryView(
+      loading: _internalContextLoading,
+      loadingMore: _operationalHistoryLoadingMore,
+      error: _internalContextError,
+      items: _operationalHistory,
+      hasMore: _operationalHistoryCursor != null,
+      onRetry: _fetchInternalContext,
+      onLoadMore: _loadMoreOperationalHistory,
     );
   }
 

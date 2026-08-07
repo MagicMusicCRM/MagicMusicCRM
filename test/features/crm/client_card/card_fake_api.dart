@@ -34,6 +34,8 @@ class FakeCardApiClient extends MagicApiClient {
     this.studentAccounts = const [],
     this.studentMovements = const [],
     this.studentTechnicalHistory = const [],
+    this.internalNote,
+    this.operationalHistory = const [],
     this.studentLessons = const [],
     this.customFields = const [],
     this.sources = const [],
@@ -71,6 +73,8 @@ class FakeCardApiClient extends MagicApiClient {
   final List<Map<String, dynamic>> studentAccounts;
   final List<Map<String, dynamic>> studentMovements;
   final List<Map<String, dynamic>> studentTechnicalHistory;
+  Map<String, dynamic>? internalNote;
+  final List<Map<String, dynamic>> operationalHistory;
   final List<Map<String, dynamic>> studentLessons;
   final List<Map<String, dynamic>> customFields;
   final List<Map<String, dynamic>> sources;
@@ -91,6 +95,7 @@ class FakeCardApiClient extends MagicApiClient {
 
   Map<String, dynamic>? updateLeadBody;
   Map<String, dynamic>? updateStudentBody;
+  Map<String, dynamic>? updateInternalNoteBody;
   final List<String> requests = [];
   final List<String> getRequests = [];
   final List<CardGetCall> getCalls = [];
@@ -260,6 +265,20 @@ class FakeCardApiClient extends MagicApiClient {
           }
           as T;
     }
+    if (RegExp(
+      r'^/crm/clients/(lead|student)/[^/]+/internal-note$',
+    ).hasMatch(path)) {
+      return Map<String, dynamic>.from(
+            internalNote ?? const {'body': '', 'version': 0},
+          )
+          as T;
+    }
+    if (RegExp(
+      r'^/crm/clients/(lead|student)/[^/]+/operational-history$',
+    ).hasMatch(path)) {
+      return <String, dynamic>{'items': operationalHistory, 'nextCursor': null}
+          as T;
+    }
     if (lead != null && path == '/crm/leads/${lead!['id']}/card') {
       return <String, dynamic>{
             'lead': lead,
@@ -397,6 +416,27 @@ class FakeCardApiClient extends MagicApiClient {
   }
 
   @override
+  Future<T> put<T>(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) async {
+    requests.add('PUT $path');
+    final body = Map<String, dynamic>.from(data as Map);
+    updateInternalNoteBody = body;
+    internalNote = {
+      'id': internalNote?['id'] ?? 'note-1',
+      'body': body['body'],
+      'version': (body['expectedVersion'] as int) + 1,
+      'updatedBy': '55555555-5555-4555-8555-555555555555',
+      'updatedByName': 'Мария Управляющая',
+      'updatedAt': '2026-08-07T12:00:00.000Z',
+    };
+    return Map<String, dynamic>.from(internalNote!) as T;
+  }
+
+  @override
   Future<T> patch<T>(
     String path, {
     Object? data,
@@ -530,6 +570,7 @@ Future<void> pumpClientCard(
   String entityType = 'lead',
   List<StatusRecord>? statuses,
   bool settle = true,
+  bool routed = false,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -546,11 +587,15 @@ Future<void> pumpClientCard(
               child: ElevatedButton(
                 onPressed: () => showDialog<bool>(
                   context: context,
-                  builder: (_) => ClientCard(
-                    lead: seed,
-                    entityType: entityType,
-                    allStatuses: statuses,
-                  ),
+                  builder: (_) {
+                    final card = ClientCard(
+                      lead: seed,
+                      entityType: entityType,
+                      allStatuses: statuses,
+                      routed: routed,
+                    );
+                    return routed ? Material(child: card) : card;
+                  },
                 ),
                 child: const Text('open'),
               ),

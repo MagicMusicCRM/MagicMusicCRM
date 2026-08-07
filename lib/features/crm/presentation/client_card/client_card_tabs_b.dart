@@ -122,6 +122,10 @@ extension _ClientCardTabsB on _ClientCardState {
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (_internalContextAllowed) ...[
+          _buildOperationalHistory(),
+          const SizedBox(height: AppSpace.lg),
+        ],
         _sectionTitle('История статусов'),
         _statusHistorySection(
           cs,

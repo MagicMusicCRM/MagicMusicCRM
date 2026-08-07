@@ -57,6 +57,7 @@ import { InboundLeadService } from "./clients/inbound-lead.service";
 import { ClientConversionService } from "./clients/client-conversion.service";
 import { ClientArchiveService } from "./clients/client-archive.service";
 import { ClientCardReadService } from "./clients/client-card-read.service";
+import { ClientInternalContextService } from "./clients/client-internal-context.service";
 import { LessonLifecycleRepository } from "./schedule/lesson-lifecycle.repository";
 import { AvailabilityController } from "./schedule/availability.controller";
 import { AvailabilityRepository } from "./schedule/availability.repository";
@@ -171,6 +172,7 @@ import { SchedulePlanService } from "./schedule/schedule-plan.service";
     ClientConversionService,
     ClientArchiveService,
     ClientCardReadService,
+    ClientInternalContextService,
     LessonLifecycleRepository,
     AvailabilityRepository,
     AvailabilityService,

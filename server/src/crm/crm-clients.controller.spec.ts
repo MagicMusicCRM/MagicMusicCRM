@@ -2,6 +2,7 @@ import { ClientReferenceService } from "./clients/client-reference.service";
 import { ClientConversionService } from "./clients/client-conversion.service";
 import { ClientArchiveService } from "./clients/client-archive.service";
 import { ClientCardReadService } from "./clients/client-card-read.service";
+import { ClientInternalContextService } from "./clients/client-internal-context.service";
 import { CrmClientsController } from "./crm-clients.controller";
 
 describe("CrmClientsController", () => {
@@ -16,6 +17,11 @@ describe("CrmClientsController", () => {
     archiveConvertedLead: jest.fn(),
   };
   const clientCards = { load: jest.fn() };
+  const internalContext = {
+    getNote: jest.fn(),
+    updateNote: jest.fn(),
+    listOperationalHistory: jest.fn(),
+  };
   const controller = new CrmClientsController(
     clientReferences as unknown as ClientReferenceService,
     {
@@ -23,6 +29,7 @@ describe("CrmClientsController", () => {
     } as unknown as ClientConversionService,
     archives as unknown as ClientArchiveService,
     clientCards as unknown as ClientCardReadService,
+    internalContext as unknown as ClientInternalContextService,
   );
 
   beforeEach(() => {
@@ -89,5 +96,30 @@ describe("CrmClientsController", () => {
     });
     expect(archives.preview).toHaveBeenCalledWith(actor, ref);
     expect(archives.archive).toHaveBeenCalledWith(actor, command);
+  });
+
+  it("forwards the staff note and bounded operational history", async () => {
+    const id = "2208d64d-3eca-4a5c-9417-e763582fce11";
+    const ref = { type: "student" as const, id };
+    const note = { body: "Важно", version: 2 };
+    internalContext.getNote.mockResolvedValue(note);
+    internalContext.updateNote.mockResolvedValue({ ...note, version: 3 });
+    internalContext.listOperationalHistory.mockResolvedValue({ items: [] });
+
+    await expect(controller.getInternalNote(actor, "student", id)).resolves.toEqual(note);
+    await expect(
+      controller.updateInternalNote(actor, "student", id, {
+        body: "Важно",
+        expectedVersion: 2,
+      }),
+    ).resolves.toMatchObject({ version: 3 });
+    await expect(
+      controller.getOperationalHistory(actor, "student", id, { limit: 30 }),
+    ).resolves.toEqual({ items: [] });
+    expect(internalContext.getNote).toHaveBeenCalledWith(actor, ref);
+    expect(internalContext.updateNote).toHaveBeenCalledWith(actor, ref, {
+      body: "Важно",
+      expectedVersion: 2,
+    });
   });
 });

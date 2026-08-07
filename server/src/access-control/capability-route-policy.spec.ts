@@ -11,6 +11,13 @@ describe("capability route policy", () => {
     ["PUT", "/access/users/id/overrides/key", "access.user.override.manage"],
     ["GET", "/crm/students/id", "crm.client.read.basic"],
     ["PATCH", "/crm/students/id", "crm.client.write"],
+    ["GET", "/crm/clients/student/id/internal-note", "crm.client.write"],
+    ["PUT", "/crm/clients/lead/id/internal-note", "crm.client.write"],
+    [
+      "GET",
+      "/crm/clients/student/id/operational-history",
+      "crm.client.write",
+    ],
     ["GET", "/crm/client-pipelines", "crm.client.read.basic"],
     ["GET", "/crm/client-pipelines/revisions", "system.settings.manage"],
     ["POST", "/crm/client-pipelines/preview", "system.settings.manage"],

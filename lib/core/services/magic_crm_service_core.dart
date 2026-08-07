@@ -2,6 +2,42 @@ part of 'magic_crm_service.dart';
 
 /// Core: current-user summary, students, teachers, staff, activity log.
 extension MagicCrmCore on MagicCrmService {
+  Future<ClientInternalNote> getClientInternalNote({
+    required String clientType,
+    required String clientId,
+  }) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/clients/$clientType/$clientId/internal-note',
+    );
+    return ClientInternalNote.fromJson(response);
+  }
+
+  Future<ClientInternalNote> updateClientInternalNote({
+    required String clientType,
+    required String clientId,
+    required String body,
+    required int expectedVersion,
+  }) async {
+    final response = await _api.put<Map<String, dynamic>>(
+      '/crm/clients/$clientType/$clientId/internal-note',
+      data: {'body': body, 'expectedVersion': expectedVersion},
+    );
+    return ClientInternalNote.fromJson(response);
+  }
+
+  Future<ClientOperationalHistoryPage> getClientOperationalHistory({
+    required String clientType,
+    required String clientId,
+    String? cursor,
+    int limit = 30,
+  }) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/clients/$clientType/$clientId/operational-history',
+      queryParameters: {'limit': limit, 'cursor': ?cursor},
+    );
+    return ClientOperationalHistoryPage.fromJson(response);
+  }
+
   Future<StudentFunnelConfiguration> getClientPipeline({
     required String clientType,
     String? branchId,

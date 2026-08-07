@@ -153,6 +153,8 @@ export class SubscriptionIssueService {
       entityType: "subscription",
       entityId: subscriptionId,
       reason: "subscription_purchase",
+      reasonText:
+        dto.purchaseReason?.trim() || "Покупка абонемента",
       metadata: {
         recipientStudentId,
         payerStudentId: dto.payerStudentId,

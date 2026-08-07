@@ -221,6 +221,12 @@ export class ClientConversionService {
         `,
         [leadId, studentId, actor.userId],
       );
+      await client.query(
+        `update app.client_internal_notes
+         set student_id = $2
+         where lead_id = $1 and student_id is null`,
+        [leadId, studentId],
+      );
       return { studentId, replayed: false };
     });
 

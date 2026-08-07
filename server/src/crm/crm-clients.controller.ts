@@ -6,6 +6,7 @@ import {
   ParseUUIDPipe,
   Post,
   Get,
+  Put,
   Query,
   UseGuards,
 } from "@nestjs/common";
@@ -16,12 +17,17 @@ import { ClientReferenceService } from "./clients/client-reference.service";
 import { ClientConversionService } from "./clients/client-conversion.service";
 import { ClientArchiveService } from "./clients/client-archive.service";
 import { ClientCardReadService } from "./clients/client-card-read.service";
+import { ClientInternalContextService } from "./clients/client-internal-context.service";
 import {
   ArchiveClientCommandDto,
   ArchiveClientPreviewDto,
   ArchiveConvertedLeadDto,
 } from "./dto/client-archive.dto";
 import { ConvertLeadDto } from "./dto/client-conversion.dto";
+import {
+  ClientOperationalHistoryQueryDto,
+  UpdateClientInternalNoteDto,
+} from "./dto/client-internal-context.dto";
 import {
   CLIENT_REF_TYPES,
   ClientRefDto,
@@ -37,6 +43,7 @@ export class CrmClientsController {
     private readonly conversions: ClientConversionService,
     private readonly archives: ClientArchiveService,
     private readonly clientCards: ClientCardReadService,
+    private readonly internalContext: ClientInternalContextService,
   ) {}
 
   @Get("resolve")
@@ -65,6 +72,46 @@ export class CrmClientsController {
       throw new BadRequestException("Неизвестный тип клиента.");
     }
     return this.clientCards.load(actor, { type: type as ClientRefType, id });
+  }
+
+  @Get(":type/:id/internal-note")
+  getInternalNote(
+    @CurrentActor() actor: ActorContext,
+    @Param("type") type: string,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.internalContext.getNote(actor, {
+      type: this.clientType(type),
+      id,
+    });
+  }
+
+  @Put(":type/:id/internal-note")
+  updateInternalNote(
+    @CurrentActor() actor: ActorContext,
+    @Param("type") type: string,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: UpdateClientInternalNoteDto,
+  ) {
+    return this.internalContext.updateNote(
+      actor,
+      { type: this.clientType(type), id },
+      dto,
+    );
+  }
+
+  @Get(":type/:id/operational-history")
+  getOperationalHistory(
+    @CurrentActor() actor: ActorContext,
+    @Param("type") type: string,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Query() query: ClientOperationalHistoryQueryDto,
+  ) {
+    return this.internalContext.listOperationalHistory(
+      actor,
+      { type: this.clientType(type), id },
+      query,
+    );
   }
 
   @Post("leads/:leadId/convert")
@@ -99,5 +146,12 @@ export class CrmClientsController {
     @Body() dto: ArchiveClientCommandDto,
   ) {
     return this.archives.archive(actor, dto);
+  }
+
+  private clientType(type: string): ClientRefType {
+    if (!(CLIENT_REF_TYPES as readonly string[]).includes(type)) {
+      throw new BadRequestException("Неизвестный тип клиента.");
+    }
+    return type as ClientRefType;
   }
 }

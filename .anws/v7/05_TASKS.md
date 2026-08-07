@@ -370,7 +370,7 @@ graph TD
   - **Зависимости**: INT-S1.
   - **Приоритет**: P0.
 
-- [ ] **T5.1.2** [REQ-CLIENT-102]: Общая note и operational history backend/UI
+- [x] **T5.1.2** [REQ-CLIENT-102]: Общая note и operational history backend/UI
   - **Описание**: Один versioned Lead/Student note, conversion preservation и bounded allowlisted technical history visible staff roles.
   - **Входные данные**: INT-S0, [`crm_workspace_v7.md` §6/7](04_SYSTEM_DESIGN/crm_workspace_v7.md).
   - **Выходные данные**: note/history endpoints, conversion hook, Flutter cards/tests.

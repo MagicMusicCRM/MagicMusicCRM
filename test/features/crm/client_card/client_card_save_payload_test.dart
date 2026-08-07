@@ -86,7 +86,9 @@ void main() {
     );
 
     // Статус-пикер — первый дропдаун вкладки «Инфо».
-    await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+    final statusPicker = find.byType(DropdownButtonFormField<String>).first;
+    await tester.ensureVisible(statusPicker);
+    await tester.tap(statusPicker);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Новый').last);
     await tester.pumpAndSettle();

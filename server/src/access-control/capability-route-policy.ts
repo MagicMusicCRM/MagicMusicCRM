@@ -197,6 +197,15 @@ export function resolveCapabilityRoutePolicy(
     );
   }
 
+  if (/^\/crm\/clients\/[^/]+\/[^/]+\/(?:internal-note|operational-history)$/.test(path)) {
+    return policy(
+      "crm.client.write",
+      "resource",
+      staffRoles,
+      "ClientInternalContextService staff-only ClientRef scope",
+    );
+  }
+
   if (
     read &&
     [
