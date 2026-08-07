@@ -44,6 +44,7 @@ describe("Subscription cancellation preview/confirm", () => {
   let database: DatabaseService;
   let issueService: SubscriptionIssueService;
   let paymentService: ActualPaymentService;
+  let paymentLifecycle: PaymentLifecycleService;
   let lifecycleService: SubscriptionLifecycleService;
   let fixture: Awaited<ReturnType<typeof createFixture>>;
   let actor: ActorContext;
@@ -78,22 +79,23 @@ describe("Subscription cancellation preview/confirm", () => {
       } as unknown as ConfigService),
     );
     const commerceRepository = new CommerceProjectionRepository(database);
+    paymentLifecycle = new PaymentLifecycleService(
+      new PaymentLifecycleRepository(
+        database,
+        new PlatformIntegrityRepository(),
+      ),
+      issueRepository,
+      policy,
+      integrity,
+      commerceRepository,
+      reservations,
+    );
     paymentService = new ActualPaymentService(
       issueRepository,
       policy,
       integrity,
       commerceRepository,
-      new PaymentLifecycleService(
-        new PaymentLifecycleRepository(
-          database,
-          new PlatformIntegrityRepository(),
-        ),
-        issueRepository,
-        policy,
-        integrity,
-        commerceRepository,
-        reservations,
-      ),
+      paymentLifecycle,
     );
     lifecycleService = new SubscriptionLifecycleService(
       new SubscriptionLifecycleRepository(database),
@@ -180,7 +182,7 @@ describe("Subscription cancellation preview/confirm", () => {
     expect(new Date(preview.expiresAt).getTime()).toBeGreaterThan(Date.now());
   });
 
-  it("cancels lifecycle-only, releases reservations and preserves every finance/lesson fact", async () => {
+  it("creates one cancellation credit, releases reservations and preserves historical facts", async () => {
     const issued = await issue("confirm-source");
     await paymentService.record(
       actor,
@@ -218,6 +220,7 @@ describe("Subscription cancellation preview/confirm", () => {
       previewToken: preview.previewToken,
       confirm: true as const,
       reason: "issued.by.mistake",
+      refundMinor: "0",
     };
     const financeBefore = await immutableState(
       pool,
@@ -257,19 +260,32 @@ describe("Subscription cancellation preview/confirm", () => {
       metadata("confirm-cancel"),
     );
     expect(replay).toEqual({ ...first, replayed: true });
-    expect(first.cancellation).toEqual({
+    expect(first.cancellation).toMatchObject({
       issuedSubscriptionId: issued.subscription.id,
       version: 2,
       status: "cancelled",
+      payerStudentId: fixture.studentId,
       releasedReservationCount: 1,
       releasedReservationUnits: "2",
       futureLessonCount: 2,
+      closedPaymentRecordCount: 0,
+      confirmedFundedMinor: "600000",
+      previousRefundMinor: "0",
+      unusedUnits: "7",
+      unfundedCancellationMinor: "140000",
+      chosenRefundMinor: "0",
+      totalCreditMinor: "140000",
+      creditFactId: expect.any(String),
     });
     expect(await immutableState(
       pool,
       fixture.studentId,
       issued.subscription.id,
-    )).toEqual(financeBefore);
+    )).toEqual({
+      ...financeBefore,
+      obligationCount: String(Number(financeBefore.obligationCount) + 1),
+      obligationCreditMinor: "140000",
+    });
     expect(
       await lifecycleState(pool, issued.subscription.id),
     ).toEqual({
@@ -281,6 +297,325 @@ describe("Subscription cancellation preview/confirm", () => {
       lessons: financeBefore.lessonCount,
       auditEvents: 1,
       outboxEvents: 1,
+    });
+  });
+
+  it("refunds an unused personal-account purchase to the original payer", async () => {
+    await paymentLifecycle.create(
+      actor,
+      fixture.otherStudentId,
+      {
+        amountMinor: "800000",
+        currencyCode: "RUB",
+        status: "paid",
+        method: "cashless",
+        occurredAt: "2026-08-12T09:00:00.000Z",
+        externalIdentifier: `${marker}-personal-funding`,
+        reason: "Пополнение личного счёта плательщика",
+      },
+      metadata("personal-funding"),
+    );
+    const purchaseInput = {
+      packageId: fixture.sourcePackageId,
+      payerStudentId: fixture.otherStudentId,
+      fundingMode: "personal_account" as const,
+      purchaseReason: "Родитель оплатил абонемент ученика",
+    };
+    const purchasePreview = await issueService.previewPurchase(
+      actor,
+      fixture.studentId,
+      purchaseInput,
+    );
+    const purchased = await issueService.purchase(
+      actor,
+      fixture.studentId,
+      {
+        ...purchaseInput,
+        previewToken: purchasePreview.previewToken,
+        confirm: true,
+      },
+      metadata("personal-purchase"),
+    );
+    const preview = await lifecycleService.previewCancellation(
+      actor,
+      fixture.studentId,
+      purchased.subscription.id,
+    );
+    expect(preview.financial).toMatchObject({
+      payerStudentId: fixture.otherStudentId,
+      fundingMode: "personal_account",
+      actualPaidMinor: "0",
+      confirmedFundedMinor: "800000",
+      previousRefundMinor: "0",
+      unusedValueMinor: "800000",
+      unfundedCancellationMinor: "0",
+      recommendedRefundMinor: "800000",
+    });
+
+    const result = await lifecycleService.cancel(
+      actor,
+      fixture.studentId,
+      purchased.subscription.id,
+      {
+        expectedVersion: preview.expectedVersion,
+        previewToken: preview.previewToken,
+        confirm: true,
+        reason: "Абонемент назначен ошибочно, вернуть плательщику",
+        refundMinor: "800000",
+      },
+      metadata("personal-cancel"),
+    );
+    expect(result.cancellation).toMatchObject({
+      payerStudentId: fixture.otherStudentId,
+      confirmedFundedMinor: "800000",
+      unfundedCancellationMinor: "0",
+      chosenRefundMinor: "800000",
+      totalCreditMinor: "800000",
+      closedPaymentRecordCount: 0,
+    });
+    const facts = await pool.query<{
+      payer_student_id: string;
+      credit_minor: string;
+      linked_payment_count: string;
+      reason: string;
+    }>(
+      `
+        select
+          credit.student_id as payer_student_id,
+          credit.amount_minor::text as credit_minor,
+          (select count(*)::text from app.payments payment
+           where payment.issued_subscription_id = subscription.id)
+            as linked_payment_count,
+          lifecycle.reason
+        from app.subscriptions subscription
+        join app.subscription_obligation_facts credit
+          on credit.issued_subscription_id = subscription.id
+         and credit.source_type = 'subscription.cancel'
+        join app.subscription_lifecycle_events lifecycle
+          on lifecycle.issued_subscription_id = subscription.id
+         and lifecycle.event_type = 'cancel'
+        where subscription.id = $1
+      `,
+      [purchased.subscription.id],
+    );
+    expect(facts.rows[0]).toEqual({
+      payer_student_id: fixture.otherStudentId,
+      credit_minor: "800000",
+      linked_payment_count: "0",
+      reason: "Абонемент назначен ошибочно, вернуть плательщику",
+    });
+  });
+
+  it("caps an installment refund, closes open payments and credits once", async () => {
+    const purchaseInput = {
+      packageId: fixture.sourcePackageId,
+      payerStudentId: fixture.otherStudentId,
+      fundingMode: "installment" as const,
+      purchaseReason: "Оплата частями другим клиентом",
+      installments: [
+        { dueAt: "2035-01-10T09:00:00.000Z", amountMinor: "400000" },
+        { dueAt: "2035-02-10T09:00:00.000Z", amountMinor: "400000" },
+      ],
+    };
+    const purchasePreview = await issueService.previewPurchase(
+      actor,
+      fixture.studentId,
+      purchaseInput,
+    );
+    const purchased = await issueService.purchase(
+      actor,
+      fixture.studentId,
+      {
+        ...purchaseInput,
+        previewToken: purchasePreview.previewToken,
+        confirm: true,
+      },
+      metadata("installment-purchase"),
+    );
+    const paid = await paymentLifecycle.create(
+      actor,
+      fixture.otherStudentId,
+      {
+        issuedSubscriptionId: purchased.subscription.id,
+        installmentId: purchased.installments[0]!.id,
+        amountMinor: "400000",
+        status: "paid",
+        method: "cashless",
+        externalIdentifier: `${marker}-installment-paid`,
+        occurredAt: "2026-08-13T09:00:00.000Z",
+        reason: "Первая часть рассрочки подтверждена",
+      },
+      metadata("installment-paid"),
+    );
+    const unpaid = await paymentLifecycle.create(
+      actor,
+      fixture.otherStudentId,
+      {
+        issuedSubscriptionId: purchased.subscription.id,
+        installmentId: purchased.installments[1]!.id,
+        amountMinor: "400000",
+        status: "unpaid",
+        reason: "Вторая часть не поступила",
+      },
+      metadata("installment-unpaid"),
+    );
+    const pending = await paymentLifecycle.create(
+      actor,
+      fixture.otherStudentId,
+      {
+        issuedSubscriptionId: purchased.subscription.id,
+        amountMinor: "100000",
+        status: "posted_pending",
+        reason: "Дополнительный перевод ожидает проверки",
+      },
+      metadata("installment-pending"),
+    );
+    await paymentService.recordAdjustment(
+      actor,
+      fixture.otherStudentId,
+      {
+        sourcePaymentId: paid.actualPayment!.id,
+        kind: "refund",
+        amountMinor: "100000",
+        occurredAt: "2026-08-14T09:00:00.000Z",
+        reason: "Предыдущий частичный возврат",
+      },
+      metadata("installment-previous-refund"),
+    );
+    await seedConsumedUnits(
+      pool,
+      fixture.studentId,
+      purchased.subscription.id,
+      "2",
+    );
+    await seedFutureLessons(
+      pool,
+      fixture.studentId,
+      purchased.subscription.id,
+      [{ units: "1", reserved: true }],
+    );
+
+    const preview = await lifecycleService.previewCancellation(
+      actor,
+      fixture.studentId,
+      purchased.subscription.id,
+    );
+    expect(preview).toMatchObject({
+      usage: { usedUnits: "2", reservedUnits: "1", unusedUnits: "7" },
+      financial: {
+        payerStudentId: fixture.otherStudentId,
+        fundingMode: "installment",
+        actualPaidMinor: "400000",
+        confirmedFundedMinor: "400000",
+        previousRefundMinor: "100000",
+        unusedValueMinor: "560000",
+        unfundedCancellationMinor: "380000",
+        recommendedRefundMinor: "180000",
+      },
+      openPayments: { count: 2, amountMinor: "500000" },
+    });
+    await expect(
+      lifecycleService.cancel(
+        actor,
+        fixture.studentId,
+        purchased.subscription.id,
+        {
+          expectedVersion: preview.expectedVersion,
+          previewToken: preview.previewToken,
+          confirm: true,
+          reason: "Запрошен недопустимо большой возврат",
+          refundMinor: "180001",
+        },
+        metadata("installment-over-cap"),
+      ),
+    ).rejects.toMatchObject({
+      response: { code: "CANCELLATION_REFUND_EXCEEDS_CAP" },
+    });
+
+    const command = {
+      expectedVersion: preview.expectedVersion,
+      previewToken: preview.previewToken,
+      confirm: true as const,
+      reason: "Клиент прекратил обучение, согласован частичный возврат",
+      refundMinor: "150000",
+    };
+    const operation = metadata("installment-cancel");
+    const first = await lifecycleService.cancel(
+      actor,
+      fixture.studentId,
+      purchased.subscription.id,
+      command,
+      operation,
+    );
+    expect(
+      await lifecycleService.cancel(
+        actor,
+        fixture.studentId,
+        purchased.subscription.id,
+        command,
+        operation,
+      ),
+    ).toEqual({ ...first, replayed: true });
+    expect(first.cancellation).toMatchObject({
+      payerStudentId: fixture.otherStudentId,
+      closedPaymentRecordCount: 2,
+      previousRefundMinor: "100000",
+      unfundedCancellationMinor: "380000",
+      chosenRefundMinor: "150000",
+      totalCreditMinor: "530000",
+    });
+    const openIds = [
+      unpaid.paymentRecord.id,
+      pending.paymentRecord.id,
+    ];
+    const facts = await pool.query<{
+      credits: string;
+      credit_minor: string;
+      credit_payer: string;
+      exclusions: string;
+      ordinary_open: string;
+      ordinary_paid: string;
+      reason: string;
+    }>(
+      `
+        select
+          (select count(*)::text
+           from app.subscription_obligation_facts fact
+           where fact.issued_subscription_id = $1
+             and fact.source_type = 'subscription.cancel') as credits,
+          (select amount_minor::text
+           from app.subscription_obligation_facts fact
+           where fact.issued_subscription_id = $1
+             and fact.source_type = 'subscription.cancel') as credit_minor,
+          (select student_id::text
+           from app.subscription_obligation_facts fact
+           where fact.issued_subscription_id = $1
+             and fact.source_type = 'subscription.cancel') as credit_payer,
+          (select count(*)::text
+           from app.commerce_reporting_exclusions exclusion
+           where exclusion.source_kind = 'payment_record'
+             and exclusion.source_id = any($2::uuid[])) as exclusions,
+          (select count(*)::text
+           from app.commerce_ordinary_payment_records record
+           where record.id = any($2::uuid[])) as ordinary_open,
+          (select count(*)::text
+           from app.commerce_ordinary_payment_records record
+           where record.id = $3) as ordinary_paid,
+          (select reason
+           from app.subscription_lifecycle_events event
+           where event.issued_subscription_id = $1
+             and event.event_type = 'cancel') as reason
+      `,
+      [purchased.subscription.id, openIds, paid.paymentRecord.id],
+    );
+    expect(facts.rows[0]).toEqual({
+      credits: "1",
+      credit_minor: "530000",
+      credit_payer: fixture.otherStudentId,
+      exclusions: "2",
+      ordinary_open: "0",
+      ordinary_paid: "1",
+      reason: "Клиент прекратил обучение, согласован частичный возврат",
     });
   });
 
@@ -304,6 +639,7 @@ describe("Subscription cancellation preview/confirm", () => {
       previewToken: cancelPreview.previewToken,
       confirm: true as const,
       reason: "race.cancel",
+      refundMinor: "0",
     };
     const replaceCommand = {
       expectedVersion: replacePreview.expectedVersion,
@@ -682,7 +1018,11 @@ async function createFixture(pool: Pool) {
       studentProfile,
       branch.rows[0]!.id,
     );
-    const otherStudentId = await insertStudent(client, otherProfile);
+    const otherStudentId = await insertStudent(
+      client,
+      otherProfile,
+      branch.rows[0]!.id,
+    );
     const sourcePackageId = await insertPackage(
       client,
       "source",
@@ -809,11 +1149,20 @@ async function cleanupFixture(
       [[fixture.studentId, fixture.otherStudentId]],
     );
     const paymentIds = payments.rows.map((row) => row.id);
+    const adjustments = await client.query<{ id: string }>(
+      "select id from app.account_adjustments where student_id = any($1::uuid[])",
+      [[fixture.studentId, fixture.otherStudentId]],
+    );
+    const adjustmentIds = adjustments.rows.map((row) => row.id);
     const paymentRecords = await client.query<{ id: string }>(
       "select id from app.client_payment_records where student_id = any($1::uuid[])",
       [[fixture.studentId, fixture.otherStudentId]],
     );
     const paymentRecordIds = paymentRecords.rows.map((row) => row.id);
+    await client.query(
+      "delete from app.commerce_reporting_exclusions where actor_user_id = $1",
+      [fixture.actor.userId],
+    );
     await deleteByIds(
       client,
       "app.idempotency_records",
@@ -825,7 +1174,12 @@ async function cleanupFixture(
       client,
       "app.platform_outbox_events",
       "aggregate_id",
-      [...subscriptionIds, ...paymentIds, ...paymentRecordIds],
+      [
+        ...subscriptionIds,
+        ...paymentIds,
+        ...paymentRecordIds,
+        ...adjustmentIds,
+      ],
       "text",
     );
     await client.query("delete from app.audit_events where actor_user_id = $1", [
@@ -835,7 +1189,12 @@ async function cleanupFixture(
       client,
       "app.aggregate_versions",
       "aggregate_id",
-      [...subscriptionIds, ...paymentIds, ...paymentRecordIds],
+      [
+        ...subscriptionIds,
+        ...paymentIds,
+        ...paymentRecordIds,
+        ...adjustmentIds,
+      ],
       "text",
     );
     for (const table of [
@@ -871,6 +1230,13 @@ async function cleanupFixture(
       "app.client_payment_records",
       "id",
       paymentRecordIds,
+      "uuid",
+    );
+    await deleteByIds(
+      client,
+      "app.account_adjustments",
+      "id",
+      adjustmentIds,
       "uuid",
     );
     await deleteByIds(client, "app.payments", "id", paymentIds, "uuid");

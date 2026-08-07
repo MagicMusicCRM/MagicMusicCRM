@@ -165,7 +165,7 @@ graph TD
   - **Зависимости**: T2.1.2, T1.1.1.
   - **Приоритет**: P0.
 
-- [ ] **T2.1.4** [REQ-COMMERCE-102]: Отмена абонемента и корректный refund
+- [x] **T2.1.4** [REQ-COMMERCE-102]: Отмена абонемента и корректный refund
   - **Описание**: Расширить existing cancel preview/commit на original payer, confirmed-funded/unfunded split, configurable lower refund и closure pending/unpaid.
   - **Входные данные**: T2.1.1, T2.1.2, [`commerce_integrity.detail.md` §5](04_SYSTEM_DESIGN/commerce_integrity.detail.md).
   - **Выходные данные**: updated cancellation token/context/repository/API.

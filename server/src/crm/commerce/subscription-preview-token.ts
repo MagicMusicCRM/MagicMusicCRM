@@ -81,6 +81,7 @@ export interface SubscriptionCancelPreviewTokenPayload {
   kind: "subscription.cancel";
   actorUserId: string;
   studentId: string;
+  payerStudentId: string;
   issuedSubscriptionId: string;
   expectedVersion: number;
   packageId: string;
@@ -90,8 +91,12 @@ export interface SubscriptionCancelPreviewTokenPayload {
   currencyCode: string;
   finalMinor: string;
   actualPaidMinor: string;
+  fundingMode: "personal_account" | "installment" | "legacy";
+  previousRefundMinor: string;
   writeoffMinor: string;
   balanceMinor: string;
+  openPaymentRecordCount: number;
+  openPaymentRecordMinor: string;
   futureLessonCount: number;
   reservedLessonCount: number;
   reservedUnits: string;
@@ -376,6 +381,7 @@ function assertCancelPayload(
     "kind",
     "actorUserId",
     "studentId",
+    "payerStudentId",
     "issuedSubscriptionId",
     "expectedVersion",
     "packageId",
@@ -385,8 +391,12 @@ function assertCancelPayload(
     "currencyCode",
     "finalMinor",
     "actualPaidMinor",
+    "fundingMode",
+    "previousRefundMinor",
     "writeoffMinor",
     "balanceMinor",
+    "openPaymentRecordCount",
+    "openPaymentRecordMinor",
     "futureLessonCount",
     "reservedLessonCount",
     "reservedUnits",
@@ -400,6 +410,7 @@ function assertCancelPayload(
     payload.kind !== "subscription.cancel" ||
     !isUuid(payload.actorUserId) ||
     !isUuid(payload.studentId) ||
+    !isUuid(payload.payerStudentId) ||
     !isUuid(payload.issuedSubscriptionId) ||
     !isPositiveInteger(payload.expectedVersion) ||
     !isUuid(payload.packageId) ||
@@ -410,8 +421,14 @@ function assertCancelPayload(
     !/^[A-Z]{3}$/.test(payload.currencyCode) ||
     !isMinor(payload.finalMinor) ||
     !isMinor(payload.actualPaidMinor) ||
+    !["personal_account", "installment", "legacy"].includes(
+      payload.fundingMode as string,
+    ) ||
+    !isMinor(payload.previousRefundMinor) ||
     !isMinor(payload.writeoffMinor) ||
     !isSignedMinor(payload.balanceMinor) ||
+    !isNonnegativeInteger(payload.openPaymentRecordCount) ||
+    !isMinor(payload.openPaymentRecordMinor) ||
     !isNonnegativeInteger(payload.futureLessonCount) ||
     !isNonnegativeInteger(payload.reservedLessonCount) ||
     !isUnits(payload.reservedUnits) ||

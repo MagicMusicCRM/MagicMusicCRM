@@ -26,6 +26,10 @@ export class SubscriptionCancelCommandDto {
   confirm: true;
 
   @IsString()
-  @Matches(/^[A-Za-z0-9._:-]{1,120}$/)
+  @MaxLength(1000)
   reason: string;
+
+  @IsString()
+  @Matches(/^(0|[1-9]\d*)$/)
+  refundMinor: string;
 }

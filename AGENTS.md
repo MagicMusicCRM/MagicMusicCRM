@@ -122,7 +122,7 @@
 > **Примечание**: Этот блок автоматически поддерживается процессами `/genesis`, `/blueprint` и `/forge`.
 
 - **Последняя версия архитектуры**: `.anws/v7` (Financial & Lesson Integrity)
-- **Активный список задач**: `.anws/v7/05_TASKS.md` — следующая задача `T2.1.4`
+- **Активный список задач**: `.anws/v7/05_TASKS.md` — следующая задача `T2.1.5`
 - **Фаза**: `/genesis`, `/design-system` и `/blueprint` завершены; выполняется `/forge`
 - **Последнее обновление**: `2026-08-07`
 
@@ -174,6 +174,19 @@ staff-only технической истории, а карточка/дашбо
 down→up, reconcile issues=0, inventory finance=233, reporting-safe reads=47,
 lesson writes=13, unowned=0. Следующий шаг `/forge`: `T2.1.4` — отмена
 абонемента и корректный refund._
+
+_`T2.1.4` закрыта 2026-08-07: отмена абонемента рассчитывается от исходного
+плательщика и разделяет подтверждённое финансирование и незакрытую часть.
+Неиспользованная one-time покупка возвращается полностью даже без связанного
+payment record; для рассрочки учитываются оплаченные части, прошлые возвраты,
+использованные часы и активные резервы. Pending/unpaid записи закрываются
+техническими exclusions, а один append-only credit исключает двойное
+зачисление и выдерживает idempotent replay. Причина сохраняется в lifecycle,
+audit и технической истории. Gate: commerce 55/55, Actor Matrix/leak 9/9,
+full backend 152/152 suites и 1181/1181 tests, typecheck/build, reconcile
+issues=0, inventory finance=241, reporting-safe reads=51, lesson writes=13,
+unowned=0. Следующий шаг `/forge`: `T2.1.5` — client-finance capabilities,
+scope, projections и audit reasons._
 
 ### 🌊 Wave v6/S0 — Evidence & UX Foundation ✅
 _Owner подтвердил полное выполнение v6. `V6-001..005` и `INT-S0` закрыты 2026-08-04: воспроизводимый generator покрывает 21 GoRouter route, 248/259 production-reachable Dart files, 256/256 service calls, route/surface/navigation/input/back ownership с unowned=0; v4 inventory обновлён и снова проходит stale-check. Baseline: Flutter analyze clean и 486/486 tests, backend typecheck/build clean, 150/150 suites и 1160/1160 tests, actor/payload 9/9, targeted workflow contracts 68/68 (`docs/audits/v6-s0-baseline.md`). Следующий шаг `/forge`: `V6-101` canonical location adapter._

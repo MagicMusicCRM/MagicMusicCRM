@@ -34,6 +34,9 @@ export interface ReplacementPackageRow {
 interface ReplacementContextDatabaseRow {
   issued_id: string;
   student_id: string;
+  payer_student_id: string;
+  funding_mode: "personal_account" | "installment" | "legacy";
+  purchase_reason: string | null;
   old_package_id: string;
   old_status: string;
   old_version: number | string;
@@ -68,6 +71,9 @@ export interface ReplacementReservationRow {
 export interface ReplacementContext {
   issuedSubscriptionId: string;
   studentId: string;
+  payerStudentId: string;
+  fundingMode: "personal_account" | "installment" | "legacy";
+  purchaseReason: string | null;
   oldPackageId: string;
   oldStatus: string;
   oldVersion: number;
@@ -102,9 +108,16 @@ export interface ReplacementObligationRow {
   currency_code: string;
 }
 
+export interface CancellationCreditRow {
+  id: string;
+  amount_minor: string;
+}
+
 interface CancellationContextDatabaseRow {
   issued_id: string;
   student_id: string;
+  payer_student_id: string;
+  funding_mode: "personal_account" | "installment" | "legacy";
   package_id: string;
   package_name: string;
   package_version: number | string;
@@ -115,10 +128,13 @@ interface CancellationContextDatabaseRow {
   final_minor: string;
   used_units: string;
   actual_paid_minor: string;
+  previous_refund_minor: string;
   writeoff_minor: string;
   net_obligation_minor: string;
   balance_minor: string;
   payment_refs: CancellationPaymentRef[];
+  previous_refund_refs: CancellationRefundRef[];
+  open_payment_record_refs: CancellationPaymentRecordRef[];
   writeoff_refs: CancellationWriteoffRef[];
   obligation_refs: CancellationObligationRef[];
   future_lesson_count: number | string;
@@ -131,6 +147,19 @@ export interface CancellationPaymentRef {
   id: string;
   amountMinor: string;
   occurredAt: string;
+}
+
+export interface CancellationRefundRef {
+  id: string;
+  amountMinor: string;
+  occurredAt: string;
+}
+
+export interface CancellationPaymentRecordRef {
+  id: string;
+  status: "unpaid" | "posted_pending";
+  version: number;
+  amountMinor: string;
 }
 
 export interface CancellationWriteoffRef {
@@ -159,6 +188,8 @@ export interface CancellationFutureLesson {
 export interface CancellationContext {
   issuedSubscriptionId: string;
   studentId: string;
+  payerStudentId: string;
+  fundingMode: "personal_account" | "installment" | "legacy";
   package: {
     id: string;
     name: string;
@@ -171,10 +202,13 @@ export interface CancellationContext {
   finalMinor: string;
   usedUnits: string;
   actualPaidMinor: string;
+  previousRefundMinor: string;
   writeoffMinor: string;
   netObligationMinor: string;
   balanceMinor: string;
   paymentRefs: CancellationPaymentRef[];
+  previousRefundRefs: CancellationRefundRef[];
+  openPaymentRecordRefs: CancellationPaymentRecordRef[];
   writeoffRefs: CancellationWriteoffRef[];
   obligationRefs: CancellationObligationRef[];
   futureLessonCount: number;
@@ -243,6 +277,41 @@ const replacementContextSql = `
   select
     issued.id as issued_id,
     issued.student_id,
+    coalesce(
+      issued.payer_student_id,
+      (
+        select ancestor.payer_student_id
+        from lifecycle_chain chain
+        join app.subscriptions ancestor on ancestor.id = chain.id
+        where ancestor.payer_student_id is not null
+        order by ancestor.created_at desc, ancestor.id desc
+        limit 1
+      ),
+      issued.student_id
+    ) as payer_student_id,
+    coalesce(
+      issued.funding_mode,
+      (
+        select ancestor.funding_mode
+        from lifecycle_chain chain
+        join app.subscriptions ancestor on ancestor.id = chain.id
+        where ancestor.funding_mode is not null
+        order by ancestor.created_at desc, ancestor.id desc
+        limit 1
+      ),
+      'legacy'
+    ) as funding_mode,
+    coalesce(
+      issued.purchase_reason,
+      (
+        select ancestor.purchase_reason
+        from lifecycle_chain chain
+        join app.subscriptions ancestor on ancestor.id = chain.id
+        where ancestor.purchase_reason is not null
+        order by ancestor.created_at desc, ancestor.id desc
+        limit 1
+      )
+    ) as purchase_reason,
     issued.package_id as old_package_id,
     issued.status as old_status,
     issued.version as old_version,
@@ -323,6 +392,33 @@ const cancellationContextSql = `
         select id from lifecycle_chain
       )
   ),
+  previous_refund_rows as (
+    select
+      adjustment.id,
+      abs(adjustment.amount_minor)::bigint as amount_minor,
+      adjustment.occurred_at
+    from app.commerce_ordinary_account_adjustments adjustment
+    join app.commerce_ordinary_payments source_payment
+      on source_payment.id = adjustment.source_payment_id
+    where adjustment.deleted_at is null
+      and adjustment.status = 'paid'
+      and adjustment.amount_minor < 0
+      and source_payment.issued_subscription_id in (
+        select id from lifecycle_chain
+      )
+  ),
+  open_payment_record_rows as (
+    select
+      record.id,
+      record.status,
+      record.version,
+      record.amount_minor
+    from app.commerce_ordinary_payment_records record
+    where record.issued_subscription_id in (
+        select id from lifecycle_chain
+      )
+      and record.status in ('unpaid', 'posted_pending')
+  ),
   writeoff_rows as (
     select
       fact.id,
@@ -398,6 +494,8 @@ const cancellationContextSql = `
     select
       coalesce((select sum(amount_minor) from payment_rows), 0)::bigint
         as actual_paid_minor,
+      coalesce((select sum(amount_minor) from previous_refund_rows), 0)::bigint
+        as previous_refund_minor,
       coalesce((select sum(amount_minor) from writeoff_rows), 0)::bigint
         as writeoff_minor,
       coalesce(
@@ -416,6 +514,30 @@ const cancellationContextSql = `
   select
     issued.id as issued_id,
     issued.student_id,
+    coalesce(
+      issued.payer_student_id,
+      (
+        select ancestor.payer_student_id
+        from lifecycle_chain chain
+        join app.subscriptions ancestor on ancestor.id = chain.id
+        where ancestor.payer_student_id is not null
+        order by ancestor.created_at desc, ancestor.id desc
+        limit 1
+      ),
+      issued.student_id
+    ) as payer_student_id,
+    coalesce(
+      issued.funding_mode,
+      (
+        select ancestor.funding_mode
+        from lifecycle_chain chain
+        join app.subscriptions ancestor on ancestor.id = chain.id
+        where ancestor.funding_mode is not null
+        order by ancestor.created_at desc, ancestor.id desc
+        limit 1
+      ),
+      'legacy'
+    ) as funding_mode,
     issued.package_id,
     issued.commercial_snapshot ->> 'displayName' as package_name,
     issued.package_version,
@@ -434,6 +556,7 @@ const cancellationContextSql = `
       0
     )::numeric as used_units,
     totals.actual_paid_minor,
+    totals.previous_refund_minor,
     totals.writeoff_minor,
     totals.net_obligation_minor,
     (
@@ -453,6 +576,35 @@ const cancellationContextSql = `
       ),
       '[]'::jsonb
     ) as payment_refs,
+    coalesce(
+      (
+        select jsonb_agg(
+          jsonb_build_object(
+            'id', id,
+            'amountMinor', amount_minor::text,
+            'occurredAt', occurred_at
+          )
+          order by occurred_at, id
+        )
+        from previous_refund_rows
+      ),
+      '[]'::jsonb
+    ) as previous_refund_refs,
+    coalesce(
+      (
+        select jsonb_agg(
+          jsonb_build_object(
+            'id', id,
+            'status', status,
+            'version', version,
+            'amountMinor', amount_minor::text
+          )
+          order by id
+        )
+        from open_payment_record_rows
+      ),
+      '[]'::jsonb
+    ) as open_payment_record_refs,
     coalesce(
       (
         select jsonb_agg(
@@ -609,6 +761,90 @@ export class SubscriptionLifecycleRepository {
     );
   }
 
+  async lockCancellationStudents(
+    client: PoolClient,
+    studentIds: string[],
+  ): Promise<number> {
+    const result = await client.query(
+      `
+        select id
+        from app.students
+        where id = any($1::uuid[])
+          and deleted_at is null
+        order by id
+        for update
+      `,
+      [[...new Set(studentIds)].sort()],
+    );
+    return result.rowCount ?? 0;
+  }
+
+  async lockCancellationInstallments(
+    client: PoolClient,
+    issuedSubscriptionId: string,
+  ): Promise<void> {
+    await client.query(
+      `
+        with recursive lifecycle_chain(id) as (
+          select $1::uuid
+          union
+          select event.before_issued_subscription_id
+          from app.subscription_lifecycle_events event
+          join lifecycle_chain current
+            on current.id = event.after_issued_subscription_id
+          where event.event_type = 'replace'
+            and event.before_issued_subscription_id is not null
+        )
+        select installment.id
+        from app.subscription_installments installment
+        where installment.issued_subscription_id in (
+          select id from lifecycle_chain
+        )
+        order by installment.id
+        for update of installment
+      `,
+      [issuedSubscriptionId],
+    );
+  }
+
+  async lockCancellationPaymentRecords(
+    client: PoolClient,
+    issuedSubscriptionId: string,
+  ): Promise<void> {
+    await client.query(
+      `
+        with recursive lifecycle_chain(id) as (
+          select $1::uuid
+          union
+          select event.before_issued_subscription_id
+          from app.subscription_lifecycle_events event
+          join lifecycle_chain current
+            on current.id = event.after_issued_subscription_id
+          where event.event_type = 'replace'
+            and event.before_issued_subscription_id is not null
+        )
+        select record.id
+        from app.client_payment_records record
+        where record.issued_subscription_id in (
+            select id from lifecycle_chain
+          )
+          and record.status in ('unpaid', 'posted_pending')
+          and not exists (
+            select 1
+            from app.commerce_reporting_exclusions exclusion
+            where (exclusion.source_kind = 'payment_record'
+                and exclusion.source_id = record.id)
+               or (record.actual_payment_id is not null
+                and exclusion.source_kind = 'payment'
+                and exclusion.source_id = record.actual_payment_id)
+          )
+        order by record.id
+        for update of record
+      `,
+      [issuedSubscriptionId],
+    );
+  }
+
   async readReplacementContextInTransaction(
     client: PoolClient,
     issuedSubscriptionId: string,
@@ -696,6 +932,9 @@ export class SubscriptionLifecycleRepository {
       package: ReplacementPackageRow;
       usedUnits: string;
       snapshot: IssuedCommercialSnapshot;
+      payerStudentId: string;
+      fundingMode: "personal_account" | "installment" | "legacy";
+      purchaseReason: string | null;
     },
   ): Promise<ReplacementIssuedRow> {
     const result = await client.query<ReplacementIssuedRow>(
@@ -720,7 +959,10 @@ export class SubscriptionLifecycleRepository {
           discount_fixed_minor,
           discount_reason,
           final_price_minor,
-          version
+          version,
+          payer_student_id,
+          funding_mode,
+          purchase_reason
         )
         values (
           $1,
@@ -745,7 +987,10 @@ export class SubscriptionLifecycleRepository {
           null,
           null,
           $9::bigint,
-          1
+          1,
+          $11,
+          $12,
+          $13
         )
         returning
           id,
@@ -773,6 +1018,9 @@ export class SubscriptionLifecycleRepository {
         input.package.version,
         input.package.base_price_minor,
         input.package.currency_code,
+        input.payerStudentId,
+        input.fundingMode,
+        input.purchaseReason,
       ],
     );
     return result.rows[0]!;
@@ -944,6 +1192,92 @@ export class SubscriptionLifecycleRepository {
     return result.rows[0]!;
   }
 
+  async createCancellationCredit(
+    client: PoolClient,
+    input: {
+      payerStudentId: string;
+      issuedSubscriptionId: string;
+      amountMinor: string;
+      currencyCode: string;
+    },
+  ): Promise<CancellationCreditRow | null> {
+    if (input.amountMinor === "0") return null;
+    const result = await client.query<CancellationCreditRow>(
+      `
+        insert into app.subscription_obligation_facts (
+          student_id,
+          issued_subscription_id,
+          fact_type,
+          direction,
+          amount_minor,
+          currency_code,
+          source_type,
+          source_ref
+        )
+        values ($1, $2::uuid, 'adjustment', 'credit', $3::bigint, $4,
+          'subscription.cancel', $2::uuid::text)
+        returning id, amount_minor::text
+      `,
+      [
+        input.payerStudentId,
+        input.issuedSubscriptionId,
+        input.amountMinor,
+        input.currencyCode,
+      ],
+    );
+    return result.rows[0]!;
+  }
+
+  async closeCancellationPaymentRecords(
+    client: PoolClient,
+    input: {
+      issuedSubscriptionId: string;
+      reason: string;
+      actorUserId: string;
+      auditEventId: string;
+    },
+  ): Promise<number> {
+    const result = await client.query(
+      `
+        with recursive lifecycle_chain(id) as (
+          select $1::uuid
+          union
+          select event.before_issued_subscription_id
+          from app.subscription_lifecycle_events event
+          join lifecycle_chain current
+            on current.id = event.after_issued_subscription_id
+          where event.event_type = 'replace'
+            and event.before_issued_subscription_id is not null
+        ), open_records as (
+          select record.id
+          from app.commerce_ordinary_payment_records record
+          where record.issued_subscription_id in (
+              select id from lifecycle_chain
+            )
+            and record.status in ('unpaid', 'posted_pending')
+          order by record.id
+        )
+        insert into app.commerce_reporting_exclusions (
+          source_kind,
+          source_id,
+          reason,
+          actor_user_id,
+          audit_event_id
+        )
+        select 'payment_record', open_record.id, $2, $3, $4
+        from open_records open_record
+        returning id
+      `,
+      [
+        input.issuedSubscriptionId,
+        input.reason,
+        input.actorUserId,
+        input.auditEventId,
+      ],
+    );
+    return result.rowCount ?? 0;
+  }
+
   async createReplaceLifecycle(
     client: PoolClient,
     input: {
@@ -1033,6 +1367,9 @@ export class SubscriptionLifecycleRepository {
     return {
       issuedSubscriptionId: row.issued_id,
       studentId: row.student_id,
+      payerStudentId: row.payer_student_id,
+      fundingMode: row.funding_mode,
+      purchaseReason: row.purchase_reason,
       oldPackageId: row.old_package_id,
       oldStatus: row.old_status,
       oldVersion: Number(row.old_version),
@@ -1065,6 +1402,8 @@ export class SubscriptionLifecycleRepository {
     return {
       issuedSubscriptionId: row.issued_id,
       studentId: row.student_id,
+      payerStudentId: row.payer_student_id,
+      fundingMode: row.funding_mode,
       package: {
         id: row.package_id,
         name: row.package_name,
@@ -1077,6 +1416,7 @@ export class SubscriptionLifecycleRepository {
       finalMinor: row.final_minor,
       usedUnits: normalizeNumeric(row.used_units),
       actualPaidMinor: row.actual_paid_minor,
+      previousRefundMinor: row.previous_refund_minor,
       writeoffMinor: row.writeoff_minor,
       netObligationMinor: row.net_obligation_minor,
       balanceMinor: row.balance_minor,
@@ -1084,6 +1424,17 @@ export class SubscriptionLifecycleRepository {
         id: payment.id,
         amountMinor: String(payment.amountMinor),
         occurredAt: new Date(payment.occurredAt).toISOString(),
+      })),
+      previousRefundRefs: row.previous_refund_refs.map((refund) => ({
+        id: refund.id,
+        amountMinor: String(refund.amountMinor),
+        occurredAt: new Date(refund.occurredAt).toISOString(),
+      })),
+      openPaymentRecordRefs: row.open_payment_record_refs.map((record) => ({
+        id: record.id,
+        status: record.status,
+        version: Number(record.version),
+        amountMinor: String(record.amountMinor),
       })),
       writeoffRefs: row.writeoff_refs.map((writeoff) => ({
         id: writeoff.id,
