@@ -100,6 +100,7 @@ describe("Subscription replacement preview/confirm", () => {
     );
     lifecycleService = new SubscriptionLifecycleService(
       new SubscriptionLifecycleRepository(database),
+      issueRepository,
       policy,
       integrity,
       new SubscriptionPreviewTokenService({

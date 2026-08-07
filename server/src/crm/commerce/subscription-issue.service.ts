@@ -164,6 +164,10 @@ export class SubscriptionIssueService {
       await this.integrity.executeVersionedMutation<IssueMutationResult>({
         actorKey: actor.userId,
         actorUserId: actor.userId,
+        authorization: {
+          actor,
+          capabilityKey: "commerce.client_finance.write",
+        },
         operation: "crm.subscription.purchase",
         idempotencyKey: metadata.idempotencyKey,
         requestId: metadata.requestId,
@@ -226,6 +230,7 @@ export class SubscriptionIssueService {
             dto,
             activePackage,
           );
+          audit.reasonText = this.auditReasonForPurchase(normalized);
           this.assertPurchasePreviewStillCurrent(
             signedPayload,
             this.createPurchaseTokenPayload(
@@ -316,6 +321,7 @@ export class SubscriptionIssueService {
     this.policy.assertCanWriteCrm(actor);
     this.assertMetadata(metadata);
     this.assertPaymentMethod(dto.paymentMethod);
+    await this.repository.assertStudentsInScope(actor, [studentId]);
     const subscriptionId = this.deterministicId(
       actor.userId,
       "crm.subscription.issue",
@@ -335,6 +341,10 @@ export class SubscriptionIssueService {
       await this.integrity.executeVersionedMutation<IssueMutationResult>({
         actorKey: actor.userId,
         actorUserId: actor.userId,
+        authorization: {
+          actor,
+          capabilityKey: "commerce.subscription.issue",
+        },
         operation: "crm.subscription.issue",
         idempotencyKey: metadata.idempotencyKey,
         requestId: metadata.requestId,
@@ -352,7 +362,13 @@ export class SubscriptionIssueService {
           },
         },
         mutate: async (client, nextVersion) => {
-          if (!(await this.repository.lockStudent(client, studentId))) {
+          if (
+            (await this.repository.lockPurchaseStudents(
+              client,
+              actor,
+              [studentId],
+            )).length !== 1
+          ) {
             throw new NotFoundException("Ученик не найден.");
           }
           const packageRow =
@@ -377,6 +393,12 @@ export class SubscriptionIssueService {
             dto.installments,
             finalPriceMinor,
           );
+          audit.reasonText =
+            discount.columns.reason ??
+            (surcharge.snapshot.type === "fixed"
+              ? surcharge.snapshot.reason
+              : null) ??
+            "Выдача абонемента";
           const snapshot = this.createSnapshot(
             packageRow,
             discount,
@@ -446,6 +468,13 @@ export class SubscriptionIssueService {
     packageRow: IssuePackageRow,
   ): NormalizedPurchase {
     const purchaseReason = dto.purchaseReason?.trim() || null;
+    if (purchaseReason && purchaseReason.length > 500) {
+      throw new UnprocessableEntityException({
+        code: "PURCHASE_REASON_TOO_LONG",
+        field: "purchaseReason",
+        message: "Причина покупки не должна превышать 500 символов.",
+      });
+    }
     if (
       dto.payerStudentId !== recipientStudentId &&
       purchaseReason === null
@@ -519,6 +548,16 @@ export class SubscriptionIssueService {
       snapshot,
       purchaseReason,
     };
+  }
+
+  private auditReasonForPurchase(normalized: NormalizedPurchase): string {
+    return (
+      normalized.purchaseReason ??
+      normalized.discount.columns.reason ??
+      (normalized.surcharge.snapshot.type === "fixed"
+        ? normalized.surcharge.snapshot.reason
+        : "Покупка абонемента")
+    );
   }
 
   private assertPurchaseContext(
@@ -669,7 +708,7 @@ export class SubscriptionIssueService {
       };
     }
     const reason = dto.reason?.trim();
-    if (!reason) {
+    if (!reason || reason.length > 500) {
       throw new UnprocessableEntityException({
         code: "DISCOUNT_REASON_REQUIRED",
         field: "discount.reason",
@@ -801,7 +840,7 @@ export class SubscriptionIssueService {
   ): NormalizedSurcharge {
     if (!dto) return { snapshot: { type: "none" }, amountMinor: "0" };
     const reason = dto.reason?.trim();
-    if (!reason) {
+    if (!reason || reason.length > 500) {
       throw new UnprocessableEntityException({
         code: "SURCHARGE_REASON_REQUIRED",
         field: "surcharge.reason",

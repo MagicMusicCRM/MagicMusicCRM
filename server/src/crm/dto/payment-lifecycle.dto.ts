@@ -60,7 +60,7 @@ export class CreatePaymentRecordDto {
   verificationNote?: string;
 
   @IsString()
-  @MaxLength(1000)
+  @MaxLength(500)
   reason: string;
 }
 
@@ -96,7 +96,7 @@ export class TransitionPaymentRecordDto {
   verificationNote?: string;
 
   @IsString()
-  @MaxLength(1000)
+  @MaxLength(500)
   reason: string;
 }
 
@@ -116,6 +116,6 @@ export class ReversePaymentDto {
   confirm: boolean;
 
   @IsString()
-  @MaxLength(1000)
+  @MaxLength(500)
   reason: string;
 }

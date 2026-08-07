@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { authorizeCurrentCapability } from "../access-control/capability-request-authorizer";
 import { DatabaseService } from "../db/database.service";
 import { PlatformIntegrityRepository } from "./platform-integrity.repository";
 import {
@@ -33,6 +34,14 @@ export class PlatformIntegrityService {
       payload: command.payload,
     });
     return this.database.transaction(async (client) => {
+      if (command.authorization) {
+        await authorizeCurrentCapability(
+          client,
+          command.authorization.actor,
+          command.authorization.capabilityKey,
+          true,
+        );
+      }
       const reservation = await this.repository.reserveIdempotency(client, {
         actorKey: command.actorKey,
         operation: command.operation,

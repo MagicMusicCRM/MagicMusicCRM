@@ -578,6 +578,49 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
     }
   });
 
+  it("rolls the empty human audit reason column down and up losslessly", async () => {
+    const client = await pool.connect();
+    await client.query("begin");
+    try {
+      const migrationRoot = resolve(process.cwd(), "db/migrations");
+      await client.query("update app.audit_events set reason_text = null");
+      await client.query(
+        readFileSync(
+          resolve(migrationRoot, "0108_v7_client_finance_audit.down.sql"),
+          "utf8",
+        ),
+      );
+      const removed = await client.query<{ present: boolean }>(`
+        select exists (
+          select 1 from information_schema.columns
+          where table_schema = 'app'
+            and table_name = 'audit_events'
+            and column_name = 'reason_text'
+        ) as present
+      `);
+      expect(removed.rows[0]!.present).toBe(false);
+
+      await client.query(
+        readFileSync(
+          resolve(migrationRoot, "0108_v7_client_finance_audit.up.sql"),
+          "utf8",
+        ),
+      );
+      const restored = await client.query<{ present: boolean }>(`
+        select exists (
+          select 1 from information_schema.columns
+          where table_schema = 'app'
+            and table_name = 'audit_events'
+            and column_name = 'reason_text'
+        ) as present
+      `);
+      expect(restored.rows[0]!.present).toBe(true);
+    } finally {
+      await client.query("rollback");
+      client.release();
+    }
+  });
+
   it("enforces payment state, identity and role-package constraints", async () => {
     const client = await pool.connect();
     await client.query("begin");

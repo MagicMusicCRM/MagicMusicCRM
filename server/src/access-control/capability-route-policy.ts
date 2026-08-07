@@ -216,6 +216,21 @@ export function resolveCapabilityRoutePolicy(
     );
   }
 
+  const legacySubscriptionIssue =
+    !read &&
+    (path === "/crm/subscriptions" ||
+      /^\/crm\/(?:students|leads)\/[^/]+\/subscriptions\/issue$/.test(
+        path,
+      ));
+  if (legacySubscriptionIssue) {
+    return policy(
+      "commerce.subscription.issue",
+      "self_or_assigned",
+      staffRoles,
+      "Legacy subscription issue adapter with client resource scope",
+    );
+  }
+
   if (
     path.includes("/subscriptions") ||
     path.includes("/subscription-payments") ||
@@ -228,9 +243,7 @@ export function resolveCapabilityRoutePolicy(
     return policy(
       read
         ? "commerce.client_finance.read"
-        : path.includes("/payment-records")
-          ? "commerce.client_finance.write"
-          : "commerce.subscription.issue",
+        : "commerce.client_finance.write",
       "self_or_assigned",
       read ? ["client", ...staffRoles] : staffRoles,
       "CrmPolicy student-finance/resource scope",

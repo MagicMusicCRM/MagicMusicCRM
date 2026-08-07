@@ -107,7 +107,7 @@ export class CommerceProjectionFactory {
         chargeType: movement.chargeType,
         branchId: movement.branchId ?? null,
         branchName: movement.branchName ?? null,
-        comment: movement.comment ?? null,
+        comment: actor.role === "client" ? null : movement.comment ?? null,
         invoiceIdentifier: movement.invoiceIdentifier ?? null,
         status: movement.status ?? null,
         acceptedByName: movement.acceptedByName ?? null,

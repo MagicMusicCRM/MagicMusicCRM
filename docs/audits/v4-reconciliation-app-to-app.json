@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "task": "T8.1.5",
-  "generatedAt": "2026-08-01T11:34:15.096Z",
+  "generatedAt": "2026-08-07T04:05:17.305Z",
   "mode": "schema-compare",
   "source": "app",
   "target": "app",
@@ -11,7 +11,7 @@
     "unexplainedFacts": 0
   },
   "summary": {
-    "invariants": 14,
+    "invariants": 17,
     "sourceFacts": 1,
     "targetFacts": 1,
     "invariantsWithDrift": 0,
@@ -103,6 +103,42 @@
       "unexplainedDiff": []
     },
     {
+      "id": "commerce.client-payment-records",
+      "owner": "SYS-COMMERCE",
+      "economic": true,
+      "tolerance": 0,
+      "description": "Three-state client payment aggregates remain identical.",
+      "sourceCount": 0,
+      "targetCount": 0,
+      "sourceDigestSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "targetDigestSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "commerce.client-payment-status-events",
+      "owner": "SYS-COMMERCE",
+      "economic": false,
+      "tolerance": 0,
+      "description": "Payment status history and reasons remain identical.",
+      "sourceCount": 0,
+      "targetCount": 0,
+      "sourceDigestSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "targetDigestSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "commerce.reporting-exclusions",
+      "owner": "SYS-COMMERCE",
+      "economic": true,
+      "tolerance": 0,
+      "description": "Reporting source/counterpart exclusions remain identical.",
+      "sourceCount": 0,
+      "targetCount": 0,
+      "sourceDigestSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "targetDigestSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "unexplainedDiff": []
+    },
+    {
       "id": "commerce.lesson-charge-facts",
       "owner": "SYS-COMMERCE",
       "economic": true,
@@ -182,16 +218,16 @@
       "description": "Application role and CRM entity mappings remain identical.",
       "sourceCount": 1,
       "targetCount": 1,
-      "sourceDigestSha256": "bc74f26c37bc5e94ec3e163d711ec4079709ee510c5b770149d1f45b163bd76c",
-      "targetDigestSha256": "bc74f26c37bc5e94ec3e163d711ec4079709ee510c5b770149d1f45b163bd76c",
+      "sourceDigestSha256": "ec61677fce314a43e6095b759f7877f2292fc7753bc5801d5aa3baf4dbb90f6f",
+      "targetDigestSha256": "ec61677fce314a43e6095b759f7877f2292fc7753bc5801d5aa3baf4dbb90f6f",
       "unexplainedDiff": []
     }
   ],
   "signature": {
     "algorithm": "Ed25519",
-    "contentSha256": "863b7feb97a2704ea4621227cf66df2560b146b50336327b3f801f1ef93590a0",
-    "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAS+Z1oX9c+wpOWeT1DdgCYNejjjrrx4mHZpy+oG42Lc4=\n-----END PUBLIC KEY-----\n",
-    "valueBase64": "l+/t1t/lBsct1dyqe0n3ODv9sMe7LHglRAoZ+OSiQCebeoVjLRwu+b1Q2mprPAAZ9SP64h2SmTHb3Y1e+tPjBA==",
+    "contentSha256": "cb27aae78909899ad135abc7d69ea7541efade3cba5cb6239be5819daa0f86d1",
+    "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA/jpiFA20wweZiVWuBGCzUUZWJ/dupgDTnBEi5Rymwis=\n-----END PUBLIC KEY-----\n",
+    "valueBase64": "NE3irFEhPVb35T+Bk/PdVSa8SggB06XP6vHBK4wTjmYwD5I1ec1oIRTmYALTyt2XPak+0HAWs4wuusOxDKpeAQ==",
     "verified": true
   }
 }

@@ -24,7 +24,7 @@ export class RecordPaymentAdjustmentDto {
   direction?: 'income' | 'outcome';
 
   @IsString()
-  @MaxLength(1000)
+  @MaxLength(500)
   reason: string;
 
   @IsDateString()

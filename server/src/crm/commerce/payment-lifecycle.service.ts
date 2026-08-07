@@ -88,12 +88,17 @@ export class PaymentLifecycleService {
         installmentId: dto.installmentId ?? null,
         status: dto.status,
       },
+      reasonText: normalized.reason,
     };
     const result =
       await this.integrity.executeVersionedMutation<PaymentRecordMutationResult>(
         {
           actorKey: actor.userId,
           actorUserId: actor.userId,
+          authorization: {
+            actor,
+            capabilityKey: "commerce.client_finance.write",
+          },
           operation: "crm.payment-record.create",
           idempotencyKey: metadata.idempotencyKey,
           requestId: metadata.requestId,
@@ -119,9 +124,12 @@ export class PaymentLifecycleService {
             const students = await this.issueRepository.lockPurchaseStudents(
               client,
               actor,
-              [studentId],
+              [studentId, recipientStudentId],
             );
-            if (students.length !== 1) {
+            if (students.length !== new Set([
+              studentId,
+              recipientStudentId,
+            ]).size) {
               throw new NotFoundException("Клиент не найден.");
             }
             const target = await this.resolveTarget(
@@ -265,12 +273,17 @@ export class PaymentLifecycleService {
       entityId: paymentRecordId,
       reason: "payment_record_transition",
       metadata: { studentId, targetStatus: dto.targetStatus },
+      reasonText: reason,
     };
     const result =
       await this.integrity.executeVersionedMutation<PaymentRecordMutationResult>(
         {
           actorKey: actor.userId,
           actorUserId: actor.userId,
+          authorization: {
+            actor,
+            capabilityKey: "commerce.client_finance.write",
+          },
           operation: "crm.payment-record.transition",
           idempotencyKey: metadata.idempotencyKey,
           requestId: metadata.requestId,
@@ -291,9 +304,12 @@ export class PaymentLifecycleService {
             const students = await this.issueRepository.lockPurchaseStudents(
               client,
               actor,
-              [studentId],
+              [studentId, recipientStudentId],
             );
-            if (students.length !== 1) {
+            if (students.length !== new Set([
+              studentId,
+              recipientStudentId,
+            ]).size) {
               throw new NotFoundException("Клиент не найден.");
             }
             const current = await this.repository.lockRecord(
@@ -723,7 +739,7 @@ function requiredText(
   message: string,
 ): string {
   const value = raw?.trim();
-  if (!value) {
+  if (!value || value.length > 500) {
     throw new UnprocessableEntityException({ code, field, message });
   }
   return value;

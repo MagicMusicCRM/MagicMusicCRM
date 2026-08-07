@@ -111,6 +111,7 @@ const source = {
       currencyCode: "RUB",
       occurredAt: "2026-07-29T10:00:00.000Z",
       method: "cashless",
+      comment: "Проверить оплату за рассрочку",
       factType: null,
       chargeType: null,
       issuedSubscriptionId: "33333333-3333-4333-8333-333333333333",
@@ -183,6 +184,10 @@ describe("v4 commerce projections contract", () => {
       reason: "Льгота",
     });
     expect(clientProjection.technicalHistory).toEqual([]);
+    expect(clientProjection.movements[0]?.comment).toBeNull();
+    expect(staffProjection.movements[0]?.comment).toBe(
+      source.movements[0]?.comment ?? null,
+    );
     expect(staffProjection.technicalHistory).toEqual([
       expect.objectContaining({
         eventType: "monetary_reversal",
@@ -416,5 +421,8 @@ describe("v4 commerce projections contract", () => {
       /expected_payments|subscription_packages|lesson_participation|attendance/i,
     );
     expect(query).toHaveBeenCalledTimes(1);
+    expect(query.mock.calls[0]?.[1]).toEqual([[scope.studentId], true]);
+    await repository.loadProjection(actor("client"), [scope]);
+    expect(query.mock.calls[1]?.[1]).toEqual([[scope.studentId], false]);
   });
 });

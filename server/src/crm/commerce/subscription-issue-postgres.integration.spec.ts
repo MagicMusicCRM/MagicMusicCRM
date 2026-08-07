@@ -868,6 +868,22 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       debit_count: "1",
       payer_student_id: payerStudentId,
     });
+    await expect(
+      pool.query<{ reason: string; reason_text: string }>(
+        `select reason, reason_text
+         from app.audit_events
+         where action = 'crm.subscription_purchased'
+           and entity_id = $1`,
+        [first.subscription.id],
+      ),
+    ).resolves.toMatchObject({
+      rows: [
+        {
+          reason: "subscription_purchase",
+          reason_text: "Родитель оплачивает обучение ребёнка",
+        },
+      ],
+    });
   });
 
   it("rejects an unfunded personal-account purchase without partial facts", async () => {
@@ -899,6 +915,69 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       response: { code: "INSUFFICIENT_PERSONAL_ACCOUNT_BALANCE" },
     });
     expect(await countIssuedSubscriptions()).toBe(before);
+  });
+
+  it("rechecks current finance capability when a previewed purchase commits", async () => {
+    const input = {
+      packageId,
+      payerStudentId: studentId,
+      fundingMode: "installment" as const,
+      purchaseReason: "Проверка отзыва доступа",
+      installments: [
+        {
+          dueAt: "2026-12-15T09:00:00.000Z",
+          amountMinor: "400000",
+        },
+        {
+          dueAt: "2027-01-15T09:00:00.000Z",
+          amountMinor: "400000",
+        },
+      ],
+    };
+    const preview = await issueService.previewPurchase(
+      actors.admin,
+      studentId,
+      input,
+    );
+    const before = await countIssuedSubscriptions();
+    await pool.query(
+      `
+        insert into app.user_capability_overrides (
+          user_id,
+          capability_key,
+          capability_version,
+          effect,
+          reason_code,
+          actor_user_id
+        )
+        values ($1, 'commerce.client_finance.write', 1, 'deny', 'test.revoked', $2)
+      `,
+      [actors.admin.userId, actors.director.userId],
+    );
+    try {
+      await expect(
+        issueService.purchase(
+          actors.admin,
+          studentId,
+          { ...input, previewToken: preview.previewToken, confirm: true },
+          mutationMetadata("revoked-after-preview"),
+        ),
+      ).rejects.toMatchObject({
+        response: {
+          code: "CAPABILITY_DENIED",
+          capabilityKey: "commerce.client_finance.write",
+        },
+      });
+      await expect(countIssuedSubscriptions()).resolves.toBe(before);
+    } finally {
+      await pool.query(
+        `delete from app.user_capability_overrides
+          where user_id = $1
+            and capability_key = 'commerce.client_finance.write'
+            and reason_code = 'test.revoked'`,
+        [actors.admin.userId],
+      );
+    }
   });
 
   it("serializes competing purchases so only one can spend the payer balance", async () => {

@@ -111,6 +111,10 @@ export class PackageCatalogService {
       await this.integrity.executeVersionedMutation<PackageMutationResult>({
         actorKey: actor.userId,
         actorUserId: actor.userId,
+        authorization: {
+          actor,
+          capabilityKey: "config.commerce.manage",
+        },
         operation: "crm.subscription-package.create",
         idempotencyKey: metadata.idempotencyKey,
         requestId: metadata.requestId,
@@ -168,6 +172,10 @@ export class PackageCatalogService {
       await this.integrity.executeVersionedMutation<PackageMutationResult>({
         actorKey: actor.userId,
         actorUserId: actor.userId,
+        authorization: {
+          actor,
+          capabilityKey: "config.commerce.manage",
+        },
         operation: "crm.subscription-package.update",
         idempotencyKey: metadata.idempotencyKey,
         requestId: metadata.requestId,
@@ -243,6 +251,10 @@ export class PackageCatalogService {
     const result = await this.integrity.executeVersionedMutation<PackageMutationResult>({
       actorKey: actor.userId,
       actorUserId: actor.userId,
+      authorization: {
+        actor,
+        capabilityKey: "config.commerce.manage",
+      },
       operation: "crm.subscription-package.archive",
       idempotencyKey: metadata.idempotencyKey,
       requestId: metadata.requestId,
@@ -308,6 +320,10 @@ export class PackageCatalogService {
     const result = await this.integrity.executeVersionedMutation<PackageMutationResult>({
       actorKey: actor.userId,
       actorUserId: actor.userId,
+      authorization: {
+        actor,
+        capabilityKey: "config.commerce.manage",
+      },
       operation: "crm.subscription-package.restore",
       idempotencyKey: metadata.idempotencyKey,
       requestId: metadata.requestId,

@@ -1,4 +1,6 @@
 import { PoolClient } from "pg";
+import type { CapabilityKey } from "../access-control/capability-registry";
+import type { ActorContext } from "../common/security/actor-context";
 
 export interface PlatformAuditInput {
   id?: string;
@@ -8,6 +10,7 @@ export interface PlatformAuditInput {
   beforeRef?: Record<string, unknown>;
   afterRef?: Record<string, unknown>;
   reason?: string;
+  reasonText?: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -35,6 +38,10 @@ export interface VersionedMutationCommand<
   audit: PlatformAuditInput;
   outbox: PlatformOutboxInput;
   retentionUntil?: Date;
+  authorization?: {
+    actor: ActorContext;
+    capabilityKey: CapabilityKey;
+  };
   mutate: (
     client: PoolClient,
     nextVersion: number,

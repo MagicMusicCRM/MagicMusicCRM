@@ -121,7 +121,7 @@ export class PaymentReversalService {
       });
     }
     const reason = dto.reason.trim();
-    if (!reason) {
+    if (!reason || reason.length > 500) {
       throw new UnprocessableEntityException({
         code: "PAYMENT_REVERSAL_REASON_REQUIRED",
         field: "reason",
@@ -152,6 +152,7 @@ export class PaymentReversalService {
       entityType: "client_payment_record",
       entityId: paymentRecordId,
       reason: "payment_reversal",
+      reasonText: reason,
       beforeRef: {
         status: signed.status,
         actualPaymentId: signed.actualPaymentId,
@@ -170,6 +171,10 @@ export class PaymentReversalService {
         {
           actorKey: actor.userId,
           actorUserId: actor.userId,
+          authorization: {
+            actor,
+            capabilityKey: "commerce.client_finance.write",
+          },
           operation: "crm.payment-reversal.commit",
           idempotencyKey: metadata.idempotencyKey,
           requestId: metadata.requestId,

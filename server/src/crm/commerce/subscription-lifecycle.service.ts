@@ -30,6 +30,7 @@ import {
   SubscriptionReplacePreviewTokenPayload,
 } from "./subscription-preview-token";
 import { SubscriptionPreviewTokenService } from "./subscription-preview-token.service";
+import { SubscriptionIssueRepository } from "./subscription-issue.repository";
 import { SubscriptionReservationService } from "./subscription-reservation.service";
 
 export interface SubscriptionLifecycleMutationMetadata {
@@ -101,6 +102,7 @@ interface CancellationCalculation {
 export class SubscriptionLifecycleService {
   constructor(
     private readonly repository: SubscriptionLifecycleRepository,
+    private readonly issueRepository: SubscriptionIssueRepository,
     private readonly policy: CrmPolicy,
     private readonly integrity: PlatformIntegrityService,
     private readonly previewTokens: SubscriptionPreviewTokenService,
@@ -120,6 +122,10 @@ export class SubscriptionLifecycleService {
     );
     this.assertReplaceableContext(context);
     this.assertStudentScope(context, studentId);
+    await this.issueRepository.assertStudentsInScope(actor, [
+      context.studentId,
+      context.payerStudentId,
+    ]);
     const tokenPayload = this.createTokenPayload(actor, context);
     const signed = this.previewTokens.issue(tokenPayload);
     const calculation = this.calculate(context);
@@ -173,6 +179,7 @@ export class SubscriptionLifecycleService {
   ) {
     this.policy.assertCanWriteCrm(actor);
     this.assertCommand(dto, metadata);
+    const reason = dto.reason.trim();
     const newSubscriptionId = this.deterministicId(
       actor.userId,
       "crm.subscription.replace",
@@ -182,7 +189,8 @@ export class SubscriptionLifecycleService {
       action: "crm.subscription_replaced",
       entityType: "subscription",
       entityId: issuedSubscriptionId,
-      reason: dto.reason,
+      reason: "subscription_replace",
+      reasonText: reason,
       beforeRef: {
         subscriptionId: issuedSubscriptionId,
         version: dto.expectedVersion,
@@ -196,6 +204,10 @@ export class SubscriptionLifecycleService {
       await this.integrity.executeVersionedMutation<ReplacementResultRef>({
         actorKey: actor.userId,
         actorUserId: actor.userId,
+        authorization: {
+          actor,
+          capabilityKey: "commerce.client_finance.write",
+        },
         operation: "crm.subscription.replace",
         idempotencyKey: metadata.idempotencyKey,
         requestId: metadata.requestId,
@@ -208,7 +220,7 @@ export class SubscriptionLifecycleService {
           expectedVersion: dto.expectedVersion,
           previewToken: dto.previewToken,
           confirm: dto.confirm,
-          reason: dto.reason,
+          reason,
         },
         audit,
         outbox: {
@@ -220,6 +232,29 @@ export class SubscriptionLifecycleService {
           },
         },
         mutate: async (client, nextVersion) => {
+          // Verify before taking domain locks so recipient and payer are always
+          // locked in the same UUID order as every other commerce command.
+          const signedPayload = this.previewTokens.verify(dto.previewToken);
+          this.assertTokenBinding(
+            signedPayload,
+            actor,
+            studentId,
+            issuedSubscriptionId,
+            dto.expectedVersion,
+          );
+          const scopedStudents = new Set([
+            studentId,
+            signedPayload.payerStudentId,
+          ]);
+          if (
+            (await this.issueRepository.lockPurchaseStudents(
+              client,
+              actor,
+              [...scopedStudents],
+            )).length !== scopedStudents.size
+          ) {
+            throw new NotFoundException("Клиент или плательщик не найден.");
+          }
           const issued = await this.repository.lockIssuedSubscription(
             client,
             issuedSubscriptionId,
@@ -240,17 +275,6 @@ export class SubscriptionLifecycleService {
             });
           }
 
-          // Verification deliberately lives inside the mutation callback:
-          // completed idempotent replays do not fail merely because the
-          // originally valid short-lived preview has since expired.
-          const signedPayload = this.previewTokens.verify(dto.previewToken);
-          this.assertTokenBinding(
-            signedPayload,
-            actor,
-            studentId,
-            issuedSubscriptionId,
-            dto.expectedVersion,
-          );
           const lockedPackage = await this.repository.lockPackage(
             client,
             signedPayload.newPackageId,
@@ -344,7 +368,7 @@ export class SubscriptionLifecycleService {
             oldIssuedSubscriptionId: issuedSubscriptionId,
             newIssuedSubscriptionId: replacement.id,
             actorUserId: actor.userId,
-            reason: dto.reason,
+            reason,
           });
           const resultRef: ReplacementResultRef = {
             sourceId: issuedSubscriptionId,
@@ -432,6 +456,10 @@ export class SubscriptionLifecycleService {
     );
     this.assertCancellableContext(context);
     this.assertStudentScope(context, studentId);
+    await this.issueRepository.assertStudentsInScope(actor, [
+      context.studentId,
+      context.payerStudentId,
+    ]);
     const calculation = this.calculateCancellation(context);
     const signed = this.previewTokens.issueCancellation(
       this.createCancellationTokenPayload(actor, context),
@@ -506,6 +534,7 @@ export class SubscriptionLifecycleService {
       entityType: "subscription",
       entityId: issuedSubscriptionId,
       reason: "subscription_cancel",
+      reasonText: reason,
       beforeRef: {
         subscriptionId: issuedSubscriptionId,
         version: dto.expectedVersion,
@@ -519,6 +548,10 @@ export class SubscriptionLifecycleService {
       await this.integrity.executeVersionedMutation<CancellationResultRef>({
         actorKey: actor.userId,
         actorUserId: actor.userId,
+        authorization: {
+          actor,
+          capabilityKey: "commerce.client_finance.write",
+        },
         operation: "crm.subscription.cancel",
         idempotencyKey: metadata.idempotencyKey,
         requestId: metadata.requestId,
@@ -561,10 +594,11 @@ export class SubscriptionLifecycleService {
             signedPayload.payerStudentId,
           ]);
           if (
-            (await this.repository.lockCancellationStudents(
+            (await this.issueRepository.lockPurchaseStudents(
               client,
+              actor,
               [...scopedStudents],
-            )) !== scopedStudents.size
+            )).length !== scopedStudents.size
           ) {
             throw new NotFoundException("Клиент или плательщик не найден.");
           }
@@ -772,6 +806,7 @@ export class SubscriptionLifecycleService {
       kind: "subscription.replace",
       actorUserId: actor.userId,
       studentId: context.studentId,
+      payerStudentId: context.payerStudentId,
       issuedSubscriptionId: context.issuedSubscriptionId,
       expectedVersion: context.oldVersion,
       newPackageId: context.newPackage!.id,
@@ -1211,10 +1246,10 @@ export class SubscriptionLifecycleService {
         message: "Передайте актуальную версию абонемента.",
       });
     }
-    if (!/^[A-Za-z0-9._:-]{1,120}$/.test(dto.reason)) {
+    if (!dto.reason?.trim() || dto.reason.trim().length > 500) {
       throw new UnprocessableEntityException({
         code: "REPLACEMENT_REASON_REQUIRED",
-        message: "Передайте безопасный код причины замены.",
+        message: "Укажите причину замены абонемента.",
       });
     }
     if (
@@ -1261,7 +1296,7 @@ export class SubscriptionLifecycleService {
         message: "Передайте актуальную версию абонемента.",
       });
     }
-    if (!dto.reason?.trim() || dto.reason.length > 1000) {
+    if (!dto.reason?.trim() || dto.reason.trim().length > 500) {
       throw new UnprocessableEntityException({
         code: "CANCELLATION_REASON_REQUIRED",
         message: "Укажите причину отмены абонемента.",

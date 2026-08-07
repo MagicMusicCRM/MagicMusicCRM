@@ -42,15 +42,25 @@ describe('redactSensitive', () => {
         debt: 200,
         clientCost: 1200,
         teacherRate: 900,
+        payerStudentId: 'payer-1',
+        refundReason: 'duplicate',
+        reversalId: 'reversal-1',
+        exclusionId: 'exclusion-1',
+        compensationRule: 'fixed',
         commentBody: 'private note',
         representativeName: 'Parent'
       })
     ).toEqual({
       balance: '[PRIVATE]',
       debt: '[PRIVATE]',
-      clientCost: '[PRIVATE]',
-      teacherRate: '[PRIVATE]',
-      commentBody: '[PRIVATE]',
+        clientCost: '[PRIVATE]',
+        teacherRate: '[PRIVATE]',
+        payerStudentId: '[PRIVATE]',
+        refundReason: '[PRIVATE]',
+        reversalId: '[PRIVATE]',
+        exclusionId: '[PRIVATE]',
+        compensationRule: '[PRIVATE]',
+        commentBody: '[PRIVATE]',
       representativeName: '[PRIVATE]'
     });
   });

@@ -42,6 +42,31 @@ describe("capability route policy", () => {
     [
       "POST",
       "/crm/students/id/subscription-payments",
+      "commerce.client_finance.write",
+    ],
+    [
+      "POST",
+      "/crm/students/id/subscriptions/purchase/preview",
+      "commerce.client_finance.write",
+    ],
+    [
+      "POST",
+      "/crm/students/id/subscriptions/id/replace",
+      "commerce.client_finance.write",
+    ],
+    [
+      "POST",
+      "/crm/students/id/subscriptions/id/cancel",
+      "commerce.client_finance.write",
+    ],
+    [
+      "POST",
+      "/crm/students/id/subscriptions/issue",
+      "commerce.subscription.issue",
+    ],
+    [
+      "POST",
+      "/crm/leads/id/subscriptions/issue",
       "commerce.subscription.issue",
     ],
     [
@@ -67,7 +92,7 @@ describe("capability route policy", () => {
     [
       "POST",
       "/crm/students/id/adjustments",
-      "commerce.subscription.issue",
+      "commerce.client_finance.write",
     ],
     ["GET", "/crm/subscription-packages", "commerce.package.read"],
     ["POST", "/crm/subscription-packages", "commerce.package.manage"],

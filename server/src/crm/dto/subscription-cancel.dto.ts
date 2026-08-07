@@ -26,7 +26,7 @@ export class SubscriptionCancelCommandDto {
   confirm: true;
 
   @IsString()
-  @MaxLength(1000)
+  @MaxLength(500)
   reason: string;
 
   @IsString()

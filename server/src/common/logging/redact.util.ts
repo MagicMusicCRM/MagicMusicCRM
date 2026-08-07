@@ -7,7 +7,7 @@ const piiKeyPattern =
   /(e-?mail|phone|\btel\b|first[_-]?name|last[_-]?name|full[_-]?name|middle[_-]?name|patronymic|\bfio\b|\bdob\b|birth|address|passport)/i;
 
 const privateBusinessKeyPattern =
-  /(amount|price|cost|balance|debt|revenue|expense|salary|rate|currency|payment|subscription|comment|body|message|note|description|text|content|representative)/i;
+  /(amount|price|cost|balance|debt|revenue|expense|salary|rate|currency|payment|subscription|payer|refund|reason|reversal|exclusion|compensation|comment|body|message|note|description|text|content|representative)/i;
 
 // Email values embedded in free-text strings. (Phone-in-text is intentionally
 // not regex-masked to avoid false positives on dates/ids; phone *fields* are

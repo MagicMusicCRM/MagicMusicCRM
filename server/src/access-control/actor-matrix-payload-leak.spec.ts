@@ -8,7 +8,7 @@ import {
 } from "./actor-client-projection.factory";
 
 const forbiddenTeacherKey =
-  /contacts?|representatives?|finance|subscriptions?|payments?|balance|debt|price|cost|rate|phone|email|address/i;
+  /contacts?|representatives?|finance|subscriptions?|payments?|balance|debt|price|cost|rate|payer|refund|reason|reversal|exclusion|compensation|phone|email|address/i;
 const forbiddenValue =
   /LEAK_(?:PHONE|EMAIL|ADDRESS|REPRESENTATIVE|RATE|COST|PRIVATE_COMMENT|BALANCE|DEBT|PAYMENT|SUBSCRIPTION|PRICE)/;
 

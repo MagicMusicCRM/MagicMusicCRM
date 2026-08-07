@@ -2,6 +2,7 @@ import {
   computeOutboxBackoffSeconds,
   fingerprintPayload,
   safeAuditReason,
+  safeAuditReasonText,
   safeFailureName,
   safeOutboxPayload,
   safeReference,
@@ -44,12 +45,16 @@ describe("platform integrity utilities", () => {
         contactEmail: "person@example.com",
         accessToken: "secret-token",
         amount: 500,
+        payerStudentId: "payer-id",
+        refundMinor: "100",
       }),
     ).toEqual({
       entityId: "safe-id",
       contactEmail: "[PRIVATE]",
       accessToken: "[REDACTED]",
       amount: "[PRIVATE]",
+      payerStudentId: "payer-id",
+      refundMinor: "100",
     });
     expect(
       safeOutboxPayload({
@@ -68,6 +73,11 @@ describe("platform integrity utilities", () => {
     expect(() => safeAuditReason("free-form private reason")).toThrow(
       "reason code",
     );
+    expect(safeAuditReasonText("  Клиент сменил филиал  ")).toBe(
+      "Клиент сменил филиал",
+    );
+    expect(() => safeAuditReasonText("   ")).toThrow("1..500");
+    expect(() => safeAuditReasonText("x".repeat(501))).toThrow("1..500");
   });
 
   it("uses bounded exponential retry and safe error names", () => {

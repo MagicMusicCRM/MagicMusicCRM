@@ -99,6 +99,7 @@ describe("Subscription cancellation preview/confirm", () => {
     );
     lifecycleService = new SubscriptionLifecycleService(
       new SubscriptionLifecycleRepository(database),
+      issueRepository,
       policy,
       integrity,
       new SubscriptionPreviewTokenService({
@@ -378,6 +379,7 @@ describe("Subscription cancellation preview/confirm", () => {
       credit_minor: string;
       linked_payment_count: string;
       reason: string;
+      audit_reason_text: string;
     }>(
       `
         select
@@ -386,7 +388,12 @@ describe("Subscription cancellation preview/confirm", () => {
           (select count(*)::text from app.payments payment
            where payment.issued_subscription_id = subscription.id)
             as linked_payment_count,
-          lifecycle.reason
+          lifecycle.reason,
+          (select audit.reason_text
+           from app.audit_events audit
+           where audit.action = 'crm.subscription_cancelled'
+             and audit.entity_id = subscription.id::text)
+            as audit_reason_text
         from app.subscriptions subscription
         join app.subscription_obligation_facts credit
           on credit.issued_subscription_id = subscription.id
@@ -403,6 +410,7 @@ describe("Subscription cancellation preview/confirm", () => {
       credit_minor: "800000",
       linked_payment_count: "0",
       reason: "Абонемент назначен ошибочно, вернуть плательщику",
+      audit_reason_text: "Абонемент назначен ошибочно, вернуть плательщику",
     });
   });
 

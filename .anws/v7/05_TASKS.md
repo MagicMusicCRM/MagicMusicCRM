@@ -179,7 +179,7 @@ graph TD
   - **Зависимости**: T2.1.1, T2.1.2.
   - **Приоритет**: P0.
 
-- [ ] **T2.1.5** [REQ-REPORT-101, REQ-CLIENT-102]: Client-finance capabilities, projections и audit reasons
+- [x] **T2.1.5** [REQ-REPORT-101, REQ-CLIENT-102]: Client-finance capabilities, projections и audit reasons
   - **Описание**: Добавить write/config capabilities, route policy, recipient+payer scope, bounded payment projections и mandatory human reasons.
   - **Входные данные**: T2.1.1–T2.1.4, [`access_audit_v7.md`](04_SYSTEM_DESIGN/access_audit_v7.md).
   - **Выходные данные**: registry/migration/policy/projection/audit changes.

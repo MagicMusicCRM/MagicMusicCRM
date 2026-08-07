@@ -5,7 +5,6 @@ import {
   IsInt,
   IsString,
   IsUUID,
-  Matches,
   MaxLength,
   Min,
 } from "class-validator";
@@ -30,6 +29,6 @@ export class SubscriptionReplaceCommandDto {
   confirm: true;
 
   @IsString()
-  @Matches(/^[A-Za-z0-9._:-]{1,120}$/)
+  @MaxLength(500)
   reason: string;
 }

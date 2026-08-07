@@ -27,10 +27,11 @@ expand legacy access.
 | `access.user.override.manage` | 1 |
 | `access.user.role.assign` | 5 |
 | `commerce.client_finance.read` | 2 |
+| `commerce.client_finance.write` | 7 |
 | `commerce.package.manage` | 4 |
 | `commerce.package.read` | 1 |
 | `commerce.school_finance.read` | 10 |
-| `commerce.subscription.issue` | 9 |
+| `commerce.subscription.issue` | 2 |
 | `config.crm.edit` | 12 |
 | `config.crm.publish` | 2 |
 | `config.crm.read` | 3 |

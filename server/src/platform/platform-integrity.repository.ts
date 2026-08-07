@@ -10,6 +10,7 @@ import {
 import {
   safeFailureName,
   safeAuditReason,
+  safeAuditReasonText,
   safeOutboxPayload,
   safeReference,
 } from "./platform-integrity.util";
@@ -219,10 +220,12 @@ export class PlatformIntegrityRepository {
           request_id,
           before_ref,
           after_ref,
-          reason
+          reason,
+          reason_text
         )
         values (
-          $1, $2, $3, $4, $5, $6::jsonb, $7, $8::jsonb, $9::jsonb, $10
+          $1, $2, $3, $4, $5, $6::jsonb, $7, $8::jsonb, $9::jsonb, $10,
+          $11
         )
       `,
       [
@@ -240,6 +243,7 @@ export class PlatformIntegrityRepository {
           ? JSON.stringify(safeReference(input.afterRef))
           : null,
         safeAuditReason(input.reason),
+        safeAuditReasonText(input.reasonText),
       ],
     );
     return id;

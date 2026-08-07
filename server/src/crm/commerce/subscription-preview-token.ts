@@ -52,6 +52,7 @@ export interface SubscriptionReplacePreviewTokenPayload {
   kind: "subscription.replace";
   actorUserId: string;
   studentId: string;
+  payerStudentId: string;
   issuedSubscriptionId: string;
   expectedVersion: number;
   newPackageId: string;
@@ -307,6 +308,7 @@ function assertReplacePayload(
     "kind",
     "actorUserId",
     "studentId",
+    "payerStudentId",
     "issuedSubscriptionId",
     "expectedVersion",
     "newPackageId",
@@ -337,6 +339,7 @@ function assertReplacePayload(
     payload.kind !== "subscription.replace" ||
     !isUuid(payload.actorUserId) ||
     !isUuid(payload.studentId) ||
+    !isUuid(payload.payerStudentId) ||
     !isUuid(payload.issuedSubscriptionId) ||
     !isPositiveInteger(payload.expectedVersion) ||
     !isUuid(payload.newPackageId) ||

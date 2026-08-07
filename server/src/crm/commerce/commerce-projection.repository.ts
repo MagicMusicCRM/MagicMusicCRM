@@ -200,10 +200,7 @@ export class CommerceProjectionRepository {
     );
     const row = result.rows[0];
     if (!row) {
-      throw new ForbiddenException({
-        code: "COMMERCE_BRANCH_SCOPE_DENIED",
-        message: "Student commerce is outside the actor branch scope.",
-      });
+      this.throwClientNotFound();
     }
     return this.toScope(row, "branch");
   }
@@ -804,14 +801,15 @@ export class CommerceProjectionRepository {
             left join app.profiles actor_profile
               on actor_profile.user_id = actor.id
              and actor_profile.deleted_at is null
-            where record.student_id = selected.student_id
+            where $2::boolean
+              and record.student_id = selected.student_id
             order by exclusion.occurred_at desc, exclusion.id desc
             limit 200
           ) event
         ) technical_history_projection on true
         order by selected.position
       `,
-      [scopes.map((scope) => scope.studentId)],
+      [scopes.map((scope) => scope.studentId), actor.role !== "client"],
     );
 
     return result.rows.flatMap((row) => {

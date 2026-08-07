@@ -103,7 +103,7 @@ export class ActualPaymentService {
       });
     }
     const reason = dto.reason.trim();
-    if (!reason) {
+    if (!reason || reason.length > 500) {
       throw new UnprocessableEntityException({
         code: "PAYMENT_ADJUSTMENT_REASON_REQUIRED",
         field: "reason",
@@ -128,11 +128,17 @@ export class ActualPaymentService {
       entityType: "account_adjustment",
       entityId: adjustmentId,
       metadata: normalizedPayload,
+      reason: "payment_adjustment",
+      reasonText: reason,
     };
     const result =
       await this.integrity.executeVersionedMutation<PaymentMutationResult>({
         actorKey: actor.userId,
         actorUserId: actor.userId,
+        authorization: {
+          actor,
+          capabilityKey: "commerce.client_finance.write",
+        },
         operation: "crm.payment-adjustment.record",
         idempotencyKey: metadata.idempotencyKey,
         requestId: metadata.requestId,
@@ -149,7 +155,13 @@ export class ActualPaymentService {
           },
         },
         mutate: async (client, nextVersion) => {
-          if (!(await this.repository.lockStudent(client, studentId))) {
+          if (
+            (await this.repository.lockPurchaseStudents(
+              client,
+              actor,
+              [studentId],
+            )).length !== 1
+          ) {
             throw new NotFoundException("Ученик не найден.");
           }
           const source =

@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { PoolClient } from "pg";
 import { ActorContext } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
@@ -223,6 +223,19 @@ export class SubscriptionIssueRepository {
       unrestricted ? [ids] : [ids, actor.userId],
     );
     return result.rows;
+  }
+
+  async assertStudentsInScope(
+    actor: ActorContext,
+    studentIds: readonly string[],
+  ): Promise<void> {
+    const expected = new Set(studentIds).size;
+    const actual = await this.database.transaction((client) =>
+      this.lockPurchaseStudents(client, actor, studentIds),
+    );
+    if (actual.length !== expected) {
+      throw new NotFoundException("Клиент не найден.");
+    }
   }
 
   async readAccountBalance(

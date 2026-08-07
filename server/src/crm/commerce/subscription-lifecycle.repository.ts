@@ -761,24 +761,6 @@ export class SubscriptionLifecycleRepository {
     );
   }
 
-  async lockCancellationStudents(
-    client: PoolClient,
-    studentIds: string[],
-  ): Promise<number> {
-    const result = await client.query(
-      `
-        select id
-        from app.students
-        where id = any($1::uuid[])
-          and deleted_at is null
-        order by id
-        for update
-      `,
-      [[...new Set(studentIds)].sort()],
-    );
-    return result.rowCount ?? 0;
-  }
-
   async lockCancellationInstallments(
     client: PoolClient,
     issuedSubscriptionId: string,

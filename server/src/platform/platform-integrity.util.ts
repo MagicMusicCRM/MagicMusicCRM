@@ -3,6 +3,8 @@ import { redactSensitive } from "../common/logging/redact.util";
 
 const privateReferenceKeyPattern =
   /(amount|price|balance|revenue|expense|salary|rate|currency|phone|e-?mail|address|name|comment|body|message|note|description|text|content|passport|birth|\bdob\b|\bip\b|user[_-]?agent)/i;
+const secretReferenceKeyPattern =
+  /(authorization|cookie|password|token|secret|otp|api[_-]?key|refresh|access(?!version)|private[_-]?url|signed[_-]?url)/i;
 
 const safeOutboxKeys = new Set([
   "accessVersion",
@@ -55,13 +57,15 @@ function maskPrivateReferenceFields(value: unknown): unknown {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
         key,
-        privateReferenceKeyPattern.test(key)
-          ? "[PRIVATE]"
-          : maskPrivateReferenceFields(entry),
+        secretReferenceKeyPattern.test(key)
+          ? "[REDACTED]"
+          : privateReferenceKeyPattern.test(key)
+            ? "[PRIVATE]"
+            : maskPrivateReferenceFields(entry),
       ]),
     );
   }
-  return value;
+  return redactSensitive(value);
 }
 
 export function fingerprintPayload(payload: unknown): string {
@@ -75,7 +79,7 @@ export function fingerprintPayload(payload: unknown): string {
 export function safeReference<T extends Record<string, unknown>>(
   value: T,
 ): T {
-  return maskPrivateReferenceFields(redactSensitive(value)) as T;
+  return maskPrivateReferenceFields(value) as T;
 }
 
 export function safeOutboxPayload(
@@ -96,6 +100,17 @@ export function safeAuditReason(reason: string | undefined): string | null {
     throw new TypeError("Audit reason must be a non-sensitive reason code.");
   }
   return reason;
+}
+
+export function safeAuditReasonText(
+  reasonText: string | undefined,
+): string | null {
+  if (reasonText === undefined) return null;
+  const value = reasonText.trim();
+  if (!value || value.length > 500 || value.includes("\0")) {
+    throw new TypeError("Audit reason text must contain 1..500 safe characters.");
+  }
+  return value;
 }
 
 export function safeFailureName(error: unknown): string {
