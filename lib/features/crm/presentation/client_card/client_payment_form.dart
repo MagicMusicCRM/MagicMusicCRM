@@ -528,6 +528,20 @@ String clientPaymentStatusLabel(Object? raw) => switch (raw?.toString()) {
   _ => 'Статус не указан',
 };
 
+Future<void> _popPaymentSheet<T>(BuildContext context, T result) async {
+  FocusManager.instance.primaryFocus?.unfocus();
+  for (
+    var frame = 0;
+    frame < 30 &&
+        context.mounted &&
+        MediaQuery.viewInsetsOf(context).bottom > 0;
+    frame++
+  ) {
+    await Future<void>.delayed(const Duration(milliseconds: 16));
+  }
+  if (context.mounted) Navigator.pop(context, result);
+}
+
 Future<bool?> showClientPaymentTransitionSheet(
   BuildContext context, {
   required CommerceMovement payment,
@@ -631,7 +645,7 @@ class _ClientPaymentTransitionFormState
         ),
       );
       if (mounted) {
-        Navigator.pop(context, true);
+        await _popPaymentSheet(context, true);
       }
     } catch (error) {
       if (mounted) {
@@ -723,7 +737,11 @@ class _ClientPaymentTransitionFormState
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: _busy ? null : () => Navigator.pop(context, false),
+                  onPressed: _busy
+                      ? null
+                      : () async {
+                          await _popPaymentSheet(context, false);
+                        },
                   child: const Text('Отмена'),
                 ),
               ),
@@ -805,7 +823,7 @@ class _ClientPaymentReversalFormState
         ),
       );
       if (mounted) {
-        Navigator.pop(context, true);
+        await _popPaymentSheet(context, true);
       }
     } catch (error) {
       if (mounted) {
@@ -860,7 +878,11 @@ class _ClientPaymentReversalFormState
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: _busy ? null : () => Navigator.pop(context, false),
+                  onPressed: _busy
+                      ? null
+                      : () async {
+                          await _popPaymentSheet(context, false);
+                        },
                   child: const Text('Отмена'),
                 ),
               ),

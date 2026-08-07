@@ -665,16 +665,20 @@ class _ClientCardState extends ConsumerState<ClientCard>
       },
       child: widget.routed
           ? card
-          : Dialog(
-              backgroundColor: cs.surface,
-              clipBehavior: Clip.antiAlias,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppRadius.card),
-                side: BorderSide(
-                  color: cs.outlineVariant.withValues(alpha: 0.5),
+          : MediaQuery.removeViewInsets(
+              context: context,
+              removeBottom: true,
+              child: Dialog(
+                backgroundColor: cs.surface,
+                clipBehavior: Clip.antiAlias,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.card),
+                  side: BorderSide(
+                    color: cs.outlineVariant.withValues(alpha: 0.5),
+                  ),
                 ),
+                child: card,
               ),
-              child: card,
             ),
     );
   }

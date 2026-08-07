@@ -259,8 +259,11 @@ void main() {
     expect(reversal.data, containsPair('reason', 'Создано по ошибке'));
 
     scroll.position.jumpTo(scroll.position.maxScrollExtent);
-    await tester.pump();
-    await tester.tap(find.text('Техническая история'));
+    await tester.pumpAndSettle();
+    final technicalHistory = find.text('Техническая история');
+    await tester.ensureVisible(technicalHistory);
+    await tester.pumpAndSettle();
+    await tester.tap(technicalHistory);
     await tester.pumpAndSettle();
     _expectNoFlutterException(tester, 'после раскрытия техистории');
     expect(find.textContaining('Ошибочная запись'), findsOneWidget);
@@ -329,5 +332,7 @@ String _trace(FakeCardApiClient api) =>
     ({...api.getRequests, ...api.requests}.toList()..sort()).join(',');
 
 void _expectNoFlutterException(WidgetTester tester, String step) {
-  expect(tester.takeException(), isNull, reason: step);
+  final error = tester.takeException();
+  if (error is FlutterError) debugPrint(error.toStringDeep());
+  expect(error, isNull, reason: step);
 }
