@@ -372,6 +372,18 @@ unknown/unowned=0, server diff empty
 (`docs/audits/v7-int-s4-client-workspace.md`). Следующий шаг `/forge`:
 `T6.1.1`._
 
+### 🌊 Wave v7/S8 — Final Candidate ⛔
+
+_`T6.1.1` выполнена до единственного внешнего security blocker: backend 155/155
+suites и 1227/1227 tests, Actor Matrix/leak 9/9, Flutter analyze и 642/642,
+двойные inventory/preflight/reconcile с unowned=0/drift=0, current tracked
+Gitleaks=0, npm/Trivy/Semgrep Critical/High=0. Windows и Android прошли
+real-account relogin и v7 story diagnostics. History-aware scan доказал, что один
+текущий HolliHop credential присутствует в 23 находках трёх старых коммитов.
+Версия не повышена, release artifacts не выпущены, задачи не закрыты. Требуются
+ротация ключа у провайдера и явное разрешение на coordinated history rewrite;
+затем gate запускается заново (`docs/audits/v7-t6-regression-security-blocked.md`)._
+
 ### 🌊 Wave v6/S0 — Evidence & UX Foundation ✅
 _Owner подтвердил полное выполнение v6. `V6-001..005` и `INT-S0` закрыты 2026-08-04: воспроизводимый generator покрывает 21 GoRouter route, 248/259 production-reachable Dart files, 256/256 service calls, route/surface/navigation/input/back ownership с unowned=0; v4 inventory обновлён и снова проходит stale-check. Baseline: Flutter analyze clean и 486/486 tests, backend typecheck/build clean, 150/150 suites и 1160/1160 tests, actor/payload 9/9, targeted workflow contracts 68/68 (`docs/audits/v6-s0-baseline.md`). Следующий шаг `/forge`: `V6-101` canonical location adapter._
 
