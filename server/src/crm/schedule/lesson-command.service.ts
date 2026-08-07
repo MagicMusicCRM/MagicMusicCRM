@@ -22,6 +22,7 @@ import {
 } from "./lesson-required-field.validator";
 import { ScheduleConstraintEngine } from "./constraint-engine.service";
 import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
+import { assertLessonPatchUsesTransition } from "./lesson-protected-patch.guard";
 
 export interface LessonCommandMetadata {
   idempotencyKey: string;
@@ -179,6 +180,7 @@ export class LessonCommandService {
   ) {
     this.policy.assertCanWriteCrm(actor);
     this.assertMetadata(metadata);
+    assertLessonPatchUsesTransition(dto);
     if (!dto.expectedVersion) {
       throw new UnprocessableEntityException({
         code: "EXPECTED_VERSION_REQUIRED",
@@ -186,9 +188,6 @@ export class LessonCommandService {
         fields: ["expectedVersion"],
       });
     }
-    const before = await this.loadExisting(lessonId);
-    const preview = this.validator.update(dto, before);
-    await this.assertClientActive(actor, preview);
     const mutation = await this.platform.executeVersionedMutation({
       actorKey: `user:${actor.userId}`,
       actorUserId: actor.userId,
@@ -218,41 +217,22 @@ export class LessonCommandService {
             currentVersion: current.version,
           });
         }
-        const draft = this.validator.update(dto, current);
-        await this.acquireLocks(client, draft, current);
-        await this.assertConstraints(draft, client, lessonId);
-        await this.assertLeadNotConverted(client, draft);
         const updated = await client.query<{
           id: string;
           version: number | string;
         }>(
           `
             update app.lessons
-            set teacher_id = $2,
-                branch_id = $3,
-                room_id = $4,
-                original_scheduled_at = case
-                  when $5::timestamptz <> scheduled_at and series_id is not null
-                  then coalesce(original_scheduled_at, scheduled_at)
-                  else original_scheduled_at
-                end,
-                scheduled_at = $5,
-                duration_minutes = $6,
-                notes = $7,
+            set notes = $2,
                 updated_at = now()
             where id = $1
               and deleted_at is null
-              and version = $8
+              and version = $3
             returning id, version
           `,
           [
             lessonId,
-            draft.teacherId,
-            draft.branchId,
-            draft.roomId,
-            draft.scheduledAt,
-            draft.durationMinutes,
-            draft.notes,
+            dto.notes!.trim() || null,
             dto.expectedVersion,
           ],
         );
@@ -268,12 +248,6 @@ export class LessonCommandService {
             expectedVersion: nextVersion,
             currentVersion: Number(updated.rows[0].version),
           });
-        }
-        if (dto.scheduledAt !== undefined) {
-          await client.query(
-            "delete from app.lesson_reminders where lesson_id = $1",
-            [lessonId],
-          );
         }
         return { lessonId, version: nextVersion };
       },

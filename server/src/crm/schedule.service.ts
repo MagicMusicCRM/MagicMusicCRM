@@ -27,6 +27,7 @@ import {
 import { BulkLessonRateDto } from "./dto/bulk-lesson-rate.dto";
 import { UpsertLessonDto } from "./dto/upsert-lesson.dto";
 import { LessonRow, formatLessonTimeMoscow, toLessonDto } from "./crm-mappers";
+import { assertLessonPatchUsesTransition } from "./schedule/lesson-protected-patch.guard";
 
 interface ScheduleLessonRow extends LessonRow {
   conflict_types: string[] | null;
@@ -1770,162 +1771,54 @@ export class ScheduleService {
         fields: ["status"],
       });
     }
-    if (dto.scheduledAt) {
-      this.assertScheduledAtWithinBookingWindow(dto.scheduledAt);
+    if (
+      actor.role === "teacher" &&
+      Object.keys(dto).some(
+        (field) => !["expectedVersion", "notes"].includes(field),
+      )
+    ) {
+      this.policy.assertCanWriteCrm(actor);
     }
-    const replacesSubject = this.assertUnambiguousLessonSubject(dto, false);
-    // Snapshot the pre-update state so we can tell a genuine RESCHEDULE
-    // (time / room / teacher change) from an ordinary save (e.g. notes or
-    // status edit). The UPDATE ... RETURNING below cannot surface the OLD
-    // values, so we read them first. Also resolves the currently-assigned
-    // teacher's user_id for the reschedule notification (KVA-158).
-    const { previous, result } = await this.database.transaction(
-      async (client) => {
-        if (replacesSubject && dto.leadId) {
-          const conversion = await client.query<{ converted: boolean }>(
-            `
-              with locked_lead as (
-                select pg_advisory_xact_lock(
-                  hashtextextended($1::uuid::text, 0)
-                )
-              )
-              select exists (
-                select 1
-                from app.students student
-                where student.lead_id = $1
-                  and student.deleted_at is null
-              ) as converted
-              from locked_lead
-            `,
-            [dto.leadId],
-          );
-          if (conversion.rows[0]?.converted) {
-            throw new ConflictException(
-              "Лид уже стал учеником; назначьте обычное занятие ученику.",
-            );
-          }
-        }
-        const before = await client.query<RescheduleSnapshotRow>(
-          `
-        select l.student_id, l.group_id, l.lead_id, l.teacher_id,
-          l.room_id, l.scheduled_at, l.duration_minutes, l.is_trial,
-          tp.user_id as teacher_user_id
-        from app.lessons l
-        left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
-        left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
-        where l.id = $1 and l.deleted_at is null
-        limit 1
-        for update of l
-      `,
-          [lessonId],
-        );
-        const previous = before.rows[0] ?? null;
-        await this.assertCanUpdateLesson(actor, lessonId, dto, previous);
-        const effectiveLeadId = replacesSubject
-          ? (dto.leadId ?? null)
-          : previous?.lead_id;
-        const effectiveIsTrial = dto.isTrial ?? previous?.is_trial;
-        if (previous) {
-          this.assertLeadLessonIsTrial(effectiveLeadId, effectiveIsTrial);
-        }
-        // Contract 2: 409 on a busy teacher/room — but ONLY when the PATCH
-        // actually touches scheduling. Notes-only saves carry none of these fields
-        // and must stay 409-free.
-        const touchesScheduling =
-          dto.scheduledAt !== undefined ||
-          dto.teacherId !== undefined ||
-          dto.roomId !== undefined ||
-          dto.durationMinutes !== undefined ||
-          replacesSubject;
-        if (previous && touchesScheduling) {
-          const effectiveTeacherId = dto.teacherId ?? previous.teacher_id;
-          const effectiveRoomId = dto.roomId ?? previous.room_id;
-          await this.acquireScheduleLockKeys(
-            client as unknown as ScheduleQueryExecutor,
-            [
-              previous.teacher_id ? `teacher:${previous.teacher_id}` : null,
-              previous.room_id ? `room:${previous.room_id}` : null,
-              effectiveTeacherId ? `teacher:${effectiveTeacherId}` : null,
-              effectiveRoomId ? `room:${effectiveRoomId}` : null,
-            ],
-          );
-          await this.assertNoScheduleConflicts(
-            {
-              teacherId: effectiveTeacherId,
-              roomId: effectiveRoomId,
-              startsAt: dto.scheduledAt ?? previous.scheduled_at ?? new Date(),
-              durationMinutes:
-                dto.durationMinutes ?? Number(previous.duration_minutes ?? 60),
-              excludeLessonId: lessonId,
-              groupId: replacesSubject
-                ? (dto.groupId ?? null)
-                : (previous.group_id ?? null),
-              force: dto.force,
-            },
-            client as unknown as ScheduleQueryExecutor,
-          );
-        }
-        const result = await client.query<LessonRow>(
-          `
-        update app.lessons
-        set student_id = case when $13::boolean then $2::uuid else student_id end,
-          group_id = case when $13::boolean then $3::uuid else group_id end,
-          lead_id = case when $13::boolean then $4::uuid else lead_id end,
-          teacher_id = coalesce($5, teacher_id),
-          branch_id = coalesce($6, branch_id),
-          room_id = coalesce($7, room_id),
-          -- KVA-236: первый перенос занятия серии запоминает исходное время
-          -- («перенесено с …»); SET читает СТАРОЕ значение scheduled_at.
-          original_scheduled_at = case
-            when $8::timestamptz is not null
-              and $8::timestamptz <> scheduled_at
-              and series_id is not null
-            then coalesce(original_scheduled_at, scheduled_at)
-            else original_scheduled_at
-          end,
-          scheduled_at = coalesce($8::timestamptz, scheduled_at),
-          duration_minutes = coalesce($9, duration_minutes),
-          is_trial = coalesce($10, is_trial),
-          notes = coalesce($11, notes),
-          teacher_rate = coalesce($12::numeric, teacher_rate),
-          updated_at = now()
-        where id = $1 and deleted_at is null
-        returning id, student_id, group_id, lead_id, teacher_id, branch_id, room_id, scheduled_at, duration_minutes,
-          status, is_trial, notes, teacher_rate, null::uuid as student_user_id, null::uuid as teacher_user_id,
-          null::text as student_name, null::text as lead_name, null::text as teacher_name, null::text as branch_name,
-          null::text as room_name, null::text as group_name, null::numeric as group_price_per_lesson
-      `,
-          [
-            lessonId,
-            dto.studentId ?? null,
-            dto.groupId ?? null,
-            dto.leadId ?? null,
-            dto.teacherId ?? null,
-            dto.branchId ?? null,
-            dto.roomId ?? null,
-            dto.scheduledAt,
-            dto.durationMinutes ?? null,
-            dto.isTrial ?? null,
-            dto.notes?.trim() || null,
-            dto.teacherRate ?? null,
-            replacesSubject,
-          ],
-        );
-        return { previous, result };
-      },
-    );
+    assertLessonPatchUsesTransition(dto);
+    const result = await this.database.transaction(async (client) => {
+      const before = await client.query<RescheduleSnapshotRow>(
+        `
+          select l.student_id, l.group_id, l.lead_id, l.teacher_id,
+            l.room_id, l.scheduled_at, l.duration_minutes, l.is_trial,
+            tp.user_id as teacher_user_id
+          from app.lessons l
+          left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
+          left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
+          where l.id = $1 and l.deleted_at is null
+          limit 1
+          for update of l
+        `,
+        [lessonId],
+      );
+      await this.assertCanUpdateLesson(
+        actor,
+        lessonId,
+        dto,
+        before.rows[0] ?? null,
+      );
+      return client.query<LessonRow>(
+        `
+          update app.lessons
+          set notes = $2, updated_at = now()
+          where id = $1 and deleted_at is null
+          returning id, student_id, group_id, lead_id, teacher_id, branch_id,
+            room_id, scheduled_at, duration_minutes, status, is_trial, notes,
+            teacher_rate, null::uuid as student_user_id,
+            null::uuid as teacher_user_id, null::text as student_name,
+            null::text as lead_name, null::text as teacher_name,
+            null::text as branch_name, null::text as room_name,
+            null::text as group_name, null::numeric as group_price_per_lesson
+        `,
+        [lessonId, dto.notes!.trim() || null],
+      );
+    });
     const lesson = result.rows[0];
     if (!lesson) throw new NotFoundException("Урок не найден.");
-    // If the lesson was rescheduled, clear its reminder markers so the
-    // notification scheduler re-issues -24h/-1h reminders for the NEW time
-    // instead of staying silent (markers are keyed by lesson + kind only).
-    if (dto.scheduledAt) {
-      await this.database.query(
-        "delete from app.lesson_reminders where lesson_id = $1",
-        [lesson.id],
-      );
-    }
-    await this.notifyTeacherOfReschedule(lessonId, previous, lesson);
     await this.recordAuditSafe({
       actor,
       action: "crm.lesson_updated",
@@ -1941,95 +1834,6 @@ export class ScheduleService {
       affectedUserIds,
     });
     return toLessonDto(lesson);
-  }
-
-  // KVA-158: when a lesson is actually rescheduled — its time, room or
-  // assigned teacher changes — push an in-app + FCM notification to the
-  // ASSIGNED teacher. We deliberately do NOT fire on notes-only saves so
-  // teachers are not spammed.
-  private async notifyTeacherOfReschedule(
-    lessonId: string,
-    previous: RescheduleSnapshotRow | null,
-    lesson: LessonRow,
-  ): Promise<void> {
-    if (!previous) return;
-    const sameInstant = (a: Date | string | null, b: Date | string | null) => {
-      if (a === null || b === null) return a === b;
-      return new Date(a).getTime() === new Date(b).getTime();
-    };
-    const timeChanged = !sameInstant(
-      previous.scheduled_at,
-      lesson.scheduled_at,
-    );
-    const roomChanged = previous.room_id !== lesson.room_id;
-    const teacherChanged = previous.teacher_id !== lesson.teacher_id;
-    if (!timeChanged && !roomChanged && !teacherChanged) return;
-
-    // Notify the teacher who now owns the slot. If the teacher was swapped we
-    // resolve the NEW teacher's user_id; otherwise reuse the snapshot value.
-    const oldTeacherUserId = previous.teacher_user_id;
-    let newTeacherUserId = oldTeacherUserId;
-    if (teacherChanged) {
-      newTeacherUserId = lesson.teacher_id
-        ? await this.resolveTeacherUserId(lesson.teacher_id)
-        : null;
-    }
-
-    const whenLocal = formatLessonTimeMoscow(lesson.scheduled_at);
-    const reasons: string[] = [];
-    if (timeChanged) reasons.push("время");
-    if (roomChanged) reasons.push("аудитория");
-    if (teacherChanged) reasons.push("назначение");
-    const body =
-      `Изменено: ${reasons.join(", ")}. ` +
-      `Новое время — ${whenLocal} (по Москве).`;
-
-    try {
-      if (newTeacherUserId) {
-        await this.notifications.notifyUser({
-          userId: newTeacherUserId,
-          title: "Перенос занятия",
-          body,
-          data: { type: "lesson_rescheduled", lessonId },
-          channels: ["push", "in_app"],
-        });
-      }
-      // On a teacher swap, also notify the REMOVED teacher so they know they
-      // are no longer assigned. Guard against null and against old==new (e.g.
-      // same person re-assigned: time-only reschedule leaves teacher unchanged).
-      if (
-        teacherChanged &&
-        oldTeacherUserId &&
-        oldTeacherUserId !== newTeacherUserId
-      ) {
-        const oldWhenLocal = formatLessonTimeMoscow(previous.scheduled_at);
-        await this.notifications.notifyUser({
-          userId: oldTeacherUserId,
-          title: "Занятие переназначено",
-          body: `Вы откреплены от занятия ${oldWhenLocal} (по Москве) (передано другому преподавателю).`,
-          data: { type: "lesson_reassigned", lessonId },
-          channels: ["push", "in_app"],
-        });
-      }
-    } catch {
-      // A notification failure must never block the reschedule itself.
-    }
-  }
-
-  private async resolveTeacherUserId(
-    teacherId: string,
-  ): Promise<string | null> {
-    const result = await this.database.query<{ user_id: string | null }>(
-      `
-        select tp.user_id
-        from app.teachers t
-        left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
-        where t.id = $1 and t.deleted_at is null
-        limit 1
-      `,
-      [teacherId],
-    );
-    return result.rows[0]?.user_id ?? null;
   }
 
   /**

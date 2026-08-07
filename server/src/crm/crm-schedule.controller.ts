@@ -30,6 +30,8 @@ import {
 import { UpsertLessonDto } from "./dto/upsert-lesson.dto";
 import { LessonConstraintPreviewDto } from "./dto/lesson-constraint-preview.dto";
 import {
+  LessonBulkTransitionCommandDto,
+  LessonBulkTransitionPreviewDto,
   LessonCancelCommandDto,
   LessonCancelPreviewDto,
   LessonRescheduleCommandDto,
@@ -41,6 +43,7 @@ import { LessonCommandService } from "./schedule/lesson-command.service";
 import { LessonSeriesCommandService } from "./schedule/lesson-series-command.service";
 import { LessonTransitionService } from "./schedule/lesson-transition.service";
 import { V4DomainFlagsService } from "../platform/v4-domain-flags";
+import { assertLessonPatchUsesTransition } from "./schedule/lesson-protected-patch.guard";
 
 @UseGuards(JwtAuthGuard)
 @Controller("crm")
@@ -74,6 +77,7 @@ export class CrmScheduleController {
     @Headers("x-request-id") requestId: string | undefined,
     @Body() dto: CreateScheduleSeriesDto,
   ) {
+    assertLessonPatchUsesTransition(dto);
     const metadata = {
       idempotencyKey: idempotencyKey ?? "",
       requestId: requestId ?? "",
@@ -183,6 +187,29 @@ export class CrmScheduleController {
     return this.v4DomainFlags.get("schedule").effectivePath === "v4"
       ? this.lessonCommands.update(actor, id, dto, metadata)
       : this.schedule.updateLesson(actor, id, dto);
+  }
+
+  @Post("lessons/transitions/bulk/preview")
+  previewBulkLessonTransitions(
+    @CurrentActor() actor: ActorContext,
+    @Body() dto: LessonBulkTransitionPreviewDto,
+  ) {
+    this.v4DomainFlags.assertEnabled("schedule");
+    return this.lessonTransitions.previewBulk(actor, dto);
+  }
+
+  @Post("lessons/transitions/bulk")
+  bulkLessonTransitions(
+    @CurrentActor() actor: ActorContext,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+    @Body() dto: LessonBulkTransitionCommandDto,
+  ) {
+    this.v4DomainFlags.assertEnabled("schedule");
+    return this.lessonTransitions.bulk(actor, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
   }
 
   @Post("lessons/:id/reschedule/preview")

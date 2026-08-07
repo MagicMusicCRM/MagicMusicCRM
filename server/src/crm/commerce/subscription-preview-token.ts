@@ -14,7 +14,7 @@ const LESSON_TRANSITION_TOKEN_DOMAIN =
 
 export interface LessonTransitionPreviewTokenPayload {
   kind: "lesson.transition";
-  operation: "reschedule" | "cancel" | "settle";
+  operation: "reschedule" | "cancel" | "settle" | "bulk";
   actorUserId: string;
   lessonId: string;
   expectedVersion: number;
@@ -613,7 +613,9 @@ function assertLessonTransitionPayload(
     Object.keys(payload).length !== exactKeys.length ||
     exactKeys.some((key) => !(key in payload)) ||
     payload.kind !== "lesson.transition" ||
-    !["reschedule", "cancel", "settle"].includes(payload.operation as string) ||
+    !["reschedule", "cancel", "settle", "bulk"].includes(
+      payload.operation as string,
+    ) ||
     !isUuid(payload.actorUserId) ||
     !isUuid(payload.lessonId) ||
     !isPositiveInteger(payload.expectedVersion) ||

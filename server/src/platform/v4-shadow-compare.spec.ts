@@ -16,7 +16,7 @@ describe("T8.3.3 shadow compare", () => {
     const report = runShadowCompare(coverage);
 
     expect(report.summary).toMatchObject({
-      accessDecisions: 1_680,
+      accessDecisions: 1_740,
       scheduleDecisions: 2_000,
       unexplainedDifferences: 0,
     });

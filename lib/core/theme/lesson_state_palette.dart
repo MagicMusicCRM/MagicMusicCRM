@@ -43,6 +43,7 @@ LessonStateProjection lessonStateProjection({
       ? LessonStateToken.success
       : LessonStateToken.neutral;
   final label = switch (state) {
+    'settlement_pending' => 'Ожидает расчёта',
     'successfully_completed' => 'Завершено',
     'rescheduled' => 'Перенесено',
     'cancelled' => 'Отменено',
@@ -61,6 +62,7 @@ String _normalizeState(String? lifecycleState, String? legacyStatus) {
   final state = lifecycleState?.trim();
   if (state != null && state.isNotEmpty) return state;
   return switch (legacyStatus?.trim()) {
+    'settlement_pending' => 'settlement_pending',
     'completed' => 'successfully_completed',
     'rescheduled' => 'rescheduled',
     'cancelled' => 'cancelled',

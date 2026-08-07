@@ -252,7 +252,7 @@ graph TD
   - **Зависимости**: T3.1.2, T1.1.1.
   - **Приоритет**: P0.
 
-- [ ] **T3.1.4** [REQ-SCHEDULE-101]: Закрыть worker, direct PATCH и bulk bypass
+- [x] **T3.1.4** [REQ-SCHEDULE-101]: Закрыть worker, direct PATCH и bulk bypass
   - **Описание**: Перевести completion worker в settlement_pending, запретить protected PATCH и добавить один atomic bulk transition с inventory ownership.
   - **Входные данные**: T3.1.3, [`schedule_v7.detail.md` §1/5/8](04_SYSTEM_DESIGN/schedule_v7.detail.md), T1.1.1.
   - **Выходные данные**: worker state, DTO guard, bulk API and no-bypass contract.

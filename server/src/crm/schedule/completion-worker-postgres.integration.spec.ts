@@ -5,10 +5,6 @@ import { DatabaseService } from "../../db/database.service";
 import { MigrationRunner } from "../../db/migration-runner";
 import { PlatformIntegrityRepository } from "../../platform/platform-integrity.repository";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
-import { LessonSettlementRepository } from "../commerce/lesson-settlement.repository";
-import { LessonSettlementService } from "../commerce/lesson-settlement.service";
-import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
-import { RealtimeBus } from "../../realtime/realtime-bus";
 import {
   computeCompletionBackoffSeconds,
   LessonCompletionWorkerRepository,
@@ -53,26 +49,12 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
       getOrThrow: () => databaseUrl,
     } as unknown as ConfigService);
     repository = new LessonCompletionWorkerRepository(database);
-    const settlement = new LessonSettlementService(
-      database,
-      new LessonSettlementRepository(),
-    );
-    const reservations = new SubscriptionReservationService(
-      database,
-      {
-        emitCrmChanged: jest.fn(),
-        emitFinanceChanged: jest.fn(),
-      } as unknown as RealtimeBus,
-    );
     completion = new LessonCompletionService(
       new PlatformIntegrityService(
         database,
         new PlatformIntegrityRepository(),
       ),
       repository,
-      new LessonLifecycleRepository(database),
-      settlement,
-      reservations,
     );
   });
 
@@ -81,7 +63,7 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
     if (pool) await pool.end();
   });
 
-  it("lets two workers create one terminal state, fact pair, audit and outbox within 60 seconds", async () => {
+  it("lets two workers queue one pending settlement without finance facts within 60 seconds", async () => {
     const fixture = await createFixture(pool, database, "valid");
     try {
       const left = new LessonCompletionWorker(repository, completion);
@@ -95,17 +77,17 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
 
       const evidence = await loadEvidence(pool, fixture.lessonId);
       expect(evidence.lesson).toMatchObject({
-        lifecycle_state: "successfully_completed",
-        status: "completed",
+        lifecycle_state: "settlement_pending",
+        status: "settlement_pending",
       });
       expect(Number(evidence.lesson.version)).toBe(2);
       expect(Number(evidence.lesson.completion_latency_seconds)).toBeLessThanOrEqual(
         60,
       );
       expect(evidence.counts).toEqual({
-        transitions: 1,
-        client_facts: 1,
-        teacher_facts: 1,
+        transitions: 0,
+        client_facts: 0,
+        teacher_facts: 0,
         audits: 1,
         outbox: 1,
         idempotency: 1,
@@ -113,18 +95,11 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
       expect(evidence.work).toMatchObject({
         state: "completed",
         attempts: 1,
-        terminal_state: "successfully_completed",
+        terminal_state: "settlement_pending",
       });
       expect(evidence.work.claimed_by).toBeNull();
-      expect(evidence.transition.worker_id).toMatch(
-        /^completion-(left|right)$/,
-      );
-      expect(evidence.transition.client_financial_fact_id).toBe(
-        evidence.work.client_financial_fact_id,
-      );
-      expect(evidence.transition.teacher_financial_fact_id).toBe(
-        evidence.work.teacher_financial_fact_id,
-      );
+      expect(evidence.work.client_financial_fact_id).toBeNull();
+      expect(evidence.work.teacher_financial_fact_id).toBeNull();
 
       const replay = await left.runOnce({
         workerId: "completion-after-terminal",
@@ -162,9 +137,9 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
 
       const evidence = await loadEvidence(pool, fixture.lessonId);
       expect(evidence.counts).toEqual({
-        transitions: 1,
-        client_facts: 1,
-        teacher_facts: 1,
+        transitions: 0,
+        client_facts: 0,
+        teacher_facts: 0,
         audits: 1,
         outbox: 1,
         idempotency: 1,
@@ -215,9 +190,9 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
         attempts: 2,
       });
       expect(evidence.counts).toEqual({
-        transitions: 1,
-        client_facts: 1,
-        teacher_facts: 1,
+        transitions: 0,
+        client_facts: 0,
+        teacher_facts: 0,
         audits: 1,
         outbox: 1,
         idempotency: 1,
@@ -228,9 +203,16 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
   });
 
   it("retries with bounded backoff and leaves poison work visible", async () => {
-    const fixture = await createFixture(pool, database, "legacy-incomplete");
+    const fixture = await createFixture(pool, database, "valid");
     try {
-      const worker = new LessonCompletionWorker(repository, completion);
+      const failingCompletion = {
+        complete: async () => {
+          const error = new Error("injected completion failure");
+          error.name = "ConflictException";
+          throw error;
+        },
+      } as unknown as LessonCompletionService;
+      const worker = new LessonCompletionWorker(repository, failingCompletion);
       const first = await worker.runOnce({
         workerId: "completion-poison",
         maxAttempts: 2,
@@ -508,7 +490,7 @@ async function loadEvidence(pool: Pool, lessonId: string) {
         (
           select count(*)::int
           from app.audit_events
-          where action = 'crm.lesson_completed'
+          where action = 'crm.lesson_settlement_queued'
             and entity_id = $1::text
         ) as audits,
         (
@@ -522,8 +504,8 @@ async function loadEvidence(pool: Pool, lessonId: string) {
           select count(*)::int
           from app.idempotency_records
           where actor_key = 'worker:lesson-completion'
-            and operation = 'schedule.lesson.complete'
-            and idempotency_key = 'lesson-completion:' || $1::text
+            and operation = 'schedule.lesson.queue-settlement'
+            and idempotency_key = 'lesson-settlement-pending:' || $1::text
         ) as idempotency
     `,
     [lessonId],
@@ -568,7 +550,7 @@ async function loadEvidence(pool: Pool, lessonId: string) {
     lesson: lesson.rows[0]!,
     counts: counts.rows[0]!,
     work: work.rows[0]!,
-    transition: transition.rows[0]!,
+    transition: transition.rows[0] ?? null,
   };
 }
 
@@ -584,8 +566,8 @@ async function cleanupFixture(
       `
         delete from app.idempotency_records
         where actor_key = 'worker:lesson-completion'
-          and operation = 'schedule.lesson.complete'
-          and idempotency_key = 'lesson-completion:' || $1::text
+          and operation = 'schedule.lesson.queue-settlement'
+          and idempotency_key = 'lesson-settlement-pending:' || $1::text
       `,
       [fixture.lessonId],
     );
@@ -599,7 +581,8 @@ async function cleanupFixture(
     await client.query(
       `
         delete from app.audit_events
-        where action = 'crm.lesson_completed' and entity_id = $1::text
+        where action = 'crm.lesson_settlement_queued'
+          and entity_id = $1::text
       `,
       [fixture.lessonId],
     );

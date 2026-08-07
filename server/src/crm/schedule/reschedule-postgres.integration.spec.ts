@@ -243,11 +243,28 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         settlementTypeKey: "lesson",
         teacherCompensationRuleKey: "standard",
       };
+      await pool.query(
+        "update app.lessons set lifecycle_state = 'settlement_pending' where id = $1",
+        [fixture.settleId],
+      );
+      const beforeSettle = await pool.query<{ count: number }>(
+        `
+          select (
+            select count(*)::int from app.lesson_client_charge_facts
+            where lesson_id = $1
+          ) + (
+            select count(*)::int from app.lesson_teacher_compensation_facts
+            where lesson_id = $1
+          ) as count
+        `,
+        [fixture.settleId],
+      );
+      expect(beforeSettle.rows[0]!.count).toBe(0);
       const settlePreview = await service.previewSettle(
         actor,
         fixture.settleId,
         {
-          expectedVersion: 1,
+          expectedVersion: 2,
           reasonCode: "attendance.confirmed",
           financialDecision: settleDecision,
         },
@@ -256,7 +273,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         actor,
         fixture.settleId,
         {
-          expectedVersion: 1,
+          expectedVersion: 2,
           reasonCode: "attendance.confirmed",
           financialDecision: settleDecision,
           previewToken: settlePreview.previewToken!,
@@ -267,7 +284,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       expect(settled.source).toEqual({
         id: fixture.settleId,
         state: "successfully_completed",
-        version: 2,
+        version: 3,
       });
 
       const persisted = await pool.query<{
@@ -432,6 +449,129 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       });
     } finally {
       await cleanup(pool, fixture);
+    }
+  });
+
+  it("commits a signed bulk transition once and rolls the whole batch back on stale input", async () => {
+    const actorFor = (managerId: string) => ({
+      userId: managerId,
+      role: "manager" as const,
+    });
+    const decision = {
+      settlementTypeKey: "free_lesson",
+      teacherCompensationRuleKey: "none",
+    };
+    const lifecycle = new LessonLifecycleRepository(database);
+    const successFixture = await createFixture(pool, lifecycle);
+    try {
+      const actor = actorFor(successFixture.managerId);
+      const previewDto = {
+        reasonCode: "attendance.bulk",
+        reasonText: "Массовая проверка занятий",
+        items: [successFixture.cancelId, successFixture.settleId].map(
+          (lessonId) => ({
+            lessonId,
+            operation: "settle" as const,
+            expectedVersion: 1,
+            financialDecision: decision,
+          }),
+        ),
+      };
+      const preview = await service.previewBulk(actor, previewDto);
+      expect(preview).toMatchObject({
+        canConfirm: true,
+        confirmRequired: true,
+        items: [{ canConfirm: true }, { canConfirm: true }],
+      });
+      const command = {
+        ...previewDto,
+        previewToken: preview.previewToken!,
+        confirm: true as const,
+      };
+      const metadata = {
+        idempotencyKey: `bulk-success-${randomUUID()}`,
+        requestId: `bulk-success-${randomUUID()}`,
+      };
+      const committed = await service.bulk(actor, command, metadata);
+      expect(committed).toMatchObject({ replayed: false });
+      expect(committed.items).toHaveLength(2);
+      await expect(service.bulk(actor, command, metadata)).resolves.toMatchObject({
+        bulkId: committed.bulkId,
+        replayed: true,
+      });
+      const counts = await pool.query<{
+        completed: number;
+        transitions: number;
+        client_facts: number;
+        teacher_facts: number;
+      }>(
+        `
+          select
+            (select count(*)::int from app.lessons
+              where id = any($1::uuid[])
+                and lifecycle_state = 'successfully_completed') as completed,
+            (select count(*)::int from app.lesson_transitions
+              where lesson_id = any($1::uuid[])) as transitions,
+            (select count(*)::int from app.lesson_client_charge_facts
+              where lesson_id = any($1::uuid[])) as client_facts,
+            (select count(*)::int from app.lesson_teacher_compensation_facts
+              where lesson_id = any($1::uuid[])) as teacher_facts
+        `,
+        [[successFixture.cancelId, successFixture.settleId]],
+      );
+      expect(counts.rows[0]).toEqual({
+        completed: 2,
+        transitions: 2,
+        client_facts: 2,
+        teacher_facts: 2,
+      });
+    } finally {
+      await cleanup(pool, successFixture);
+    }
+
+    const rollbackFixture = await createFixture(pool, lifecycle);
+    try {
+      const actor = actorFor(rollbackFixture.managerId);
+      const ordered = [rollbackFixture.cancelId, rollbackFixture.settleId]
+        .sort();
+      const previewDto = {
+        reasonCode: "attendance.bulk",
+        reasonText: "Проверка полного отката",
+        items: ordered.map((lessonId) => ({
+          lessonId,
+          operation: "settle" as const,
+          expectedVersion: 1,
+          financialDecision: decision,
+        })),
+      };
+      const preview = await service.previewBulk(actor, previewDto);
+      await pool.query(
+        "update app.lessons set notes = 'stale' where id = $1",
+        [ordered[1]],
+      );
+      await expect(service.bulk(
+        actor,
+        {
+          ...previewDto,
+          previewToken: preview.previewToken!,
+          confirm: true,
+        },
+        {
+          idempotencyKey: `bulk-rollback-${randomUUID()}`,
+          requestId: `bulk-rollback-${randomUUID()}`,
+        },
+      )).rejects.toMatchObject({ status: 409 });
+      await expectSourceUnchanged(pool, ordered[0]!);
+      expect(await transitionCounts(pool, ordered[1]!)).toEqual({
+        lifecycle_state: "scheduled",
+        version: 2,
+        successors: 0,
+        transitions: 0,
+        client_facts: 0,
+        teacher_facts: 0,
+      });
+    } finally {
+      await cleanup(pool, rollbackFixture);
     }
   });
 });
@@ -632,23 +772,39 @@ async function cleanup(
     );
     await client.query(
       `delete from app.platform_outbox_events
-       where aggregate_type = 'schedule:lesson'
+       where (
+         aggregate_type = 'schedule:lesson'
          and aggregate_id in (
            select id::text from app.lessons where created_by = $1
-         )`,
+         )
+       ) or (
+         aggregate_type = 'schedule:lesson-bulk'
+         and aggregate_id in (
+           select entity_id from app.audit_events
+           where actor_user_id = $1 and entity_type = 'lesson_batch'
+         )
+       )`,
+      [fixture.managerId],
+    );
+    await client.query(
+      `delete from app.aggregate_versions
+       where (
+         aggregate_type = 'schedule:lesson'
+         and aggregate_id in (
+           select id::text from app.lessons where created_by = $1
+         )
+       ) or (
+         aggregate_type = 'schedule:lesson-bulk'
+         and aggregate_id in (
+           select entity_id from app.audit_events
+           where actor_user_id = $1 and entity_type = 'lesson_batch'
+         )
+       )`,
       [fixture.managerId],
     );
     await client.query("delete from app.audit_events where actor_user_id = $1", [
       fixture.managerId,
     ]);
-    await client.query(
-      `delete from app.aggregate_versions
-       where aggregate_type = 'schedule:lesson'
-         and aggregate_id in (
-           select id::text from app.lessons where created_by = $1
-         )`,
-      [fixture.managerId],
-    );
     for (const table of [
       "lesson_transitions",
       "lesson_reservations",

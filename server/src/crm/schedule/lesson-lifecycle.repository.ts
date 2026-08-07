@@ -4,6 +4,7 @@ import { DatabaseService } from "../../db/database.service";
 
 export type LessonLifecycleState =
   | "scheduled"
+  | "settlement_pending"
   | "successfully_completed"
   | "cancelled"
   | "rescheduled";
@@ -23,7 +24,8 @@ export interface LessonSnapshotInput {
 
 export interface LessonTransitionInput {
   lessonId: string;
-  toState: Exclude<LessonLifecycleState, "scheduled">;
+  fromState?: "scheduled" | "settlement_pending";
+  toState: Exclude<LessonLifecycleState, "scheduled" | "settlement_pending">;
   reasonCode: string;
   reasonText?: string;
   actorUserId?: string;
@@ -198,13 +200,14 @@ export class LessonLifecycleRepository {
           teacher_financial_fact_id
         )
         values (
-          $1, 'scheduled', $2, $3, $4, $5, $6, $7, $8, $9::jsonb,
-          $10, $11::uuid[], $12
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb,
+          $11, $12::uuid[], $13
         )
         returning *
       `,
       [
         input.lessonId,
+        input.fromState ?? "scheduled",
         input.toState,
         input.reasonCode,
         input.reasonText ?? null,

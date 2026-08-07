@@ -6,11 +6,12 @@
 
 | Slice | Count |
 |---|---:|
-| Matched production source files | 50 |
-| Finance SQL/wire callsites | 244 |
+| Matched production source files | 49 |
+| Finance SQL/wire callsites | 243 |
 | Ordinary finance reads | 96 |
 | Reporting-safe finance reads | 51 |
-| Protected lesson temporal mutations | 13 |
+| Protected lesson temporal mutations | 7 |
+| Unknown lesson mutation callers | 0 |
 | Unowned | 0 |
 
 The JSON companion is the authoritative deterministic baseline. A new matching

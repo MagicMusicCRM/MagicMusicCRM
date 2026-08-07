@@ -768,22 +768,12 @@ describe("ScheduleService", () => {
       { rows: [] }, // reschedule notification lookup (best-effort)
     ]);
 
-    await service.updateLesson(actor, "lesson-a", {
+    await expect(service.updateLesson(actor, "lesson-a", {
       scheduledAt: "2026-07-16T15:00:00Z",
+    })).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "LESSON_TRANSITION_REQUIRED" }),
     });
-
-    // Первый перенос занятия серии фиксирует исходное время в САМОМ UPDATE.
-    const updateCall = query.mock.calls.find((c) =>
-      String(c[0]).includes("update app.lessons"),
-    );
-    expect(String(updateCall?.[0])).toContain(
-      "coalesce(original_scheduled_at, scheduled_at)",
-    );
-    expect(String(updateCall?.[0])).toContain("series_id is not null");
-    const snapshotCall = query.mock.calls.find((call) =>
-      String(call[0]).includes("select l.student_id"),
-    );
-    expect(String(snapshotCall?.[0])).toContain("for update of l");
+    expect(query).not.toHaveBeenCalled();
   });
 
   it("creates lessons with branch and room ids", async () => {
@@ -918,21 +908,7 @@ describe("ScheduleService", () => {
     expect(policy.assertCanWriteCrm).not.toHaveBeenCalled();
     expect(query.mock.calls[0][1]).toEqual(["lesson-a"]); // locked snapshot + access check
     expect(String(query.mock.calls[0][0])).toContain("for update of l");
-    expect(query.mock.calls[1][1]).toEqual([
-      "lesson-a",
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      undefined,
-      null,
-      null,
-      "План занятия",
-      null,
-      false,
-    ]);
+    expect(query.mock.calls[1][1]).toEqual(["lesson-a", "План занятия"]);
   });
 
   it("rejects manual completion before touching persistence", async () => {
@@ -1014,14 +990,12 @@ describe("ScheduleService", () => {
       { rows: [] }, // delete from app.lesson_reminders
     ]);
 
-    await service.updateLesson(actor, "lesson-a", {
+    await expect(service.updateLesson(actor, "lesson-a", {
       scheduledAt: "2026-06-20T15:00:00.000Z",
+    })).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "LESSON_TRANSITION_REQUIRED" }),
     });
-
-    expect(query).toHaveBeenCalledWith(
-      expect.stringContaining("delete from app.lesson_reminders"),
-      ["lesson-a"],
-    );
+    expect(query).not.toHaveBeenCalled();
   });
 
   it("notifies the assigned teacher when a lesson is rescheduled (KVA-158)", async () => {
@@ -1068,24 +1042,13 @@ describe("ScheduleService", () => {
       { rows: [] }, // delete from app.lesson_reminders
     ]);
 
-    await service.updateLesson(actor, "lesson-a", {
+    await expect(service.updateLesson(actor, "lesson-a", {
       scheduledAt: "2026-06-21T18:30:00.000Z",
+    })).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "LESSON_TRANSITION_REQUIRED" }),
     });
-
-    expect(notifications.notifyUser).toHaveBeenCalledTimes(1);
-    expect(notifications.notifyUser).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: "teacher-user-a",
-        title: "Перенос занятия",
-        channels: ["push", "in_app"],
-        data: { type: "lesson_rescheduled", lessonId: "lesson-a" },
-      }),
-    );
-    const call = notifications.notifyUser.mock.calls[0][0];
-    expect(call.body).toContain("время");
-    expect(call.body).toContain("21.06");
-    // The snapshot query must run before the UPDATE.
-    expect(query.mock.calls[0][0]).toContain("from app.lessons l");
+    expect(query).not.toHaveBeenCalled();
+    expect(notifications.notifyUser).not.toHaveBeenCalled();
   });
 
   it("does not notify the teacher on a non-reschedule save (KVA-158)", async () => {
@@ -1181,43 +1144,13 @@ describe("ScheduleService", () => {
       { rows: [{ user_id: "teacher-user-b" }] }, // resolveTeacherUserId(new)
     ]);
 
-    await service.updateLesson(actor, "lesson-a", {
+    await expect(service.updateLesson(actor, "lesson-a", {
       teacherId: "teacher-b",
+    })).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "LESSON_TRANSITION_REQUIRED" }),
     });
-
-    const firstResourceLocks = query.mock.calls
-      .filter((call) => String(call[0]).includes("pg_advisory_xact_lock"))
-      .slice(0, 3)
-      .map((call) => call[1][0]);
-    expect(firstResourceLocks).toEqual([
-      "room:room-a",
-      "teacher:teacher-a",
-      "teacher:teacher-b",
-    ]);
-
-    expect(notifications.notifyUser).toHaveBeenCalledTimes(2);
-    // NEW teacher keeps the existing reschedule notification.
-    expect(notifications.notifyUser).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: "teacher-user-b",
-        title: "Перенос занятия",
-        channels: ["push", "in_app"],
-        data: { type: "lesson_rescheduled", lessonId: "lesson-a" },
-      }),
-    );
-    // REMOVED teacher gets the new reassignment notification.
-    expect(notifications.notifyUser).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: "teacher-user-a",
-        title: "Занятие переназначено",
-        channels: ["push", "in_app"],
-        data: { type: "lesson_reassigned", lessonId: "lesson-a" },
-      }),
-    );
-    const removed = notifications.notifyUser.mock.calls.find(
-      (c: { userId: string }[]) => c[0].userId === "teacher-user-a",
-    );
-    expect(removed?.[0].body).toContain("откреплены");
+    expect(query).not.toHaveBeenCalled();
+    expect(notifications.notifyUser).not.toHaveBeenCalled();
   });
 
   it("creates trial lessons linked to leads", async () => {
@@ -1349,7 +1282,9 @@ describe("ScheduleService", () => {
         leadId: "lead-a",
         isTrial: true,
       }),
-    ).rejects.toBeInstanceOf(ConflictException);
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "LESSON_TRANSITION_REQUIRED" }),
+    });
     expect(
       query.mock.calls.some((call) =>
         String(call[0]).includes("select l.student_id"),
@@ -1660,16 +1595,10 @@ describe("ScheduleService", () => {
         service.updateLesson(actor, "lesson-a", {
           scheduledAt: "2026-07-20T12:00:00.000Z",
         }),
-      ).rejects.toBeInstanceOf(ConflictException);
-
-      // The moved lesson must not conflict with itself: excludeLessonId=$5.
-      const conflictCall = query.mock.calls.find((c) =>
-        String(c[0]).includes("tstzrange"),
-      );
-      expect(conflictCall?.[1]?.[4]).toBe("lesson-a");
-      // Effective teacher/room come from the snapshot when the PATCH omits them.
-      expect(conflictCall?.[1]?.[0]).toBe("teacher-a");
-      expect(conflictCall?.[1]?.[1]).toBe("room-a");
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: "LESSON_TRANSITION_REQUIRED" }),
+      });
+      expect(query).not.toHaveBeenCalled();
     });
 
     it("lets clientRef lead win over a stale studentId (contract 7)", async () => {
@@ -1817,19 +1746,13 @@ describe("ScheduleService", () => {
         { rows: [] },
       ]);
 
-      await service.updateLesson(actor, "lesson-a", {
+      await expect(service.updateLesson(actor, "lesson-a", {
         clientRef: { type: "lead", id: "lead-b" },
         isTrial: true,
+      })).rejects.toMatchObject({
+        response: expect.objectContaining({ code: "LESSON_TRANSITION_REQUIRED" }),
       });
-
-      const updateCall = query.mock.calls.find((call) =>
-        String(call[0]).includes("update app.lessons"),
-      );
-      expect(String(updateCall?.[0])).toContain(
-        "case when $13::boolean then $2::uuid else student_id end",
-      );
-      expect(updateCall?.[1]?.slice(1, 4)).toEqual([null, null, "lead-b"]);
-      expect(updateCall?.[1]?.[12]).toBe(true);
+      expect(query).not.toHaveBeenCalled();
     });
 
     it("rejects an ambiguous recurring-series subject", async () => {

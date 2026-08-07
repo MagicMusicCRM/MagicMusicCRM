@@ -23,6 +23,9 @@ import {
 import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
 import { CrmPolicy } from "../crm.policy";
 import {
+  LessonBulkTransitionCommandDto,
+  LessonBulkTransitionItemDto,
+  LessonBulkTransitionPreviewDto,
   LessonCancelCommandDto,
   LessonCancelPreviewDto,
   LessonRescheduleCommandDto,
@@ -43,6 +46,7 @@ import {
 type TransitionOperation = "reschedule" | "cancel" | "settle";
 type TransitionState =
   | "scheduled"
+  | "settlement_pending"
   | "successfully_completed"
   | "cancelled"
   | "rescheduled";
@@ -125,6 +129,27 @@ type TransitionCommandDto =
   | LessonRescheduleCommandDto
   | LessonSettleCommandDto;
 
+export interface CommittedTransition {
+  [key: string]: unknown;
+  lessonId: string;
+  state: Exclude<TransitionState, "scheduled" | "settlement_pending">;
+  successorId: string | null;
+  transitionId: string;
+  clientFinancialFactIds: string[];
+  teacherFinancialFactId: string;
+  transitionFingerprint: string;
+}
+
+interface CalculatedTransitionPreview extends LessonTransitionPreviewResult {
+  transitionFingerprint?: string;
+}
+
+interface BulkTransitionResultRef {
+  [key: string]: unknown;
+  bulkId: string;
+  items: CommittedTransition[];
+}
+
 export interface LessonTransitionPreviewResult {
   operation: TransitionOperation;
   source: { id: string; version: number; state: string };
@@ -205,6 +230,180 @@ export class LessonTransitionService {
     return this.execute(actor, lessonId, dto, metadata, "settle");
   }
 
+  previewBulk(
+    actor: ActorContext,
+    dto: LessonBulkTransitionPreviewDto,
+  ) {
+    return this.previewBulkTransitions(actor, dto);
+  }
+
+  bulk(
+    actor: ActorContext,
+    dto: LessonBulkTransitionCommandDto,
+    metadata: LessonCommandMetadata,
+  ) {
+    return this.executeBulkTransitions(actor, dto, metadata);
+  }
+
+  private async previewBulkTransitions(
+    actor: ActorContext,
+    dto: LessonBulkTransitionPreviewDto,
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    const items = this.normalizedBulkItems(dto);
+    return this.database.transaction(async (client) => {
+      const calculated: Array<{
+        lessonId: string;
+        operation: TransitionOperation;
+        preview: CalculatedTransitionPreview;
+      }> = [];
+      for (const item of items) {
+        const itemDto = this.bulkItemDto(dto, item);
+        calculated.push({
+          lessonId: item.lessonId,
+          operation: item.operation,
+          preview: await this.calculatePreview(
+            client,
+            item.lessonId,
+            itemDto,
+            item.operation,
+          ),
+        });
+      }
+      const canConfirm = calculated.every(
+        (item) => item.preview.canConfirm && item.preview.transitionFingerprint,
+      );
+      const previews = calculated.map(({ preview, ...item }) => {
+        const { transitionFingerprint: _fingerprint, ...publicPreview } = preview;
+        return { ...item, ...publicPreview };
+      });
+      if (!canConfirm) {
+        return { items: previews, canConfirm: false, confirmRequired: true };
+      }
+      const transitionFingerprint = this.bulkFingerprint(dto, calculated);
+      const signed = this.previewTokens.issueLessonTransition({
+        kind: "lesson.transition",
+        operation: "bulk",
+        actorUserId: actor.userId,
+        lessonId: this.bulkPreviewId(items),
+        expectedVersion: 1,
+        transitionFingerprint,
+      });
+      return {
+        items: previews,
+        canConfirm: true,
+        confirmRequired: true,
+        previewToken: signed.token,
+        previewExpiresAt: signed.expiresAt,
+      };
+    });
+  }
+
+  private async executeBulkTransitions(
+    actor: ActorContext,
+    dto: LessonBulkTransitionCommandDto,
+    metadata: LessonCommandMetadata,
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    this.assertConfirmed(dto.confirm);
+    this.assertMetadata(metadata);
+    const items = this.normalizedBulkItems(dto);
+    const previewId = this.bulkPreviewId(items);
+    const bulkId = this.stableId(
+      `schedule.lesson.bulk\0${actor.userId}\0${metadata.idempotencyKey}`,
+    );
+    const mutation = await this.platform.executeVersionedMutation<
+      BulkTransitionResultRef
+    >({
+      actorKey: `user:${actor.userId}`,
+      actorUserId: actor.userId,
+      authorization: { actor, capabilityKey: "schedule.lesson.write" },
+      operation: "schedule.lesson.bulk-transition",
+      idempotencyKey: metadata.idempotencyKey,
+      payload: { dto },
+      aggregateType: "schedule:lesson-bulk",
+      aggregateId: bulkId,
+      expectedVersion: 0,
+      requestId: metadata.requestId,
+      audit: {
+        action: "crm.lessons_bulk_transitioned",
+        entityType: "lesson_batch",
+        entityId: bulkId,
+        reason: dto.reasonCode?.trim() || "manual",
+        reasonText: dto.reasonText.trim(),
+        beforeRef: {
+          items: items.map((item) => ({
+            lessonId: item.lessonId,
+            version: item.expectedVersion,
+          })),
+        },
+      },
+      outbox: {
+        type: "schedule.lessons.changed",
+        payload: { entityIds: items.map((item) => item.lessonId) },
+      },
+      mutate: async (client) => {
+        const signed = this.previewTokens.verifyLessonTransition(
+          dto.previewToken,
+        );
+        if (
+          signed.actorUserId !== actor.userId ||
+          signed.operation !== "bulk" ||
+          signed.lessonId !== previewId ||
+          signed.expectedVersion !== 1
+        ) {
+          throw new UnprocessableEntityException({
+            code: "LESSON_TRANSITION_PREVIEW_STALE",
+            message: "Signed preview does not match this bulk command.",
+          });
+        }
+        const committed: CommittedTransition[] = [];
+        for (const item of items) {
+          const itemDto = this.bulkItemDto(dto, item);
+          committed.push(await this.commitTransition(client, {
+            actor,
+            lessonId: item.lessonId,
+            dto: itemDto,
+            operation: item.operation,
+            successorId: item.operation === "reschedule"
+              ? this.stableId(
+                  `schedule.lesson.bulk-successor\0${bulkId}\0${item.lessonId}`,
+                )
+              : null,
+            nextVersion: item.expectedVersion + 1,
+          }));
+        }
+        const actualFingerprint = this.bulkFingerprint(
+          dto,
+          committed.map((item) => ({
+            lessonId: item.lessonId,
+            operation: items.find(
+              (source) => source.lessonId === item.lessonId,
+            )!.operation,
+            preview: {
+              transitionFingerprint: item.transitionFingerprint,
+            } as CalculatedTransitionPreview,
+          })),
+        );
+        if (signed.transitionFingerprint !== actualFingerprint) {
+          throw new UnprocessableEntityException({
+            code: "LESSON_TRANSITION_PREVIEW_STALE",
+            message: "Bulk transition inputs changed after preview.",
+          });
+        }
+        return { bulkId, items: committed };
+      },
+    });
+    for (const item of items) {
+      await this.reservations.publishLessonSettlementPostCommit(item.lessonId);
+    }
+    return {
+      bulkId,
+      items: mutation.resultRef.items,
+      replayed: mutation.replayed,
+    };
+  }
+
   private async preview(
     actor: ActorContext,
     lessonId: string,
@@ -214,48 +413,14 @@ export class LessonTransitionService {
     this.policy.assertCanWriteCrm(actor);
     this.assertReason(dto, operation);
     return this.database.transaction(async (client) => {
-      const source = await this.loadSource(lessonId, client, true);
-      this.assertSource(source, dto.expectedVersion);
-      const successor = operation === "reschedule"
-        ? this.successorDraft(
-            (dto as LessonReschedulePreviewDto).successor,
-            source,
-          )
-        : null;
-      const validation = successor
-        ? await this.validateSuccessor(client, lessonId, successor)
-        : { valid: true, violations: [] };
-      const base = {
-        operation,
-        source: this.sourceProjection(source),
-        successor: successor ? this.draftProjection(successor) : null,
-        financialDecision: dto.financialDecision,
-        violations: validation.violations,
-        canConfirm: validation.valid,
-        confirmRequired: true as const,
-      };
-      if (!validation.valid) return base;
-
-      const coverage = await this.reservations.lockSettlementCoverage(
+      const calculated = await this.calculatePreview(
         client,
         lessonId,
-        this.selectedSubscriptionIds(dto),
-      );
-      const financial = await this.previewFinancial(
-        client,
-        lessonId,
-        operation,
         dto,
-      );
-      const financialPreview = this.financialProjection(financial);
-      const transitionFingerprint = this.transitionFingerprint({
         operation,
-        source,
-        successor,
-        dto,
-        coverage,
-        financial: financialPreview,
-      });
+      );
+      const { transitionFingerprint, ...preview } = calculated;
+      if (!calculated.canConfirm || !transitionFingerprint) return preview;
       const signed = this.previewTokens.issueLessonTransition({
         kind: "lesson.transition",
         operation,
@@ -265,11 +430,7 @@ export class LessonTransitionService {
         transitionFingerprint,
       });
       return {
-        ...base,
-        financialPreview,
-        warnings: successor && this.hasClientCharge(financial)
-          ? ["SUCCESSOR_MAY_CHARGE_AGAIN"]
-          : [],
+        ...preview,
         previewToken: signed.token,
         previewExpiresAt: signed.expiresAt,
       };
@@ -317,7 +478,7 @@ export class LessonTransitionService {
         entityId: lessonId,
         reason: this.reasonCode(dto),
         reasonText: dto.reasonText?.trim(),
-        beforeRef: { lessonId, version: dto.expectedVersion, state: "scheduled" },
+        beforeRef: { lessonId, version: dto.expectedVersion },
       },
       outbox: {
         type: "schedule.lesson.changed",
@@ -326,95 +487,15 @@ export class LessonTransitionService {
       mutate: async (client, nextVersion) => {
         const signed = this.previewTokens.verifyLessonTransition(dto.previewToken);
         this.assertSignedPreview(signed, actor, lessonId, dto, operation);
-        const source = await this.loadSource(lessonId, client, true);
-        this.assertSource(source, dto.expectedVersion);
-        const successor = operation === "reschedule"
-          ? this.successorDraft(
-              (dto as LessonRescheduleCommandDto).successor,
-              source,
-            )
-          : null;
-        if (successor) {
-          await this.acquireLocks(client, source, successor);
-          const validation = await this.validateSuccessor(
-            client,
-            lessonId,
-            successor,
-          );
-          if (!validation.valid) {
-            throw new UnprocessableEntityException({
-              code: "LESSON_CONSTRAINT_VIOLATIONS",
-              message: "Successor lesson violates schedule constraints.",
-              violations: validation.violations,
-            });
-          }
-        }
-        const coverage = await this.reservations.lockSettlementCoverage(
-          client,
+        return this.commitTransition(client, {
+          actor,
           lessonId,
-          this.selectedSubscriptionIds(dto),
-        );
-        if (successor && successorId) {
-          await this.insertSuccessor(
-            client,
-            successorId,
-            lessonId,
-            successor,
-            actor.userId,
-          );
-        }
-        await this.updateSource(
-          client,
-          lessonId,
-          dto.expectedVersion,
-          nextVersion,
-          toState,
-          successorId,
-        );
-        const settled = await this.settlement.settle(client, lessonId, {
-          context: operation,
-          decision: dto.financialDecision,
-          reasonText: dto.reasonText?.trim(),
-        });
-        await this.reservations.terminalize(client, settled);
-        const financial = this.financialProjection(settled);
-        const actualFingerprint = this.transitionFingerprint({
-          operation,
-          source,
-          successor,
           dto,
-          coverage,
-          financial,
-        });
-        if (signed.transitionFingerprint !== actualFingerprint) {
-          throw new UnprocessableEntityException({
-            code: "LESSON_TRANSITION_PREVIEW_STALE",
-            message: "Lesson transition inputs changed after preview.",
-          });
-        }
-        if (successor && successorId) {
-          await this.allocateSuccessor(client, successorId, successor);
-        }
-        const transition = await this.lifecycle.appendTransition(client, {
-          lessonId,
-          toState,
-          reasonCode: this.reasonCode(dto),
-          reasonText: dto.reasonText?.trim(),
-          actorUserId: actor.userId,
-          successorId: successorId ?? undefined,
-          financialDecision: this.normalizedDecision(dto),
-          clientFinancialFactId: settled.clientFact.id,
-          clientFinancialFactIds: settled.clientFacts.map((fact) => fact.id),
-          teacherFinancialFactId: settled.teacherFact.id,
-        });
-        return {
-          lessonId,
-          state: toState,
+          operation,
           successorId,
-          transitionId: String(transition.rows[0]!.id),
-          clientFinancialFactIds: settled.clientFacts.map((fact) => fact.id),
-          teacherFinancialFactId: settled.teacherFact.id,
-        };
+          nextVersion,
+          expectedFingerprint: signed.transitionFingerprint,
+        });
       },
     });
     await this.reservations.publishLessonSettlementPostCommit(lessonId);
@@ -430,6 +511,170 @@ export class LessonTransitionService {
         mutation.resultRef.teacherFinancialFactId as string,
       financialDecision: dto.financialDecision,
       replayed: mutation.replayed,
+    };
+  }
+
+  private async calculatePreview(
+    client: PoolClient,
+    lessonId: string,
+    dto: TransitionPreviewDto,
+    operation: TransitionOperation,
+  ): Promise<CalculatedTransitionPreview> {
+    const source = await this.loadSource(lessonId, client, true);
+    this.assertSource(source, dto.expectedVersion);
+    const successor = operation === "reschedule"
+      ? this.successorDraft(
+          (dto as LessonReschedulePreviewDto).successor,
+          source,
+        )
+      : null;
+    const validation = successor
+      ? await this.validateSuccessor(client, lessonId, successor)
+      : { valid: true, violations: [] };
+    const base: CalculatedTransitionPreview = {
+      operation,
+      source: this.sourceProjection(source),
+      successor: successor ? this.draftProjection(successor) : null,
+      financialDecision: dto.financialDecision,
+      violations: validation.violations,
+      canConfirm: validation.valid,
+      confirmRequired: true,
+    };
+    if (!validation.valid) return base;
+    const coverage = await this.reservations.lockSettlementCoverage(
+      client,
+      lessonId,
+      this.selectedSubscriptionIds(dto),
+    );
+    const financial = await this.previewFinancial(
+      client,
+      lessonId,
+      operation,
+      dto,
+    );
+    const financialPreview = this.financialProjection(financial);
+    return {
+      ...base,
+      financialPreview,
+      warnings: successor && this.hasClientCharge(financial)
+        ? ["SUCCESSOR_MAY_CHARGE_AGAIN"]
+        : [],
+      transitionFingerprint: this.transitionFingerprint({
+        operation,
+        source,
+        successor,
+        dto,
+        coverage,
+        financial: financialPreview,
+      }),
+    };
+  }
+
+  private async commitTransition(
+    client: PoolClient,
+    input: {
+      actor: ActorContext;
+      lessonId: string;
+      dto: TransitionPreviewDto;
+      operation: TransitionOperation;
+      successorId: string | null;
+      nextVersion: number;
+      expectedFingerprint?: string;
+    },
+  ): Promise<CommittedTransition> {
+    const source = await this.loadSource(input.lessonId, client, true);
+    this.assertSource(source, input.dto.expectedVersion);
+    const successor = input.operation === "reschedule"
+      ? this.successorDraft(
+          (input.dto as LessonReschedulePreviewDto).successor,
+          source,
+        )
+      : null;
+    if (successor) {
+      await this.acquireLocks(client, source, successor);
+      const validation = await this.validateSuccessor(
+        client,
+        input.lessonId,
+        successor,
+      );
+      if (!validation.valid) {
+        throw new UnprocessableEntityException({
+          code: "LESSON_CONSTRAINT_VIOLATIONS",
+          message: "Successor lesson violates schedule constraints.",
+          violations: validation.violations,
+        });
+      }
+    }
+    const coverage = await this.reservations.lockSettlementCoverage(
+      client,
+      input.lessonId,
+      this.selectedSubscriptionIds(input.dto),
+    );
+    if (successor && input.successorId) {
+      await this.insertSuccessor(
+        client,
+        input.successorId,
+        input.lessonId,
+        successor,
+        input.actor.userId,
+      );
+    }
+    const toState = this.targetState(input.operation);
+    await this.updateSource(
+      client,
+      input.lessonId,
+      input.dto.expectedVersion,
+      input.nextVersion,
+      toState,
+      input.successorId,
+    );
+    const settled = await this.settlement.settle(client, input.lessonId, {
+      context: input.operation,
+      decision: input.dto.financialDecision,
+      reasonText: input.dto.reasonText?.trim(),
+    });
+    await this.reservations.terminalize(client, settled);
+    const transitionFingerprint = this.transitionFingerprint({
+      operation: input.operation,
+      source,
+      successor,
+      dto: input.dto,
+      coverage,
+      financial: this.financialProjection(settled),
+    });
+    if (
+      input.expectedFingerprint !== undefined &&
+      input.expectedFingerprint !== transitionFingerprint
+    ) {
+      throw new UnprocessableEntityException({
+        code: "LESSON_TRANSITION_PREVIEW_STALE",
+        message: "Lesson transition inputs changed after preview.",
+      });
+    }
+    if (successor && input.successorId) {
+      await this.allocateSuccessor(client, input.successorId, successor);
+    }
+    const transition = await this.lifecycle.appendTransition(client, {
+      lessonId: input.lessonId,
+      fromState: source.lifecycleState,
+      toState,
+      reasonCode: this.reasonCode(input.dto),
+      reasonText: input.dto.reasonText?.trim(),
+      actorUserId: input.actor.userId,
+      successorId: input.successorId ?? undefined,
+      financialDecision: this.normalizedDecision(input.dto),
+      clientFinancialFactId: settled.clientFact.id,
+      clientFinancialFactIds: settled.clientFacts.map((fact) => fact.id),
+      teacherFinancialFactId: settled.teacherFact.id,
+    });
+    return {
+      lessonId: input.lessonId,
+      state: toState,
+      successorId: input.successorId,
+      transitionId: String(transition.rows[0]!.id),
+      clientFinancialFactIds: settled.clientFacts.map((fact) => fact.id),
+      teacherFinancialFactId: settled.teacherFact.id,
+      transitionFingerprint,
     };
   }
 
@@ -714,14 +959,15 @@ export class LessonTransitionService {
     lessonId: string,
     expectedVersion: number,
     nextVersion: number,
-    toState: Exclude<TransitionState, "scheduled">,
+    toState: Exclude<TransitionState, "scheduled" | "settlement_pending">,
     successorId: string | null,
   ) {
     const updated = await client.query<{ version: number | string }>(
       `
         update app.lessons
         set lifecycle_state = $3, successor_id = $4, updated_at = now()
-        where id = $1 and version = $2 and lifecycle_state = 'scheduled'
+        where id = $1 and version = $2
+          and lifecycle_state in ('scheduled', 'settlement_pending')
         returning version
       `,
       [lessonId, expectedVersion, toState, successorId],
@@ -830,7 +1076,12 @@ export class LessonTransitionService {
     };
   }
 
-  private assertSource(source: TransitionSource, expectedVersion: number) {
+  private assertSource(
+    source: TransitionSource,
+    expectedVersion: number,
+  ): asserts source is TransitionSource & {
+    lifecycleState: "scheduled" | "settlement_pending";
+  } {
     if (source.version !== expectedVersion) {
       throw new ConflictException({
         code: "STALE_LESSON_VERSION",
@@ -838,7 +1089,10 @@ export class LessonTransitionService {
         currentVersion: source.version,
       });
     }
-    if (source.lifecycleState !== "scheduled") {
+    if (
+      source.lifecycleState !== "scheduled" &&
+      source.lifecycleState !== "settlement_pending"
+    ) {
       throw new ConflictException({
         code: "LESSON_ALREADY_TERMINAL",
         state: source.lifecycleState,
@@ -904,6 +1158,98 @@ export class LessonTransitionService {
     };
   }
 
+  private normalizedBulkItems(
+    dto: LessonBulkTransitionPreviewDto,
+  ): LessonBulkTransitionItemDto[] {
+    const reasonText = dto.reasonText?.trim();
+    const reasonCode = dto.reasonCode?.trim() || "manual";
+    if (
+      !reasonText ||
+      reasonText.length > 500 ||
+      reasonText.includes("\0") ||
+      !/^[A-Za-z0-9._:-]{1,120}$/.test(reasonCode) ||
+      !Array.isArray(dto.items) ||
+      dto.items.length < 1 ||
+      dto.items.length > 500
+    ) {
+      this.invalidDraft("LESSON_BULK_TRANSITION_INVALID", [
+        "reasonText",
+        "reasonCode",
+        "items",
+      ]);
+    }
+    const ids = new Set<string>();
+    for (const [index, item] of dto.items.entries()) {
+      const validId =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+          .test(item.lessonId);
+      const validOperation = ["reschedule", "cancel", "settle"].includes(
+        item.operation,
+      );
+      if (
+        !validId ||
+        !Number.isSafeInteger(item.expectedVersion) ||
+        item.expectedVersion < 1 ||
+        !validOperation ||
+        !item.financialDecision ||
+        (item.operation === "reschedule") !== Boolean(item.successor) ||
+        ids.has(item.lessonId)
+      ) {
+        this.invalidDraft("LESSON_BULK_TRANSITION_INVALID", [
+          `items.${index}`,
+        ]);
+      }
+      ids.add(item.lessonId);
+    }
+    return [...dto.items].sort((left, right) =>
+      left.lessonId.localeCompare(right.lessonId)
+    );
+  }
+
+  private bulkItemDto(
+    bulk: LessonBulkTransitionPreviewDto,
+    item: LessonBulkTransitionItemDto,
+  ): TransitionPreviewDto {
+    const common = {
+      expectedVersion: item.expectedVersion,
+      reasonCode: bulk.reasonCode,
+      reasonText: bulk.reasonText,
+      financialDecision: item.financialDecision,
+    };
+    return item.operation === "reschedule"
+      ? { ...common, successor: item.successor! }
+      : common;
+  }
+
+  private bulkFingerprint(
+    dto: LessonBulkTransitionPreviewDto,
+    items: Array<{
+      lessonId: string;
+      operation: TransitionOperation;
+      preview: Pick<CalculatedTransitionPreview, "transitionFingerprint">;
+    }>,
+  ) {
+    return fingerprintPayload({
+      reasonCode: dto.reasonCode?.trim() || "manual",
+      reasonText: dto.reasonText.trim(),
+      items: items.map((item) => ({
+        lessonId: item.lessonId,
+        operation: item.operation,
+        transitionFingerprint: item.preview.transitionFingerprint,
+      })),
+    });
+  }
+
+  private bulkPreviewId(items: LessonBulkTransitionItemDto[]) {
+    return this.stableId(
+      `schedule.lesson.bulk-preview\0${fingerprintPayload(items.map((item) => ({
+        lessonId: item.lessonId,
+        operation: item.operation,
+        expectedVersion: item.expectedVersion,
+      })))}`,
+    );
+  }
+
   private selectedSubscriptionIds(dto: TransitionPreviewDto) {
     return (dto.financialDecision.clientDecisions ?? [])
       .map((decision) => decision.subscriptionId)
@@ -911,7 +1257,11 @@ export class LessonTransitionService {
   }
 
   private sourceProjection(source: TransitionSource) {
-    return { id: source.id, version: source.version, state: "scheduled" };
+    return {
+      id: source.id,
+      version: source.version,
+      state: source.lifecycleState,
+    };
   }
 
   private draftProjection(draft: TransitionSuccessor) {
@@ -929,7 +1279,7 @@ export class LessonTransitionService {
 
   private targetState(
     operation: TransitionOperation,
-  ): Exclude<TransitionState, "scheduled"> {
+  ): Exclude<TransitionState, "scheduled" | "settlement_pending"> {
     return operation === "reschedule"
       ? "rescheduled"
       : operation === "cancel"

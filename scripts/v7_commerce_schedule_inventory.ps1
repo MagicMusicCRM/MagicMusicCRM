@@ -64,8 +64,8 @@ $flutterFiles = @(Get-ChildItem (Join-Path $repoRoot 'lib') -Recurse -File -Filt
 $sourceFiles = @($serverFiles + $flutterFiles)
 $financeTables = 'app\.(?<table>commerce_ordinary_payments|commerce_ordinary_account_adjustments|commerce_ordinary_payment_records|commerce_reporting_exclusions|client_payment_records|payments|account_adjustments|subscription_obligation_facts|expected_payments)\b'
 $financeWire = '(?i)(?<wire>/(?:[^''"\s]*/)?(?:payments?|finance|subscriptions?|account-adjustments)(?:/[^''"\s]*)?)'
-$lessonWrite = '(?is)(?<statement>(?:update\s+app\.lessons\b|insert\s+into\s+app\.lessons\b).{0,900}?(?:scheduled_at|duration_minutes))'
-$lessonWire = '(?i)(?<wire>/(?:[^''"\s]*/)?lessons?/(?:[^''"\s]*/)?(?:move|reschedule|transition)|\b(?:moveLesson|rescheduleLesson|updateLessonTime)\s*\()'
+$lessonWrite = '(?is)(?<statement>update\s+app\.lessons\b\s+set\s+(?:(?!\bwhere\b).){0,900}?\b(?:scheduled_at|duration_minutes)\s*=.{0,600}?\bwhere\b|insert\s+into\s+app\.lessons\s*\([^)]*\b(?:scheduled_at|duration_minutes)\b[^)]*\))'
+$lessonWire = '(?i)(?<wire>/(?:[^''"\s]*/)?lessons?/(?:[^''"\s]*/)?(?:move|reschedule|transition)|\b(?:bulkLessonTransitions|moveLesson|rescheduleLesson|updateLessonTime)\s*\()'
 
 $financeSites = [Collections.Generic.List[object]]::new()
 $lessonSites = [Collections.Generic.List[object]]::new()
@@ -124,6 +124,23 @@ if ($unowned.Count -ne 0) {
   throw "v7 inventory contains $($unowned.Count) unowned callsites: $locations"
 }
 
+$knownLessonMutationFiles = @{
+  'server/src/crm/crm-schedule.controller.ts' = '^wire-temporal-mutation$'
+  'server/src/crm/schedule.service.ts' = '^sql-temporal-write$'
+  'server/src/crm/schedule/lesson-command.service.ts' = '^sql-temporal-write$'
+  'server/src/crm/schedule/lesson-series-command.service.ts' = '^sql-temporal-write$'
+  'server/src/crm/schedule/lesson-transition.service.ts' = '^sql-temporal-write$'
+}
+$unknownLessonMutations = @($lessonSites | Where-Object {
+  -not $knownLessonMutationFiles.ContainsKey($_.file) -or
+  $_.kind -notmatch $knownLessonMutationFiles[$_.file]
+})
+if ($unknownLessonMutations.Count -ne 0) {
+  $locations = ($unknownLessonMutations | Select-Object -First 10 |
+    ForEach-Object { "$($_.file):$($_.line)" }) -join ', '
+  throw "v7 inventory contains $($unknownLessonMutations.Count) unknown lesson mutation callers: $locations"
+}
+
 $artifact = [ordered]@{
   schema_version = 1
   task = 'T1.1.1'
@@ -136,6 +153,7 @@ $artifact = [ordered]@{
       $_.operation -eq 'read' -and $_.subject -like 'commerce_ordinary_*'
     }).Count
     lesson_temporal_mutations = $lessonSites.Count
+    unknown_lesson_mutation_callers = $unknownLessonMutations.Count
     unowned = $unowned.Count
   }
   finance_callsites = @($financeSites | Sort-Object file, line, subject)
@@ -157,6 +175,7 @@ $markdown = @"
 | Ordinary finance reads | $($artifact.summary.ordinary_finance_reads) |
 | Reporting-safe finance reads | $($artifact.summary.reporting_safe_finance_reads) |
 | Protected lesson temporal mutations | $($artifact.summary.lesson_temporal_mutations) |
+| Unknown lesson mutation callers | $($artifact.summary.unknown_lesson_mutation_callers) |
 | Unowned | $($artifact.summary.unowned) |
 
 The JSON companion is the authoritative deterministic baseline. A new matching

@@ -34,6 +34,15 @@ void main() {
       expect(projection.label, 'Завершено');
     });
 
+    test('elapsed lesson exposes the pending settlement queue state', () {
+      final projection = lessonStateProjection(
+        lifecycleState: 'settlement_pending',
+      );
+
+      expect(projection.token, LessonStateToken.neutral);
+      expect(projection.label, 'Ожидает расчёта');
+    });
+
     test('rescheduled source remains red even when reservation exists', () {
       final projection = lessonStateProjection(
         lifecycleState: 'rescheduled',

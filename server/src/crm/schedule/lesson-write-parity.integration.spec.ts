@@ -31,7 +31,7 @@ if (
 
 jest.setTimeout(60_000);
 
-describe("Unified lesson create/edit/drag writes (PostgreSQL)", () => {
+describe("Unified lesson create and protected transition writes (PostgreSQL)", () => {
   let pool: Pool;
   let database: DatabaseService;
   let commands: LessonCommandService;
@@ -65,7 +65,7 @@ describe("Unified lesson create/edit/drag writes (PostgreSQL)", () => {
     await pool.end();
   });
 
-  it("returns identical violations for create/edit/drag and replays a create once", async () => {
+  it("keeps create constraint parity and rejects direct edit/drag bypasses", async () => {
     const fixture = await createFixture(pool);
     const actor = { userId: fixture.managerId, role: "manager" as const };
     const keys: string[] = [];
@@ -143,9 +143,12 @@ describe("Unified lesson create/edit/drag writes (PostgreSQL)", () => {
           key("invalid-drag"),
         ),
       );
-      expect(invalidCreate).toEqual(invalidEdit);
-      expect(invalidEdit).toEqual(invalidDrag);
       expect(preview.violations).toEqual(invalidCreate.violations);
+      expect(invalidEdit).toEqual({
+        code: "LESSON_TRANSITION_REQUIRED",
+        violations: undefined,
+      });
+      expect(invalidDrag).toEqual(invalidEdit);
       expect(invalidCreate).toEqual({
         code: "LESSON_CONSTRAINT_VIOLATIONS",
         violations: [
@@ -189,7 +192,7 @@ describe("Unified lesson create/edit/drag writes (PostgreSQL)", () => {
       );
       expect(count.rows[0]!.count).toBe("1");
 
-      const moved = await commands.update(
+      await expect(commands.update(
         actor,
         editable.id,
         {
@@ -197,13 +200,7 @@ describe("Unified lesson create/edit/drag writes (PostgreSQL)", () => {
           scheduledAt: "2026-07-27T11:00:00.000Z",
         },
         key("valid-drag"),
-      );
-      expect(moved).toMatchObject({
-        id: editable.id,
-        version: editable.version + 1,
-        replayed: false,
-        scheduledAt: new Date("2026-07-27T11:00:00.000Z"),
-      });
+      )).rejects.toMatchObject({ status: 422 });
     } finally {
       await cleanupFixture(pool, {
         ...fixture,
@@ -283,7 +280,7 @@ describe("Unified lesson create/edit/drag writes (PostgreSQL)", () => {
     }
   });
 
-  it("serializes parallel create and drag races into one accepted interval", async () => {
+  it("serializes parallel creates and rejects both direct drag bypasses", async () => {
     const fixture = await createFixture(pool);
     const actor = { userId: fixture.managerId, role: "manager" as const };
     const lessonIds: string[] = [];
@@ -367,13 +364,14 @@ describe("Unified lesson create/edit/drag writes (PostgreSQL)", () => {
       ]);
       expect(
         concurrentDrags.filter((result) => result.status === "fulfilled"),
-      ).toHaveLength(1);
+      ).toHaveLength(0);
       const rejectedDrag = concurrentDrags.filter(
         (result): result is PromiseRejectedResult =>
           result.status === "rejected",
       );
-      expect(rejectedDrag).toHaveLength(1);
+      expect(rejectedDrag).toHaveLength(2);
       expect(rejectedDrag[0]!.reason).toMatchObject({ status: 422 });
+      expect(rejectedDrag[1]!.reason).toMatchObject({ status: 422 });
 
       const persisted = await pool.query<{
         at_target: string;
@@ -396,8 +394,8 @@ describe("Unified lesson create/edit/drag writes (PostgreSQL)", () => {
         [[left.id, right.id]],
       );
       expect(persisted.rows[0]).toEqual({
-        at_target: "1",
-        at_sources: "1",
+        at_target: "0",
+        at_sources: "2",
       });
     } finally {
       await cleanupFixture(pool, {

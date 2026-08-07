@@ -20,6 +20,7 @@ interface CompletionSourceRow {
   version: number | string;
   lifecycle_state:
     | "scheduled"
+    | "settlement_pending"
     | "successfully_completed"
     | "cancelled"
     | "rescheduled";
@@ -202,15 +203,9 @@ export class LessonCompletionWorkerRepository {
     return row;
   }
 
-  async markCompleted(
+  async markPending(
     client: PoolClient,
-    input: {
-      claim: LessonCompletionClaim;
-      transitionId: string;
-      clientFinancialFactId: string;
-      clientFinancialFactIds: string[];
-      teacherFinancialFactId: string;
-    },
+    claim: LessonCompletionClaim,
   ): Promise<void> {
     const updated = await client.query(
       `
@@ -219,11 +214,11 @@ export class LessonCompletionWorkerRepository {
             claimed_at = null,
             claimed_by = null,
             completed_at = now(),
-            transition_id = $4,
-            client_financial_fact_id = $5,
-            client_financial_fact_ids = $6::uuid[],
-            teacher_financial_fact_id = $7,
-            terminal_state = 'successfully_completed',
+            transition_id = null,
+            client_financial_fact_id = null,
+            client_financial_fact_ids = '{}'::uuid[],
+            teacher_financial_fact_id = null,
+            terminal_state = 'settlement_pending',
             last_error = null,
             updated_at = now()
         where lesson_id = $1
@@ -232,13 +227,9 @@ export class LessonCompletionWorkerRepository {
           and attempts = $3
       `,
       [
-        input.claim.lessonId,
-        input.claim.workerId,
-        input.claim.attempts,
-        input.transitionId,
-        input.clientFinancialFactId,
-        input.clientFinancialFactIds,
-        input.teacherFinancialFactId,
+        claim.lessonId,
+        claim.workerId,
+        claim.attempts,
       ],
     );
     if (updated.rowCount !== 1) {
