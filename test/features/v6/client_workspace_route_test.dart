@@ -123,6 +123,7 @@ void main() {
         expect(find.text('Обзор'), findsOneWidget);
         expect(find.text('Занятия'), findsOneWidget);
         expect(find.text('Абонементы'), findsOneWidget);
+        expect(find.text('Прогресс'), findsOneWidget);
         expect(find.text('История и задачи'), findsOneWidget);
         expect(find.text('Контакты'), findsOneWidget);
         expect(find.text('Документы'), findsOneWidget);
@@ -248,6 +249,7 @@ void main() {
         'Занятия',
         'Оплаты',
         'Абонементы',
+        'Прогресс',
         'История и задачи',
         'Контакты',
         'Документы',
@@ -270,8 +272,12 @@ void main() {
         tester.getTopLeft(find.text('Контакты')).dy,
       );
       expect(
-        tester.getTopLeft(find.text('Оплаты')).dy,
         tester.getTopLeft(find.text('Абонементы')).dy,
+        tester.getTopLeft(find.text('Прогресс')).dy,
+      );
+      expect(
+        tester.getTopLeft(find.text('Оплаты')).dy,
+        greaterThan(tester.getTopLeft(find.text('Абонементы')).dy),
       );
       await tester.ensureVisible(
         find.byKey(const ValueKey('client-lesson-lesson-1')),
@@ -569,8 +575,7 @@ void main() {
     router.push('/students/student-1?section=overview');
     await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.text('Оплаты'));
-    await tester.tap(find.text('Оплаты'));
+    await tester.tap(find.byKey(const Key('client-section-jump-payments')));
     await tester.pumpAndSettle();
 
     expect(router.state.uri.queryParameters['section'], 'payments');

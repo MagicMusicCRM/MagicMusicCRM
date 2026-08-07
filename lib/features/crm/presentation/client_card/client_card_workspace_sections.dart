@@ -27,18 +27,66 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 1440),
               child: LayoutBuilder(
-                builder: (context, constraints) => _buildDesktopCardLayout(
-                  cs,
-                  currentStatus,
-                  tabs,
-                  wide: constraints.maxWidth >= 1120,
-                  canReadClientFinance: canReadClientFinance,
-                  canReadSchedule: canReadSchedule,
-                  canWriteSchedule: canWriteSchedule,
+                builder: (context, constraints) => Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildDesktopSectionJumps(cs, tabs),
+                    const SizedBox(height: AppSpace.lg),
+                    _buildDesktopCardLayout(
+                      cs,
+                      currentStatus,
+                      tabs,
+                      wide: constraints.maxWidth >= 1120,
+                      canReadClientFinance: canReadClientFinance,
+                      canReadSchedule: canReadSchedule,
+                      canWriteSchedule: canWriteSchedule,
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopSectionJumps(
+    ColorScheme cs,
+    List<(IconData, String, String)> tabs,
+  ) {
+    return Semantics(
+      container: true,
+      label: 'Быстрый переход по карточке клиента',
+      child: Container(
+        key: const Key('client-desktop-section-jumps'),
+        padding: const EdgeInsets.all(AppSpace.md),
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(color: cs.outlineVariant),
+        ),
+        child: Wrap(
+          spacing: AppSpace.sm,
+          runSpacing: AppSpace.sm,
+          children: [
+            for (final tab in tabs)
+              Semantics(
+                button: true,
+                selected: _selectedSection == tab.$3,
+                child: OutlinedButton.icon(
+                  key: Key('client-section-jump-${tab.$3}'),
+                  onPressed: () => _selectSection(tab.$3),
+                  style: OutlinedButton.styleFrom(
+                    backgroundColor: _selectedSection == tab.$3
+                        ? AppColor.goldSoft
+                        : null,
+                  ),
+                  icon: Icon(tab.$1, size: 16),
+                  label: Text('→ ${tab.$2}'),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -107,24 +155,26 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
     final lessons = bySection['lessons'];
     if (lessons != null) add(card(lessons));
 
-    final payments = bySection['payments'];
     final subscriptions = bySection['subscriptions'];
-    if (payments != null && subscriptions != null) {
+    final progress = bySection['progress'];
+    if (wide && subscriptions != null && progress != null) {
       add(
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(flex: 2, child: card(payments)),
-            const SizedBox(width: AppSpace.lg),
             Expanded(child: card(subscriptions)),
+            const SizedBox(width: AppSpace.lg),
+            Expanded(child: card(progress)),
           ],
         ),
       );
-    } else if (payments != null) {
-      add(card(payments));
-    } else if (subscriptions != null) {
-      add(card(subscriptions));
+    } else {
+      if (subscriptions != null) add(card(subscriptions));
+      if (progress != null) add(card(progress));
     }
+
+    final payments = bySection['payments'];
+    if (payments != null) add(card(payments));
 
     for (final section in const ['history_tasks', 'documents']) {
       final tab = bySection[section];
@@ -159,10 +209,9 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
         cs,
         embedded: true,
       ),
-      'subscriptions' when _isStudent => _buildSubscriptionsTab(
-        cs,
-        embedded: true,
-      ),
+      'subscriptions' => _buildSubscriptionsTab(cs, embedded: true),
+      'progress' when _isStudent => _buildProgressTab(cs, embedded: true),
+      'progress' => _buildLeadProgressTab(cs, embedded: true),
       'history_tasks' => _buildDesktopHistoryAndTasks(cs),
       'contacts' => _buildFamilyTab(cs, embedded: true),
       'documents' => const Padding(
@@ -244,11 +293,6 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
               Icons.history_rounded,
               _buildStudentHistoryTab(cs, embedded: true),
             ),
-            (
-              'Прогресс',
-              Icons.insights_rounded,
-              _buildProgressTab(cs, embedded: true),
-            ),
           ]
         : <(String, IconData, Widget)>[
             (
@@ -265,11 +309,6 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
               'История',
               Icons.history_rounded,
               _buildHistoryTab(cs, embedded: true),
-            ),
-            (
-              'Прогресс',
-              Icons.insights_rounded,
-              _buildLeadProgressTab(cs, embedded: true),
             ),
           ];
     return Padding(
@@ -344,7 +383,9 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
       'payments' when _isStudent && canReadClientFinance => _buildPaymentsTab(
         cs,
       ),
-      'subscriptions' when _isStudent => _buildSubscriptionsTab(cs),
+      'subscriptions' => _buildSubscriptionsTab(cs),
+      'progress' when _isStudent => _buildProgressTab(cs),
+      'progress' => _buildLeadProgressTab(cs),
       'history_tasks' => _buildHistoryAndTasksTab(cs),
       'contacts' => _buildFamilyTab(cs),
       'documents' => const MagicPageState(
@@ -475,13 +516,11 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
             ('Задачи', _buildStudentTasksTab(cs)),
             ('Комментарии', _buildCommentsTab(cs)),
             ('История', _buildStudentHistoryTab(cs)),
-            ('Прогресс', _buildProgressTab(cs)),
           ]
         : <(String, Widget)>[
             ('Задачи', _buildTasksTab(cs)),
             ('Комментарии', _buildCommentsTab(cs)),
             ('История', _buildHistoryTab(cs)),
-            ('Прогресс', _buildLeadProgressTab(cs)),
           ];
     return DefaultTabController(
       length: tabs.length,
@@ -501,6 +540,38 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
   }
 
   Widget _buildSubscriptionsTab(ColorScheme cs, {bool embedded = false}) {
+    if (!_isStudent) {
+      return ListView(
+        shrinkWrap: embedded,
+        physics: embedded ? const NeverScrollableScrollPhysics() : null,
+        padding: const EdgeInsets.all(AppSpace.xl),
+        children: [
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.icon(
+              key: const Key('subscription-add'),
+              onPressed: _converting ? null : _showIssueSubscriptionSheet,
+              icon: _converting
+                  ? const SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.card_membership_rounded),
+              label: const Text('Выдать абонемент'),
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: AppSpace.xl),
+            child: MagicPageState(
+              kind: MagicPageStateKind.empty,
+              title: 'Абонемент ещё не выдан',
+              message:
+                  'Выдача оплаченного абонемента переведёт лида в ученики.',
+            ),
+          ),
+        ],
+      );
+    }
     return _studentGuard(cs, () {
       final focusedId = widget.initialViewState?.filters['subscriptionId']
           ?.toString();

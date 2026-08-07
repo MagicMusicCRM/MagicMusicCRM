@@ -384,7 +384,7 @@ graph TD
   - **Зависимости**: INT-S0, T2.1.5.
   - **Приоритет**: P0.
 
-- [ ] **T5.1.3** [REQ-CLIENT-101]: Удалить общее Actions и завершить длинную карточку
+- [x] **T5.1.3** [REQ-CLIENT-101]: Удалить общее Actions и завершить длинную карточку
   - **Описание**: Subscription actions только в section, homework в Progress, archive отдельно; payment movements/installments/obligations collapsed; Tasks/History доступны через section jump не более чем за два действия.
   - **Входные данные**: T5.1.1, T5.1.2, T4.1.3, [`crm_workspace_v7.md` §3/8](04_SYSTEM_DESIGN/crm_workspace_v7.md).
   - **Выходные данные**: cleaned Client Card production composition and action inventory.

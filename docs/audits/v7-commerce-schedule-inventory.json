@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "task": "T1.1.1",
-  "source_digest": "f8e686254e0f68cefc0873d9ef31c77f8698224cfeb1e247bb801be05f3fb6b5",
+  "source_digest": "476d776dae34749b2522d0a6123832eb43eb9ecc9ffe390f946a4d3a0643a9ea",
   "summary": {
-    "matched_source_files": 50,
-    "finance_callsites": 246,
-    "ordinary_finance_reads": 96,
+    "matched_source_files": 51,
+    "finance_callsites": 251,
+    "ordinary_finance_reads": 97,
     "reporting_safe_finance_reads": 51,
     "lesson_temporal_mutations": 7,
     "unknown_lesson_mutation_callers": 0,
@@ -19,22 +19,6 @@
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
       "line": 175
-    },
-    {
-      "kind": "wire",
-      "subject": "/subscription",
-      "operation": "call",
-      "owner": "SYS-COMMERCE-INTEGRITY",
-      "file": "server/src/crm/commerce/payment-reversal.service.ts",
-      "line": 25
-    },
-    {
-      "kind": "wire",
-      "subject": "/subscription",
-      "operation": "call",
-      "owner": "SYS-COMMERCE-INTEGRITY",
-      "file": "server/src/crm/commerce/payment-reversal.service.ts",
-      "line": 26
     },
     {
       "kind": "sql-table",
@@ -117,20 +101,20 @@
       "line": 814
     },
     {
-      "kind": "wire",
-      "subject": "/subscription",
-      "operation": "call",
-      "owner": "SYS-COMMERCE-INTEGRITY",
-      "file": "server/src/crm/commerce/payment-reversal.service.ts",
-      "line": 24
-    },
-    {
       "kind": "sql-table",
       "subject": "commerce_ordinary_account_adjustments",
       "operation": "read",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/commerce/subscription-issue.repository.ts",
       "line": 822
+    },
+    {
+      "kind": "sql-table",
+      "subject": "account_adjustments",
+      "operation": "mutation",
+      "owner": "SYS-COMMERCE-INTEGRITY",
+      "file": "server/src/crm/commerce/subscription-issue.repository.ts",
+      "line": 855
     },
     {
       "kind": "sql-table",
@@ -230,11 +214,51 @@
     },
     {
       "kind": "sql-table",
-      "subject": "account_adjustments",
+      "subject": "commerce_reporting_exclusions",
+      "operation": "read",
+      "owner": "SYS-COMMERCE-INTEGRITY",
+      "file": "server/src/crm/commerce/subscription-lifecycle.repository.ts",
+      "line": 816
+    },
+    {
+      "kind": "sql-table",
+      "subject": "subscription_obligation_facts",
       "operation": "mutation",
       "owner": "SYS-COMMERCE-INTEGRITY",
-      "file": "server/src/crm/commerce/subscription-issue.repository.ts",
-      "line": 855
+      "file": "server/src/crm/commerce/subscription-lifecycle.repository.ts",
+      "line": 1142
+    },
+    {
+      "kind": "sql-table",
+      "subject": "subscription_obligation_facts",
+      "operation": "mutation",
+      "owner": "SYS-COMMERCE-INTEGRITY",
+      "file": "server/src/crm/commerce/subscription-lifecycle.repository.ts",
+      "line": 1189
+    },
+    {
+      "kind": "wire",
+      "subject": "/subscription",
+      "operation": "call",
+      "owner": "SYS-COMMERCE-INTEGRITY",
+      "file": "server/src/crm/commerce/payment-reversal.service.ts",
+      "line": 26
+    },
+    {
+      "kind": "wire",
+      "subject": "/subscription",
+      "operation": "call",
+      "owner": "SYS-COMMERCE-INTEGRITY",
+      "file": "server/src/crm/commerce/payment-reversal.service.ts",
+      "line": 25
+    },
+    {
+      "kind": "wire",
+      "subject": "/subscription",
+      "operation": "call",
+      "owner": "SYS-COMMERCE-INTEGRITY",
+      "file": "server/src/crm/commerce/payment-reversal.service.ts",
+      "line": 24
     },
     {
       "kind": "wire",
@@ -243,30 +267,6 @@
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/commerce/payment-reversal.service.ts",
       "line": 23
-    },
-    {
-      "kind": "wire",
-      "subject": "/payment",
-      "operation": "call",
-      "owner": "SYS-COMMERCE-INTEGRITY",
-      "file": "server/src/crm/commerce/payment-reversal.service.ts",
-      "line": 22
-    },
-    {
-      "kind": "wire",
-      "subject": "/dto/payment",
-      "operation": "call",
-      "owner": "SYS-COMMERCE-INTEGRITY",
-      "file": "server/src/crm/commerce/payment-reversal.service.ts",
-      "line": 17
-    },
-    {
-      "kind": "sql-table",
-      "subject": "commerce_ordinary_payment_records",
-      "operation": "read",
-      "owner": "SYS-COMMERCE-INTEGRITY",
-      "file": "server/src/crm/commerce/payment-lifecycle.repository.ts",
-      "line": 170
     },
     {
       "kind": "sql-table",
@@ -373,20 +373,20 @@
       "line": 518
     },
     {
+      "kind": "sql-table",
+      "subject": "commerce_ordinary_payment_records",
+      "operation": "read",
+      "owner": "SYS-COMMERCE-INTEGRITY",
+      "file": "server/src/crm/commerce/subscription-lifecycle.repository.ts",
+      "line": 1235
+    },
+    {
       "kind": "wire",
       "subject": "/dto/payment",
       "operation": "call",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/commerce/payment-lifecycle.service.ts",
       "line": 17
-    },
-    {
-      "kind": "wire",
-      "subject": "/payment",
-      "operation": "call",
-      "owner": "SYS-COMMERCE-INTEGRITY",
-      "file": "server/src/crm/commerce/payment-lifecycle.service.ts",
-      "line": 24
     },
     {
       "kind": "wire",
@@ -477,60 +477,52 @@
       "line": 183
     },
     {
-      "kind": "sql-table",
-      "subject": "commerce_reporting_exclusions",
-      "operation": "read",
+      "kind": "wire",
+      "subject": "/dto/payment",
+      "operation": "call",
       "owner": "SYS-COMMERCE-INTEGRITY",
-      "file": "server/src/crm/commerce/subscription-lifecycle.repository.ts",
-      "line": 816
+      "file": "server/src/crm/commerce/payment-reversal.service.ts",
+      "line": 17
     },
     {
-      "kind": "sql-table",
-      "subject": "subscription_obligation_facts",
-      "operation": "mutation",
+      "kind": "wire",
+      "subject": "/payment",
+      "operation": "call",
       "owner": "SYS-COMMERCE-INTEGRITY",
-      "file": "server/src/crm/commerce/subscription-lifecycle.repository.ts",
-      "line": 1142
+      "file": "server/src/crm/commerce/payment-reversal.service.ts",
+      "line": 22
     },
     {
-      "kind": "sql-table",
-      "subject": "subscription_obligation_facts",
-      "operation": "mutation",
+      "kind": "wire",
+      "subject": "/payment",
+      "operation": "call",
       "owner": "SYS-COMMERCE-INTEGRITY",
-      "file": "server/src/crm/commerce/subscription-lifecycle.repository.ts",
-      "line": 1189
+      "file": "server/src/crm/commerce/payment-lifecycle.service.ts",
+      "line": 24
     },
     {
       "kind": "sql-table",
       "subject": "commerce_ordinary_payment_records",
       "operation": "read",
       "owner": "SYS-COMMERCE-INTEGRITY",
+      "file": "server/src/crm/commerce/payment-lifecycle.repository.ts",
+      "line": 170
+    },
+    {
+      "kind": "sql-table",
+      "subject": "commerce_reporting_exclusions",
+      "operation": "mutation",
+      "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/commerce/subscription-lifecycle.repository.ts",
-      "line": 1235
+      "line": 1242
     },
     {
       "kind": "wire",
-      "subject": "/analytics/finance/monthly.$format",
+      "subject": "/dto/subscription",
       "operation": "call",
-      "owner": "SYS-APP-EXPERIENCE",
-      "file": "lib/core/services/magic_crm_service_finance.dart",
-      "line": 932
-    },
-    {
-      "kind": "wire",
-      "subject": "/crm/payments",
-      "operation": "call",
-      "owner": "SYS-APP-EXPERIENCE",
-      "file": "lib/core/services/magic_crm_service_finance.dart",
-      "line": 1035
-    },
-    {
-      "kind": "wire",
-      "subject": "/crm/payments",
-      "operation": "call",
-      "owner": "SYS-APP-EXPERIENCE",
-      "file": "lib/core/services/magic_crm_service_finance.dart",
-      "line": 1059
+      "owner": "SYS-COMMERCE-INTEGRITY",
+      "file": "server/src/crm/commerce/subscription-lifecycle.service.ts",
+      "line": 20
     },
     {
       "kind": "wire",
@@ -538,7 +530,7 @@
       "operation": "call",
       "owner": "SYS-APP-EXPERIENCE",
       "file": "lib/core/services/magic_crm_service_finance.dart",
-      "line": 1138
+      "line": 1338
     },
     {
       "kind": "wire",
@@ -546,7 +538,7 @@
       "operation": "call",
       "owner": "SYS-APP-EXPERIENCE",
       "file": "lib/core/services/magic_crm_service_finance.dart",
-      "line": 1167
+      "line": 1353
     },
     {
       "kind": "wire",
@@ -554,7 +546,7 @@
       "operation": "call",
       "owner": "SYS-APP-EXPERIENCE",
       "file": "lib/core/services/magic_crm_service_finance.dart",
-      "line": 1182
+      "line": 1363
     },
     {
       "kind": "wire",
@@ -562,31 +554,55 @@
       "operation": "call",
       "owner": "SYS-APP-EXPERIENCE",
       "file": "lib/core/services/magic_crm_service_finance.dart",
-      "line": 1192
+      "line": 1373
     },
     {
       "kind": "wire",
-      "subject": "/crm/subscription",
+      "subject": "/crm/students/$recipientStudentId/subscriptions/purchase/preview",
       "operation": "call",
       "owner": "SYS-APP-EXPERIENCE",
       "file": "lib/core/services/magic_crm_service_finance.dart",
-      "line": 1202
+      "line": 1384
     },
     {
       "kind": "wire",
-      "subject": "/crm/students/$studentId/subscriptions/issue",
+      "subject": "/crm/students/$recipientStudentId/subscriptions/purchase",
       "operation": "call",
       "owner": "SYS-APP-EXPERIENCE",
       "file": "lib/core/services/magic_crm_service_finance.dart",
-      "line": 1214
+      "line": 1397
     },
     {
       "kind": "wire",
-      "subject": "/crm/students/$studentId/subscription",
+      "subject": "/crm/students/$studentId/payment",
       "operation": "call",
       "owner": "SYS-APP-EXPERIENCE",
       "file": "lib/core/services/magic_crm_service_finance.dart",
-      "line": 1226
+      "line": 1413
+    },
+    {
+      "kind": "wire",
+      "subject": "/crm/students/$studentId/payment",
+      "operation": "call",
+      "owner": "SYS-APP-EXPERIENCE",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1426
+    },
+    {
+      "kind": "wire",
+      "subject": "/crm/students/$studentId/payment",
+      "operation": "call",
+      "owner": "SYS-APP-EXPERIENCE",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1438
+    },
+    {
+      "kind": "wire",
+      "subject": "/crm/students/$studentId/payment",
+      "operation": "call",
+      "owner": "SYS-APP-EXPERIENCE",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1453
     },
     {
       "kind": "wire",
@@ -594,7 +610,7 @@
       "operation": "call",
       "owner": "SYS-APP-EXPERIENCE",
       "file": "lib/core/services/magic_crm_service_finance.dart",
-      "line": 1250
+      "line": 1481
     },
     {
       "kind": "wire",
@@ -602,7 +618,7 @@
       "operation": "call",
       "owner": "SYS-APP-EXPERIENCE",
       "file": "lib/core/services/magic_crm_service_finance.dart",
-      "line": 1264
+      "line": 1495
     },
     {
       "kind": "wire",
@@ -610,7 +626,7 @@
       "operation": "call",
       "owner": "SYS-APP-EXPERIENCE",
       "file": "lib/core/services/magic_crm_service_finance.dart",
-      "line": 1277
+      "line": 1508
     },
     {
       "kind": "wire",
@@ -618,7 +634,7 @@
       "operation": "call",
       "owner": "SYS-APP-EXPERIENCE",
       "file": "lib/core/services/magic_crm_service_finance.dart",
-      "line": 1291
+      "line": 1522
     },
     {
       "kind": "wire",
@@ -626,7 +642,7 @@
       "operation": "call",
       "owner": "SYS-APP-EXPERIENCE",
       "file": "lib/core/services/magic_crm_service_finance.dart",
-      "line": 1309
+      "line": 1540
     },
     {
       "kind": "wire",
@@ -634,7 +650,7 @@
       "operation": "call",
       "owner": "SYS-APP-EXPERIENCE",
       "file": "lib/core/services/magic_crm_service_finance.dart",
-      "line": 1447
+      "line": 1678
     },
     {
       "kind": "wire",
@@ -650,7 +666,7 @@
       "operation": "call",
       "owner": "SYS-APP-EXPERIENCE",
       "file": "lib/core/services/magic_crm_service.dart",
-      "line": 10
+      "line": 11
     },
     {
       "kind": "wire",
@@ -690,7 +706,7 @@
       "operation": "call",
       "owner": "SYS-CRM-WORKSPACE",
       "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 30
+      "line": 31
     },
     {
       "kind": "wire",
@@ -698,7 +714,7 @@
       "operation": "call",
       "owner": "SYS-CRM-WORKSPACE",
       "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 31
+      "line": 32
     },
     {
       "kind": "wire",
@@ -726,59 +742,35 @@
     },
     {
       "kind": "wire",
-      "subject": "/crm/reports/finance",
+      "subject": "/crm/subscription",
       "operation": "call",
       "owner": "SYS-APP-EXPERIENCE",
-      "file": "lib/core/services/magic_crm_service_core.dart",
-      "line": 134
-    },
-    {
-      "kind": "sql-table",
-      "subject": "commerce_ordinary_payment_records",
-      "operation": "read",
-      "owner": "SYS-COMMERCE-INTEGRITY",
-      "file": "server/src/crm/commerce/payment-lifecycle.repository.ts",
-      "line": 98
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1309
     },
     {
       "kind": "wire",
-      "subject": "/core/models/subscription",
+      "subject": "/crm/payments",
       "operation": "call",
       "owner": "SYS-APP-EXPERIENCE",
-      "file": "lib/core/models/commerce_projection.dart",
-      "line": 3
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1230
     },
     {
       "kind": "wire",
-      "subject": "/payment",
+      "subject": "/crm/payments",
       "operation": "call",
-      "owner": "SYS-PLATFORM-QUALITY",
-      "file": "server/src/platform/v4-preflight.ts",
-      "line": 436
-    },
-    {
-      "kind": "sql-table",
-      "subject": "commerce_reporting_exclusions",
-      "operation": "mutation",
-      "owner": "SYS-COMMERCE-INTEGRITY",
-      "file": "server/src/crm/commerce/subscription-lifecycle.repository.ts",
-      "line": 1242
+      "owner": "SYS-APP-EXPERIENCE",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1206
     },
     {
       "kind": "wire",
-      "subject": "/dto/subscription",
+      "subject": "/analytics/finance/monthly.$format",
       "operation": "call",
-      "owner": "SYS-COMMERCE-INTEGRITY",
-      "file": "server/src/crm/commerce/subscription-lifecycle.service.ts",
-      "line": 16
-    },
-    {
-      "kind": "wire",
-      "subject": "/dto/subscription",
-      "operation": "call",
-      "owner": "SYS-COMMERCE-INTEGRITY",
-      "file": "server/src/crm/commerce/subscription-lifecycle.service.ts",
-      "line": 20
+      "owner": "SYS-APP-EXPERIENCE",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1103
     },
     {
       "kind": "wire",
@@ -885,20 +877,20 @@
       "line": 1107
     },
     {
+      "kind": "wire",
+      "subject": "/dto/subscription",
+      "operation": "call",
+      "owner": "SYS-COMMERCE-INTEGRITY",
+      "file": "server/src/crm/commerce/subscription-lifecycle.service.ts",
+      "line": 16
+    },
+    {
       "kind": "sql-table",
       "subject": "payments",
       "operation": "reference",
       "owner": "SYS-PLATFORM-QUALITY",
       "file": "server/src/migration/hollihop-import.ts",
       "line": 1132
-    },
-    {
-      "kind": "sql-table",
-      "subject": "payments",
-      "operation": "read",
-      "owner": "SYS-PLATFORM-QUALITY",
-      "file": "server/src/migration/hollihop-import.ts",
-      "line": 1853
     },
     {
       "kind": "wire",
@@ -974,6 +966,14 @@
     },
     {
       "kind": "wire",
+      "subject": "/payment",
+      "operation": "call",
+      "owner": "SYS-PLATFORM-QUALITY",
+      "file": "server/src/platform/v4-preflight.ts",
+      "line": 436
+    },
+    {
+      "kind": "wire",
       "subject": "/core/models/payment",
       "operation": "call",
       "owner": "SYS-APP-EXPERIENCE",
@@ -982,11 +982,43 @@
     },
     {
       "kind": "wire",
-      "subject": "/dto/subscription",
+      "subject": "/core/models/subscription",
       "operation": "call",
+      "owner": "SYS-APP-EXPERIENCE",
+      "file": "lib/core/models/commerce_projection.dart",
+      "line": 3
+    },
+    {
+      "kind": "wire",
+      "subject": "/crm/reports/finance",
+      "operation": "call",
+      "owner": "SYS-APP-EXPERIENCE",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 170
+    },
+    {
+      "kind": "sql-table",
+      "subject": "payments",
+      "operation": "read",
+      "owner": "SYS-PLATFORM-QUALITY",
+      "file": "server/src/migration/hollihop-import.ts",
+      "line": 1853
+    },
+    {
+      "kind": "wire",
+      "subject": "/features/manager/presentation/widgets/finance",
+      "operation": "call",
+      "owner": "SYS-OPERATIONS",
+      "file": "lib/features/manager/presentation/widgets/reports_widget.dart",
+      "line": 18
+    },
+    {
+      "kind": "sql-table",
+      "subject": "commerce_ordinary_payment_records",
+      "operation": "read",
       "owner": "SYS-COMMERCE-INTEGRITY",
-      "file": "server/src/crm/commerce/package-catalog.service.ts",
-      "line": 14
+      "file": "server/src/crm/commerce/payment-lifecycle.repository.ts",
+      "line": 98
     },
     {
       "kind": "wire",
@@ -995,30 +1027,6 @@
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/commerce/installment-due.worker.ts",
       "line": 8
-    },
-    {
-      "kind": "wire",
-      "subject": "/payment",
-      "operation": "call",
-      "owner": "SYS-COMMERCE-INTEGRITY",
-      "file": "server/src/crm/commerce/installment-due.worker.ts",
-      "line": 7
-    },
-    {
-      "kind": "wire",
-      "subject": "/commerce/subscription",
-      "operation": "call",
-      "owner": "SYS-COMMERCE-INTEGRITY",
-      "file": "server/src/crm/crm.module.ts",
-      "line": 89
-    },
-    {
-      "kind": "wire",
-      "subject": "/commerce/payment",
-      "operation": "call",
-      "owner": "SYS-COMMERCE-INTEGRITY",
-      "file": "server/src/crm/crm.module.ts",
-      "line": 99
     },
     {
       "kind": "wire",
@@ -1043,6 +1051,14 @@
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/crm.module.ts",
       "line": 102
+    },
+    {
+      "kind": "wire",
+      "subject": "/commerce/payment",
+      "operation": "call",
+      "owner": "SYS-COMMERCE-INTEGRITY",
+      "file": "server/src/crm/crm.module.ts",
+      "line": 103
     },
     {
       "kind": "sql-table",
@@ -1221,14 +1237,6 @@
       "line": 437
     },
     {
-      "kind": "wire",
-      "subject": "/commerce/subscription",
-      "operation": "call",
-      "owner": "SYS-COMMERCE-INTEGRITY",
-      "file": "server/src/crm/crm.module.ts",
-      "line": 84
-    },
-    {
       "kind": "sql-table",
       "subject": "commerce_ordinary_payments",
       "operation": "read",
@@ -1242,7 +1250,7 @@
       "operation": "call",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/crm.module.ts",
-      "line": 83
+      "line": 90
     },
     {
       "kind": "wire",
@@ -1250,7 +1258,23 @@
       "operation": "call",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/crm.module.ts",
-      "line": 80
+      "line": 85
+    },
+    {
+      "kind": "wire",
+      "subject": "/commerce/subscription",
+      "operation": "call",
+      "owner": "SYS-COMMERCE-INTEGRITY",
+      "file": "server/src/crm/crm.module.ts",
+      "line": 84
+    },
+    {
+      "kind": "wire",
+      "subject": "/commerce/subscription",
+      "operation": "call",
+      "owner": "SYS-COMMERCE-INTEGRITY",
+      "file": "server/src/crm/crm.module.ts",
+      "line": 83
     },
     {
       "kind": "wire",
@@ -1266,7 +1290,7 @@
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 203
+      "line": 212
     },
     {
       "kind": "wire",
@@ -1274,7 +1298,7 @@
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 204
+      "line": 213
     },
     {
       "kind": "wire",
@@ -1282,7 +1306,7 @@
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 230
+      "line": 239
     },
     {
       "kind": "wire",
@@ -1290,7 +1314,7 @@
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 231
+      "line": 240
     },
     {
       "kind": "wire",
@@ -1298,7 +1322,7 @@
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 244
+      "line": 253
     },
     {
       "kind": "wire",
@@ -1306,7 +1330,7 @@
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 245
+      "line": 254
     },
     {
       "kind": "wire",
@@ -1314,7 +1338,7 @@
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 246
+      "line": 255
     },
     {
       "kind": "wire",
@@ -1322,7 +1346,7 @@
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 248
+      "line": 257
     },
     {
       "kind": "sql-table",
@@ -1358,19 +1382,19 @@
     },
     {
       "kind": "sql-table",
+      "subject": "commerce_ordinary_account_adjustments",
+      "operation": "read",
+      "owner": "SYS-OPERATIONS",
+      "file": "server/src/crm/finance.service.ts",
+      "line": 512
+    },
+    {
+      "kind": "sql-table",
       "subject": "commerce_ordinary_payments",
       "operation": "read",
       "owner": "SYS-OPERATIONS",
       "file": "server/src/analytics/reporting-read.service.ts",
       "line": 188
-    },
-    {
-      "kind": "wire",
-      "subject": "/finance",
-      "operation": "call",
-      "owner": "SYS-OPERATIONS",
-      "file": "server/src/crm/crm-dashboard.controller.ts",
-      "line": 41
     },
     {
       "kind": "wire",
@@ -1458,14 +1482,6 @@
       "operation": "call",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/crm.module.ts",
-      "line": 78
-    },
-    {
-      "kind": "wire",
-      "subject": "/commerce/subscription",
-      "operation": "call",
-      "owner": "SYS-COMMERCE-INTEGRITY",
-      "file": "server/src/crm/crm.module.ts",
       "line": 79
     },
     {
@@ -1474,47 +1490,47 @@
       "operation": "call",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/crm.module.ts",
-      "line": 82
+      "line": 80
     },
     {
       "kind": "wire",
-      "subject": "/features/manager/presentation/widgets/finance",
+      "subject": "/commerce/subscription",
+      "operation": "call",
+      "owner": "SYS-COMMERCE-INTEGRITY",
+      "file": "server/src/crm/crm.module.ts",
+      "line": 81
+    },
+    {
+      "kind": "wire",
+      "subject": "/finance",
       "operation": "call",
       "owner": "SYS-OPERATIONS",
-      "file": "lib/features/manager/presentation/widgets/reports_widget.dart",
-      "line": 18
+      "file": "server/src/crm/crm-dashboard.controller.ts",
+      "line": 41
+    },
+    {
+      "kind": "wire",
+      "subject": "/dto/subscription",
+      "operation": "call",
+      "owner": "SYS-COMMERCE-INTEGRITY",
+      "file": "server/src/crm/commerce/package-catalog.service.ts",
+      "line": 14
     },
     {
       "kind": "sql-table",
-      "subject": "commerce_ordinary_account_adjustments",
-      "operation": "read",
+      "subject": "account_adjustments",
+      "operation": "mutation",
       "owner": "SYS-OPERATIONS",
       "file": "server/src/crm/finance.service.ts",
-      "line": 512
-    },
-    {
-      "kind": "sql-table",
-      "subject": "commerce_ordinary_payments",
-      "operation": "read",
-      "owner": "SYS-OPERATIONS",
-      "file": "server/src/crm/finance.service.ts",
-      "line": 672
+      "line": 593
     },
     {
       "kind": "sql-table",
       "subject": "payments",
-      "operation": "read",
-      "owner": "SYS-CRM-WORKSPACE",
-      "file": "server/src/crm/clients/client-archive.service.ts",
-      "line": 377
-    },
-    {
-      "kind": "sql-table",
-      "subject": "expected_payments",
-      "operation": "read",
-      "owner": "SYS-CRM-WORKSPACE",
-      "file": "server/src/crm/clients/client-archive.service.ts",
-      "line": 383
+      "operation": "mutation",
+      "owner": "SYS-OPERATIONS",
+      "file": "server/src/crm/finance.service.ts",
+      "line": 692
     },
     {
       "kind": "sql-table",
@@ -1523,6 +1539,14 @@
       "owner": "SYS-CRM-WORKSPACE",
       "file": "server/src/crm/clients/client-archive.service.ts",
       "line": 388
+    },
+    {
+      "kind": "sql-table",
+      "subject": "client_payment_records",
+      "operation": "read",
+      "owner": "SYS-CRM-WORKSPACE",
+      "file": "server/src/crm/clients/client-internal-context.service.ts",
+      "line": 238
     },
     {
       "kind": "wire",
@@ -1642,7 +1666,7 @@
       "operation": "read",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/commerce/commerce-projection.repository.ts",
-      "line": 622
+      "line": 628
     },
     {
       "kind": "sql-table",
@@ -1650,7 +1674,7 @@
       "operation": "read",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/commerce/commerce-projection.repository.ts",
-      "line": 655
+      "line": 664
     },
     {
       "kind": "sql-table",
@@ -1658,7 +1682,7 @@
       "operation": "read",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/commerce/commerce-projection.repository.ts",
-      "line": 656
+      "line": 665
     },
     {
       "kind": "sql-table",
@@ -1666,7 +1690,7 @@
       "operation": "read",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/commerce/commerce-projection.repository.ts",
-      "line": 684
+      "line": 696
     },
     {
       "kind": "sql-table",
@@ -1674,7 +1698,7 @@
       "operation": "read",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/commerce/commerce-projection.repository.ts",
-      "line": 738
+      "line": 756
     },
     {
       "kind": "sql-table",
@@ -1682,7 +1706,7 @@
       "operation": "read",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/commerce/commerce-projection.repository.ts",
-      "line": 739
+      "line": 757
     },
     {
       "kind": "sql-table",
@@ -1690,7 +1714,7 @@
       "operation": "read",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/commerce/commerce-projection.repository.ts",
-      "line": 793
+      "line": 811
     },
     {
       "kind": "sql-table",
@@ -1698,7 +1722,7 @@
       "operation": "read",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/commerce/commerce-projection.repository.ts",
-      "line": 794
+      "line": 812
     },
     {
       "kind": "sql-table",
@@ -1717,6 +1741,30 @@
       "line": 398
     },
     {
+      "kind": "wire",
+      "subject": "/payment",
+      "operation": "call",
+      "owner": "SYS-COMMERCE-INTEGRITY",
+      "file": "server/src/crm/commerce/installment-due.worker.ts",
+      "line": 7
+    },
+    {
+      "kind": "sql-table",
+      "subject": "expected_payments",
+      "operation": "read",
+      "owner": "SYS-CRM-WORKSPACE",
+      "file": "server/src/crm/clients/client-archive.service.ts",
+      "line": 383
+    },
+    {
+      "kind": "sql-table",
+      "subject": "payments",
+      "operation": "read",
+      "owner": "SYS-CRM-WORKSPACE",
+      "file": "server/src/crm/clients/client-archive.service.ts",
+      "line": 377
+    },
+    {
       "kind": "sql-table",
       "subject": "commerce_ordinary_payments",
       "operation": "read",
@@ -1725,36 +1773,12 @@
       "line": 186
     },
     {
-      "kind": "sql-table",
-      "subject": "account_adjustments",
-      "operation": "mutation",
-      "owner": "SYS-OPERATIONS",
-      "file": "server/src/crm/finance.service.ts",
-      "line": 593
-    },
-    {
       "kind": "wire",
       "subject": "/subscription",
       "operation": "call",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/subscriptions.service.ts",
       "line": 363
-    },
-    {
-      "kind": "sql-table",
-      "subject": "payments",
-      "operation": "mutation",
-      "owner": "SYS-COMMERCE-INTEGRITY",
-      "file": "server/src/crm/subscriptions.service.ts",
-      "line": 669
-    },
-    {
-      "kind": "sql-table",
-      "subject": "payments",
-      "operation": "mutation",
-      "owner": "SYS-OPERATIONS",
-      "file": "server/src/crm/finance.service.ts",
-      "line": 692
     },
     {
       "kind": "wire",
@@ -1861,12 +1885,12 @@
       "line": 64
     },
     {
-      "kind": "wire",
-      "subject": "/payment",
-      "operation": "call",
-      "owner": "SYS-COMMERCE-INTEGRITY",
-      "file": "server/src/crm/subscription-commerce.controller.ts",
-      "line": 79
+      "kind": "sql-table",
+      "subject": "commerce_ordinary_payments",
+      "operation": "read",
+      "owner": "SYS-OPERATIONS",
+      "file": "server/src/crm/finance.service.ts",
+      "line": 672
     },
     {
       "kind": "wire",
@@ -1874,7 +1898,7 @@
       "operation": "call",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/subscription-commerce.controller.ts",
-      "line": 100
+      "line": 79
     },
     {
       "kind": "wire",
@@ -1967,10 +1991,26 @@
     {
       "kind": "sql-table",
       "subject": "payments",
+      "operation": "mutation",
+      "owner": "SYS-COMMERCE-INTEGRITY",
+      "file": "server/src/crm/subscriptions.service.ts",
+      "line": 669
+    },
+    {
+      "kind": "sql-table",
+      "subject": "payments",
       "operation": "read",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/subscriptions.service.ts",
       "line": 827
+    },
+    {
+      "kind": "wire",
+      "subject": "/payment",
+      "operation": "call",
+      "owner": "SYS-COMMERCE-INTEGRITY",
+      "file": "server/src/crm/subscription-commerce.controller.ts",
+      "line": 100
     },
     {
       "kind": "wire",

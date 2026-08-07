@@ -372,23 +372,7 @@ extension _ClientCardStudent on _ClientCardState {
       () => Column(
         mainAxisSize: embedded ? MainAxisSize.min : MainAxisSize.max,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpace.xl,
-              AppSpace.md,
-              AppSpace.xl,
-              0,
-            ),
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: FilledButton.icon(
-                key: const Key('assign-homework'),
-                onPressed: _showAssignHomeworkSheet,
-                icon: const Icon(Icons.assignment_add),
-                label: const Text('Назначить ДЗ'),
-              ),
-            ),
-          ),
+          _buildAssignHomeworkButton(),
           if (embedded)
             _HomeworkProgressList(
               studentId: _studentId,
@@ -411,10 +395,44 @@ extension _ClientCardStudent on _ClientCardState {
   /// Staff therefore need the same progress surface before conversion; the
   /// server moves these rows to the student atomically with subscription issue.
   Widget _buildLeadProgressTab(ColorScheme cs, {bool embedded = false}) {
-    return _HomeworkProgressList(
-      leadId: _leadId,
-      refreshKey: _homeworkRefreshKey,
-      embedded: embedded,
+    return Column(
+      mainAxisSize: embedded ? MainAxisSize.min : MainAxisSize.max,
+      children: [
+        _buildAssignHomeworkButton(),
+        if (embedded)
+          _HomeworkProgressList(
+            leadId: _leadId,
+            refreshKey: _homeworkRefreshKey,
+            embedded: true,
+          )
+        else
+          Expanded(
+            child: _HomeworkProgressList(
+              leadId: _leadId,
+              refreshKey: _homeworkRefreshKey,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildAssignHomeworkButton() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpace.xl,
+        AppSpace.md,
+        AppSpace.xl,
+        0,
+      ),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: FilledButton.icon(
+          key: const Key('assign-homework'),
+          onPressed: _showAssignHomeworkSheet,
+          icon: const Icon(Icons.assignment_add),
+          label: const Text('Назначить ДЗ'),
+        ),
+      ),
     );
   }
 
@@ -770,10 +788,16 @@ extension _ClientCardStudent on _ClientCardState {
 
   Future<void> _showAssignHomeworkSheet() async {
     final crm = ref.read(magicCrmServiceProvider);
+    final studentId = _isStudent ? _studentId : null;
+    final leadId = _isStudent ? null : _leadId;
 
     List<Map<String, dynamic>> homeworks = const [];
     try {
-      homeworks = await crm.listHomeworks(studentId: _studentId, limit: 5);
+      homeworks = await crm.listHomeworks(
+        studentId: studentId,
+        leadId: leadId,
+        limit: 5,
+      );
     } catch (_) {
       // Listing is best-effort; the assign form still works without it.
     }
@@ -787,7 +811,8 @@ extension _ClientCardStudent on _ClientCardState {
 
     try {
       await crm.createHomework(
-        studentId: _studentId,
+        studentId: studentId,
+        leadId: leadId,
         title: input.title,
         description: input.description,
         dueAt: input.dueAt?.toIso8601String(),

@@ -61,8 +61,8 @@
   - Проверки: `flutter analyze` чисто, `flutter test` 163/163, `git diff server/`+`lib/core/services/` пусто.
   - Осталось: **P1-7** сетевой baseline (нужен seeded backend). Follow-up: вынести `_V7Field`/`_V7PrimaryButton` в общий файл; выверить текст онбординг-слайдов; owner-визуальная приёмка.
 
-**▶ Следующий шаг:** `/forge` по `.anws/v7/05_TASKS.md`: `T5.1.3` —
-финальная компоновка длинной Client Card и action inventory.
+**▶ Следующий шаг:** `/forge` по `.anws/v7/05_TASKS.md`: `T5.1.4` —
+Director UI двух commerce-каталогов в unified Configuration.
 
 ---
 
@@ -122,7 +122,7 @@
 > **Примечание**: Этот блок автоматически поддерживается процессами `/genesis`, `/blueprint` и `/forge`.
 
 - **Последняя версия архитектуры**: `.anws/v7` (Financial & Lesson Integrity)
-- **Активный список задач**: `.anws/v7/05_TASKS.md` — следующая задача `T5.1.3`
+- **Активный список задач**: `.anws/v7/05_TASKS.md` — следующая задача `T5.1.4`
 - **Фаза**: `/genesis`, `/design-system` и `/blueprint` завершены; выполняется `/forge`
 - **Последнее обновление**: `2026-08-07`
 
@@ -346,8 +346,13 @@ versioned Lead/Student note с optimistic concurrency и conversion preservation
 author и time. Teacher/Client не делают скрытых запросов. Gate:
 Flutter analyze clean и 635/635; backend 155/155 suites, 1227/1227 tests;
 двойной reconcile `issues=[]`
-(`docs/audits/v7-client-note-operational-history.md`). Следующий шаг `/forge`:
-`T5.1.3` — финальная Client Card composition и action inventory._
+(`docs/audits/v7-client-note-operational-history.md`). `T5.1.3` вынесла
+Subscriptions и Progress в отдельные Lead/Student sections, удалила
+дубль issue из action-bar, добавила desktop section-jumps и сохранила
+payments/installments collapsed. Gate: Flutter analyze clean и 637/637;
+routes=22, reachable=260, wire=274/274, unowned=0; server diff empty
+(`docs/audits/v7-client-card-composition.md`). Следующий шаг `/forge`:
+`T5.1.4` — Director commerce catalog UI._
 
 ### 🌊 Wave v6/S0 — Evidence & UX Foundation ✅
 _Owner подтвердил полное выполнение v6. `V6-001..005` и `INT-S0` закрыты 2026-08-04: воспроизводимый generator покрывает 21 GoRouter route, 248/259 production-reachable Dart files, 256/256 service calls, route/surface/navigation/input/back ownership с unowned=0; v4 inventory обновлён и снова проходит stale-check. Baseline: Flutter analyze clean и 486/486 tests, backend typecheck/build clean, 150/150 suites и 1160/1160 tests, actor/payload 9/9, targeted workflow contracts 68/68 (`docs/audits/v6-s0-baseline.md`). Следующий шаг `/forge`: `V6-101` canonical location adapter._

@@ -90,6 +90,10 @@ void main() {
       statuses: const [],
     );
 
+    final subscriptions = find.text('Абонементы');
+    await tester.ensureVisible(subscriptions);
+    await tester.tap(subscriptions);
+    await tester.pumpAndSettle();
     expect(find.text('Выдать абонемент'), findsOneWidget);
     expect(find.text('Создать ученика'), findsNothing);
   });
@@ -130,6 +134,10 @@ void main() {
     await tester.tap(find.text('В работе').last);
     await tester.pumpAndSettle();
 
+    final subscriptions = find.text('Абонементы');
+    await tester.ensureVisible(subscriptions);
+    await tester.tap(subscriptions);
+    await tester.pumpAndSettle();
     final issue = find.text('Выдать абонемент');
     await tester.ensureVisible(issue);
     await tester.tap(issue);

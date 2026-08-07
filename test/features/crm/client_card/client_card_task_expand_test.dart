@@ -47,7 +47,9 @@ void main() {
       statuses: const [],
     );
 
-    await tester.tap(find.text('История и задачи'));
+    final historyAndTasks = find.text('История и задачи');
+    await tester.ensureVisible(historyAndTasks);
+    await tester.tap(historyAndTasks);
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(Tab, 'Задачи'));
     await tester.pumpAndSettle();

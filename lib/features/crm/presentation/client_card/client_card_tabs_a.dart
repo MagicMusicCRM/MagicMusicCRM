@@ -269,32 +269,8 @@ extension _ClientCardTabsA on _ClientCardState {
               ),
               onArchived: () => _closeCard(true),
             ),
-            // Product rule: a trial, its homework and feedback all belong to
-            // the lead. Conversion happens only when a paid package is chosen,
-            // so there is no standalone «Создать ученика» mutation here.
-            if (!_isConverted && !_hasLinkedStudent)
-              OutlinedButton.icon(
-                onPressed: _saving || _converting
-                    ? null
-                    : _showIssueSubscriptionSheet,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: cs.onSurface,
-                  side: BorderSide(color: cs.outlineVariant),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.control),
-                  ),
-                ),
-                icon: _converting
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.card_membership_rounded, size: 18),
-                label: const Text('Выдать абонемент'),
-              ),
-            // «Прикрепить к ученику» (§1 спеки). Рядом с выдачей абонемента,
-            // потому что это тот же выбор: клиент уже заведён или ещё нет.
+            // «Прикрепить к ученику» (§1 спеки) остаётся отдельной lifecycle-
+            // командой; выдачей абонемента владеет профильная секция.
             // Раньше связать можно было только пару, которую нашёл автоподбор
             // дублей — если он молчал, привязать было нельзя вовсе.
             if (!_isConverted && !_hasLinkedStudent)
