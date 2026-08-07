@@ -193,7 +193,7 @@ graph TD
   - **Зависимости**: T2.1.1, T2.1.2, T2.1.3, T2.1.4.
   - **Приоритет**: P0.
 
-- [ ] **INT-S1** [MILESTONE]: Интеграционная проверка S1 — Client Commerce
+- [x] **INT-S1** [MILESTONE]: Интеграционная проверка S1 — Client Commerce
   - **Описание**: Пройти purchase→installment→verify/unpaid→reverse/cancel цепочки и роли.
   - **Входные данные**: T2.1.1–T2.1.5.
   - **Выходные данные**: `docs/audits/v7-int-s1-client-commerce.md`.
