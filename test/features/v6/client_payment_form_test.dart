@@ -132,12 +132,11 @@ void main() {
     expect(submissions.last.input.toJson(), {
       'issuedSubscriptionId': '22222222-2222-4222-8222-222222222222',
       'amountMinor': '250075',
-      'method': 'cashless',
-      'occurredAt': '2026-08-04T09:00:00.000Z',
       'currencyCode': 'RUB',
-      'branchId': '11111111-1111-4111-8111-111111111111',
-      'comment': 'Оплата за август',
-      'invoiceIdentifier': 'ЧЕК-3905',
+      'status': 'posted_pending',
+      'dueAt': '2026-08-04T09:00:00.000Z',
+      'verificationNote': 'Оплата за август',
+      'reason': 'Оплата по абонементу',
     });
   });
 
@@ -154,6 +153,11 @@ void main() {
     expect(calls, 0);
 
     await tester.enterText(find.byKey(const Key('payment-amount')), '100');
+    await tester.tap(find.byKey(const Key('payment-status')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Оплачен').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('payment-invoice')), 'ЧЕК-1');
     await tester.tap(find.byKey(const Key('payment-submit')));
     await tester.pump();
     expect(

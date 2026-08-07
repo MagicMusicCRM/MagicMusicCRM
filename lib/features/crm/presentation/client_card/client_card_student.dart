@@ -174,6 +174,8 @@ extension _ClientCardStudent on _ClientCardState {
         onCancel: () => _emitState(() => _creatingPayment = false),
         onSubmit: _recordClientPayment,
         onAdjust: (payment) => _emitState(() => _adjustingPayment = payment),
+        onTransition: _showPaymentTransitionFlow,
+        onReverse: _showPaymentReversalFlow,
         onCancelAdjustment: () => _emitState(() => _adjustingPayment = null),
         onSubmitAdjustment: _recordPaymentAdjustment,
         scrollController: _paymentScrollController,
@@ -205,7 +207,7 @@ extension _ClientCardStudent on _ClientCardState {
   Future<void> _recordClientPayment(ClientPaymentSubmission submission) async {
     await ref
         .read(magicCrmServiceProvider)
-        .recordSubscriptionPayment(
+        .createClientPaymentRecord(
           _studentId,
           input: submission.input,
           identity: submission.identity,
@@ -214,7 +216,7 @@ extension _ClientCardStudent on _ClientCardState {
     _emitState(() => _creatingPayment = false);
     _refreshLedger();
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Оплата проведена и добавлена в историю')),
+      const SnackBar(content: Text('Оплата добавлена в финансовую историю')),
     );
   }
 
@@ -236,6 +238,75 @@ extension _ClientCardStudent on _ClientCardState {
         content: Text('Исправление добавлено отдельной операцией'),
       ),
     );
+  }
+
+  Future<void> _showPaymentTransitionFlow(
+    CommerceMovement payment,
+    ClientPaymentStatus targetStatus,
+  ) async {
+    final changed = await showClientPaymentTransitionSheet(
+      context,
+      payment: payment,
+      targetStatus: targetStatus,
+      branchId: _clientBranchId,
+      onSubmit: (submission) => ref
+          .read(magicCrmServiceProvider)
+          .transitionClientPaymentRecord(
+            _studentId,
+            paymentRecordId: payment.id,
+            input: submission.input,
+            identity: submission.identity,
+          ),
+    );
+    if (changed != true || !mounted) return;
+    MagicToast.show(
+      context,
+      'Статус оплаты изменён',
+      detail: clientPaymentStatusLabel(targetStatus.apiValue),
+      type: MagicToastType.success,
+    );
+    _refreshLedger();
+  }
+
+  Future<void> _showPaymentReversalFlow(CommerceMovement payment) async {
+    final version = payment.paymentRecordVersion;
+    if (version == null) return;
+    final crm = ref.read(magicCrmServiceProvider);
+    try {
+      final preview = await crm.previewClientPaymentReversal(
+        _studentId,
+        paymentRecordId: payment.id,
+        expectedVersion: version,
+      );
+      if (!mounted) return;
+      final changed = await showClientPaymentReversalSheet(
+        context,
+        preview: preview,
+        onSubmit: (submission) => crm.reverseClientPayment(
+          _studentId,
+          paymentRecordId: payment.id,
+          preview: preview,
+          reason: submission.reason,
+          identity: submission.identity,
+        ),
+      );
+      if (changed != true || !mounted) return;
+      MagicToast.show(
+        context,
+        'Оплата удалена из обычного учёта',
+        detail: 'Причина сохранена в технической истории',
+        type: MagicToastType.success,
+      );
+      _refreshLedger();
+    } catch (error) {
+      if (!mounted) return;
+      MagicToast.show(
+        context,
+        'Не удалось подготовить удаление оплаты',
+        detail: '$error',
+        type: MagicToastType.danger,
+      );
+    }
   }
 
   // ── Student tab: История ─────────────────────────────────────────────────
@@ -271,10 +342,40 @@ extension _ClientCardStudent on _ClientCardState {
   Widget _buildProgressTab(ColorScheme cs, {bool embedded = false}) {
     return _studentGuard(
       cs,
-      () => _HomeworkProgressList(
-        studentId: _studentId,
-        refreshKey: _homeworkRefreshKey,
-        embedded: embedded,
+      () => Column(
+        mainAxisSize: embedded ? MainAxisSize.min : MainAxisSize.max,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpace.xl,
+              AppSpace.md,
+              AppSpace.xl,
+              0,
+            ),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.icon(
+                key: const Key('assign-homework'),
+                onPressed: _showAssignHomeworkSheet,
+                icon: const Icon(Icons.assignment_add),
+                label: const Text('Назначить ДЗ'),
+              ),
+            ),
+          ),
+          if (embedded)
+            _HomeworkProgressList(
+              studentId: _studentId,
+              refreshKey: _homeworkRefreshKey,
+              embedded: true,
+            )
+          else
+            Expanded(
+              child: _HomeworkProgressList(
+                studentId: _studentId,
+                refreshKey: _homeworkRefreshKey,
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -295,10 +396,7 @@ extension _ClientCardStudent on _ClientCardState {
   // телефоне карточка — bottom sheet во всю ширину, и три кнопки с отступами
   // не влезали в 320–360dp — правый край переполнялся. Wrap переносит кнопки
   // на вторую строку.
-  Widget _buildStudentActionBar(
-    ColorScheme cs, {
-    required bool canReadClientFinance,
-  }) {
+  Widget _buildStudentActionBar(ColorScheme cs) {
     final busy = _loadingStudent || _student == null;
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -322,62 +420,6 @@ extension _ClientCardStudent on _ClientCardState {
                 ref.read(releaseGateStatusProvider).asData?.value.role ?? '',
               ),
               onArchived: () => _closeCard(true),
-            ),
-            PopupMenuButton<String>(
-              enabled: !busy,
-              tooltip: 'Действия',
-              position: PopupMenuPosition.under,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppRadius.control),
-              ),
-              onSelected: (value) {
-                switch (value) {
-                  case 'subscription':
-                    _showIssueSubscriptionSheet();
-                  case 'homework':
-                    _showAssignHomeworkSheet();
-                }
-              },
-              itemBuilder: (context) => [
-                if (canReadClientFinance)
-                  const PopupMenuItem(
-                    value: 'subscription',
-                    child: ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(
-                        Icons.card_membership_rounded,
-                        color: AppColor.gold,
-                      ),
-                      title: Text('Выдать абонемент'),
-                    ),
-                  ),
-                const PopupMenuItem(
-                  value: 'homework',
-                  child: ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(
-                      Icons.assignment_rounded,
-                      color: AppColor.gold,
-                    ),
-                    title: Text('Задать ДЗ'),
-                  ),
-                ),
-              ],
-              child: OutlinedButton.icon(
-                onPressed: null,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: cs.onSurface,
-                  disabledForegroundColor: cs.onSurface,
-                  side: BorderSide(color: cs.outlineVariant),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.control),
-                  ),
-                ),
-                icon: const Icon(Icons.bolt_rounded, size: 18),
-                label: const Text('Действия'),
-              ),
             ),
             // #6: переход в расписание — на ближайшее занятие ученика, а без
             // занятий просто на сегодняшний день.
@@ -474,31 +516,44 @@ extension _ClientCardStudent on _ClientCardState {
     if (packageId == null || packageId.isEmpty) return;
 
     if (!issuingForLead) {
+      final recipientLabel = [
+        _clientLastName,
+        _clientFirstName,
+      ].whereType<String>().where((value) => value.trim().isNotEmpty).join(' ');
       final issued = await showSubscriptionIssueFormSheet(
         context,
         package: selected,
-        onSubmit: (submission) async {
-          final response = await crm.issueSubscription(
-            _studentId,
-            input: submission.issue,
-            identity: submission.issueIdentity,
+        recipientStudentId: _studentId,
+        recipientLabel: recipientLabel.isEmpty
+            ? 'Текущий ученик'
+            : recipientLabel,
+        searchPayers: (query) async {
+          final rows = await crm.searchClientRefs(
+            q: query,
+            type: 'student',
+            limit: 50,
           );
-          final payment = submission.payment;
-          if (payment == null) return;
-
-          final subscription = response['subscription'];
-          final issuedSubscriptionId = subscription is Map
-              ? subscription['id']?.toString()
-              : null;
-          if (issuedSubscriptionId == null || issuedSubscriptionId.isEmpty) {
-            throw const FormatException(
-              'Сервер не вернул идентификатор выданного абонемента.',
-            );
-          }
-          await crm.recordSubscriptionPayment(
+          return [
+            for (final row in rows)
+              if (row['ref'] is Map &&
+                  (row['ref'] as Map)['id']?.toString().isNotEmpty == true)
+                SearchableSelectItem(
+                  id: (row['ref'] as Map)['id'].toString(),
+                  label: row['label']?.toString().trim().isNotEmpty == true
+                      ? row['label'].toString()
+                      : 'Ученик без имени',
+                  subtitle: 'Личный счёт ученика',
+                ),
+          ];
+        },
+        onPreview: (input) =>
+            crm.previewSubscriptionPurchase(_studentId, input: input),
+        onSubmit: (submission) async {
+          await crm.purchaseSubscription(
             _studentId,
-            input: payment.toInput(issuedSubscriptionId: issuedSubscriptionId),
-            identity: payment.identity,
+            input: submission.purchase,
+            preview: submission.preview,
+            identity: submission.identity,
           );
         },
       );
@@ -506,7 +561,7 @@ extension _ClientCardStudent on _ClientCardState {
       _dirty = true;
       MagicToast.show(
         context,
-        'Абонемент выдан',
+        'Абонемент куплен',
         detail: selected['name']?.toString(),
         type: MagicToastType.success,
       );

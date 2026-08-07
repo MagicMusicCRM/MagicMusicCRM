@@ -88,6 +88,7 @@ class CommerceStudent {
     required this.accounts,
     required this.subscriptions,
     required this.movements,
+    required this.technicalHistory,
     required this.lessonBalance,
   });
 
@@ -95,6 +96,7 @@ class CommerceStudent {
   final List<CommerceAccount> accounts;
   final List<CommerceSubscription> subscriptions;
   final List<CommerceMovement> movements;
+  final List<CommerceTechnicalFinanceEvent> technicalHistory;
   final CommerceLessonBalance lessonBalance;
 
   factory CommerceStudent.fromJson(Map<String, dynamic> json) {
@@ -113,6 +115,9 @@ class CommerceStudent {
       movements: _commerceMaps(
         json['movements'],
       ).map(CommerceMovement.fromJson).toList(growable: false),
+      technicalHistory: _commerceMaps(
+        json['technicalHistory'],
+      ).map(CommerceTechnicalFinanceEvent.fromJson).toList(growable: false),
       lessonBalance: CommerceLessonBalance.fromJson(
         _commerceMap(json['lessonBalance'], 'lessonBalance'),
       ),
@@ -154,6 +159,8 @@ class CommerceAccount {
     required this.writeOffsMinor,
     required this.balanceMinor,
     required this.debtMinor,
+    required this.pendingMinor,
+    required this.remainingObligationMinor,
   });
 
   final String currencyCode;
@@ -164,6 +171,8 @@ class CommerceAccount {
   final BigInt writeOffsMinor;
   final BigInt balanceMinor;
   final BigInt debtMinor;
+  final BigInt pendingMinor;
+  final BigInt remainingObligationMinor;
 
   factory CommerceAccount.fromJson(Map<String, dynamic> json) {
     return CommerceAccount(
@@ -187,6 +196,10 @@ class CommerceAccount {
       writeOffsMinor: _commerceMinor(json['writeOffsMinor'], 'writeOffsMinor'),
       balanceMinor: _commerceMinor(json['balanceMinor'], 'balanceMinor'),
       debtMinor: _commerceMinor(json['debtMinor'], 'debtMinor'),
+      pendingMinor: _commerceOptionalMinor(json['pendingMinor']),
+      remainingObligationMinor: _commerceOptionalMinor(
+        json['remainingObligationMinor'],
+      ),
     );
   }
 
@@ -295,6 +308,8 @@ class CommerceSubscriptionFinancial {
     required this.actualPaidMinor,
     required this.obligationMinor,
     required this.debtMinor,
+    required this.pendingMinor,
+    required this.remainingObligationMinor,
     required this.overpaymentMinor,
     required this.nextPaymentAt,
   });
@@ -302,6 +317,8 @@ class CommerceSubscriptionFinancial {
   final BigInt actualPaidMinor;
   final BigInt obligationMinor;
   final BigInt debtMinor;
+  final BigInt pendingMinor;
+  final BigInt remainingObligationMinor;
   final BigInt overpaymentMinor;
   final DateTime? nextPaymentAt;
 
@@ -316,6 +333,10 @@ class CommerceSubscriptionFinancial {
         'financial.obligationMinor',
       ),
       debtMinor: _commerceMinor(json['debtMinor'], 'financial.debtMinor'),
+      pendingMinor: _commerceOptionalMinor(json['pendingMinor']),
+      remainingObligationMinor: _commerceOptionalMinor(
+        json['remainingObligationMinor'],
+      ),
       overpaymentMinor: _commerceMinor(
         json['overpaymentMinor'],
         'financial.overpaymentMinor',
@@ -460,6 +481,7 @@ class CommerceInstallment {
 
 enum CommerceMovementKind {
   payment('payment'),
+  paymentRecord('payment_record'),
   refund('refund'),
   adjustment('adjustment'),
   obligation('obligation'),
@@ -515,6 +537,9 @@ class CommerceMovement {
     required this.issuedSubscriptionId,
     required this.subscriptionName,
     required this.sourcePaymentId,
+    required this.paymentRecordVersion,
+    required this.installmentId,
+    required this.dueAt,
   });
 
   final String id;
@@ -535,6 +560,9 @@ class CommerceMovement {
   final String? issuedSubscriptionId;
   final String? subscriptionName;
   final String? sourcePaymentId;
+  final int? paymentRecordVersion;
+  final String? installmentId;
+  final DateTime? dueAt;
 
   factory CommerceMovement.fromJson(Map<String, dynamic> json) {
     return CommerceMovement(
@@ -556,6 +584,13 @@ class CommerceMovement {
       issuedSubscriptionId: json['issuedSubscriptionId']?.toString(),
       subscriptionName: json['subscriptionName']?.toString(),
       sourcePaymentId: json['sourcePaymentId']?.toString(),
+      paymentRecordVersion: json['paymentRecordVersion'] == null
+          ? null
+          : _commerceInt(json['paymentRecordVersion'], 'paymentRecordVersion'),
+      installmentId: json['installmentId']?.toString(),
+      dueAt: json['dueAt'] == null
+          ? null
+          : _commerceDate(json['dueAt'], 'dueAt'),
     );
   }
 
@@ -576,6 +611,44 @@ class CommerceMovement {
     'accepted_by_name': acceptedByName,
     'students': {'id': studentId, 'first_name': '', 'last_name': ''},
   };
+}
+
+class CommerceTechnicalFinanceEvent {
+  const CommerceTechnicalFinanceEvent({
+    required this.id,
+    required this.eventType,
+    required this.paymentRecordId,
+    required this.previousStatus,
+    required this.amountMinor,
+    required this.currencyCode,
+    required this.reason,
+    required this.actorName,
+    required this.occurredAt,
+  });
+
+  final String id;
+  final String eventType;
+  final String paymentRecordId;
+  final String previousStatus;
+  final BigInt amountMinor;
+  final String currencyCode;
+  final String reason;
+  final String? actorName;
+  final DateTime occurredAt;
+
+  factory CommerceTechnicalFinanceEvent.fromJson(Map<String, dynamic> json) {
+    return CommerceTechnicalFinanceEvent(
+      id: _commerceRequiredString(json, 'id'),
+      eventType: _commerceRequiredString(json, 'eventType'),
+      paymentRecordId: _commerceRequiredString(json, 'paymentRecordId'),
+      previousStatus: _commerceRequiredString(json, 'previousStatus'),
+      amountMinor: _commerceMinor(json['amountMinor'], 'amountMinor'),
+      currencyCode: _commerceRequiredString(json, 'currencyCode'),
+      reason: _commerceRequiredString(json, 'reason'),
+      actorName: json['actorName']?.toString(),
+      occurredAt: _commerceDate(json['occurredAt'], 'occurredAt'),
+    );
+  }
 }
 
 class CommerceLessonBalance {
@@ -672,6 +745,9 @@ BigInt _commerceMinor(Object? raw, String field) {
   }
   return value;
 }
+
+BigInt _commerceOptionalMinor(Object? raw) =>
+    raw == null ? BigInt.zero : BigInt.parse(raw.toString());
 
 int _commerceInt(Object? raw, String field) {
   final value = raw is int ? raw : int.tryParse(raw?.toString() ?? '');

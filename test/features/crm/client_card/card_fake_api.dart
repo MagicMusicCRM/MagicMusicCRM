@@ -33,6 +33,7 @@ class FakeCardApiClient extends MagicApiClient {
     this.studentSubscriptions = const [],
     this.studentAccounts = const [],
     this.studentMovements = const [],
+    this.studentTechnicalHistory = const [],
     this.studentLessons = const [],
     this.customFields = const [],
     this.sources = const [],
@@ -49,6 +50,7 @@ class FakeCardApiClient extends MagicApiClient {
     this.cancellationPreview,
     this.cancellationResult,
     this.cancellationFailures = 0,
+    this.paymentReversalPreview,
   }) : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   final String role;
@@ -68,6 +70,7 @@ class FakeCardApiClient extends MagicApiClient {
   final List<Map<String, dynamic>> studentSubscriptions;
   final List<Map<String, dynamic>> studentAccounts;
   final List<Map<String, dynamic>> studentMovements;
+  final List<Map<String, dynamic>> studentTechnicalHistory;
   final List<Map<String, dynamic>> studentLessons;
   final List<Map<String, dynamic>> customFields;
   final List<Map<String, dynamic>> sources;
@@ -84,6 +87,7 @@ class FakeCardApiClient extends MagicApiClient {
   final Map<String, dynamic>? cancellationPreview;
   final Map<String, dynamic>? cancellationResult;
   int cancellationFailures;
+  final Map<String, dynamic>? paymentReversalPreview;
 
   Map<String, dynamic>? updateLeadBody;
   Map<String, dynamic>? updateStudentBody;
@@ -317,6 +321,7 @@ class FakeCardApiClient extends MagicApiClient {
                   .toList(growable: false),
               'subscriptions': subscriptions,
               'movements': studentMovements,
+              'technicalHistory': studentTechnicalHistory,
               'lessonBalance': {
                 'activeSubscriptionCount': subscriptions
                     .where((item) => item['status'] == 'active')
@@ -444,6 +449,9 @@ class FakeCardApiClient extends MagicApiClient {
     }
     if (cancellationPreview != null && path.endsWith('/cancel/preview')) {
       return Map<String, dynamic>.from(cancellationPreview!) as T;
+    }
+    if (paymentReversalPreview != null && path.endsWith('/reversal/preview')) {
+      return Map<String, dynamic>.from(paymentReversalPreview!) as T;
     }
     if (path.endsWith('/end/preview')) {
       return <String, dynamic>{

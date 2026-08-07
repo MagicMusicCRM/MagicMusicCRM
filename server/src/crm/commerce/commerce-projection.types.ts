@@ -113,6 +113,9 @@ export interface CommerceMovementDto {
   issuedSubscriptionId?: string | null;
   subscriptionName?: string | null;
   sourcePaymentId?: string | null;
+  paymentRecordVersion?: number | null;
+  installmentId?: string | null;
+  dueAt?: string | null;
 }
 
 export interface CommerceTechnicalFinanceEventDto {

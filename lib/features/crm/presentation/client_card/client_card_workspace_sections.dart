@@ -511,108 +511,126 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
           title: 'Связанная запись недоступна',
         );
       }
-      if (_subscriptions.isEmpty) {
-        return const MagicPageState(
-          kind: MagicPageStateKind.empty,
-          title: 'Абонементов пока нет',
-        );
-      }
       return ListView(
         controller: embedded ? null : _subscriptionScrollController,
         shrinkWrap: embedded,
         physics: embedded ? const NeverScrollableScrollPhysics() : null,
         padding: const EdgeInsets.all(AppSpace.xl),
         children: [
-          _sectionTitle('Абонементы'),
-          _buildInfoCard('Выданные абонементы', [
-            for (final subscription in _subscriptions)
-              _InfoRow(
-                icon: subscription.isActive
-                    ? Icons.confirmation_number_outlined
-                    : Icons.history_toggle_off_rounded,
-                label: (subscription.packageName?.trim().isNotEmpty ?? false)
-                    ? subscription.packageName!
-                    : 'Абонемент',
-                value: [
-                  _subscriptionRemainder(subscription),
-                  ?_subscriptionCourse(subscription),
-                  ?_subscriptionPaid(subscription),
-                ].join('\n'),
-                hint: _subscriptionOverpayment(subscription)?.label,
-                hintColor:
-                    _subscriptionOverpayment(subscription)?.isDebt == true
-                    ? AppTheme.danger
-                    : AppTheme.success,
-                highlighted:
-                    subscription.id ==
-                    widget.initialViewState?.filters['subscriptionId']
-                        ?.toString(),
-                onOpen: subscription.id?.isNotEmpty == true
-                    ? (sourceContext, target) => _openLinkedRecord(
-                        sourceContext,
-                        EntityLink.typed(
-                          entityType: EntityLinkType.subscription,
-                          entityId: subscription.id!,
-                          presentation: EntityPresentationReference(
-                            primary:
-                                (subscription.packageName?.trim().isNotEmpty ??
-                                    false)
-                                ? subscription.packageName!
-                                : 'Абонемент',
-                            context: _subscriptionRemainder(subscription),
-                          ),
-                          optionalFocus: EntityLinkFocus(
-                            focus: 'subscription',
-                            filter: {
-                              'studentId': _studentId,
-                              'section': 'subscriptions',
-                              'subscriptionId': subscription.id!,
-                            },
-                          ),
-                        ),
-                        target,
-                      )
-                    : null,
-                trailing:
-                    subscription.isActive &&
-                        (subscription.id?.isNotEmpty ?? false)
-                    ? Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            key: Key('subscription-replace-${subscription.id}'),
-                            tooltip: 'Заменить абонемент',
-                            onPressed:
-                                _replacingSubscription ||
-                                    _cancellingSubscription
-                                ? null
-                                : () => _showReplaceSubscriptionFlow(
-                                    subscription,
-                                  ),
-                            icon: const Icon(
-                              Icons.swap_horiz_rounded,
-                              color: AppColor.gold,
-                            ),
-                          ),
-                          IconButton(
-                            key: Key('subscription-cancel-${subscription.id}'),
-                            tooltip: 'Отменить абонемент',
-                            onPressed:
-                                _replacingSubscription ||
-                                    _cancellingSubscription
-                                ? null
-                                : () =>
-                                      _showCancelSubscriptionFlow(subscription),
-                            icon: const Icon(
-                              Icons.cancel_outlined,
-                              color: AppColor.danger,
-                            ),
-                          ),
-                        ],
-                      )
-                    : null,
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.icon(
+              key: const Key('subscription-add'),
+              onPressed: _showIssueSubscriptionSheet,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Добавить абонемент'),
+            ),
+          ),
+          if (_subscriptions.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: AppSpace.xl),
+              child: MagicPageState(
+                kind: MagicPageStateKind.empty,
+                title: 'Абонементов пока нет',
               ),
-          ]),
+            )
+          else
+            _buildInfoCard('Выданные абонементы', [
+              for (final subscription in _subscriptions)
+                _InfoRow(
+                  icon: subscription.isActive
+                      ? Icons.confirmation_number_outlined
+                      : Icons.history_toggle_off_rounded,
+                  label: (subscription.packageName?.trim().isNotEmpty ?? false)
+                      ? subscription.packageName!
+                      : 'Абонемент',
+                  value: [
+                    _subscriptionRemainder(subscription),
+                    ?_subscriptionCourse(subscription),
+                    ?_subscriptionPaid(subscription),
+                  ].join('\n'),
+                  hint: _subscriptionOverpayment(subscription)?.label,
+                  hintColor:
+                      _subscriptionOverpayment(subscription)?.isDebt == true
+                      ? AppTheme.danger
+                      : AppTheme.success,
+                  highlighted:
+                      subscription.id ==
+                      widget.initialViewState?.filters['subscriptionId']
+                          ?.toString(),
+                  onOpen: subscription.id?.isNotEmpty == true
+                      ? (sourceContext, target) => _openLinkedRecord(
+                          sourceContext,
+                          EntityLink.typed(
+                            entityType: EntityLinkType.subscription,
+                            entityId: subscription.id!,
+                            presentation: EntityPresentationReference(
+                              primary:
+                                  (subscription.packageName
+                                          ?.trim()
+                                          .isNotEmpty ??
+                                      false)
+                                  ? subscription.packageName!
+                                  : 'Абонемент',
+                              context: _subscriptionRemainder(subscription),
+                            ),
+                            optionalFocus: EntityLinkFocus(
+                              focus: 'subscription',
+                              filter: {
+                                'studentId': _studentId,
+                                'section': 'subscriptions',
+                                'subscriptionId': subscription.id!,
+                              },
+                            ),
+                          ),
+                          target,
+                        )
+                      : null,
+                  trailing:
+                      subscription.isActive &&
+                          (subscription.id?.isNotEmpty ?? false)
+                      ? Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              key: Key(
+                                'subscription-replace-${subscription.id}',
+                              ),
+                              tooltip: 'Заменить абонемент',
+                              onPressed:
+                                  _replacingSubscription ||
+                                      _cancellingSubscription
+                                  ? null
+                                  : () => _showReplaceSubscriptionFlow(
+                                      subscription,
+                                    ),
+                              icon: const Icon(
+                                Icons.swap_horiz_rounded,
+                                color: AppColor.gold,
+                              ),
+                            ),
+                            IconButton(
+                              key: Key(
+                                'subscription-cancel-${subscription.id}',
+                              ),
+                              tooltip: 'Отменить абонемент',
+                              onPressed:
+                                  _replacingSubscription ||
+                                      _cancellingSubscription
+                                  ? null
+                                  : () => _showCancelSubscriptionFlow(
+                                      subscription,
+                                    ),
+                              icon: const Icon(
+                                Icons.cancel_outlined,
+                                color: AppColor.danger,
+                              ),
+                            ),
+                          ],
+                        )
+                      : null,
+                ),
+            ]),
         ],
       );
     });

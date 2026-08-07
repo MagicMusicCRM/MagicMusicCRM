@@ -3,64 +3,43 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
+import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 
 import 'client_card_ui.dart';
 
 enum SubscriptionIssueDiscountMode { none, percent, fixed }
 
-class SubscriptionImmediatePaymentDraft {
-  const SubscriptionImmediatePaymentDraft({
-    required this.amountMinor,
-    required this.method,
-    required this.occurredAt,
-    required this.currencyCode,
+class SubscriptionIssueSubmission {
+  const SubscriptionIssueSubmission({
+    required this.purchase,
+    required this.preview,
     required this.identity,
   });
 
-  final BigInt amountMinor;
-  final SubscriptionPaymentMethod method;
-  final DateTime occurredAt;
-  final String currencyCode;
+  final PurchaseSubscriptionInput purchase;
+  final SubscriptionPurchasePreview preview;
   final MagicMutationIdentity identity;
-
-  RecordSubscriptionPaymentInput toInput({
-    required String issuedSubscriptionId,
-  }) {
-    return RecordSubscriptionPaymentInput(
-      issuedSubscriptionId: issuedSubscriptionId,
-      amountMinor: amountMinor,
-      method: method,
-      occurredAt: occurredAt,
-      currencyCode: currencyCode,
-    );
-  }
-}
-
-/// Immutable command assembled by the issue form.
-///
-/// Both identities and [SubscriptionImmediatePaymentDraft.occurredAt] live for
-/// the lifetime of the form. After the first request the fields are frozen, so
-/// tapping «Повторить» sends exactly the same fingerprints to both endpoints.
-class SubscriptionIssueSubmission {
-  const SubscriptionIssueSubmission({
-    required this.issue,
-    required this.issueIdentity,
-    this.payment,
-  });
-
-  final IssueSubscriptionInput issue;
-  final MagicMutationIdentity issueIdentity;
-  final SubscriptionImmediatePaymentDraft? payment;
 }
 
 typedef SubscriptionIssueSubmit =
     Future<void> Function(SubscriptionIssueSubmission submission);
+typedef SubscriptionIssuePreview =
+    Future<SubscriptionPurchasePreview> Function(
+      PurchaseSubscriptionInput input,
+    );
 
 Future<bool?> showSubscriptionIssueFormSheet(
   BuildContext context, {
   required Map<String, dynamic> package,
+  required String recipientStudentId,
+  required String recipientLabel,
+  required Future<List<SearchableSelectItem>> Function(String query)
+  searchPayers,
+  required SubscriptionIssuePreview onPreview,
   required SubscriptionIssueSubmit onSubmit,
 }) {
   return showMagicSheet<bool>(
@@ -68,7 +47,14 @@ Future<bool?> showSubscriptionIssueFormSheet(
     title: 'Условия абонемента',
     subtitle: package['name']?.toString() ?? 'Настройте выдачу',
     icon: Icons.receipt_long_rounded,
-    builder: (_) => SubscriptionIssueForm(package: package, onSubmit: onSubmit),
+    builder: (_) => SubscriptionIssueForm(
+      package: package,
+      recipientStudentId: recipientStudentId,
+      recipientLabel: recipientLabel,
+      searchPayers: searchPayers,
+      onPreview: onPreview,
+      onSubmit: onSubmit,
+    ),
   );
 }
 
@@ -76,11 +62,19 @@ class SubscriptionIssueForm extends StatefulWidget {
   const SubscriptionIssueForm({
     super.key,
     required this.package,
+    required this.recipientStudentId,
+    required this.recipientLabel,
+    required this.searchPayers,
+    required this.onPreview,
     required this.onSubmit,
     this.commandTimestamp,
   });
 
   final Map<String, dynamic> package;
+  final String recipientStudentId;
+  final String recipientLabel;
+  final Future<List<SearchableSelectItem>> Function(String query) searchPayers;
+  final SubscriptionIssuePreview onPreview;
   final SubscriptionIssueSubmit onSubmit;
 
   /// Test seam; production commands use the instant at which the form opens.
@@ -94,25 +88,25 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
   final _formKey = GlobalKey<FormState>();
   final _discountValueController = TextEditingController();
   final _discountReasonController = TextEditingController();
-  final _paymentAmountController = TextEditingController();
   final _surchargeAmountController = TextEditingController();
   final _surchargeReasonController = TextEditingController();
+  final _purchaseReasonController = TextEditingController();
 
   late final BigInt _basePriceMinor;
   late final String _currencyCode;
   late final DateTime _commandTimestamp;
-  late final MagicMutationIdentity _issueIdentity;
-  late final MagicMutationIdentity _paymentIdentity;
+  late MagicMutationIdentity _identity;
   late final DirtyFormExitController _exitController;
 
   SubscriptionIssueDiscountMode _discountMode =
       SubscriptionIssueDiscountMode.none;
-  SubscriptionPaymentMethod _paymentMethod = SubscriptionPaymentMethod.cash;
-  bool _useInstallments = false;
+  SubscriptionFundingMode _fundingMode =
+      SubscriptionFundingMode.personalAccount;
   bool _useSurcharge = false;
-  bool _recordPayment = false;
-  bool _paymentAmountTouched = false;
   int _installmentCount = 2;
+  late String _payerStudentId;
+  late String _payerLabel;
+  SubscriptionPurchasePreview? _preview;
   bool _busy = false;
   bool _attempted = false;
   String? _error;
@@ -126,21 +120,21 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
     _currencyCode =
         widget.package['currencyCode']?.toString().toUpperCase() ?? 'RUB';
     _commandTimestamp = (widget.commandTimestamp ?? DateTime.now()).toUtc();
-    _issueIdentity = MagicMutationIdentity.create('subscription-issue');
-    _paymentIdentity = MagicMutationIdentity.create('subscription-payment');
+    _identity = MagicMutationIdentity.create('subscription-purchase');
+    _payerStudentId = widget.recipientStudentId;
+    _payerLabel = widget.recipientLabel;
     _exitController = DirtyFormExitController(
       onSave: () => _submit(closeOnSuccess: false),
     );
-    _paymentAmountController.text = _minorToInput(_basePriceMinor);
   }
 
   @override
   void dispose() {
     _discountValueController.dispose();
     _discountReasonController.dispose();
-    _paymentAmountController.dispose();
     _surchargeAmountController.dispose();
     _surchargeReasonController.dispose();
+    _purchaseReasonController.dispose();
     _exitController.dispose();
     super.dispose();
   }
@@ -190,8 +184,7 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
     setState(() {
       _discountMode = mode;
       _discountValueController.clear();
-      _error = null;
-      _syncUntouchedPaymentAmount();
+      _invalidatePreview();
     });
     _exitController.markDirty();
   }
@@ -199,17 +192,14 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
   void _pricingChanged() {
     if (!_fieldsEnabled) return;
     setState(() {
-      _error = null;
-      _syncUntouchedPaymentAmount();
+      _invalidatePreview();
     });
   }
 
-  void _syncUntouchedPaymentAmount() {
-    if (_paymentAmountTouched) return;
-    final finalPrice = _finalPriceMinor;
-    if (finalPrice != null) {
-      _paymentAmountController.text = _minorToInput(finalPrice);
-    }
+  void _invalidatePreview() {
+    _preview = null;
+    _error = null;
+    _identity = MagicMutationIdentity.create('subscription-purchase');
   }
 
   String? _validateDiscountValue(String? raw) {
@@ -240,19 +230,6 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
     return (raw ?? '').trim().isEmpty ? 'Укажите причину скидки' : null;
   }
 
-  String? _validatePaymentAmount(String? raw) {
-    if (!_recordPayment) return null;
-    final amount = _parseMoneyMinor(raw ?? '');
-    if (amount == null || amount <= BigInt.zero) {
-      return 'Введите положительную сумму';
-    }
-    final finalPrice = _finalPriceMinor;
-    if (finalPrice != null && amount > finalPrice) {
-      return 'Оплата не может превышать итог';
-    }
-    return null;
-  }
-
   String? _validateSurchargeAmount(String? raw) {
     if (!_useSurcharge) return null;
     final amount = _parseMoneyMinor(raw ?? '');
@@ -266,8 +243,17 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
     return (raw ?? '').trim().isEmpty ? 'Укажите причину доплаты' : null;
   }
 
+  String? _validatePurchaseReason(String? raw) {
+    if (_payerStudentId == widget.recipientStudentId) return null;
+    return (raw ?? '').trim().isEmpty
+        ? 'Укажите причину оплаты с чужого счёта'
+        : null;
+  }
+
   List<SubscriptionInstallmentInput> _installments(BigInt finalPrice) {
-    if (!_useInstallments) return const <SubscriptionInstallmentInput>[];
+    if (_fundingMode != SubscriptionFundingMode.installment) {
+      return const <SubscriptionInstallmentInput>[];
+    }
     final count = _installmentCount;
     final equalPart = finalPrice ~/ BigInt.from(count);
     final remainder = (finalPrice % BigInt.from(count)).toInt();
@@ -279,7 +265,7 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
     }, growable: false);
   }
 
-  SubscriptionIssueSubmission _buildSubmission(BigInt finalPrice) {
+  PurchaseSubscriptionInput _buildPurchase(BigInt finalPrice) {
     SubscriptionDiscountInput? discount;
     switch (_discountMode) {
       case SubscriptionIssueDiscountMode.none:
@@ -298,22 +284,14 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
         break;
     }
 
-    final payment = _recordPayment
-        ? SubscriptionImmediatePaymentDraft(
-            amountMinor: _parseMoneyMinor(_paymentAmountController.text)!,
-            method: _paymentMethod,
-            occurredAt: _commandTimestamp,
-            currencyCode: _currencyCode,
-            identity: _paymentIdentity,
-          )
-        : null;
-
-    return SubscriptionIssueSubmission(
+    return PurchaseSubscriptionInput(
+      payerStudentId: _payerStudentId,
+      fundingMode: _fundingMode,
+      purchaseReason: _purchaseReasonController.text,
       issue: IssueSubscriptionInput(
         packageId: widget.package['id'].toString(),
         discount: discount,
         installments: _installments(finalPrice),
-        paymentMethod: payment?.method,
         surcharge: _useSurcharge
             ? SubscriptionSurchargeInput(
                 amountMinor: _surchargeMinor!,
@@ -321,8 +299,6 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
               )
             : null,
       ),
-      issueIdentity: _issueIdentity,
-      payment: payment,
     );
   }
 
@@ -333,7 +309,8 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
 
     final finalPrice = _finalPriceMinor;
     if (finalPrice == null || finalPrice < BigInt.zero) return false;
-    if (_useInstallments && finalPrice < BigInt.from(_installmentCount)) {
+    if (_fundingMode == SubscriptionFundingMode.installment &&
+        finalPrice < BigInt.from(_installmentCount)) {
       setState(() {
         _error =
             'Итог должен позволять $_installmentCount положительных платежа.';
@@ -341,15 +318,40 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
       return false;
     }
 
-    final submission = _buildSubmission(finalPrice);
+    final purchase = _buildPurchase(finalPrice);
     setState(() {
       _busy = true;
-      _attempted = true;
       _error = null;
     });
     _exitController.setBusy(true);
     try {
-      await widget.onSubmit(submission);
+      final preview = _preview;
+      if (preview == null) {
+        final loaded = await widget.onPreview(purchase);
+        if (!mounted) return false;
+        setState(() {
+          _preview = loaded;
+          _busy = false;
+        });
+        _exitController.setBusy(false);
+        return false;
+      }
+      if (!preview.canCommit) {
+        setState(() {
+          _busy = false;
+          _error = 'На личном счёте недостаточно средств.';
+        });
+        _exitController.setBusy(false);
+        return false;
+      }
+      setState(() => _attempted = true);
+      await widget.onSubmit(
+        SubscriptionIssueSubmission(
+          purchase: purchase,
+          preview: preview,
+          identity: _identity,
+        ),
+      );
       _exitController.setBusy(false);
       _exitController.markClean();
       if (closeOnSuccess && mounted) Navigator.pop(context, true);
@@ -401,6 +403,85 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
               surchargeMinor: surcharge,
               finalPriceMinor: finalPrice,
               currencyCode: _currencyCode,
+            ),
+            const SizedBox(height: AppSpace.lg),
+            const _SectionTitle('Оплата абонемента'),
+            const SizedBox(height: AppSpace.sm),
+            SearchablePickerField(
+              key: const Key('subscription-payer'),
+              label: 'Личный счёт плательщика',
+              placeholder: 'Выберите ученика',
+              hintText: 'Введите имя или ФИО ученика',
+              selectedId: _payerStudentId,
+              selectedLabel: _payerLabel,
+              items: [
+                SearchableSelectItem(
+                  id: widget.recipientStudentId,
+                  label: widget.recipientLabel,
+                  subtitle: 'Получатель абонемента',
+                ),
+              ],
+              isNullable: false,
+              enabled: _fieldsEnabled,
+              onSearch: widget.searchPayers,
+              onSelected: (item) {
+                if (item == null) return;
+                setState(() {
+                  _payerStudentId = item.id;
+                  _payerLabel = item.label;
+                  _invalidatePreview();
+                });
+                _exitController.markDirty();
+              },
+            ),
+            const SizedBox(height: AppSpace.md),
+            Wrap(
+              spacing: AppSpace.sm,
+              runSpacing: AppSpace.sm,
+              children: [
+                _ModeChip(
+                  key: const Key('subscription-funding-account'),
+                  label: 'С личного счёта',
+                  selected:
+                      _fundingMode == SubscriptionFundingMode.personalAccount,
+                  enabled: _fieldsEnabled,
+                  onSelected: () => setState(() {
+                    _fundingMode = SubscriptionFundingMode.personalAccount;
+                    _invalidatePreview();
+                    _exitController.markDirty();
+                  }),
+                ),
+                _ModeChip(
+                  key: const Key('subscription-funding-installment'),
+                  label: 'Рассрочка',
+                  selected: _fundingMode == SubscriptionFundingMode.installment,
+                  enabled: _fieldsEnabled,
+                  onSelected: () => setState(() {
+                    _fundingMode = SubscriptionFundingMode.installment;
+                    _invalidatePreview();
+                    _exitController.markDirty();
+                  }),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpace.md),
+            TextFormField(
+              key: const Key('subscription-purchase-reason'),
+              controller: _purchaseReasonController,
+              enabled: _fieldsEnabled,
+              maxLength: 500,
+              minLines: 1,
+              maxLines: 3,
+              validator: _validatePurchaseReason,
+              onChanged: (_) => setState(_invalidatePreview),
+              decoration: clientCardInputDecoration(
+                Theme.of(context).colorScheme,
+                label: _payerStudentId == widget.recipientStudentId
+                    ? 'Комментарий к покупке'
+                    : 'Причина оплаты с чужого счёта *',
+                hint: 'Причина сохранится в истории действий',
+                isDense: true,
+              ),
             ),
             const SizedBox(height: AppSpace.lg),
             const _SectionTitle('Скидка'),
@@ -474,9 +555,7 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
                     isDense: true,
                   ),
                   validator: _validateReason,
-                  onChanged: (_) {
-                    if (_error != null) setState(() => _error = null);
-                  },
+                  onChanged: (_) => setState(_invalidatePreview),
                 ),
               ),
             ],
@@ -490,8 +569,7 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
               enabled: _fieldsEnabled,
               onChanged: (value) => setState(() {
                 _useSurcharge = value;
-                _error = null;
-                _syncUntouchedPaymentAmount();
+                _invalidatePreview();
                 _exitController.markDirty();
               }),
             ),
@@ -528,30 +606,13 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
                     isDense: true,
                   ),
                   validator: _validateSurchargeReason,
-                  onChanged: (_) {
-                    if (_error != null) setState(() => _error = null);
-                  },
+                  onChanged: (_) => setState(_invalidatePreview),
                 ),
               ),
             ],
             const SizedBox(height: AppSpace.xl),
-            _OptionCard(
-              key: const Key('subscription-installments-toggle'),
-              icon: Icons.calendar_view_month_rounded,
-              title: 'Рассрочка',
-              subtitle: 'Разделить итог на равные ежемесячные обязательства',
-              value: _useInstallments,
-              enabled:
-                  _fieldsEnabled &&
-                  finalPrice != null &&
-                  finalPrice > BigInt.zero,
-              onChanged: (value) => setState(() {
-                _useInstallments = value;
-                _error = null;
-                _exitController.markDirty();
-              }),
-            ),
-            if (_useInstallments) ...[
+            if (_fundingMode == SubscriptionFundingMode.installment) ...[
+              const _SectionTitle('График рассрочки'),
               const SizedBox(height: AppSpace.md),
               DropdownButtonFormField<int>(
                 key: const Key('subscription-installment-count'),
@@ -568,7 +629,7 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
                 onChanged: _fieldsEnabled
                     ? (value) => setState(() {
                         _installmentCount = value ?? 2;
-                        _error = null;
+                        _invalidatePreview();
                         _exitController.markDirty();
                       })
                     : null,
@@ -581,60 +642,12 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
                 ),
               ],
             ],
-            const SizedBox(height: AppSpace.md),
-            _OptionCard(
-              key: const Key('subscription-payment-toggle'),
-              icon: Icons.payments_outlined,
-              title: 'Внести оплату сейчас',
-              subtitle: 'Оплата будет записана отдельным финансовым фактом',
-              value: _recordPayment,
-              enabled:
-                  _fieldsEnabled &&
-                  finalPrice != null &&
-                  finalPrice > BigInt.zero,
-              onChanged: (value) => setState(() {
-                _recordPayment = value;
-                _error = null;
-                _exitController.markDirty();
-                if (value && !_paymentAmountTouched) {
-                  _syncUntouchedPaymentAmount();
-                }
-              }),
-            ),
-            if (_recordPayment) ...[
+            if (_preview != null) ...[
               const SizedBox(height: AppSpace.md),
-              _AdaptivePair(
-                first: TextFormField(
-                  key: const Key('subscription-payment-amount'),
-                  controller: _paymentAmountController,
-                  enabled: _fieldsEnabled,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9,.]')),
-                  ],
-                  decoration: clientCardInputDecoration(
-                    Theme.of(context).colorScheme,
-                    label: 'Сумма оплаты, ₽',
-                    helperText: 'Можно внести часть итога',
-                    isDense: true,
-                  ),
-                  validator: _validatePaymentAmount,
-                  onChanged: (_) {
-                    _paymentAmountTouched = true;
-                    if (_error != null) setState(() => _error = null);
-                  },
-                ),
-                second: _PaymentMethodPicker(
-                  method: _paymentMethod,
-                  enabled: _fieldsEnabled,
-                  onChanged: (method) => setState(() {
-                    _paymentMethod = method;
-                    _error = null;
-                    _exitController.markDirty();
-                  }),
-                ),
+              _PurchasePreviewCard(
+                preview: _preview!,
+                recipientLabel: widget.recipientLabel,
+                payerLabel: _payerLabel,
               ),
             ],
             if (_attempted) ...[
@@ -679,7 +692,13 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
                               color: AppColor.onGold,
                             ),
                           )
-                        : Text(_attempted ? 'Повторить' : 'Выдать'),
+                        : Text(
+                            _attempted
+                                ? 'Повторить'
+                                : _preview == null
+                                ? 'Проверить'
+                                : 'Подтвердить покупку',
+                          ),
                   ),
                 ),
               ],
@@ -756,6 +775,82 @@ class _PriceSummary extends StatelessWidget {
                 : _formatMinor(finalPriceMinor!, currencyCode),
             emphasized: true,
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PurchasePreviewCard extends StatelessWidget {
+  const _PurchasePreviewCard({
+    required this.preview,
+    required this.recipientLabel,
+    required this.payerLabel,
+  });
+
+  final SubscriptionPurchasePreview preview;
+  final String recipientLabel;
+  final String payerLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      key: const Key('subscription-purchase-preview'),
+      padding: const EdgeInsets.all(AppSpace.md),
+      decoration: BoxDecoration(
+        color: preview.canCommit
+            ? AppTheme.success.withValues(alpha: 0.08)
+            : cs.errorContainer,
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        border: Border.all(
+          color: preview.canCommit
+              ? AppTheme.success.withValues(alpha: 0.35)
+              : cs.error,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            preview.canCommit
+                ? 'Проверьте покупку перед подтверждением'
+                : 'Покупку нельзя провести',
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: AppSpace.sm),
+          _PriceLine(label: 'Получатель', value: recipientLabel),
+          _PriceLine(label: 'Плательщик', value: payerLabel),
+          _PriceLine(
+            label: preview.fundingMode == SubscriptionFundingMode.installment
+                ? 'Обязательство'
+                : 'Будет списано',
+            value: _formatMinor(preview.finalPriceMinor, preview.currencyCode),
+          ),
+          if (preview.fundingMode ==
+              SubscriptionFundingMode.personalAccount) ...[
+            _PriceLine(
+              label: 'Баланс до',
+              value: _formatMinor(
+                preview.payerBalanceMinor,
+                preview.currencyCode,
+              ),
+            ),
+            _PriceLine(
+              label: 'Баланс после',
+              value: _formatMinor(
+                preview.balanceAfterMinor,
+                preview.currencyCode,
+              ),
+              emphasized: true,
+            ),
+          ],
+          if (!preview.canCommit)
+            _PriceLine(
+              label: 'Не хватает',
+              value: _formatMinor(preview.shortageMinor, preview.currencyCode),
+              emphasized: true,
+            ),
         ],
       ),
     );
@@ -977,49 +1072,6 @@ class _InstallmentPreview extends StatelessWidget {
   }
 }
 
-class _PaymentMethodPicker extends StatelessWidget {
-  const _PaymentMethodPicker({
-    required this.method,
-    required this.enabled,
-    required this.onChanged,
-  });
-
-  final SubscriptionPaymentMethod method;
-  final bool enabled;
-  final ValueChanged<SubscriptionPaymentMethod> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return InputDecorator(
-      decoration: clientCardInputDecoration(
-        Theme.of(context).colorScheme,
-        label: 'Способ оплаты',
-        isDense: true,
-      ),
-      child: Wrap(
-        spacing: AppSpace.xs,
-        runSpacing: AppSpace.xs,
-        children: [
-          _ModeChip(
-            key: const Key('subscription-payment-cash'),
-            label: 'Наличные',
-            selected: method == SubscriptionPaymentMethod.cash,
-            enabled: enabled,
-            onSelected: () => onChanged(SubscriptionPaymentMethod.cash),
-          ),
-          _ModeChip(
-            key: const Key('subscription-payment-cashless'),
-            label: 'Безнал',
-            selected: method == SubscriptionPaymentMethod.cashless,
-            enabled: enabled,
-            onSelected: () => onChanged(SubscriptionPaymentMethod.cashless),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _RetryNotice extends StatelessWidget {
   const _RetryNotice();
 
@@ -1102,14 +1154,6 @@ int? _parsePercentBasisPoints(String raw) {
   if (whole == null) return null;
   final fraction = (match.group(2) ?? '').padRight(2, '0');
   return whole * 100 + int.parse(fraction.isEmpty ? '0' : fraction);
-}
-
-String _minorToInput(BigInt minor) {
-  final whole = minor ~/ BigInt.from(100);
-  final fraction = (minor % BigInt.from(100)).toInt();
-  return fraction == 0
-      ? whole.toString()
-      : '${whole.toString()},${fraction.toString().padLeft(2, '0')}';
 }
 
 String _formatMinor(BigInt minor, String currencyCode) {

@@ -120,6 +120,8 @@ Widget _paymentsView(
   required VoidCallback onCancel,
   required ClientPaymentSubmit onSubmit,
   required ValueChanged<CommerceMovement> onAdjust,
+  required void Function(CommerceMovement, ClientPaymentStatus) onTransition,
+  required ValueChanged<CommerceMovement> onReverse,
   required VoidCallback onCancelAdjustment,
   required ClientPaymentAdjustmentSubmit onSubmitAdjustment,
   required void Function(
@@ -140,6 +142,8 @@ Widget _paymentsView(
           orElse: () => commerce.accounts.first,
         );
   final movements = commerce?.movements ?? const <CommerceMovement>[];
+  final technicalHistory =
+      commerce?.technicalHistory ?? const <CommerceTechnicalFinanceEvent>[];
   final installments =
       commerce?.subscriptions
           .expand(
@@ -214,9 +218,13 @@ Widget _paymentsView(
       ],
       LayoutBuilder(
         builder: (context, constraints) {
-          final width = constraints.maxWidth >= 720
-              ? (constraints.maxWidth - AppSpace.md * 2) / 3
-              : constraints.maxWidth;
+          final columns = constraints.maxWidth >= 960
+              ? 4
+              : constraints.maxWidth >= 720
+              ? 2
+              : 1;
+          final width =
+              (constraints.maxWidth - AppSpace.md * (columns - 1)) / columns;
           return Wrap(
             spacing: AppSpace.md,
             runSpacing: AppSpace.md,
@@ -240,13 +248,19 @@ Widget _paymentsView(
               ),
               _PaymentMetric(
                 width: width,
-                label: 'Обязательства',
-                value: formatPaymentMinor(
-                  (account?.obligationDebitsMinor ?? BigInt.zero) -
-                      (account?.obligationCreditsMinor ?? BigInt.zero),
-                ),
-                icon: Icons.receipt_long_outlined,
+                label: 'Ожидает подтверждения',
+                value: formatPaymentMinor(account?.pendingMinor ?? BigInt.zero),
+                icon: Icons.hourglass_top_rounded,
                 color: AppColor.actionBlue,
+              ),
+              _PaymentMetric(
+                width: width,
+                label: 'Долг',
+                value: formatPaymentMinor(account?.debtMinor ?? BigInt.zero),
+                icon: Icons.warning_amber_rounded,
+                color: (account?.debtMinor ?? BigInt.zero) > BigInt.zero
+                    ? cs.error
+                    : AppTheme.success,
               ),
             ],
           );
@@ -286,6 +300,15 @@ Widget _paymentsView(
                 ),
                 onAdjust: movement.kind == CommerceMovementKind.payment
                     ? () => onAdjust(movement)
+                    : null,
+                onTransition:
+                    movement.kind == CommerceMovementKind.paymentRecord
+                    ? (status) => onTransition(movement, status)
+                    : null,
+                onReverse:
+                    movement.kind == CommerceMovementKind.paymentRecord &&
+                        movement.paymentRecordVersion != null
+                    ? () => onReverse(movement)
                     : null,
               ),
             )
@@ -331,6 +354,35 @@ Widget _paymentsView(
             ),
         ],
       ),
+      if (technicalHistory.isNotEmpty) ...[
+        const SizedBox(height: AppSpace.md),
+        _PaymentExpansion(
+          key: const Key('payment-technical-history-expansion'),
+          title: 'Техническая история',
+          count: technicalHistory.length,
+          children: [
+            for (final event in technicalHistory)
+              ListTile(
+                leading: const Icon(Icons.history_rounded),
+                title: Text(
+                  event.eventType == 'monetary_reversal'
+                      ? 'Оплата удалена с возвратом'
+                      : 'Запись оплаты удалена',
+                ),
+                subtitle: Text(
+                  [
+                    event.reason,
+                    event.actorName,
+                    DateFormat(
+                      'dd.MM.yyyy HH:mm',
+                    ).format(event.occurredAt.toLocal()),
+                  ].whereType<String>().join(' · '),
+                ),
+                trailing: Text(formatPaymentMinor(event.amountMinor)),
+              ),
+          ],
+        ),
+      ],
     ],
   );
 }
@@ -344,7 +396,8 @@ EntityPresentationReference _movementPresentation(CommerceMovement movement) {
               '${formatPaymentMinor(movement.amountMinor)}',
     context: [
       movement.branchName,
-      if (movement.status == 'paid') 'Проведён',
+      if (movement.kind == CommerceMovementKind.paymentRecord)
+        clientPaymentStatusLabel(movement.status),
     ].whereType<String>().where((value) => value.isNotEmpty).join(' · '),
   );
 }
@@ -471,6 +524,8 @@ class _PaymentMovementRow extends StatelessWidget {
     required this.movement,
     required this.onOpen,
     this.onAdjust,
+    this.onTransition,
+    this.onReverse,
     this.highlighted = false,
   });
 
@@ -478,6 +533,8 @@ class _PaymentMovementRow extends StatelessWidget {
   final void Function(BuildContext context, EntityOpenTarget target) onOpen;
   final bool highlighted;
   final VoidCallback? onAdjust;
+  final ValueChanged<ClientPaymentStatus>? onTransition;
+  final VoidCallback? onReverse;
 
   @override
   Widget build(BuildContext context) {
@@ -485,6 +542,7 @@ class _PaymentMovementRow extends StatelessWidget {
     final credit = movement.direction == CommerceMovementDirection.credit;
     final title = switch (movement.kind) {
       CommerceMovementKind.payment => 'Оплата',
+      CommerceMovementKind.paymentRecord => 'Оплата',
       CommerceMovementKind.refund => 'Возврат',
       CommerceMovementKind.adjustment => 'Корректировка',
       CommerceMovementKind.obligation => 'Обязательство по абонементу',
@@ -500,11 +558,80 @@ class _PaymentMovementRow extends StatelessWidget {
       },
       if (movement.invoiceIdentifier?.isNotEmpty == true)
         '№ ${movement.invoiceIdentifier}',
-      if (movement.status == 'paid') 'Проведён',
+      if (movement.kind == CommerceMovementKind.paymentRecord)
+        clientPaymentStatusLabel(movement.status),
+      if (movement.kind == CommerceMovementKind.payment &&
+          movement.status == 'paid')
+        'Оплачен',
       movement.acceptedByName,
       if (movement.subscriptionName?.isNotEmpty == true)
         'Назначение: ${movement.subscriptionName}',
     ].whereType<String>().where((value) => value.isNotEmpty).join(' · ');
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+        if (movement.kind == CommerceMovementKind.paymentRecord)
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpace.xs),
+            child: _PaymentStatusBadge(status: movement.status),
+          ),
+        if (movement.comment?.isNotEmpty == true)
+          Text(movement.comment!, style: const TextStyle(fontSize: 13)),
+        const SizedBox(height: AppSpace.xs),
+        Text(
+          details,
+          style: const TextStyle(color: AppColor.text2, fontSize: 12),
+        ),
+      ],
+    );
+    final amount = Text(
+      '${credit ? '+' : '−'}${formatPaymentMinor(movement.amountMinor)}',
+      style: TextStyle(
+        color: credit ? AppTheme.success : cs.error,
+        fontWeight: FontWeight.w800,
+      ),
+    );
+    final actions = <Widget>[
+      if (onAdjust != null)
+        IconButton(
+          key: ValueKey('adjust-payment-${movement.id}'),
+          tooltip: 'Возврат или корректировка',
+          onPressed: onAdjust,
+          icon: const Icon(Icons.undo_rounded),
+        ),
+      if (onTransition != null && movement.status != 'paid')
+        PopupMenuButton<ClientPaymentStatus>(
+          key: ValueKey('payment-status-${movement.id}'),
+          tooltip: 'Изменить статус оплаты',
+          onSelected: onTransition,
+          itemBuilder: (_) => [
+            const PopupMenuItem(
+              value: ClientPaymentStatus.paid,
+              child: Text('Подтвердить оплату'),
+            ),
+            if (movement.status == 'posted_pending')
+              const PopupMenuItem(
+                value: ClientPaymentStatus.unpaid,
+                child: Text('Отметить как долг'),
+              ),
+            if (movement.status == 'unpaid')
+              const PopupMenuItem(
+                value: ClientPaymentStatus.postedPending,
+                child: Text('Ожидает подтверждения'),
+              ),
+          ],
+          icon: const Icon(Icons.sync_alt_rounded),
+        ),
+      if (onReverse != null)
+        IconButton(
+          key: ValueKey('reverse-payment-${movement.id}'),
+          tooltip: 'Удалить оплату с причиной',
+          onPressed: onReverse,
+          icon: Icon(Icons.delete_outline_rounded, color: cs.error),
+        ),
+      _EntityOpenButtons(onOpen: (target) => onOpen(context, target)),
+    ];
     return Semantics(
       key: ValueKey('commerce-movement-${movement.id}'),
       button: true,
@@ -526,61 +653,86 @@ class _PaymentMovementRow extends StatelessWidget {
             onTap: () => onOpen(context, EntityOpenTarget.current),
             child: Padding(
               padding: const EdgeInsets.all(AppSpace.md),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final leading = Icon(
                     credit
                         ? Icons.south_west_rounded
                         : Icons.north_east_rounded,
                     color: credit ? AppTheme.success : cs.error,
-                  ),
-                  const SizedBox(width: AppSpace.md),
-                  Expanded(
-                    child: Column(
+                  );
+                  if (constraints.maxWidth >= 620) {
+                    return Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          title,
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        if (movement.comment?.isNotEmpty == true)
-                          Text(
-                            movement.comment!,
-                            style: const TextStyle(fontSize: 13),
-                          ),
-                        const SizedBox(height: AppSpace.xs),
-                        Text(
-                          details,
-                          style: const TextStyle(
-                            color: AppColor.text2,
-                            fontSize: 12,
-                          ),
-                        ),
+                        leading,
+                        const SizedBox(width: AppSpace.md),
+                        Expanded(child: content),
+                        const SizedBox(width: AppSpace.sm),
+                        amount,
+                        ...actions,
                       ],
-                    ),
-                  ),
-                  const SizedBox(width: AppSpace.sm),
-                  Text(
-                    '${credit ? '+' : '−'}${formatPaymentMinor(movement.amountMinor)}',
-                    style: TextStyle(
-                      color: credit ? AppTheme.success : cs.error,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  if (onAdjust != null)
-                    IconButton(
-                      key: ValueKey('adjust-payment-${movement.id}'),
-                      tooltip: 'Возврат или корректировка',
-                      onPressed: onAdjust,
-                      icon: const Icon(Icons.undo_rounded),
-                    ),
-                  _EntityOpenButtons(
-                    onOpen: (target) => onOpen(context, target),
-                  ),
-                ],
+                    );
+                  }
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          leading,
+                          const SizedBox(width: AppSpace.sm),
+                          Expanded(child: content),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpace.sm),
+                      Wrap(
+                        alignment: WrapAlignment.end,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [amount, ...actions],
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PaymentStatusBadge extends StatelessWidget {
+  const _PaymentStatusBadge({required this.status});
+
+  final String? status;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final color = switch (status) {
+      'paid' => AppTheme.success,
+      'posted_pending' => AppColor.actionBlue,
+      _ => cs.error,
+    };
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpace.sm,
+          vertical: 3,
+        ),
+        child: Text(
+          clientPaymentStatusLabel(status),
+          style: TextStyle(
+            color: color,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
           ),
         ),
       ),

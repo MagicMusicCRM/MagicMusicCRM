@@ -356,7 +356,7 @@ graph TD
 
 ### SYS-CRM-WORKSPACE / Integration & Polish
 
-- [ ] **T5.1.1** [REQ-COMMERCE-101, REQ-PAYMENT-101, REQ-PAYMENT-102, REQ-COMMERCE-102]: Commerce UI в профильных секциях
+- [x] **T5.1.1** [REQ-COMMERCE-101, REQ-PAYMENT-101, REQ-PAYMENT-102, REQ-COMMERCE-102]: Commerce UI в профильных секциях
   - **Описание**: Подключить purchase payer selector/preview, payment statuses/verification/reversal и cancel refund к одному Client Card controller.
   - **Входные данные**: INT-S1, [`crm_workspace_v7.md` §5](04_SYSTEM_DESIGN/crm_workspace_v7.md).
   - **Выходные данные**: Flutter models/service/forms/payment/subscription sections.

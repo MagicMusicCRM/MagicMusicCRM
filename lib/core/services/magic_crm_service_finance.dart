@@ -124,39 +124,210 @@ class IssueSubscriptionInput {
   };
 }
 
-class RecordSubscriptionPaymentInput {
-  const RecordSubscriptionPaymentInput({
-    required this.amountMinor,
-    required this.method,
-    required this.occurredAt,
-    required this.issuedSubscriptionId,
-    this.currencyCode,
-    this.branchId,
-    this.comment,
-    this.invoiceIdentifier,
+enum SubscriptionFundingMode {
+  personalAccount('personal_account'),
+  installment('installment');
+
+  const SubscriptionFundingMode(this.apiValue);
+  final String apiValue;
+}
+
+class PurchaseSubscriptionInput {
+  const PurchaseSubscriptionInput({
+    required this.issue,
+    required this.payerStudentId,
+    required this.fundingMode,
+    this.purchaseReason,
   });
 
-  final String issuedSubscriptionId;
-  final BigInt amountMinor;
-  final SubscriptionPaymentMethod method;
-  final DateTime occurredAt;
-  final String? currencyCode;
-  final String? branchId;
-  final String? comment;
-  final String? invoiceIdentifier;
+  final IssueSubscriptionInput issue;
+  final String payerStudentId;
+  final SubscriptionFundingMode fundingMode;
+  final String? purchaseReason;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-    'issuedSubscriptionId': issuedSubscriptionId,
-    'amountMinor': amountMinor.toString(),
-    'method': method.apiValue,
-    'occurredAt': occurredAt.toUtc().toIso8601String(),
-    if (currencyCode != null) 'currencyCode': currencyCode,
-    if (branchId != null) 'branchId': branchId,
-    if (comment != null && comment!.trim().isNotEmpty)
-      'comment': comment!.trim(),
-    if (invoiceIdentifier != null && invoiceIdentifier!.trim().isNotEmpty)
-      'invoiceIdentifier': invoiceIdentifier!.trim(),
+    ...issue.toJson(),
+    'payerStudentId': payerStudentId,
+    'fundingMode': fundingMode.apiValue,
+    if (purchaseReason?.trim().isNotEmpty == true)
+      'purchaseReason': purchaseReason!.trim(),
   };
+}
+
+class SubscriptionPurchasePreview {
+  const SubscriptionPurchasePreview({
+    required this.recipientStudentId,
+    required this.payerStudentId,
+    required this.fundingMode,
+    required this.currencyCode,
+    required this.finalPriceMinor,
+    required this.payerBalanceMinor,
+    required this.balanceAfterMinor,
+    required this.canCommit,
+    required this.shortageMinor,
+    required this.previewToken,
+  });
+
+  final String recipientStudentId;
+  final String payerStudentId;
+  final SubscriptionFundingMode fundingMode;
+  final String currencyCode;
+  final BigInt finalPriceMinor;
+  final BigInt payerBalanceMinor;
+  final BigInt balanceAfterMinor;
+  final bool canCommit;
+  final BigInt shortageMinor;
+  final String previewToken;
+
+  factory SubscriptionPurchasePreview.fromJson(Map<String, dynamic> json) {
+    return SubscriptionPurchasePreview(
+      recipientStudentId: json['recipientStudentId'].toString(),
+      payerStudentId: json['payerStudentId'].toString(),
+      fundingMode: json['fundingMode'] == 'installment'
+          ? SubscriptionFundingMode.installment
+          : SubscriptionFundingMode.personalAccount,
+      currencyCode: json['currencyCode'].toString(),
+      finalPriceMinor: _replacementMinor(json['finalPriceMinor']),
+      payerBalanceMinor: _replacementMinor(json['payerBalanceMinor']),
+      balanceAfterMinor: _replacementMinor(json['balanceAfterMinor']),
+      canCommit: json['canCommit'] == true,
+      shortageMinor: _replacementMinor(json['shortageMinor']),
+      previewToken: json['previewToken'].toString(),
+    );
+  }
+}
+
+enum ClientPaymentStatus {
+  unpaid('unpaid'),
+  postedPending('posted_pending'),
+  paid('paid');
+
+  const ClientPaymentStatus(this.apiValue);
+  final String apiValue;
+}
+
+class CreateClientPaymentRecordInput {
+  const CreateClientPaymentRecordInput({
+    required this.amountMinor,
+    required this.status,
+    required this.reason,
+    this.issuedSubscriptionId,
+    this.currencyCode = 'RUB',
+    this.dueAt,
+    this.method,
+    this.externalIdentifier,
+    this.occurredAt,
+    this.branchId,
+    this.verificationNote,
+  });
+
+  final String? issuedSubscriptionId;
+  final BigInt amountMinor;
+  final String currencyCode;
+  final ClientPaymentStatus status;
+  final DateTime? dueAt;
+  final SubscriptionPaymentMethod? method;
+  final String? externalIdentifier;
+  final DateTime? occurredAt;
+  final String? branchId;
+  final String? verificationNote;
+  final String reason;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    if (issuedSubscriptionId != null)
+      'issuedSubscriptionId': issuedSubscriptionId,
+    'amountMinor': amountMinor.toString(),
+    'currencyCode': currencyCode,
+    'status': status.apiValue,
+    if (dueAt != null) 'dueAt': dueAt!.toUtc().toIso8601String(),
+    if (method != null) 'method': method!.apiValue,
+    if (externalIdentifier?.trim().isNotEmpty == true)
+      'externalIdentifier': externalIdentifier!.trim(),
+    if (occurredAt != null) 'occurredAt': occurredAt!.toUtc().toIso8601String(),
+    if (branchId != null) 'branchId': branchId,
+    if (verificationNote?.trim().isNotEmpty == true)
+      'verificationNote': verificationNote!.trim(),
+    'reason': reason.trim(),
+  };
+}
+
+class TransitionClientPaymentRecordInput {
+  const TransitionClientPaymentRecordInput({
+    required this.expectedVersion,
+    required this.targetStatus,
+    required this.reason,
+    this.method,
+    this.externalIdentifier,
+    this.occurredAt,
+    this.branchId,
+    this.verificationNote,
+  });
+
+  final int expectedVersion;
+  final ClientPaymentStatus targetStatus;
+  final SubscriptionPaymentMethod? method;
+  final String? externalIdentifier;
+  final DateTime? occurredAt;
+  final String? branchId;
+  final String? verificationNote;
+  final String reason;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'expectedVersion': expectedVersion,
+    'targetStatus': targetStatus.apiValue,
+    if (method != null) 'method': method!.apiValue,
+    if (externalIdentifier?.trim().isNotEmpty == true)
+      'externalIdentifier': externalIdentifier!.trim(),
+    if (occurredAt != null) 'occurredAt': occurredAt!.toUtc().toIso8601String(),
+    if (branchId != null) 'branchId': branchId,
+    if (verificationNote?.trim().isNotEmpty == true)
+      'verificationNote': verificationNote!.trim(),
+    'reason': reason.trim(),
+  };
+}
+
+class PaymentReversalPreview {
+  const PaymentReversalPreview({
+    required this.paymentRecordId,
+    required this.status,
+    required this.amountMinor,
+    required this.currencyCode,
+    required this.walletDeltaMinor,
+    required this.walletBalanceMinor,
+    required this.resultingBalanceMinor,
+    required this.negativeBalanceWarning,
+    required this.operation,
+    required this.previewToken,
+  });
+
+  final String paymentRecordId;
+  final ClientPaymentStatus status;
+  final BigInt amountMinor;
+  final String currencyCode;
+  final BigInt walletDeltaMinor;
+  final BigInt walletBalanceMinor;
+  final BigInt resultingBalanceMinor;
+  final bool negativeBalanceWarning;
+  final String operation;
+  final String previewToken;
+
+  factory PaymentReversalPreview.fromJson(Map<String, dynamic> json) {
+    final status = ClientPaymentStatus.values.firstWhere(
+      (item) => item.apiValue == json['status'],
+    );
+    return PaymentReversalPreview(
+      paymentRecordId: json['paymentRecordId'].toString(),
+      status: status,
+      amountMinor: _replacementMinor(json['amountMinor']),
+      currencyCode: json['currencyCode'].toString(),
+      walletDeltaMinor: _replacementMinor(json['walletDeltaMinor']),
+      walletBalanceMinor: _replacementMinor(json['walletBalanceMinor']),
+      resultingBalanceMinor: _replacementMinor(json['resultingBalanceMinor']),
+      negativeBalanceWarning: json['negativeBalanceWarning'] == true,
+      operation: json['operation'].toString(),
+      previewToken: json['previewToken'].toString(),
+    );
+  }
 }
 
 enum PaymentAdjustmentKind { refund, correction }
@@ -1205,27 +1376,87 @@ extension MagicCrmFinance on MagicCrmService {
     );
   }
 
-  Future<Map<String, dynamic>> issueSubscription(
-    String studentId, {
-    required IssueSubscriptionInput input,
-    required MagicMutationIdentity identity,
+  Future<SubscriptionPurchasePreview> previewSubscriptionPurchase(
+    String recipientStudentId, {
+    required PurchaseSubscriptionInput input,
   }) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/crm/students/$recipientStudentId/subscriptions/purchase/preview',
+      data: input.toJson(),
+    );
+    return SubscriptionPurchasePreview.fromJson(response);
+  }
+
+  Future<Map<String, dynamic>> purchaseSubscription(
+    String recipientStudentId, {
+    required PurchaseSubscriptionInput input,
+    required SubscriptionPurchasePreview preview,
+    required MagicMutationIdentity identity,
+  }) {
     return _api.postIdempotent<Map<String, dynamic>>(
-      '/crm/students/$studentId/subscriptions/issue',
+      '/crm/students/$recipientStudentId/subscriptions/purchase',
+      identity: identity,
+      data: <String, dynamic>{
+        ...input.toJson(),
+        'previewToken': preview.previewToken,
+        'confirm': true,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> createClientPaymentRecord(
+    String studentId, {
+    required CreateClientPaymentRecordInput input,
+    required MagicMutationIdentity identity,
+  }) {
+    return _api.postIdempotent<Map<String, dynamic>>(
+      '/crm/students/$studentId/payment-records',
       identity: identity,
       data: input.toJson(),
     );
   }
 
-  Future<Map<String, dynamic>> recordSubscriptionPayment(
+  Future<Map<String, dynamic>> transitionClientPaymentRecord(
     String studentId, {
-    required RecordSubscriptionPaymentInput input,
+    required String paymentRecordId,
+    required TransitionClientPaymentRecordInput input,
     required MagicMutationIdentity identity,
-  }) async {
+  }) {
     return _api.postIdempotent<Map<String, dynamic>>(
-      '/crm/students/$studentId/subscription-payments',
+      '/crm/students/$studentId/payment-records/$paymentRecordId/transition',
       identity: identity,
       data: input.toJson(),
+    );
+  }
+
+  Future<PaymentReversalPreview> previewClientPaymentReversal(
+    String studentId, {
+    required String paymentRecordId,
+    required int expectedVersion,
+  }) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/crm/students/$studentId/payment-records/'
+      '$paymentRecordId/reversal/preview',
+      data: <String, dynamic>{'expectedVersion': expectedVersion},
+    );
+    return PaymentReversalPreview.fromJson(response);
+  }
+
+  Future<Map<String, dynamic>> reverseClientPayment(
+    String studentId, {
+    required String paymentRecordId,
+    required PaymentReversalPreview preview,
+    required String reason,
+    required MagicMutationIdentity identity,
+  }) {
+    return _api.postIdempotent<Map<String, dynamic>>(
+      '/crm/students/$studentId/payment-records/$paymentRecordId/reversal',
+      identity: identity,
+      data: <String, dynamic>{
+        'previewToken': preview.previewToken,
+        'confirm': true,
+        'reason': reason.trim(),
+      },
     );
   }
 

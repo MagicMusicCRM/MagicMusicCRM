@@ -589,7 +589,10 @@ export class CommerceProjectionRepository {
               'acceptedByName', movement.accepted_by_name,
               'issuedSubscriptionId', movement.issued_subscription_id,
               'subscriptionName', movement.subscription_name,
-              'sourcePaymentId', movement.source_payment_id
+              'sourcePaymentId', movement.source_payment_id,
+              'paymentRecordVersion', movement.payment_record_version,
+              'installmentId', movement.installment_id,
+              'dueAt', movement.due_at
             )
             order by movement.occurred_at desc, movement.id desc
           ) as items
@@ -618,7 +621,10 @@ export class CommerceProjectionRepository {
                 payment.issued_subscription_id,
                 subscription.commercial_snapshot ->> 'displayName'
                   as subscription_name,
-                null::uuid as source_payment_id
+                null::uuid as source_payment_id,
+                null::integer as payment_record_version,
+                null::uuid as installment_id,
+                null::timestamptz as due_at
               from app.commerce_ordinary_payments payment
               left join app.branches branch on branch.id = payment.branch_id
               left join app.subscriptions subscription
@@ -651,7 +657,10 @@ export class CommerceProjectionRepository {
                 ), ''),
                 record.issued_subscription_id,
                 subscription.commercial_snapshot ->> 'displayName',
-                null::uuid
+                null::uuid,
+                record.version,
+                record.installment_id,
+                record.due_at
               from app.commerce_ordinary_payment_records record
               left join app.payments actual
                 on actual.id = record.actual_payment_id
@@ -680,7 +689,10 @@ export class CommerceProjectionRepository {
                 null::text,
                 obligation.issued_subscription_id,
                 subscription.commercial_snapshot ->> 'displayName',
-                null::uuid
+                null::uuid,
+                null::integer,
+                null::uuid,
+                null::timestamptz
               from app.subscription_obligation_facts obligation
               left join app.subscriptions subscription
                 on subscription.id = obligation.issued_subscription_id
@@ -704,7 +716,10 @@ export class CommerceProjectionRepository {
                 null::text,
                 charge.subscription_id,
                 subscription.commercial_snapshot ->> 'displayName',
-                null::uuid
+                null::uuid,
+                null::integer,
+                null::uuid,
+                null::timestamptz
               from app.lesson_client_charge_facts charge
               left join app.subscriptions subscription
                 on subscription.id = charge.subscription_id
@@ -734,7 +749,10 @@ export class CommerceProjectionRepository {
                 ), ''),
                 source_payment.issued_subscription_id,
                 subscription.commercial_snapshot ->> 'displayName',
-                adjustment.source_payment_id
+                adjustment.source_payment_id,
+                null::integer,
+                null::uuid,
+                null::timestamptz
               from app.commerce_ordinary_account_adjustments adjustment
               left join app.payments source_payment
                 on source_payment.id = adjustment.source_payment_id

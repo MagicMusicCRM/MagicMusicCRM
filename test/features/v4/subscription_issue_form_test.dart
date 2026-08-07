@@ -4,19 +4,40 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/subscription_issue_sheet.dart';
 
-typedef _IdempotentCall = ({
-  String path,
-  Object? data,
-  MagicMutationIdentity identity,
-});
+typedef _Call = ({String path, Object? data, MagicMutationIdentity? identity});
 
-class _IssueApiClient extends MagicApiClient {
-  _IssueApiClient()
+class _PurchaseApiClient extends MagicApiClient {
+  _PurchaseApiClient()
     : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
-  final List<_IdempotentCall> calls = [];
+  final calls = <_Call>[];
+
+  Map<String, dynamic> get preview => const {
+    'recipientStudentId': 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    'payerStudentId': 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    'fundingMode': 'personal_account',
+    'currencyCode': 'RUB',
+    'finalPriceMinor': '640000',
+    'payerBalanceMinor': '800000',
+    'balanceAfterMinor': '160000',
+    'canCommit': true,
+    'shortageMinor': '0',
+    'previewToken': 'signed-preview',
+  };
+
+  @override
+  Future<T> post<T>(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) async {
+    calls.add((path: path, data: data, identity: null));
+    return preview as T;
+  }
 
   @override
   Future<T> postIdempotent<T>(
@@ -27,14 +48,8 @@ class _IssueApiClient extends MagicApiClient {
     bool authenticated = true,
   }) async {
     calls.add((path: path, data: data, identity: identity));
-    if (path.endsWith('/subscriptions/issue')) {
-      return <String, dynamic>{
-            'subscription': {'id': '11111111-1111-4111-8111-111111111111'},
-          }
-          as T;
-    }
     return <String, dynamic>{
-          'payment': {'id': '22222222-2222-4222-8222-222222222222'},
+          'subscription': {'id': 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'},
         }
         as T;
   }
@@ -46,30 +61,50 @@ const _package = <String, dynamic>{
   'basePriceMinor': '800000',
   'currencyCode': 'RUB',
 };
+const _recipientId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const _payerId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
-Future<void> _openIssueSheet(
+SubscriptionPurchasePreview _preview({
+  String payerId = _recipientId,
+  SubscriptionFundingMode mode = SubscriptionFundingMode.personalAccount,
+}) => SubscriptionPurchasePreview(
+  recipientStudentId: _recipientId,
+  payerStudentId: payerId,
+  fundingMode: mode,
+  currencyCode: 'RUB',
+  finalPriceMinor: BigInt.from(640000),
+  payerBalanceMinor: BigInt.from(800000),
+  balanceAfterMinor: BigInt.from(160000),
+  canCommit: true,
+  shortageMinor: BigInt.zero,
+  previewToken: 'signed-preview',
+);
+
+Future<void> _openSheet(
   WidgetTester tester, {
+  required SubscriptionIssuePreview onPreview,
   required SubscriptionIssueSubmit onSubmit,
-  Size size = const Size(320, 900),
+  Future<List<SearchableSelectItem>> Function(String query)? searchPayers,
 }) async {
-  tester.view.physicalSize = size;
+  tester.view.physicalSize = const Size(420, 1000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-
   await tester.pumpWidget(
     MaterialApp(
       home: Scaffold(
         body: Builder(
-          builder: (context) => Center(
-            child: FilledButton(
-              onPressed: () => showSubscriptionIssueFormSheet(
-                context,
-                package: _package,
-                onSubmit: onSubmit,
-              ),
-              child: const Text('Открыть'),
+          builder: (context) => FilledButton(
+            onPressed: () => showSubscriptionIssueFormSheet(
+              context,
+              package: _package,
+              recipientStudentId: _recipientId,
+              recipientLabel: 'Иванов Иван',
+              searchPayers: searchPayers ?? (_) async => const [],
+              onPreview: onPreview,
+              onSubmit: onSubmit,
             ),
+            child: const Text('Открыть'),
           ),
         ),
       ),
@@ -79,276 +114,154 @@ Future<void> _openIssueSheet(
   await tester.pumpAndSettle();
 }
 
-Future<void> _tapVisible(WidgetTester tester, Finder finder) async {
+Future<void> _tap(WidgetTester tester, Finder finder) async {
   await tester.ensureVisible(finder);
-  await tester.pump();
   await tester.tap(finder);
-  await tester.pump();
+  await tester.pumpAndSettle();
 }
 
-String _normalized(String value) =>
-    value.replaceAll('\u00a0', ' ').replaceAll('\u202f', ' ');
-
-List<String> _textsInside(WidgetTester tester, Finder parent) => tester
+List<String> _normalizedTexts(WidgetTester tester, Finder parent) => tester
     .widgetList<Text>(find.descendant(of: parent, matching: find.byType(Text)))
-    .map((widget) => _normalized(widget.data ?? ''))
+    .map(
+      (widget) => (widget.data ?? '')
+          .replaceAll('\u00a0', ' ')
+          .replaceAll('\u202f', ' '),
+    )
     .toList(growable: false);
 
 void main() {
   test(
-    'service sends canonical issue and payment DTOs with owned identities',
+    'purchase uses preview + idempotent commit and never legacy issue',
     () async {
-      final api = _IssueApiClient();
+      final api = _PurchaseApiClient();
       final service = MagicCrmService(api);
-      const issueIdentity = MagicMutationIdentity(
-        idempotencyKey: 'issue-stable-key',
-        requestId: 'issue-stable-request',
+      const identity = MagicMutationIdentity(
+        idempotencyKey: 'purchase-stable-key',
+        requestId: 'purchase-stable-request',
       );
-      const paymentIdentity = MagicMutationIdentity(
-        idempotencyKey: 'payment-stable-key',
-        requestId: 'payment-stable-request',
-      );
-      final dueAt = DateTime.utc(2026, 8, 1, 12);
-
-      final issue = await service.issueSubscription(
-        'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-        input: IssueSubscriptionInput(
+      final input = PurchaseSubscriptionInput(
+        issue: IssueSubscriptionInput(
           packageId: _package['id']! as String,
           discount: SubscriptionDiscountInput.percent(
             basisPoints: 2000,
-            reason: 'Летняя акция',
-          ),
-          installments: [
-            SubscriptionInstallmentInput(
-              dueAt: dueAt,
-              amountMinor: BigInt.from(320000),
-            ),
-            SubscriptionInstallmentInput(
-              dueAt: DateTime.utc(2026, 9, 1, 12),
-              amountMinor: BigInt.from(320000),
-            ),
-          ],
-          paymentMethod: SubscriptionPaymentMethod.cashless,
-          surcharge: SubscriptionSurchargeInput(
-            amountMinor: BigInt.from(50000),
-            reason: 'Дополнительный урок',
+            reason: 'Семейная скидка',
           ),
         ),
-        identity: issueIdentity,
-      );
-      final issuedId =
-          (issue['subscription'] as Map<String, dynamic>)['id']! as String;
-      await service.recordSubscriptionPayment(
-        'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-        input: RecordSubscriptionPaymentInput(
-          issuedSubscriptionId: issuedId,
-          amountMinor: BigInt.from(100000),
-          method: SubscriptionPaymentMethod.cashless,
-          occurredAt: DateTime.utc(2026, 8, 1, 12, 30),
-          currencyCode: 'RUB',
-        ),
-        identity: paymentIdentity,
+        payerStudentId: _payerId,
+        fundingMode: SubscriptionFundingMode.personalAccount,
+        purchaseReason: 'Родитель оплачивает обучение ребёнка',
       );
 
-      expect(api.calls, hasLength(2));
-      expect(api.calls.first.path, endsWith('/subscriptions/issue'));
-      expect(api.calls.first.identity, same(issueIdentity));
-      expect(api.calls.first.data, {
-        'packageId': 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-        'discount': {
-          'type': 'percent',
-          'percent': 20,
-          'reason': 'Летняя акция',
-        },
-        'installments': [
-          {'dueAt': '2026-08-01T12:00:00.000Z', 'amountMinor': '320000'},
-          {'dueAt': '2026-09-01T12:00:00.000Z', 'amountMinor': '320000'},
-        ],
-        'paymentMethod': 'cashless',
-        'surcharge': {'amountMinor': '50000', 'reason': 'Дополнительный урок'},
-      });
-      expect(api.calls.last.path, endsWith('/subscription-payments'));
-      expect(api.calls.last.identity, same(paymentIdentity));
-      expect(api.calls.last.data, {
-        'issuedSubscriptionId': '11111111-1111-4111-8111-111111111111',
-        'amountMinor': '100000',
-        'method': 'cashless',
-        'occurredAt': '2026-08-01T12:30:00.000Z',
-        'currencyCode': 'RUB',
-      });
+      final preview = await service.previewSubscriptionPurchase(
+        _recipientId,
+        input: input,
+      );
+      await service.purchaseSubscription(
+        _recipientId,
+        input: input,
+        preview: preview,
+        identity: identity,
+      );
+
+      expect(api.calls.map((call) => call.path), [
+        '/crm/students/$_recipientId/subscriptions/purchase/preview',
+        '/crm/students/$_recipientId/subscriptions/purchase',
+      ]);
+      expect(api.calls.last.identity, same(identity));
+      expect(api.calls.last.data, containsPair('confirm', true));
+      expect(
+        api.calls.last.data,
+        containsPair('previewToken', 'signed-preview'),
+      );
+      expect(api.calls.last.data, containsPair('payerStudentId', _payerId));
+      expect(
+        api.calls.last.data,
+        containsPair('purchaseReason', 'Родитель оплачивает обучение ребёнка'),
+      );
     },
   );
 
-  testWidgets(
-    'narrow form calculates discount + surcharge, installments and stable retry',
-    (tester) async {
-      final submissions = <SubscriptionIssueSubmission>[];
-      await _openIssueSheet(
-        tester,
-        onSubmit: (submission) async {
-          submissions.add(submission);
-          if (submissions.length == 1) {
-            throw const MagicApiException(
-              message: 'Соединение прервано после отправки.',
-            );
-          }
-        },
-      );
-
-      expect(tester.takeException(), isNull);
-      await _tapVisible(
-        tester,
-        find.byKey(const Key('subscription-discount-percent')),
-      );
-      await tester.enterText(
-        find.byKey(const Key('subscription-discount-value')),
-        '20',
-      );
-      await tester.enterText(
-        find.byKey(const Key('subscription-discount-reason')),
-        'Семейная скидка',
-      );
-      await tester.pump();
-
-      expect(
-        _textsInside(tester, find.byKey(const Key('subscription-issue-final'))),
-        contains('6 400 ₽'),
-      );
-
-      await _tapVisible(
-        tester,
-        find.byKey(const Key('subscription-surcharge-toggle')),
-      );
-      await tester.enterText(
-        find.byKey(const Key('subscription-surcharge-amount')),
-        '600',
-      );
-      await tester.enterText(
-        find.byKey(const Key('subscription-surcharge-reason')),
-        'Дополнительный урок',
-      );
-      await tester.pump();
-      expect(
-        _textsInside(tester, find.byKey(const Key('subscription-issue-final'))),
-        contains('7 000 ₽'),
-      );
-
-      await _tapVisible(tester, find.text('Рассрочка'));
-      await _tapVisible(tester, find.text('Внести оплату сейчас'));
-      await _tapVisible(
-        tester,
-        find.byKey(const Key('subscription-payment-cashless')),
-      );
-      await tester.binding.handlePopRoute();
-      await tester.pumpAndSettle();
-      expect(find.text('Сохранить изменения?'), findsOneWidget);
-      expect(
-        tester
-            .widget<TextFormField>(
-              find.byKey(const Key('subscription-discount-value')),
-            )
-            .controller!
-            .text,
-        '20',
-      );
-      await tester.tap(find.text('Сохранить'));
-      await tester.pumpAndSettle();
-
-      expect(submissions, hasLength(1));
-      expect(find.byKey(const Key('subscription-issue-error')), findsOneWidget);
-      expect(find.text('Повторить'), findsOneWidget);
-      expect(
-        tester
-            .widget<TextFormField>(
-              find.byKey(const Key('subscription-discount-value')),
-            )
-            .enabled,
-        isFalse,
-      );
-
-      await _tapVisible(tester, find.text('Повторить'));
-      await tester.pumpAndSettle();
-      expect(submissions, hasLength(2));
-
-      final first = submissions.first;
-      final retry = submissions.last;
-      expect(
-        retry.issueIdentity.idempotencyKey,
-        first.issueIdentity.idempotencyKey,
-      );
-      expect(retry.issueIdentity.requestId, first.issueIdentity.requestId);
-      expect(
-        retry.payment!.identity.idempotencyKey,
-        first.payment!.identity.idempotencyKey,
-      );
-      expect(retry.payment!.occurredAt, first.payment!.occurredAt);
-      expect(first.issue.toJson()['discount'], {
-        'type': 'percent',
-        'percent': 20,
-        'reason': 'Семейная скидка',
-      });
-      expect(first.issue.toJson()['paymentMethod'], 'cashless');
-      expect(first.issue.toJson()['surcharge'], {
-        'amountMinor': '60000',
-        'reason': 'Дополнительный урок',
-      });
-      expect(first.payment!.amountMinor, BigInt.from(700000));
-
-      final installments = first.issue.installments;
-      expect(installments, hasLength(2));
-      expect(
-        installments.fold<BigInt>(
-          BigInt.zero,
-          (sum, item) => sum + item.amountMinor,
-        ),
-        BigInt.from(700000),
-      );
-      expect(
-        installments.every((item) => item.amountMinor > BigInt.zero),
-        isTrue,
-      );
-      expect(find.text('Условия абонемента'), findsNothing);
-      expect(tester.takeException(), isNull);
-    },
-  );
-
-  testWidgets('fixed discount is serialized in minor units', (tester) async {
-    SubscriptionIssueSubmission? captured;
-    await _openIssueSheet(
+  testWidgets('preview is explicit and commit retry keeps one identity', (
+    tester,
+  ) async {
+    final submissions = <SubscriptionIssueSubmission>[];
+    await _openSheet(
       tester,
-      size: const Size(800, 900),
-      onSubmit: (submission) async => captured = submission,
+      onPreview: (input) async => _preview(mode: input.fundingMode),
+      onSubmit: (submission) async {
+        submissions.add(submission);
+        if (submissions.length == 1) {
+          throw const MagicApiException(message: 'Сбой после отправки');
+        }
+      },
     );
-
-    await _tapVisible(
-      tester,
-      find.byKey(const Key('subscription-discount-fixed')),
-    );
+    await _tap(tester, find.byKey(const Key('subscription-discount-percent')));
     await tester.enterText(
       find.byKey(const Key('subscription-discount-value')),
-      '1600',
+      '20',
     );
     await tester.enterText(
       find.byKey(const Key('subscription-discount-reason')),
-      'Персональная скидка',
+      'Семейная скидка',
     );
-    await tester.pump();
+    await _tap(tester, find.byKey(const Key('subscription-issue-submit')));
+
+    expect(find.byKey(const Key('subscription-purchase-preview')), findsOne);
+    expect(find.text('Получатель'), findsOne);
+    expect(find.text('Плательщик'), findsOne);
     expect(
-      _textsInside(tester, find.byKey(const Key('subscription-issue-final'))),
-      contains('6 400 ₽'),
+      _normalizedTexts(
+        tester,
+        find.byKey(const Key('subscription-purchase-preview')),
+      ),
+      contains('1 600 ₽'),
     );
 
-    await _tapVisible(
-      tester,
-      find.byKey(const Key('subscription-issue-submit')),
+    await _tap(tester, find.byKey(const Key('subscription-issue-submit')));
+    expect(submissions, hasLength(1));
+    expect(find.text('Повторить'), findsOne);
+    await _tap(tester, find.byKey(const Key('subscription-issue-submit')));
+    expect(submissions, hasLength(2));
+    expect(
+      submissions.first.identity.idempotencyKey,
+      submissions.last.identity.idempotencyKey,
     );
+    expect(
+      submissions.first.purchase.issue.discount!.toJson(),
+      submissions.last.purchase.issue.discount!.toJson(),
+    );
+  });
+
+  testWidgets('different payer requires a reason before preview', (
+    tester,
+  ) async {
+    var previews = 0;
+    await _openSheet(
+      tester,
+      searchPayers: (_) async => [
+        SearchableSelectItem(id: _payerId, label: 'Петров Пётр'),
+      ],
+      onPreview: (input) async {
+        previews++;
+        return _preview(payerId: input.payerStudentId);
+      },
+      onSubmit: (_) async {},
+    );
+    await _tap(tester, find.byKey(const Key('subscription-payer')));
+    await tester.enterText(find.byType(TextField).last, 'Петров');
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.pumpAndSettle();
-    expect(captured, isNotNull);
-    expect(captured!.issue.toJson()['discount'], {
-      'type': 'fixed',
-      'fixedMinor': '160000',
-      'reason': 'Персональная скидка',
-    });
-    expect(tester.takeException(), isNull);
+    await _tap(tester, find.text('Петров Пётр'));
+    await _tap(tester, find.byKey(const Key('subscription-issue-submit')));
+    expect(find.text('Укажите причину оплаты с чужого счёта'), findsOne);
+    expect(previews, 0);
+
+    await tester.enterText(
+      find.byKey(const Key('subscription-purchase-reason')),
+      'Семейная оплата',
+    );
+    await _tap(tester, find.byKey(const Key('subscription-issue-submit')));
+    expect(previews, 1);
+    expect(find.text('Петров Пётр'), findsWidgets);
   });
 }

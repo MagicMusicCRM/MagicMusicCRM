@@ -5,16 +5,37 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/models/commerce_projection.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 
 class ClientPaymentSubmission {
   const ClientPaymentSubmission({required this.input, required this.identity});
 
-  final RecordSubscriptionPaymentInput input;
+  final CreateClientPaymentRecordInput input;
   final MagicMutationIdentity identity;
 }
 
 typedef ClientPaymentSubmit =
     Future<void> Function(ClientPaymentSubmission submission);
+
+class ClientPaymentTransitionSubmission {
+  const ClientPaymentTransitionSubmission({
+    required this.input,
+    required this.identity,
+  });
+
+  final TransitionClientPaymentRecordInput input;
+  final MagicMutationIdentity identity;
+}
+
+class ClientPaymentReversalSubmission {
+  const ClientPaymentReversalSubmission({
+    required this.reason,
+    required this.identity,
+  });
+
+  final String reason;
+  final MagicMutationIdentity identity;
+}
 
 class ClientPaymentAdjustmentSubmission {
   const ClientPaymentAdjustmentSubmission({
@@ -58,10 +79,12 @@ class _ClientPaymentFormState extends State<ClientPaymentForm> {
   final _amountController = TextEditingController();
   final _commentController = TextEditingController();
   final _invoiceController = TextEditingController();
+  final _reasonController = TextEditingController(text: 'Оплата по абонементу');
 
   late DateTime _date;
   late MagicMutationIdentity _identity;
   SubscriptionPaymentMethod _method = SubscriptionPaymentMethod.cashless;
+  ClientPaymentStatus _status = ClientPaymentStatus.postedPending;
   String? _subscriptionId;
   bool _busy = false;
   bool _attempted = false;
@@ -88,6 +111,7 @@ class _ClientPaymentFormState extends State<ClientPaymentForm> {
     _amountController.dispose();
     _commentController.dispose();
     _invoiceController.dispose();
+    _reasonController.dispose();
     super.dispose();
   }
 
@@ -104,7 +128,7 @@ class _ClientPaymentFormState extends State<ClientPaymentForm> {
       context: context,
       initialDate: _date,
       firstDate: DateTime(2000),
-      lastDate: DateTime.now().add(const Duration(days: 1)),
+      lastDate: DateTime(2100),
       locale: const Locale('ru'),
     );
     if (selected == null || selected == _date) return;
@@ -122,7 +146,8 @@ class _ClientPaymentFormState extends State<ClientPaymentForm> {
 
   Future<void> _submit() async {
     if (_busy || !_formKey.currentState!.validate()) return;
-    if (widget.branchId == null || widget.branchId!.isEmpty) {
+    if (_status == ClientPaymentStatus.paid &&
+        (widget.branchId == null || widget.branchId!.isEmpty)) {
       setState(() => _error = 'Сначала укажите филиал в карточке ученика.');
       return;
     }
@@ -130,15 +155,20 @@ class _ClientPaymentFormState extends State<ClientPaymentForm> {
     final occurredAt = DateTime(_date.year, _date.month, _date.day, 12).toUtc();
     final submission = ClientPaymentSubmission(
       identity: _identity,
-      input: RecordSubscriptionPaymentInput(
-        issuedSubscriptionId: _subscriptionId!,
+      input: CreateClientPaymentRecordInput(
+        issuedSubscriptionId: _subscriptionId,
         amountMinor: amount,
-        method: _method,
-        occurredAt: occurredAt,
+        status: _status,
+        method: _status == ClientPaymentStatus.paid ? _method : null,
+        occurredAt: _status == ClientPaymentStatus.paid ? occurredAt : null,
+        dueAt: _status == ClientPaymentStatus.paid ? null : occurredAt,
         currencyCode: 'RUB',
-        branchId: widget.branchId,
-        comment: _commentController.text,
-        invoiceIdentifier: _invoiceController.text,
+        branchId: _status == ClientPaymentStatus.paid ? widget.branchId : null,
+        verificationNote: _commentController.text,
+        externalIdentifier: _status == ClientPaymentStatus.paid
+            ? _invoiceController.text
+            : null,
+        reason: _reasonController.text,
       ),
     );
     setState(() {
@@ -161,7 +191,9 @@ class _ClientPaymentFormState extends State<ClientPaymentForm> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final amount = parsePaymentMinor(_amountController.text) ?? BigInt.zero;
-    final after = widget.balanceMinor + amount;
+    final after =
+        widget.balanceMinor +
+        (_status == ClientPaymentStatus.paid ? amount : BigInt.zero);
     return Form(
       key: _formKey,
       child: DecoratedBox(
@@ -209,7 +241,7 @@ class _ClientPaymentFormState extends State<ClientPaymentForm> {
                       borderRadius: BorderRadius.circular(AppRadius.control),
                       child: InputDecorator(
                         decoration: const InputDecoration(
-                          labelText: 'Дата',
+                          labelText: 'Дата оплаты или срока',
                           prefixIcon: Icon(Icons.calendar_today_rounded),
                         ),
                         child: Text(DateFormat('dd.MM.yyyy').format(_date)),
@@ -253,7 +285,7 @@ class _ClientPaymentFormState extends State<ClientPaymentForm> {
                           child: Text('Наличные'),
                         ),
                       ],
-                      onChanged: _busy
+                      onChanged: _busy || _status != ClientPaymentStatus.paid
                           ? null
                           : (value) {
                               if (value == null) return;
@@ -261,10 +293,35 @@ class _ClientPaymentFormState extends State<ClientPaymentForm> {
                               _changed();
                             },
                     ),
-                    const _ReadonlyPaymentField(
-                      label: 'Статус',
-                      value: 'Проведён',
-                      icon: Icons.verified_rounded,
+                    DropdownButtonFormField<ClientPaymentStatus>(
+                      key: const Key('payment-status'),
+                      isExpanded: true,
+                      initialValue: _status,
+                      decoration: const InputDecoration(
+                        labelText: 'Статус',
+                        prefixIcon: Icon(Icons.verified_outlined),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: ClientPaymentStatus.unpaid,
+                          child: Text('Не оплачен'),
+                        ),
+                        DropdownMenuItem(
+                          value: ClientPaymentStatus.postedPending,
+                          child: Text('Проведён, ожидает подтверждения'),
+                        ),
+                        DropdownMenuItem(
+                          value: ClientPaymentStatus.paid,
+                          child: Text('Оплачен'),
+                        ),
+                      ],
+                      onChanged: _busy
+                          ? null
+                          : (value) {
+                              if (value == null) return;
+                              setState(() => _status = value);
+                              _changed();
+                            },
                     ),
                     const _ReadonlyPaymentField(
                       label: 'Принял',
@@ -306,17 +363,18 @@ class _ClientPaymentFormState extends State<ClientPaymentForm> {
                   labelText: 'Погашаемое обязательство',
                   prefixIcon: Icon(Icons.receipt_long_outlined),
                 ),
-                validator: (value) => value == null
-                    ? 'Сначала выдайте и выберите абонемент'
-                    : null,
-                items: widget.subscriptions
-                    .map(
-                      (subscription) => DropdownMenuItem<String>(
-                        value: subscription.id,
-                        child: Text(subscription.terms.displayName),
-                      ),
-                    )
-                    .toList(growable: false),
+                items: [
+                  const DropdownMenuItem<String>(
+                    value: null,
+                    child: Text('Без привязки к абонементу'),
+                  ),
+                  ...widget.subscriptions.map(
+                    (subscription) => DropdownMenuItem<String>(
+                      value: subscription.id,
+                      child: Text(subscription.terms.displayName),
+                    ),
+                  ),
+                ],
                 onChanged: _busy
                     ? null
                     : (value) {
@@ -330,10 +388,30 @@ class _ClientPaymentFormState extends State<ClientPaymentForm> {
                 controller: _invoiceController,
                 enabled: !_busy,
                 maxLength: 120,
+                validator: (value) =>
+                    _status == ClientPaymentStatus.paid &&
+                        (value ?? '').trim().isEmpty
+                    ? 'Для оплаченной операции укажите номер'
+                    : null,
                 onChanged: (_) => _changed(),
                 decoration: const InputDecoration(
                   labelText: 'Номер счёта или чека',
                   prefixIcon: Icon(Icons.numbers_rounded),
+                ),
+              ),
+              const SizedBox(height: AppSpace.sm),
+              TextFormField(
+                key: const Key('payment-reason'),
+                controller: _reasonController,
+                enabled: !_busy,
+                maxLength: 500,
+                validator: (value) => (value ?? '').trim().isEmpty
+                    ? 'Укажите причину добавления оплаты'
+                    : null,
+                onChanged: (_) => _changed(),
+                decoration: const InputDecoration(
+                  labelText: 'Причина *',
+                  prefixIcon: Icon(Icons.history_edu_outlined),
                 ),
               ),
               const SizedBox(height: AppSpace.sm),
@@ -370,7 +448,11 @@ class _ClientPaymentFormState extends State<ClientPaymentForm> {
                     Text(
                       'Баланс до: ${formatPaymentMinor(widget.balanceMinor)}',
                     ),
-                    Text('Оплата: +${formatPaymentMinor(amount)}'),
+                    Text(
+                      _status == ClientPaymentStatus.paid
+                          ? 'Оплата: +${formatPaymentMinor(amount)}'
+                          : 'До подтверждения: ${formatPaymentMinor(amount)}',
+                    ),
                     Text(
                       'Баланс после: ${formatPaymentMinor(after)}',
                       style: const TextStyle(fontWeight: FontWeight.w800),
@@ -435,6 +517,368 @@ class _ReadonlyPaymentField extends StatelessWidget {
     return InputDecorator(
       decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon)),
       child: Text(value),
+    );
+  }
+}
+
+String clientPaymentStatusLabel(Object? raw) => switch (raw?.toString()) {
+  'unpaid' => 'Не оплачен',
+  'posted_pending' => 'Проведён, ожидает подтверждения',
+  'paid' => 'Оплачен',
+  _ => 'Статус не указан',
+};
+
+Future<bool?> showClientPaymentTransitionSheet(
+  BuildContext context, {
+  required CommerceMovement payment,
+  required ClientPaymentStatus targetStatus,
+  required String? branchId,
+  required Future<void> Function(ClientPaymentTransitionSubmission submission)
+  onSubmit,
+}) {
+  return showMagicSheet<bool>(
+    context,
+    title: clientPaymentStatusLabel(targetStatus.apiValue),
+    subtitle: 'Изменение статуса оплаты фиксируется в истории',
+    icon: Icons.sync_alt_rounded,
+    builder: (_) => _ClientPaymentTransitionForm(
+      payment: payment,
+      targetStatus: targetStatus,
+      branchId: branchId,
+      onSubmit: onSubmit,
+    ),
+  );
+}
+
+class _ClientPaymentTransitionForm extends StatefulWidget {
+  const _ClientPaymentTransitionForm({
+    required this.payment,
+    required this.targetStatus,
+    required this.branchId,
+    required this.onSubmit,
+  });
+
+  final CommerceMovement payment;
+  final ClientPaymentStatus targetStatus;
+  final String? branchId;
+  final Future<void> Function(ClientPaymentTransitionSubmission submission)
+  onSubmit;
+
+  @override
+  State<_ClientPaymentTransitionForm> createState() =>
+      _ClientPaymentTransitionFormState();
+}
+
+class _ClientPaymentTransitionFormState
+    extends State<_ClientPaymentTransitionForm> {
+  final _formKey = GlobalKey<FormState>();
+  final _reason = TextEditingController();
+  final _identifier = TextEditingController();
+  final _note = TextEditingController();
+  final _identity = MagicMutationIdentity.create('payment-status');
+  SubscriptionPaymentMethod _method = SubscriptionPaymentMethod.cashless;
+  late DateTime _date;
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _date = DateTime(now.year, now.month, now.day);
+  }
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    _identifier.dispose();
+    _note.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_busy || !_formKey.currentState!.validate()) return;
+    final version = widget.payment.paymentRecordVersion;
+    if (version == null) {
+      setState(() => _error = 'Обновите карточку: версия оплаты не получена.');
+      return;
+    }
+    final paid = widget.targetStatus == ClientPaymentStatus.paid;
+    if (paid && (widget.branchId == null || widget.branchId!.isEmpty)) {
+      setState(() => _error = 'Сначала укажите филиал ученика.');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await widget.onSubmit(
+        ClientPaymentTransitionSubmission(
+          identity: _identity,
+          input: TransitionClientPaymentRecordInput(
+            expectedVersion: version,
+            targetStatus: widget.targetStatus,
+            reason: _reason.text,
+            method: paid ? _method : null,
+            externalIdentifier: paid ? _identifier.text : null,
+            occurredAt: paid
+                ? DateTime(_date.year, _date.month, _date.day, 12).toUtc()
+                : null,
+            branchId: paid ? widget.branchId : null,
+            verificationNote: _note.text,
+          ),
+        ),
+      );
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = '$error';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final paid = widget.targetStatus == ClientPaymentStatus.paid;
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            '${formatPaymentMinor(widget.payment.amountMinor)} · '
+            '${clientPaymentStatusLabel(widget.payment.status)} → '
+            '${clientPaymentStatusLabel(widget.targetStatus.apiValue)}',
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: AppSpace.md),
+          TextFormField(
+            key: const Key('payment-transition-reason'),
+            controller: _reason,
+            maxLength: 500,
+            validator: (value) => (value ?? '').trim().isEmpty
+                ? 'Укажите причину изменения статуса'
+                : null,
+            decoration: const InputDecoration(labelText: 'Причина *'),
+          ),
+          if (paid) ...[
+            const SizedBox(height: AppSpace.sm),
+            DropdownButtonFormField<SubscriptionPaymentMethod>(
+              initialValue: _method,
+              decoration: const InputDecoration(labelText: 'Способ оплаты'),
+              items: const [
+                DropdownMenuItem(
+                  value: SubscriptionPaymentMethod.cashless,
+                  child: Text('Безналичная оплата'),
+                ),
+                DropdownMenuItem(
+                  value: SubscriptionPaymentMethod.cash,
+                  child: Text('Наличные'),
+                ),
+              ],
+              onChanged: _busy
+                  ? null
+                  : (value) => setState(() {
+                      if (value != null) _method = value;
+                    }),
+            ),
+            const SizedBox(height: AppSpace.sm),
+            TextFormField(
+              key: const Key('payment-transition-identifier'),
+              controller: _identifier,
+              maxLength: 120,
+              validator: (value) => (value ?? '').trim().isEmpty
+                  ? 'Укажите номер операции или чека'
+                  : null,
+              decoration: const InputDecoration(
+                labelText: 'Номер операции или чека *',
+              ),
+            ),
+          ],
+          const SizedBox(height: AppSpace.sm),
+          TextFormField(
+            controller: _note,
+            maxLength: 1000,
+            minLines: 2,
+            maxLines: 4,
+            decoration: const InputDecoration(
+              labelText: 'Пометка для проверки',
+            ),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: AppSpace.sm),
+            Text(
+              _error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ],
+          const SizedBox(height: AppSpace.lg),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _busy ? null : () => Navigator.pop(context, false),
+                  child: const Text('Отмена'),
+                ),
+              ),
+              const SizedBox(width: AppSpace.sm),
+              Expanded(
+                child: FilledButton(
+                  key: const Key('payment-transition-submit'),
+                  onPressed: _busy ? null : _submit,
+                  child: Text(_busy ? 'Сохраняем…' : 'Изменить статус'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Future<bool?> showClientPaymentReversalSheet(
+  BuildContext context, {
+  required PaymentReversalPreview preview,
+  required Future<void> Function(ClientPaymentReversalSubmission submission)
+  onSubmit,
+}) {
+  return showMagicSheet<bool>(
+    context,
+    title: preview.operation == 'monetary_reversal'
+        ? 'Удалить оплату и вернуть сумму'
+        : 'Удалить запись оплаты',
+    subtitle:
+        'Операция исчезнет из обычной статистики, но останется в техистории',
+    icon: Icons.delete_outline_rounded,
+    builder: (_) =>
+        _ClientPaymentReversalForm(preview: preview, onSubmit: onSubmit),
+  );
+}
+
+class _ClientPaymentReversalForm extends StatefulWidget {
+  const _ClientPaymentReversalForm({
+    required this.preview,
+    required this.onSubmit,
+  });
+
+  final PaymentReversalPreview preview;
+  final Future<void> Function(ClientPaymentReversalSubmission submission)
+  onSubmit;
+
+  @override
+  State<_ClientPaymentReversalForm> createState() =>
+      _ClientPaymentReversalFormState();
+}
+
+class _ClientPaymentReversalFormState
+    extends State<_ClientPaymentReversalForm> {
+  final _formKey = GlobalKey<FormState>();
+  final _reason = TextEditingController();
+  final _identity = MagicMutationIdentity.create('payment-reversal');
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_busy || !_formKey.currentState!.validate()) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await widget.onSubmit(
+        ClientPaymentReversalSubmission(
+          reason: _reason.text,
+          identity: _identity,
+        ),
+      );
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = '$error';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Сумма: ${formatPaymentMinor(widget.preview.amountMinor)}',
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          if (widget.preview.operation == 'monetary_reversal')
+            Text(
+              'Личный счёт: ${formatPaymentMinor(widget.preview.walletBalanceMinor)} '
+              '→ ${formatPaymentMinor(widget.preview.resultingBalanceMinor)}',
+            ),
+          if (widget.preview.negativeBalanceWarning)
+            Text(
+              'После возврата баланс станет отрицательным.',
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          const SizedBox(height: AppSpace.md),
+          TextFormField(
+            key: const Key('payment-reversal-reason'),
+            controller: _reason,
+            maxLength: 500,
+            minLines: 2,
+            maxLines: 4,
+            validator: (value) => (value ?? '').trim().isEmpty
+                ? 'Укажите причину удаления оплаты'
+                : null,
+            decoration: const InputDecoration(labelText: 'Причина *'),
+          ),
+          if (_error != null)
+            Text(
+              _error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          const SizedBox(height: AppSpace.lg),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _busy ? null : () => Navigator.pop(context, false),
+                  child: const Text('Отмена'),
+                ),
+              ),
+              const SizedBox(width: AppSpace.sm),
+              Expanded(
+                child: FilledButton(
+                  key: const Key('payment-reversal-submit'),
+                  onPressed: _busy ? null : _submit,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.error,
+                  ),
+                  child: Text(_busy ? 'Удаляем…' : 'Удалить'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

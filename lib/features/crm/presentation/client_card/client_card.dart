@@ -638,12 +638,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
             ),
           ),
           Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.6)),
-          _isStudent
-              ? _buildStudentActionBar(
-                  cs,
-                  canReadClientFinance: canReadClientFinance,
-                )
-              : _buildActionBar(cs),
+          _isStudent ? _buildStudentActionBar(cs) : _buildActionBar(cs),
         ],
       ),
     );

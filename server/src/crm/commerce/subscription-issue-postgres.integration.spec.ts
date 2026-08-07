@@ -468,6 +468,21 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       events: "2",
       payments: "1",
     });
+    const paymentProjection = await commerceRepository.loadProjection(
+      actors.admin,
+      [await commerceRepository.resolveStudentScope(actors.admin, studentId)],
+    );
+    expect(
+      paymentProjection[0]!.movements.find(
+        (movement) => movement.id === first.rows[0]!.id,
+      ),
+    ).toMatchObject({
+      kind: "payment_record",
+      status: "paid",
+      paymentRecordVersion: 2,
+      installmentId: issued.installments[0]!.id,
+      dueAt: "2030-01-01T09:00:00+00:00",
+    });
 
     await dueWorker.runOnce(new Date("2032-01-01T00:00:00.000Z"), 100);
     const second = await pool.query<{ id: string }>(

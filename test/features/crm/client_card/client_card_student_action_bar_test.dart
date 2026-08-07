@@ -5,9 +5,8 @@ import 'package:magic_music_crm/core/models/types.dart';
 
 import 'card_fake_api.dart';
 
-/// #13: бар действий ученика (Действия / Открыть в расписании / Отмена /
-/// Сохранить) на телефонной ширине переносится Wrap'ом, а не переполняет
-/// правый край, как раньше делал жёсткий Row.
+/// Бар ученика хранит только контекстные действия и на 360dp переносится
+/// Wrap'ом без переполнения. Общего меню «Действия» больше нет.
 void main() {
   setUpAll(() => initializeDateFormatting('ru', null));
 
@@ -35,12 +34,10 @@ void main() {
       statuses: const [],
     );
 
-    // Все кнопки бара на месте…
-    expect(find.text('Действия'), findsOneWidget);
+    expect(find.text('Действия'), findsNothing);
     expect(find.text('Открыть в расписании'), findsOneWidget);
     expect(find.text('Отмена'), findsOneWidget);
     expect(find.text('Сохранить'), findsOneWidget);
-    // …и вёрстка не бросила RenderFlex overflow.
     expect(tester.takeException(), isNull);
   });
 
