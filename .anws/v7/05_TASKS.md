@@ -280,7 +280,7 @@ graph TD
   - **Зависимости**: T3.1.4.
   - **Приоритет**: P0.
 
-- [ ] **INT-S2** [MILESTONE]: Интеграционная проверка S2 — Lesson Integrity
+- [x] **INT-S2** [MILESTONE]: Интеграционная проверка S2 — Lesson Integrity
   - **Описание**: Сквозной move/settle/config/roles smoke без обходов.
   - **Входные данные**: T3.1.1–T3.1.5.
   - **Выходные данные**: `docs/audits/v7-int-s2-lesson-integrity.md`.

@@ -109,6 +109,10 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       settlementTypeKey: "free_lesson",
       teacherCompensationRuleKey: "none",
     };
+    const paidMissDecision = {
+      settlementTypeKey: "paid_miss",
+      teacherCompensationRuleKey: "standard",
+    };
     try {
       const conflicting = await service.previewReschedule(
         actor,
@@ -217,9 +221,27 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
           expectedVersion: 1,
           reasonCode: "school.cancelled",
           reasonText: "Отмена по решению школы",
-          financialDecision: freeDecision,
+          financialDecision: paidMissDecision,
         },
       );
+      expect(cancelPreview).toMatchObject({
+        canConfirm: true,
+        financialPreview: {
+          clientFacts: [
+            expect.objectContaining({
+              settlementTypeKey: "paid_miss",
+              settlementLabel: "Оплачиваемый пропуск",
+              settlementColorToken: "blue",
+              hourShareBasisPoints: 10_000,
+              units: "0.00",
+              amountMinor: "0",
+            }),
+          ],
+          teacherFact: expect.objectContaining({
+            compensationRuleKey: "standard",
+          }),
+        },
+      });
       const cancelled = await service.cancel(
         actor,
         fixture.cancelId,
@@ -227,7 +249,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
           expectedVersion: 1,
           reasonCode: "school.cancelled",
           reasonText: "Отмена по решению школы",
-          financialDecision: freeDecision,
+          financialDecision: paidMissDecision,
           previewToken: cancelPreview.previewToken!,
           confirm: true,
         },

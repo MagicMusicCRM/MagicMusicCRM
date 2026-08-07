@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "task": "T8.3.3",
-  "generatedAt": "2026-08-07T05:37:42.303Z",
+  "generatedAt": "2026-08-07T06:21:11.551Z",
   "summary": {
-    "accessDecisions": 1740,
+    "accessDecisions": 1746,
     "scheduleDecisions": 2000,
     "differences": 6,
     "explainedDifferences": 6,
@@ -74,7 +74,7 @@
     }
   ],
   "proof": {
-    "requestCorpusDigestSha256": "3d6755c3f41cb61de01affa41fe127486542dcf1f48527c8499abd78d6953ff3",
+    "requestCorpusDigestSha256": "41c6deeba148bba031f8c00699d0d6555a68fbe29d56af473aa194b41030c144",
     "safePayload": true
   }
 }
