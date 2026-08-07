@@ -38,6 +38,12 @@ describe("platform integrity utilities", () => {
     );
   });
 
+  it("treats omitted and undefined optional object fields identically", () => {
+    expect(fingerprintPayload({ required: "value", optional: undefined })).toBe(
+      fingerprintPayload({ required: "value" }),
+    );
+  });
+
   it("redacts result references and outbox envelopes recursively", () => {
     expect(
       safeReference({
