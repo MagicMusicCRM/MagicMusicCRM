@@ -122,7 +122,7 @@
 > **Примечание**: Этот блок автоматически поддерживается процессами `/genesis`, `/blueprint` и `/forge`.
 
 - **Последняя версия архитектуры**: `.anws/v7` (Financial & Lesson Integrity)
-- **Активный список задач**: `.anws/v7/05_TASKS.md` — следующая задача `INT-S0`
+- **Активный список задач**: `.anws/v7/05_TASKS.md` — следующая задача `T2.1.1`
 - **Фаза**: `/genesis`, `/design-system` и `/blueprint` завершены; выполняется `/forge`
 - **Последнее обновление**: `2026-08-07`
 
@@ -138,6 +138,14 @@ _План прошёл шесть passes task review: 24 implementation tasks + 
 открытых Critical/High нет. Реализация идёт волнами data → commerce → lesson
 integrity → recurring plans → Client Card → release. Следующий шаг `/forge`:
 `T1.1.1`._
+
+### 🌊 Wave v7/S3 — Data Foundation ✅
+_`T1.1.1..T1.1.4` и `INT-S0` закрыты 2026-08-07: migrations `0103..0105`
+добавили payer/payment lifecycle/exclusions, plans/snapshots/note и restartable
+legacy backfill без второго ledger. Down `0105→0103` и up прошли; targeted
+96/96, typecheck/build, preflight 19/19 и commerce reconcile 13/13 зелёные;
+inventory finance=164, lesson writes=13, unowned=0
+(`docs/audits/v7-s0-data-foundation.md`). Следующий шаг `/forge`: `T2.1.1`._
 
 ### 🌊 Wave v6/S0 — Evidence & UX Foundation ✅
 _Owner подтвердил полное выполнение v6. `V6-001..005` и `INT-S0` закрыты 2026-08-04: воспроизводимый generator покрывает 21 GoRouter route, 248/259 production-reachable Dart files, 256/256 service calls, route/surface/navigation/input/back ownership с unowned=0; v4 inventory обновлён и снова проходит stale-check. Baseline: Flutter analyze clean и 486/486 tests, backend typecheck/build clean, 150/150 suites и 1160/1160 tests, actor/payload 9/9, targeted workflow contracts 68/68 (`docs/audits/v6-s0-baseline.md`). Следующий шаг `/forge`: `V6-101` canonical location adapter._

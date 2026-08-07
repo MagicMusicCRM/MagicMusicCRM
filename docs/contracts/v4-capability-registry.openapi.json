@@ -21,6 +21,7 @@
           "schedule.attendance.write",
           "schedule.lesson.complete",
           "commerce.client_finance.read",
+          "commerce.client_finance.write",
           "commerce.school_finance.read",
           "commerce.package.read",
           "commerce.package.manage",
@@ -32,6 +33,7 @@
           "config.crm.read",
           "config.crm.edit",
           "config.crm.publish",
+          "config.commerce.manage",
           "system.settings.manage"
         ]
       },
