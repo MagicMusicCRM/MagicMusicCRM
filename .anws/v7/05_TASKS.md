@@ -224,7 +224,7 @@ graph TD
   - **Зависимости**: INT-S1.
   - **Приоритет**: P0.
 
-- [ ] **T3.1.2** [REQ-LESSON-101, REQ-LESSON-102]: Реализовать settlement и teacher accrual facts
+- [x] **T3.1.2** [REQ-LESSON-101, REQ-LESSON-102]: Реализовать settlement и teacher accrual facts
   - **Описание**: Заменить boolean boundary typed financial decision, рассчитать share/penalty и независимую teacher rule с immutable snapshots.
   - **Входные данные**: T3.1.1, [`commerce_integrity.detail.md` §6/7](04_SYSTEM_DESIGN/commerce_integrity.detail.md).
   - **Выходные данные**: decision DTO/service/port/repository and fact tests.

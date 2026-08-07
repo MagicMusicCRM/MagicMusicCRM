@@ -4,9 +4,12 @@ import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import { DatabaseService } from "../../db/database.service";
 import { MigrationRunner } from "../../db/migration-runner";
+import { RealtimeBus } from "../../realtime/realtime-bus";
+import { ConfigSnapshot } from "../crm-configuration.service";
 import { LessonLifecycleRepository } from "../schedule/lesson-lifecycle.repository";
 import { LessonSettlementRepository } from "./lesson-settlement.repository";
 import { LessonSettlementService } from "./lesson-settlement.service";
+import { SubscriptionReservationService } from "./subscription-reservation.service";
 
 const databaseUrl =
   process.env.V4_PLATFORM_TEST_DATABASE_URL ??
@@ -25,6 +28,7 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
   let pool: Pool;
   let database: DatabaseService;
   let service: LessonSettlementService;
+  let reservations: SubscriptionReservationService;
 
   beforeAll(async () => {
     pool = new Pool({ connectionString: databaseUrl });
@@ -35,6 +39,10 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
     service = new LessonSettlementService(
       database,
       new LessonSettlementRepository(),
+    );
+    reservations = new SubscriptionReservationService(
+      database,
+      {} as RealtimeBus,
     );
   });
 
@@ -196,7 +204,245 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
       await cleanupFixture(pool, fixture);
     }
   });
+
+  it("persists the 0-200%/penalty/group decision and keeps its catalog snapshot", async () => {
+    const fixture = await createFixture(pool, database);
+    try {
+      await publishBranchCatalog(pool, fixture, 1, (snapshot) => ({
+        ...snapshot,
+        lessonSettlementTypes: snapshot.lessonSettlementTypes.map((type) =>
+          type.stableKey === "penalty_lesson"
+            ? {
+                ...type,
+                label: "Двойное занятие со штрафом",
+                colorToken: "violet",
+                hourShareBasisPoints: 20_000,
+                fixedPenaltyMinor: "250",
+              }
+            : type),
+      }));
+
+      await pool.query(
+        `insert into app.lesson_reservations (lesson_id, subscription_id, units)
+         values ($1, $2, 18.5)`,
+        [fixture.groupLessonId, fixture.subscriptionId],
+      );
+      await expect(service.settleStandalone(
+        fixture.subscriptionLessonId,
+        {
+          context: "settle",
+          decision: {
+            settlementTypeKey: "penalty_lesson",
+            teacherCompensationRuleKey: "percent",
+          },
+        },
+      )).rejects.toMatchObject({
+        response: { code: "SUBSCRIPTION_CAPACITY" },
+      });
+      const rolledBack = await pool.query<{ count: number; units: string }>(
+        `select
+           (select count(*)::int from app.lesson_client_charge_facts
+             where lesson_id = $1) as count,
+           (select units::text from app.lesson_reservations
+             where lesson_id = $1) as units`,
+        [fixture.subscriptionLessonId],
+      );
+      expect(rolledBack.rows[0]).toEqual({ count: 0, units: "1.00" });
+      await pool.query(
+        `update app.lesson_reservations set state = 'released'
+         where lesson_id = $1 and subscription_id = $2`,
+        [fixture.groupLessonId, fixture.subscriptionId],
+      );
+
+      const penaltyRuns = await Promise.all(
+        Array.from({ length: 8 }, () => service.settleStandalone(
+          fixture.subscriptionLessonId,
+          {
+            context: "settle",
+            decision: {
+              settlementTypeKey: "penalty_lesson",
+              teacherCompensationRuleKey: "percent",
+            },
+          },
+        )),
+      );
+      const penalty = penaltyRuns[0]!;
+      for (const result of penaltyRuns) expect(result).toEqual(penalty);
+      expect(penalty.clientFact).toMatchObject({
+        settlementTypeKey: "penalty_lesson",
+        settlementLabel: "Двойное занятие со штрафом",
+        settlementColorToken: "violet",
+        hourShareBasisPoints: 20_000,
+        fixedPenaltyMinor: "250",
+        units: "2.00",
+        amountMinor: "250",
+        chargeType: "subscription",
+        subscriptionId: fixture.subscriptionId,
+      });
+      expect(penalty.teacherFact).toMatchObject({
+        compensationRuleKey: "percent",
+        compensationRuleLabel: "Процент ставки",
+        compensationMode: "percent",
+        compensationDefaultValue: "70000",
+        compensationActualValue: "10000",
+        amountMinor: "70000",
+      });
+      const reservation = await pool.query<{ units: string }>(
+        "select units::text from app.lesson_reservations where lesson_id = $1",
+        [fixture.subscriptionLessonId],
+      );
+      expect(reservation.rows[0]?.units).toBe("2.00");
+
+      const group = await service.settleStandalone(fixture.groupLessonId, {
+        context: "settle",
+        reasonText: "Согласованная ставка за групповое занятие",
+        decision: {
+          settlementTypeKey: "partially_paid_lesson",
+          clientDecisions: [{
+            clientId: fixture.studentId,
+            settlementTypeKey: "lesson",
+          }],
+          teacherCompensationRuleKey: "fixed",
+          teacherCompensationValueMinor: "60000",
+        },
+      });
+      expect(group.clientFacts).toHaveLength(2);
+      expect(group.clientFacts.find((fact) =>
+        fact.clientId === fixture.studentId)).toMatchObject({
+          settlementTypeKey: "lesson",
+          hourShareBasisPoints: 10_000,
+          units: "1.00",
+          amountMinor: "80000",
+        });
+      expect(group.clientFacts.find((fact) =>
+        fact.clientId === fixture.secondStudentId)).toMatchObject({
+          settlementTypeKey: "partially_paid_lesson",
+          hourShareBasisPoints: 5_000,
+          units: "0.50",
+          amountMinor: "40000",
+        });
+      expect(group.teacherFact).toMatchObject({
+        compensationRuleKey: "fixed",
+        compensationActualValue: "60000",
+        compensationOverrideReason:
+          "Согласованная ставка за групповое занятие",
+        amountMinor: "60000",
+      });
+
+      const free = await service.settleStandalone(fixture.hourlyLessonId, {
+        context: "settle",
+        decision: {
+          settlementTypeKey: "free_lesson",
+          teacherCompensationRuleKey: "standard",
+        },
+      });
+      expect(free.clientFact).toMatchObject({
+        settlementTypeKey: "free_lesson",
+        hourShareBasisPoints: 0,
+        units: "0.00",
+        amountMinor: "0",
+      });
+      expect(free.teacherFact).toMatchObject({
+        compensationRuleKey: "standard",
+        compensationDefaultValue: "75001",
+        compensationActualValue: "75001",
+        amountMinor: "75001",
+      });
+
+      await pool.query(
+        `insert into app.lesson_reservations (lesson_id, subscription_id, units)
+         values ($1, $2, 1)`,
+        [fixture.noneLessonId, fixture.subscriptionId],
+      );
+      const zeroSubscription = await service.settleStandalone(
+        fixture.noneLessonId,
+        {
+          context: "settle",
+          decision: {
+            settlementTypeKey: "free_lesson",
+            clientDecisions: [{
+              clientId: fixture.studentId,
+              subscriptionId: fixture.subscriptionId,
+            }],
+            teacherCompensationRuleKey: "none",
+          },
+        },
+      );
+      expect(zeroSubscription.clientFact).toMatchObject({
+        chargeType: "subscription",
+        units: "0.00",
+        amountMinor: "0",
+      });
+      await database.transaction((client) =>
+        reservations.terminalize(client, zeroSubscription));
+      const released = await pool.query<{ state: string }>(
+        `select state from app.lesson_reservations
+         where lesson_id = $1 and subscription_id = $2`,
+        [fixture.noneLessonId, fixture.subscriptionId],
+      );
+      expect(released.rows[0]?.state).toBe("released");
+
+      await publishBranchCatalog(pool, fixture, 2, (snapshot) => ({
+        ...snapshot,
+        lessonSettlementTypes: snapshot.lessonSettlementTypes.map((type) =>
+          type.stableKey === "penalty_lesson"
+            ? { ...type, label: "Новое название", colorToken: "danger" }
+            : type),
+        teacherCompensationRules: snapshot.teacherCompensationRules.map((rule) =>
+          rule.stableKey === "percent"
+            ? { ...rule, label: "Новый процент", value: "5000" }
+            : rule),
+      }));
+      const replay = await service.settleStandalone(
+        fixture.subscriptionLessonId,
+        {
+          context: "settle",
+          decision: {
+            settlementTypeKey: "penalty_lesson",
+            teacherCompensationRuleKey: "percent",
+          },
+        },
+      );
+      expect(replay).toEqual(penalty);
+      expect(replay.clientFact.settlementLabel)
+        .toBe("Двойное занятие со штрафом");
+      expect(replay.teacherFact.compensationRuleLabel)
+        .toBe("Процент ставки");
+    } finally {
+      await cleanupFixture(pool, fixture);
+    }
+  });
 });
+
+async function publishBranchCatalog(
+  pool: Pool,
+  fixture: Awaited<ReturnType<typeof createFixture>>,
+  version: number,
+  mutate: (snapshot: ConfigSnapshot) => ConfigSnapshot,
+) {
+  const school = await pool.query<{ effective_snapshot: ConfigSnapshot }>(
+    `select effective_snapshot from app.crm_configuration_revisions
+     where branch_id is null order by version desc limit 1`,
+  );
+  const snapshot = mutate(school.rows[0]!.effective_snapshot);
+  const patch = {
+    lessonSettlementTypes: snapshot.lessonSettlementTypes,
+    teacherCompensationRules: snapshot.teacherCompensationRules,
+  };
+  await pool.query(
+    `insert into app.crm_configuration_revisions (
+       branch_id, version, patch, effective_snapshot, impact, reason, created_by
+     ) values ($1, $2, $3::jsonb, $4::jsonb, '{}'::jsonb, $5, $6)`,
+    [
+      fixture.branchId,
+      version,
+      JSON.stringify(patch),
+      JSON.stringify(snapshot),
+      `Settlement catalog test v${version}`,
+      fixture.managerId,
+    ],
+  );
+}
 
 async function createFixture(
   pool: Pool,
@@ -283,6 +529,29 @@ async function createFixture(
      values ($1, $2, '2026-01-01'), ($1, $3, '2026-01-01')`,
     [groupId, studentId, secondStudentId],
   );
+  const packageRow = await pool.query<{ id: string }>(
+    `insert into app.subscription_packages (
+       name, lessons_total, base_price_minor, currency_code, validity_days,
+       is_active, version
+     ) values ($1, 20, 800000, 'RUB', 90, true, 1) returning id`,
+    [`Settlement package ${randomUUID()}`],
+  );
+  const subscription = await pool.query<{ id: string }>(
+    `insert into app.subscriptions (
+       student_id, lessons_total, lessons_used, starts_at, expires_at, status,
+       package_id, commercial_snapshot, snapshot_version, package_version,
+       base_price_minor, currency_code, final_price_minor, version
+     ) values (
+       $1, 20, 0, current_date, current_date + 90, 'active', $2,
+       $3::jsonb, 1, 1, 800000, 'RUB', 800000, 1
+     ) returning id`,
+    [
+      studentId,
+      packageRow.rows[0]!.id,
+      JSON.stringify({ snapshotVersion: 1, displayName: "Settlement package" }),
+    ],
+  );
+  const subscriptionId = subscription.rows[0]!.id;
   const lessons = await pool.query<{ id: string; duration_minutes: number }>(
     `
       insert into app.lessons (
@@ -292,7 +561,8 @@ async function createFixture(
       values
         ($1, $2, $3, '2026-07-29T07:00:00Z', 60, $4, $5),
         ($1, $2, $3, '2026-07-29T09:00:00Z', 45, 'completed', $5),
-        ($1, $2, $3, '2026-07-29T11:00:00Z', 90, 'completed', $5)
+        ($1, $2, $3, '2026-07-29T11:00:00Z', 90, 'completed', $5),
+        ($1, $2, $3, '2026-07-29T15:00:00Z', 60, 'completed', $5)
       returning id, duration_minutes
     `,
     [
@@ -306,6 +576,7 @@ async function createFixture(
   const fixedLessonId = lessons.rows[0]!.id;
   const hourlyLessonId = lessons.rows[1]!.id;
   const noneLessonId = lessons.rows[2]!.id;
+  const subscriptionLessonId = lessons.rows[3]!.id;
   const groupLesson = await pool.query<{ id: string }>(
     `insert into app.lessons (
        group_id, teacher_id, branch_id, scheduled_at, duration_minutes,
@@ -327,6 +598,23 @@ async function createFixture(
       teacherCompensationType: "fixed",
       teacherCompensationValue: 700,
       trial: false,
+    });
+    await lifecycle.createSnapshot(client, {
+      lessonId: subscriptionLessonId,
+      clientType: "student",
+      clientId: studentId,
+      completionType: "standard.success",
+      clientChargeType: "subscription",
+      clientChargeValue: 1,
+      teacherCompensationType: "fixed",
+      teacherCompensationValue: 700,
+      subscriptionId,
+      trial: false,
+    });
+    await lifecycle.createReservation(client, {
+      lessonId: subscriptionLessonId,
+      subscriptionId,
+      units: 1,
     });
     await lifecycle.createGroupSnapshot(client, {
       lessonId: groupLessonId,
@@ -386,6 +674,9 @@ async function createFixture(
     hourlyLessonId,
     noneLessonId,
     groupLessonId,
+    subscriptionLessonId,
+    subscriptionId,
+    packageId: packageRow.rows[0]!.id,
   };
 }
 
@@ -410,6 +701,10 @@ async function cleanupFixture(
       [fixture.lessonIds],
     );
     await client.query(
+      "delete from app.lesson_reservations where lesson_id = any($1::uuid[])",
+      [fixture.lessonIds],
+    );
+    await client.query(
       "delete from app.lesson_snapshots where lesson_id = any($1::uuid[])",
       [fixture.lessonIds],
     );
@@ -422,6 +717,12 @@ async function cleanupFixture(
     ]);
     await client.query("delete from app.group_students where group_id = $1", [fixture.groupId]);
     await client.query("delete from app.groups where id = $1", [fixture.groupId]);
+    await client.query("delete from app.subscriptions where id = $1", [
+      fixture.subscriptionId,
+    ]);
+    await client.query("delete from app.subscription_packages where id = $1", [
+      fixture.packageId,
+    ]);
     await client.query("delete from app.students where id = any($1::uuid[])", [
       [fixture.studentId, fixture.secondStudentId],
     ]);
@@ -434,6 +735,10 @@ async function cleanupFixture(
     await client.query("delete from app.users where id = any($1::uuid[])", [
       fixture.userIds,
     ]);
+    await client.query(
+      "delete from app.crm_configuration_revisions where branch_id = $1",
+      [fixture.branchId],
+    );
     await client.query("delete from app.branches where id = $1", [
       fixture.branchId,
     ]);

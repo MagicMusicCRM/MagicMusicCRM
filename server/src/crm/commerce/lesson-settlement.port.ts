@@ -5,7 +5,31 @@ export type ClientChargeFactType =
   | "personal_account"
   | "none";
 
-export type TeacherCompensationFactType = "fixed" | "hourly" | "none";
+export type TeacherCompensationFactType =
+  | "none"
+  | "standard"
+  | "percent"
+  | "fixed"
+  | "hourly";
+
+export type LessonSettlementContext = "settle" | "reschedule" | "cancel";
+
+export interface LessonFinancialDecision {
+  settlementTypeKey: string;
+  clientDecisions?: Array<{
+    clientId: string;
+    settlementTypeKey?: string;
+    subscriptionId?: string;
+  }>;
+  teacherCompensationRuleKey: string;
+  teacherCompensationValueMinor?: string;
+}
+
+export interface LessonSettlementInput {
+  context: LessonSettlementContext;
+  decision: LessonFinancialDecision;
+  reasonText?: string;
+}
 
 export interface LessonSettlementResult {
   lessonId: string;
@@ -19,6 +43,12 @@ export interface LessonSettlementResult {
     amountMinor: string;
     units: string;
     currencyCode: string;
+    settlementTypeKey: string | null;
+    settlementLabel: string | null;
+    settlementColorToken: string | null;
+    hourShareBasisPoints: number | null;
+    fixedPenaltyMinor: string | null;
+    configurationRevisionId: string | null;
   }>;
   /** First fact retained for compatibility with individual-lesson callers. */
   clientFact: LessonSettlementResult["clientFacts"][number];
@@ -31,6 +61,13 @@ export interface LessonSettlementResult {
     durationMinutes: number;
     amountMinor: string;
     currencyCode: string;
+    compensationRuleKey: string | null;
+    compensationRuleLabel: string | null;
+    compensationMode: TeacherCompensationFactType | null;
+    compensationDefaultValue: string | null;
+    compensationActualValue: string | null;
+    compensationOverrideReason: string | null;
+    configurationRevisionId: string | null;
   };
 }
 
@@ -38,6 +75,7 @@ export interface LessonSettlementPort {
   settle(
     client: PoolClient,
     lessonId: string,
+    input?: LessonSettlementInput,
   ): Promise<LessonSettlementResult>;
 }
 

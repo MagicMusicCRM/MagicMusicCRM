@@ -373,6 +373,7 @@ const invariants: InvariantDefinition[] = [
         ,'compensationMode', compensation_mode
         ,'compensationDefaultValue', compensation_default_value::text
         ,'compensationActualValue', compensation_actual_value::text
+        ,'compensationOverrideReason', compensation_override_reason
         ,'configurationRevisionId', configuration_revision_id::text
       `,
     ),

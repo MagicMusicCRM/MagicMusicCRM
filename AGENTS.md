@@ -220,7 +220,19 @@ byte-equivalent защищённых сегментах; mixed publish откл�
 loss guard PASS. Gate: config 6/6, Actor Matrix/leak 9/9, full backend 152/152
 suites и 1191/1191 tests, typecheck/build, reconcile issues=0/drift=0,
 inventory finance=243/lesson writes=13/unowned=0
-(`docs/audits/v7-commerce-catalogs.md`). Следующий шаг `/forge`: `T3.1.2`._
+(`docs/audits/v7-commerce-catalogs.md`)._
+
+_`T3.1.2` закрыта 2026-08-07: typed Commerce decision рассчитывает client
+share 0–200%, fixed penalty и независимые teacher none/standard/percent/fixed/
+hourly rules целочисленно, создавая exact N immutable client facts + один
+teacher fact. Snapshot хранит key/label/color/share/rule/default/actual/reason и
+раздельную effective revision каталогов. Subscription capacity проверяется под
+lock: недостаток даёт writes=0, 200% атомарно расширяет reserve, zero settlement
+освобождает его. Concurrent replay 8/8 стабилен; изменение catalog после записи
+не меняет историю. Gate: calculation/configured PostgreSQL 9/9, commerce 58/58,
+schedule regression 8/8, full backend 153/153 suites и 1197/1197 tests,
+typecheck/build, reconcile issues=0, inventory unowned=0
+(`docs/audits/v7-lesson-settlement-facts.md`). Следующий шаг `/forge`: `T3.1.3`._
 
 ### 🌊 Wave v6/S0 — Evidence & UX Foundation ✅
 _Owner подтвердил полное выполнение v6. `V6-001..005` и `INT-S0` закрыты 2026-08-04: воспроизводимый generator покрывает 21 GoRouter route, 248/259 production-reachable Dart files, 256/256 service calls, route/surface/navigation/input/back ownership с unowned=0; v4 inventory обновлён и снова проходит stale-check. Baseline: Flutter analyze clean и 486/486 tests, backend typecheck/build clean, 150/150 suites и 1160/1160 tests, actor/payload 9/9, targeted workflow contracts 68/68 (`docs/audits/v6-s0-baseline.md`). Следующий шаг `/forge`: `V6-101` canonical location adapter._

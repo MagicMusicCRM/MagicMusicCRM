@@ -161,7 +161,11 @@ export class SubscriptionReservationService {
   ): Promise<void> {
     let consumed = 0;
     for (const fact of settled.clientFacts) {
-      if (fact.chargeType !== "subscription" || !fact.subscriptionId) continue;
+      if (
+        fact.chargeType !== "subscription" ||
+        !fact.subscriptionId ||
+        Number(fact.units) <= 0
+      ) continue;
       const result = await client.query(
         `
           update app.lesson_reservations
@@ -181,7 +185,7 @@ export class SubscriptionReservationService {
       [settled.lessonId],
     );
     const expected = settled.clientFacts.filter(
-      (fact) => fact.chargeType === "subscription",
+      (fact) => fact.chargeType === "subscription" && Number(fact.units) > 0,
     ).length;
     if (consumed !== expected) {
       throw new UnprocessableEntityException({
