@@ -1,22 +1,22 @@
 # MagicMusicCRM v4 — Current-State Inventory
 
 **Task:** T8.1.2
-**Source digest:** `1e781ade8c63138e40325be2ad4f891feae777c014ba52bde559a4190da89f05`
+**Source digest:** `de9adab3a6dbe0541c6891b5089968293f4c4abe3d5f5dc34a324685cf318117`
 **Validation:** PASS
 
 ## Coverage
 
 | Slice | Count |
 |---|---:|
-| backend routes | 292 |
+| backend routes | 300 |
 | role guards | 22 |
-| policy calls | 224 |
-| dto fields | 683 |
-| flutter role checks | 135 |
-| flutter navigation sources | 325 |
-| schedule entry points | 39 |
+| policy calls | 227 |
+| dto fields | 729 |
+| flutter role checks | 141 |
+| flutter navigation sources | 315 |
+| schedule entry points | 38 |
 | attendance mutations | 0 |
-| finance writes | 39 |
+| finance writes | 46 |
 | schema tables | 5 |
 | unowned items | 0 |
 | missing status items | 0 |
@@ -42,8 +42,8 @@ Every row in the JSON artifact has one v4 system owner and an explicit migration
 | Table | Owner | Columns | Indexes |
 |---|---|---:|---:|
 | `app.lessons` | SYS-SCHEDULE | 24 | 15 |
-| `app.subscriptions` | SYS-COMMERCE | 25 | 4 |
-| `app.payments` | SYS-COMMERCE | 18 | 6 |
+| `app.subscriptions` | SYS-COMMERCE | 28 | 5 |
+| `app.payments` | SYS-COMMERCE | 19 | 6 |
 | `app.tasks` | SYS-WORKFLOW | 15 | 5 |
 | `app.users` | SYS-PLATFORM | 14 | 3 |
 
@@ -55,13 +55,13 @@ Indexes: `lessons_branch_scheduled_idx`, `lessons_group_idx`, `lessons_lead_sche
 
 ### `app.subscriptions`
 
-Columns: `base_price_minor`, `commercial_snapshot`, `conversion_lead_id`, `created_at`, `currency_code`, `discount_fixed_minor`, `discount_percent_basis_points`, `discount_reason`, `discount_type`, `expires_at`, `final_price_minor`, `id`, `lessons_total`, `lessons_used`, `package_id`, `package_version`, `payment_id`, `snapshot_version`, `starts_at`, `status`, `student_id`, `surcharge_minor`, `surcharge_reason`, `updated_at`, `version`
+Columns: `base_price_minor`, `commercial_snapshot`, `conversion_lead_id`, `created_at`, `currency_code`, `discount_fixed_minor`, `discount_percent_basis_points`, `discount_reason`, `discount_type`, `expires_at`, `final_price_minor`, `funding_mode`, `id`, `lessons_total`, `lessons_used`, `package_id`, `package_version`, `payer_student_id`, `payment_id`, `purchase_reason`, `snapshot_version`, `starts_at`, `status`, `student_id`, `surcharge_minor`, `surcharge_reason`, `updated_at`, `version`
 
-Indexes: `subscriptions_conversion_lead_unique_idx`, `subscriptions_student_expires_idx`, `subscriptions_v4_client_status_idx`, `subscriptions_v4_package_idx`
+Indexes: `subscriptions_conversion_lead_unique_idx`, `subscriptions_student_expires_idx`, `subscriptions_v4_client_status_idx`, `subscriptions_v4_package_idx`, `subscriptions_v7_payer_status_idx`
 
 ### `app.payments`
 
-Columns: `amount`, `amount_minor`, `branch_id`, `created_at`, `created_by`, `currency`, `deleted_at`, `external_id`, `id`, `idempotency_ref`, `invoice_number`, `issued_subscription_id`, `lesson_id`, `method`, `notes`, `payment_date`, `request_fingerprint`, `student_id`
+Columns: `amount`, `amount_minor`, `branch_id`, `created_at`, `created_by`, `currency`, `deleted_at`, `external_id`, `id`, `idempotency_ref`, `invoice_number`, `issued_subscription_id`, `lesson_id`, `method`, `notes`, `payment_date`, `payment_record_id`, `request_fingerprint`, `student_id`
 
 Indexes: `payments_branch_id_idx`, `payments_lesson_idx`, `payments_payment_date_idx`, `payments_student_date_idx`, `payments_v4_idempotency_idx`, `payments_v4_issued_idx`
 
@@ -98,34 +98,41 @@ Indexes: `users_app_accounts_role_created_idx`, `users_email_lower_unique`, `use
 | backend-route | POST /crm/leads/:leadId/subscriptions/issue | `server/src/crm/crm-leads.controller.ts:123` | commerce-migration-pending |
 | backend-route | POST /crm/teachers/:id/payouts | `server/src/crm/crm-people.controller.ts:81` | commerce-migration-pending |
 | backend-route | POST /crm/teachers/:id/rates | `server/src/crm/crm-people.controller.ts:90` | commerce-migration-pending |
-| backend-route | PATCH /crm/lessons/teacher-rate | `server/src/crm/crm-schedule.controller.ts:161` | commerce-migration-pending |
+| backend-route | PATCH /crm/lessons/teacher-rate | `server/src/crm/crm-schedule.controller.ts:163` | commerce-migration-pending |
 | backend-route | POST /crm/students/:id/adjustments | `server/src/crm/crm-students.controller.ts:126` | commerce-migration-pending |
 | backend-route | POST /crm/students/:id/transfer | `server/src/crm/crm-students.controller.ts:140` | commerce-migration-pending |
-| backend-route | POST /crm/students/:studentId/subscriptions/issue | `server/src/crm/subscription-commerce.controller.ts:36` | commerce-migration-pending |
-| backend-route | POST /crm/students/:studentId/subscription-payments | `server/src/crm/subscription-commerce.controller.ts:50` | commerce-migration-pending |
-| backend-route | POST /crm/students/:studentId/subscriptions/:issuedSubscriptionId/replace/preview | `server/src/crm/subscription-commerce.controller.ts:64` | commerce-migration-pending |
-| backend-route | POST /crm/students/:studentId/subscriptions/:issuedSubscriptionId/replace | `server/src/crm/subscription-commerce.controller.ts:80` | commerce-migration-pending |
-| backend-route | POST /crm/students/:studentId/subscriptions/:issuedSubscriptionId/cancel/preview | `server/src/crm/subscription-commerce.controller.ts:102` | commerce-migration-pending |
-| backend-route | POST /crm/students/:studentId/subscriptions/:issuedSubscriptionId/cancel | `server/src/crm/subscription-commerce.controller.ts:117` | commerce-migration-pending |
-| sql-mutation | insert into app.account_adjustments | `server/src/crm/finance.service.ts:591` | commerce-migration-pending |
-| sql-mutation | insert into app.payments | `server/src/crm/finance.service.ts:690` | commerce-migration-pending |
-| sql-mutation | insert into app.expenses | `server/src/crm/finance.service.ts:787` | commerce-migration-pending |
-| sql-mutation | update app.expenses | `server/src/crm/finance.service.ts:824` | commerce-migration-pending |
-| sql-mutation | update app.expenses | `server/src/crm/finance.service.ts:863` | commerce-migration-pending |
+| backend-route | POST /crm/students/:studentId/subscriptions/issue | `server/src/crm/subscription-commerce.controller.ts:50` | commerce-migration-pending |
+| backend-route | POST /crm/students/:studentId/payment-records/:paymentRecordId/reversal/preview | `server/src/crm/subscription-commerce.controller.ts:64` | commerce-migration-pending |
+| backend-route | POST /crm/students/:studentId/payment-records/:paymentRecordId/reversal | `server/src/crm/subscription-commerce.controller.ts:79` | commerce-migration-pending |
+| backend-route | POST /crm/students/:studentId/payment-records | `server/src/crm/subscription-commerce.controller.ts:100` | commerce-migration-pending |
+| backend-route | POST /crm/students/:studentId/payment-records/:paymentRecordId/transition | `server/src/crm/subscription-commerce.controller.ts:114` | commerce-migration-pending |
+| backend-route | POST /crm/students/:studentId/subscriptions/purchase/preview | `server/src/crm/subscription-commerce.controller.ts:135` | commerce-migration-pending |
+| backend-route | POST /crm/students/:studentId/subscriptions/purchase | `server/src/crm/subscription-commerce.controller.ts:144` | commerce-migration-pending |
+| backend-route | POST /crm/students/:studentId/subscription-payments | `server/src/crm/subscription-commerce.controller.ts:158` | commerce-migration-pending |
+| backend-route | POST /crm/students/:studentId/subscriptions/:issuedSubscriptionId/replace/preview | `server/src/crm/subscription-commerce.controller.ts:172` | commerce-migration-pending |
+| backend-route | POST /crm/students/:studentId/subscriptions/:issuedSubscriptionId/replace | `server/src/crm/subscription-commerce.controller.ts:188` | commerce-migration-pending |
+| backend-route | POST /crm/students/:studentId/subscriptions/:issuedSubscriptionId/cancel/preview | `server/src/crm/subscription-commerce.controller.ts:210` | commerce-migration-pending |
+| backend-route | POST /crm/students/:studentId/subscriptions/:issuedSubscriptionId/cancel | `server/src/crm/subscription-commerce.controller.ts:225` | commerce-migration-pending |
+| sql-mutation | insert into app.account_adjustments | `server/src/crm/finance.service.ts:593` | commerce-migration-pending |
+| sql-mutation | insert into app.payments | `server/src/crm/finance.service.ts:692` | commerce-migration-pending |
+| sql-mutation | insert into app.expenses | `server/src/crm/finance.service.ts:789` | commerce-migration-pending |
+| sql-mutation | update app.expenses | `server/src/crm/finance.service.ts:826` | commerce-migration-pending |
+| sql-mutation | update app.expenses | `server/src/crm/finance.service.ts:865` | commerce-migration-pending |
 | sql-mutation | insert into app.teacher_payouts | `server/src/crm/payroll.service.ts:342` | commerce-migration-pending |
 | sql-mutation | insert into app.teacher_rates | `server/src/crm/payroll.service.ts:390` | commerce-migration-pending |
-| sql-mutation | insert into app.payments | `server/src/crm/subscriptions.service.ts:282` | commerce-migration-pending |
-| sql-mutation | insert into app.subscriptions | `server/src/crm/subscriptions.service.ts:291` | commerce-migration-pending |
-| sql-mutation | insert into app.payments | `server/src/crm/subscriptions.service.ts:657` | commerce-migration-pending |
-| sql-mutation | insert into app.subscriptions | `server/src/crm/subscriptions.service.ts:675` | commerce-migration-pending |
+| sql-mutation | insert into app.payments | `server/src/crm/subscriptions.service.ts:285` | commerce-migration-pending |
+| sql-mutation | insert into app.subscriptions | `server/src/crm/subscriptions.service.ts:294` | commerce-migration-pending |
+| sql-mutation | insert into app.payments | `server/src/crm/subscriptions.service.ts:669` | commerce-migration-pending |
+| sql-mutation | insert into app.subscriptions | `server/src/crm/subscriptions.service.ts:687` | commerce-migration-pending |
 | sql-mutation | insert into app.subscriptions | `server/src/crm/commerce/commerce-schema.repository.ts:185` | commerce-migration-pending |
 | sql-mutation | insert into app.payments | `server/src/crm/commerce/commerce-schema.repository.ts:333` | commerce-migration-pending |
-| sql-mutation | insert into app.subscriptions | `server/src/crm/commerce/subscription-issue.repository.ts:178` | commerce-migration-pending |
-| sql-mutation | insert into app.payments | `server/src/crm/commerce/subscription-issue.repository.ts:526` | commerce-migration-pending |
-| sql-mutation | insert into app.account_adjustments | `server/src/crm/commerce/subscription-issue.repository.ts:677` | commerce-migration-pending |
-| sql-mutation | update app.subscriptions | `server/src/crm/commerce/subscription-lifecycle.repository.ts:645` | commerce-migration-pending |
-| sql-mutation | update app.subscriptions | `server/src/crm/commerce/subscription-lifecycle.repository.ts:673` | commerce-migration-pending |
-| sql-mutation | insert into app.subscriptions | `server/src/crm/commerce/subscription-lifecycle.repository.ts:703` | commerce-migration-pending |
+| sql-mutation | update app.payments | `server/src/crm/commerce/payment-lifecycle.repository.ts:340` | commerce-migration-pending |
+| sql-mutation | insert into app.subscriptions | `server/src/crm/commerce/subscription-issue.repository.ts:329` | commerce-migration-pending |
+| sql-mutation | insert into app.payments | `server/src/crm/commerce/subscription-issue.repository.ts:698` | commerce-migration-pending |
+| sql-mutation | insert into app.account_adjustments | `server/src/crm/commerce/subscription-issue.repository.ts:855` | commerce-migration-pending |
+| sql-mutation | update app.subscriptions | `server/src/crm/commerce/subscription-lifecycle.repository.ts:863` | commerce-migration-pending |
+| sql-mutation | update app.subscriptions | `server/src/crm/commerce/subscription-lifecycle.repository.ts:891` | commerce-migration-pending |
+| sql-mutation | insert into app.subscriptions | `server/src/crm/commerce/subscription-lifecycle.repository.ts:924` | commerce-migration-pending |
 
 ## Verification
 

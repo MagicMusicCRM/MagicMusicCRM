@@ -5,7 +5,9 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import {
+  LessonTransitionPreviewTokenPayload,
   PaymentReversalPreviewTokenPayload,
+  signLessonTransitionPreview,
   signPaymentReversalPreview,
   signSubscriptionCancelPreview,
   signSubscriptionPurchasePreview,
@@ -15,6 +17,7 @@ import {
   SubscriptionPreviewTokenError,
   SubscriptionReplacePreviewTokenPayload,
   verifyPaymentReversalPreview,
+  verifyLessonTransitionPreview,
   verifySubscriptionCancelPreview,
   verifySubscriptionPurchasePreview,
   verifySubscriptionReplacePreview,
@@ -210,6 +213,52 @@ export class SubscriptionPreviewTokenService {
           error.code === "PREVIEW_TOKEN_EXPIRED"
             ? "Предпросмотр удаления оплаты устарел. Обновите расчёт."
             : "Подписанный предпросмотр удаления оплаты недействителен.",
+      });
+    }
+  }
+
+  issueLessonTransition(
+    payload: Omit<
+      LessonTransitionPreviewTokenPayload,
+      "issuedAtSeconds" | "expiresAtSeconds"
+    >,
+    now = new Date(),
+  ): {
+    token: string;
+    expiresAt: string;
+    payload: LessonTransitionPreviewTokenPayload;
+  } {
+    const issuedAtSeconds = Math.floor(now.getTime() / 1000);
+    const complete: LessonTransitionPreviewTokenPayload = {
+      ...payload,
+      issuedAtSeconds,
+      expiresAtSeconds: issuedAtSeconds + SUBSCRIPTION_PREVIEW_TTL_SECONDS,
+    };
+    return {
+      token: signLessonTransitionPreview(this.secret(), complete),
+      expiresAt: new Date(complete.expiresAtSeconds * 1000).toISOString(),
+      payload: complete,
+    };
+  }
+
+  verifyLessonTransition(
+    token: string,
+    now = new Date(),
+  ): LessonTransitionPreviewTokenPayload {
+    try {
+      return verifyLessonTransitionPreview(
+        this.secret(),
+        token,
+        Math.floor(now.getTime() / 1000),
+      );
+    } catch (error) {
+      if (!(error instanceof SubscriptionPreviewTokenError)) throw error;
+      throw new UnprocessableEntityException({
+        code: error.code,
+        message:
+          error.code === "PREVIEW_TOKEN_EXPIRED"
+            ? "Предпросмотр действия с занятием устарел. Обновите расчёт."
+            : "Подписанный предпросмотр действия с занятием недействителен.",
       });
     }
   }

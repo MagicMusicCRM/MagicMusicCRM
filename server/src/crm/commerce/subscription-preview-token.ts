@@ -9,6 +9,19 @@ const PURCHASE_TOKEN_DOMAIN =
   "magicmusiccrm:subscription-purchase-preview:v1";
 const PAYMENT_REVERSAL_TOKEN_DOMAIN =
   "magicmusiccrm:payment-reversal-preview:v1";
+const LESSON_TRANSITION_TOKEN_DOMAIN =
+  "magicmusiccrm:lesson-transition-preview:v1";
+
+export interface LessonTransitionPreviewTokenPayload {
+  kind: "lesson.transition";
+  operation: "reschedule" | "cancel" | "settle";
+  actorUserId: string;
+  lessonId: string;
+  expectedVersion: number;
+  transitionFingerprint: string;
+  issuedAtSeconds: number;
+  expiresAtSeconds: number;
+}
 
 export interface PaymentReversalPreviewTokenPayload {
   kind: "payment.reversal";
@@ -218,6 +231,32 @@ export function verifyPaymentReversalPreview(
     token,
     nowSeconds,
     assertPaymentReversalPayload,
+  );
+}
+
+export function signLessonTransitionPreview(
+  secret: string,
+  payload: LessonTransitionPreviewTokenPayload,
+): string {
+  return signPayload(
+    secret,
+    LESSON_TRANSITION_TOKEN_DOMAIN,
+    payload,
+    assertLessonTransitionPayload,
+  );
+}
+
+export function verifyLessonTransitionPreview(
+  secret: string,
+  token: string,
+  nowSeconds: number,
+): LessonTransitionPreviewTokenPayload {
+  return verifyPayload(
+    secret,
+    LESSON_TRANSITION_TOKEN_DOMAIN,
+    token,
+    nowSeconds,
+    assertLessonTransitionPayload,
   );
 }
 
@@ -545,6 +584,41 @@ function assertPaymentReversalPayload(
     !/^[A-Z]{3}$/.test(payload.currencyCode) ||
     !isSignedMinor(payload.walletBalanceMinor) ||
     !isSignedMinor(payload.resultingBalanceMinor) ||
+    !isPositiveInteger(payload.issuedAtSeconds) ||
+    !isPositiveInteger(payload.expiresAtSeconds) ||
+    payload.expiresAtSeconds < payload.issuedAtSeconds
+  ) {
+    throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
+  }
+}
+
+function assertLessonTransitionPayload(
+  value: unknown,
+): asserts value is LessonTransitionPreviewTokenPayload {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
+  }
+  const payload = value as Record<string, unknown>;
+  const exactKeys = [
+    "kind",
+    "operation",
+    "actorUserId",
+    "lessonId",
+    "expectedVersion",
+    "transitionFingerprint",
+    "issuedAtSeconds",
+    "expiresAtSeconds",
+  ];
+  if (
+    Object.keys(payload).length !== exactKeys.length ||
+    exactKeys.some((key) => !(key in payload)) ||
+    payload.kind !== "lesson.transition" ||
+    !["reschedule", "cancel", "settle"].includes(payload.operation as string) ||
+    !isUuid(payload.actorUserId) ||
+    !isUuid(payload.lessonId) ||
+    !isPositiveInteger(payload.expectedVersion) ||
+    typeof payload.transitionFingerprint !== "string" ||
+    !/^[a-f0-9]{64}$/.test(payload.transitionFingerprint) ||
     !isPositiveInteger(payload.issuedAtSeconds) ||
     !isPositiveInteger(payload.expiresAtSeconds) ||
     payload.expiresAtSeconds < payload.issuedAtSeconds

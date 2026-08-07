@@ -21,6 +21,28 @@ interface ReservationRow {
   id: string;
   subscription_id: string;
   state: "reserved" | "consumed" | "released" | "cancelled";
+  version: number | string;
+  units: string;
+}
+
+export interface LessonSettlementCoverageSnapshot {
+  reservations: Array<{
+    id: string;
+    subscriptionId: string;
+    state: ReservationRow["state"];
+    version: number;
+    units: string;
+  }>;
+  subscriptions: Array<{
+    id: string;
+    version: number;
+    status: string;
+    lessonsTotal: string;
+    lessonsUsed: string;
+    settledUnits: string;
+    reservedUnits: string;
+    expiresAt: string | null;
+  }>;
 }
 
 @Injectable()
@@ -123,7 +145,8 @@ export class SubscriptionReservationService {
   async lockSettlementCoverage(
     client: PoolClient,
     lessonId: string,
-  ): Promise<void> {
+    selectedSubscriptionIds: string[] = [],
+  ): Promise<LessonSettlementCoverageSnapshot> {
     const candidates = await client.query<{ subscription_id: string }>(
       `
         select distinct source.subscription_id
@@ -133,19 +156,21 @@ export class SubscriptionReservationService {
           select subscription_id from app.lesson_snapshot_participants where lesson_id = $1
           union all
           select subscription_id from app.lesson_reservations where lesson_id = $1
+          union all
+          select unnest($2::uuid[])
         ) source
         where source.subscription_id is not null
         order by source.subscription_id
       `,
-      [lessonId],
+      [lessonId, [...new Set(selectedSubscriptionIds)].sort()],
     );
     for (const candidate of candidates.rows) {
       await this.lockSubscription(client, candidate.subscription_id);
     }
 
-    await client.query<ReservationRow>(
+    const reservations = await client.query<ReservationRow>(
       `
-        select id, subscription_id, state
+        select id, subscription_id, state, version, units::text
         from app.lesson_reservations
         where lesson_id = $1
         order by subscription_id, created_at, id
@@ -153,6 +178,60 @@ export class SubscriptionReservationService {
       `,
       [lessonId],
     );
+    const subscriptionIds = candidates.rows.map((row) => row.subscription_id);
+    const subscriptions = await client.query<{
+      id: string;
+      version: number | string;
+      status: string;
+      lessons_total: string;
+      lessons_used: string;
+      settled_units: string;
+      reserved_units: string;
+      expires_at: Date | string | null;
+    }>(
+      `
+        select subscription.id, subscription.version, subscription.status,
+          subscription.lessons_total::text, subscription.lessons_used::text,
+          coalesce((
+            select sum(fact.units)
+            from app.lesson_client_charge_facts fact
+            where fact.subscription_id = subscription.id
+              and fact.charge_type = 'subscription'
+          ), 0)::text as settled_units,
+          coalesce((
+            select sum(reservation.units)
+            from app.lesson_reservations reservation
+            where reservation.subscription_id = subscription.id
+              and reservation.state = 'reserved'
+          ), 0)::text as reserved_units,
+          subscription.expires_at
+        from app.subscriptions subscription
+        where subscription.id = any($1::uuid[])
+        order by subscription.id
+      `,
+      [subscriptionIds],
+    );
+    return {
+      reservations: reservations.rows.map((row) => ({
+        id: row.id,
+        subscriptionId: row.subscription_id,
+        state: row.state,
+        version: Number(row.version),
+        units: row.units,
+      })),
+      subscriptions: subscriptions.rows.map((row) => ({
+        id: row.id,
+        version: Number(row.version),
+        status: row.status,
+        lessonsTotal: row.lessons_total,
+        lessonsUsed: row.lessons_used,
+        settledUnits: row.settled_units,
+        reservedUnits: row.reserved_units,
+        expiresAt: row.expires_at === null
+          ? null
+          : new Date(row.expires_at).toISOString().slice(0, 10),
+      })),
+    };
   }
 
   async terminalize(

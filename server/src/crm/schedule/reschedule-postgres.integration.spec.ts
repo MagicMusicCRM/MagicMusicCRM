@@ -5,26 +5,30 @@ import { DatabaseService } from "../../db/database.service";
 import { MigrationRunner } from "../../db/migration-runner";
 import { PlatformIntegrityRepository } from "../../platform/platform-integrity.repository";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
+import { RealtimeBus } from "../../realtime/realtime-bus";
+import { LessonSettlementPort } from "../commerce/lesson-settlement.port";
+import { LessonSettlementRepository } from "../commerce/lesson-settlement.repository";
+import { LessonSettlementService } from "../commerce/lesson-settlement.service";
+import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
+import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
 import { CrmPolicy } from "../crm.policy";
 import { AvailabilityRepository } from "./availability.repository";
 import { ConstraintEngineRepository } from "./constraint-engine.repository";
 import { ScheduleConstraintEngine } from "./constraint-engine.service";
 import { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
 import { LessonRequiredFieldValidator } from "./lesson-required-field.validator";
-import { LessonTransitionFinancialService } from "./lesson-transition-financial.service";
 import { LessonTransitionService } from "./lesson-transition.service";
-import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
-import { RealtimeBus } from "../../realtime/realtime-bus";
 
 const url =
   process.env.V4_PLATFORM_TEST_DATABASE_URL ??
   "postgresql://magiccrm_owner:magiccrm_owner@127.0.0.1:54329/magiccrm";
 if (!["127.0.0.1", "localhost", "[::1]"].includes(new URL(url).hostname)) {
-  throw new Error("Reschedule tests require local PostgreSQL.");
+  throw new Error("Lesson transition tests require local PostgreSQL.");
 }
+const previewSecret = "lesson-transition-preview-secret-for-tests-2026";
 jest.setTimeout(60_000);
 
-describe("Atomic lesson reschedule/cancel (PostgreSQL)", () => {
+describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
   let pool: Pool;
   let database: DatabaseService;
   let service: LessonTransitionService;
@@ -33,24 +37,19 @@ describe("Atomic lesson reschedule/cancel (PostgreSQL)", () => {
   beforeAll(async () => {
     pool = new Pool({ connectionString: url });
     await new MigrationRunner(pool).up();
-    database = new DatabaseService({
+    const config = {
       getOrThrow: () => url,
-    } as unknown as ConfigService);
-    const repository = new ConstraintEngineRepository(
-      database,
-      new AvailabilityRepository(database),
-    );
-    const dependencies = [
-      database,
-      new PlatformIntegrityService(
+      get: (key: string, fallback: string) =>
+        key === "COMMERCE_PREVIEW_SECRET" ? previewSecret : fallback,
+    } as unknown as ConfigService;
+    database = new DatabaseService(config);
+    const constraints = new ScheduleConstraintEngine(
+      new ConstraintEngineRepository(
         database,
-        new PlatformIntegrityRepository(),
+        new AvailabilityRepository(database),
       ),
-      new CrmPolicy(),
-      new LessonRequiredFieldValidator(),
-      new ScheduleConstraintEngine(repository),
-      new LessonLifecycleRepository(database),
-    ] as const;
+    );
+    const lifecycle = new LessonLifecycleRepository(database);
     const reservations = new SubscriptionReservationService(
       database,
       {
@@ -58,19 +57,36 @@ describe("Atomic lesson reschedule/cancel (PostgreSQL)", () => {
         emitFinanceChanged: jest.fn(),
       } as unknown as RealtimeBus,
     );
+    const tokens = new SubscriptionPreviewTokenService(config);
+    const base = [
+      database,
+      new PlatformIntegrityService(
+        database,
+        new PlatformIntegrityRepository(),
+      ),
+      new CrmPolicy(),
+      new LessonRequiredFieldValidator(),
+      constraints,
+      lifecycle,
+    ] as const;
     service = new LessonTransitionService(
-      ...dependencies,
-      new LessonTransitionFinancialService(),
+      ...base,
+      new LessonSettlementService(
+        database,
+        new LessonSettlementRepository(),
+      ),
       reservations,
+      tokens,
     );
     failingService = new LessonTransitionService(
-      ...dependencies,
+      ...base,
       {
-        apply: async () => {
+        settle: async () => {
           throw new Error("injected commerce failure");
         },
-      } as LessonTransitionFinancialService,
+      } as LessonSettlementPort,
       reservations,
+      tokens,
     );
   });
 
@@ -79,34 +95,33 @@ describe("Atomic lesson reschedule/cancel (PostgreSQL)", () => {
     await pool.end();
   });
 
-  it("keeps source unchanged on conflict/failure and commits one linked transition", async () => {
+  it("dry-runs the exact facts and atomically commits every transition kind", async () => {
     const fixture = await createFixture(
       pool,
       new LessonLifecycleRepository(database),
     );
     const actor = { userId: fixture.managerId, role: "manager" as const };
-    const financialDecision = {
-      chargeClient: false,
-      compensateTeacher: true,
-    };
-    const dto = (scheduledAt: string) => ({
-      expectedVersion: 1,
-      reasonCode: "client.requested",
-      reasonText: "Requested another time",
-      financialDecision,
-      successor: { scheduledAt },
-    });
     const metadata = (label: string) => ({
       idempotencyKey: `${label}-${randomUUID()}`,
       requestId: `request-${label}-${randomUUID()}`,
     });
+    const freeDecision = {
+      settlementTypeKey: "free_lesson",
+      teacherCompensationRuleKey: "none",
+    };
     try {
-      const preview = await service.previewReschedule(
+      const conflicting = await service.previewReschedule(
         actor,
         fixture.sourceId,
-        dto("2026-07-27T09:00:00.000Z"),
+        {
+          expectedVersion: 1,
+          reasonCode: "client.requested",
+          reasonText: "Клиент попросил другое время",
+          financialDecision: freeDecision,
+          successor: { scheduledAt: "2026-07-27T09:00:00.000Z" },
+        },
       );
-      expect(preview).toMatchObject({
+      expect(conflicting).toMatchObject({
         canConfirm: false,
         confirmRequired: true,
         violations: expect.arrayContaining([
@@ -115,64 +130,84 @@ describe("Atomic lesson reschedule/cancel (PostgreSQL)", () => {
           expect.objectContaining({ code: "ROOM_OVERLAP" }),
         ]),
       });
-      await expect(
-        service.reschedule(
-          actor,
-          fixture.sourceId,
-          { ...dto("2026-07-27T09:00:00.000Z"), confirm: true as const },
-          metadata("conflict"),
-        ),
-      ).rejects.toMatchObject({ status: 422 });
+      expect(conflicting).not.toHaveProperty("previewToken");
+
+      const preview = await service.previewReschedule(
+        actor,
+        fixture.sourceId,
+        {
+          expectedVersion: 1,
+          reasonCode: "client.requested",
+          reasonText: "Клиент попросил другое время",
+          financialDecision: freeDecision,
+          successor: { scheduledAt: "2026-07-27T11:00:00.000Z" },
+        },
+      );
+      expect(preview).toMatchObject({
+        canConfirm: true,
+        financialPreview: {
+          clientFacts: [
+            expect.objectContaining({
+              settlementTypeKey: "free_lesson",
+              amountMinor: "0",
+              units: "0.00",
+            }),
+          ],
+          teacherFact: expect.objectContaining({
+            compensationRuleKey: "none",
+            amountMinor: "0",
+          }),
+        },
+      });
+      expect(preview.previewToken).toBeTruthy();
       await expect(
         failingService.reschedule(
           actor,
           fixture.sourceId,
-          { ...dto("2026-07-27T11:00:00.000Z"), confirm: true as const },
+          {
+            expectedVersion: 1,
+            reasonCode: "client.requested",
+            reasonText: "Клиент попросил другое время",
+            financialDecision: freeDecision,
+            successor: { scheduledAt: "2026-07-27T11:00:00.000Z" },
+            previewToken: preview.previewToken!,
+            confirm: true,
+          },
           metadata("failure"),
         ),
       ).rejects.toThrow("injected commerce failure");
       await expectSourceUnchanged(pool, fixture.sourceId);
 
+      const command = {
+        expectedVersion: 1,
+        reasonCode: "client.requested",
+        reasonText: "Клиент попросил другое время",
+        financialDecision: freeDecision,
+        successor: { scheduledAt: "2026-07-27T11:00:00.000Z" },
+        previewToken: preview.previewToken!,
+        confirm: true as const,
+      };
+      const idempotency = metadata("reschedule-success");
       const result = await service.reschedule(
         actor,
         fixture.sourceId,
-        { ...dto("2026-07-27T11:00:00.000Z"), confirm: true as const },
-        metadata("success"),
+        command,
+        idempotency,
       );
       expect(result).toMatchObject({
         source: { id: fixture.sourceId, state: "rescheduled", version: 2 },
         successor: { state: "scheduled", version: 1 },
-        financialDecision,
         replayed: false,
       });
-      const persisted = await pool.query<{
-        source_state: string;
-        successor_id: string;
-        predecessor_id: string;
-        transition_count: number;
-        audit_count: number;
-      }>(
-        `
-          select source.lifecycle_state as source_state,
-            source.successor_id,
-            successor.predecessor_id,
-            (select count(*)::int from app.lesson_transitions
-              where lesson_id = source.id) as transition_count,
-            (select count(*)::int from app.audit_events
-              where action = 'crm.lesson_rescheduled'
-                and entity_id = source.id::text) as audit_count
-          from app.lessons source
-          join app.lessons successor on successor.id = source.successor_id
-          where source.id = $1
-        `,
-        [fixture.sourceId],
+      const replay = await service.reschedule(
+        actor,
+        fixture.sourceId,
+        command,
+        idempotency,
       );
-      expect(persisted.rows[0]).toEqual({
-        source_state: "rescheduled",
-        successor_id: result.successor!.id,
-        predecessor_id: fixture.sourceId,
-        transition_count: 1,
-        audit_count: 1,
+      expect(replay).toMatchObject({
+        transitionId: result.transitionId,
+        replayed: true,
       });
 
       const cancelPreview = await service.previewCancel(
@@ -181,17 +216,19 @@ describe("Atomic lesson reschedule/cancel (PostgreSQL)", () => {
         {
           expectedVersion: 1,
           reasonCode: "school.cancelled",
-          financialDecision,
+          reasonText: "Отмена по решению школы",
+          financialDecision: freeDecision,
         },
       );
-      expect(cancelPreview).toMatchObject({ canConfirm: true });
       const cancelled = await service.cancel(
         actor,
         fixture.cancelId,
         {
           expectedVersion: 1,
           reasonCode: "school.cancelled",
-          financialDecision,
+          reasonText: "Отмена по решению школы",
+          financialDecision: freeDecision,
+          previewToken: cancelPreview.previewToken!,
           confirm: true,
         },
         metadata("cancel"),
@@ -201,97 +238,197 @@ describe("Atomic lesson reschedule/cancel (PostgreSQL)", () => {
         state: "cancelled",
         version: 2,
       });
+
+      const settleDecision = {
+        settlementTypeKey: "lesson",
+        teacherCompensationRuleKey: "standard",
+      };
+      const settlePreview = await service.previewSettle(
+        actor,
+        fixture.settleId,
+        {
+          expectedVersion: 1,
+          reasonCode: "attendance.confirmed",
+          financialDecision: settleDecision,
+        },
+      );
+      const settled = await service.settle(
+        actor,
+        fixture.settleId,
+        {
+          expectedVersion: 1,
+          reasonCode: "attendance.confirmed",
+          financialDecision: settleDecision,
+          previewToken: settlePreview.previewToken!,
+          confirm: true,
+        },
+        metadata("settle"),
+      );
+      expect(settled.source).toEqual({
+        id: fixture.settleId,
+        state: "successfully_completed",
+        version: 2,
+      });
+
+      const persisted = await pool.query<{
+        transitions: number;
+        client_facts: number;
+        teacher_facts: number;
+        successors: number;
+        reason_text: string;
+      }>(
+        `
+          select
+            (select count(*)::int from app.lesson_transitions
+              where lesson_id = any($1::uuid[])) as transitions,
+            (select count(*)::int from app.lesson_client_charge_facts
+              where lesson_id = any($1::uuid[])) as client_facts,
+            (select count(*)::int from app.lesson_teacher_compensation_facts
+              where lesson_id = any($1::uuid[])) as teacher_facts,
+            (select count(*)::int from app.lessons
+              where predecessor_id = $2) as successors,
+            (select reason_text from app.lesson_transitions
+              where lesson_id = $2) as reason_text
+        `,
+        [[fixture.sourceId, fixture.cancelId, fixture.settleId], fixture.sourceId],
+      );
+      expect(persisted.rows[0]).toEqual({
+        transitions: 3,
+        client_facts: 3,
+        teacher_facts: 3,
+        successors: 1,
+        reason_text: "Клиент попросил другое время",
+      });
     } finally {
       await cleanup(pool, fixture);
     }
   });
 
-  it("allows exactly one winner in a parallel reschedule race", async () => {
+  it("rejects stale/tampered previews and allows one parallel winner", async () => {
     const fixture = await createFixture(
       pool,
       new LessonLifecycleRepository(database),
     );
     const actor = { userId: fixture.managerId, role: "manager" as const };
-    const command = (scheduledAt: string) => ({
-      expectedVersion: 1,
-      reasonCode: "schedule.concurrent",
-      financialDecision: {
-        chargeClient: false,
-        compensateTeacher: false,
+    const decision = {
+      settlementTypeKey: "free_lesson",
+      teacherCompensationRuleKey: "none",
+    };
+    const preview = (scheduledAt: string) => service.previewReschedule(
+      actor,
+      fixture.sourceId,
+      {
+        expectedVersion: 1,
+        reasonCode: "schedule.concurrent",
+        reasonText: "Проверка конкурентного переноса",
+        financialDecision: decision,
+        successor: { scheduledAt },
       },
-      successor: { scheduledAt },
-      confirm: true as const,
-    });
+    );
     const metadata = (label: string) => ({
-      idempotencyKey: `reschedule-race-${label}-${randomUUID()}`,
-      requestId: `reschedule-race-request-${label}-${randomUUID()}`,
+      idempotencyKey: `race-${label}-${randomUUID()}`,
+      requestId: `race-request-${label}-${randomUUID()}`,
     });
     try {
+      const left = await preview("2026-07-27T11:00:00.000Z");
+      const right = await preview("2026-07-27T12:00:00.000Z");
+      await expect(
+        service.reschedule(
+          actor,
+          fixture.sourceId,
+          {
+            expectedVersion: 1,
+            reasonCode: "schedule.concurrent",
+            reasonText: "Изменённое после предпросмотра объяснение",
+            financialDecision: decision,
+            successor: { scheduledAt: "2026-07-27T11:00:00.000Z" },
+            previewToken: left.previewToken!,
+            confirm: true,
+          },
+          metadata("stale"),
+        ),
+      ).rejects.toMatchObject({ status: 422 });
+      await expectSourceUnchanged(pool, fixture.sourceId);
+
+      const capacityPreview = await service.previewSettle(
+        actor,
+        fixture.capacityId,
+        {
+          expectedVersion: 1,
+          reasonCode: "attendance.confirmed",
+          financialDecision: {
+            settlementTypeKey: "lesson",
+            teacherCompensationRuleKey: "standard",
+          },
+        },
+      );
+      await pool.query(
+        `insert into app.lesson_reservations (
+          lesson_id, subscription_id, units
+        ) values ($1, $2, 1)`,
+        [fixture.blockerId, fixture.subscriptionId],
+      );
+      await expect(
+        service.settle(
+          actor,
+          fixture.capacityId,
+          {
+            expectedVersion: 1,
+            reasonCode: "attendance.confirmed",
+            financialDecision: {
+              settlementTypeKey: "lesson",
+              teacherCompensationRuleKey: "standard",
+            },
+            previewToken: capacityPreview.previewToken!,
+            confirm: true,
+          },
+          metadata("insufficient-capacity"),
+        ),
+      ).rejects.toMatchObject({ status: 422 });
+      await expectSourceUnchanged(pool, fixture.capacityId);
+
       const results = await Promise.allSettled([
         service.reschedule(
           actor,
           fixture.sourceId,
-          command("2026-07-27T11:00:00.000Z"),
+          {
+            expectedVersion: 1,
+            reasonCode: "schedule.concurrent",
+            reasonText: "Проверка конкурентного переноса",
+            financialDecision: decision,
+            successor: { scheduledAt: "2026-07-27T11:00:00.000Z" },
+            previewToken: left.previewToken!,
+            confirm: true,
+          },
           metadata("left"),
         ),
         service.reschedule(
           actor,
           fixture.sourceId,
-          command("2026-07-27T12:00:00.000Z"),
+          {
+            expectedVersion: 1,
+            reasonCode: "schedule.concurrent",
+            reasonText: "Проверка конкурентного переноса",
+            financialDecision: decision,
+            successor: { scheduledAt: "2026-07-27T12:00:00.000Z" },
+            previewToken: right.previewToken!,
+            confirm: true,
+          },
           metadata("right"),
         ),
       ]);
-      expect(
-        results.filter((result) => result.status === "fulfilled"),
-      ).toHaveLength(1);
-      const rejected = results.filter(
-        (result): result is PromiseRejectedResult =>
-          result.status === "rejected",
-      );
-      expect(rejected).toHaveLength(1);
-      expect(rejected[0]!.reason).toMatchObject({ status: 409 });
-
-      const persisted = await pool.query<{
-        source_state: string;
-        source_version: number | string;
-        successors: number;
-        transitions: number;
-        audits: number;
-      }>(
-        `
-          select
-            source.lifecycle_state as source_state,
-            source.version as source_version,
-            (
-              select count(*)::int
-              from app.lessons
-              where predecessor_id = source.id
-            ) as successors,
-            (
-              select count(*)::int
-              from app.lesson_transitions
-              where lesson_id = source.id
-            ) as transitions,
-            (
-              select count(*)::int
-              from app.audit_events
-              where action = 'crm.lesson_rescheduled'
-                and entity_id = source.id::text
-            ) as audits
-          from app.lessons source
-          where source.id = $1
-        `,
-        [fixture.sourceId],
-      );
-      expect({
-        ...persisted.rows[0],
-        source_version: Number(persisted.rows[0]!.source_version),
-      }).toEqual({
-        source_state: "rescheduled",
-        source_version: 2,
+      expect(results.filter((result) => result.status === "fulfilled"))
+        .toHaveLength(1);
+      expect(results.filter((result) => result.status === "rejected"))
+        .toHaveLength(1);
+      const counts = await transitionCounts(pool, fixture.sourceId);
+      expect(counts).toEqual({
+        lifecycle_state: "rescheduled",
+        version: 2,
         successors: 1,
         transitions: 1,
-        audits: 1,
+        client_facts: 1,
+        teacher_facts: 1,
       });
     } finally {
       await cleanup(pool, fixture);
@@ -300,33 +437,40 @@ describe("Atomic lesson reschedule/cancel (PostgreSQL)", () => {
 });
 
 async function expectSourceUnchanged(pool: Pool, lessonId: string) {
+  expect(await transitionCounts(pool, lessonId)).toEqual({
+    lifecycle_state: "scheduled",
+    version: 1,
+    successors: 0,
+    transitions: 0,
+    client_facts: 0,
+    teacher_facts: 0,
+  });
+}
+
+async function transitionCounts(pool: Pool, lessonId: string) {
   const result = await pool.query<{
     lifecycle_state: string;
     version: number | string;
-    successor_id: string | null;
     successors: number;
     transitions: number;
+    client_facts: number;
+    teacher_facts: number;
   }>(
     `
-      select source.lifecycle_state, source.version, source.successor_id,
-        (select count(*)::int from app.lessons where predecessor_id = source.id)
-          as successors,
+      select source.lifecycle_state, source.version,
+        (select count(*)::int from app.lessons
+          where predecessor_id = source.id) as successors,
         (select count(*)::int from app.lesson_transitions
-          where lesson_id = source.id) as transitions
+          where lesson_id = source.id) as transitions,
+        (select count(*)::int from app.lesson_client_charge_facts
+          where lesson_id = source.id) as client_facts,
+        (select count(*)::int from app.lesson_teacher_compensation_facts
+          where lesson_id = source.id) as teacher_facts
       from app.lessons source where source.id = $1
     `,
     [lessonId],
   );
-  expect({
-    ...result.rows[0],
-    version: Number(result.rows[0]!.version),
-  }).toEqual({
-    lifecycle_state: "scheduled",
-    version: 1,
-    successor_id: null,
-    successors: 0,
-    transitions: 0,
-  });
+  return { ...result.rows[0]!, version: Number(result.rows[0]!.version) };
 }
 
 async function createFixture(
@@ -394,20 +538,30 @@ async function createFixture(
     [studentProfileId, branchId],
   );
   const studentId = student.rows[0]!.id;
-  const lessons = await pool.query<{ id: string; scheduled_at: Date }>(
+  const subscription = await pool.query<{ id: string }>(
+    `insert into app.subscriptions (
+      student_id, lessons_total, lessons_used, status
+    ) values ($1, 1, 0, 'active') returning id`,
+    [studentId],
+  );
+  const subscriptionId = subscription.rows[0]!.id;
+  const lessons = await pool.query<{ id: string }>(
     `insert into app.lessons (
       student_id, teacher_id, branch_id, room_id, scheduled_at,
       duration_minutes, created_by
     ) values
       ($1, $2, $3, $4, '2026-07-27T07:00:00Z', 60, $5),
       ($1, $2, $3, $4, '2026-07-28T07:00:00Z', 60, $5),
-      ($1, $2, $3, $4, '2026-07-27T09:00:00Z', 60, $5)
-    returning id, scheduled_at`,
+      ($1, $2, $3, $4, '2026-07-29T07:00:00Z', 60, $5),
+      ($1, $2, $3, $4, '2026-07-27T09:00:00Z', 60, $5),
+      ($1, $2, $3, $4, '2026-07-30T07:00:00Z', 60, $5),
+      ($1, $2, $3, $4, '2026-07-31T07:00:00Z', 60, $5)
+    returning id`,
     [studentId, teacherId, branchId, room.rows[0]!.id, managerId],
   );
-  const sourceId = lessons.rows[0]!.id;
-  const cancelId = lessons.rows[1]!.id;
-  for (const lessonId of [sourceId, cancelId]) {
+  const [sourceId, cancelId, settleId, , capacityId, blockerId] =
+    lessons.rows.map((row) => row.id);
+  for (const lessonId of [sourceId, cancelId, settleId]) {
     const client = await pool.connect();
     try {
       await lifecycle.createSnapshot(client, {
@@ -425,6 +579,28 @@ async function createFixture(
       client.release();
     }
   }
+  const capacityClient = await pool.connect();
+  try {
+    await lifecycle.createSnapshot(capacityClient, {
+      lessonId: capacityId!,
+      clientType: "student",
+      clientId: studentId,
+      completionType: "standard.success",
+      clientChargeType: "subscription",
+      clientChargeValue: 1,
+      teacherCompensationType: "fixed",
+      teacherCompensationValue: 700,
+      subscriptionId,
+      trial: false,
+    });
+    await lifecycle.createReservation(capacityClient, {
+      lessonId: capacityId!,
+      subscriptionId,
+      units: 1,
+    });
+  } finally {
+    capacityClient.release();
+  }
   return {
     branchId,
     roomId: room.rows[0]!.id,
@@ -433,8 +609,12 @@ async function createFixture(
     managerId,
     userIds: [managerId, teacherUserId, clientUserId],
     profileIds: profiles.rows.map((row) => row.id),
-    sourceId,
-    cancelId,
+    sourceId: sourceId!,
+    cancelId: cancelId!,
+    settleId: settleId!,
+    capacityId: capacityId!,
+    blockerId: blockerId!,
+    subscriptionId,
   };
 }
 
@@ -446,45 +626,70 @@ async function cleanup(
   try {
     await client.query("begin");
     await client.query("set local session_replication_role = replica");
-    await client.query("delete from app.idempotency_records where actor_key = $1", [
-      `user:${fixture.managerId}`,
-    ]);
     await client.query(
-      `
-        delete from app.platform_outbox_events
-        where aggregate_type = 'schedule:lesson'
-          and aggregate_id in (
-            select id::text from app.lessons where created_by = $1
-          )
-      `,
+      "delete from app.idempotency_records where actor_key = $1",
+      [`user:${fixture.managerId}`],
+    );
+    await client.query(
+      `delete from app.platform_outbox_events
+       where aggregate_type = 'schedule:lesson'
+         and aggregate_id in (
+           select id::text from app.lessons where created_by = $1
+         )`,
       [fixture.managerId],
     );
     await client.query("delete from app.audit_events where actor_user_id = $1", [
       fixture.managerId,
     ]);
     await client.query(
-      "delete from app.aggregate_versions where aggregate_type = 'schedule:lesson' and aggregate_id in (select id::text from app.lessons where created_by = $1)",
+      `delete from app.aggregate_versions
+       where aggregate_type = 'schedule:lesson'
+         and aggregate_id in (
+           select id::text from app.lessons where created_by = $1
+         )`,
       [fixture.managerId],
     );
-    await client.query(
-      "delete from app.lesson_snapshots where lesson_id in (select id from app.lessons where created_by = $1)",
-      [fixture.managerId],
-    );
-    await client.query(
-      "delete from app.lesson_transitions where lesson_id in (select id from app.lessons where created_by = $1)",
-      [fixture.managerId],
-    );
+    for (const table of [
+      "lesson_transitions",
+      "lesson_reservations",
+      "lesson_client_charge_facts",
+      "lesson_teacher_compensation_facts",
+      "lesson_snapshot_participants",
+      "lesson_snapshots",
+    ]) {
+      await client.query(
+        `delete from app.${table}
+         where lesson_id in (
+           select id from app.lessons where created_by = $1
+         )`,
+        [fixture.managerId],
+      );
+    }
     await client.query("delete from app.lessons where created_by = $1", [
       fixture.managerId,
     ]);
+    await client.query("delete from app.subscriptions where id = $1", [
+      fixture.subscriptionId,
+    ]);
     await client.query("delete from app.students where id = $1", [fixture.studentId]);
-    await client.query("delete from app.teacher_availability_rules where teacher_id = $1", [fixture.teacherId]);
-    await client.query("delete from app.teacher_branches where teacher_id = $1", [fixture.teacherId]);
+    await client.query(
+      "delete from app.teacher_availability_rules where teacher_id = $1",
+      [fixture.teacherId],
+    );
+    await client.query("delete from app.teacher_branches where teacher_id = $1", [
+      fixture.teacherId,
+    ]);
     await client.query("delete from app.teachers where id = $1", [fixture.teacherId]);
     await client.query("delete from app.rooms where id = $1", [fixture.roomId]);
-    await client.query("delete from app.profiles where id = any($1::uuid[])", [fixture.profileIds]);
-    await client.query("delete from app.users where id = any($1::uuid[])", [fixture.userIds]);
-    await client.query("delete from app.branch_hours where branch_id = $1", [fixture.branchId]);
+    await client.query("delete from app.profiles where id = any($1::uuid[])", [
+      fixture.profileIds,
+    ]);
+    await client.query("delete from app.users where id = any($1::uuid[])", [
+      fixture.userIds,
+    ]);
+    await client.query("delete from app.branch_hours where branch_id = $1", [
+      fixture.branchId,
+    ]);
     await client.query("delete from app.branches where id = $1", [fixture.branchId]);
     await client.query("commit");
   } catch (error) {

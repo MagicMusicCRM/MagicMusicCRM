@@ -117,7 +117,7 @@ export class LessonSettlementRepository {
     );
     const source = sourceResult.rows[0];
     if (!source) throw new NotFoundException("Урок не найден.");
-    this.assertSettleable(source);
+    this.assertSettleable(source, input?.context);
 
     if (input) {
       await this.insertConfiguredFacts(client, source, input);
@@ -747,12 +747,21 @@ export class LessonSettlementRepository {
     throw error;
   }
 
-  private assertSettleable(source: SettlementSourceRow) {
-    if (source.lifecycle_state !== "successfully_completed") {
+  private assertSettleable(
+    source: SettlementSourceRow,
+    context?: LessonSettlementInput["context"],
+  ) {
+    const expectedState = context === "reschedule"
+      ? "rescheduled"
+      : context === "cancel"
+        ? "cancelled"
+        : "successfully_completed";
+    if (source.lifecycle_state !== expectedState) {
       throw new ConflictException({
-        code: "LESSON_NOT_SUCCESSFULLY_COMPLETED",
+        code: "LESSON_NOT_IN_SETTLEMENT_STATE",
         lessonId: source.lesson_id,
         state: source.lifecycle_state,
+        expectedState,
       });
     }
     if (

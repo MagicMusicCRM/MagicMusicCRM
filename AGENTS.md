@@ -234,6 +234,17 @@ schedule regression 8/8, full backend 153/153 suites и 1197/1197 tests,
 typecheck/build, reconcile issues=0, inventory unowned=0
 (`docs/audits/v7-lesson-settlement-facts.md`). Следующий шаг `/forge`: `T3.1.3`._
 
+_`T3.1.3` закрыта 2026-08-07: reschedule/cancel/explicit settle сведены в один
+typed transition с HMAC preview token. Preview исполняет тот же Commerce port в
+PostgreSQL savepoint; commit атомарно фиксирует source/successor, reservation,
+exact client/teacher facts, transition, human reason, audit/outbox. Conflict,
+stale fingerprint, исчерпанные часы и injected Commerce fault оставляют source
+scheduled и 0 successor/facts. Group snapshot и per-client decisions сохраняются;
+boolean adapter удалён. Gate: schedule 26/26, commerce 58/58, full backend
+153/153 suites и 1197/1197 tests, typecheck/build, reconcile issues=0, access
+288/288, inventory routes=300/DTO=729/finance=244/lesson writes=13/unowned=0
+(`docs/audits/v7-unified-lesson-transition.md`). Следующий шаг `/forge`: `T3.1.4`._
+
 ### 🌊 Wave v6/S0 — Evidence & UX Foundation ✅
 _Owner подтвердил полное выполнение v6. `V6-001..005` и `INT-S0` закрыты 2026-08-04: воспроизводимый generator покрывает 21 GoRouter route, 248/259 production-reachable Dart files, 256/256 service calls, route/surface/navigation/input/back ownership с unowned=0; v4 inventory обновлён и снова проходит stale-check. Baseline: Flutter analyze clean и 486/486 tests, backend typecheck/build clean, 150/150 suites и 1160/1160 tests, actor/payload 9/9, targeted workflow contracts 68/68 (`docs/audits/v6-s0-baseline.md`). Следующий шаг `/forge`: `V6-101` canonical location adapter._
 

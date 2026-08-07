@@ -238,7 +238,7 @@ graph TD
   - **Зависимости**: T3.1.1.
   - **Приоритет**: P0.
 
-- [ ] **T3.1.3** [REQ-SCHEDULE-101]: Единый lesson transition preview/commit
+- [x] **T3.1.3** [REQ-SCHEDULE-101]: Единый lesson transition preview/commit
   - **Описание**: Расширить reschedule/cancel/settle на rich decision, signed preview, atomic source/successor и Commerce facts.
   - **Входные данные**: T3.1.2, [`schedule_v7.detail.md` §1–5](04_SYSTEM_DESIGN/schedule_v7.detail.md), T1.1.1.
   - **Выходные данные**: schedule DTO/controller/services/worker/contracts.

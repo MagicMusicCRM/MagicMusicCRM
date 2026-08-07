@@ -34,6 +34,8 @@ import {
   LessonCancelPreviewDto,
   LessonRescheduleCommandDto,
   LessonReschedulePreviewDto,
+  LessonSettleCommandDto,
+  LessonSettlePreviewDto,
 } from "./dto/lesson-transition.dto";
 import { LessonCommandService } from "./schedule/lesson-command.service";
 import { LessonSeriesCommandService } from "./schedule/lesson-series-command.service";
@@ -228,6 +230,31 @@ export class CrmScheduleController {
   ) {
     this.v4DomainFlags.assertEnabled("schedule");
     return this.lessonTransitions.cancel(actor, id, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
+  }
+
+  @Post("lessons/:id/settle/preview")
+  previewLessonSettlement(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: LessonSettlePreviewDto,
+  ) {
+    this.v4DomainFlags.assertEnabled("schedule");
+    return this.lessonTransitions.previewSettle(actor, id, dto);
+  }
+
+  @Post("lessons/:id/settle")
+  settleLesson(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+    @Body() dto: LessonSettleCommandDto,
+  ) {
+    this.v4DomainFlags.assertEnabled("schedule");
+    return this.lessonTransitions.settle(actor, id, dto, {
       idempotencyKey: idempotencyKey ?? "",
       requestId: requestId ?? "",
     });

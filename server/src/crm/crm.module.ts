@@ -66,7 +66,6 @@ import { ScheduleConstraintEngine } from "./schedule/constraint-engine.service";
 import { LessonRequiredFieldValidator } from "./schedule/lesson-required-field.validator";
 import { LessonCommandService } from "./schedule/lesson-command.service";
 import { LessonSeriesCommandService } from "./schedule/lesson-series-command.service";
-import { LessonTransitionFinancialService } from "./schedule/lesson-transition-financial.service";
 import { LessonTransitionService } from "./schedule/lesson-transition.service";
 import { LESSON_SETTLEMENT_PORT } from "./commerce/lesson-settlement.port";
 import { LessonSettlementRepository } from "./commerce/lesson-settlement.repository";
@@ -178,7 +177,6 @@ import { PaymentReversalService } from "./commerce/payment-reversal.service";
     LessonRequiredFieldValidator,
     LessonCommandService,
     LessonSeriesCommandService,
-    LessonTransitionFinancialService,
     LessonTransitionService,
     LessonSettlementRepository,
     LessonSettlementService,
