@@ -49,6 +49,10 @@ History-aware Gitleaks gate остаётся красным. Скан 735 ком
 3. Владелец явно разрешает coordinated Git history rewrite и force-push; перед операцией все участники предупреждаются о необходимости fresh clone/rebase.
 4. После rewrite повторяются history-aware Gitleaks, полный regression/security gate, Windows/Android release build, signature/install/launch, hashes и final smoke.
 
+Изолированная репетиция rewrite уже прошла: 761/761 reachable commits, 4/4 heads,
+22/22 tags, byte-identical текущий HEAD tree и history-aware Gitleaks=0. Проверенный
+lease-based runbook записан в `docs/audits/v7-history-rewrite-rehearsal.md`.
+
 ## Зафиксированные hardening-изменения
 
 - `js-yaml`/`uuid` dependency overrides закрывают npm advisories.
