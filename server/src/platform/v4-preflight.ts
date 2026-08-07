@@ -579,6 +579,80 @@ function commerceChecks(): CheckDefinition[] {
          where abs(stored.balance - computed.balance) > 0.01
          order by stored.student_id`,
     },
+    {
+      id: "commerce.v7-subscription-funding-gap",
+      owner: "SYS-COMMERCE",
+      severity: "blocker",
+      description: "Every subscription has a canonical payer and funding mode.",
+      requires: {
+        subscriptions: ["id", "student_id", "payer_student_id", "funding_mode"],
+      },
+      sql: `
+        select id::text as entity_id, student_id::text as related_id,
+               'payer_or_funding_missing'::text as detail
+        from app.subscriptions
+        where payer_student_id is null or funding_mode is null
+        order by id`,
+    },
+    {
+      id: "commerce.v7-payment-linkage-drift",
+      owner: "SYS-COMMERCE",
+      severity: "blocker",
+      description: "Legacy actual payment and v7 paid record link exactly once.",
+      requires: {
+        payments: [
+          "id", "student_id", "amount_minor", "payment_record_id", "deleted_at",
+        ],
+        client_payment_records: [
+          "id", "student_id", "amount_minor", "status", "actual_payment_id",
+        ],
+      },
+      sql: `
+        select payment.id::text as entity_id, record.id::text as related_id,
+               'payment_record_linkage_mismatch'::text as detail
+        from app.payments payment
+        left join app.client_payment_records record
+          on record.actual_payment_id = payment.id
+        where payment.deleted_at is null and payment.amount_minor > 0
+          and (
+            record.id is null
+            or payment.payment_record_id is distinct from record.id
+            or record.student_id <> payment.student_id
+            or record.amount_minor <> payment.amount_minor
+            or record.status <> 'paid'
+          )
+        order by payment.id`,
+    },
+    {
+      id: "commerce.v7-payment-version-drift",
+      owner: "SYS-COMMERCE",
+      severity: "blocker",
+      description: "Payment record, latest status event and aggregate version agree.",
+      requires: {
+        client_payment_records: ["id", "status", "version"],
+        client_payment_status_events: [
+          "payment_record_id", "after_status", "aggregate_version",
+        ],
+        aggregate_versions: ["aggregate_type", "aggregate_id", "version"],
+      },
+      sql: `
+        select record.id::text as entity_id, null::text as related_id,
+               'payment_event_or_aggregate_version_mismatch'::text as detail
+        from app.client_payment_records record
+        left join lateral (
+          select event.after_status, event.aggregate_version
+          from app.client_payment_status_events event
+          where event.payment_record_id = record.id
+          order by event.aggregate_version desc limit 1
+        ) latest on true
+        left join app.aggregate_versions aggregate
+          on aggregate.aggregate_type = 'commerce:client-payment'
+         and aggregate.aggregate_id = record.id::text
+        where latest.aggregate_version is distinct from record.version
+           or latest.after_status is distinct from record.status
+           or aggregate.version is distinct from record.version
+        order by record.id`,
+    },
   ];
 }
 

@@ -3,13 +3,13 @@
 **Task:** T8.1.3
 **Mode:** `repeatable-read/read-only`
 **Result:** PASS
-**Scan digest:** `00d50966f0c646c9c3bc799885c37a163dc2770e0b24ea3dbb7ca19e4058aac5`
+**Scan digest:** `267c1cce8fb5635640c69e2b3e95a7b96a21ec04e1266240b7cdb18244010090`
 
 ## Summary
 
 | Metric | Count |
 |---|---:|
-| Checks | 16 |
+| Checks | 19 |
 | Findings | 0 |
 | Blockers | 0 |
 | Warnings | 0 |
@@ -25,6 +25,9 @@
 | `commerce.subscription-reference-gaps` | SYS-COMMERCE | blocker | 0 |
 | `commerce.subscription-snapshot-unprovable` | SYS-COMMERCE | blocker | 0 |
 | `commerce.subscription-usage-out-of-range` | SYS-COMMERCE | blocker | 0 |
+| `commerce.v7-payment-linkage-drift` | SYS-COMMERCE | blocker | 0 |
+| `commerce.v7-payment-version-drift` | SYS-COMMERCE | blocker | 0 |
+| `commerce.v7-subscription-funding-gap` | SYS-COMMERCE | blocker | 0 |
 | `crm.student-identity-missing` | SYS-CRM | blocker | 0 |
 | `crm.student-phone-ambiguous` | SYS-CRM | warning | 0 |
 | `schedule.active-teacher-branch-missing` | SYS-SCHEDULE | blocker | 0 |
@@ -44,7 +47,7 @@ amounts.
 - Transaction setting is read-only: true.
 - A no-row UPDATE probe was rejected with SQLSTATE `25006`.
 - Two scans in one repeatable-read snapshot were byte-stable: true.
-- Findings digest: `00d50966f0c646c9c3bc799885c37a163dc2770e0b24ea3dbb7ca19e4058aac5`.
+- Findings digest: `267c1cce8fb5635640c69e2b3e95a7b96a21ec04e1266240b7cdb18244010090`.
 
 ## Reproduction
 

@@ -18,6 +18,9 @@ describe("v4 reconciliation report", () => {
         "commerce.installment-facts",
         "commerce.obligation-facts",
         "commerce.lifecycle-facts",
+        "commerce.client-payment-records",
+        "commerce.client-payment-status-events",
+        "commerce.reporting-exclusions",
         "commerce.lesson-charge-facts",
         "commerce.teacher-compensation-facts",
         "commerce.reservation-facts",
@@ -27,7 +30,7 @@ describe("v4 reconciliation report", () => {
         "access.role-mappings",
       ]),
     );
-    expect(invariants.filter((invariant) => invariant.economic)).toHaveLength(9);
+    expect(invariants.filter((invariant) => invariant.economic)).toHaveLength(11);
   });
 
   it("signs canonical report content and detects tampering", () => {

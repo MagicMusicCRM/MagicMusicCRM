@@ -3,6 +3,10 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { Pool, PoolClient } from "pg";
 import { MigrationRunner } from "../../db/migration-runner";
+import {
+  backfillV7Commerce,
+  reconcileV7Commerce,
+} from "../../platform/v7-commerce-data";
 import { CommerceSchemaRepository } from "./commerce-schema.repository";
 import { IssuedCommercialSnapshot } from "./commerce-schema.types";
 
@@ -565,6 +569,94 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
             row.effect === "allow",
         ).map((row) => row.role),
       ).toEqual(["director", "system_admin"]);
+    } finally {
+      await client.query("rollback");
+      client.release();
+    }
+  });
+
+  it("backfills legacy payer/payment facts exactly once and detects version drift", async () => {
+    const client = await pool.connect();
+    await client.query("begin");
+    try {
+      const fixture = await createClientFixture(client);
+      const subscription = await client.query<{ id: string }>(
+        `
+          insert into app.subscriptions (
+            student_id, lessons_total, lessons_used, status
+          ) values ($1, 12, 0, 'active') returning id
+        `,
+        [fixture.studentId],
+      );
+      const payment = await client.query<{ id: string }>(
+        `
+          insert into app.payments (
+            student_id, amount_minor, currency, method, payment_date,
+            issued_subscription_id, external_id, created_by
+          ) values (
+            $1, 3000000, 'RUB', 'cashless',
+            '2026-08-07T10:00:00Z', $2, $3, $4
+          ) returning id
+        `,
+        [
+          fixture.studentId,
+          subscription.rows[0]!.id,
+          `v7-backfill-${randomUUID()}`,
+          fixture.managerId,
+        ],
+      );
+
+      expect(await backfillV7Commerce(client)).toEqual({
+        subscriptionsBackfilled: 1,
+        paymentsBackfilled: 1,
+        reviewRows: 0,
+      });
+      expect(await backfillV7Commerce(client)).toEqual({
+        subscriptionsBackfilled: 0,
+        paymentsBackfilled: 0,
+        reviewRows: 0,
+      });
+      expect(await reconcileV7Commerce(client)).toEqual([]);
+
+      const record = await client.query<{
+        id: string;
+        amount_minor: string;
+        status: string;
+        funding_mode: string;
+        payer_student_id: string;
+      }>(
+        `
+          select record.id, record.amount_minor, record.status,
+                 subscription.funding_mode, subscription.payer_student_id
+          from app.client_payment_records record
+          join app.subscriptions subscription
+            on subscription.id = record.issued_subscription_id
+          where record.actual_payment_id = $1
+        `,
+        [payment.rows[0]!.id],
+      );
+      expect(record.rows[0]).toMatchObject({
+        id: payment.rows[0]!.id,
+        amount_minor: "3000000",
+        status: "paid",
+        funding_mode: "legacy",
+        payer_student_id: fixture.studentId,
+      });
+
+      await client.query(
+        `
+          update app.aggregate_versions set version = 99
+          where aggregate_type = 'commerce:client-payment'
+            and aggregate_id = $1
+        `,
+        [record.rows[0]!.id],
+      );
+      expect(await reconcileV7Commerce(client)).toEqual([
+        expect.objectContaining({
+          issueCode: "payment.event_version_mismatch",
+          entityId: record.rows[0]!.id,
+        }),
+      ]);
     } finally {
       await client.query("rollback");
       client.release();

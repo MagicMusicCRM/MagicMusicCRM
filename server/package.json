@@ -18,6 +18,8 @@
     "v4:migrate:dry-run": "ts-node src/platform/v4-migrate-dry-run.ts",
     "v4:preflight": "ts-node src/platform/v4-preflight.ts",
     "v4:reconcile": "ts-node src/platform/v4-reconcile.ts",
+    "v7:backfill": "ts-node src/platform/v7-commerce-data.ts --apply",
+    "v7:reconcile": "ts-node src/platform/v7-commerce-data.ts",
     "v4:shadow-compare": "ts-node src/platform/v4-shadow-compare.ts",
     "v4:access-coverage": "ts-node src/access-control/v4-access-coverage.ts",
     "start": "node dist/main.js",

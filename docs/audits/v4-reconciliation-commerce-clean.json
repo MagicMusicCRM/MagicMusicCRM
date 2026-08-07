@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "task": "T8.1.5",
-  "generatedAt": "2026-07-30T10:31:41.535Z",
+  "generatedAt": "2026-08-07T01:28:35.736Z",
   "mode": "fixture",
   "source": "clean:source",
   "target": "clean:target",
@@ -11,9 +11,9 @@
     "unexplainedFacts": 0
   },
   "summary": {
-    "invariants": 10,
-    "sourceFacts": 10,
-    "targetFacts": 10,
+    "invariants": 13,
+    "sourceFacts": 13,
+    "targetFacts": 13,
     "invariantsWithDrift": 0,
     "unexplainedDiff": 0
   },
@@ -103,6 +103,42 @@
       "unexplainedDiff": []
     },
     {
+      "id": "commerce.client-payment-records",
+      "owner": "SYS-COMMERCE",
+      "economic": true,
+      "tolerance": 0,
+      "description": "Three-state client payment aggregates remain identical.",
+      "sourceCount": 1,
+      "targetCount": 1,
+      "sourceDigestSha256": "6aacb03cf868af0fcee96b288e46eed26a8298b2ff289fce85f41c534ab5265b",
+      "targetDigestSha256": "6aacb03cf868af0fcee96b288e46eed26a8298b2ff289fce85f41c534ab5265b",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "commerce.client-payment-status-events",
+      "owner": "SYS-COMMERCE",
+      "economic": false,
+      "tolerance": 0,
+      "description": "Payment status history and reasons remain identical.",
+      "sourceCount": 1,
+      "targetCount": 1,
+      "sourceDigestSha256": "dc945bab9dd6248cb00fe09412715e6eb91d4d7540e92c7ea5951a0038d071f1",
+      "targetDigestSha256": "dc945bab9dd6248cb00fe09412715e6eb91d4d7540e92c7ea5951a0038d071f1",
+      "unexplainedDiff": []
+    },
+    {
+      "id": "commerce.reporting-exclusions",
+      "owner": "SYS-COMMERCE",
+      "economic": true,
+      "tolerance": 0,
+      "description": "Reporting source/counterpart exclusions remain identical.",
+      "sourceCount": 1,
+      "targetCount": 1,
+      "sourceDigestSha256": "bd811d8164c1bba7a4970d733ec8ff1f3d57268443795d0a75909e19a78bf859",
+      "targetDigestSha256": "bd811d8164c1bba7a4970d733ec8ff1f3d57268443795d0a75909e19a78bf859",
+      "unexplainedDiff": []
+    },
+    {
       "id": "commerce.lesson-charge-facts",
       "owner": "SYS-COMMERCE",
       "economic": true,
@@ -141,9 +177,9 @@
   ],
   "signature": {
     "algorithm": "Ed25519",
-    "contentSha256": "0f7d94b5ee3eea27970ec4a7e1ee96f19e364e9e687d08db78abdb6a8e91d9f6",
-    "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAP49QEzKJihnKL8lGCl1z/DTvTIyYFu0XrtcXjhSxrYQ=\n-----END PUBLIC KEY-----\n",
-    "valueBase64": "IPyFyxPoayve+k9yT0MuMZ7MW8sNtxpYoSGleMz58sd99zdA+7cB4uswpvrDTFEcKBiozpEqGTBUrRScSYhmDw==",
+    "contentSha256": "12e37dac7d96f0344647a02c8c5a9f296f72b857bc9ea1c5a15b31722d5142b4",
+    "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAutyjftGmTJTjhpVI5p4mO8EEVKW/GLFcm0nzMXNLjh8=\n-----END PUBLIC KEY-----\n",
+    "valueBase64": "6rvW7OpwcqMSwKXUQ6SrOpA1ShVJ8nDc9rdYH2s8uk/+Cu76N9A5LECSIph2XByfDW3939+00NzpSZ/j4lT3BQ==",
     "verified": true
   }
 }

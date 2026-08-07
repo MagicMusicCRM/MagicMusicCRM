@@ -92,7 +92,7 @@ graph TD
   - **Зависимости**: T1.1.2.
   - **Приоритет**: P0.
 
-- [ ] **T1.1.4** [REQ-REPORT-101]: Реализовать lossless backfill и v7 reconciliation
+- [x] **T1.1.4** [REQ-REPORT-101]: Реализовать lossless backfill и v7 reconciliation
   - **Описание**: Backfill payer=recipient/mode=legacy, paid payment records и aggregate versions; расширить preflight/reconcile без догадок о неоднозначных links.
   - **Входные данные**: T1.1.2, [`access_audit_v7.md` §7](04_SYSTEM_DESIGN/access_audit_v7.md).
   - **Выходные данные**: backfill SQL/service, reconciliation checks и fixtures.

@@ -140,6 +140,7 @@ const invariants: InvariantDefinition[] = [
         'issuedSubscriptionId', issued_subscription_id::text,
         'idempotencyRef', idempotency_ref,
         'requestFingerprint', request_fingerprint
+        ,'paymentRecordId', payment_record_id::text
       `,
       "where deleted_at is null",
     ),
@@ -203,6 +204,9 @@ const invariants: InvariantDefinition[] = [
         'finalPriceMinor', final_price_minor::text,
         'commercialSnapshot', commercial_snapshot,
         'version', version::text
+        ,'payerStudentId', payer_student_id::text
+        ,'fundingMode', funding_mode
+        ,'purchaseReason', purchase_reason
       `,
     ),
   },
@@ -264,6 +268,63 @@ const invariants: InvariantDefinition[] = [
     ),
   },
   {
+    id: "commerce.client-payment-records",
+    owner: "SYS-COMMERCE",
+    economic: true,
+    description: "Three-state client payment aggregates remain identical.",
+    sourceSql: sourceSql(
+      "client_payment_records",
+      `
+        'studentId', student_id::text,
+        'issuedSubscriptionId', issued_subscription_id::text,
+        'installmentId', installment_id::text,
+        'amountMinor', amount_minor::text,
+        'currencyCode', currency_code,
+        'status', status,
+        'dueAt', due_at::text,
+        'actualPaymentId', actual_payment_id::text,
+        'version', version::text
+      `,
+    ),
+  },
+  {
+    id: "commerce.client-payment-status-events",
+    owner: "SYS-COMMERCE",
+    economic: false,
+    description: "Payment status history and reasons remain identical.",
+    sourceSql: sourceSql(
+      "client_payment_status_events",
+      `
+        'paymentRecordId', payment_record_id::text,
+        'beforeStatus', before_status,
+        'afterStatus', after_status,
+        'reason', reason,
+        'actorUserId', actor_user_id::text,
+        'aggregateVersion', aggregate_version::text,
+        'actualPaymentId', actual_payment_id::text,
+        'occurredAt', occurred_at::text
+      `,
+    ),
+  },
+  {
+    id: "commerce.reporting-exclusions",
+    owner: "SYS-COMMERCE",
+    economic: true,
+    description: "Reporting source/counterpart exclusions remain identical.",
+    sourceSql: sourceSql(
+      "commerce_reporting_exclusions",
+      `
+        'sourceKind', source_kind,
+        'sourceId', source_id::text,
+        'counterpartKind', counterpart_kind,
+        'counterpartId', counterpart_id::text,
+        'reason', reason,
+        'actorUserId', actor_user_id::text,
+        'occurredAt', occurred_at::text
+      `,
+    ),
+  },
+  {
     id: "commerce.lesson-charge-facts",
     owner: "SYS-COMMERCE",
     economic: true,
@@ -281,6 +342,12 @@ const invariants: InvariantDefinition[] = [
         'units', units::text,
         'currencyCode', currency_code,
         'createdAt', created_at::text
+        ,'settlementTypeKey', settlement_type_key
+        ,'settlementLabel', settlement_label
+        ,'settlementColorToken', settlement_color_token
+        ,'hourShareBasisPoints', hour_share_basis_points
+        ,'fixedPenaltyMinor', fixed_penalty_minor::text
+        ,'configurationRevisionId', configuration_revision_id::text
       `,
     ),
   },
@@ -301,6 +368,12 @@ const invariants: InvariantDefinition[] = [
         'amountMinor', amount_minor::text,
         'currencyCode', currency_code,
         'createdAt', created_at::text
+        ,'compensationRuleKey', compensation_rule_key
+        ,'compensationRuleLabel', compensation_rule_label
+        ,'compensationMode', compensation_mode
+        ,'compensationDefaultValue', compensation_default_value::text
+        ,'compensationActualValue', compensation_actual_value::text
+        ,'configurationRevisionId', configuration_revision_id::text
       `,
     ),
   },

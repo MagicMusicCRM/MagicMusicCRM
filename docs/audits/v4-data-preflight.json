@@ -3,7 +3,7 @@
   "task": "T8.1.3",
   "mode": "repeatable-read/read-only",
   "summary": {
-    "checks": 16,
+    "checks": 19,
     "findings": 0,
     "blockerFindings": 0,
     "warningFindings": 0
@@ -62,6 +62,30 @@
       "owner": "SYS-COMMERCE",
       "severity": "blocker",
       "description": "Issued subscription usage is negative or exceeds its total capacity.",
+      "count": 0,
+      "rows": []
+    },
+    {
+      "id": "commerce.v7-payment-linkage-drift",
+      "owner": "SYS-COMMERCE",
+      "severity": "blocker",
+      "description": "Legacy actual payment and v7 paid record link exactly once.",
+      "count": 0,
+      "rows": []
+    },
+    {
+      "id": "commerce.v7-payment-version-drift",
+      "owner": "SYS-COMMERCE",
+      "severity": "blocker",
+      "description": "Payment record, latest status event and aggregate version agree.",
+      "count": 0,
+      "rows": []
+    },
+    {
+      "id": "commerce.v7-subscription-funding-gap",
+      "owner": "SYS-COMMERCE",
+      "severity": "blocker",
+      "description": "Every subscription has a canonical payer and funding mode.",
       "count": 0,
       "rows": []
     },
@@ -125,7 +149,7 @@
       "id": "workflow.task-audience-ambiguous",
       "owner": "SYS-WORKFLOW",
       "severity": "blocker",
-      "description": "Active task has neither an assignee nor a branch audience anchor.",
+      "description": "Open task has neither an assignee nor a branch audience anchor.",
       "count": 0,
       "rows": []
     },
@@ -143,6 +167,6 @@
     "writeProbeRejected": true,
     "writeProbeSqlState": "25006",
     "repeatedScanStable": true,
-    "scanDigestSha256": "00d50966f0c646c9c3bc799885c37a163dc2770e0b24ea3dbb7ca19e4058aac5"
+    "scanDigestSha256": "267c1cce8fb5635640c69e2b3e95a7b96a21ec04e1266240b7cdb18244010090"
   }
 }

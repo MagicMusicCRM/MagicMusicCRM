@@ -36,6 +36,21 @@ values
     '{"issuedSubscriptionId":"subscription-1","eventType":"issue","aggregateVersion":"1"}'
   ),
   (
+    'commerce.client-payment-records',
+    'payment-record-1',
+    '{"studentId":"student-1","amountMinor":"100000","status":"paid"}'
+  ),
+  (
+    'commerce.client-payment-status-events',
+    'payment-event-1',
+    '{"paymentRecordId":"payment-record-1","afterStatus":"paid","aggregateVersion":"1"}'
+  ),
+  (
+    'commerce.reporting-exclusions',
+    'exclusion-1',
+    '{"sourceKind":"payment","sourceId":"payment-1","counterpartKind":"account_adjustment"}'
+  ),
+  (
     'commerce.lesson-charge-facts',
     'lesson-charge-1',
     '{"lessonId":"lesson-1","chargeType":"subscription","units":"1"}'
