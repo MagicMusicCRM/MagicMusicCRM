@@ -841,6 +841,13 @@ async function cleanup(pool: Pool, fixture: Awaited<ReturnType<typeof createFixt
       [fixture.managerId],
     );
     await client.query(
+      `delete from app.lesson_transitions where lesson_id in (
+         select lesson.id from app.lessons lesson join app.schedule_series series
+           on series.id = lesson.series_id join app.schedule_plans plan on plan.id = series.plan_id
+         where plan.created_by = $1)`,
+      [fixture.managerId],
+    );
+    await client.query(
       `delete from app.lesson_snapshot_participants where lesson_id in (
          select lesson.id from app.lessons lesson join app.schedule_series series
            on series.id = lesson.series_id join app.schedule_plans plan on plan.id = series.plan_id

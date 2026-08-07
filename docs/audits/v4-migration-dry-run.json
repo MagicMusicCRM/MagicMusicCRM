@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "task": "T8.3.2",
   "mode": "repeatable-read/read-only",
-  "generatedAt": "2026-08-01T12:48:24.692Z",
+  "generatedAt": "2026-08-07T10:24:01.944Z",
   "requiredMigrations": [
     "0076_capability_registry",
     "0083_lesson_lifecycle_schema",
@@ -10,7 +10,12 @@
     "0089_commerce_catalog_snapshot_ledger",
     "0090_commerce_package_aggregate_versions",
     "0091_commerce_issued_subscription_aggregate_versions",
-    "0092_shared_tasks_audience_schema"
+    "0092_shared_tasks_audience_schema",
+    "0097_unified_crm_configuration",
+    "0098_admin_persona_boundary",
+    "0103_v7_client_commerce",
+    "0106_v7_payment_lifecycle",
+    "0107_v7_payment_reversal"
   ],
   "missingMigrations": [],
   "invariants": [
@@ -22,8 +27,8 @@
     },
     {
       "id": "access.capability-registry-packages",
-      "sourceCount": 20,
-      "targetCount": 20,
+      "sourceCount": 25,
+      "targetCount": 25,
       "violations": 0
     },
     {
@@ -65,13 +70,13 @@
   ],
   "summary": {
     "invariants": 8,
-    "sourceRows": 21,
-    "targetRows": 21,
+    "sourceRows": 26,
+    "targetRows": 26,
     "violations": 0,
     "pendingBatches": 0
   },
   "proof": {
     "transactionReadOnly": true,
-    "digestSha256": "401db33ec964478be387f60873ca270ea11b97720a84ef34b6fc29fa854427cf"
+    "digestSha256": "090fa256c640ceb7b9f92b3c878a035255ecc3703b9f5b99ea110b51520d67ff"
   }
 }

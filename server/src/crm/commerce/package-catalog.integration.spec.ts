@@ -832,6 +832,25 @@ async function cleanupFixture(
       packageIds,
       "uuid",
     );
+    if (packageIds.length > 0) {
+      await client.query(
+        `delete from app.issued_subscription_aggregate_version_backfill
+         where subscription_id in (
+           select id from app.subscriptions
+           where package_id = any($1::uuid[])
+         )`,
+        [packageIds],
+      );
+      await client.query(
+        `delete from app.aggregate_versions
+         where aggregate_type = 'commerce:issued-subscription'
+           and aggregate_id in (
+             select id::text from app.subscriptions
+             where package_id = any($1::uuid[])
+           )`,
+        [packageIds],
+      );
+    }
     await deleteByIds(
       client,
       "app.client_payment_status_events",

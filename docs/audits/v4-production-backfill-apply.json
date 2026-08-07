@@ -1,18 +1,25 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "task": "T8.3.1",
   "mode": "apply",
-  "generatedAt": "2026-08-01T11:29:51.248Z",
+  "generatedAt": "2026-08-07T10:23:58.172Z",
   "summary": {
-    "candidates": 0,
-    "applied": 0,
+    "candidates": 1,
+    "applied": 1,
     "reviewQueue": 0
   },
-  "candidates": [],
+  "candidates": [
+    {
+      "kind": "access-link",
+      "entityId": "4ae28b6d-f622-4a42-a81d-571f682c27b2",
+      "relatedId": "558466f9-2a23-49ae-a4a0-e60fdaa6323e"
+    }
+  ],
   "reviewQueue": [],
+  "manualMappingTable": [],
   "proof": {
     "transaction": "repeatable-read",
     "deterministicOnly": true,
-    "reportDigestSha256": "7544560bbca4713d63d19545d6aa278d0bd8db0f5d1074a4a4dd96cdc144dbc2"
+    "reportDigestSha256": "c04aec36b03ae42cbcc0a346f2b6612b7570e11fd8c71dd94d55a3fc4000f2d1"
   }
 }

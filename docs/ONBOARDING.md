@@ -691,7 +691,7 @@ Generated project graph:
 Local dashboard may be available if the custom server is still running:
 
 ```text
-http://127.0.0.1:5175/?token=9756091ea7f44d418dc1c85f3deb7cac
+http://127.0.0.1:5175/?token=<local-session-token>
 ```
 
 The token/server are local session details and can change. If the dashboard is blank, use the production-built dashboard/static server workaround rather than relying on the Vite dev server; the earlier failure mode was raw TSX served for `/src/main.tsx`.

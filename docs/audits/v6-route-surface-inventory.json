@@ -757,7 +757,7 @@
         "retry": true
       },
       "file": "lib/features/crm/presentation/client_card/client_payment_form.dart",
-      "line": 539
+      "line": 553
     },
     {
       "kind": "dialog",
@@ -901,7 +901,7 @@
         "retry": true
       },
       "file": "lib/features/crm/presentation/client_card/client_payment_form.dart",
-      "line": 752
+      "line": 770
     },
     {
       "kind": "dialog",

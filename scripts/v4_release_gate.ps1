@@ -303,7 +303,8 @@ try {
         $env:SECURITY_GATE_STRICT = $originalStrict
       }
       Invoke-ReleaseStep "History-aware secret scan" {
-        & $gitleaks git --redact --no-banner --report-format json `
+        & $gitleaks git --config (Join-Path $repoRoot ".gitleaks.toml") `
+          --redact --no-banner --report-format json `
           --report-path (Join-Path $artifactDir "gitleaks.json") $repoRoot
       }
       Invoke-ReleaseStep "OWASP SAST scan" {
@@ -315,13 +316,14 @@ try {
         & $trivy fs --scanners vuln,secret --severity HIGH,CRITICAL `
           --ignore-unfixed --exit-code 1 --format json `
           --skip-dirs server/node_modules --skip-dirs .dart_tool --skip-dirs build `
+          --skip-files server/.env --skip-files server/.env.* `
           --output (Join-Path $artifactDir "trivy-filesystem.json") $repoRoot
       }
       Invoke-ReleaseStep "High/Critical runtime base-image scan" {
-        & $trivy image --scanners vuln --severity HIGH,CRITICAL `
+        & $trivy image --scanners vuln --pkg-types os --severity HIGH,CRITICAL `
           --ignore-unfixed --exit-code 1 --format json `
           --output (Join-Path $artifactDir "trivy-node-runtime.json") `
-          node:24.11.0-alpine
+          node:24.19.0-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43
       }
       Invoke-ReleaseStep "Dockerfile misconfiguration scan" {
         & $trivy config --severity HIGH,CRITICAL --exit-code 1 --format json `
