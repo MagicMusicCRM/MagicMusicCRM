@@ -37,6 +37,10 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
   bool _loadingRooms = false;
   String? _roomsError;
   List<Map<String, dynamic>> _rooms = const [];
+  bool _loadingDisciplines = false;
+  String? _disciplinesError;
+  List<Map<String, dynamic>> _disciplines = const [];
+  List<Map<String, dynamic>> _allDisciplines = const [];
 
   static final List<int> _offsetOptions = List.generate(
     (14 * 60 + 12 * 60) ~/ 30 + 1,
@@ -52,6 +56,7 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
       _utcOffsetMinutes =
           (widget.branch!['utc_offset_minutes'] as num?)?.toInt() ?? 180;
       _loadRooms();
+      _loadDisciplines();
     }
   }
 
@@ -92,6 +97,77 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
       ),
     );
     if (saved == true) await _loadRooms();
+  }
+
+  Future<void> _loadDisciplines() async {
+    final id = widget.branch?['id']?.toString();
+    if (id == null || id.isEmpty) return;
+    setState(() {
+      _loadingDisciplines = true;
+      _disciplinesError = null;
+    });
+    try {
+      final crm = ref.read(magicCrmServiceProvider);
+      final values = await Future.wait([
+        crm.listBranchDisciplines(id),
+        crm.listDisciplines(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _disciplines = values[0];
+        _allDisciplines = values[1];
+        _loadingDisciplines = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadingDisciplines = false;
+        _disciplinesError = '$error';
+      });
+    }
+  }
+
+  Future<void> _addDiscipline() async {
+    final branchId = widget.branch?['id']?.toString();
+    if (branchId == null || branchId.isEmpty) return;
+    final assigned = _disciplines
+        .map((item) => item['discipline_id']?.toString())
+        .toSet();
+    final available = _allDisciplines
+        .where((item) => !assigned.contains(item['id']?.toString()))
+        .toList();
+    if (available.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Все доступные дисциплины уже добавлены')),
+      );
+      return;
+    }
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Добавить дисциплину'),
+        children: [
+          for (final discipline in available)
+            SimpleDialogOption(
+              onPressed: () =>
+                  Navigator.pop(context, discipline['id']?.toString()),
+              child: Text(discipline['name']?.toString() ?? '—'),
+            ),
+        ],
+      ),
+    );
+    if (selected == null || !mounted) return;
+    try {
+      await ref
+          .read(magicCrmServiceProvider)
+          .assignBranchDiscipline(branchId: branchId, disciplineId: selected);
+      await _loadDisciplines();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось добавить дисциплину: $error')),
+      );
+    }
   }
 
   @override
@@ -185,6 +261,52 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
                 },
               ),
               if (isEdit) ...[
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Дисциплины филиала',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    FilledButton.tonalIcon(
+                      onPressed: _loadingDisciplines ? null : _addDiscipline,
+                      icon: const Icon(Icons.add_rounded),
+                      label: const Text('Добавить'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (_loadingDisciplines)
+                  const Center(child: CircularProgressIndicator())
+                else if (_disciplinesError != null)
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text('Не удалось загрузить дисциплины.'),
+                      ),
+                      TextButton(
+                        onPressed: _loadDisciplines,
+                        child: const Text('Повторить'),
+                      ),
+                    ],
+                  )
+                else if (_disciplines.isEmpty)
+                  const Text('Дисциплин пока нет.')
+                else
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final discipline in _disciplines)
+                        Chip(
+                          label: Text(
+                            discipline['name']?.toString() ?? 'Дисциплина',
+                          ),
+                        ),
+                    ],
+                  ),
                 const SizedBox(height: 20),
                 Row(
                   children: [

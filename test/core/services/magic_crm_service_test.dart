@@ -2445,6 +2445,24 @@ void main() {
       expect(adapter.requests.single.queryParameters, isEmpty);
     });
 
+    test('assignBranchDiscipline posts selected dictionary value', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/crm/branches/branch-a/disciplines',
+          statusCode: 201,
+          body: {'id': 'bd-1', 'disciplineId': 'disc-1', 'sortOrder': 0},
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      await service.assignBranchDiscipline(
+        branchId: 'branch-a',
+        disciplineId: 'disc-1',
+      );
+
+      expect(adapter.requests.single.body, {'disciplineId': 'disc-1'});
+    });
+
     test(
       'getLeadStatusHistory requests /crm/leads/{id}/status-history and maps items',
       () async {

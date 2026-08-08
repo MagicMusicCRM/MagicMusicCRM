@@ -43,6 +43,16 @@ extension MagicCrmOrg on MagicCrmService {
     ).map((item) => {'id': item['id'], 'name': item['name']}).toList();
   }
 
+  Future<void> assignBranchDiscipline({
+    required String branchId,
+    required String disciplineId,
+  }) async {
+    await _api.post<Map<String, dynamic>>(
+      '/crm/branches/$branchId/disciplines',
+      data: {'disciplineId': disciplineId},
+    );
+  }
+
   Future<Map<String, dynamic>> createBranch({
     required String name,
     String? address,
