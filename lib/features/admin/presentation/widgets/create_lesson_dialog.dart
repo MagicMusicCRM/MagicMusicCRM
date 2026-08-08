@@ -110,6 +110,7 @@ class CreateLessonDialog extends ConsumerStatefulWidget {
 }
 
 class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
+  final _scrollController = ScrollController(keepScrollOffset: false);
   bool _loading = false;
   bool _saving = false;
 
@@ -238,6 +239,12 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
       _selectedSubscriptionId = lesson['subscription_id']?.toString();
     }
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   String get _dialogTitle => _isEdit
@@ -700,6 +707,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
             : width - 80,
         height: widget.pageMode ? double.maxFinite : null,
         child: SingleChildScrollView(
+          controller: _scrollController,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,

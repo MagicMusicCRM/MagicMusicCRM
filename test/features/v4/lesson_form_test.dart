@@ -374,7 +374,10 @@ Future<void> _pumpDialog(
   expect(ModalRoute.of(formContext)?.settings.name, 'lesson-editor');
   expect(find.byType(BackButton), findsOneWidget);
   expect(
-    find.ancestor(of: find.byType(AlertDialog), matching: find.byType(SafeArea)),
+    find.ancestor(
+      of: find.byType(AlertDialog),
+      matching: find.byType(SafeArea),
+    ),
     findsOneWidget,
   );
 }
@@ -427,6 +430,18 @@ Future<void> _tapCreate(WidgetTester tester) async {
 
 void main() {
   setUpAll(() => initializeDateFormatting('ru'));
+
+  testWidgets('new lesson always opens at the required client field', (
+    tester,
+  ) async {
+    await _pumpDialog(tester, _FakeApiClient());
+
+    final scroll = tester.widget<SingleChildScrollView>(
+      find.byType(SingleChildScrollView).first,
+    );
+    expect(scroll.controller?.keepScrollOffset, isFalse);
+    expect(find.byKey(const ValueKey('lesson-client-field')), findsOneWidget);
+  });
 
   testWidgets('единый Client selector отправляет Lead и trial независимо', (
     tester,
