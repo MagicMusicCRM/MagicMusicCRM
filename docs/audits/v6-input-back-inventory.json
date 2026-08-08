@@ -1244,7 +1244,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/admin/presentation/widgets/staff_detail_dialog.dart",
-      "line": 272
+      "line": 267
     },
     {
       "kind": "SingleChildScrollView",
@@ -1255,7 +1255,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/admin/presentation/widgets/teacher_detail_dialog.dart",
-      "line": 404
+      "line": 398
     },
     {
       "kind": "SingleChildScrollView",
@@ -3150,7 +3150,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/admin/presentation/widgets/provision_access_dialog.dart",
-      "line": 74
+      "line": 81
     },
     {
       "kind": "Form",
@@ -3159,7 +3159,7 @@
       "ahead_of_time": true,
       "status": "predictive-back-capable",
       "file": "lib/features/admin/presentation/widgets/provision_access_dialog.dart",
-      "line": 92
+      "line": 99
     },
     {
       "kind": "imperative-exit",
@@ -3168,7 +3168,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/admin/presentation/widgets/provision_access_dialog.dart",
-      "line": 168
+      "line": 175
     },
     {
       "kind": "imperative-exit",
@@ -3213,7 +3213,7 @@
       "ahead_of_time": true,
       "status": "predictive-back-capable",
       "file": "lib/features/admin/presentation/widgets/staff_detail_dialog.dart",
-      "line": 273
+      "line": 268
     },
     {
       "kind": "imperative-exit",
@@ -3222,7 +3222,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/admin/presentation/widgets/staff_detail_dialog.dart",
-      "line": 438
+      "line": 433
     },
     {
       "kind": "imperative-exit",
@@ -3240,7 +3240,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/admin/presentation/widgets/teacher_detail_dialog.dart",
-      "line": 360
+      "line": 354
     },
     {
       "kind": "imperative-exit",
@@ -3249,7 +3249,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/admin/presentation/widgets/teacher_detail_dialog.dart",
-      "line": 364
+      "line": 358
     },
     {
       "kind": "imperative-exit",
@@ -3258,7 +3258,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/admin/presentation/widgets/teacher_detail_dialog.dart",
-      "line": 526
+      "line": 520
     },
     {
       "kind": "imperative-exit",

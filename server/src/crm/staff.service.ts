@@ -354,7 +354,7 @@ export class StaffService {
   ) {
     this.policy.assertCanManageSystemSettings(actor);
     const role = dto.role;
-    if (!role || !canAssignRole(actor.role, role)) {
+    if (!role || role === "teacher" || !canAssignRole(actor.role, role)) {
       throw new ForbiddenException(
         "Недостаточно прав для назначения этой роли сотруднику.",
       );

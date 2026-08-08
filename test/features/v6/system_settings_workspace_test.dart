@@ -474,6 +474,23 @@ void main() {
       find.widgetWithText(TextFormField, 'Email для входа *'),
     );
     expect(emailField.controller!.text, isEmpty);
+    final accessDialog = find.widgetWithText(
+      AlertDialog,
+      'Создать доступ: Смирнова Ольга',
+    );
+    final accessRole = tester.widget<DropdownButtonFormField<String>>(
+      find
+          .descendant(
+            of: accessDialog,
+            matching: find.byType(DropdownButtonFormField<String>),
+          )
+          .first,
+    );
+    expect(accessRole.initialValue, 'admin');
+    expect(
+      find.descendant(of: accessDialog, matching: find.text('Преподаватель')),
+      findsNothing,
+    );
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Email для входа *'),
       'legacy.staff@example.test',

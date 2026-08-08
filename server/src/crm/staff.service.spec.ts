@@ -494,6 +494,24 @@ describe("StaffService", () => {
     );
   });
 
+  it("never provisions teacher access for a staff record", async () => {
+    const { service, query, passwords } = createService();
+
+    await expect(
+      service.provisionAccess(
+        { userId: "director-a", role: "director" },
+        "staff-a",
+        {
+          email: "staff@example.com",
+          password: "password-123",
+          role: "teacher",
+        },
+      ),
+    ).rejects.toThrow("Недостаточно прав");
+    expect(passwords.hash).not.toHaveBeenCalled();
+    expect(query).not.toHaveBeenCalled();
+  });
+
   it("hides imported placeholder email in staff projections", async () => {
     const { service } = createService([
       {

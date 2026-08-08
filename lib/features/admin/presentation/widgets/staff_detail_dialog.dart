@@ -156,18 +156,13 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
 
   Map<String, String> get _provisionRoles => switch (widget.currentRole) {
     'system_admin' => const {
-      'teacher': 'Преподаватель',
       'admin': 'Администратор',
       'manager': 'Управляющий',
       'director': 'Директор',
       'system_admin': 'Администратор системы',
     },
-    'director' => const {
-      'teacher': 'Преподаватель',
-      'admin': 'Администратор',
-      'manager': 'Управляющий',
-    },
-    _ => const {'teacher': 'Преподаватель', 'admin': 'Администратор'},
+    'director' => const {'admin': 'Администратор', 'manager': 'Управляющий'},
+    _ => const {'admin': 'Администратор'},
   };
 
   Future<void> _provisionAccess() async {

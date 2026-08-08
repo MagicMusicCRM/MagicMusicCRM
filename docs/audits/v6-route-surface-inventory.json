@@ -1333,7 +1333,7 @@
         "retry": false
       },
       "file": "lib/features/admin/presentation/widgets/teacher_detail_dialog.dart",
-      "line": 391
+      "line": 385
     },
     {
       "kind": "dialog",
@@ -2085,7 +2085,7 @@
         "retry": false
       },
       "file": "lib/features/admin/presentation/widgets/teacher_detail_dialog.dart",
-      "line": 353
+      "line": 347
     },
     {
       "kind": "dialog",

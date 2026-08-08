@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "task": "T8.1.2",
-  "source_digest_sha256": "59f784cc9065c85405ad8a78a85e601e3e9be36fc712ca678c17898a1c025937",
+  "source_digest_sha256": "75b4f26e46c3ba9a83c624f428245bbe265eb0c589bd1a13366cf9572b7270a4",
   "source_file_count": 751,
   "systems": [
     "SYS-APP",
@@ -18523,7 +18523,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/staff_detail_dialog.dart",
-      "line": 438
+      "line": 433
     },
     {
       "kind": "navigation-source",
@@ -19339,7 +19339,7 @@
       "owner": "SYS-APP",
       "status": "workspace-migration-pending",
       "file": "lib/features/admin/presentation/widgets/staff_detail_dialog.dart",
-      "line": 247
+      "line": 242
     },
     {
       "kind": "navigation-source",
