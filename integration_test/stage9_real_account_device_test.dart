@@ -8,8 +8,10 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/services/notification_service.dart';
+import 'package:magic_music_crm/core/widgets/app_logo.dart';
 import 'package:magic_music_crm/features/auth/data/services/magic_auth_service.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
+import 'package:magic_music_crm/features/teacher/presentation/widgets/teacher_students_widget.dart';
 import 'package:magic_music_crm/main.dart';
 
 import 'evidence_screenshot.dart';
@@ -67,8 +69,24 @@ void main() {
       );
       await _pumpUntilVisible(tester, find.text(readyLabel));
       _expectRoleShell(role);
+      if (tester.view.physicalSize.width / tester.view.devicePixelRatio >=
+          840) {
+        expect(find.byType(AppLogo), findsWidgets, reason: 'magic$number logo');
+      }
       await captureEvidence(tester, 'real-role-$number-$role');
       if (role == 'teacher') {
+        await tester.tap(find.text('Ученики').first);
+        await _pumpUntilVisible(tester, find.byType(TeacherStudentsWidget));
+        await _pumpUntilGone(
+          tester,
+          find.descendant(
+            of: find.byType(TeacherStudentsWidget),
+            matching: find.byType(CircularProgressIndicator),
+          ),
+          timeout: const Duration(minutes: 2),
+        );
+        expect(find.textContaining('Ошибка:'), findsNothing);
+        await captureEvidence(tester, 'real-role-2-teacher-students');
         await tester.tap(find.text('Расписание').first);
         await tester.pump(const Duration(seconds: 3));
         await captureEvidence(tester, 'real-role-2-teacher-schedule');
@@ -185,6 +203,19 @@ Future<void> _pumpUntilVisible(
     if (finder.evaluate().isNotEmpty) return;
   }
   throw TestFailure('Timed out waiting for $finder');
+}
+
+Future<void> _pumpUntilGone(
+  WidgetTester tester,
+  Finder finder, {
+  Duration timeout = const Duration(seconds: 45),
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (DateTime.now().isBefore(deadline)) {
+    await tester.pump(const Duration(milliseconds: 200));
+    if (finder.evaluate().isEmpty) return;
+  }
+  throw TestFailure('Timed out waiting for $finder to disappear');
 }
 
 class _NoopNotificationService extends NotificationService {

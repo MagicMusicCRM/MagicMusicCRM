@@ -132,9 +132,6 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
 
   String _completionType = 'standard.success';
   String _clientChargeType = 'none';
-  String _teacherCompensationType = 'none';
-  final _clientChargeController = TextEditingController(text: '0');
-  final _teacherCompensationController = TextEditingController(text: '0');
   LessonDecisionCatalog? _decisionCatalog;
   String? _settlementTypeKey;
   String? _compensationRuleKey;
@@ -157,6 +154,21 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     final type = _clientType;
     final id = _clientId;
     return type == null || id == null ? '' : '$type:$id';
+  }
+
+  List<Map<String, dynamic>> get _eligibleTeachers {
+    final branchId = _selectedBranchId;
+    if (branchId == null) return const [];
+    return _teachers
+        .where((teacher) {
+          if (teacher['status']?.toString() != 'active') return false;
+          final assignments = teacher['assigned_branches'];
+          return assignments is List &&
+              assignments.whereType<Map>().any(
+                (branch) => branch['id']?.toString() == branchId,
+              );
+        })
+        .toList(growable: false);
   }
 
   @override
@@ -223,23 +235,9 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
           lesson['completion_type']?.toString() ?? _completionType;
       _clientChargeType =
           lesson['client_charge_type']?.toString() ?? _clientChargeType;
-      _teacherCompensationType =
-          lesson['teacher_compensation_type']?.toString() ??
-          _teacherCompensationType;
-      _clientChargeController.text =
-          lesson['client_charge_value']?.toString() ?? '0';
-      _teacherCompensationController.text =
-          lesson['teacher_compensation_value']?.toString() ?? '0';
       _selectedSubscriptionId = lesson['subscription_id']?.toString();
     }
     _loadData();
-  }
-
-  @override
-  void dispose() {
-    _clientChargeController.dispose();
-    _teacherCompensationController.dispose();
-    super.dispose();
   }
 
   String get _dialogTitle => _isEdit
@@ -274,7 +272,16 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
       final branchId =
           _selectedBranchId ?? _branches.firstOrNull?['id']?.toString();
       if (branchId != null) {
-        if (mounted) setState(() => _selectedBranchId ??= branchId);
+        if (mounted) {
+          setState(() {
+            _selectedBranchId ??= branchId;
+            if (!_eligibleTeachers.any(
+              (teacher) => teacher['id']?.toString() == _selectedTeacherId,
+            )) {
+              _selectedTeacherId = null;
+            }
+          });
+        }
         await Future.wait([
           _loadRooms(branchId),
           _loadDecisionCatalog(branchId),
@@ -323,13 +330,14 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
       if (!catalog.settlementTypes.any(
         (item) => item.key == _settlementTypeKey,
       )) {
-        _settlementTypeKey = null;
+        _settlementTypeKey = catalog.settlementTypes.firstOrNull?.key;
       }
       if (!catalog.compensationRules.any(
         (item) => item.key == _compensationRuleKey,
       )) {
-        _compensationRuleKey = null;
+        _compensationRuleKey = catalog.compensationRules.firstOrNull?.key;
       }
+      _applyFundingDefault();
     });
   }
 
@@ -340,10 +348,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         setState(() {
           _subscriptions = [];
           _selectedSubscriptionId = null;
-          if (_clientChargeType == 'subscription') {
-            _clientChargeType = 'none';
-            _clientChargeController.text = '0';
-          }
+          _clientChargeType = 'none';
         });
       }
       return;
@@ -355,12 +360,17 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
       );
       if (!mounted) return;
       setState(() {
-        _subscriptions = rows;
+        _subscriptions = rows
+            .where((row) => row['status']?.toString() == 'active')
+            .toList(growable: false);
         if (_selectedSubscriptionId != null &&
-            !rows.any(
+            !_subscriptions.any(
               (row) => row['id']?.toString() == _selectedSubscriptionId,
             )) {
           _selectedSubscriptionId = null;
+        }
+        if (!_isEdit) {
+          _applyFundingDefault();
         }
       });
     } catch (error) {
@@ -368,12 +378,28 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     }
   }
 
+  void _applyFundingDefault() {
+    final settlement = _decisionCatalog?.settlementTypes
+        .where((item) => item.key == _settlementTypeKey)
+        .firstOrNull;
+    if (settlement?.hourShareBasisPoints == 0 &&
+        settlement?.fixedPenaltyMinor == '0') {
+      _clientChargeType = 'none';
+      _selectedSubscriptionId = null;
+      return;
+    }
+    if (_clientType == 'student' && _subscriptions.isNotEmpty) {
+      _clientChargeType = 'subscription';
+      _selectedSubscriptionId ??= _subscriptions.first['id']?.toString();
+    } else if (_clientType == 'student') {
+      _clientChargeType = 'personal_account';
+    }
+  }
+
   Future<void> _save() async {
     if (_saving) return;
     final clientId = _clientId;
     final clientType = _clientType;
-    final chargeValue = _parseAmount(_clientChargeController.text);
-    final compensationValue = _parseAmount(_teacherCompensationController.text);
     final missingSubscription =
         !_isEdit &&
         _clientChargeType == 'subscription' &&
@@ -385,8 +411,6 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         _selectedTeacherId == null ||
         _selectedBranchId == null ||
         _selectedRoomId == null ||
-        (!_isEdit && chargeValue == null) ||
-        (!_isEdit && compensationValue == null) ||
         missingSubscription ||
         (!_isEdit && _settlementTypeKey == null) ||
         (!_isEdit && _compensationRuleKey == null) ||
@@ -412,11 +436,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         _selectedTime.hour - 3,
         _selectedTime.minute,
       );
-      final payload = _lessonPayload(
-        scheduledAt: startsAt.toIso8601String(),
-        chargeValue: chargeValue ?? 0,
-        compensationValue: compensationValue ?? 0,
-      );
+      final payload = _lessonPayload(scheduledAt: startsAt.toIso8601String());
       final api = ref.read(magicApiClientProvider);
       if (_isEdit) {
         final changed = await showLessonDecisionFlow(
@@ -465,16 +485,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     }
   }
 
-  num? _parseAmount(String raw) {
-    final value = num.tryParse(raw.trim().replaceAll(',', '.'));
-    return value == null || value < 0 ? null : value;
-  }
-
-  Map<String, dynamic> _lessonPayload({
-    required String scheduledAt,
-    required num chargeValue,
-    required num compensationValue,
-  }) {
+  Map<String, dynamic> _lessonPayload({required String scheduledAt}) {
     final mutable = <String, dynamic>{
       'teacherId': _selectedTeacherId,
       'branchId': _selectedBranchId,
@@ -491,9 +502,9 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
       'isTrial': _isTrial,
       'completionType': _completionType,
       'clientChargeType': _clientChargeType,
-      'clientChargeValue': chargeValue,
-      'teacherCompensationType': _teacherCompensationType,
-      'teacherCompensationValue': compensationValue,
+      'clientChargeValue': _derivedClientChargeValue,
+      'teacherCompensationType': _derivedTeacherRate.$1,
+      'teacherCompensationValue': _derivedTeacherRate.$2,
       'financialDecision': {
         'settlementTypeKey': _settlementTypeKey,
         'teacherCompensationRuleKey': _compensationRuleKey,
@@ -503,6 +514,30 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
       if (_clientType == 'lead' && widget.leadName?.trim().isNotEmpty == true)
         'notes': 'Занятие по лиду: ${widget.leadName!.trim()}',
     };
+  }
+
+  num get _derivedClientChargeValue {
+    if (_clientChargeType == 'subscription') {
+      return _durationMinutes / 60;
+    }
+    if (_clientChargeType != 'personal_account') return 0;
+    final source = _subscriptions.firstWhere(
+      (row) => row['id']?.toString() == _selectedSubscriptionId,
+      orElse: () => _subscriptions.firstOrNull ?? const {},
+    );
+    final price = source['package_price'];
+    final units = source['lessons_total'];
+    if (price is! num || units is! num || units <= 0) return 0;
+    return price / units * (_durationMinutes / 60);
+  }
+
+  (String, num) get _derivedTeacherRate {
+    final teacher = _teachers.firstWhere(
+      (row) => row['id']?.toString() == _selectedTeacherId,
+      orElse: () => const {},
+    );
+    final rate = teacher['current_rate'];
+    return rate is num && rate > 0 ? ('hourly', rate) : ('none', 0);
   }
 
   Future<bool> _previewConstraintsBeforeSave(
@@ -634,13 +669,13 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
       return widget.pageMode
           ? Scaffold(
               appBar: AppBar(title: Text(_dialogTitle)),
-              body: loading,
+              body: const SafeArea(top: false, child: loading),
             )
           : const AlertDialog(content: loading);
     }
 
     final width = MediaQuery.sizeOf(context).width;
-    return AlertDialog(
+    final dialog = AlertDialog(
       insetPadding: widget.pageMode ? EdgeInsets.zero : null,
       shape: widget.pageMode
           ? const RoundedRectangleBorder(borderRadius: BorderRadius.zero)
@@ -681,13 +716,6 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                 onTap: _pickClient,
               ),
               const SizedBox(height: 16),
-              _buildSelectionField(
-                key: const ValueKey('lesson-teacher-field'),
-                label: 'Преподаватель *',
-                value: _getTeacherName(_selectedTeacherId),
-                onTap: _pickTeacher,
-              ),
-              const SizedBox(height: 16),
               _responsivePair(
                 DropdownButtonFormField<String>(
                   initialValue: _selectedBranchId,
@@ -703,6 +731,12 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                   onChanged: (value) {
                     setState(() {
                       _selectedBranchId = value;
+                      if (!_eligibleTeachers.any(
+                        (teacher) =>
+                            teacher['id']?.toString() == _selectedTeacherId,
+                      )) {
+                        _selectedTeacherId = null;
+                      }
                       _selectedRoomId = null;
                       _rooms = [];
                       _decisionCatalog = null;
@@ -734,6 +768,25 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                       setState(() => _selectedRoomId = item?.id),
                 ),
               ),
+              const SizedBox(height: 16),
+              _buildSelectionField(
+                key: const ValueKey('lesson-teacher-field'),
+                label: 'Преподаватель *',
+                value: _getTeacherName(_selectedTeacherId),
+                enabled: _eligibleTeachers.isNotEmpty,
+                onTap: _pickTeacher,
+              ),
+              if (_selectedBranchId != null && _eligibleTeachers.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    'В выбранный филиал не назначен ни один активный преподаватель.',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
               const SizedBox(height: 16),
               _responsivePair(_dateButton(), _timeButton()),
               const SizedBox(height: 16),
@@ -825,7 +878,10 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                   ],
                   onChanged: _snapshotLocked
                       ? null
-                      : (value) => setState(() => _settlementTypeKey = value),
+                      : (value) => setState(() {
+                          _settlementTypeKey = value;
+                          _applyFundingDefault();
+                        }),
                 ),
                 DropdownButtonFormField<String>(
                   key: const ValueKey('lesson-compensation-rule-field'),
@@ -848,48 +904,40 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                 ),
               ),
               const SizedBox(height: 16),
-              _responsivePair(
-                DropdownButtonFormField<String>(
-                  key: const ValueKey('lesson-charge-type-field'),
-                  initialValue: _clientChargeType,
-                  decoration: const InputDecoration(
-                    labelText: 'Списание клиента *',
+              DropdownButtonFormField<String>(
+                key: const ValueKey('lesson-charge-type-field'),
+                initialValue: _clientChargeType,
+                decoration: const InputDecoration(
+                  labelText: 'Источник средств *',
+                  helperText: 'Сумму и долю определяет выбранный тип списания',
+                ),
+                items: [
+                  if (_clientType == 'student' &&
+                      (_subscriptions.isNotEmpty ||
+                          _clientChargeType == 'subscription'))
+                    const DropdownMenuItem(
+                      value: 'subscription',
+                      child: Text('С абонемента'),
+                    ),
+                  const DropdownMenuItem(
+                    value: 'personal_account',
+                    child: Text('С личного счёта'),
                   ),
-                  items: [
-                    const DropdownMenuItem(
-                      value: 'none',
-                      child: Text('Без списания'),
-                    ),
-                    const DropdownMenuItem(
-                      value: 'personal_account',
-                      child: Text('Личный счёт'),
-                    ),
-                    if (_clientType == 'student')
-                      const DropdownMenuItem(
-                        value: 'subscription',
-                        child: Text('Абонемент'),
-                      ),
-                  ],
-                  onChanged: _snapshotLocked
-                      ? null
-                      : (value) {
-                          setState(() {
-                            _clientChargeType = value ?? 'none';
-                            if (_clientChargeType == 'none') {
-                              _clientChargeController.text = '0';
-                              _selectedSubscriptionId = null;
-                            }
-                          });
-                        },
-                ),
-                _amountField(
-                  key: const ValueKey('lesson-charge-value-field'),
-                  controller: _clientChargeController,
-                  label: _clientChargeType == 'subscription'
-                      ? 'Единиц списания *'
-                      : 'Стоимость / списание *',
-                  enabled: !_snapshotLocked && _clientChargeType != 'none',
-                ),
+                  const DropdownMenuItem(
+                    value: 'none',
+                    child: Text('Без списания'),
+                  ),
+                ],
+                onChanged: _snapshotLocked
+                    ? null
+                    : (value) => setState(() {
+                        _clientChargeType = value ?? 'none';
+                        if (_clientChargeType == 'subscription') {
+                          _selectedSubscriptionId ??= _subscriptions
+                              .firstOrNull?['id']
+                              ?.toString();
+                        }
+                      }),
               ),
               if (_clientChargeType == 'subscription') ...[
                 const SizedBox(height: 16),
@@ -911,44 +959,6 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                       setState(() => _selectedSubscriptionId = item?.id),
                 ),
               ],
-              const SizedBox(height: 16),
-              _responsivePair(
-                DropdownButtonFormField<String>(
-                  key: const ValueKey('lesson-compensation-type-field'),
-                  initialValue: _teacherCompensationType,
-                  decoration: const InputDecoration(
-                    labelText: 'Оплата преподавателя *',
-                  ),
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'none',
-                      child: Text('Без начисления'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'fixed',
-                      child: Text('Фиксированная'),
-                    ),
-                    DropdownMenuItem(value: 'hourly', child: Text('Почасовая')),
-                  ],
-                  onChanged: _snapshotLocked
-                      ? null
-                      : (value) {
-                          setState(() {
-                            _teacherCompensationType = value ?? 'none';
-                            if (_teacherCompensationType == 'none') {
-                              _teacherCompensationController.text = '0';
-                            }
-                          });
-                        },
-                ),
-                _amountField(
-                  key: const ValueKey('lesson-compensation-value-field'),
-                  controller: _teacherCompensationController,
-                  label: 'Сумма / ставка *',
-                  enabled:
-                      !_snapshotLocked && _teacherCompensationType != 'none',
-                ),
-              ),
               if (_snapshotLocked) ...[
                 const SizedBox(height: 10),
                 Text(
@@ -978,6 +988,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         ),
       ],
     );
+    return widget.pageMode ? SafeArea(child: dialog) : dialog;
   }
 
   Widget _responsivePair(Widget first, Widget second) {
@@ -1032,21 +1043,6 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     );
   }
 
-  Widget _amountField({
-    required Key key,
-    required TextEditingController controller,
-    required String label,
-    required bool enabled,
-  }) {
-    return TextField(
-      key: key,
-      controller: controller,
-      enabled: enabled,
-      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      decoration: InputDecoration(labelText: label),
-    );
-  }
-
   Future<void> _pickClient() async {
     SearchableSelect.show(
       context: context,
@@ -1084,7 +1080,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
       title: 'Выберите преподавателя',
       hintText: 'Поиск по имени...',
       items: [
-        for (final teacher in _teachers)
+        for (final teacher in _eligibleTeachers)
           SearchableSelectItem(
             id: teacher['id'].toString(),
             label: _getTeacherNameFromData(teacher),

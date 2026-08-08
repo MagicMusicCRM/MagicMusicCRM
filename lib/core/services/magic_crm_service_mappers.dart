@@ -464,6 +464,7 @@ Map<String, dynamic> _legacyLesson(Map<String, dynamic> item) {
   final studentParts = _splitName(item['studentName']?.toString() ?? '');
   return {
     'id': item['id'],
+    'version': item['version'],
     'student_id': item['studentId'],
     'group_id': item['groupId'],
     'lead_id': item['leadId'],

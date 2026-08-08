@@ -293,6 +293,8 @@ export class AvailabilityRepository {
         })),
       },
       teacherBranchAssigned: assignment.rows[0]?.assigned ?? false,
+      branchHoursConfigured:
+        weekly.rows.length > 0 || exceptions.rows.length > 0,
       branchWindows: branchWindows.rows.map((row) => ({
         localDate: row.local_date,
         opensAt: row.opens_at,

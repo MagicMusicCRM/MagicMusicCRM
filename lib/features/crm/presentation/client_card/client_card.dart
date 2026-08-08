@@ -219,12 +219,22 @@ class _ClientCardState extends ConsumerState<ClientCard>
 
   List<(IconData, String, String)> _tabsFor({
     required bool canReadClientFinance,
+    required bool canReadTasks,
   }) {
-    if (!_isStudent) return _leadTabs;
-    if (canReadClientFinance) return _studentTabs;
-    return _studentTabs
-        .where((tab) => tab.$3 != 'payments' && tab.$3 != 'subscriptions')
-        .toList(growable: false);
+    final source = !_isStudent
+        ? _leadTabs
+        : canReadClientFinance
+        ? _studentTabs
+        : _studentTabs.where(
+            (tab) => tab.$3 != 'payments' && tab.$3 != 'subscriptions',
+          );
+    return [
+      for (final tab in source)
+        if (tab.$3 == 'history_tasks' && !canReadTasks)
+          (tab.$1, 'История', tab.$3)
+        else
+          tab,
+    ];
   }
 
   // The (entityType, entityId) pairs whose comment / task / history streams the
@@ -583,7 +593,18 @@ class _ClientCardState extends ConsumerState<ClientCard>
         ? crmHasManagerAccess(actorRole ?? '')
         : widget.capabilitySnapshot!.allows('schedule.lesson.read.assigned') ||
               canWriteSchedule;
-    final tabs = _tabsFor(canReadClientFinance: canReadClientFinance);
+    final canReadTasks =
+        widget.capabilitySnapshot?.allows('workflow.task.read') ??
+        const {
+          'teacher',
+          'manager',
+          'director',
+          'system_admin',
+        }.contains(actorRole);
+    final tabs = _tabsFor(
+      canReadClientFinance: canReadClientFinance,
+      canReadTasks: canReadTasks,
+    );
     final visibleTabIndex = tabs.indexWhere(
       (tab) => tab.$3 == _selectedSection,
     );
@@ -623,6 +644,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
                     canReadClientFinance: canReadClientFinance,
                     canReadSchedule: canReadSchedule,
                     canWriteSchedule: canWriteSchedule,
+                    canReadTasks: canReadTasks,
                   );
                 }
                 return Column(
@@ -644,6 +666,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
                               canReadClientFinance: canReadClientFinance,
                               canReadSchedule: canReadSchedule,
                               canWriteSchedule: canWriteSchedule,
+                              canReadTasks: canReadTasks,
                             ),
                         ],
                       ),

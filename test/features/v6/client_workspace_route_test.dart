@@ -103,9 +103,10 @@ void main() {
                 accountId: 'account-1',
                 role: role,
                 accessVersion: 1,
-                capabilities: const {
+                capabilities: {
                   'crm.client.read.basic',
                   'commerce.client_finance.read',
+                  if (role != 'admin') 'workflow.task.read',
                 },
                 scopes: const {},
               ),
@@ -124,7 +125,17 @@ void main() {
         expect(find.text('Занятия'), findsOneWidget);
         expect(find.text('Абонементы'), findsOneWidget);
         expect(find.text('Прогресс'), findsOneWidget);
-        expect(find.text('История и задачи'), findsOneWidget);
+        expect(
+          find.text(role == 'admin' ? 'История' : 'История и задачи'),
+          findsWidgets,
+        );
+        if (role == 'admin') {
+          expect(find.text('Задачи'), findsNothing);
+          expect(
+            api.getRequests.where((path) => path == '/crm/shared-tasks'),
+            isEmpty,
+          );
+        }
         expect(find.text('Контакты'), findsOneWidget);
         expect(find.text('Документы'), findsOneWidget);
         expect(find.text('Доп. поля'), findsNothing);
@@ -235,6 +246,7 @@ void main() {
                 'commerce.client_finance.read',
                 'schedule.lesson.read.assigned',
                 'schedule.lesson.write',
+                'workflow.task.read',
               },
               scopes: {},
             ),
@@ -396,7 +408,15 @@ void main() {
         {'id': 'branch-a', 'name': 'Сокол'},
       ],
       teachers: const [
-        {'id': 'teacher-a', 'firstName': 'Мария', 'lastName': 'Иванова'},
+        {
+          'id': 'teacher-a',
+          'status': 'active',
+          'firstName': 'Мария',
+          'lastName': 'Иванова',
+          'assignedBranches': [
+            {'id': 'branch-a', 'name': 'Сокол'},
+          ],
+        },
       ],
       rooms: const [
         {

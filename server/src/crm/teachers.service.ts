@@ -258,17 +258,9 @@ export class TeachersService {
             $5::uuid is null
             or exists (
               select 1
-              from app.groups branch_group
-              where branch_group.teacher_id = t.id
-                and branch_group.branch_id = $5
-                and branch_group.deleted_at is null
-            )
-            or exists (
-              select 1
-              from app.lessons branch_lesson
-              where branch_lesson.teacher_id = t.id
-                and branch_lesson.branch_id = $5
-                and branch_lesson.deleted_at is null
+              from app.teacher_branches assignment
+              where assignment.teacher_id = t.id
+                and assignment.branch_id = $5
             )
           )
           and (

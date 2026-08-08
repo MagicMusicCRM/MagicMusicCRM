@@ -32,6 +32,7 @@ class _TeacherStudentsWidgetState extends ConsumerState<TeacherStudentsWidget> {
     try {
       final crm = ref.read(magicCrmServiceProvider);
       final teacher = (await crm.listTeachers(limit: 1)).firstOrNull;
+      if (!mounted) return;
 
       if (teacher == null) {
         setState(() => _loading = false);
@@ -43,6 +44,7 @@ class _TeacherStudentsWidgetState extends ConsumerState<TeacherStudentsWidget> {
         teacherId: teacher['id']?.toString(),
         limit: 200,
       );
+      if (!mounted) return;
 
       final counts = <String, int>{};
       for (final l in lessons) {
@@ -58,6 +60,7 @@ class _TeacherStudentsWidgetState extends ConsumerState<TeacherStudentsWidget> {
         _loading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _loadError = e;
         _loading = false;

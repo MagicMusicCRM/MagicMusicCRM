@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
@@ -15,18 +13,7 @@ const double kHourHeight = 64;
 const double kTimeColWidth = 64;
 const double kMinRoomColWidth = 150; // floor before horizontal scroll engages
 const double kHeaderHeight = 58;
-const double kEdgeZone = 56; // autoscroll trigger band
 const String kUnassignedColumnId = '__unassigned__';
-
-/// How far a pointer must travel before an empty-area drag counts as a
-/// booking-select. Below this it is jitter around a click, and a create dialog
-/// popping up for it reads as the app firing on its own.
-const double kSelectSlop = 12;
-
-/// A card must be at least this tall to carry resize handles. A 45-minute
-/// lesson is 48 px, a 30-minute one 32 px — the old 52 px floor silently denied
-/// both, which is why resize «worked on some lessons, not on others».
-const double kMinResizeHeight = 26;
 
 /// One day-grid column (a room, or the synthetic «Без аудитории» bucket).
 class ScheduleColumn {
@@ -59,7 +46,6 @@ class ScheduleEntry {
   final String subtitle;
   final bool isTrial;
   final List<String> conflicts;
-  final bool movable;
   final bool highlighted;
   final bool clientContext;
   final bool searchContext;
@@ -75,7 +61,6 @@ class ScheduleEntry {
     required this.subtitle,
     required this.isTrial,
     required this.conflicts,
-    required this.movable,
     required this.highlighted,
     this.clientContext = false,
     this.searchContext = false,
@@ -132,37 +117,18 @@ Map<ScheduleEntry, _EntryLane> _layoutOverlappingEntries(
   return result;
 }
 
-/// The day-view canvas: a 2-axis scrollable time grid with a sticky time gutter
-/// (left) and sticky room headers (top), block-drag move, hover/focus resize
-/// handles and drag-edge autoscroll. It owns NO data — every mutation is routed
-/// up through a callback so the parent keeps the single source of truth and the
-/// existing service-call paths (`updateLesson`/`createLesson`) are reused
-/// verbatim (KVA-195 is a wire-up, not a contract change).
+/// The day-view canvas: a read-first 2-axis time grid. Empty-slot taps create a
+/// lesson; existing cards open the explicit edit/transfer actions. Direct
+/// drag/drop mutations are intentionally absent.
 class ScheduleDayCanvas extends StatefulWidget {
   final DateTime date; // branch-local selected day (date only)
   final List<ScheduleColumn> columns;
   final List<ScheduleEntry> entries;
   final bool allowCreate;
 
-  /// Tap an empty hour → 1h create; vertical drag-select → multi-hour create.
+  /// Tap an empty hour → one-hour create.
   final void Function(String columnId, DateTime startLocal, int durationMinutes)
   onCreateSlot;
-
-  /// Existing lesson moved: vertical → time, horizontal → room.
-  final void Function(
-    Map<String, dynamic> lesson,
-    DateTime newStartLocal,
-    String newColumnId,
-  )
-  onMove;
-
-  /// Top/bottom edge resize committed on release.
-  final void Function(
-    Map<String, dynamic> lesson,
-    DateTime newStartLocal,
-    int newDurationMinutes,
-  )
-  onResize;
 
   final void Function(Map<String, dynamic> lesson) onOpenLesson;
   final double initialVerticalOffset;
@@ -175,8 +141,6 @@ class ScheduleDayCanvas extends StatefulWidget {
     required this.entries,
     this.allowCreate = true,
     required this.onCreateSlot,
-    required this.onMove,
-    required this.onResize,
     required this.onOpenLesson,
     this.initialVerticalOffset = 0,
     this.onVerticalOffsetChanged,
@@ -192,43 +156,6 @@ class _ScheduleDayCanvasState extends State<ScheduleDayCanvas> {
   final ScrollController _bodyH = ScrollController();
   final ScrollController _headerH = ScrollController();
   final ScrollController _gutterV = ScrollController();
-  final GlobalKey _bodyKey = GlobalKey(); // scrolled grid content
-  final GlobalKey _viewportKey = GlobalKey(); // body viewport (for edge math)
-
-  // Vertical drag-select (new booking) — vertical only, single column.
-  String? _selColumnId;
-  DateTime? _selColumnDate;
-  int? _selStartColIndex;
-  double? _selStartY;
-  double? _selEndY;
-  int? _selForbidColIndex; // a different column the finger wandered into
-  // Armed only once the pointer has travelled [kSelectSlop]. Until then the
-  // gesture is still a click as far as the user is concerned: no teal block,
-  // and releasing creates nothing.
-  bool _selArmed = false;
-
-  // Hover (desktop) reveals the resize handles on a lesson.
-  String? _hoverId;
-
-  // Touch selection: on a phone there is no hover, so a single tap SELECTS a
-  // card (that is what reveals its resize handles) and a double tap opens it.
-  // Desktop keeps click = open, since hover already exposes the handles.
-  String? _selectedId;
-
-  // Column width resolved each build from the real viewport (LayoutBuilder), so
-  // columns fill the width when few and scroll horizontally when many. Gesture
-  // handlers read it without a build context.
-  double _colW = kMinRoomColWidth;
-
-  // Live resize preview.
-  String? _resizingId;
-  bool _resizeTop = false;
-  double _resizeDelta = 0; // px
-
-  // Drag + autoscroll.
-  bool _dragging = false;
-  Offset? _pointerGlobal;
-  Timer? _autoScroll;
 
   double get _gridHeight => (kDayEndHour - kDayStartHour) * kHourHeight;
 
@@ -257,16 +184,11 @@ class _ScheduleDayCanvasState extends State<ScheduleDayCanvas> {
 
   @override
   void dispose() {
-    _autoScroll?.cancel();
     _bodyV.dispose();
     _bodyH.dispose();
     _headerH.dispose();
     _gutterV.dispose();
     super.dispose();
-  }
-
-  void _emitState(void Function() fn) {
-    if (mounted) setState(fn);
   }
 
   @override
@@ -283,7 +205,6 @@ class _ScheduleDayCanvasState extends State<ScheduleDayCanvas> {
         );
         final fit = cols.isEmpty ? kMinRoomColWidth : avail / cols.length;
         final colWidth = fit >= kMinRoomColWidth ? fit : kMinRoomColWidth;
-        _colW = colWidth;
         final contentWidth = cols.length * colWidth;
         return Column(
           children: [
@@ -361,76 +282,56 @@ class _ScheduleDayCanvasState extends State<ScheduleDayCanvas> {
                   ),
                   // Grid body.
                   Expanded(
-                    child: Listener(
-                      key: _viewportKey,
-                      onPointerMove: _onPointerMove,
-                      child: Stack(
-                        children: [
-                          MagicDesktopScrollbar(
-                            axis: Axis.vertical,
-                            controller: _bodyV,
-                            builder: (context, verticalController) =>
-                                SingleChildScrollView(
-                                  controller: verticalController,
-                                  child: MagicDesktopScrollbar(
-                                    axis: Axis.horizontal,
-                                    controller: _bodyH,
-                                    builder: (context, horizontalController) =>
-                                        SingleChildScrollView(
-                                          controller: horizontalController,
-                                          scrollDirection: Axis.horizontal,
-                                          child: SizedBox(
-                                            key: _bodyKey,
-                                            width: contentWidth,
-                                            height: _gridHeight,
-                                            child: Stack(
-                                              children: [
-                                                // Full-width hour lines.
-                                                for (
-                                                  int i = 0;
-                                                  i <=
-                                                      kDayEndHour -
-                                                          kDayStartHour;
-                                                  i++
-                                                )
-                                                  Positioned(
-                                                    top: i * kHourHeight,
-                                                    left: 0,
-                                                    width: contentWidth,
-                                                    child: Container(
-                                                      height: 1,
-                                                      color: cs.onSurfaceVariant
-                                                          .withAlpha(16),
-                                                    ),
-                                                  ),
-                                                // Columns.
-                                                for (
-                                                  int i = 0;
-                                                  i < cols.length;
-                                                  i++
-                                                )
-                                                  Positioned(
-                                                    left: i * colWidth,
-                                                    top: 0,
-                                                    width: colWidth,
-                                                    height: _gridHeight,
-                                                    child: _buildColumn(
-                                                      cols[i],
-                                                      i,
-                                                      colWidth,
-                                                    ),
-                                                  ),
-                                              ],
+                    child: MagicDesktopScrollbar(
+                      axis: Axis.vertical,
+                      controller: _bodyV,
+                      builder: (context, verticalController) =>
+                          SingleChildScrollView(
+                            controller: verticalController,
+                            child: MagicDesktopScrollbar(
+                              axis: Axis.horizontal,
+                              controller: _bodyH,
+                              builder: (context, horizontalController) =>
+                                  SingleChildScrollView(
+                                    controller: horizontalController,
+                                    scrollDirection: Axis.horizontal,
+                                    child: SizedBox(
+                                      width: contentWidth,
+                                      height: _gridHeight,
+                                      child: Stack(
+                                        children: [
+                                          for (
+                                            int i = 0;
+                                            i <= kDayEndHour - kDayStartHour;
+                                            i++
+                                          )
+                                            Positioned(
+                                              top: i * kHourHeight,
+                                              left: 0,
+                                              width: contentWidth,
+                                              child: Container(
+                                                height: 1,
+                                                color: cs.onSurfaceVariant
+                                                    .withAlpha(16),
+                                              ),
                                             ),
-                                          ),
-                                        ),
+                                          for (int i = 0; i < cols.length; i++)
+                                            Positioned(
+                                              left: i * colWidth,
+                                              top: 0,
+                                              width: colWidth,
+                                              height: _gridHeight,
+                                              child: _buildColumn(
+                                                cols[i],
+                                                colWidth,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
                                   ),
-                                ),
+                            ),
                           ),
-                          // Edge autoscroll affordances (visible only while dragging).
-                          if (_dragging) ..._edgeZones(),
-                        ],
-                      ),
                     ),
                   ),
                 ],

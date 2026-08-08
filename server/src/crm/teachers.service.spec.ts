@@ -232,6 +232,7 @@ describe("TeachersService", () => {
     });
 
     expect(query.mock.calls[0][0]).toContain("app.user_crm_links link");
+    expect(query.mock.calls[0][0]).toContain("app.teacher_branches assignment");
     expect(query.mock.calls[0][1]).toEqual([
       "manager",
       "manager-a",

@@ -178,6 +178,11 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
     )) {
       _roomId = null;
     }
+    if (!_teachersForBranch.any(
+      (teacher) => teacher['id']?.toString() == _teacherId,
+    )) {
+      _teacherId = null;
+    }
     _notesController = TextEditingController(
       text: series?['notes']?.toString() ?? initial?.notes ?? '',
     );
@@ -219,18 +224,29 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
   LessonDecisionCatalog? get _decisionCatalog =>
       widget.decisionCatalogs[_branchId];
 
+  List<Map<String, dynamic>> get _teachersForBranch => widget.teachers
+      .where((teacher) {
+        if (teacher['status']?.toString() != 'active') return false;
+        final assignments = teacher['assigned_branches'];
+        return assignments is List &&
+            assignments.whereType<Map>().any(
+              (branch) => branch['id']?.toString() == _branchId,
+            );
+      })
+      .toList(growable: false);
+
   void _syncDecisionForBranch() {
     final catalog = _decisionCatalog;
     if (catalog == null) return;
     if (!catalog.settlementTypes.any(
       (item) => item.key == _settlementTypeKey,
     )) {
-      _settlementTypeKey = null;
+      _settlementTypeKey = catalog.settlementTypes.firstOrNull?.key;
     }
     if (!catalog.compensationRules.any(
       (item) => item.key == _teacherCompensationRuleKey,
     )) {
-      _teacherCompensationRuleKey = null;
+      _teacherCompensationRuleKey = catalog.compensationRules.firstOrNull?.key;
     }
   }
 
@@ -332,6 +348,7 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
     final branchRooms = widget.rooms
         .where((room) => room['branch_id']?.toString() == _branchId)
         .toList(growable: false);
+    final branchTeachers = _teachersForBranch;
     return DirtyFormExitScope(
       controller: _exitController,
       savedResult: _draft,
@@ -368,7 +385,7 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
             key: const ValueKey('preferred-schedule-branch'),
             initialValue: _branchId.isEmpty ? null : _branchId,
             decoration: const InputDecoration(
-              labelText: 'Филиал',
+              labelText: 'Филиал *',
               helperText: 'Постоянная серия всегда привязана к филиалу',
             ),
             items: [
@@ -384,6 +401,7 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
                     if (value == null) return;
                     _changed(() {
                       _branchId = value;
+                      _teacherId = null;
                       _roomId = null;
                       _syncDecisionForBranch();
                     });
@@ -494,11 +512,14 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
             ),
           const SizedBox(height: AppSpace.md),
           SearchablePickerField(
-            label: 'Педагог',
-            placeholder: 'Выберите педагога',
+            label: 'Педагог *',
+            placeholder: branchTeachers.isEmpty
+                ? 'Нет назначенных в этот филиал педагогов'
+                : 'Выберите педагога',
+            enabled: branchTeachers.isNotEmpty,
             selectedId: _teacherId,
             items: [
-              for (final teacher in widget.teachers)
+              for (final teacher in branchTeachers)
                 SearchableSelectItem(
                   id: teacher['id'].toString(),
                   label:
@@ -510,7 +531,7 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
           ),
           const SizedBox(height: AppSpace.md),
           SearchablePickerField(
-            label: 'Аудитория',
+            label: 'Аудитория *',
             placeholder: branchRooms.isEmpty
                 ? 'В филиале нет доступных аудиторий'
                 : 'Выберите аудиторию',

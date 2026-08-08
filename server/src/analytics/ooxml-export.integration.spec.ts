@@ -1,5 +1,8 @@
 import { ConfigService } from "@nestjs/config";
-import { NotFoundException, UnprocessableEntityException } from "@nestjs/common";
+import {
+  NotFoundException,
+  UnprocessableEntityException,
+} from "@nestjs/common";
 import { randomUUID } from "crypto";
 import { mkdir, writeFile } from "fs/promises";
 import { dirname, resolve } from "path";
@@ -23,9 +26,7 @@ const databaseUrl =
   "postgresql://magiccrm_owner:magiccrm_owner@127.0.0.1:54329/magiccrm";
 const parsedDatabaseUrl = new URL(databaseUrl);
 if (
-  !new Set(["127.0.0.1", "localhost", "[::1]"]).has(
-    parsedDatabaseUrl.hostname,
-  )
+  !new Set(["127.0.0.1", "localhost", "[::1]"]).has(parsedDatabaseUrl.hostname)
 ) {
   throw new Error("OOXML export tests require local PostgreSQL.");
 }
@@ -35,7 +36,11 @@ jest.setTimeout(90_000);
 describe("v4 OOXML export", () => {
   const builder = new OoxmlWorkbookBuilder();
   let database: DatabaseService;
-  let actors: { owner: ActorContext; stranger: ActorContext; userIds: string[] };
+  let actors: {
+    owner: ActorContext;
+    stranger: ActorContext;
+    userIds: string[];
+  };
 
   beforeAll(async () => {
     database = new DatabaseService(
@@ -66,10 +71,9 @@ describe("v4 OOXML export", () => {
         "delete from app.report_export_jobs where actor_user_id = any($1::uuid[])",
         [actors.userIds],
       );
-      await database.query(
-        "delete from app.users where id = any($1::uuid[])",
-        [actors.userIds],
-      );
+      await database.query("delete from app.users where id = any($1::uuid[])", [
+        actors.userIds,
+      ]);
     }
     await database.onModuleDestroy();
   });
@@ -120,24 +124,72 @@ describe("v4 OOXML export", () => {
     );
   });
 
+  it("exports an Excel-friendly UTF-8 CSV with Cyrillic intact", async () => {
+    const clientStatus = {
+      list: jest.fn(async () => ({
+        total: 1,
+        items: [
+          {
+            type: "student",
+            id: "student-1",
+            displayName: "Алёна Смирнова",
+            status: "active",
+            statusLabel: "Занимается",
+            branchId: null,
+            createdAt: "2026-08-08T00:00:00.000Z",
+          },
+        ],
+      })),
+    } as unknown as ClientStatusReadService;
+    const service = new ReportExportService(
+      database,
+      clientStatus,
+      {} as ReportingReadService,
+      builder,
+      {
+        record: jest.fn().mockResolvedValue(undefined),
+      } as unknown as AuditService,
+    );
+
+    const result = await service.request(actors.owner, {
+      reportKey: "client_status",
+      format: "csv",
+    });
+
+    expect(result.mode).toBe("sync");
+    if (result.mode !== "sync") throw new Error("Expected sync export.");
+    expect([...result.content.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+    expect(result.content.toString("utf8")).toContain(
+      "\uFEFFТип;Клиент;Статус;Филиал ID;Создан\r\nstudent;Алёна Смирнова;Занимается;",
+    );
+  });
+
   it("keeps async downloads private and produces a validated streaming XLSX", async () => {
     const rowCount = SYNC_EXPORT_ROW_LIMIT + 1;
     const clientStatus = {
-      list: jest.fn(async (_actor: ActorContext, query: { limit: number; offset: number }) => {
-        const count = Math.max(0, Math.min(query.limit, rowCount - query.offset));
-        return {
-          total: rowCount,
-          items: Array.from({ length: count }, (_, index) => ({
-            type: "lead",
-            id: `${query.offset + index}`,
-            displayName: `Клиент ${query.offset + index}`,
-            status: "new",
-            statusLabel: "Новый",
-            branchId: null,
-            createdAt: "2026-07-30T00:00:00.000Z",
-          })),
-        };
-      }),
+      list: jest.fn(
+        async (
+          _actor: ActorContext,
+          query: { limit: number; offset: number },
+        ) => {
+          const count = Math.max(
+            0,
+            Math.min(query.limit, rowCount - query.offset),
+          );
+          return {
+            total: rowCount,
+            items: Array.from({ length: count }, (_, index) => ({
+              type: "lead",
+              id: `${query.offset + index}`,
+              displayName: `Клиент ${query.offset + index}`,
+              status: "new",
+              statusLabel: "Новый",
+              branchId: null,
+              createdAt: "2026-07-30T00:00:00.000Z",
+            })),
+          };
+        },
+      ),
     } as unknown as ClientStatusReadService;
     const reporting = {} as ReportingReadService;
     const audit = {

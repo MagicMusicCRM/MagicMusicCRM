@@ -10,6 +10,7 @@ void main() {
 
   testWidgets('задача в карточке лида раскрывается по тапу', (tester) async {
     final api = FakeCardApiClient(
+      role: 'manager',
       lead: {
         'id': 'lead-1',
         'firstName': 'Иван',

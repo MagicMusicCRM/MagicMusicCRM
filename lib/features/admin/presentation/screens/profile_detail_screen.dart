@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/access_editor_sheet.dart';
 
 /// Карточка пользователя (профиль/админ).
 ///
@@ -27,7 +30,9 @@ class ProfileDetailScreen extends ConsumerStatefulWidget {
 class _ProfileDetailScreenState extends ConsumerState<ProfileDetailScreen> {
   Map<String, dynamic>? _profile;
   List<Map<String, dynamic>> _links = const [];
+  String? _linksError;
   bool _loading = true;
+  bool _linking = false;
   String? _error;
 
   @override
@@ -40,6 +45,7 @@ class _ProfileDetailScreenState extends ConsumerState<ProfileDetailScreen> {
     setState(() {
       _loading = true;
       _error = null;
+      _linksError = null;
     });
 
     final service = ref.read(magicProfileAdminServiceProvider);
@@ -61,8 +67,9 @@ class _ProfileDetailScreenState extends ConsumerState<ProfileDetailScreen> {
     List<Map<String, dynamic>> links;
     try {
       links = await service.getProfileLinks(widget.profileId);
-    } catch (_) {
+    } catch (error) {
       links = const [];
+      _linksError = '$error';
     }
 
     if (!mounted) return;
@@ -103,6 +110,29 @@ class _ProfileDetailScreenState extends ConsumerState<ProfileDetailScreen> {
     }
   }
 
+  Future<void> _autoLink() async {
+    if (_linking) return;
+    setState(() => _linking = true);
+    try {
+      await ref
+          .read(magicProfileAdminServiceProvider)
+          .autoLinkByPhone(widget.profileId);
+      await _load();
+      if (mounted) MagicToast.show(context, 'Связи по телефону обновлены');
+    } catch (error) {
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'Не удалось обновить связи',
+          detail: '$error',
+          type: MagicToastType.danger,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _linking = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.embedded) return _buildBody(context);
@@ -128,6 +158,8 @@ class _ProfileDetailScreenState extends ConsumerState<ProfileDetailScreen> {
       return _ErrorState(message: 'Профиль не найден', onRetry: _load);
     }
 
+    final snapshot = ref.watch(capabilitySnapshotProvider).asData?.value;
+    final userId = profile['user_id']?.toString();
     return RefreshIndicator(
       color: AppColor.gold,
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -141,8 +173,39 @@ class _ProfileDetailScreenState extends ConsumerState<ProfileDetailScreen> {
             email: (profile['email'] ?? '').toString(),
             phone: (profile['phone'] ?? '').toString(),
           ),
+          if (snapshot?.allows('system.settings.manage') == true) ...[
+            const SizedBox(height: AppSpace.md),
+            Wrap(
+              spacing: AppSpace.sm,
+              runSpacing: AppSpace.sm,
+              children: [
+                if (userId?.isNotEmpty == true)
+                  FilledButton.icon(
+                    onPressed: () => AccessEditorSheet.show(
+                      context,
+                      actorRole: snapshot!.role,
+                      userId: userId!,
+                      userLabel: _fullName(profile),
+                      onChanged: _load,
+                    ),
+                    icon: const Icon(Icons.admin_panel_settings_outlined),
+                    label: const Text('Настроить доступ'),
+                  ),
+                OutlinedButton.icon(
+                  onPressed: _linking ? null : _autoLink,
+                  icon: _linking
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.link_rounded),
+                  label: const Text('Связать по телефону'),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: AppSpace.lg),
-          _LinksSection(links: _links),
+          _LinksSection(links: _links, error: _linksError, onRetry: _load),
         ],
       ),
     );
@@ -283,9 +346,15 @@ class _InfoRow extends StatelessWidget {
 
 /// Секция «Привязанные клиенты».
 class _LinksSection extends StatelessWidget {
-  const _LinksSection({required this.links});
+  const _LinksSection({
+    required this.links,
+    required this.error,
+    required this.onRetry,
+  });
 
   final List<Map<String, dynamic>> links;
+  final String? error;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -317,7 +386,22 @@ class _LinksSection extends StatelessWidget {
             ),
           ),
           clipBehavior: Clip.antiAlias,
-          child: links.isEmpty
+          child: error != null
+              ? ListTile(
+                  leading: Icon(
+                    Icons.error_outline_rounded,
+                    color: scheme.error,
+                  ),
+                  title: const Text('Не удалось загрузить привязки'),
+                  subtitle: const Text(
+                    'Профиль загружен. Повторите запрос привязанных клиентов.',
+                  ),
+                  trailing: TextButton(
+                    onPressed: onRetry,
+                    child: const Text('Повторить'),
+                  ),
+                )
+              : links.isEmpty
               ? Padding(
                   padding: const EdgeInsets.all(AppSpace.lg),
                   child: Text(

@@ -123,7 +123,7 @@ void main() {
       expect(find.byKey(const ValueKey('schedule-week-view')), findsOneWidget);
       expect(find.byType(ScheduleDayCanvas), findsOneWidget);
       expect(find.text('Ольга Ученик'), findsOneWidget);
-      expect(find.text('Перетащить — время / день'), findsOneWidget);
+      expect(find.textContaining('Перетащить'), findsNothing);
 
       // Switch to День → the time grid (wide «Время» gutter header) is shown.
       await tester.tap(find.text('День'));
@@ -191,8 +191,6 @@ void main() {
               ],
               entries: const [],
               onCreateSlot: (_, start, _) => createdAt = start,
-              onMove: (_, _, _) {},
-              onResize: (_, _, _) {},
               onOpenLesson: (_) {},
             ),
           ),

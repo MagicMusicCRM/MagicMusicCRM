@@ -1,7 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { randomUUID } from "crypto";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
@@ -97,7 +94,14 @@ export class ReportExportService {
         values ($1, $2, $3, $4, $5::jsonb, $6)
         returning expires_at
       `,
-      [id, actor.userId, dto.reportKey, dto.format, JSON.stringify(dto), rowCount],
+      [
+        id,
+        actor.userId,
+        dto.reportKey,
+        dto.format,
+        JSON.stringify(dto),
+        rowCount,
+      ],
     );
     setImmediate(() => {
       void this.processJob(id, actor, dto, rowCount);
@@ -244,7 +248,7 @@ export class ReportExportService {
         : `client-status-${date}`;
     if (dto.format === "csv") {
       return {
-        content: Buffer.from(this.toCsv(input), "utf8"),
+        content: Buffer.from(`\uFEFF${this.toCsv(input)}`, "utf8"),
         filename: `${baseName}.csv`,
         mimeType: CSV_MIME,
         rowCount,
@@ -351,12 +355,14 @@ export class ReportExportService {
           : typeof value === "object" && value !== null && "formula" in value
             ? String(value.result)
             : String(value ?? "");
-      return /[",\r\n]/.test(raw) ? `"${raw.replace(/"/g, '""')}"` : raw;
+      return /[";\r\n]/.test(raw) ? `"${raw.replace(/"/g, '""')}"` : raw;
     };
-    return [
-      input.columns.map((column) => escape(column.header)).join(","),
-      ...input.rows.map((row) => row.map(escape).join(",")),
-    ].join("\r\n") + "\r\n";
+    return (
+      [
+        input.columns.map((column) => escape(column.header)).join(";"),
+        ...input.rows.map((row) => row.map(escape).join(";")),
+      ].join("\r\n") + "\r\n"
+    );
   }
 
   private async loadOwnedJob(

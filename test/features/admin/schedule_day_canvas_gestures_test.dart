@@ -16,7 +16,7 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_day
 
 final _day = DateTime(2026, 7, 9);
 
-ScheduleEntry _entry({String id = 'l1', bool movable = true, DateTime? start}) {
+ScheduleEntry _entry({String id = 'l1', DateTime? start}) {
   return ScheduleEntry(
     lesson: {'id': id},
     id: id,
@@ -27,7 +27,6 @@ ScheduleEntry _entry({String id = 'l1', bool movable = true, DateTime? start}) {
     subtitle: 'Антон Кондрашов',
     isTrial: false,
     conflicts: const [],
-    movable: movable,
     highlighted: false,
   );
 }
@@ -52,8 +51,6 @@ Widget _host({
         ],
         entries: entries,
         onCreateSlot: (col, start, dur) => rec.created.add('$col@$start+$dur'),
-        onMove: (_, _, _) {},
-        onResize: (_, _, _) {},
         onOpenLesson: (l) => rec.opened.add(l['id'].toString()),
       ),
     ),
@@ -110,9 +107,7 @@ void main() {
     );
   });
 
-  testWidgets('on touch a single tap selects and a double tap opens', (
-    tester,
-  ) async {
+  testWidgets('on touch a single tap opens the lesson', (tester) async {
     tester.view.physicalSize = const Size(1200, 1600);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -125,15 +120,6 @@ void main() {
 
     final card = find.text('Степан Белоусов');
 
-    // One tap picks the card — it must NOT open it. Selecting is what reveals
-    // the resize handles, so a tap that opened would make resize unreachable.
-    await tester.tap(card);
-    await tester.pumpAndSettle();
-    expect(rec.opened, isEmpty);
-
-    // Two taps open it.
-    await tester.tap(card);
-    await tester.pump(const Duration(milliseconds: 50));
     await tester.tap(card);
     await tester.pumpAndSettle();
     expect(rec.opened, ['l1']);
@@ -162,7 +148,7 @@ void main() {
     expect(rec.created, isEmpty);
   });
 
-  testWidgets('holding first, then dragging, books the picked range', (
+  testWidgets('tapping an empty slot creates one 60-minute lesson', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1200, 800);
@@ -173,22 +159,14 @@ void main() {
     await tester.pumpWidget(_host(platform: TargetPlatform.windows, rec: rec));
     await tester.pumpAndSettle();
 
-    final centre = tester.getCenter(find.byType(ScheduleDayCanvas));
-    final g = await tester.startGesture(centre, kind: PointerDeviceKind.mouse);
-    // Sit still past the long-press threshold — the deliberate part.
-    await tester.pump(const Duration(milliseconds: 600));
-    for (var i = 1; i <= 10; i++) {
-      await g.moveBy(const Offset(0, 12));
-      await tester.pump(const Duration(milliseconds: 16));
-    }
-    await g.up();
+    final canvas = tester.getRect(find.byType(ScheduleDayCanvas));
+    await tester.tapAt(
+      Offset(canvas.left + kTimeColWidth + 40, canvas.top + kHeaderHeight + 14),
+    );
     await tester.pumpAndSettle();
 
-    expect(
-      rec.created,
-      isNotEmpty,
-      reason: 'picking a range on purpose must still work, just one beat later',
-    );
+    expect(rec.created, hasLength(1));
+    expect(rec.created.single, endsWith('+60'));
   });
 
   testWidgets('on desktop a click opens the lesson straight away', (

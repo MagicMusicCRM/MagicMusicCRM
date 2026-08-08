@@ -308,8 +308,24 @@ FakeCardApiClient _api({List<Map<String, dynamic>>? plans}) =>
         {'id': 'branch-1', 'name': 'Сокол'},
       ],
       teachers: const [
-        {'id': 'teacher-1', 'firstName': 'Мария', 'lastName': 'Иванова'},
-        {'id': 'teacher-2', 'firstName': 'Пётр', 'lastName': 'Сидоров'},
+        {
+          'id': 'teacher-1',
+          'firstName': 'Мария',
+          'lastName': 'Иванова',
+          'status': 'active',
+          'assignedBranches': [
+            {'id': 'branch-1', 'name': 'Сокол'},
+          ],
+        },
+        {
+          'id': 'teacher-2',
+          'firstName': 'Пётр',
+          'lastName': 'Сидоров',
+          'status': 'active',
+          'assignedBranches': [
+            {'id': 'branch-1', 'name': 'Сокол'},
+          ],
+        },
       ],
       rooms: const [
         {'id': 'room-1', 'branchId': 'branch-1', 'name': 'Класс 1'},

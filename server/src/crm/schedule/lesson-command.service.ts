@@ -174,21 +174,24 @@ export class LessonCommandService {
           subscriptionId: draft.subscriptionId ?? undefined,
           trial: draft.isTrial,
         });
-        await this.reservations.allocate(client, {
-          lessonId,
-          clientType: draft.clientRef.type,
-          clientId: draft.clientRef.id,
-          chargeType: draft.clientChargeType,
-          subscriptionId: draft.subscriptionId,
-          units: draft.clientChargeValue,
-        });
-        await this.settlement.assignPlan(client, {
+        const plan = await this.settlement.assignPlan(client, {
           lessonId,
           branchId: draft.branchId,
           decision: dto.financialDecision!,
           selectedBy: actor.userId,
           reasonText: dto.plannedSettlementReason,
         });
+        for (const allocation of await this.settlement.plannedSubscriptionAllocations(
+          client,
+          lessonId,
+          plan,
+        )) {
+          await this.reservations.allocate(client, {
+            lessonId,
+            chargeType: "subscription",
+            ...allocation,
+          });
+        }
         return { lessonId };
       },
     });
@@ -253,11 +256,7 @@ export class LessonCommandService {
               and version = $3
             returning id, version
           `,
-          [
-            lessonId,
-            dto.notes!.trim() || null,
-            dto.expectedVersion,
-          ],
+          [lessonId, dto.notes!.trim() || null, dto.expectedVersion],
         );
         if (!updated.rows[0]) {
           throw new ConflictException({
@@ -287,11 +286,7 @@ export class LessonCommandService {
     const calculated = await this.database.transaction(async (client) => {
       await client.query("savepoint lesson_planned_settlement_preview");
       try {
-        return await this.calculateSettlementPlanChange(
-          client,
-          lessonId,
-          dto,
-        );
+        return await this.calculateSettlementPlanChange(client, lessonId, dto);
       } finally {
         await client.query(
           "rollback to savepoint lesson_planned_settlement_preview",
@@ -383,7 +378,10 @@ export class LessonCommandService {
            returning version`,
           [lessonId, dto.expectedVersion],
         );
-        if (!updated.rows[0] || Number(updated.rows[0].version) !== nextVersion) {
+        if (
+          !updated.rows[0] ||
+          Number(updated.rows[0].version) !== nextVersion
+        ) {
           throw new ConflictException({ code: "LESSON_VERSION_DIVERGED" });
         }
         return { lessonId, planVersion };
@@ -512,7 +510,9 @@ export class LessonCommandService {
       await this.reservations.terminalize(client, settled);
       return settled;
     } finally {
-      await client.query("rollback to savepoint lesson_planned_financial_preview");
+      await client.query(
+        "rollback to savepoint lesson_planned_financial_preview",
+      );
       await client.query("release savepoint lesson_planned_financial_preview");
     }
   }

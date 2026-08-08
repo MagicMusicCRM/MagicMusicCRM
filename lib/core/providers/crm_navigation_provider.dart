@@ -102,6 +102,7 @@ int? crmTabForEntityLink(EntityLink link, String role) {
       EntityLinkType.scheduleSeries ||
       EntityLinkType.report => 1,
       EntityLinkType.client ||
+      EntityLinkType.clientStatus ||
       EntityLinkType.homework ||
       EntityLinkType.comment => 2,
       _ => null,

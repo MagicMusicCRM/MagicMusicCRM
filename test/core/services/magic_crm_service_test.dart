@@ -278,6 +278,7 @@ void main() {
             'items': [
               {
                 'id': 'lesson-a',
+                'version': 7,
                 'studentId': 'student-a',
                 'groupId': null,
                 'leadId': null,
@@ -1362,6 +1363,7 @@ void main() {
             'items': [
               {
                 'id': 'lesson-a',
+                'version': 7,
                 'studentId': 'student-a',
                 'groupId': null,
                 'leadId': null,
@@ -1399,6 +1401,7 @@ void main() {
       expect(lessons.single['is_trial'], true);
       expect(lessons.single['lifecycle_state'], 'successfully_completed');
       expect(lessons.single['reservation_state'], 'reserved');
+      expect(lessons.single['version'], 7);
       expect(adapter.requests[0].queryParameters['limit'], 10);
       expect(adapter.requests[1].queryParameters['isTrial'], true);
     });

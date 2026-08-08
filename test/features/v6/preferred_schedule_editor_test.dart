@@ -8,7 +8,15 @@ const _branches = [
   {'id': 'branch-b', 'name': 'Центр'},
 ];
 const _teachers = [
-  {'id': 'teacher-a', 'first_name': 'Мария', 'last_name': 'Иванова'},
+  {
+    'id': 'teacher-a',
+    'first_name': 'Мария',
+    'last_name': 'Иванова',
+    'status': 'active',
+    'assigned_branches': [
+      {'id': 'branch-a', 'name': 'Сокол'},
+    ],
+  },
 ];
 const _rooms = [
   {'id': 'room-a', 'branch_id': 'branch-a', 'name': 'Класс 1'},

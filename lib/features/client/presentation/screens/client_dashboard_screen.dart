@@ -8,6 +8,7 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/core/widgets/lazy_indexed_stack.dart';
+import 'package:magic_music_crm/core/widgets/v7/v7_nav_shell.dart';
 import 'package:magic_music_crm/features/client/presentation/widgets/subscription_status_card.dart';
 import 'package:magic_music_crm/features/client/presentation/widgets/upcoming_lessons_list.dart';
 import 'package:magic_music_crm/features/messenger/presentation/screens/messenger_screen.dart';
@@ -34,23 +35,23 @@ class _ClientDashboardScreenState extends ConsumerState<ClientDashboardScreen> {
   // Client bottom nav (mobile) / rail (desktop): Чат opens first by default,
   // Профиль is last. «Занятия» merges the old Занятия+Расписание; «Абонемент»
   // merges the old Абонемент+Оплаты behind an in-tab toggle.
-  static const _destinations = <_ClientDestination>[
-    _ClientDestination(
+  static const _destinations = <V7NavDestination>[
+    V7NavDestination(
       label: 'Чат',
       icon: Icons.chat_bubble_outline_rounded,
       selectedIcon: Icons.chat_bubble_rounded,
     ),
-    _ClientDestination(
+    V7NavDestination(
       label: 'Занятия',
       icon: Icons.school_outlined,
       selectedIcon: Icons.school_rounded,
     ),
-    _ClientDestination(
+    V7NavDestination(
       label: 'Абонемент',
       icon: Icons.confirmation_number_outlined,
       selectedIcon: Icons.confirmation_number_rounded,
     ),
-    _ClientDestination(
+    V7NavDestination(
       label: 'Профиль',
       icon: Icons.person_outline_rounded,
       selectedIcon: Icons.person_rounded,
@@ -80,7 +81,7 @@ class _ClientDashboardScreenState extends ConsumerState<ClientDashboardScreen> {
       }
     });
 
-    final isDesktop = MediaQuery.of(context).size.width >= 768;
+    final isDesktop = MediaQuery.of(context).size.width >= 840;
     // Mount tabs on first visit, then keep them in-place. A plain IndexedStack
     // preserved MessengerScreen but eagerly mounted all four tabs at login,
     // triggering their API providers simultaneously.
@@ -98,22 +99,12 @@ class _ClientDashboardScreenState extends ConsumerState<ClientDashboardScreen> {
       return Scaffold(
         body: Row(
           children: [
-            NavigationRail(
+            V7NavShell(
+              isDesktop: true,
+              destinations: _destinations,
               selectedIndex: _selectedIndex,
-              onDestinationSelected: (index) =>
-                  setState(() => _selectedIndex = index),
-              labelType: NavigationRailLabelType.all,
-              minWidth: 92,
-              destinations: [
-                for (final d in _destinations)
-                  NavigationRailDestination(
-                    icon: Icon(d.icon),
-                    selectedIcon: Icon(d.selectedIcon),
-                    label: Text(d.label),
-                  ),
-              ],
+              onSelected: (index) => setState(() => _selectedIndex = index),
             ),
-            const VerticalDivider(width: 1),
             Expanded(child: body),
           ],
         ),
@@ -122,33 +113,14 @@ class _ClientDashboardScreenState extends ConsumerState<ClientDashboardScreen> {
 
     return Scaffold(
       body: SafeArea(child: body),
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: V7NavShell(
+        isDesktop: false,
+        destinations: _destinations,
         selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) =>
-            setState(() => _selectedIndex = index),
-        destinations: [
-          for (final d in _destinations)
-            NavigationDestination(
-              icon: Icon(d.icon),
-              selectedIcon: Icon(d.selectedIcon),
-              label: d.label,
-            ),
-        ],
+        onSelected: (index) => setState(() => _selectedIndex = index),
       ),
     );
   }
-}
-
-class _ClientDestination {
-  final String label;
-  final IconData icon;
-  final IconData selectedIcon;
-
-  const _ClientDestination({
-    required this.label,
-    required this.icon,
-    required this.selectedIcon,
-  });
 }
 
 class _ClientSectionFrame extends StatelessWidget {

@@ -46,11 +46,15 @@ Map<String, dynamic> _busyPreview() => {
 };
 
 class _FakeApiClient extends MagicApiClient {
-  _FakeApiClient({this.preview, this.createError})
-    : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
+  _FakeApiClient({
+    this.preview,
+    this.createError,
+    this.subscriptions = const [],
+  }) : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   Map<String, dynamic>? preview;
   MagicApiException? createError;
+  final List<Map<String, dynamic>> subscriptions;
   Completer<void>? createGate;
   final lessonPosts = <Map<String, dynamic>>[];
   final decisionPreviews = <Map<String, dynamic>>[];
@@ -72,6 +76,9 @@ class _FakeApiClient extends MagicApiClient {
                   'firstName': 'Пётр',
                   'lastName': 'Педагогов',
                   'status': 'active',
+                  'assignedBranches': const [
+                    {'id': _branchId, 'name': 'Главный филиал'},
+                  ],
                 },
               ],
             }
@@ -117,17 +124,89 @@ class _FakeApiClient extends MagicApiClient {
             }
             as T;
       case '/crm/subscriptions':
-        return <String, dynamic>{'items': const []} as T;
+        return <String, dynamic>{'items': subscriptions} as T;
+      case '/crm/students/$_studentId/commerce':
+        return <String, dynamic>{
+              'projection': 'admin_scoped',
+              'student': {
+                'studentId': _studentId,
+                'accounts': const [],
+                'subscriptions': [
+                  for (final item in subscriptions)
+                    {
+                      'id': item['id'],
+                      'status': item['status'],
+                      'startsAt': '2026-08-01T00:00:00.000Z',
+                      'expiresAt': null,
+                      'units': {
+                        'total': item['lessonsTotal'],
+                        'used': item['lessonsUsed'],
+                        'reserved': 0,
+                        'paid': item['lessonsTotal'],
+                        'available':
+                            (item['lessonsTotal'] as num) -
+                            (item['lessonsUsed'] as num),
+                        'remaining':
+                            (item['lessonsTotal'] as num) -
+                            (item['lessonsUsed'] as num),
+                      },
+                      'financial': const {
+                        'actualPaidMinor': '3000000',
+                        'obligationMinor': '3000000',
+                        'debtMinor': '0',
+                        'overpaymentMinor': '0',
+                        'nextPaymentAt': null,
+                      },
+                      'terms': {
+                        'displayName': item['packageName'],
+                        'validityDays': null,
+                        'basePriceMinor': '3000000',
+                        'finalPriceMinor': '3000000',
+                        'currencyCode': 'RUB',
+                        'discount': const {'type': 'none'},
+                        'surcharge': const {'type': 'none'},
+                      },
+                      'installments': const [],
+                    },
+                ],
+                'movements': const [],
+                'technicalHistory': const [],
+                'lessonBalance': {
+                  'activeSubscriptionCount': subscriptions.length,
+                  'total': 12,
+                  'used': 1,
+                  'reserved': 0,
+                  'paid': 12,
+                  'available': 11,
+                  'debts': const [],
+                  'nextPaymentAt': null,
+                  'expiresAt': null,
+                },
+              },
+            }
+            as T;
       case '/crm/configuration/lesson-decisions':
         return <String, dynamic>{
               'settlementTypes': const [
+                {
+                  'stableKey': 'standard_lesson',
+                  'label': 'Занятие',
+                  'colorToken': 'success',
+                  'allowedContexts': ['settle'],
+                  'active': true,
+                  'order': 0,
+                  'hourShareBasisPoints': 10000,
+                  'fixedPenaltyMinor': '0',
+                },
                 {
                   'stableKey': 'free_lesson',
                   'label': 'Бесплатное занятие',
                   'colorToken': 'warning',
                   'allowedContexts': ['cancel', 'reschedule', 'settle'],
                   'active': true,
-                  'order': 0,
+                  'order': 1,
+                  'hourShareBasisPoints': 0,
+                  'fixedPenaltyMinor': '0',
                 },
               ],
               'teacherCompensationRules': const [
@@ -294,6 +373,10 @@ Future<void> _pumpDialog(
   final formContext = tester.element(find.textContaining('занятие').first);
   expect(ModalRoute.of(formContext)?.settings.name, 'lesson-editor');
   expect(find.byType(BackButton), findsOneWidget);
+  expect(
+    find.ancestor(of: find.byType(AlertDialog), matching: find.byType(SafeArea)),
+    findsOneWidget,
+  );
 }
 
 Future<void> _selectRequiredResources(
@@ -382,6 +465,39 @@ void main() {
     expect(body, isNot(contains('status')));
     expect(body, isNot(contains('force')));
   });
+
+  testWidgets(
+    'student defaults to subscription and raw money fields stay absent',
+    (tester) async {
+      final client = _FakeApiClient(
+        subscriptions: const [
+          {
+            'id': 'subscription-1',
+            'studentId': _studentId,
+            'lessonsTotal': 12,
+            'lessonsUsed': 1,
+            'status': 'active',
+            'packageName': '12 занятий',
+            'packagePrice': 30000,
+          },
+        ],
+      );
+      await _pumpDialog(tester, client);
+      await tester.tap(find.byKey(const ValueKey('lesson-client-field')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Иван Прилежный').last);
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('lesson-charge-type-field')),
+      );
+      expect(find.text('С абонемента'), findsOneWidget);
+      expect(find.text('Списание клиента *'), findsNothing);
+      expect(find.text('Стоимость / списание *'), findsNothing);
+      expect(find.text('Оплата преподавателя *'), findsNothing);
+      expect(find.text('Сумма / ставка *'), findsNothing);
+    },
+  );
 
   testWidgets('preview-конфликт блокирует create без force affordance', (
     tester,

@@ -845,7 +845,10 @@ class _CrmConfigurationWorkspaceState
             '${((item['hourShareBasisPoints'] as num?) ?? 0) / 100}%',
           ),
           if (item['fixedPenaltyMinor'] != null)
-            _property('Штраф', '${_minorToMajor(item['fixedPenaltyMinor'])} ₽'),
+            _property(
+              'Дополнительное списание',
+              '${_minorToMajor(item['fixedPenaltyMinor'])} ₽',
+            ),
           _property(
             'Сценарии',
             (item['allowedContexts'] as List? ?? const [])
@@ -1374,7 +1377,7 @@ class _CommerceCatalogEditorDialogState
                   decimal: true,
                 ),
                 decoration: const InputDecoration(
-                  labelText: 'Дополнительный штраф, ₽',
+                  labelText: 'Дополнительное фиксированное списание, ₽',
                 ),
               ),
               const SizedBox(height: AppSpace.sm),
@@ -1477,7 +1480,7 @@ class _CommerceCatalogEditorDialogState
           _contexts.isEmpty) {
         setState(() {
           _error =
-              'Укажите долю 0–200%, корректный штраф и хотя бы один сценарий.';
+              'Укажите долю 0–200%, корректное дополнительное списание и хотя бы один сценарий.';
         });
         return;
       }

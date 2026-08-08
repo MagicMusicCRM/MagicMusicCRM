@@ -56,6 +56,8 @@ class LessonDecisionCatalogItem {
     this.allowedContexts = const [],
     this.mode,
     this.value = '0',
+    this.hourShareBasisPoints = 0,
+    this.fixedPenaltyMinor = '0',
   });
 
   final String key;
@@ -65,6 +67,8 @@ class LessonDecisionCatalogItem {
   final List<String> allowedContexts;
   final String? mode;
   final String value;
+  final int hourShareBasisPoints;
+  final String fixedPenaltyMinor;
 
   factory LessonDecisionCatalogItem.fromJson(Map<String, dynamic> json) {
     return LessonDecisionCatalogItem(
@@ -78,6 +82,9 @@ class LessonDecisionCatalogItem {
       ],
       mode: json['mode']?.toString(),
       value: json['value']?.toString() ?? '0',
+      hourShareBasisPoints:
+          (json['hourShareBasisPoints'] as num?)?.toInt() ?? 0,
+      fixedPenaltyMinor: json['fixedPenaltyMinor']?.toString() ?? '0',
     );
   }
 }

@@ -171,11 +171,13 @@ void main() {
     final permissions = CrmNavigationRequest.userRolesSearch(
       'user@example.com',
     );
+    final clients = EntityRouteRegistry.sectionRootLink('clients');
 
     expect(schedule.link.rawEntityType, 'lesson_list');
     expect(schedule.link.optionalFocus?.filter['lessonId'], 'lesson-1');
     expect(crmTabForEntityLink(schedule.link, 'manager'), 2);
     expect(crmTabForEntityLink(schedule.link, 'teacher'), 1);
+    expect(crmTabForEntityLink(clients, 'teacher'), 2);
     expect(crmTabForEntityLink(permissions.link, 'manager'), 8);
     expect(permissions.link.optionalFocus?.filter['query'], 'user@example.com');
     expect(crmTabForEntityLink(permissions.link, 'teacher'), isNull);

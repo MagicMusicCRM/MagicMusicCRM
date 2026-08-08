@@ -126,149 +126,6 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
         : _fetchDayLessons(_selectedDate);
   }
 
-  // Drag/drop never mutates the local card before the shared financial decision
-  // is previewed and confirmed. A failed or dismissed flow therefore leaves the
-  // source lesson exactly where it was.
-  Future<void> _moveLessonOptimistic(
-    Map<String, dynamic> lesson,
-    DateTime newStartLocal,
-    String? newColumnId, {
-    bool preserveRoom = false,
-    bool teacherColumns = false,
-  }) async {
-    final lessonId = lesson['id']?.toString();
-    if (lessonId == null || _movingLesson) return;
-
-    final currentRoomId = lesson['room_id']?.toString();
-    final currentTeacherId = lesson['teacher_id']?.toString();
-    final targetTeacherId = teacherColumns ? newColumnId : currentTeacherId;
-    final targetRoomId = preserveRoom || teacherColumns
-        ? currentRoomId
-        : (newColumnId == null ||
-              newColumnId == kUnassignedColumnId ||
-              newColumnId.isEmpty)
-        ? null
-        : newColumnId;
-    final currentStart = _parseLessonTime(lesson);
-
-    // No-op drop (same room + same minute) → skip the round-trip.
-    if (currentStart != null &&
-        DateUtils.isSameDay(currentStart, newStartLocal) &&
-        currentStart.hour == newStartLocal.hour &&
-        currentStart.minute == newStartLocal.minute &&
-        (targetRoomId ?? '') == (currentRoomId ?? '') &&
-        (targetTeacherId ?? '') == (currentTeacherId ?? '')) {
-      return;
-    }
-
-    final offset = _offsetForLesson(lesson);
-    final utc = DateTime.utc(
-      newStartLocal.year,
-      newStartLocal.month,
-      newStartLocal.day,
-      newStartLocal.hour,
-      newStartLocal.minute,
-    ).subtract(Duration(minutes: offset));
-    final newScheduledAtIso = utc.toIso8601String();
-    final roomChanged =
-        !preserveRoom && targetRoomId != null && targetRoomId != currentRoomId;
-    final teacherChanged =
-        teacherColumns &&
-        targetTeacherId != null &&
-        targetTeacherId != currentTeacherId;
-
-    _emitState(() => _movingLesson = true);
-    try {
-      final changed = await showLessonDecisionFlow(
-        context,
-        api: ref.read(magicApiClientProvider),
-        operation: LessonDecisionOperation.reschedule,
-        lesson: lesson,
-        successor: {
-          'scheduledAt': newScheduledAtIso,
-          if (roomChanged) 'roomId': targetRoomId,
-          if (teacherChanged) 'teacherId': targetTeacherId,
-        },
-      );
-      if (changed == true && mounted) {
-        await _refreshEditedSchedule();
-        if (!mounted) return;
-        MagicToast.show(
-          context,
-          'Занятие перенесено',
-          type: MagicToastType.success,
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        MagicToast.show(
-          context,
-          'Не удалось перенести занятие',
-          detail: '$e',
-          type: MagicToastType.danger,
-        );
-      }
-    } finally {
-      if (mounted) _emitState(() => _movingLesson = false);
-    }
-  }
-
-  // ── Resize via hover/focus edge handles (KVA-195) ──────────────────────────
-  // Top handle moves the start, bottom handle moves the end. The shared decision
-  // surface owns preview, conflicts, settlement and final commit.
-  Future<void> _resizeLesson(
-    Map<String, dynamic> lesson,
-    DateTime newStartLocal,
-    int newDurationMinutes,
-  ) async {
-    if (!widget.canWrite) return;
-    final lessonId = lesson['id']?.toString();
-    if (lessonId == null || _movingLesson) return;
-
-    final offset = _offsetForLesson(lesson);
-    final utc = DateTime.utc(
-      newStartLocal.year,
-      newStartLocal.month,
-      newStartLocal.day,
-      newStartLocal.hour,
-      newStartLocal.minute,
-    ).subtract(Duration(minutes: offset));
-    final newScheduledAtIso = utc.toIso8601String();
-    _emitState(() => _movingLesson = true);
-    try {
-      final changed = await showLessonDecisionFlow(
-        context,
-        api: ref.read(magicApiClientProvider),
-        operation: LessonDecisionOperation.reschedule,
-        lesson: lesson,
-        successor: {
-          'scheduledAt': newScheduledAtIso,
-          'durationMinutes': newDurationMinutes,
-        },
-      );
-      if (changed == true && mounted) {
-        await _refreshEditedSchedule();
-        if (!mounted) return;
-        MagicToast.show(
-          context,
-          'Длительность обновлена',
-          type: MagicToastType.success,
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        MagicToast.show(
-          context,
-          'Не удалось изменить длительность',
-          detail: '$e',
-          type: MagicToastType.danger,
-        );
-      }
-    } finally {
-      if (mounted) _emitState(() => _movingLesson = false);
-    }
-  }
-
   // ── Day view by Teacher ───────────────────────────────────────────────────
   Widget _buildDayViewByTeacher() {
     final dayLessons = _lessonsForDate(_selectedDate);
@@ -337,10 +194,6 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
           ].join(' · '),
           isTrial: lesson['is_trial'] == true,
           conflicts: conflictTypes(lesson['conflict_types']),
-          movable:
-              widget.canWrite &&
-              lesson['id'] != null &&
-              lesson['status'] != 'cancelled',
           highlighted:
               _highlightLessonId != null &&
               lesson['id']?.toString() == _highlightLessonId,
@@ -361,9 +214,6 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
       entries: entries,
       allowCreate: widget.canWrite,
       onCreateSlot: (_, start, duration) => _openWeekCreate(start, duration),
-      onMove: (lesson, start, teacherId) =>
-          _moveLessonOptimistic(lesson, start, teacherId, teacherColumns: true),
-      onResize: _resizeLesson,
       onOpenLesson: _showLessonDetails,
       initialVerticalOffset: _dayScrollOffset,
       onVerticalOffsetChanged: _updateDayScrollOffset,

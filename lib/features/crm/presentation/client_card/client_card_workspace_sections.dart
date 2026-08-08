@@ -8,6 +8,7 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
     required bool canReadClientFinance,
     required bool canReadSchedule,
     required bool canWriteSchedule,
+    required bool canReadTasks,
   }) {
     return ColoredBox(
       color: cs.surfaceContainerLowest,
@@ -40,6 +41,7 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
                       canReadClientFinance: canReadClientFinance,
                       canReadSchedule: canReadSchedule,
                       canWriteSchedule: canWriteSchedule,
+                      canReadTasks: canReadTasks,
                     ),
                   ],
                 ),
@@ -100,6 +102,7 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
     required bool canReadClientFinance,
     required bool canReadSchedule,
     required bool canWriteSchedule,
+    required bool canReadTasks,
   }) {
     final bySection = {for (final tab in tabs) tab.$3: tab};
     Widget card((IconData, String, String) tab) => _desktopSectionCard(
@@ -115,6 +118,7 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
         canReadClientFinance: canReadClientFinance,
         canReadSchedule: canReadSchedule,
         canWriteSchedule: canWriteSchedule,
+        canReadTasks: canReadTasks,
       ),
     );
 
@@ -190,6 +194,7 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
     required bool canReadClientFinance,
     required bool canReadSchedule,
     required bool canWriteSchedule,
+    required bool canReadTasks,
   }) {
     return switch (section) {
       'overview' => _buildClientInfoTab(cs, currentStatus, embedded: true),
@@ -212,7 +217,10 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
       'subscriptions' => _buildSubscriptionsTab(cs, embedded: true),
       'progress' when _isStudent => _buildProgressTab(cs, embedded: true),
       'progress' => _buildLeadProgressTab(cs, embedded: true),
-      'history_tasks' => _buildDesktopHistoryAndTasks(cs),
+      'history_tasks' => _buildDesktopHistoryAndTasks(
+        cs,
+        canReadTasks: canReadTasks,
+      ),
       'contacts' => _buildFamilyTab(cs, embedded: true),
       'documents' => const Padding(
         padding: EdgeInsets.all(AppSpace.xl),
@@ -275,14 +283,18 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
     );
   }
 
-  Widget _buildDesktopHistoryAndTasks(ColorScheme cs) {
+  Widget _buildDesktopHistoryAndTasks(
+    ColorScheme cs, {
+    required bool canReadTasks,
+  }) {
     final sections = _isStudent
         ? <(String, IconData, Widget)>[
-            (
-              'Задачи',
-              Icons.task_alt_rounded,
-              SizedBox(height: 520, child: _buildStudentTasksTab(cs)),
-            ),
+            if (canReadTasks)
+              (
+                'Задачи',
+                Icons.task_alt_rounded,
+                SizedBox(height: 520, child: _buildStudentTasksTab(cs)),
+              ),
             (
               'Комментарии',
               Icons.comment_outlined,
@@ -295,11 +307,12 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
             ),
           ]
         : <(String, IconData, Widget)>[
-            (
-              'Задачи',
-              Icons.task_alt_rounded,
-              SizedBox(height: 520, child: _buildTasksTab(cs)),
-            ),
+            if (canReadTasks)
+              (
+                'Задачи',
+                Icons.task_alt_rounded,
+                SizedBox(height: 520, child: _buildTasksTab(cs)),
+              ),
             (
               'Комментарии',
               Icons.comment_outlined,
@@ -367,6 +380,7 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
     required bool canReadClientFinance,
     required bool canReadSchedule,
     required bool canWriteSchedule,
+    required bool canReadTasks,
   }) {
     return switch (section) {
       'overview' => _buildClientInfoTab(cs, currentStatus),
@@ -386,7 +400,10 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
       'subscriptions' => _buildSubscriptionsTab(cs),
       'progress' when _isStudent => _buildProgressTab(cs),
       'progress' => _buildLeadProgressTab(cs),
-      'history_tasks' => _buildHistoryAndTasksTab(cs),
+      'history_tasks' => _buildHistoryAndTasksTab(
+        cs,
+        canReadTasks: canReadTasks,
+      ),
       'contacts' => _buildFamilyTab(cs),
       'documents' => const MagicPageState(
         kind: MagicPageStateKind.empty,
@@ -510,15 +527,18 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
     );
   }
 
-  Widget _buildHistoryAndTasksTab(ColorScheme cs) {
+  Widget _buildHistoryAndTasksTab(
+    ColorScheme cs, {
+    required bool canReadTasks,
+  }) {
     final tabs = _isStudent
         ? <(String, Widget)>[
-            ('Задачи', _buildStudentTasksTab(cs)),
+            if (canReadTasks) ('Задачи', _buildStudentTasksTab(cs)),
             ('Комментарии', _buildCommentsTab(cs)),
             ('История', _buildStudentHistoryTab(cs)),
           ]
         : <(String, Widget)>[
-            ('Задачи', _buildTasksTab(cs)),
+            if (canReadTasks) ('Задачи', _buildTasksTab(cs)),
             ('Комментарии', _buildCommentsTab(cs)),
             ('История', _buildHistoryTab(cs)),
           ];

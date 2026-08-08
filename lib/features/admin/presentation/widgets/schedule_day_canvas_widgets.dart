@@ -70,20 +70,8 @@ class _RoomHeader extends StatelessWidget {
 
 class _LessonCard extends StatelessWidget {
   final ScheduleEntry entry;
-  final bool inHand;
-  final bool ghost;
 
-  /// Touch-only: this card is the tapped one, so its resize handles are out and
-  /// a second tap opens it. It has to LOOK picked, or the handles appear to
-  /// belong to nothing.
-  final bool selected;
-
-  const _LessonCard({
-    required this.entry,
-    this.inHand = false,
-    this.ghost = false,
-    this.selected = false,
-  });
+  const _LessonCard({required this.entry});
 
   Color get _accent {
     if (entry.clientContext || entry.searchContext) {
@@ -101,27 +89,15 @@ class _LessonCard extends StatelessWidget {
     final end = start.add(Duration(minutes: entry.durationMinutes));
     String hm(DateTime d) =>
         '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
-    final timeStr = inHand
-        ? 'в руках → ${hm(start)}'
-        : '${hm(start)}–${hm(end)}';
+    final timeStr = '${hm(start)}–${hm(end)}';
 
     return Container(
       key: ValueKey('schedule-lesson-${entry.id}'),
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
       decoration: BoxDecoration(
-        // `ghost` is the SOURCE left behind during a move — it stays clearly
-        // HIGHLIGHTED in place (gold wash + ring), never dimmed-out (rule 7).
-        color: ghost
-            ? AppColor.goldSoft
-            : inHand
-            ? cs.surface
-            : accent.withAlpha(34),
+        color: accent.withAlpha(34),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: ghost || selected ? AppColor.gold : accent,
-          width: ghost || selected || entry.highlighted || inHand ? 2 : 1,
-        ),
-        boxShadow: inHand || selected ? AppShadow.shLift : null,
+        border: Border.all(color: accent, width: entry.highlighted ? 2 : 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -150,17 +126,6 @@ class _LessonCard extends StatelessWidget {
                   ),
                 ),
               ),
-              // A frozen lesson used to look exactly like a movable one, so
-              // «drag does nothing» read as a broken grid rather than a rule.
-              if (!entry.movable && !inHand)
-                Padding(
-                  padding: const EdgeInsets.only(left: 2),
-                  child: Icon(
-                    Icons.lock_outline_rounded,
-                    color: cs.onSurfaceVariant,
-                    size: 11,
-                  ),
-                ),
               if (entry.conflicts.isNotEmpty)
                 const Icon(
                   Icons.warning_amber_rounded,
@@ -198,64 +163,4 @@ class _LessonCard extends StatelessWidget {
       ),
     );
   }
-}
-
-/// A simple dashed-border box (Flutter has no built-in dashed border) used for
-/// the new-booking selection and the forbidden-horizontal hint.
-class _DashedBox extends StatelessWidget {
-  final Color color;
-  final Color fill;
-  final Widget child;
-  const _DashedBox({
-    required this.color,
-    required this.fill,
-    required this.child,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: _DashedPainter(color),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: fill,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: child,
-      ),
-    );
-  }
-}
-
-class _DashedPainter extends CustomPainter {
-  final Color color;
-  _DashedPainter(this.color);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = 1.5
-      ..style = PaintingStyle.stroke;
-    final rrect = RRect.fromRectAndRadius(
-      Offset.zero & size,
-      const Radius.circular(8),
-    );
-    final path = Path()..addRRect(rrect);
-    const dash = 5.0;
-    const gap = 4.0;
-    for (final metric in path.computeMetrics()) {
-      double d = 0;
-      while (d < metric.length) {
-        canvas.drawPath(
-          metric.extractPath(d, (d + dash).clamp(0, metric.length)),
-          paint,
-        );
-        d += dash + gap;
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _DashedPainter old) => old.color != color;
 }

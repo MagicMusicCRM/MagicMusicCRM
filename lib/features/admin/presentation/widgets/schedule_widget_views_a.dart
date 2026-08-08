@@ -494,10 +494,6 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
           ].where((value) => value.isNotEmpty).join(' · '),
           isTrial: lesson['is_trial'] == true,
           conflicts: conflictTypes(lesson['conflict_types']),
-          movable:
-              widget.canWrite &&
-              lesson['id'] != null &&
-              lesson['status'] != 'cancelled',
           highlighted:
               _highlightLessonId != null &&
               lesson['id']?.toString() == _highlightLessonId,
@@ -515,9 +511,6 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
       entries: entries,
       allowCreate: widget.canWrite,
       onCreateSlot: (_, start, duration) => _openWeekCreate(start, duration),
-      onMove: (lesson, start, _) =>
-          _moveLessonOptimistic(lesson, start, null, preserveRoom: true),
-      onResize: _resizeLesson,
       onOpenLesson: _showLessonDetails,
       initialVerticalOffset: _dayScrollOffset,
       onVerticalOffsetChanged: _updateDayScrollOffset,
@@ -792,7 +785,6 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
           (rid == null || rid.isEmpty || !renderedRoomIds.contains(rid))
           ? kUnassignedColumnId
           : rid;
-      final status = l['status']?.toString();
       final teacher = _teacherNames[l['teacher_id']?.toString()] ?? '';
       final group = l['group_name']?.toString();
       final student = _studentNames[l['student_id']?.toString()] ?? '';
@@ -815,18 +807,6 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
           subtitle: teacher,
           isTrial: l['is_trial'] == true,
           conflicts: conflictTypes(l['conflict_types']),
-          // Only a CANCELLED lesson is frozen — rescheduling one is meaningless
-          // (it never happens; a new lesson is created instead).
-          //
-          // «completed»/«done» used to freeze a card too, which is why drag and
-          // resize looked broken on some cards and fine on others: the importer
-          // stamps `completed` on every lesson dated before the import run
-          // (hollihop-import.ts — `attended || isPast`), so the ~33k historical
-          // lessons — the whole schedule up to today — were all silently
-          // immovable, while tomorrow's moved fine. That status marks «in the
-          // past», not «audited»; it must not be a write lock. Fixing a
-          // mistyped past lesson is ordinary admin work.
-          movable: widget.canWrite && l['id'] != null && status != 'cancelled',
           highlighted:
               _highlightLessonId != null &&
               l['id']?.toString() == _highlightLessonId,
@@ -851,8 +831,6 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
       entries: entries,
       allowCreate: widget.canWrite,
       onCreateSlot: _openQuickCreate,
-      onMove: _moveLessonOptimistic,
-      onResize: _resizeLesson,
       onOpenLesson: _showLessonDetails,
       initialVerticalOffset: _dayScrollOffset,
       onVerticalOffsetChanged: _updateDayScrollOffset,

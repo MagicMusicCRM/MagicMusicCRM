@@ -160,7 +160,6 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
 
   // Guards against overlapping move/resize requests (double-drop / refetch in
   // flight); also drives the optimistic in-place patch + rollback (KVA-195).
-  bool _movingLesson = false;
 
   // Debounce for realtime refetches: a burst of lesson events from other staff
   // would otherwise trigger one full refetch each. Coalesce them into a single
@@ -340,15 +339,12 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     ref.listen(crmRealtimeProvider, (prev, next) {
       final event = next.value;
       if (event == null || event.entity != 'lesson' || !mounted) return;
-      // Don't refetch while loading or while an optimistic move/resize is in
-      // flight — a mid-flight reload would clobber the in-place patch (the move
-      // refetches itself on completion).
-      if (_isLoading || _movingLesson) return;
+      if (_isLoading) return;
       // Debounce: coalesce a burst of lesson events into one refetch so we don't
       // fire a full reload per event.
       _realtimeDebounce?.cancel();
       _realtimeDebounce = Timer(const Duration(milliseconds: 350), () {
-        if (!mounted || _isLoading || _movingLesson) return;
+        if (!mounted || _isLoading) return;
         if (_currentView == ScheduleView.day) {
           _fetchDayLessons(_selectedDate);
         } else {
