@@ -123,7 +123,7 @@
 
 - **Последняя версия архитектуры**: `.anws/v7` (Financial & Lesson Integrity)
 - **Активный список задач**: `.anws/v7/05_TASKS.md` — следующая T7.1.2
-- **Фаза**: production mega-UAT кандидата `1.5.1+159`
+- **Фаза**: production mega-UAT кандидата `1.5.1+160`
 - **Последнее обновление**: `2026-08-08`
 
 ### 🌊 Wave v7/S0 — Architecture Foundation ✅
@@ -414,6 +414,15 @@ Client Card/notes/history/schedule plans закрыты и повторно пр
 Windows/Android; 26-point pack получил PRODUCTION PASS 26/26
 (`docs/audits/v7-production-backend-sync.md`,
 `docs/audits/v7-26-point-final-verification.md`)._
+
+_`T7.1.3` закрыта 2026-08-08: Staff/Teacher создаются сразу как app users с
+обязательными email/password, филиалами и справочными дисциплинами; старые
+CRM-записи получают вход через атомарную команду «Создать доступ» без дубля.
+Группы используют branch-filtered teacher/room, аудитории перенесены в карточку
+филиала. Production `ebcd7fa` healthy, Release `1.5.1+160` опубликован после
+совпадения SHA-256 Windows/APK/AAB; full backend 157/157 suites и 1247/1247,
+Flutter 649/649 (`docs/audits/v7-organizational-constructors-160.md`). Следующий
+шаг остаётся `T7.1.2` — продолжение связанного production-мегатеста._
 
 ### 🌊 Wave v6/S0 — Evidence & UX Foundation ✅
 _Owner подтвердил полное выполнение v6. `V6-001..005` и `INT-S0` закрыты 2026-08-04: воспроизводимый generator покрывает 21 GoRouter route, 248/259 production-reachable Dart files, 256/256 service calls, route/surface/navigation/input/back ownership с unowned=0; v4 inventory обновлён и снова проходит stale-check. Baseline: Flutter analyze clean и 486/486 tests, backend typecheck/build clean, 150/150 suites и 1160/1160 tests, actor/payload 9/9, targeted workflow contracts 68/68 (`docs/audits/v6-s0-baseline.md`). Следующий шаг `/forge`: `V6-101` canonical location adapter._
