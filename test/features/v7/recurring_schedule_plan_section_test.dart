@@ -213,14 +213,16 @@ void main() {
     await tester.tap(
       find.byKey(ValueKey('preferred-schedule-weekday-$otherDay')),
     );
-    await tester.tap(find.text('Мария Иванова').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Пётр Сидоров').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Класс 1').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Класс 2').last);
-    await tester.pumpAndSettle();
+    await _chooseSearchable(
+      tester,
+      const ValueKey('preferred-schedule-teacher'),
+      'Пётр Сидоров',
+    );
+    await _chooseSearchable(
+      tester,
+      const ValueKey('preferred-schedule-room'),
+      'Класс 2',
+    );
     await tester.ensureVisible(
       find.byKey(const ValueKey('preferred-schedule-save')),
     );
@@ -381,14 +383,16 @@ Future<void> _pump(
 }
 
 Future<void> _chooseReferences(WidgetTester tester) async {
-  await tester.tap(find.text('Выберите педагога'));
-  await tester.pumpAndSettle();
-  await tester.tap(find.text('Мария Иванова').last);
-  await tester.pumpAndSettle();
-  await tester.tap(find.text('Выберите аудиторию'));
-  await tester.pumpAndSettle();
-  await tester.tap(find.text('Класс 1').last);
-  await tester.pumpAndSettle();
+  await _chooseSearchable(
+    tester,
+    const ValueKey('preferred-schedule-teacher'),
+    'Мария Иванова',
+  );
+  await _chooseSearchable(
+    tester,
+    const ValueKey('preferred-schedule-room'),
+    'Класс 1',
+  );
   await tester.ensureVisible(
     find.byKey(const ValueKey('schedule-plan-settlement-type')),
   );
@@ -401,5 +405,22 @@ Future<void> _chooseReferences(WidgetTester tester) async {
   );
   await tester.pumpAndSettle();
   await tester.tap(find.text('Не оплачивать').last);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _chooseSearchable(
+  WidgetTester tester,
+  Key field,
+  String option,
+) async {
+  await tester.ensureVisible(find.byKey(field));
+  await tester.tap(find.byKey(field));
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.descendant(
+      of: find.byType(Scrollbar).last,
+      matching: find.text(option),
+    ),
+  );
   await tester.pumpAndSettle();
 }

@@ -38,6 +38,22 @@ Widget _app(FakeCardApiClient api, Widget child) {
   );
 }
 
+Future<void> _chooseSearchable(
+  WidgetTester tester,
+  Key field,
+  String option,
+) async {
+  await tester.tap(find.byKey(field));
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.descendant(
+      of: find.byType(Scrollbar).last,
+      matching: find.text(option),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
 void main() {
   setUpAll(() => initializeDateFormatting('ru'));
 
@@ -450,14 +466,16 @@ void main() {
     await tester.tap(
       find.byKey(ValueKey('preferred-schedule-weekday-$addedDay')),
     );
-    await tester.tap(find.text('Выберите педагога'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Мария Иванова'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Выберите аудиторию'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Класс 1'));
-    await tester.pumpAndSettle();
+    await _chooseSearchable(
+      tester,
+      const ValueKey('preferred-schedule-teacher'),
+      'Мария Иванова',
+    );
+    await _chooseSearchable(
+      tester,
+      const ValueKey('preferred-schedule-room'),
+      'Класс 1',
+    );
     await tester.tap(
       find.byKey(const ValueKey('preferred-schedule-lessons-per-day')),
     );

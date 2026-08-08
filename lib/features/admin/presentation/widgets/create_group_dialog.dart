@@ -206,39 +206,31 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
             validator: (value) => value == null ? 'Выберите филиал' : null,
           ),
           const SizedBox(height: 12),
-          InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTap: _branchId == null || visibleTeachers.isEmpty
-                ? null
-                : () => SearchableSelect.show(
-                    context: context,
-                    title: 'Преподаватель',
-                    hintText: 'Поиск по имени…',
-                    selectedId: _teacherId,
-                    items: [
-                      for (final teacher in visibleTeachers)
-                        SearchableSelectItem(
-                          id: teacher['id']?.toString() ?? '',
-                          label: _personName(teacher),
-                        ),
-                    ],
-                    onSelected: (item) => setState(() => _teacherId = item?.id),
-                  ),
-            child: InputDecorator(
-              decoration: const InputDecoration(labelText: 'Преподаватель *'),
-              child: Text(
-                _selectedTeacherName() ??
-                    (_branchId == null
-                        ? 'Сначала выберите филиал'
-                        : visibleTeachers.isEmpty
-                        ? 'Нет назначенных преподавателей'
-                        : 'Выберите преподавателя'),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
+          SearchablePickerField(
+            key: const ValueKey('group-teacher-field'),
+            label: 'Преподаватель *',
+            placeholder: _branchId == null
+                ? 'Сначала выберите филиал'
+                : visibleTeachers.isEmpty
+                ? 'Нет назначенных преподавателей'
+                : 'Выберите преподавателя',
+            hintText: 'Введите имя или ФИО преподавателя',
+            enabled: _branchId != null && visibleTeachers.isNotEmpty,
+            selectedId: _teacherId,
+            selectedLabel: _selectedTeacherName(),
+            isNullable: false,
+            items: [
+              for (final teacher in visibleTeachers)
+                SearchableSelectItem(
+                  id: teacher['id']?.toString() ?? '',
+                  label: _personName(teacher),
+                ),
+            ],
+            onSelected: (item) => setState(() => _teacherId = item?.id),
           ),
           const SizedBox(height: 12),
           SearchablePickerField(
+            key: const ValueKey('group-room-field'),
             label: 'Аудитория *',
             placeholder: _branchId == null
                 ? 'Сначала выберите филиал'

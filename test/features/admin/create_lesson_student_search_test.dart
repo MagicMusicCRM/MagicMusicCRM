@@ -104,7 +104,13 @@ void main() {
     // She is nowhere in the pre-loaded page — the old picker stopped here.
     expect(find.text('Зинаида Заречная'), findsNothing);
 
-    await tester.enterText(find.byType(TextField).last, 'Зинаида');
+    await tester.enterText(
+      find.descendant(
+        of: find.byKey(const ValueKey('lesson-client-field')),
+        matching: find.byType(TextField),
+      ),
+      'Зинаида',
+    );
     // Past the 350 ms search debounce.
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
@@ -114,20 +120,25 @@ void main() {
       contains('Зинаида'),
       reason: 'typing must reach /crm/clients/search, not filter one page',
     );
-    expect(find.text('Зинаида Заречная'), findsOneWidget);
+    final result = find.descendant(
+      of: find.byType(Scrollbar).last,
+      matching: find.text('Зинаида Заречная'),
+    );
+    expect(result, findsOneWidget);
 
     // Picking her must stick even though she was absent from the initial page.
-    await tester.tap(find.text('Зинаида Заречная'));
+    await tester.tap(result);
     await tester.pumpAndSettle();
 
-    // The sheet is gone, so the surviving name is the one the field renders.
     final studentField = find.byKey(const ValueKey('lesson-client-field'));
     expect(
-      find.descendant(
-        of: studentField,
-        matching: find.text('Зинаида Заречная'),
-      ),
-      findsOneWidget,
+      tester
+          .widget<TextField>(
+            find.descendant(of: studentField, matching: find.byType(TextField)),
+          )
+          .controller!
+          .text,
+      'Зинаида Заречная',
       reason: 'the selected typed client must retain the server label',
     );
   });

@@ -198,6 +198,22 @@ Future<void> _pump(
   await tester.pumpAndSettle();
 }
 
+Future<void> _chooseSearchable(
+  WidgetTester tester,
+  Key field,
+  String option,
+) async {
+  await tester.tap(find.byKey(field));
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.descendant(
+      of: find.byType(Scrollbar).last,
+      matching: find.text(option),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('manager sees one six-area settings workspace read-only', (
     tester,
@@ -385,14 +401,16 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Сокол').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Выберите преподавателя'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Мария Петрова').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Выберите аудиторию'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Вокальный класс').last);
-    await tester.pumpAndSettle();
+    await _chooseSearchable(
+      tester,
+      const ValueKey('group-teacher-field'),
+      'Мария Петрова',
+    );
+    await _chooseSearchable(
+      tester,
+      const ValueKey('group-room-field'),
+      'Вокальный класс',
+    );
     await tester.tap(find.widgetWithText(FilledButton, 'Создать группу'));
     await tester.pumpAndSettle();
 

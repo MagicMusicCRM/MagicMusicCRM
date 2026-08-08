@@ -82,14 +82,12 @@ void main() {
     await tester.tap(
       find.byKey(const ValueKey('preferred-schedule-weekday-1')),
     );
-    await tester.tap(find.text('Выберите педагога'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Мария Иванова'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Выберите аудиторию'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Класс 1'));
-    await tester.pumpAndSettle();
+    await _choose(
+      tester,
+      const ValueKey('preferred-schedule-teacher'),
+      'Мария Иванова',
+    );
+    await _choose(tester, const ValueKey('preferred-schedule-room'), 'Класс 1');
 
     await tester.tap(
       find.byKey(const ValueKey('preferred-schedule-lessons-per-day')),
@@ -110,6 +108,18 @@ void main() {
     expect(result!.weekdays, contains(DateTime.monday));
     expect(result!.lessonsPerDay, 2);
   });
+}
+
+Future<void> _choose(WidgetTester tester, Key field, String option) async {
+  await tester.tap(find.byKey(field));
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.descendant(
+      of: find.byType(Scrollbar).last,
+      matching: find.text(option),
+    ),
+  );
+  await tester.pumpAndSettle();
 }
 
 Future<void> _openEditor(

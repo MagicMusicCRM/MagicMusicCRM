@@ -236,11 +236,13 @@ void main() {
     tester,
   ) async {
     var previews = 0;
+    final payerQueries = <String>[];
     await _openSheet(
       tester,
-      searchPayers: (_) async => [
-        SearchableSelectItem(id: _payerId, label: 'Петров Пётр'),
-      ],
+      searchPayers: (query) async {
+        payerQueries.add(query);
+        return [SearchableSelectItem(id: _payerId, label: 'Петров Пётр')];
+      },
       onPreview: (input) async {
         previews++;
         return _preview(payerId: input.payerStudentId);
@@ -248,10 +250,46 @@ void main() {
       onSubmit: (_) async {},
     );
     await _tap(tester, find.byKey(const Key('subscription-payer')));
-    await tester.enterText(find.byType(TextField).last, 'Петров');
+    await tester.enterText(
+      find.descendant(
+        of: find.byKey(const Key('subscription-payer')),
+        matching: find.byType(TextField),
+      ),
+      'Петров',
+    );
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pumpAndSettle();
-    await _tap(tester, find.text('Петров Пётр'));
+    expect(payerQueries, contains('Петров'));
+    expect(
+      tester
+          .widget<TextField>(
+            find.descendant(
+              of: find.byKey(const Key('subscription-payer')),
+              matching: find.byType(TextField),
+            ),
+          )
+          .controller!
+          .text,
+      'Петров',
+    );
+    final payerMenu = tester.widget<DropdownMenu<String>>(
+      find.descendant(
+        of: find.byKey(const Key('subscription-payer')),
+        matching: find.byType(DropdownMenu<String>),
+      ),
+    );
+    expect(
+      payerMenu.dropdownMenuEntries.map((entry) => entry.label),
+      contains('Петров Пётр'),
+    );
+    expect(find.text('Петров Пётр'), findsWidgets);
+    await _tap(
+      tester,
+      find.descendant(
+        of: find.byType(Scrollbar).last,
+        matching: find.text('Петров Пётр'),
+      ),
+    );
     await _tap(tester, find.byKey(const Key('subscription-issue-submit')));
     expect(find.text('Укажите причину оплаты с чужого счёта'), findsOne);
     expect(previews, 0);

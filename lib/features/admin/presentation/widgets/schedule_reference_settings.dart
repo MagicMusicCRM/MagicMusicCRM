@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
+import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/core/widgets/v7/magic_toast.dart';
 
 class ScheduleReferenceSettings extends ConsumerStatefulWidget {
@@ -309,41 +311,40 @@ class _ScheduleReferenceSettingsState
             ? constraints.maxWidth
             : (constraints.maxWidth - 12) / 2;
         final fields = [
-          DropdownMenu<String>(
+          SearchablePickerField(
             key: ValueKey('settings-branch-$_branchId'),
-            width: width,
-            enableFilter: true,
-            requestFocusOnTap: true,
-            initialSelection: _branchId,
-            label: const Text('Филиал'),
-            dropdownMenuEntries: [
+            label: 'Филиал',
+            selectedId: _branchId,
+            isNullable: false,
+            items: [
               for (final branch in _branches)
-                DropdownMenuEntry(
-                  value: branch['id'].toString(),
+                SearchableSelectItem(
+                  id: branch['id'].toString(),
                   label: branch['name']?.toString() ?? 'Филиал',
                 ),
             ],
-            onSelected: (value) {
+            onSelected: (item) {
+              final value = item?.id;
               if (value == null || value == _branchId) return;
               _branchId = value;
               _loadReference();
             },
           ),
-          DropdownMenu<String>(
+          SearchablePickerField(
             key: ValueKey('settings-teacher-$_teacherId'),
-            width: width,
-            enableFilter: true,
-            requestFocusOnTap: true,
-            initialSelection: _teacherId,
-            label: const Text('Преподаватель'),
-            dropdownMenuEntries: [
+            label: 'Преподаватель',
+            hintText: 'Введите имя или ФИО преподавателя',
+            selectedId: _teacherId,
+            isNullable: false,
+            items: [
               for (final teacher in _teachers)
-                DropdownMenuEntry(
-                  value: teacher['id'].toString(),
+                SearchableSelectItem(
+                  id: teacher['id'].toString(),
                   label: _teacherName(teacher),
                 ),
             ],
-            onSelected: (value) {
+            onSelected: (item) {
+              final value = item?.id;
               if (value == null || value == _teacherId) return;
               _teacherId = value;
               _loadReference();
@@ -354,7 +355,13 @@ class _ScheduleReferenceSettingsState
             ? Column(
                 children: [fields[0], const SizedBox(height: 12), fields[1]],
               )
-            : Row(children: [fields[0], const SizedBox(width: 12), fields[1]]);
+            : Row(
+                children: [
+                  SizedBox(width: width, child: fields[0]),
+                  const SizedBox(width: 12),
+                  SizedBox(width: width, child: fields[1]),
+                ],
+              );
       },
     );
   }

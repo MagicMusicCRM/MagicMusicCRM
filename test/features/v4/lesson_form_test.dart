@@ -386,24 +386,17 @@ Future<void> _selectRequiredResources(
   WidgetTester tester, {
   required String clientName,
 }) async {
-  await tester.tap(find.byKey(const ValueKey('lesson-client-field')));
-  await tester.pumpAndSettle();
-  await tester.tap(find.text(clientName).last);
-  await tester.pumpAndSettle();
-
-  await tester.ensureVisible(
-    find.byKey(const ValueKey('lesson-teacher-field')),
+  await _chooseSearchable(
+    tester,
+    const ValueKey('lesson-client-field'),
+    clientName,
   );
-  await tester.tap(find.byKey(const ValueKey('lesson-teacher-field')));
-  await tester.pumpAndSettle();
-  await tester.tap(find.text('Пётр Педагогов').last);
-  await tester.pumpAndSettle();
-
-  await tester.ensureVisible(find.byKey(const ValueKey('lesson-room-field')));
-  await tester.tap(find.byKey(const ValueKey('lesson-room-field')));
-  await tester.pumpAndSettle();
-  await tester.tap(find.text('Зал 1').last);
-  await tester.pumpAndSettle();
+  await _chooseSearchable(
+    tester,
+    const ValueKey('lesson-teacher-field'),
+    'Пётр Педагогов',
+  );
+  await _chooseSearchable(tester, const ValueKey('lesson-room-field'), 'Зал 1');
 
   await tester.ensureVisible(
     find.byKey(const ValueKey('lesson-settlement-type-field')),
@@ -417,6 +410,23 @@ Future<void> _selectRequiredResources(
   );
   await tester.pumpAndSettle();
   await tester.tap(find.text('Не оплачивать').last);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _chooseSearchable(
+  WidgetTester tester,
+  Key field,
+  String option,
+) async {
+  await tester.ensureVisible(find.byKey(field));
+  await tester.tap(find.byKey(field));
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.descendant(
+      of: find.byType(Scrollbar).last,
+      matching: find.text(option),
+    ),
+  );
   await tester.pumpAndSettle();
 }
 
@@ -498,10 +508,11 @@ void main() {
         ],
       );
       await _pumpDialog(tester, client);
-      await tester.tap(find.byKey(const ValueKey('lesson-client-field')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Иван Прилежный').last);
-      await tester.pumpAndSettle();
+      await _chooseSearchable(
+        tester,
+        const ValueKey('lesson-client-field'),
+        'Иван Прилежный',
+      );
 
       await tester.ensureVisible(
         find.byKey(const ValueKey('lesson-charge-type-field')),

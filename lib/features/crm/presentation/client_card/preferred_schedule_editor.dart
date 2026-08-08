@@ -512,6 +512,7 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
             ),
           const SizedBox(height: AppSpace.md),
           SearchablePickerField(
+            key: const ValueKey('preferred-schedule-teacher'),
             label: 'Педагог *',
             placeholder: branchTeachers.isEmpty
                 ? 'Нет назначенных в этот филиал педагогов'
@@ -531,6 +532,7 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
           ),
           const SizedBox(height: AppSpace.md),
           SearchablePickerField(
+            key: const ValueKey('preferred-schedule-room'),
             label: 'Аудитория *',
             placeholder: branchRooms.isEmpty
                 ? 'В филиале нет доступных аудиторий'

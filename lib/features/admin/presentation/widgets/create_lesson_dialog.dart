@@ -712,16 +712,31 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _buildSelectionField(
+              SearchablePickerField(
                 key: const ValueKey('lesson-client-field'),
                 label: 'Клиент *',
-                value: _selectedClient?['label']?.toString() ?? 'Не выбран',
-                badge: _clientType == null ? null : _clientBadge(_clientType!),
+                placeholder: 'Не выбран',
+                hintText: 'Введите имя или ФИО клиента',
+                selectedId: _clientKey,
+                selectedLabel: _selectedClient == null
+                    ? null
+                    : '${_selectedClient!['label']} · ${_clientType == 'lead' ? 'Lead' : 'Student'}',
+                items: [for (final row in _clients) _clientItem(row)],
+                onSearch: (query) async {
+                  final rows = await _crm.searchClientRefs(q: query, limit: 50);
+                  return [for (final row in rows) _clientItem(row)];
+                },
+                isNullable: false,
                 enabled:
                     !_snapshotLocked &&
                     widget.leadId == null &&
                     widget.clientId == null,
-                onTap: _pickClient,
+                onSelected: (item) {
+                  final row = item?.data;
+                  if (row == null) return;
+                  setState(() => _selectedClient = row);
+                  _loadSubscriptions();
+                },
               ),
               const SizedBox(height: 16),
               _responsivePair(
@@ -777,12 +792,26 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                 ),
               ),
               const SizedBox(height: 16),
-              _buildSelectionField(
+              SearchablePickerField(
                 key: const ValueKey('lesson-teacher-field'),
                 label: 'Преподаватель *',
-                value: _getTeacherName(_selectedTeacherId),
+                placeholder: 'Выберите преподавателя',
+                hintText: 'Введите имя или ФИО преподавателя',
+                selectedId: _selectedTeacherId,
+                selectedLabel: _selectedTeacherId == null
+                    ? null
+                    : _getTeacherName(_selectedTeacherId),
+                items: [
+                  for (final teacher in _eligibleTeachers)
+                    SearchableSelectItem(
+                      id: teacher['id'].toString(),
+                      label: _getTeacherNameFromData(teacher),
+                    ),
+                ],
+                isNullable: false,
                 enabled: _eligibleTeachers.isNotEmpty,
-                onTap: _pickTeacher,
+                onSelected: (item) =>
+                    setState(() => _selectedTeacherId = item?.id),
               ),
               if (_selectedBranchId != null && _eligibleTeachers.isEmpty)
                 Padding(
@@ -1051,27 +1080,6 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     );
   }
 
-  Future<void> _pickClient() async {
-    SearchableSelect.show(
-      context: context,
-      title: 'Выберите клиента',
-      hintText: 'Поиск Lead или Student по ФИО...',
-      items: [for (final row in _clients) _clientItem(row)],
-      onSearch: (query) async {
-        final rows = await _crm.searchClientRefs(q: query, limit: 50);
-        return [for (final row in rows) _clientItem(row)];
-      },
-      selectedId: _clientKey,
-      isNullable: false,
-      onSelected: (item) async {
-        final row = item?.data;
-        if (row == null) return;
-        setState(() => _selectedClient = row);
-        await _loadSubscriptions();
-      },
-    );
-  }
-
   SearchableSelectItem _clientItem(Map<String, dynamic> row) {
     final type = _clientTypeFor(row);
     return SearchableSelectItem(
@@ -1079,86 +1087,6 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
       label: row['label']?.toString() ?? 'Клиент без имени',
       subtitle: type == 'lead' ? 'Lead' : 'Student',
       data: row,
-    );
-  }
-
-  void _pickTeacher() {
-    SearchableSelect.show(
-      context: context,
-      title: 'Выберите преподавателя',
-      hintText: 'Поиск по имени...',
-      items: [
-        for (final teacher in _eligibleTeachers)
-          SearchableSelectItem(
-            id: teacher['id'].toString(),
-            label: _getTeacherNameFromData(teacher),
-          ),
-      ],
-      selectedId: _selectedTeacherId,
-      isNullable: false,
-      onSelected: (item) => setState(() => _selectedTeacherId = item?.id),
-    );
-  }
-
-  Widget _buildSelectionField({
-    Key? key,
-    required String label,
-    required String value,
-    required VoidCallback onTap,
-    Widget? badge,
-    bool enabled = true,
-  }) {
-    return InkWell(
-      key: key,
-      onTap: enabled ? onTap : null,
-      borderRadius: BorderRadius.circular(AppRadius.control),
-      child: InputDecorator(
-        decoration: InputDecoration(
-          labelText: label,
-          enabled: enabled,
-          suffixIcon: enabled
-              ? const Icon(Icons.arrow_drop_down)
-              : const Icon(Icons.lock_outline_rounded, size: 18),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                value,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: value == 'Не выбран'
-                      ? Theme.of(context).colorScheme.onSurfaceVariant
-                      : null,
-                ),
-              ),
-            ),
-            ?badge,
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _clientBadge(String type) {
-    final isLead = type == 'lead';
-    return Container(
-      margin: const EdgeInsets.only(left: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: (isLead ? AppColor.gold : AppColor.infoViolet).withValues(
-          alpha: 0.12,
-        ),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        isLead ? 'Lead' : 'Student',
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: isLead ? AppColor.gold : AppColor.infoViolet,
-        ),
-      ),
     );
   }
 
