@@ -39,6 +39,7 @@ graph TD
   Y --> I4R
   C2 --> I4R
   I4R --> U["T6.1.1 Full gates"] --> V["T6.1.2 Devices/build"] --> W["T6.1.3 Release 1.5.1"] --> I5["INT-S5"]
+  I5 --> A6["T7.1.1 Admin task board"] --> B6["T7.1.2 Production mega-UAT"] --> I6["INT-S6"]
 ```
 
 ## Дорожная карта
@@ -52,6 +53,7 @@ graph TD
 | S4 | Client Workspace | adaptive UI, note/history/actions/config | desktop/mobile parity and no duplicate Actions | 30 ч |
 | S4R | Owner Refinement | entity-text links, plan conflicts, planned auto settlement/correction | atomic worker/correction + explainable constraints + adaptive parity | 74 ч |
 | S5 | Final Candidate | full regression, devices, release evidence | all gates + 5 accounts + signed artifacts | 24 ч |
+| S6 | Owner Production Mega-UAT | Admin tasks + связанный production-прогон | owner matrix, UI/API/DB reconciliation, explicit decision | 93 ч |
 
 ## S0 — Data Foundation
 
@@ -570,6 +572,50 @@ graph TD
   - **Зависимости**: T6.1.1, T6.1.2, T6.1.3.
   - **Приоритет**: P0.
 
+## S6 — Owner Production Mega-UAT
+
+### SYS-OPERATIONS / SYS-ACCESS-SCOPE
+
+- [x] **T7.1.1** [OWNER-2026-08-08]: Общая доска задач Администратора
+  - **Описание**: Добавить Admin в branch-scoped read/close task workflow и production navigation без create/edit; стартовое состояние доски — одновременно `Мои задачи` и `Сегодня`, остальные существующие фильтры остаются доступны.
+  - **Входные данные**: подтверждение владельца 2026-08-08, существующие capability projection, SharedTask API/provider и task filter model.
+  - **Выходные данные**: минимальные read/close capability/nav/default-filter изменения и regression tests без task-write/school-finance/config expansion.
+  - **Критерии приемки**:
+    - Given Admin opens Tasks first time, Then board requests only allowed scope and shows `Мои задачи + Сегодня`.
+    - Given Admin changes filters, Then все существующие разрешённые фильтры работают без повышения scope.
+    - Given Teacher/Client or out-of-scope Admin, Then task payload/access remains denied or projected safely.
+  - **Тип верификации**: backend Actor Matrix + Flutter unit/widget/integration.
+  - **Инструкция по верификации**: capability/package/route checks, default filter regression, Admin Windows Release smoke.
+  - **Оценка**: 6 ч.
+  - **Зависимости**: INT-S5.
+  - **Приоритет**: P0.
+
+### SYS-PLATFORM-QUALITY / ALL PRODUCTION SYSTEMS
+
+- [ ] **T7.1.2** [OWNER-2026-08-08]: Выполнить связанный production-мегатест
+  - **Описание**: Выполнить `docs/audits/v7-owner-production-mega-uat-plan.md` на production с UAT-prefixed филиалом `Оборонная 30`, реальными `magic1..5`, Windows для Admin/Manager/Director и Android emulator для Client/Teacher.
+  - **Входные данные**: T7.1.1, production backup/restore-check, signed Release 1.5.1.
+  - **Выходные данные**: уникальные screenshots, redacted traces, exports, ID ledger, API/DB/reconciliation и defect/retest log.
+  - **Критерии приемки**:
+    - Given all planned custom/role/commerce/schedule/operations scenarios, When executed through real UI, Then each row is PASS/FAIL/BLOCKED with role-correct visible proof and exact persisted result.
+    - Given production immutable facts, Then every UAT entity/fact is traceable, ordinary reversal/exclusion follows domain rules and no manual DB deletion hides history.
+  - **Тип верификации**: Production E2E/Manual/Smoke/Reconciliation.
+  - **Инструкция по верификации**: follow runbook G0–G14; stop on financial drift, data leak, duplicate effect or unexplained 5xx.
+  - **Оценка**: 83 ч + worker/webhook ожидание.
+  - **Зависимости**: T7.1.1.
+  - **Приоритет**: P0.
+
+- [ ] **INT-S6** [MILESTONE]: Owner production decision
+  - **Описание**: Сопоставить каждый результат мегатеста с UI/API/DB evidence и принять или отклонить production candidate.
+  - **Входные данные**: T7.1.1–T7.1.2.
+  - **Выходные данные**: `docs/audits/v7-owner-production-mega-uat-result.md` и итоговый DOCX.
+  - **Критерии приемки**: каждый обязательный шаг подписан; открытый P0, необъяснённый drift/error или отсутствующий role proof даёт `NOT APPROVED`.
+  - **Тип верификации**: Owner acceptance.
+  - **Инструкция по верификации**: независимая проверка evidence index, hashes, defects/retests and final reconciliation.
+  - **Оценка**: 4 ч.
+  - **Зависимости**: T7.1.2.
+  - **Приоритет**: P0.
+
 ## User Story Overlay
 
 | User Story | Задачи | Проверяемый результат | Покрытие |
@@ -590,7 +636,7 @@ graph TD
 
 ## Итог
 
-- Level-3 implementation tasks: **28**
-- Integration milestones: **7**
-- P0 tasks/milestones: **32**; P1: **3**
-- Прогноз: **243 ч** включая проверки и release evidence.
+- Level-3 implementation tasks: **30**
+- Integration milestones: **8**
+- P0 tasks/milestones: **35**; P1: **3**
+- Прогноз: **336 ч** включая production mega-UAT и release evidence.

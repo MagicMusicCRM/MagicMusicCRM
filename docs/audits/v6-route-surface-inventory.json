@@ -981,7 +981,7 @@
         "retry": false
       },
       "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
-      "line": 423
+      "line": 424
     },
     {
       "kind": "dialog",
@@ -1205,7 +1205,7 @@
         "retry": true
       },
       "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
-      "line": 1117
+      "line": 1150
     },
     {
       "kind": "adaptive-surface",
@@ -1221,7 +1221,7 @@
         "retry": true
       },
       "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
-      "line": 597
+      "line": 601
     },
     {
       "kind": "dialog",

@@ -278,6 +278,7 @@ extension _MessengerBuildersA on _MessengerScreenState {
       6 when access?.allows('workflow.task.read') == true => SharedTasksV4Panel(
         initialLink: widget.initialLink,
         canWrite: _accessSnapshot?.allows('workflow.task.write') == true,
+        defaultToMineToday: widget.role == 'admin',
       ),
       7 when access?.allows('report.status.read') == true => ReportsWidget(
         role: widget.role,

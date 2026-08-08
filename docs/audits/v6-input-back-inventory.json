@@ -496,7 +496,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
-      "line": 541
+      "line": 542
     },
     {
       "kind": "ListView.builder",
@@ -738,7 +738,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
-      "line": 779
+      "line": 790
     },
     {
       "kind": "SingleChildScrollView",
@@ -749,7 +749,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
-      "line": 857
+      "line": 880
     },
     {
       "kind": "GridView.builder",
@@ -760,7 +760,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
-      "line": 974
+      "line": 1007
     },
     {
       "kind": "SingleChildScrollView",
@@ -771,7 +771,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
-      "line": 1206
+      "line": 1239
     },
     {
       "kind": "SingleChildScrollView",
@@ -782,7 +782,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
-      "line": 1257
+      "line": 1290
     },
     {
       "kind": "SingleChildScrollView",
@@ -793,7 +793,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
-      "line": 1601
+      "line": 1634
     },
     {
       "kind": "Scrollbar",
@@ -2515,7 +2515,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
-      "line": 1125
+      "line": 1158
     },
     {
       "kind": "imperative-exit",
@@ -2524,7 +2524,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
-      "line": 1726
+      "line": 1759
     },
     {
       "kind": "imperative-exit",
@@ -2533,7 +2533,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
-      "line": 1931
+      "line": 1964
     },
     {
       "kind": "imperative-exit",

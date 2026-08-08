@@ -352,6 +352,7 @@ class SharedTasksV4Panel extends ConsumerStatefulWidget {
     this.linkedEntity,
     this.scrollController,
     this.canWrite,
+    this.defaultToMineToday = false,
   });
 
   final SharedTasksDataSource? dataSource;
@@ -360,6 +361,7 @@ class SharedTasksV4Panel extends ConsumerStatefulWidget {
   final EntityLink? linkedEntity;
   final ScrollController? scrollController;
   final bool? canWrite;
+  final bool defaultToMineToday;
 
   @override
   ConsumerState<SharedTasksV4Panel> createState() => _SharedTasksV4PanelState();
@@ -373,7 +375,7 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
   Object? _error;
   String _filter = 'open';
   String _priority = 'all';
-  String _scope = 'all';
+  late String _scope;
   final TextEditingController _search = TextEditingController();
   bool _calendarMode = false;
   DateTime _calendarMonth = DateTime(DateTime.now().year, DateTime.now().month);
@@ -389,6 +391,8 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
   void initState() {
     super.initState();
     _dataSource = widget.dataSource ?? _ServiceSharedTasksDataSource(ref);
+    _scope = widget.defaultToMineToday ? 'mine' : 'all';
+    if (widget.defaultToMineToday) _selectedDay = _moscowToday();
     Future<void>.microtask(_load);
   }
 
@@ -410,7 +414,7 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
       final focusedTask =
           widget.initialLink?.entityType == EntityLinkType.task &&
           widget.initialLink?.entityId != '__section__';
-      final day = _selectedDay;
+      final day = focusedTask ? null : _selectedDay;
       final dayFrom = day == null ? null : _moscowInstant(day);
       final dayTo = day == null
           ? null
@@ -672,8 +676,8 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
                 search: _search,
                 priority: _priority,
                 scope: _scope,
+                selectedDay: _selectedDay,
                 calendarMode: _calendarMode,
-                showScopes: canWrite,
                 onSearch: () {
                   _selectedDay = null;
                   _load();
@@ -689,6 +693,13 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
                   setState(() {
                     _scope = value;
                     _selectedDay = null;
+                  });
+                  _load();
+                },
+                onDayChanged: (value) {
+                  setState(() {
+                    _selectedDay = value;
+                    _calendarMode = false;
                   });
                   _load();
                 },
@@ -811,6 +822,16 @@ String _moscowInstant(DateTime date) => DateTime.utc(
   date.day,
 ).subtract(const Duration(hours: 3)).toIso8601String();
 
+DateTime _moscowToday() {
+  final now = DateTime.now().toUtc().add(const Duration(hours: 3));
+  return DateTime(now.year, now.month, now.day);
+}
+
+bool _sameDay(DateTime left, DateTime right) =>
+    left.year == right.year &&
+    left.month == right.month &&
+    left.day == right.day;
+
 bool _isOverdueSharedTask(Map<String, dynamic> task) {
   final start = DateTime.tryParse(task['startAt']?.toString() ?? '');
   return task['state'] == 'open' &&
@@ -829,22 +850,24 @@ class _TaskViewToolbar extends StatelessWidget {
     required this.search,
     required this.priority,
     required this.scope,
+    required this.selectedDay,
     required this.calendarMode,
-    required this.showScopes,
     required this.onSearch,
     required this.onPriorityChanged,
     required this.onScopeChanged,
+    required this.onDayChanged,
     required this.onCalendarChanged,
   });
 
   final TextEditingController search;
   final String priority;
   final String scope;
+  final DateTime? selectedDay;
   final bool calendarMode;
-  final bool showScopes;
   final VoidCallback onSearch;
   final ValueChanged<String> onPriorityChanged;
   final ValueChanged<String> onScopeChanged;
+  final ValueChanged<DateTime?> onDayChanged;
   final ValueChanged<bool> onCalendarChanged;
 
   @override
@@ -890,22 +913,32 @@ class _TaskViewToolbar extends StatelessWidget {
                 if (value != null) onPriorityChanged(value);
               },
             ),
-            if (showScopes) ...[
-              const SizedBox(width: AppSpace.sm),
-              DropdownButton<String>(
-                key: const Key('shared-task-scope-filter'),
-                value: scope,
-                items: const [
-                  DropdownMenuItem(value: 'mine', child: Text('Мои')),
-                  DropdownMenuItem(value: 'branch', child: Text('Мой филиал')),
-                  DropdownMenuItem(value: 'school', child: Text('Вся школа')),
-                  DropdownMenuItem(value: 'all', child: Text('Все доступные')),
-                ],
-                onChanged: (value) {
-                  if (value != null) onScopeChanged(value);
-                },
+            const SizedBox(width: AppSpace.sm),
+            DropdownButton<String>(
+              key: const Key('shared-task-scope-filter'),
+              value: scope,
+              items: const [
+                DropdownMenuItem(value: 'mine', child: Text('Мои задачи')),
+                DropdownMenuItem(value: 'branch', child: Text('Мой филиал')),
+                DropdownMenuItem(value: 'school', child: Text('Вся школа')),
+                DropdownMenuItem(value: 'all', child: Text('Все доступные')),
+              ],
+              onChanged: (value) {
+                if (value != null) onScopeChanged(value);
+              },
+            ),
+            const SizedBox(width: AppSpace.sm),
+            ChoiceChip(
+              key: const Key('shared-task-today-filter'),
+              label: Text(
+                selectedDay == null || _sameDay(selectedDay!, _moscowToday())
+                    ? 'Сегодня'
+                    : DateFormat('dd.MM.yyyy').format(selectedDay!),
               ),
-            ],
+              selected: selectedDay != null,
+              onSelected: (selected) =>
+                  onDayChanged(selected ? _moscowToday() : null),
+            ),
             const SizedBox(width: AppSpace.sm),
             IconButton.filledTonal(
               key: const Key('shared-task-calendar-toggle'),

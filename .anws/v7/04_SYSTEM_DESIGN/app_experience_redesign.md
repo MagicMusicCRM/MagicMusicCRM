@@ -40,7 +40,7 @@ The result should feel predictable after one learned pattern:
 |---|---|---|---|
 | Client | Next lesson / messages | Chat, My school, own schedule/homework/profile | Staff tools, other clients, internal finance/config |
 | Teacher | Today / Week schedule | Chat, assigned lessons/clients, shared comments, homework context | Create/drag lessons, attendance mutation, client private contacts/finance |
-| Admin | Operational day | Chat, Schedule, Clients | Users/config, managerial reports, school finance |
+| Admin | Operational day | Chat, Schedule, Clients, branch Tasks (read/close) | Task create/edit, users/config, managerial reports, school finance |
 | Manager | Operations overview | Clients, Schedule, Tasks, operational users/reports | School-wide finance and financial analytics |
 | Director | School overview | All operational areas, Finance, Analytics, Configuration, Access | Technical emergency surfaces unless separately authorized |
 

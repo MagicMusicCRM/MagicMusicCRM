@@ -16,8 +16,8 @@
 ///
 /// The numbers are CANONICAL (alert_policy.dart's CrmSection and the unseen
 /// counters key off them) — per-role lists may omit or reorder them, but never
-/// renumber. V6 limits Administrator to Chat, Schedule and Clients; Tasks and
-/// management surfaces start at Manager.
+/// renumber. Administrator also sees the branch-scoped task board; management
+/// overview, analytics and settings still start at Manager.
 library;
 
 import 'package:flutter/material.dart';
@@ -25,7 +25,7 @@ import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7_nav_shell.dart';
 
 /// Operational CRM tab indices shared by admin/manager/director/system_admin.
-const List<int> kManagerOnlyCrmTabs = [1, 6, 7, 8];
+const List<int> kManagerOnlyCrmTabs = [1, 7, 8];
 
 /// Whether [role] has access to operational CRM destinations.
 bool crmHasManagerAccess(String role) =>
@@ -76,7 +76,7 @@ bool crmHasTeacherRatesAccess(String role) => crmHasManagerAccess(role);
 List<int> crmVisibleTabs(String role, {required bool isDesktop}) {
   if (role == 'client') return const [];
   if (role == 'teacher') return const [0, 1, 2];
-  if (role == 'admin') return const [0, 2, 3];
+  if (role == 'admin') return const [0, 2, 3, 6];
   // The compact shell keeps secondary destinations in «Ещё»; Analytics must
   // remain reachable because Overview KPI cards deep-link into it.
   if (!isDesktop) return const [0, 1, 2, 3, 6, 7, 8];
@@ -102,6 +102,7 @@ List<int> crmVisibleTabsForCapabilities(
       0,
       if (snapshot.allows('schedule.lesson.read.assigned')) 2,
       if (snapshot.allows('crm.client.read.basic')) 3,
+      if (snapshot.allows('workflow.task.read')) 6,
     ];
   }
 

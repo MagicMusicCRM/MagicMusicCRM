@@ -106,7 +106,7 @@ void main() {
                 capabilities: {
                   'crm.client.read.basic',
                   'commerce.client_finance.read',
-                  if (role != 'admin') 'workflow.task.read',
+                  'workflow.task.read',
                 },
                 scopes: const {},
               ),
@@ -125,17 +125,7 @@ void main() {
         expect(find.text('Занятия'), findsOneWidget);
         expect(find.text('Абонементы'), findsOneWidget);
         expect(find.text('Прогресс'), findsOneWidget);
-        expect(
-          find.text(role == 'admin' ? 'История' : 'История и задачи'),
-          findsWidgets,
-        );
-        if (role == 'admin') {
-          expect(find.text('Задачи'), findsNothing);
-          expect(
-            api.getRequests.where((path) => path == '/crm/shared-tasks'),
-            isEmpty,
-          );
-        }
+        expect(find.text('История и задачи'), findsWidgets);
         expect(find.text('Контакты'), findsOneWidget);
         expect(find.text('Документы'), findsOneWidget);
         expect(find.text('Доп. поля'), findsNothing);

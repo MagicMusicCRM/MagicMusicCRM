@@ -262,6 +262,29 @@ describe("SharedTask API domain (PostgreSQL)", () => {
     const branch = await tasks.list(fixture.manager, { scope: "branch" });
     expect(mine.items.map((item) => item.id)).not.toContain(created.id);
     expect(branch.items.map((item) => item.id)).toContain(created.id);
+
+    const assignedToManager = await tasks.create(
+      fixture.director,
+      {
+        title: "Admin branch board",
+        allDay: true,
+        startAt: "2026-08-14T00:00:00.000Z",
+        audiences: [{ type: "user", targetId: fixture.manager.userId }],
+        linkedEntity: { type: "student", id: fixture.studentId },
+      },
+      {
+        idempotencyKey: `create-${randomUUID()}`,
+        requestId: `request-${randomUUID()}`,
+      },
+    );
+    const adminMine = await tasks.list(fixture.admin, { scope: "mine" });
+    const adminBranch = await tasks.list(fixture.admin, { scope: "branch" });
+    expect(adminMine.items.map((item) => item.id)).not.toContain(
+      assignedToManager.id,
+    );
+    expect(adminBranch.items.map((item) => item.id)).toContain(
+      assignedToManager.id,
+    );
   });
 
   it("uses the dashboard predicate for the open-task detail", async () => {
@@ -297,6 +320,8 @@ describe("SharedTask API domain (PostgreSQL)", () => {
     );
     const visible = await tasks.list(fixture.teacher, { state: "open" });
     expect(visible.items.map((item) => item.id)).toContain(created.id);
+    const adminVisible = await tasks.list(fixture.admin, { state: "open" });
+    expect(adminVisible.items.map((item) => item.id)).toContain(created.id);
     await expect(
       tasks.close(
         { ...fixture.teacher, role: "client" },

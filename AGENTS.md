@@ -32,7 +32,7 @@
 1. **0 бэкенд-багов** — новый UI шлёт ТЕ ЖЕ API-вызовы; контракты API не меняем.
 2. **Полное покрытие бэкенда** — каждый эндпоинт сохраняет «дом» в дизайне (ничего не выронить).
 3. **Reskin, не rewrite** — перешиваем существующее Flutter-приложение под v7; бэкенд — источник истины.
-4. **RBAC-иерархия (бизнес-правило, обновлено KVA-239):** `client < teacher < admin < manager < director < system_admin`, где **`manager` = Управляющий, `admin` = Администратор, `director` = Директор, `system_admin` = Администратор системы**. Т.е. **Управляющий > Администратор** (Управляющий круче!), **Директор > Управляющий**. ⚠️ **Общешкольные финансы и финансовая аналитика** (раздел «Финансы», `/crm/reports/finance`, расходы, `/analytics/finance/*`, выручка по филиалам, долги, прогноз) — ТОЛЬКО `director`/`system_admin` (`CrmPolicy.canReadSchoolFinance`); у Управляющего они ОТКЛЮЧЕНЫ, но финансы в КАРТОЧКАХ клиентов (история оплат, баланс, личный счёт — `canReadStudentFinance`) у Управляющего ОСТАЮТСЯ. Роли: `director` назначает роли строго ниже себя (включая `manager`); `manager` НЕ может назначать `director`/`system_admin` (`canAssignRole`). ⚠️ В коде RBAC — НЕ иерархия, а **set-based `@Roles(...)`**: сейчас `manager`/`admin` почти равны как «staff» (`isStaff = admin||manager||director||system_admin`) — это **баг A1** (у Администратора лишний доступ). **P1 enforce-ит:** Администратор — только Чат/Расписание/Клиенты (убрать `'admin'` из manager-only `@Roles` на бэке + из nav на фронте, без смены ролей); Управляющий — полный операционный доступ (без общешкольных финансов). Перенос обязан сохранить эту иерархию идентично.
+4. **RBAC-иерархия (бизнес-правило, обновлено KVA-239):** `client < teacher < admin < manager < director < system_admin`, где **`manager` = Управляющий, `admin` = Администратор, `director` = Директор, `system_admin` = Администратор системы**. Т.е. **Управляющий > Администратор** (Управляющий круче!), **Директор > Управляющий**. ⚠️ **Общешкольные финансы и финансовая аналитика** (раздел «Финансы», `/crm/reports/finance`, расходы, `/analytics/finance/*`, выручка по филиалам, долги, прогноз) — ТОЛЬКО `director`/`system_admin` (`CrmPolicy.canReadSchoolFinance`); у Управляющего они ОТКЛЮЧЕНЫ, но финансы в КАРТОЧКАХ клиентов (история оплат, баланс, личный счёт — `canReadStudentFinance`) у Управляющего ОСТАЮТСЯ. Роли: `director` назначает роли строго ниже себя (включая `manager`); `manager` НЕ может назначать `director`/`system_admin` (`canAssignRole`). ⚠️ RBAC set-based. **Текущая граница Admin:** Чат/Расписание/Клиенты и branch-scoped Задачи read/close; task create/edit, Пользователи, Отчёты, общешкольные Финансы и Настройки остаются Manager+/Director-only по capabilities.
 
 **Фазы (порядок: P0→P1→P2[+P6]→P3→P4→P5→P5b→P5c→P7):**
 | Фаза | Linear | Содержание | server/? |
@@ -61,8 +61,8 @@
   - Проверки: `flutter analyze` чисто, `flutter test` 163/163, `git diff server/`+`lib/core/services/` пусто.
   - Осталось: **P1-7** сетевой baseline (нужен seeded backend). Follow-up: вынести `_V7Field`/`_V7PrimaryButton` в общий файл; выверить текст онбординг-слайдов; owner-визуальная приёмка.
 
-**▶ Следующий шаг:** owner UAT финального кандидата `1.5.1+157`; обязательных
-инженерных задач v7 не осталось.
+**▶ Следующий шаг:** `T7.1.2` — production mega-UAT кандидата `1.5.1+159`
+по `docs/audits/v7-owner-production-mega-uat-plan.md`.
 
 ---
 
@@ -122,9 +122,9 @@
 > **Примечание**: Этот блок автоматически поддерживается процессами `/genesis`, `/blueprint` и `/forge`.
 
 - **Последняя версия архитектуры**: `.anws/v7` (Financial & Lesson Integrity)
-- **Активный список задач**: `.anws/v7/05_TASKS.md` — все задачи закрыты
-- **Фаза**: v7 final candidate `1.5.1+157` готов к owner UAT
-- **Последнее обновление**: `2026-08-07`
+- **Активный список задач**: `.anws/v7/05_TASKS.md` — следующая T7.1.2
+- **Фаза**: production mega-UAT кандидата `1.5.1+159`
+- **Последнее обновление**: `2026-08-08`
 
 ### 🌊 Wave v7/S0 — Architecture Foundation ✅
 _PRD подтверждён владельцем 2026-08-07. Concept model, Architecture Overview и ADR-007..010 фиксируют один существующий Flutter/NestJS/PostgreSQL runtime, `SYS-COMMERCE-INTEGRITY`, append-only payment lifecycle/reversal/exclusion, единый атомарный lesson transition и узкие client-finance capabilities Admin/Manager/Director со staff-visible reasons. Новые зависимости и deployable не вводятся. Следующий шаг `/design-system`: детальный дизайн v7._
@@ -398,6 +398,15 @@ revisions; сохранены 761/761 commits, 4/4 heads и 22/22 tags, current 
 byte-identical, history Gitleaks=0. `origin` не затронут. Production runbook
 использует ref freeze и explicit expected-old-SHA leases
 (`docs/audits/v7-history-rewrite-rehearsal.md`)._
+
+### 🌊 Wave v7/UAT — Owner Production Mega-UAT 🚧
+
+_`T7.1.1` закрыта 2026-08-08: Admin получил одну branch-scoped доску задач с
+read/close без create/edit и стартовыми фильтрами `Мои задачи + Сегодня`.
+Migration `0114` прошла down→up; Flutter 649/649, backend 156/156 suites и
+1244/1244 tests, Actor Matrix 9/9, inventories unowned=0. Windows и signed
+Android Release `1.5.1+159` собраны (`docs/audits/v7-admin-task-board.md`).
+Следующий шаг: backup/restore-check, production deploy и `T7.1.2`._
 
 _Production backend синхронизирован 2026-08-07: ревизия `4f1cf3c`, migrations
 `0102..0113`, API healthy/restart=0, двойной reconcile `issues=[]`. Прежние 404

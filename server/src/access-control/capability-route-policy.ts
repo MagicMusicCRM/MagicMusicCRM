@@ -33,6 +33,7 @@ const teacherAndStaffRoles = [
 ] as const satisfies readonly AccessRole[];
 const taskReaders = [
   "teacher",
+  "admin",
   ...managementRoles,
 ] as const satisfies readonly AccessRole[];
 

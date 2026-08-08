@@ -162,18 +162,39 @@ describe("capability route policy", () => {
     });
   });
 
-  it("keeps shared tasks outside the Administrator persona", () => {
+  it("lets Administrator read/close tasks but keeps mutations manager-only", () => {
     expect(
       resolveCapabilityRoutePolicy("GET", "/crm/shared-tasks"),
     ).toMatchObject({
       capabilityKey: "workflow.task.read",
-      legacyAllowedRoles: ["teacher", "manager", "director", "system_admin"],
+      legacyAllowedRoles: [
+        "teacher",
+        "admin",
+        "manager",
+        "director",
+        "system_admin",
+      ],
     });
     expect(
       resolveCapabilityRoutePolicy("POST", "/crm/shared-tasks"),
     ).toMatchObject({
       capabilityKey: "workflow.task.write",
       legacyAllowedRoles: ["manager", "director", "system_admin"],
+    });
+    expect(
+      resolveCapabilityRoutePolicy(
+        "POST",
+        "/crm/shared-tasks/00000000-0000-0000-0000-000000000001/close",
+      ),
+    ).toMatchObject({
+      capabilityKey: "workflow.task.read",
+      legacyAllowedRoles: [
+        "teacher",
+        "admin",
+        "manager",
+        "director",
+        "system_admin",
+      ],
     });
   });
 

@@ -80,7 +80,7 @@ void main() {
     );
     expect(
       crmVisibleTabsForCapabilities(overPrivilegedAdmin, isDesktop: true),
-      [0, 2, 3],
+      [0, 2, 3, 6],
     );
 
     final director = CapabilitySnapshot(

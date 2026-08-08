@@ -84,3 +84,17 @@
 - **[CHANGE]** После full/device/security gates выпущен final candidate
   `1.5.1+157`; исторический HolliHop credential принят владельцем как явный
   риск без добавления секрета в текущий candidate.
+
+## 2026-08-08 — Owner production mega-UAT
+
+- **[CHANGE]** Владелец выбрал непосредственный production-прогон с UAT-
+  префиксом и принял сохранение append-only тестового следа в технической истории.
+- **[CHANGE]** Администратор получает общую branch-scoped доску задач с правом
+  чтения/закрытия без create/edit; стартовые фильтры `Мои задачи` и `Сегодня`
+  включены, остальные фильтры доступны вручную.
+- **[CHANGE]** Client/Teacher принимаются через Android emulator; Admin/Manager/
+  Director — через Windows Release.
+- **[ADD]** Тестовый филиал: `Оборонная 30`, Europe/Moscow, Пн–Сб 09:00–21:00,
+  воскресенье закрыто.
+- **[ADD]** В S6 добавлены T7.1.1, T7.1.2 и INT-S6 с полным runbook UI/API/DB
+  evidence и stop-критериями финансовой/ролевой целостности.

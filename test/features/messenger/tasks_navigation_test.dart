@@ -21,7 +21,7 @@ CapabilitySnapshot _staffSnapshot(String role) {
     'schedule.lesson.read.assigned',
     'schedule.lesson.write',
     'workflow.task.read',
-    'workflow.task.write',
+    if (role != 'admin') 'workflow.task.write',
   };
   if (role == 'manager' || role == 'director') {
     capabilities.addAll({'report.status.read', 'system.settings.manage'});
@@ -146,14 +146,23 @@ void main() {
     expect(find.byType(ReportsWidget), findsOneWidget);
   });
 
-  testWidgets('admin never mounts or requests the Tasks destination', (
-    tester,
-  ) async {
+  testWidgets('admin opens the read-only Tasks destination', (tester) async {
     final api = await _pumpStaffMessenger(tester, role: 'admin');
 
-    expect(find.text('Задачи'), findsNothing);
-    expect(find.byType(SharedTasksV4Panel), findsNothing);
-    expect(api.calls.where((call) => call.path.contains('task')), isEmpty);
+    expect(find.text('Ещё'), findsNothing);
+    expect(find.text('Задачи'), findsOneWidget);
+    await tester.tap(find.text('Задачи'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 150));
+
+    expect(find.byType(SharedTasksV4Panel), findsOneWidget);
+    expect(find.text('Мои задачи'), findsOneWidget);
+    expect(find.byKey(const Key('shared-task-today-filter')), findsOneWidget);
+    expect(find.text('Новая задача'), findsNothing);
+    expect(
+      api.calls.where((call) => call.path.contains('shared-tasks')),
+      isNotEmpty,
+    );
   });
 
   testWidgets(

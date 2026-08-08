@@ -22,7 +22,8 @@ Legend: `P` primary navigation, `S` secondary/contextual, `R` read-only or reduc
 Rules:
 
 1. Capability projection can remove a listed surface; it cannot add data outside server scope.
-2. Admin is intentionally below Manager and is limited to Chat/Schedule/Clients.
+2. Admin is intentionally below Manager and is limited to Chat/Schedule/Clients
+   plus branch-scoped task read/close; task create/edit remains Manager+.
 3. Manager must not request school-finance endpoints when sections are absent.
 4. Teacher quick links cannot reveal contacts, representatives, finance, subscriptions, cost/debt or private comments.
 

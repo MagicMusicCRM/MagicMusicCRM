@@ -15,7 +15,9 @@ Build navigation and visible actions from the current capability/resource-scope 
 
 - Client: low-density self-service surfaces.
 - Teacher: day/week schedule and assigned context, without forbidden finance/contact mutations.
-- Admin: Chat, Schedule and Clients.
+- Admin: Chat, Schedule, Clients and a branch-scoped Tasks board. Tasks are
+  read/close only; create/edit, management reports, configuration and
+  school-wide finance remain outside the persona.
 - Manager: operational workspace, excluding school-wide finance.
 - Director: operational, financial, configuration and access surfaces according to capabilities.
 - UI projection reduces confusion but server enforcement remains mandatory.

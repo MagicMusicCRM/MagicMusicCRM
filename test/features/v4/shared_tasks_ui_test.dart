@@ -19,6 +19,8 @@ class FakeSharedTasksDataSource extends SharedTasksDataSource {
   String? listedQuery;
   String? listedPriority;
   String? listedScope;
+  String? listedFrom;
+  String? listedTo;
   int calendarCalls = 0;
   Map<String, dynamic>? lastCreateData;
   bool failAudiencePreview = false;
@@ -74,6 +76,8 @@ class FakeSharedTasksDataSource extends SharedTasksDataSource {
     listedQuery = q;
     listedPriority = priority;
     listedScope = scope;
+    listedFrom = from;
+    listedTo = to;
     return list(
       state: state,
       taskId: taskId,
@@ -222,6 +226,7 @@ Widget _host(
   EntityLink? initialLink,
   EntityLink? linkedEntity,
   bool canWrite = true,
+  bool defaultToMineToday = false,
 }) {
   return ProviderScope(
     child: MaterialApp(
@@ -232,6 +237,7 @@ Widget _host(
           initialLink: initialLink,
           linkedEntity: linkedEntity,
           canWrite: canWrite,
+          defaultToMineToday: defaultToMineToday,
         ),
       ),
     ),
@@ -350,6 +356,43 @@ void main() {
 
     expect(find.text('Новая задача'), findsNothing);
     expect(find.byTooltip('Изменить'), findsNothing);
+  });
+
+  testWidgets('admin board starts with my tasks and today, both removable', (
+    tester,
+  ) async {
+    final source = FakeSharedTasksDataSource();
+    await tester.pumpWidget(
+      _host(source, canWrite: false, defaultToMineToday: true),
+    );
+    await tester.pumpAndSettle();
+
+    expect(source.listedScope, 'mine');
+    expect(source.listedFrom, isNotNull);
+    expect(source.listedTo, isNotNull);
+    expect(find.text('Мои задачи'), findsOneWidget);
+    final today = tester.widget<ChoiceChip>(
+      find.byKey(const Key('shared-task-today-filter')),
+    );
+    expect(today.selected, isTrue);
+    expect(find.text('Новая задача'), findsNothing);
+
+    await tester.ensureVisible(
+      find.byKey(const Key('shared-task-today-filter')),
+    );
+    await tester.tap(find.byKey(const Key('shared-task-today-filter')));
+    await tester.pumpAndSettle();
+    expect(source.listedFrom, isNull);
+    expect(source.listedTo, isNull);
+
+    await tester.ensureVisible(
+      find.byKey(const Key('shared-task-scope-filter')),
+    );
+    await tester.tap(find.byKey(const Key('shared-task-scope-filter')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Мой филиал').last);
+    await tester.pumpAndSettle();
+    expect(source.listedScope, 'branch');
   });
 
   testWidgets('shows non-modal reminder and explicit close action', (

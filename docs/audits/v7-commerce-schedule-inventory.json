@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "task": "T1.1.1",
-  "source_digest": "e7e311dde355bec9a5dcba050ce5ff60c9baedfc42cbcbbf4282876553043d28",
+  "source_digest": "7f8d085da1ac48ab766493fe23f3af60f1fdf4ea805bff661ba53dc3695a6a4b",
   "summary": {
     "matched_source_files": 53,
     "finance_callsites": 256,
@@ -18,7 +18,7 @@
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 184
+      "line": 185
     },
     {
       "kind": "sql-table",
@@ -1306,19 +1306,11 @@
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 185
+      "line": 186
     },
     {
       "kind": "wire",
       "subject": "/crm/payments",
-      "operation": "call",
-      "owner": "SYS-ACCESS-SCOPE",
-      "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 221
-    },
-    {
-      "kind": "wire",
-      "subject": "/crm/subscriptions",
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
@@ -1330,11 +1322,11 @@
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 248
+      "line": 223
     },
     {
       "kind": "wire",
-      "subject": "/^\\/crm\\/(?:students|leads)\\/[^/]+\\/subscriptions",
+      "subject": "/crm/subscriptions",
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
@@ -1342,15 +1334,15 @@
     },
     {
       "kind": "wire",
-      "subject": "/subscriptions",
+      "subject": "/^\\/crm\\/(?:students|leads)\\/[^/]+\\/subscriptions",
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 262
+      "line": 250
     },
     {
       "kind": "wire",
-      "subject": "/subscription",
+      "subject": "/subscriptions",
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
@@ -1358,7 +1350,7 @@
     },
     {
       "kind": "wire",
-      "subject": "/payment",
+      "subject": "/subscription",
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
@@ -1366,11 +1358,19 @@
     },
     {
       "kind": "wire",
+      "subject": "/payment",
+      "operation": "call",
+      "owner": "SYS-ACCESS-SCOPE",
+      "file": "server/src/access-control/capability-route-policy.ts",
+      "line": 265
+    },
+    {
+      "kind": "wire",
       "subject": "/payments",
       "operation": "call",
       "owner": "SYS-ACCESS-SCOPE",
       "file": "server/src/access-control/capability-route-policy.ts",
-      "line": 266
+      "line": 267
     },
     {
       "kind": "sql-table",

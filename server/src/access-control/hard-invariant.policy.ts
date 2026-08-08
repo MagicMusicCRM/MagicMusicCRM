@@ -87,7 +87,6 @@ const CONFIG_CAPABILITIES = new Set<CapabilityKey>([
 ]);
 
 const ADMIN_PERSONA_DENIED_CAPABILITIES = new Set<CapabilityKey>([
-  "workflow.task.read",
   "workflow.task.write",
 ]);
 
