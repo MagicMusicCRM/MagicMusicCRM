@@ -54,6 +54,10 @@ export class RealtimeBus {
     this.server = server;
   }
 
+  isReady(): boolean {
+    return this.server !== undefined;
+  }
+
   /**
    * Broadcast a CRM invalidation hint to every staff socket in the shared CRM
    * room. The payload carries no PII — clients refetch through the authorized

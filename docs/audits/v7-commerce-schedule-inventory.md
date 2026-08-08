@@ -7,8 +7,8 @@
 | Slice | Count |
 |---|---:|
 | Matched production source files | 53 |
-| Finance SQL/wire callsites | 255 |
-| Ordinary finance reads | 97 |
+| Finance SQL/wire callsites | 256 |
+| Ordinary finance reads | 98 |
 | Reporting-safe finance reads | 51 |
 | Protected lesson temporal mutations | 7 |
 | Unknown lesson mutation callers | 0 |

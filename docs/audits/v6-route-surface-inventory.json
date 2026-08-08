@@ -3,8 +3,8 @@
   "task": "V6-001",
   "generated_from": "lib/main.dart import graph + GoRouter + presentation callsites",
   "summary": {
-    "dart_files": 262,
-    "production_reachable_files": 261,
+    "dart_files": 261,
+    "production_reachable_files": 260,
     "go_routes": 22,
     "screens": 21,
     "production_screens": 21,
@@ -259,7 +259,7 @@
       "state_contract": "data",
       "state_na_reason": null,
       "file": "lib/features/messenger/presentation/screens/messenger_screen.dart",
-      "line": 79
+      "line": 78
     },
     {
       "name": "ManagerDashboardScreen",
@@ -367,7 +367,7 @@
       "state_contract": "data",
       "state_na_reason": null,
       "file": "lib/features/client/presentation/screens/client_dashboard_screen.dart",
-      "line": 23
+      "line": 24
     },
     {
       "name": "PasswordResetScreen",
@@ -482,7 +482,7 @@
       "owner": "SYS-PLATFORM-QUALITY",
       "production_reachable": true,
       "status": "production-reachable",
-      "primary_action_evidence": false,
+      "primary_action_evidence": true,
       "states": {
         "loading": true,
         "empty": true,
@@ -493,7 +493,7 @@
       "state_contract": "data",
       "state_na_reason": null,
       "file": "lib/features/admin/presentation/screens/profile_detail_screen.dart",
-      "line": 12
+      "line": 15
     },
     {
       "name": "AdminDashboardScreen",
@@ -789,7 +789,7 @@
         "retry": false
       },
       "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 280
+      "line": 290
     },
     {
       "kind": "magic-sheet",
@@ -933,7 +933,7 @@
         "retry": true
       },
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1165
+      "line": 1168
     },
     {
       "kind": "drawer",
@@ -981,7 +981,7 @@
         "retry": false
       },
       "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
-      "line": 438
+      "line": 423
     },
     {
       "kind": "dialog",
@@ -1973,7 +1973,7 @@
         "retry": true
       },
       "file": "lib/features/admin/presentation/widgets/lesson_decision_flow.dart",
-      "line": 231
+      "line": 238
     },
     {
       "kind": "dialog",
@@ -2085,7 +2085,7 @@
         "retry": false
       },
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 541
+      "line": 583
     },
     {
       "kind": "adaptive-surface",

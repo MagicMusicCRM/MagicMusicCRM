@@ -98,6 +98,40 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
     if (pool) await pool.end();
   });
 
+  it("does not claim legacy lessons without an explicit settlement plan", async () => {
+    const fixture = await createFixture(pool, database, settlement, "valid");
+    try {
+      const client = await pool.connect();
+      try {
+        await client.query("begin");
+        await client.query("set local session_replication_role = replica");
+        await client.query(
+          "delete from app.lesson_settlement_plan_revisions where lesson_id = $1",
+          [fixture.lessonId],
+        );
+        await client.query(
+          "delete from app.lesson_settlement_plans where lesson_id = $1",
+          [fixture.lessonId],
+        );
+        await client.query("commit");
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
+
+      await expect(repository.claimDue("legacy-safe", {
+        limit: 1,
+        leaseSeconds: 60,
+        maxAttempts: 5,
+      })).resolves.toHaveLength(0);
+      await expect(repository.metrics()).resolves.toMatchObject({ due: 0 });
+    } finally {
+      await cleanupFixture(pool, fixture);
+    }
+  });
+
   it("lets two workers queue one pending settlement without finance facts within 60 seconds", async () => {
     const fixture = await createFixture(pool, database, settlement, "valid");
     try {

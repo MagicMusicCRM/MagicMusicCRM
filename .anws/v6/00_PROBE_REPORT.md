@@ -1,100 +1,130 @@
-# 🔎 MagicMusicCRM v6 — Deep Probe перед полным feature/UAT loop
+# 🔎 MagicMusicCRM v6/v7 — Deep Probe связей UI → API → Server → DB
 
 | Поле | Значение |
 |---|---|
-| Дата | 2026-08-06 |
+| Дата | 2026-08-08 |
 | Режим | Deep PROFILE → REASON → OBJECT → BENCHMARK → EMIT |
-| Объём | Flutter + NestJS + PostgreSQL + Windows/Android runtime boundaries |
-| Источники | свежий AST/Git probe, production inventories, route/service/runtime tracing |
-| Решение | **кодовая поверхность покрыта; user-story acceptance ещё не завершена** |
+| Объём | Flutter + NestJS + PostgreSQL + Socket.IO + production Windows/Android |
+| Источники | свежий AST/Git probe, deterministic inventories, full suites, production DB/health/logs |
+| Решение | **PASS после двух production root-cause fixes** |
 
 ## 1. Executive conclusion
 
-Предыдущий probe устарел: перечисленные там разрывы production mounting были закрыты в v6/S1–S6. В текущем коде подключены desktop workspace, adaptive surfaces, явные scroll/input contracts, канонические Client/Lesson/Task routes, bounded client calendar, единый Dashboard и единая CRM Configuration с reusable field option sets.
+Проверена не только структура репозитория, но и фактическая цепочка на production:
+Flutter-сервис → HTTPS API → NestJS policy/DTO → PostgreSQL → durable worker/outbox →
+realtime invalidation → повторная загрузка авторизованной проекции.
 
-Структурная полнота подтверждена: все production routes, surfaces, navigation sites и service calls имеют владельца. Однако зелёные инженерные suites не означают, что каждая функция реально пройдена пользователем. Текущий незакрытый риск — отсутствие единого story-level журнала `код → ожидаемое поведение → реальное исполнение → ошибка → исправление → повторный прогон`.
+Probe обнаружил два скрытых разрыва, которые агрегатные тесты не показывали:
+
+1. `app.platform_outbox_events` имел producers и transactional claim/ack API, но не имел
+   production consumer. Одно `commerce.subscription.changed` находилось без обработки
+   около 17 часов с `attempts=0`.
+2. Lesson completion worker был выключен production-конфигурацией, а его due-query
+   ошибочно считала рабочими 11 832 legacy Lesson без явно выбранного финансового плана.
+   Включение в таком виде могло массово перевести исторические занятия в retry/poison.
+
+Оба разрыва закрыты в общем серверном слое. Outbox теперь lease/retry/dead-letter
+доставляет safe invalidation через существующий `RealtimeBus`; readiness показывает его
+lag. Completion worker включён, но атомарно выбирает только Lesson с
+`lesson_settlement_plans.state='planned'`. Legacy-данные без решения не списывают деньги
+и не создают оплату преподавателю.
 
 ## 2. Свежая карта
 
 | Метрика | Результат |
 |---|---:|
-| AST files / parse errors | 1,202 / 0 |
-| Flutter production routes / screens | 22 / 22 |
-| Production-reachable Flutter files | 253 |
-| Production modal/surface calls | 93 |
-| Production navigation sites | 263 |
-| Production wire calls | 264 |
-| Unowned entries | 0 |
-| Git commits / authors (180 дней) | 723 / 5 |
+| Файлы / строки / AST parse errors | 1 270 / 310 582 / 0 |
+| Git commits / authors | 771 / 5 |
+| Flutter production-reachable files | 260 |
+| Flutter routes / production screens | 22 / 21 |
+| Navigation / modal sites | 266 / 98 |
+| Flutter wire calls | 275 |
+| Backend routes / DTO fields | 318 / 794 |
+| Backend policy calls / role guards | 241 / 22 |
+| Finance callsites / protected Lesson writes | 256 / 7 |
+| Unknown owners / unknown Lesson mutation callers | 0 / 0 |
 
-Единственный inventory false-positive — conditional `runtime_env_io.dart`; это platform selection, не потерянная feature surface.
+Tree-sitter успешно разобрал поддерживаемые языки без ошибок. Его текущий Dart/SQL
+адаптер строит module-only nodes и не разрешает Dart imports; поэтому authoritative
+доказательством связей Flutter остаются production inventory scripts, а не догадки AST.
 
-## 3. Production systems
+## 3. Runtime graph
 
-| Система | Проверенное назначение | Главный acceptance-риск |
-|---|---|---|
-| Session & Account | login/signup/OTP/MFA/recovery/onboarding/legal/profile/deletion | реальная смена аккаунтов и очистка старой session/realtime state |
-| App Experience | RBAC nav, typed links, tabs, Back, adaptive surfaces | role/deep-link/Back/restart matrix |
-| Messenger | direct/group/channel chat, files, reactions, pins, read/presence | reconnect, late events и роль/room scope |
-| CRM Clients | Lead/Student search, funnels, cards, conversion/archive | ввод поиска без rebuild/reset; correct actor projection |
-| Schedule | Month/Week/Day, conflicts, lesson lifecycle, attendance | search highlighting, branch/timezone and concurrency |
-| Commerce | catalog, subscription snapshot, payment, ledger, replacement/cancel | immutable history and permission scope |
-| Shared Tasks | audience preview, links, reminders, history, close | preview reconciliation and linked navigation |
-| Dashboard | one filter state, sections, drilldowns, exports | school-finance non-request for forbidden actors |
-| Configuration | organization/schedule/CRM/options/catalog/access/data | effective school/branch revisions and fail-closed capabilities |
-| Platform Quality | health, notifications, realtime invalidation, Windows update | lifecycle recovery and release artifact provenance |
+```mermaid
+flowchart LR
+  UI["Flutter UI · 5 ролей"] --> API["MagicApiClient · HTTPS/JSON"]
+  API --> CTRL["NestJS Controller · DTO · Capability"]
+  CTRL --> DOMAIN["Domain Service · version/idempotency"]
+  DOMAIN --> DB["PostgreSQL · transaction/constraints"]
+  DB --> WORK["Completion / Outbox workers"]
+  WORK --> RT["Socket.IO invalidation"]
+  RT --> UI
+```
 
-## 4. Runtime inspector
+Клиентские payloads частично остаются map-decoded, поэтому runtime drift нельзя
+исключить одной статикой. Этот риск компенсирован full backend suite, Actor Matrix,
+двумя реальными device-runs и production log/DB evidence.
 
-### Process roots
+## 4. Production evidence
 
-1. `lib/main.dart` запускает Flutter/Riverpod/GoRouter, health warmup, push, session-gated realtime and Windows update check.
-2. `server/src/main.ts` запускает NestJS with strict validation, safe exception/logging boundary, shutdown hooks, `/api`, CORS and HTTP/Socket.IO.
+| Проверка | Результат |
+|---|---:|
+| API image | `sha256:8744ae77276d…01539142` |
+| API/PostgreSQL/Redis | healthy; restart=0; OOM=false |
+| Readiness | database/migrations/completion/outbox/v4 = `ok` |
+| PostgreSQL migrations | 114; latest `0113_lesson_settlement_plan_revisions` |
+| Invalid/not-ready indexes | 0 |
+| Unvalidated constraints / blocked sessions | 0 / 0 |
+| Outbox pending / dead-letter | 0 / 0 |
+| Completion due/retry/poison | 0 / 0 / 0 |
+| HTTPS readiness burst | 30/30 |
+| API errors after stable start | 0 |
+| Caddy 5xx after stable start | 0 |
 
-### Spawn chains
+Десять Caddy `502` относятся только к секундам двух контролируемых API recreates
+(`no such host`/`connection refused`). После healthy transition — 0. Предыдущее
+зависшее outbox-событие не удалялось вручную: новый worker сам обработал его с
+`claimed=1 published=1`, после чего DB получила `published_at`.
 
-| Parent | Child | Проверка | Contract |
+## 5. Verification matrix
+
+| Gate | Результат |
+|---|---:|
+| Backend typecheck / Nest build | PASS / PASS |
+| Backend full | 156/156 suites; 1244/1244 tests |
+| Actor/payload/route policy | 77/77 |
+| Flutter full | 648/648 |
+| Windows production accounts + relogin | 2/2 |
+| Android 15 production accounts + relogin | 2/2 |
+| Deterministic v4/v6/v7 inventories | PASS; unowned=0 |
+
+Реальные проверки подтвердили Client/Teacher/Admin/Manager/Director, открытие учеников
+преподавателя, cold session recovery, logout и переключение Client → Director → Client.
+
+## 6. Risk matrix
+
+| ID | Риск | Статус | Контроль |
 |---|---|---|---|
-| Windows updater | PowerShell broker | encoded command, timeout/kill, captured output/exit, hash + PID + receipt validation | Strong |
-| Security gate | local CLI | `shell: false`, synchronous exit/stdout/stderr capture | Strong |
+| R1 | outbox commit без delivery | **closed** | worker + retry/dead-letter + readiness + unit/PostgreSQL tests |
+| R2 | массовое settlement legacy Lesson | **closed** | SQL требует explicit planned decision |
+| R3 | новые Lesson не завершаются автоматически | **closed** | production worker enabled; full atomic completion suite |
+| R4 | 11 832 legacy Lesson не имеют финансового плана | **accepted safe boundary** | не создавать деньги без решения сотрудника; назначать план только через защищённый UI |
+| R5 | старые OTP email terminal failures | **monitor** | active queue=0; две записи `smtp_timeout` от 2026-07-19 остаются технической историей |
+| R6 | Flutter map payload drift | **residual** | 275-call inventory + service tests + real device runs |
 
-### IPC / trust boundaries
+## 7. Rollback
 
-- REST is **mixed-strength**: server DTO/policy/DB boundary is strong; several Flutter responses remain map-decoded.
-- Realtime is **mixed-strength**: client events are DTO/rate/policy checked and server event names are explicitly allowlisted; Flutter payloads are still maps.
-- Account replacement is explicitly guarded: realtime transport is reset before tokens change, subject mismatch disposes the old socket, reconnect obtains a fresh token.
-- CRM/finance/access events are invalidation hints; values are refetched through authorized projections.
-- Production realtime CORS fails closed without an allowlist.
+- Backup: `/opt/magicmusiccrm/backups/manual/pre-api-db-stability-20260808T145521Z`.
+- PostgreSQL dump: 32 MB, `pg_restore --list` PASS, SHA-256
+  `4281a2565705d2cd2ae73afc527f31fa2a6a33109ab7fce4a56730989055a282`.
+- Server archive SHA-256:
+  `3583967ff909c72eb7d3400af79e478915f4ed323a9a9044f7022e2624a551d1`.
+- Previous image: `magicmusiccrm-v3-api:pre-api-db-stability-20260808T145521Z`.
+- Backup additionally contains previous `docker-compose.yml` and production `.env`.
 
-## 5. Risk matrix
+## 8. Verdict
 
-| ID | Риск | Вероятность | Влияние | Проверка в UAT loop |
-|---|---|---:|---:|---|
-| R1 | сохранённая сессия/сокет мешает повторному входу или переносит старый аккаунт | medium | critical | последовательный login/logout/same+other account/restart for all personas |
-| R2 | search field теряет focus/value из-за rebuild/refetch | medium | high | ввод ФИО посимвольно в Leads/Students/Chat/Schedule |
-| R3 | calendar search не даёт устойчивой зелёной/серой иерархии | medium | high | Month/Week/Day exact/non-match/clear filter |
-| R4 | map-shaped payload drift проявится только runtime | medium | high | реальный backend for every service-backed story |
-| R5 | forbidden role создаёт скрытый finance/config request | low | critical | network/log assertion for Client/Teacher/Admin/Manager |
-| R6 | high-churn CRM/client/schedule seams regress | high | high | prioritize cross-navigation and mutations, then full retest |
-| R7 | owner acceptance mistakenly inferred from green tests | high | high | separate Implementation Status from Test Status in canonical XLSX |
-
-## 6. Git forensics
-
-Самые изменяемые продуктовые seams за 180 дней: `crm.service.ts` (106), `client_card.dart` (67), `messenger_screen.dart` (60), `leads_widget.dart` (56), `schedule_widget.dart` (47), `crm.module.ts` (45), Flutter CRM service (41), tasks (35), reports (29) and router (28). Coupling `crm.service.ts ↔ spec` = 0.968, `crm.service.ts ↔ controller` = 0.960.
-
-Это не основание переписывать систему. Это порядок тестирования: auth switching → typed search → calendar filtering → client workspace links → finance/subscription mutations → realtime reconnect → scoped dashboard/config.
-
-## 7. Decision and next gate
-
-### PASS
-
-- production surface ownership;
-- current architecture/runtime map;
-- engineering regression evidence already recorded for v6/S6.
-
-### OPEN
-
-- story-level execution on real accounts and target platforms;
-- error inventory, root-cause fixes and complete post-fix retest.
-
-Следующий обязательный артефакт — один канонический XLSX. Он является единственным реестром user stories, expected behavior, execution evidence and errors. Release acceptance запрещено выводить только из source presence или aggregate green suites.
+**PASS.** Проверенные production связи UI → API → server → DB и обратная realtime/
+worker-цепочка функционируют; активных error/retry/poison/dead-letter состояний нет.
+Probe не обещает математически невозможное «ошибок никогда не будет»: он подтверждает
+исправленные корни, наблюдаемость следующих сбоев и воспроизводимые release gates.

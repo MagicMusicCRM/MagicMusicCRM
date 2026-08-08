@@ -8,6 +8,8 @@ import {
   V4DomainFlagsService,
   V4DomainRollout
 } from '../platform/v4-domain-flags';
+import { PlatformOutboxWorker } from '../platform/platform-outbox.worker';
+import { PlatformOutboxMetrics } from '../platform/platform-integrity.types';
 
 export interface HealthResponse {
   status: 'ok';
@@ -20,10 +22,12 @@ export interface ReadinessResponse extends HealthResponse {
     database: 'ok' | 'error';
     migrations: 'ok' | 'error';
     lessonCompletionWorker: 'ok' | 'degraded';
+    platformOutbox: 'ok' | 'degraded';
     v4Rollout: 'ok' | 'blocked';
   };
   latestMigrationId: string | null;
   lessonCompletionWorker: LessonCompletionWorkerMetrics;
+  platformOutbox: PlatformOutboxMetrics;
   v4Rollout: V4DomainRollout[];
 }
 
@@ -32,7 +36,8 @@ export class HealthService {
   constructor(
     private readonly database: DatabaseService,
     private readonly lessonCompletionWorker: LessonCompletionWorker,
-    private readonly v4DomainFlags: V4DomainFlagsService
+    private readonly v4DomainFlags: V4DomainFlagsService,
+    private readonly platformOutboxWorker: PlatformOutboxWorker
   ) {}
 
   check(): HealthResponse {
@@ -48,7 +53,7 @@ export class HealthService {
   }
 
   async ready(): Promise<ReadinessResponse> {
-    const [result, workerHealth] = await Promise.all([
+    const [result, workerHealth, outboxHealth] = await Promise.all([
       this.database.query<{ id: string | null }>(
         `
           select id
@@ -57,7 +62,8 @@ export class HealthService {
           limit 1
         `
       ),
-      this.lessonCompletionWorker.health()
+      this.lessonCompletionWorker.health(),
+      this.platformOutboxWorker.health()
     ]);
     const latestMigrationId = result.rows[0]?.id ?? null;
     const v4Rollout = this.v4DomainFlags.snapshot();
@@ -71,10 +77,12 @@ export class HealthService {
         database: 'ok',
         migrations: latestMigrationId === null ? 'error' : 'ok',
         lessonCompletionWorker: workerHealth.status,
+        platformOutbox: outboxHealth.status,
         v4Rollout: v4Blocked ? 'blocked' : 'ok'
       },
       latestMigrationId,
       lessonCompletionWorker: workerHealth.metrics,
+      platformOutbox: outboxHealth.metrics,
       v4Rollout
     };
   }

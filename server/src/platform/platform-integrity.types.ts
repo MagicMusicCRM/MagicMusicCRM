@@ -69,3 +69,10 @@ export interface ClaimedOutboxEvent {
   payload: Record<string, unknown>;
   attempts: number;
 }
+
+export interface PlatformOutboxMetrics {
+  pending: number;
+  deadLetter: number;
+  oldestDueSeconds: number | null;
+  maxAttempts: number;
+}

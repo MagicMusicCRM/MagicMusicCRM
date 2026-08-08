@@ -73,6 +73,8 @@ export class LessonCompletionWorkerRepository {
                 + make_interval(mins => lesson.duration_minutes)
                 as scheduled_end_at
             from app.lessons lesson
+            join app.lesson_settlement_plans plan
+              on plan.lesson_id = lesson.id and plan.state = 'planned'
             left join app.lesson_completion_work work
               on work.lesson_id = lesson.id
             where lesson.deleted_at is null
@@ -381,6 +383,8 @@ export class LessonCompletionWorkerRepository {
           (
             select count(*)
             from app.lessons lesson
+            join app.lesson_settlement_plans plan
+              on plan.lesson_id = lesson.id and plan.state = 'planned'
             where lesson.deleted_at is null
               and lesson.lifecycle_state = 'scheduled'
               and lesson.scheduled_at
@@ -398,6 +402,8 @@ export class LessonCompletionWorkerRepository {
               )
             )))
             from app.lessons lesson
+            join app.lesson_settlement_plans plan
+              on plan.lesson_id = lesson.id and plan.state = 'planned'
             where lesson.deleted_at is null
               and lesson.lifecycle_state = 'scheduled'
               and lesson.scheduled_at

@@ -79,6 +79,7 @@ services:
       HOLLIHOP_TIMEOUT_MS: ${HOLLIHOP_TIMEOUT_MS:-5000}
       SENTRY_DSN: ${SENTRY_DSN:-}
       SENTRY_RELEASE: ${SENTRY_RELEASE:-}
+      LESSON_COMPLETION_WORKER_ENABLED: ${LESSON_COMPLETION_WORKER_ENABLED:-true}
     volumes:
       - ../../storage:/opt/magicmusiccrm/storage
     command: sh -c "node dist/db/migrate.js up && node dist/main.js"

@@ -4,6 +4,7 @@ import { DatabaseService } from "../db/database.service";
 import { PlatformIntegrityRepository } from "./platform-integrity.repository";
 import {
   ClaimedOutboxEvent,
+  PlatformOutboxMetrics,
   VersionedMutationCommand,
   VersionedMutationResult,
   VersionedMutationResultRef,
@@ -172,5 +173,40 @@ export class PlatformIntegrityService {
         maxAttempts: options.maxAttempts ?? 10,
       }),
     );
+  }
+
+  async outboxMetrics(): Promise<PlatformOutboxMetrics> {
+    const result = await this.database.query<{
+      pending: number | string;
+      dead_letter: number | string;
+      oldest_due_seconds: number | string | null;
+      max_attempts: number | string;
+    }>(
+      `select
+         count(*) filter (
+           where published_at is null and dead_lettered_at is null
+         ) as pending,
+         count(*) filter (where dead_lettered_at is not null) as dead_letter,
+         extract(epoch from (
+           now() - min(occurred_at) filter (
+             where published_at is null and dead_lettered_at is null
+           )
+         ))::bigint as oldest_due_seconds,
+         coalesce(max(attempts) filter (
+           where published_at is null and dead_lettered_at is null
+         ), 0) as max_attempts
+       from app.platform_outbox_events`,
+    );
+    const row = result.rows[0];
+    return {
+      pending: Number(row?.pending ?? 0),
+      deadLetter: Number(row?.dead_letter ?? 0),
+      oldestDueSeconds:
+        row?.oldest_due_seconds === null ||
+        row?.oldest_due_seconds === undefined
+          ? null
+          : Number(row.oldest_due_seconds),
+      maxAttempts: Number(row?.max_attempts ?? 0),
+    };
   }
 }

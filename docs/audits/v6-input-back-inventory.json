@@ -6,7 +6,7 @@
     "production_scroll_sites": 148,
     "explicit_scrollbars": 13,
     "visible_thumb_sites": 2,
-    "scroll_sites_without_file_controller_evidence": 123,
+    "scroll_sites_without_file_controller_evidence": 121,
     "back_exit_sites": 214,
     "production_back_exit_sites": 214,
     "predictive_back_sites": 54,
@@ -89,7 +89,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 998
+      "line": 1001
     },
     {
       "kind": "SingleChildScrollView",
@@ -111,7 +111,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1037
+      "line": 1040
     },
     {
       "kind": "ListView",
@@ -122,7 +122,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1121
+      "line": 1124
     },
     {
       "kind": "SingleChildScrollView",
@@ -133,7 +133,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1316
+      "line": 1319
     },
     {
       "kind": "SingleChildScrollView",
@@ -144,7 +144,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1571
+      "line": 1574
     },
     {
       "kind": "ListView",
@@ -188,7 +188,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1084
+      "line": 1087
     },
     {
       "kind": "ListView",
@@ -320,7 +320,7 @@
       "visible_thumb_evidence": false,
       "status": "explicit-scrollbar",
       "file": "lib/features/crm/presentation/client_card/client_card_workspace_sections.dart",
-      "line": 14
+      "line": 15
     },
     {
       "kind": "SingleChildScrollView",
@@ -331,7 +331,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/crm/presentation/client_card/client_card_workspace_sections.dart",
-      "line": 17
+      "line": 18
     },
     {
       "kind": "ListView",
@@ -342,7 +342,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/crm/presentation/client_card/client_card_workspace_sections.dart",
-      "line": 406
+      "line": 423
     },
     {
       "kind": "ListView",
@@ -353,7 +353,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/crm/presentation/client_card/client_card_workspace_sections.dart",
-      "line": 544
+      "line": 564
     },
     {
       "kind": "ListView",
@@ -364,7 +364,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/crm/presentation/client_card/client_card_workspace_sections.dart",
-      "line": 585
+      "line": 605
     },
     {
       "kind": "GridView.builder",
@@ -496,7 +496,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
-      "line": 556
+      "line": 541
     },
     {
       "kind": "ListView.builder",
@@ -925,29 +925,29 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/admin/presentation/screens/profile_detail_screen.dart",
-      "line": 135
+      "line": 167
     },
     {
       "kind": "SingleChildScrollView",
       "owner": "SYS-SCHEDULE",
       "production_reachable": true,
-      "controller_evidence": false,
+      "controller_evidence": true,
       "scrollbar_evidence": false,
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 546
+      "line": 588
     },
     {
       "kind": "SingleChildScrollView",
       "owner": "SYS-SCHEDULE",
       "production_reachable": true,
-      "controller_evidence": false,
+      "controller_evidence": true,
       "scrollbar_evidence": false,
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 667
+      "line": 709
     },
     {
       "kind": "ListView",
@@ -1343,7 +1343,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/client/presentation/screens/client_dashboard_screen.dart",
-      "line": 216
+      "line": 188
     },
     {
       "kind": "ListView.separated",
@@ -1354,7 +1354,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/client/presentation/screens/client_dashboard_screen.dart",
-      "line": 326
+      "line": 298
     },
     {
       "kind": "ListView.separated",
@@ -1552,7 +1552,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/admin/presentation/widgets/schedule_day_canvas.dart",
-      "line": 307
+      "line": 228
     },
     {
       "kind": "SingleChildScrollView",
@@ -1563,7 +1563,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/admin/presentation/widgets/schedule_day_canvas.dart",
-      "line": 334
+      "line": 255
     },
     {
       "kind": "Scrollbar",
@@ -1574,7 +1574,7 @@
       "visible_thumb_evidence": false,
       "status": "explicit-scrollbar",
       "file": "lib/features/admin/presentation/widgets/schedule_day_canvas.dart",
-      "line": 369
+      "line": 285
     },
     {
       "kind": "SingleChildScrollView",
@@ -1585,7 +1585,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/admin/presentation/widgets/schedule_day_canvas.dart",
-      "line": 373
+      "line": 289
     },
     {
       "kind": "Scrollbar",
@@ -1596,7 +1596,7 @@
       "visible_thumb_evidence": false,
       "status": "explicit-scrollbar",
       "file": "lib/features/admin/presentation/widgets/schedule_day_canvas.dart",
-      "line": 375
+      "line": 291
     },
     {
       "kind": "SingleChildScrollView",
@@ -1607,7 +1607,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/admin/presentation/widgets/schedule_day_canvas.dart",
-      "line": 379
+      "line": 295
     },
     {
       "kind": "SingleChildScrollView",
@@ -1640,7 +1640,7 @@
       "visible_thumb_evidence": false,
       "status": "scroll-owner-review",
       "file": "lib/features/teacher/presentation/widgets/teacher_students_widget.dart",
-      "line": 135
+      "line": 138
     }
   ],
   "back_sites": [
@@ -2011,7 +2011,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 289
+      "line": 299
     },
     {
       "kind": "imperative-exit",
@@ -2020,7 +2020,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 294
+      "line": 304
     },
     {
       "kind": "imperative-exit",
@@ -2029,7 +2029,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 311
+      "line": 321
     },
     {
       "kind": "PopScope",
@@ -2038,7 +2038,7 @@
       "ahead_of_time": true,
       "status": "predictive-back-capable",
       "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 661
+      "line": 684
     },
     {
       "kind": "Form",
@@ -2110,7 +2110,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1452
+      "line": 1455
     },
     {
       "kind": "imperative-exit",
@@ -2119,7 +2119,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1485
+      "line": 1488
     },
     {
       "kind": "imperative-exit",
@@ -2128,7 +2128,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1505
+      "line": 1508
     },
     {
       "kind": "imperative-exit",
@@ -2335,7 +2335,7 @@
       "ahead_of_time": true,
       "status": "predictive-back-capable",
       "file": "lib/features/messenger/presentation/screens/messenger_screen.dart",
-      "line": 293
+      "line": 292
     },
     {
       "kind": "imperative-exit",
@@ -2380,7 +2380,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1734
+      "line": 1737
     },
     {
       "kind": "imperative-exit",
@@ -2389,7 +2389,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1841
+      "line": 1844
     },
     {
       "kind": "imperative-exit",
@@ -2398,7 +2398,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1852
+      "line": 1855
     },
     {
       "kind": "imperative-exit",
@@ -2407,7 +2407,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1928
+      "line": 1931
     },
     {
       "kind": "imperative-exit",
@@ -2416,7 +2416,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1948
+      "line": 1951
     },
     {
       "kind": "imperative-exit",
@@ -2794,7 +2794,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 289
+      "line": 303
     },
     {
       "kind": "imperative-exit",
@@ -2803,7 +2803,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 430
+      "line": 457
     },
     {
       "kind": "imperative-exit",
@@ -2812,7 +2812,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 453
+      "line": 480
     },
     {
       "kind": "imperative-exit",
@@ -2821,7 +2821,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 568
+      "line": 610
     },
     {
       "kind": "imperative-exit",
@@ -2839,7 +2839,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 608
+      "line": 650
     },
     {
       "kind": "imperative-exit",
@@ -3082,7 +3082,7 @@
       "ahead_of_time": true,
       "status": "predictive-back-capable",
       "file": "lib/features/messenger/presentation/screens/messenger_screen.dart",
-      "line": 409
+      "line": 407
     },
     {
       "kind": "imperative-exit",
@@ -3091,7 +3091,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 609
+      "line": 651
     },
     {
       "kind": "imperative-exit",
@@ -3325,7 +3325,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
-      "line": 966
+      "line": 984
     },
     {
       "kind": "imperative-exit",
@@ -3478,7 +3478,7 @@
       "ahead_of_time": true,
       "status": "predictive-back-capable",
       "file": "lib/features/admin/presentation/widgets/lesson_decision_flow.dart",
-      "line": 237
+      "line": 244
     },
     {
       "kind": "Form",
@@ -3487,7 +3487,7 @@
       "ahead_of_time": true,
       "status": "predictive-back-capable",
       "file": "lib/features/admin/presentation/widgets/lesson_decision_flow.dart",
-      "line": 242
+      "line": 249
     },
     {
       "kind": "imperative-exit",
@@ -3496,7 +3496,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/admin/presentation/widgets/lesson_decision_flow.dart",
-      "line": 392
+      "line": 399
     },
     {
       "kind": "Form",
@@ -3505,7 +3505,7 @@
       "ahead_of_time": true,
       "status": "predictive-back-capable",
       "file": "lib/features/admin/presentation/widgets/lesson_decision_flow.dart",
-      "line": 414
+      "line": 421
     },
     {
       "kind": "imperative-exit",
@@ -3514,7 +3514,7 @@
       "ahead_of_time": false,
       "status": "exit-review",
       "file": "lib/features/admin/presentation/widgets/lesson_decision_flow.dart",
-      "line": 514
+      "line": 521
     },
     {
       "kind": "imperative-exit",

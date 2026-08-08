@@ -28,12 +28,24 @@ describe('HealthService', () => {
       }
     })
   };
+  const outboxWorker = {
+    health: jest.fn().mockResolvedValue({
+      status: 'ok',
+      metrics: {
+        pending: 0,
+        deadLetter: 0,
+        oldestDueSeconds: null,
+        maxAttempts: 0
+      }
+    })
+  };
 
   it('returns an ok health response', () => {
     const service = new HealthService(
       { query: jest.fn() } as never,
       worker as never,
-      flags as never
+      flags as never,
+      outboxWorker as never
     );
 
     expect(service.check()).toMatchObject({
@@ -49,7 +61,8 @@ describe('HealthService', () => {
     const service = new HealthService(
       { query } as never,
       worker as never,
-      flags as never
+      flags as never,
+      outboxWorker as never
     );
 
     await expect(service.ready()).resolves.toMatchObject({
@@ -58,9 +71,11 @@ describe('HealthService', () => {
         database: 'ok',
         migrations: 'ok',
         lessonCompletionWorker: 'ok',
+        platformOutbox: 'ok',
         v4Rollout: 'ok'
       },
       lessonCompletionWorker: { poison: 0, oldestDueSeconds: null },
+      platformOutbox: { pending: 0, deadLetter: 0 },
       latestMigrationId: '0012_readiness_performance_indexes'
     });
     expect(query).toHaveBeenCalledWith(expect.stringContaining('app_schema_migrations'));
@@ -69,7 +84,7 @@ describe('HealthService', () => {
   it('marks readiness migration check as error when no migration row exists', async () => {
     const service = new HealthService({
       query: jest.fn().mockResolvedValue({ rows: [] })
-    } as never, worker as never, flags as never);
+    } as never, worker as never, flags as never, outboxWorker as never);
 
     await expect(service.ready()).resolves.toMatchObject({
       status: 'ok',
@@ -77,6 +92,7 @@ describe('HealthService', () => {
         database: 'ok',
         migrations: 'error',
         lessonCompletionWorker: 'ok',
+        platformOutbox: 'ok',
         v4Rollout: 'ok'
       },
       latestMigrationId: null
@@ -100,7 +116,7 @@ describe('HealthService', () => {
     };
     const service = new HealthService({
       query: jest.fn().mockResolvedValue({ rows: [{ id: '0088' }] })
-    } as never, degradedWorker as never, flags as never);
+    } as never, degradedWorker as never, flags as never, outboxWorker as never);
 
     await expect(service.ready()).resolves.toMatchObject({
       checks: { lessonCompletionWorker: 'degraded' },
@@ -126,11 +142,33 @@ describe('HealthService', () => {
     };
     const service = new HealthService({
       query: jest.fn().mockResolvedValue({ rows: [{ id: '0093' }] })
-    } as never, worker as never, blockedFlags as never);
+    } as never, worker as never, blockedFlags as never, outboxWorker as never);
 
     await expect(service.ready()).resolves.toMatchObject({
       checks: { v4Rollout: 'blocked' },
       v4Rollout: [{ reason: 'unexplained_parity_diff' }]
+    });
+  });
+
+  it('degrades readiness when the platform outbox is stuck', async () => {
+    const degradedOutbox = {
+      health: jest.fn().mockResolvedValue({
+        status: 'degraded',
+        metrics: {
+          pending: 1,
+          deadLetter: 0,
+          oldestDueSeconds: 121,
+          maxAttempts: 0
+        }
+      })
+    };
+    const service = new HealthService({
+      query: jest.fn().mockResolvedValue({ rows: [{ id: '0113' }] })
+    } as never, worker as never, flags as never, degradedOutbox as never);
+
+    await expect(service.ready()).resolves.toMatchObject({
+      checks: { platformOutbox: 'degraded' },
+      platformOutbox: { pending: 1, oldestDueSeconds: 121 }
     });
   });
 });
