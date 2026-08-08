@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { JwtModule } from "@nestjs/jwt";
 import { AuditModule } from "../audit/audit.module";
+import { AuthModule } from "../auth/auth.module";
 import { AccessControlModule } from "../access-control/access-control.module";
 import { LEAD_INTAKE_PORT } from "../common/lead-intake.port";
 import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
@@ -108,6 +109,7 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
 @Module({
   imports: [
     AuditModule,
+    AuthModule,
     AccessControlModule,
     DatabaseModule,
     JwtModule.register({}),

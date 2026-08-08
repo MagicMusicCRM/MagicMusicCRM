@@ -98,103 +98,13 @@ class _GroupsList extends ConsumerWidget {
   }
 }
 
-class _RoomsList extends ConsumerWidget {
-  final String searchQuery;
-  final bool canEdit;
-  const _RoomsList({required this.searchQuery, required this.canEdit});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(entitiesProvider('rooms'));
-    return async.when(
-      loading: () =>
-          Padding(padding: EdgeInsets.all(12), child: ListSkeleton()),
-      error: (e, _) => Center(
-        child: Text('Ошибка: $e', style: TextStyle(color: AppTheme.danger)),
-      ),
-      data: (items) {
-        var filtered = items;
-        if (searchQuery.isNotEmpty) {
-          filtered = items.where((item) {
-            final name = (item['name'] as String? ?? '').toLowerCase();
-            return name.contains(searchQuery.toLowerCase());
-          }).toList();
-        }
-
-        if (filtered.isEmpty) {
-          return Center(
-            child: Text(
-              searchQuery.isEmpty ? 'Нет аудиторий' : 'Ничего не найдено',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          );
-        }
-
-        return RefreshIndicator(
-          color: AppTheme.primaryGold,
-          onRefresh: () async => ref.invalidate(entitiesProvider('rooms')),
-          child: ListView.builder(
-            padding: const EdgeInsets.all(12),
-            itemCount: filtered.length,
-            itemBuilder: (ctx, i) {
-              final item = filtered[i];
-              final name = item['name'] as String? ?? 'Без названия';
-              final branchName =
-                  item['branches']?['name'] as String? ?? 'Без филиала';
-              final capacity = item['capacity']?.toString() ?? '1';
-
-              return Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: ListTile(
-                  onTap: !canEdit
-                      ? null
-                      : () async {
-                          final res = await showDialog<bool>(
-                            context: context,
-                            builder: (ctx) => CreateRoomDialog(room: item),
-                          );
-                          if (res == true) {
-                            ref.invalidate(entitiesProvider('rooms'));
-                          }
-                        },
-                  leading: CircleAvatar(
-                    backgroundColor: AppTheme.primaryGold.withAlpha(30),
-                    child: Icon(
-                      Icons.meeting_room_rounded,
-                      color: AppTheme.primaryGold,
-                    ),
-                  ),
-                  title: Text(name),
-                  subtitle: Text(
-                    'Вместимость: $capacity чел. • Фил.: $branchName',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontSize: 12,
-                    ),
-                  ),
-                  trailing: Icon(
-                    canEdit ? Icons.edit_rounded : Icons.lock_outline_rounded,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    size: 18,
-                  ),
-                ),
-              );
-            },
-          ),
-        );
-      },
-    );
-  }
-}
-
 // ─────────────────────────────────────────────────
 // Employees List
 // ─────────────────────────────────────────────────
 class _EmployeesList extends ConsumerWidget {
   final String searchQuery;
-  const _EmployeesList({required this.searchQuery});
+  final String currentRole;
+  const _EmployeesList({required this.searchQuery, required this.currentRole});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -346,7 +256,11 @@ class _EmployeesList extends ConsumerWidget {
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                   onTap: () async {
-                    final updated = await StaffDetailDialog.show(context, e);
+                    final updated = await StaffDetailDialog.show(
+                      context,
+                      e,
+                      currentRole: currentRole,
+                    );
                     if (updated == true) {
                       ref.invalidate(entitiesProvider('employees'));
                       ref.invalidate(staffSearchProvider(query));

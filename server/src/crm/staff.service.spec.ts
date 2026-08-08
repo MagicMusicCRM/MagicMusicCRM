@@ -1,4 +1,5 @@
 import { AuditService } from "../audit/audit.service";
+import { PasswordService } from "../auth/password.service";
 import { DatabaseService } from "../db/database.service";
 import { CrmPolicy } from "./crm.policy";
 import { StaffService } from "./staff.service";
@@ -13,13 +14,16 @@ describe("StaffService", () => {
     const policy = {
       assertCanReadOperationalData: jest.fn(),
       assertManagerOnly: jest.fn(),
+      assertCanManageSystemSettings: jest.fn(),
     };
+    const passwords = { hash: jest.fn().mockResolvedValue("hashed-password") };
     const service = new StaffService(
       database as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
+      passwords as unknown as PasswordService,
     );
-    return { service, query, audit, policy };
+    return { service, query, audit, policy, passwords };
   };
 
   it("enforces manager/admin role-creation limits", async () => {
@@ -33,7 +37,9 @@ describe("StaffService", () => {
           firstName: "Ольга",
           lastName: "Смирнова",
           email: "staff-admin@example.com",
+          password: "password-123",
           role: "manager",
+          branchIds: ["branch-a"],
         },
       ),
     ).rejects.toThrow("Недостаточно прав");
@@ -44,7 +50,9 @@ describe("StaffService", () => {
         firstName: "Ольга",
         lastName: "Смирнова",
         email: "staff@example.com",
+        password: "password-123",
         role: "system_admin",
+        branchIds: ["branch-a"],
       }),
     ).rejects.toThrow("Недостаточно прав");
 
@@ -54,17 +62,21 @@ describe("StaffService", () => {
     const adminActor = { userId: "sys-a", role: "system_admin" as const };
     const { service, query, audit } = createService([
       {
-        id: "profile-a",
-        userId: "user-a",
+        id: "staff-a",
+        profile_id: "profile-a",
+        profile_user_id: "user-a",
         email: "staff@example.com",
         role: "system_admin",
-        firstName: "Ольга",
-        lastName: "Смирнова",
+        position: "Администратор системы",
+        status: "working",
+        custom_data: {},
+        app_role: "system_admin",
+        is_app_account: true,
+        first_name: "Ольга",
+        last_name: "Смирнова",
         phone: "+79992222222",
-        avatarFileId: null,
-        emailOtp2faEnabled: false,
-        createdAt: "2026-06-13T00:00:00.000Z",
-        updatedAt: "2026-06-13T00:00:00.000Z",
+        branches: [{ id: "branch-a", name: "Центр" }],
+        created_at: "2026-06-13T00:00:00.000Z",
       },
     ]);
 
@@ -73,11 +85,13 @@ describe("StaffService", () => {
         firstName: " Ольга ",
         lastName: " Смирнова ",
         email: "Staff@Example.com",
+        password: "password-123",
         phone: "+79992222222",
         role: "system_admin",
+        branchIds: ["branch-a"],
       }),
     ).resolves.toMatchObject({
-      id: "profile-a",
+      id: "staff-a",
       email: "staff@example.com",
       role: "system_admin",
     });
@@ -89,12 +103,15 @@ describe("StaffService", () => {
       "system_admin",
       "Ольга",
       "Смирнова",
+      "hashed-password",
+      ["branch-a"],
+      "sys-a",
     ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "crm.staff_created",
-        entityType: "profile",
-        entityId: "profile-a",
+        entityType: "staff",
+        entityId: "staff-a",
       }),
     );
   });
@@ -166,6 +183,7 @@ describe("StaffService", () => {
       "Операционный управляющий",
       "working",
       JSON.stringify({ telegram: "@staff" }),
+      null,
     ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({

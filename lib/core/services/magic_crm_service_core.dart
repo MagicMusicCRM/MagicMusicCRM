@@ -390,26 +390,40 @@ extension MagicCrmCore on MagicCrmService {
     required String firstName,
     String? lastName,
     String? phone,
-    String? email,
-    String? specialization,
+    required String email,
+    required String password,
+    required List<String> branchIds,
+    required List<String> disciplineIds,
     String status = 'active',
   }) async {
     final data = <String, dynamic>{
       'firstName': firstName.trim(),
+      'email': email.trim(),
+      'password': password,
+      'branchIds': branchIds,
+      'disciplineIds': disciplineIds,
       'status': status,
     };
     if (lastName != null && lastName.trim().isNotEmpty) {
       data['lastName'] = lastName.trim();
     }
     if (phone != null && phone.trim().isNotEmpty) data['phone'] = phone.trim();
-    if (email != null && email.trim().isNotEmpty) data['email'] = email.trim();
-    if (specialization != null && specialization.trim().isNotEmpty) {
-      data['specialization'] = specialization.trim();
-    }
 
     final response = await _api.post<Map<String, dynamic>>(
       '/crm/teachers',
       data: data,
+    );
+    return _legacyTeacher(response);
+  }
+
+  Future<Map<String, dynamic>> provisionTeacherAccess({
+    required String teacherId,
+    required String email,
+    required String password,
+  }) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/crm/teachers/$teacherId/access',
+      data: {'email': email.trim(), 'password': password},
     );
     return _legacyTeacher(response);
   }
@@ -420,7 +434,6 @@ extension MagicCrmCore on MagicCrmService {
     String? lastName,
     String? phone,
     String? email,
-    String? specialization,
     String? status,
     // KVA-238: патч custom-полей (birthday, workStartDate, level, category,
     // isPartTime, isBlacklisted), оклад и явные связи карточки педагога.
@@ -434,9 +447,6 @@ extension MagicCrmCore on MagicCrmService {
     if (lastName != null) data['lastName'] = lastName.trim();
     if (phone != null) data['phone'] = phone.trim();
     if (email != null) data['email'] = email.trim();
-    if (specialization != null) {
-      data['specialization'] = specialization.trim();
-    }
     if (status != null) data['status'] = status.trim();
     if (customDataPatch != null && customDataPatch.isNotEmpty) {
       data['customDataPatch'] = customDataPatch;
@@ -570,18 +580,35 @@ extension MagicCrmCore on MagicCrmService {
     required String firstName,
     required String lastName,
     required String email,
+    required String password,
     String? phone,
     required String role,
+    required List<String> branchIds,
   }) async {
     final data = <String, dynamic>{
       'firstName': firstName.trim(),
       'lastName': lastName.trim(),
       'email': email.trim(),
+      'password': password,
       'role': role,
+      'branchIds': branchIds,
     };
     if (phone != null && phone.trim().isNotEmpty) data['phone'] = phone.trim();
 
     return _api.post<Map<String, dynamic>>('/crm/staff', data: data);
+  }
+
+  Future<Map<String, dynamic>> provisionStaffAccess({
+    required String staffId,
+    required String email,
+    required String password,
+    required String role,
+  }) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/crm/staff/$staffId/access',
+      data: {'email': email.trim(), 'password': password, 'role': role},
+    );
+    return _legacyStaff(response);
   }
 
   Future<Map<String, dynamic>> updateStaff(
@@ -593,6 +620,7 @@ extension MagicCrmCore on MagicCrmService {
     String? role,
     String? position,
     String? status,
+    List<String>? branchIds,
     Map<String, dynamic>? customDataPatch,
   }) async {
     final data = <String, dynamic>{};
@@ -610,6 +638,7 @@ extension MagicCrmCore on MagicCrmService {
     addString('role', role);
     addString('position', position);
     addString('status', status);
+    if (branchIds != null) data['branchIds'] = branchIds;
     if (customDataPatch != null && customDataPatch.isNotEmpty) {
       data['customDataPatch'] = customDataPatch;
     }

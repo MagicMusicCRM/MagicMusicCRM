@@ -10,12 +10,10 @@ import 'package:magic_music_crm/features/crm/presentation/client_forms/client_fo
 class _ClientFormsFakeApi extends MagicApiClient {
   _ClientFormsFakeApi({
     this.failFirstLeadWithInactiveSource = false,
-    this.configurationForbidden = false,
     this.failStudentCreate = false,
   }) : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   final bool failFirstLeadWithInactiveSource;
-  final bool configurationForbidden;
   final bool failStudentCreate;
   int sourceLoads = 0;
   int leadCreates = 0;
@@ -27,9 +25,6 @@ class _ClientFormsFakeApi extends MagicApiClient {
     Map<String, dynamic>? queryParameters,
     bool authenticated = true,
   }) async {
-    if (configurationForbidden && path.startsWith('/crm/client-config/')) {
-      throw const MagicApiException(message: 'Forbidden', statusCode: 403);
-    }
     if (path == '/crm/client-config/sources') {
       sourceLoads++;
       final sourceId = failFirstLeadWithInactiveSource && sourceLoads > 1
@@ -320,30 +315,6 @@ void main() {
 
     expect(find.byKey(const ValueKey('magic-sheet-mobile')), findsOneWidget);
     expect(find.text('Консультация'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('configuration control is hidden and 403 is handled in-dialog', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(body: ClientConfigurationButton(allowed: false)),
-      ),
-    );
-    expect(
-      find.byKey(const ValueKey('client-configuration-open')),
-      findsNothing,
-    );
-
-    final api = _ClientFormsFakeApi(configurationForbidden: true);
-    await _pump(tester, const ClientConfigurationDialog(), api);
-    expect(
-      find.text(
-        'Настройка доступна только Директору и администратору системы.',
-      ),
-      findsOneWidget,
-    );
     expect(tester.takeException(), isNull);
   });
 }

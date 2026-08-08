@@ -135,11 +135,10 @@ extension MagicCrmOrg on MagicCrmService {
 
   Future<Map<String, dynamic>> createRoom({
     required String name,
-    String? branchId,
+    required String branchId,
     int? capacity,
   }) async {
-    final data = <String, dynamic>{'name': name.trim()};
-    if (branchId != null) data['branchId'] = branchId;
+    final data = <String, dynamic>{'name': name.trim(), 'branchId': branchId};
     if (capacity != null) data['capacity'] = capacity;
 
     final response = await _api.post<Map<String, dynamic>>(
@@ -194,23 +193,19 @@ extension MagicCrmOrg on MagicCrmService {
 
   Future<Map<String, dynamic>> createGroup({
     required String name,
-    String? teacherId,
-    String? branchId,
-    String? roomId,
+    required String teacherId,
+    required String branchId,
+    required String roomId,
     num? pricePerLesson,
     // KVA-238: переопределение ставки педагога (0 = «входит в оклад»).
     num? teacherRate,
   }) async {
-    final data = <String, dynamic>{'name': name.trim()};
-    if (teacherId != null && teacherId.trim().isNotEmpty) {
-      data['teacherId'] = teacherId.trim();
-    }
-    if (branchId != null && branchId.trim().isNotEmpty) {
-      data['branchId'] = branchId.trim();
-    }
-    if (roomId != null && roomId.trim().isNotEmpty) {
-      data['roomId'] = roomId.trim();
-    }
+    final data = <String, dynamic>{
+      'name': name.trim(),
+      'teacherId': teacherId.trim(),
+      'branchId': branchId.trim(),
+      'roomId': roomId.trim(),
+    };
     if (pricePerLesson != null) data['pricePerLesson'] = pricePerLesson;
     if (teacherRate != null) data['teacherRate'] = teacherRate;
 

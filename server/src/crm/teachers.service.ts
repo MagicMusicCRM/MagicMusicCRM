@@ -1,9 +1,15 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
+import { PasswordService } from "../auth/password.service";
 import { ActorContext } from "../common/security/actor-context";
 import { managerAdminRolesSql } from "../common/security/role-sql";
 import { DatabaseService } from "../db/database.service";
 import { CreateTeacherDto } from "./dto/create-teacher.dto";
+import { ProvisionPersonAccessDto } from "./dto/provision-person-access.dto";
 import { TeacherListQuery } from "./dto/teacher-list.query";
 import { UpdateTeacherDto } from "./dto/update-teacher.dto";
 import { CrmPolicy } from "./crm.policy";
@@ -13,6 +19,7 @@ import {
   sanitizeJsonObject,
   trimOptional,
 } from "./crm-util";
+import { assertSettingsBranchScope } from "./settings-branch-scope";
 
 interface TeacherRow {
   id: string;
@@ -54,6 +61,7 @@ export class TeachersService {
     private readonly database: DatabaseService,
     private readonly audit: AuditService,
     private readonly policy: CrmPolicy,
+    private readonly passwords: PasswordService,
   ) {}
 
   // ponytail: toNumericStat is a tiny coercion copied from CrmService (used 38×
@@ -166,6 +174,8 @@ export class TeachersService {
             from app.teacher_branches tb
             join app.branches tb_branch on tb_branch.id = tb.branch_id and tb_branch.deleted_at is null
             where tb.teacher_id = t.id
+              and tb.active_from <= current_date
+              and (tb.active_until is null or tb.active_until >= current_date)
           ) as assigned_branches,
           case
             when t.custom_data->>'rating' ~ '^-?[0-9]+(\\.[0-9]+)?$'
@@ -261,6 +271,8 @@ export class TeachersService {
               from app.teacher_branches assignment
               where assignment.teacher_id = t.id
                 and assignment.branch_id = $5
+                and assignment.active_from <= current_date
+                and (assignment.active_until is null or assignment.active_until >= current_date)
             )
           )
           and (
@@ -389,29 +401,57 @@ export class TeachersService {
   }
 
   async createTeacher(actor: ActorContext, dto: CreateTeacherDto) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertCanManageSystemSettings(actor);
     const firstName = requiredTrim(
       dto.firstName,
       "Имя преподавателя обязательно.",
     );
     const lastName = trimOptional(dto.lastName);
     const phone = trimOptional(dto.phone);
-    const email = trimOptional(dto.email)?.toLowerCase() ?? null;
-    const specialization = trimOptional(dto.specialization);
+    const email = requiredTrim(
+      dto.email,
+      "Email преподавателя обязателен.",
+    ).toLowerCase();
     const status = trimOptional(dto.status) ?? "active";
     const fullName = [firstName, lastName].filter(Boolean).join(" ");
+    for (const branchId of dto.branchIds) {
+      await assertSettingsBranchScope(this.database, actor, branchId);
+    }
+    const passwordHash = await this.passwords.hash(dto.password);
 
     try {
       const result = await this.database.query<TeacherRow>(
         `
-          with identity as (
-            select coalesce($3::text, 'teacher-' || gen_random_uuid()::text || '@local.magicmusiccrm.invalid') as email
+          with valid_branches as (
+            select id, name
+            from app.branches
+            where id = any($8::uuid[]) and deleted_at is null
+          ),
+          valid_disciplines as (
+            select distinct d.id, d.name
+            from app.disciplines d
+            join app.branch_disciplines bd
+              on bd.discipline_id = d.id and bd.deleted_at is null
+            where d.id = any($9::uuid[])
+              and bd.branch_id = any($8::uuid[])
+              and d.is_active and d.deleted_at is null
+          ),
+          reference_guard as (
+            select string_agg(name, ', ' order by name) as specialization
+            from valid_disciplines
+            where (select count(*) from valid_branches) = cardinality($8::uuid[])
+              and (select count(*) from valid_disciplines) = cardinality($9::uuid[])
           ),
           inserted_user as (
-            insert into app.users (email, full_name, phone, role, profile_completed, is_app_account)
-            select identity.email, $4, $5, 'teacher'::app.user_role, false, false
-            from identity
-            returning id, email
+            insert into app.users (
+              email, password_hash, full_name, phone, role,
+              email_verified_at, profile_completed, is_app_account
+            )
+            select $3, $7, $4, $5, 'teacher'::app.user_role,
+              now(), true, true
+            from reference_guard
+            where reference_guard.specialization is not null
+            returning id, email, role, is_app_account
           ),
           inserted_profile as (
             insert into app.profiles (user_id, first_name, last_name, phone)
@@ -421,23 +461,210 @@ export class TeachersService {
           ),
           inserted_teacher as (
             insert into app.teachers (profile_id, status, specialization)
-            select id, $6, $7
-            from inserted_profile
+            select inserted_profile.id, $6, reference_guard.specialization
+            from inserted_profile cross join reference_guard
             returning id, status, specialization, profile_id
+          ),
+          inserted_branches as (
+            insert into app.teacher_branches (teacher_id, branch_id)
+            select inserted_teacher.id, valid_branches.id
+            from inserted_teacher cross join valid_branches
+            returning branch_id
+          ),
+          inserted_disciplines as (
+            insert into app.teacher_disciplines (teacher_id, discipline_id)
+            select inserted_teacher.id, valid_disciplines.id
+            from inserted_teacher cross join valid_disciplines
+            returning discipline_id
+          ),
+          inserted_link as (
+            insert into app.user_crm_links (
+              user_id, entity_type, entity_id, matched_phone, link_source,
+              confirmed_at, created_by
+            )
+            select inserted_user.id, 'teacher'::app.crm_entity_type,
+              inserted_teacher.id, $5, 'manual_email', now(), $10
+            from inserted_user cross join inserted_teacher
+            returning id
           )
           select t.id, t.status, t.specialization, t.profile_id,
-            p.user_id as profile_user_id, p.first_name, p.last_name, u.email, p.phone
+            p.user_id as profile_user_id, p.first_name, p.last_name, u.email,
+            p.phone, u.role::text as app_role, u.is_app_account,
+            (select jsonb_agg(jsonb_build_object('id', b.id, 'name', b.name)
+              order by b.name) from valid_branches b) as assigned_branches,
+            (select jsonb_agg(jsonb_build_object('id', d.id, 'name', d.name)
+              order by d.name) from valid_disciplines d) as disciplines
           from inserted_teacher t
           join inserted_profile p on p.id = t.profile_id
           join inserted_user u on u.id = p.user_id
+          join inserted_branches branch_guard on true
+          join inserted_disciplines discipline_guard on true
+          join inserted_link link_guard on true
+          group by t.id, t.status, t.specialization, t.profile_id,
+            p.user_id, p.first_name, p.last_name, u.email, p.phone,
+            u.role, u.is_app_account
           limit 1
         `,
-        [firstName, lastName, email, fullName, phone, status, specialization],
+        [
+          firstName,
+          lastName,
+          email,
+          fullName,
+          phone,
+          status,
+          passwordHash,
+          dto.branchIds,
+          dto.disciplineIds,
+          actor.userId,
+        ],
       );
       const teacher = result.rows[0];
+      if (!teacher) {
+        throw new BadRequestException(
+          "Выберите действующие филиалы и их дисциплины.",
+        );
+      }
       await this.audit.record({
         actor,
         action: "crm.teacher_created",
+        entityType: "teacher",
+        entityId: teacher.id,
+      });
+      return this.toTeacherDto(teacher);
+    } catch (error) {
+      rethrowCreatePersonError(error);
+    }
+  }
+
+  async provisionAccess(
+    actor: ActorContext,
+    teacherId: string,
+    dto: ProvisionPersonAccessDto,
+  ) {
+    this.policy.assertCanManageSystemSettings(actor);
+    const email = requiredTrim(
+      dto.email,
+      "Email преподавателя обязателен.",
+    ).toLowerCase();
+    const passwordHash = await this.passwords.hash(dto.password);
+
+    try {
+      const result = await this.database.query<TeacherRow>(
+        `
+          with target as (
+            select t.id, p.id as profile_id, p.user_id,
+              coalesce(p.first_name, '') as first_name,
+              coalesce(p.last_name, '') as last_name, p.phone
+            from app.teachers t
+            left join app.profiles p
+              on p.id = t.profile_id and p.deleted_at is null
+            left join app.users u
+              on u.id = p.user_id and u.deleted_at is null
+            where t.id = $1 and t.deleted_at is null
+              and coalesce(u.is_app_account, false) = false
+              and not exists (
+                select 1 from app.user_crm_links conflict
+                where conflict.entity_type = 'teacher'::app.crm_entity_type
+                  and conflict.entity_id = t.id and conflict.deleted_at is null
+                  and (p.user_id is null or conflict.user_id <> p.user_id)
+              )
+            limit 1
+          ),
+          upgraded_user as (
+            update app.users u
+            set email = $2, password_hash = $3,
+              role = 'teacher'::app.user_role,
+              email_verified_at = now(), profile_completed = true,
+              is_app_account = true, updated_at = now()
+            from target
+            where u.id = target.user_id and u.deleted_at is null
+            returning u.id, u.email, u.role, u.is_app_account
+          ),
+          inserted_user as (
+            insert into app.users (
+              email, password_hash, full_name, phone, role,
+              email_verified_at, profile_completed, is_app_account
+            )
+            select $2, $3,
+              nullif(btrim(concat_ws(' ', target.first_name, target.last_name)), ''),
+              target.phone, 'teacher'::app.user_role,
+              now(), true, true
+            from target
+            where target.user_id is null
+            returning id, email, role, is_app_account
+          ),
+          account as (
+            select * from upgraded_user
+            union all
+            select * from inserted_user
+          ),
+          inserted_profile as (
+            insert into app.profiles (user_id, first_name, last_name, phone)
+            select account.id, nullif(target.first_name, ''),
+              nullif(target.last_name, ''), target.phone
+            from account cross join target
+            where target.profile_id is null
+            returning id, user_id, first_name, last_name, phone
+          ),
+          selected_profile as (
+            select p.id, p.user_id, p.first_name, p.last_name, p.phone
+            from target join app.profiles p on p.id = target.profile_id
+            union all
+            select id, user_id, first_name, last_name, phone
+            from inserted_profile
+          ),
+          updated_teacher as (
+            update app.teachers t
+            set profile_id = selected_profile.id, updated_at = now()
+            from target cross join selected_profile
+            where t.id = target.id
+            returning t.*
+          ),
+          ensured_link as (
+            insert into app.user_crm_links (
+              user_id, entity_type, entity_id, matched_phone, link_source,
+              confirmed_at, created_by
+            )
+            select account.id, 'teacher'::app.crm_entity_type,
+              updated_teacher.id, selected_profile.phone,
+              'manual_email', now(), $4
+            from account cross join updated_teacher cross join selected_profile
+            on conflict do nothing
+            returning id
+          ),
+          selected_link as (
+            select id from ensured_link
+            union all
+            select link.id
+            from account
+            join updated_teacher on true
+            join app.user_crm_links link
+              on link.user_id = account.id
+              and link.entity_type = 'teacher'::app.crm_entity_type
+              and link.entity_id = updated_teacher.id
+              and link.deleted_at is null
+          )
+          select t.id, t.status, t.specialization, t.custom_data, t.salary,
+            t.profile_id, p.user_id as profile_user_id,
+            u.role::text as app_role, u.is_app_account,
+            p.first_name, p.last_name, u.email, p.phone
+          from updated_teacher t
+          join selected_profile p on p.id = t.profile_id
+          join account u on u.id = p.user_id
+          join selected_link link_guard on true
+          limit 1
+        `,
+        [teacherId, email, passwordHash, actor.userId],
+      );
+      const teacher = result.rows[0];
+      if (!teacher) {
+        throw new BadRequestException(
+          "Преподаватель не найден, уже имеет аккаунт или связан с другим пользователем.",
+        );
+      }
+      await this.audit.record({
+        actor,
+        action: "crm.teacher_access_provisioned",
         entityType: "teacher",
         entityId: teacher.id,
       });
@@ -453,19 +680,66 @@ export class TeachersService {
     dto: UpdateTeacherDto,
   ) {
     this.policy.assertCanWriteCrm(actor);
-    // KVA-238: оклад — зарплатное поле, правится только ролями payroll.
     if (dto.salary !== undefined) this.policy.assertCanReadPayroll(actor);
-    // KVA-238: custom-поля карточки (birthday, workStartDate, level, category,
-    // isPartTime, isBlacklisted) патчатся merge'ем — по образцу updateStudent.
+    if (dto.branchIds || dto.disciplineIds) {
+      this.policy.assertCanManageSystemSettings(actor);
+    }
+    if (dto.branchIds) {
+      for (const branchId of dto.branchIds) {
+        await assertSettingsBranchScope(this.database, actor, branchId);
+      }
+    }
     const customDataPatch = sanitizeJsonObject(dto.customDataPatch);
     const result = await this.database.query<TeacherRow>(
       `
         with target as (
-          select t.id, t.profile_id, p.user_id
+          select t.id, t.profile_id, p.user_id, u.email
           from app.teachers t
           left join app.profiles p on p.id = t.profile_id and p.deleted_at is null
+          left join app.users u on u.id = p.user_id and u.deleted_at is null
           where t.id = $1 and t.deleted_at is null
+            and ($5::text is null or lower(u.email) = lower($5))
           limit 1
+        ),
+        selected_branch_ids as (
+          select unnest($10::uuid[]) as id where $10::uuid[] is not null
+          union all
+          select tb.branch_id from app.teacher_branches tb
+          join target on true where $10::uuid[] is null and tb.teacher_id = target.id
+            and tb.active_from <= current_date
+            and (tb.active_until is null or tb.active_until >= current_date)
+        ),
+        selected_discipline_ids as (
+          select unnest($9::uuid[]) as id where $9::uuid[] is not null
+          union all
+          select td.discipline_id from app.teacher_disciplines td
+          join target on true where $9::uuid[] is null and td.teacher_id = target.id
+        ),
+        valid_branches as (
+          select distinct b.id, b.name
+          from selected_branch_ids selected
+          join app.branches b on b.id = selected.id and b.deleted_at is null
+        ),
+        valid_disciplines as (
+          select distinct d.id, d.name
+          from selected_discipline_ids selected
+          join app.disciplines d
+            on d.id = selected.id and d.is_active and d.deleted_at is null
+          where exists (
+            select 1 from app.branch_disciplines bd
+            join valid_branches b on b.id = bd.branch_id
+            where bd.discipline_id = d.id and bd.deleted_at is null
+          )
+        ),
+        reference_guard as (
+          select string_agg(name, ', ' order by name) as specialization
+          from valid_disciplines
+          where (select count(*) from valid_branches) =
+              (select count(*) from selected_branch_ids)
+            and (select count(*) from valid_disciplines) =
+              (select count(*) from selected_discipline_ids)
+            and exists (select 1 from valid_branches)
+            and exists (select 1 from valid_disciplines)
         ),
         updated_profile as (
           update app.profiles p
@@ -473,40 +747,70 @@ export class TeachersService {
             last_name = coalesce($3, p.last_name),
             phone = coalesce($4, p.phone),
             updated_at = now()
-          from target
+          from target cross join reference_guard
           where p.id = target.profile_id
+            and reference_guard.specialization is not null
           returning p.id, p.user_id, p.first_name, p.last_name, p.phone
-        ),
-        updated_user as (
-          update app.users u
-          set email = coalesce($5, u.email),
-            updated_at = now()
-          from target
-          where u.id = target.user_id
-          returning u.id, u.email
         ),
         updated_teacher as (
           update app.teachers t
           set status = coalesce($6, t.status),
-            specialization = coalesce($7, t.specialization),
-            custom_data = coalesce(t.custom_data, '{}'::jsonb) || $8::jsonb,
-            salary = coalesce($9::numeric, t.salary),
+            specialization = reference_guard.specialization,
+            custom_data = coalesce(t.custom_data, '{}'::jsonb) || $7::jsonb,
+            salary = coalesce($8::numeric, t.salary),
             updated_at = now()
-          from target
-          where t.id = target.id
+          from target cross join reference_guard
+          where t.id = target.id and reference_guard.specialization is not null
           returning t.id, t.status, t.specialization, t.custom_data, t.salary,
             t.profile_id
+        ),
+        removed_disciplines as (
+          delete from app.teacher_disciplines td
+          using updated_teacher
+          where $9::uuid[] is not null and td.teacher_id = updated_teacher.id
+            and not (td.discipline_id = any($9::uuid[]))
+          returning td.discipline_id
+        ),
+        inserted_disciplines as (
+          insert into app.teacher_disciplines (teacher_id, discipline_id)
+          select updated_teacher.id, valid_disciplines.id
+          from updated_teacher cross join valid_disciplines
+          where $9::uuid[] is not null
+          on conflict do nothing
+          returning discipline_id
+        ),
+        removed_branches as (
+          delete from app.teacher_branches tb
+          using updated_teacher
+          where $10::uuid[] is not null and tb.teacher_id = updated_teacher.id
+            and not (tb.branch_id = any($10::uuid[]))
+          returning tb.branch_id
+        ),
+        inserted_branches as (
+          insert into app.teacher_branches (teacher_id, branch_id)
+          select updated_teacher.id, valid_branches.id
+          from updated_teacher cross join valid_branches
+          where $10::uuid[] is not null
+          on conflict (teacher_id, branch_id) do update
+          set active_from = current_date,
+            active_until = null,
+            version = app.teacher_branches.version + 1,
+            updated_at = now()
+          returning branch_id
         )
         select ut.id, ut.status, ut.specialization, ut.custom_data, ut.salary,
           ut.profile_id,
           coalesce(updated_profile_dependency.user_id, p.user_id) as profile_user_id,
+          u.role::text as app_role, u.is_app_account,
           coalesce(updated_profile_dependency.first_name, p.first_name) as first_name,
           coalesce(updated_profile_dependency.last_name, p.last_name) as last_name,
-          coalesce(updated_user_dependency.email, u.email) as email,
-          coalesce(updated_profile_dependency.phone, p.phone) as phone
+          u.email, coalesce(updated_profile_dependency.phone, p.phone) as phone,
+          (select jsonb_agg(jsonb_build_object('id', b.id, 'name', b.name)
+            order by b.name) from valid_branches b) as assigned_branches,
+          (select jsonb_agg(jsonb_build_object('id', d.id, 'name', d.name)
+            order by d.name) from valid_disciplines d) as disciplines
         from updated_teacher ut
         left join updated_profile updated_profile_dependency on true
-        left join updated_user updated_user_dependency on true
         left join app.profiles p on p.id = ut.profile_id and p.deleted_at is null
         left join app.users u on u.id = p.user_id and u.deleted_at is null
         limit 1
@@ -518,44 +822,17 @@ export class TeachersService {
         trimOptional(dto.phone),
         trimOptional(dto.email)?.toLowerCase() ?? null,
         trimOptional(dto.status),
-        trimOptional(dto.specialization),
         JSON.stringify(customDataPatch),
         dto.salary ?? null,
+        dto.disciplineIds ?? null,
+        dto.branchIds ?? null,
       ],
     );
     const teacher = result.rows[0];
-    if (!teacher) throw new NotFoundException("Преподаватель не найден.");
-    // KVA-238: полная замена m2m-связей, если списки переданы. delete+insert
-    // идемпотентен и проще диффа; объёмы — единицы строк на педагога.
-    if (dto.disciplineIds) {
-      await this.database.query(
-        `delete from app.teacher_disciplines
-         where teacher_id = $1 and not (discipline_id = any($2::uuid[]))`,
-        [teacherId, dto.disciplineIds],
+    if (!teacher) {
+      throw new BadRequestException(
+        "Преподаватель не найден, email изменён вне управления доступом или филиалы/дисциплины не согласованы.",
       );
-      if (dto.disciplineIds.length) {
-        await this.database.query(
-          `insert into app.teacher_disciplines (teacher_id, discipline_id)
-           select $1, unnest($2::uuid[])
-           on conflict do nothing`,
-          [teacherId, dto.disciplineIds],
-        );
-      }
-    }
-    if (dto.branchIds) {
-      await this.database.query(
-        `delete from app.teacher_branches
-         where teacher_id = $1 and not (branch_id = any($2::uuid[]))`,
-        [teacherId, dto.branchIds],
-      );
-      if (dto.branchIds.length) {
-        await this.database.query(
-          `insert into app.teacher_branches (teacher_id, branch_id)
-           select $1, unnest($2::uuid[])
-           on conflict do nothing`,
-          [teacherId, dto.branchIds],
-        );
-      }
     }
     await this.audit.record({
       actor,

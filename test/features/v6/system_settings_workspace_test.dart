@@ -53,8 +53,29 @@ class SettingsTestApi extends MagicApiClient {
             'items': const [
               {
                 'id': '30000000-0000-4000-8000-000000000001',
+                'status': 'active',
                 'firstName': 'Мария',
                 'lastName': 'Петрова',
+                'assignedBranches': [
+                  {
+                    'id': '20000000-0000-4000-8000-000000000001',
+                    'name': 'Сокол',
+                  },
+                ],
+              },
+            ],
+          }
+          as T;
+    }
+    if (path ==
+        '/crm/branches/20000000-0000-4000-8000-000000000001/disciplines') {
+      return <String, dynamic>{
+            'items': const [
+              {
+                'id': 'branch-discipline-1',
+                'disciplineId': '40000000-0000-4000-8000-000000000001',
+                'name': 'Вокал',
+                'sortOrder': 0,
               },
             ],
           }
@@ -63,7 +84,18 @@ class SettingsTestApi extends MagicApiClient {
     if (path == '/crm/staff') return <String, dynamic>{'items': staff} as T;
     if (path == '/crm/groups') return <String, dynamic>{'items': groups} as T;
     if (path == '/crm/rooms') {
-      return <String, dynamic>{'items': const <Map<String, dynamic>>[]} as T;
+      return <String, dynamic>{
+            'items': const [
+              {
+                'id': '50000000-0000-4000-8000-000000000001',
+                'branchId': '20000000-0000-4000-8000-000000000001',
+                'branchName': 'Сокол',
+                'name': 'Вокальный класс',
+                'capacity': 8,
+              },
+            ],
+          }
+          as T;
     }
     if (path == '/crm/schedule-reference') {
       return <String, dynamic>{
@@ -120,6 +152,20 @@ class SettingsTestApi extends MagicApiClient {
       return <String, dynamic>{
             'id': '90000000-0000-4000-8000-000000000001',
             ...Map<String, dynamic>.from(data! as Map),
+          }
+          as T;
+    }
+    if (path.endsWith('/access')) {
+      mutations[path] = data;
+      final body = Map<String, dynamic>.from(data! as Map);
+      return <String, dynamic>{
+            'id': path.contains('/teachers/')
+                ? 'legacy-teacher'
+                : 'legacy-staff',
+            'email': body['email'],
+            'role': body['role'] ?? 'teacher',
+            'appRole': body['role'] ?? 'teacher',
+            'isAppAccount': true,
           }
           as T;
     }
@@ -255,6 +301,18 @@ void main() {
       find.widgetWithText(TextFormField, 'Электронная почта *'),
       'ivan@example.test',
     );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Пароль *'),
+      'password-123',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Повторите пароль *'),
+      'password-123',
+    );
+    await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Сокол').last);
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Добавить сотрудника'));
     await tester.pumpAndSettle();
 
@@ -279,6 +337,24 @@ void main() {
       find.widgetWithText(TextFormField, 'Имя *'),
       'Мария',
     );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Email для входа *'),
+      'maria@example.test',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Пароль *'),
+      'password-123',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Повторите пароль *'),
+      'password-123',
+    );
+    await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Сокол').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilterChip, 'Вокал'));
+    await tester.pumpAndSettle();
     await tester.tap(
       find.widgetWithText(FilledButton, 'Создать преподавателя'),
     );
@@ -305,6 +381,18 @@ void main() {
       find.widgetWithText(TextFormField, 'Название группы *'),
       'Вокал 1',
     );
+    await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Сокол').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Выберите преподавателя'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Мария Петрова').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Выберите аудиторию'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Вокальный класс').last);
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Создать группу'));
     await tester.pumpAndSettle();
 
@@ -351,5 +439,56 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.bySemanticsLabel('Поиск группы'), findsOneWidget);
     expect(find.textContaining('Учеников: 7'), findsOneWidget);
+  });
+
+  testWidgets('director creates login access for a legacy staff record', (
+    tester,
+  ) async {
+    final api = SettingsTestApi(
+      role: 'director',
+      capabilities: const ['system.settings.manage', 'crm.client.write'],
+      staff: const [
+        {
+          'id': 'legacy-staff',
+          'role': 'admin',
+          'status': 'working',
+          'firstName': 'Ольга',
+          'lastName': 'Смирнова',
+          'email': 'hollihop-staff-1@migration.invalid',
+          'isAppAccount': false,
+          'branches': [
+            {'id': '20000000-0000-4000-8000-000000000001', 'name': 'Сокол'},
+          ],
+        },
+      ],
+    );
+    await _pump(tester, api, initialArea: 'users');
+    await tester.tap(find.text('Сотрудники').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Смирнова Ольга'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Создать доступ'));
+    await tester.pumpAndSettle();
+
+    final emailField = tester.widget<TextFormField>(
+      find.widgetWithText(TextFormField, 'Email для входа *'),
+    );
+    expect(emailField.controller!.text, isEmpty);
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Email для входа *'),
+      'legacy.staff@example.test',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Пароль *'),
+      'password-123',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Повторите пароль *'),
+      'password-123',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Создать доступ').last);
+    await tester.pumpAndSettle();
+
+    expect(api.mutations, contains('/crm/staff/legacy-staff/access'));
   });
 }

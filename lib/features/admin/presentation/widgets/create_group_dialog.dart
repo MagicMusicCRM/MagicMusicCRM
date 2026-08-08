@@ -84,6 +84,14 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_branchId == null || _teacherId == null || _roomId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Выберите филиал, преподавателя и аудиторию.'),
+        ),
+      );
+      return;
+    }
     setState(() => _saving = true);
 
     try {
@@ -92,9 +100,9 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
           .read(magicCrmServiceProvider)
           .createGroup(
             name: _nameController.text,
-            teacherId: _teacherId,
-            branchId: _branchId,
-            roomId: _roomId,
+            teacherId: _teacherId!,
+            branchId: _branchId!,
+            roomId: _roomId!,
             pricePerLesson: rawPrice.isEmpty ? null : num.parse(rawPrice),
             teacherRate: _teacherRate,
           );
@@ -141,10 +149,27 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
     }
 
     final visibleRooms = _branchId == null
-        ? _rooms
+        ? const <Map<String, dynamic>>[]
         : _rooms
               .where((room) => room['branch_id']?.toString() == _branchId)
               .toList();
+    final visibleTeachers = _branchId == null
+        ? const <Map<String, dynamic>>[]
+        : _teachers.where((teacher) {
+            final status = teacher['status']?.toString().toLowerCase();
+            if (status != 'active' &&
+                status != 'working' &&
+                status != 'активен' &&
+                status != 'работает') {
+              return false;
+            }
+            final assigned = teacher['assigned_branches'];
+            return assigned is List &&
+                assigned.any(
+                  (branch) =>
+                      branch is Map && branch['id']?.toString() == _branchId,
+                );
+          }).toList();
     return Form(
       key: _formKey,
       child: Column(
@@ -159,41 +184,12 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
                 : null,
           ),
           const SizedBox(height: 12),
-          InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTap: () => SearchableSelect.show(
-              context: context,
-              title: 'Преподаватель',
-              hintText: 'Поиск по имени…',
-              selectedId: _teacherId,
-              items: [
-                for (final teacher in _teachers)
-                  SearchableSelectItem(
-                    id: teacher['id']?.toString() ?? '',
-                    label: _personName(teacher),
-                  ),
-              ],
-              onSelected: (item) => setState(() => _teacherId = item?.id),
-            ),
-            child: InputDecorator(
-              decoration: const InputDecoration(labelText: 'Преподаватель'),
-              child: Text(
-                _selectedTeacherName() ?? 'Без преподавателя',
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             key: ValueKey('group-branch-$_branchId'),
             initialValue: _branchId,
             isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Филиал'),
+            decoration: const InputDecoration(labelText: 'Филиал *'),
             items: [
-              const DropdownMenuItem<String>(
-                value: null,
-                child: Text('Без филиала'),
-              ),
               for (final branch in _branches)
                 DropdownMenuItem<String>(
                   value: branch['id']?.toString(),
@@ -201,26 +197,54 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
                 ),
             ],
             onChanged: (value) {
-              final nextRooms = value == null
-                  ? _rooms
-                  : _rooms
-                        .where((room) => room['branch_id']?.toString() == value)
-                        .toList();
               setState(() {
                 _branchId = value;
-                if (_roomId != null &&
-                    !nextRooms.any(
-                      (room) => room['id']?.toString() == _roomId,
-                    )) {
-                  _roomId = null;
-                }
+                _teacherId = null;
+                _roomId = null;
               });
             },
+            validator: (value) => value == null ? 'Выберите филиал' : null,
+          ),
+          const SizedBox(height: 12),
+          InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: _branchId == null || visibleTeachers.isEmpty
+                ? null
+                : () => SearchableSelect.show(
+                    context: context,
+                    title: 'Преподаватель',
+                    hintText: 'Поиск по имени…',
+                    selectedId: _teacherId,
+                    items: [
+                      for (final teacher in visibleTeachers)
+                        SearchableSelectItem(
+                          id: teacher['id']?.toString() ?? '',
+                          label: _personName(teacher),
+                        ),
+                    ],
+                    onSelected: (item) => setState(() => _teacherId = item?.id),
+                  ),
+            child: InputDecorator(
+              decoration: const InputDecoration(labelText: 'Преподаватель *'),
+              child: Text(
+                _selectedTeacherName() ??
+                    (_branchId == null
+                        ? 'Сначала выберите филиал'
+                        : visibleTeachers.isEmpty
+                        ? 'Нет назначенных преподавателей'
+                        : 'Выберите преподавателя'),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ),
           const SizedBox(height: 12),
           SearchablePickerField(
-            label: 'Аудитория',
-            placeholder: 'Без аудитории',
+            label: 'Аудитория *',
+            placeholder: _branchId == null
+                ? 'Сначала выберите филиал'
+                : visibleRooms.isEmpty
+                ? 'Нет аудиторий — добавьте их в филиале'
+                : 'Выберите аудиторию',
             selectedId: _roomId,
             items: [
               for (final room in visibleRooms)

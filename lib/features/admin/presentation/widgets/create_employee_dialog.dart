@@ -37,9 +37,16 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _passwordAgainController = TextEditingController();
   String _canonicalPhone = '';
   String _selectedRole = 'admin';
+  String? _branchId;
+  List<Map<String, dynamic>> _branches = const [];
+  bool _loading = true;
+  String? _loadError;
   bool _saving = false;
+  bool _showPassword = false;
 
   List<({String value, String label})> get _roles =>
       widget.currentRole == 'manager'
@@ -47,10 +54,39 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
       : const [_adminRole, _managerRole];
 
   @override
+  void initState() {
+    super.initState();
+    _loadBranches();
+  }
+
+  Future<void> _loadBranches() async {
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
+    try {
+      final branches = await ref.read(magicCrmServiceProvider).listBranches();
+      if (!mounted) return;
+      setState(() {
+        _branches = branches;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = '$error';
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _firstNameController.dispose();
     _lastNameController.dispose();
     _emailController.dispose();
+    _passwordController.dispose();
+    _passwordAgainController.dispose();
     super.dispose();
   }
 
@@ -68,7 +104,9 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
             lastName: lastName,
             phone: _canonicalPhone,
             email: _emailController.text.trim(),
+            password: _passwordController.text,
             role: _selectedRole,
+            branchIds: [_branchId!],
           );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -92,6 +130,30 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return const SizedBox(
+        height: 220,
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_loadError != null) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('Не удалось загрузить филиалы.'),
+          const SizedBox(height: 12),
+          FilledButton.tonal(
+            onPressed: _loadBranches,
+            child: const Text('Повторить'),
+          ),
+        ],
+      );
+    }
+    if (_branches.isEmpty) {
+      return const Text(
+        'Сначала создайте филиал. Без филиала сотрудника создать нельзя.',
+      );
+    }
     return Form(
       key: _formKey,
       child: Column(
@@ -100,7 +162,7 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Сотрудник сможет зарегистрироваться по указанной почте или телефону.',
+            'Аккаунт создаётся сразу и появится в разделе «Пользователи».',
             style: TextStyle(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
@@ -142,10 +204,59 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
             },
           ),
           const SizedBox(height: 12),
+          TextFormField(
+            controller: _passwordController,
+            obscureText: !_showPassword,
+            decoration: InputDecoration(
+              labelText: 'Пароль *',
+              helperText: 'Не менее 10 символов',
+              prefixIcon: const Icon(Icons.lock_outline_rounded),
+              suffixIcon: IconButton(
+                tooltip: _showPassword ? 'Скрыть пароль' : 'Показать пароль',
+                onPressed: () => setState(() => _showPassword = !_showPassword),
+                icon: Icon(
+                  _showPassword ? Icons.visibility_off : Icons.visibility,
+                ),
+              ),
+            ),
+            validator: (value) => (value?.length ?? 0) < 10
+                ? 'Пароль должен содержать минимум 10 символов'
+                : null,
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _passwordAgainController,
+            obscureText: !_showPassword,
+            decoration: const InputDecoration(
+              labelText: 'Повторите пароль *',
+              prefixIcon: Icon(Icons.lock_reset_rounded),
+            ),
+            validator: (value) => value != _passwordController.text
+                ? 'Пароли не совпадают'
+                : null,
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: _branchId,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Филиал *'),
+            items: [
+              for (final branch in _branches)
+                DropdownMenuItem(
+                  value: branch['id']?.toString(),
+                  child: Text(branch['name']?.toString() ?? 'Филиал'),
+                ),
+            ],
+            onChanged: _saving
+                ? null
+                : (value) => setState(() => _branchId = value),
+            validator: (value) => value == null ? 'Выберите филиал' : null,
+          ),
+          const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             initialValue: _selectedRole,
             isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Роль'),
+            decoration: const InputDecoration(labelText: 'Роль доступа *'),
             items: [
               for (final role in _roles)
                 DropdownMenuItem(value: role.value, child: Text(role.label)),

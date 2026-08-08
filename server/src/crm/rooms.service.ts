@@ -267,6 +267,9 @@ export class RoomsService {
     if (!dto.branchId) {
       throw new BadRequestException("Для аудитории необходимо выбрать филиал.");
     }
+    if (dto.capacity === undefined) {
+      throw new BadRequestException("Вместимость аудитории обязательна.");
+    }
     await assertSettingsBranchScope(this.database, actor, dto.branchId);
     const name = dto.name?.trim();
     if (!name) {
@@ -275,18 +278,22 @@ export class RoomsService {
 
     const result = await this.database.query<RoomRow>(
       `
-        with inserted as (
+        with target_branch as (
+          select id from app.branches where id = $1 and deleted_at is null
+        ),
+        inserted as (
           insert into app.rooms (branch_id, name, capacity)
-          values ($1, $2, $3)
+          select id, $2, $3 from target_branch
           returning id, branch_id, name, capacity, created_at
         )
         select i.id, i.branch_id, b.name as branch_name, i.name, i.capacity, i.created_at
         from inserted i
         left join app.branches b on b.id = i.branch_id and b.deleted_at is null
       `,
-      [dto.branchId ?? null, name, dto.capacity ?? null],
+      [dto.branchId, name, dto.capacity],
     );
     const room = result.rows[0];
+    if (!room) throw new BadRequestException("Выбранный филиал недоступен.");
     await this.audit.record({
       actor,
       action: "crm.room_created",

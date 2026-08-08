@@ -1,4 +1,5 @@
 import { AuditService } from "../audit/audit.service";
+import { PasswordService } from "../auth/password.service";
 import { DatabaseService } from "../db/database.service";
 import { CrmPolicy } from "./crm.policy";
 import { TeachersService } from "./teachers.service";
@@ -13,13 +14,16 @@ describe("TeachersService", () => {
     const policy = {
       assertCanWriteCrm: jest.fn(),
       assertCanReadPayroll: jest.fn(),
+      assertCanManageSystemSettings: jest.fn(),
     };
+    const passwords = { hash: jest.fn().mockResolvedValue("hashed-password") };
     const service = new TeachersService(
       database as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
+      passwords as unknown as PasswordService,
     );
-    return { service, query, audit, policy };
+    return { service, query, audit, policy, passwords };
   };
 
   describe("getTeacher", () => {
@@ -68,12 +72,14 @@ describe("TeachersService", () => {
     ]);
 
     await expect(
-      service.createTeacher(actor, {
+      service.createTeacher({ userId: "director-a", role: "director" }, {
         firstName: " Мария ",
         lastName: " Петрова ",
         email: "Teacher@Example.com",
+        password: "password-123",
         phone: "+79991111111",
-        specialization: " Вокал ",
+        branchIds: ["branch-a"],
+        disciplineIds: ["discipline-a"],
       }),
     ).resolves.toMatchObject({
       id: "teacher-a",
@@ -81,7 +87,10 @@ describe("TeachersService", () => {
       specialization: "Вокал",
     });
 
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(policy.assertCanManageSystemSettings).toHaveBeenCalledWith({
+      userId: "director-a",
+      role: "director",
+    });
     expect(query.mock.calls[0][1]).toEqual([
       "Мария",
       "Петрова",
@@ -89,7 +98,10 @@ describe("TeachersService", () => {
       "Мария Петрова",
       "+79991111111",
       "active",
-      "Вокал",
+      "hashed-password",
+      ["branch-a"],
+      ["discipline-a"],
+      "director-a",
     ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -233,6 +245,7 @@ describe("TeachersService", () => {
 
     expect(query.mock.calls[0][0]).toContain("app.user_crm_links link");
     expect(query.mock.calls[0][0]).toContain("app.teacher_branches assignment");
+    expect(query.mock.calls[0][0]).toContain("assignment.active_from <= current_date");
     expect(query.mock.calls[0][1]).toEqual([
       "manager",
       "manager-a",
@@ -274,7 +287,6 @@ describe("TeachersService", () => {
         lastName: " Петрова ",
         email: "Teacher@Example.com",
         phone: "+79991111111",
-        specialization: " Вокал ",
       }),
     ).resolves.toMatchObject({
       id: "teacher-a",
@@ -290,9 +302,10 @@ describe("TeachersService", () => {
       "+79991111111",
       "teacher@example.com",
       null,
-      "Вокал",
       "{}", // KVA-238: пустой customDataPatch
       null, // KVA-238: salary не передан
+      null, // disciplineIds
+      null, // branchIds
     ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -4,16 +4,26 @@ import 'package:magic_music_crm/core/providers/crm_navigation_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/provision_access_dialog.dart';
 
 class StaffDetailDialog extends ConsumerStatefulWidget {
   final Map<String, dynamic> staff;
+  final String currentRole;
 
-  const StaffDetailDialog({super.key, required this.staff});
+  const StaffDetailDialog({
+    super.key,
+    required this.staff,
+    required this.currentRole,
+  });
 
-  static Future<bool?> show(BuildContext context, Map<String, dynamic> staff) {
+  static Future<bool?> show(
+    BuildContext context,
+    Map<String, dynamic> staff, {
+    required String currentRole,
+  }) {
     return showDialog<bool>(
       context: context,
-      builder: (_) => StaffDetailDialog(staff: staff),
+      builder: (_) => StaffDetailDialog(staff: staff, currentRole: currentRole),
     );
   }
 
@@ -32,6 +42,10 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
   late String _canonicalPhone;
   late String _role;
   late String _status;
+  List<Map<String, dynamic>> _allBranches = const [];
+  final Set<String> _branchIds = {};
+  bool _loadingBranches = true;
+  String? _branchesError;
   bool _saving = false;
 
   static const _roleLabels = {
@@ -73,6 +87,32 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
     );
     _role = _staff['role']?.toString().trim() ?? '';
     _status = _staff['status']?.toString().trim() ?? '';
+    final branches = _staff['branches'];
+    if (branches is List) {
+      for (final branch in branches) {
+        if (branch is Map && branch['id'] != null) {
+          _branchIds.add(branch['id'].toString());
+        }
+      }
+    }
+    _loadBranches();
+  }
+
+  Future<void> _loadBranches() async {
+    try {
+      final branches = await ref.read(magicCrmServiceProvider).listBranches();
+      if (!mounted) return;
+      setState(() {
+        _allBranches = branches;
+        _loadingBranches = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadingBranches = false;
+        _branchesError = '$error';
+      });
+    }
   }
 
   @override
@@ -114,8 +154,67 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
     Navigator.of(context, rootNavigator: true).pop(false);
   }
 
+  Map<String, String> get _provisionRoles => switch (widget.currentRole) {
+    'system_admin' => const {
+      'teacher': 'Преподаватель',
+      'admin': 'Администратор',
+      'manager': 'Управляющий',
+      'director': 'Директор',
+      'system_admin': 'Администратор системы',
+    },
+    'director' => const {
+      'teacher': 'Преподаватель',
+      'admin': 'Администратор',
+      'manager': 'Управляющий',
+    },
+    _ => const {'teacher': 'Преподаватель', 'admin': 'Администратор'},
+  };
+
+  Future<void> _provisionAccess() async {
+    final id = _staff['id']?.toString();
+    if (id == null || id.isEmpty) return;
+    Map<String, dynamic>? updated;
+    final currentRole = _staff['role']?.toString();
+    final roles = _provisionRoles;
+    final saved = await showProvisionAccessDialog(
+      context,
+      personLabel: '${_lastNameController.text} ${_firstNameController.text}'
+          .trim(),
+      initialEmail: _emailController.text,
+      roles: roles,
+      initialRole: roles.containsKey(currentRole)
+          ? currentRole
+          : roles.keys.first,
+      onSubmit: (email, password, role) async {
+        updated = await ref
+            .read(magicCrmServiceProvider)
+            .provisionStaffAccess(
+              staffId: id,
+              email: email,
+              password: password,
+              role: role!,
+            );
+      },
+    );
+    if (saved == true && mounted && updated != null) {
+      setState(() {
+        _staff = updated!;
+        _emailController.text = updated!['email']?.toString() ?? '';
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Доступ сотрудника создан')));
+    }
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate() || _saving) return;
+    if (_branchIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Выберите хотя бы один филиал.')),
+      );
+      return;
+    }
     final id = _staff['id']?.toString();
     if (id == null || id.isEmpty) return;
 
@@ -139,6 +238,7 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
             role: _role,
             position: _positionController.text,
             status: _status,
+            branchIds: _branchIds.toList(),
             customDataPatch: customDataPatch,
           );
 
@@ -206,7 +306,17 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
                       ),
                   ],
                 ),
-                if (linkSearchValue != null) ...[
+                if (!isAppAccount) ...[
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: FilledButton.tonalIcon(
+                      onPressed: _provisionAccess,
+                      icon: const Icon(Icons.key_rounded),
+                      label: const Text('Создать доступ'),
+                    ),
+                  ),
+                ] else if (linkSearchValue != null) ...[
                   const SizedBox(height: 12),
                   Align(
                     alignment: Alignment.centerLeft,
@@ -238,8 +348,10 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _emailController,
+                  readOnly: true,
                   decoration: const InputDecoration(
-                    labelText: 'Электронная почта',
+                    labelText: 'Email для входа',
+                    helperText: 'Управляется через раздел «Пользователи»',
                   ),
                   keyboardType: TextInputType.emailAddress,
                   validator: _emailValidator,
@@ -252,6 +364,48 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
                   onChanged: (value) => setState(() => _role = value ?? _role),
                   validator: _required,
                 ),
+                const SizedBox(height: 12),
+                const Text('Филиалы *'),
+                const SizedBox(height: 6),
+                if (_loadingBranches)
+                  const Center(child: CircularProgressIndicator())
+                else if (_branchesError != null)
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text('Не удалось загрузить филиалы.'),
+                      ),
+                      TextButton(
+                        onPressed: _loadBranches,
+                        child: const Text('Повторить'),
+                      ),
+                    ],
+                  )
+                else
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final branch in _allBranches)
+                        FilterChip(
+                          label: Text(branch['name']?.toString() ?? 'Филиал'),
+                          selected: _branchIds.contains(
+                            branch['id']?.toString(),
+                          ),
+                          onSelected: (selected) {
+                            final id = branch['id']?.toString();
+                            if (id == null) return;
+                            setState(() {
+                              if (selected) {
+                                _branchIds.add(id);
+                              } else {
+                                _branchIds.remove(id);
+                              }
+                            });
+                          },
+                        ),
+                    ],
+                  ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _positionController,

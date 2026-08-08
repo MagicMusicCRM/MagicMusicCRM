@@ -175,7 +175,7 @@ describe("ReferenceDataService", () => {
     ]);
     const result = await service.createDiscipline(actor, { name: "Скрипка" });
     expect(result).toEqual({ id: "d9", name: "Скрипка" });
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(policy.assertCanManageSystemSettings).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][0]).toContain("insert into app.disciplines");
     expect(query.mock.calls[0][1]).toEqual(["Скрипка"]);
   });
@@ -184,11 +184,12 @@ describe("ReferenceDataService", () => {
     const { service, query, policy } = createServiceWithQueryResults([
       { rows: [], rowCount: 2 } as unknown as { rows: Record<string, unknown>[] },
     ]);
-    const result = await service.reorderBranchDisciplines(actor, "branch-1", {
+    const director = { userId: "director-a", role: "director" as const };
+    const result = await service.reorderBranchDisciplines(director, "branch-1", {
       disciplineIds: ["d2", "d1"],
     });
     expect(result).toEqual({ updated: 2 });
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(policy.assertCanManageSystemSettings).toHaveBeenCalledWith(director);
     expect(query.mock.calls[0][0]).toContain("with ordinality");
     expect(query.mock.calls[0][1]).toEqual(["branch-1", ["d2", "d1"]]);
   });
@@ -197,11 +198,12 @@ describe("ReferenceDataService", () => {
     const { service, query, policy } = createServiceWithQueryResults([
       { rows: [{ id: "bd1", discipline_id: "d1", sort_order: 3 }] },
     ]);
-    const result = await service.assignBranchDiscipline(actor, "branch-1", {
+    const director = { userId: "director-a", role: "director" as const };
+    const result = await service.assignBranchDiscipline(director, "branch-1", {
       disciplineId: "d1",
     });
     expect(result).toEqual({ id: "bd1", disciplineId: "d1", sortOrder: 3 });
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(policy.assertCanManageSystemSettings).toHaveBeenCalledWith(director);
     expect(query.mock.calls[0][0]).toContain("on conflict (branch_id, discipline_id)");
     expect(query.mock.calls[0][0]).toContain("deleted_at = null");
     expect(query.mock.calls[0][1]).toEqual(["branch-1", "d1", null]);
@@ -213,7 +215,7 @@ describe("ReferenceDataService", () => {
     ]);
     const result = await service.createLossReason(actor, { name: "Тест" });
     expect(result).toEqual({ id: "lr1", name: "Тест", kind: "lost", sortOrder: 0 });
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(policy.assertCanManageSystemSettings).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][0]).toContain("insert into app.lead_loss_reasons");
     expect(query.mock.calls[0][1]).toEqual(["Тест", "lost", 0]);
   });

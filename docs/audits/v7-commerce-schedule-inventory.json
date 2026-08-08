@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "task": "T1.1.1",
-  "source_digest": "7f8d085da1ac48ab766493fe23f3af60f1fdf4ea805bff661ba53dc3695a6a4b",
+  "source_digest": "6fb78d1599c6bba94698f0a4b2410dd7c59ab1282508c414afbf3eed53f51f37",
   "summary": {
     "matched_source_files": 53,
     "finance_callsites": 256,
@@ -1050,14 +1050,6 @@
       "operation": "call",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/crm.module.ts",
-      "line": 100
-    },
-    {
-      "kind": "wire",
-      "subject": "/commerce/payment",
-      "operation": "call",
-      "owner": "SYS-COMMERCE-INTEGRITY",
-      "file": "server/src/crm/crm.module.ts",
       "line": 101
     },
     {
@@ -1075,6 +1067,14 @@
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/crm.module.ts",
       "line": 103
+    },
+    {
+      "kind": "wire",
+      "subject": "/commerce/payment",
+      "operation": "call",
+      "owner": "SYS-COMMERCE-INTEGRITY",
+      "file": "server/src/crm/crm.module.ts",
+      "line": 104
     },
     {
       "kind": "sql-table",
@@ -1154,7 +1154,7 @@
       "operation": "call",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/crm.module.ts",
-      "line": 90
+      "line": 91
     },
     {
       "kind": "sql-table",
@@ -1290,7 +1290,7 @@
       "operation": "call",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/crm.module.ts",
-      "line": 85
+      "line": 86
     },
     {
       "kind": "wire",
@@ -1298,7 +1298,7 @@
       "operation": "call",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/crm.module.ts",
-      "line": 83
+      "line": 84
     },
     {
       "kind": "wire",
@@ -1410,7 +1410,7 @@
       "operation": "call",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/crm.module.ts",
-      "line": 84
+      "line": 85
     },
     {
       "kind": "sql-table",
@@ -1490,7 +1490,7 @@
       "operation": "call",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/crm.module.ts",
-      "line": 28
+      "line": 29
     },
     {
       "kind": "wire",
@@ -1498,19 +1498,11 @@
       "operation": "call",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/crm.module.ts",
-      "line": 29
+      "line": 30
     },
     {
       "kind": "wire",
       "subject": "/subscription",
-      "operation": "call",
-      "owner": "SYS-COMMERCE-INTEGRITY",
-      "file": "server/src/crm/crm.module.ts",
-      "line": 79
-    },
-    {
-      "kind": "wire",
-      "subject": "/commerce/subscription",
       "operation": "call",
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/crm.module.ts",
@@ -1523,6 +1515,14 @@
       "owner": "SYS-COMMERCE-INTEGRITY",
       "file": "server/src/crm/crm.module.ts",
       "line": 81
+    },
+    {
+      "kind": "wire",
+      "subject": "/commerce/subscription",
+      "operation": "call",
+      "owner": "SYS-COMMERCE-INTEGRITY",
+      "file": "server/src/crm/crm.module.ts",
+      "line": 82
     },
     {
       "kind": "wire",

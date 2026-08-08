@@ -27,6 +27,7 @@ import { UpdateTeacherDto } from "./dto/update-teacher.dto";
 import { CreateTeacherPayoutDto } from "./dto/create-teacher-payout.dto";
 import { SetTeacherRateDto } from "./dto/set-teacher-rate.dto";
 import { TeacherStatsQuery } from "./dto/teacher-stats.query";
+import { ProvisionPersonAccessDto } from "./dto/provision-person-access.dto";
 
 @UseGuards(JwtAuthGuard)
 @Controller("crm")
@@ -68,6 +69,15 @@ export class CrmPeopleController {
     @Body() dto: UpdateTeacherDto,
   ) {
     return this.teachers.updateTeacher(actor, id, dto);
+  }
+
+  @Post("teachers/:id/access")
+  provisionTeacherAccess(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: ProvisionPersonAccessDto,
+  ) {
+    return this.teachers.provisionAccess(actor, id, dto);
   }
 
   @Get("teachers/:id/payroll")
@@ -141,5 +151,14 @@ export class CrmPeopleController {
     @Body() dto: UpdateStaffDto,
   ) {
     return this.staff.updateStaff(actor, id, dto);
+  }
+
+  @Post("staff/:id/access")
+  provisionStaffAccess(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: ProvisionPersonAccessDto,
+  ) {
+    return this.staff.provisionAccess(actor, id, dto);
   }
 }

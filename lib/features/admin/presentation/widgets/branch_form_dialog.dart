@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/create_room_dialog.dart';
 
 String _utcOffsetLabel(int minutes) {
   final sign = minutes >= 0 ? '+' : '-';
   final abs = minutes.abs();
   final h = abs ~/ 60;
   final m = abs % 60;
-  final timeStr = m == 0 ? 'UTC$sign$h' : 'UTC$sign$h:${m.toString().padLeft(2, '0')}';
+  final timeStr = m == 0
+      ? 'UTC$sign$h'
+      : 'UTC$sign$h:${m.toString().padLeft(2, '0')}';
   return switch (minutes) {
     180 => 'МСК ($timeStr)',
     120 => 'EET ($timeStr)',
@@ -31,6 +34,9 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
   final _addressController = TextEditingController();
   int _utcOffsetMinutes = 180;
   bool _saving = false;
+  bool _loadingRooms = false;
+  String? _roomsError;
+  List<Map<String, dynamic>> _rooms = const [];
 
   static final List<int> _offsetOptions = List.generate(
     (14 * 60 + 12 * 60) ~/ 30 + 1,
@@ -45,7 +51,47 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
       _addressController.text = widget.branch!['address'] as String? ?? '';
       _utcOffsetMinutes =
           (widget.branch!['utc_offset_minutes'] as num?)?.toInt() ?? 180;
+      _loadRooms();
     }
+  }
+
+  Future<void> _loadRooms() async {
+    final id = widget.branch?['id']?.toString();
+    if (id == null || id.isEmpty) return;
+    setState(() {
+      _loadingRooms = true;
+      _roomsError = null;
+    });
+    try {
+      final rooms = await ref
+          .read(magicCrmServiceProvider)
+          .listRooms(branchId: id);
+      if (!mounted) return;
+      setState(() {
+        _rooms = rooms;
+        _loadingRooms = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadingRooms = false;
+        _roomsError = '$error';
+      });
+    }
+  }
+
+  Future<void> _openRoom([Map<String, dynamic>? room]) async {
+    final id = widget.branch?['id']?.toString();
+    if (id == null || id.isEmpty) return;
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => CreateRoomDialog(
+        room: room,
+        branchId: id,
+        branchName: _nameController.text.trim(),
+      ),
+    );
+    if (saved == true) await _loadRooms();
   }
 
   @override
@@ -58,9 +104,9 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
   Future<void> _save() async {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Введите название филиала')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Введите название филиала')));
       return;
     }
 
@@ -103,38 +149,91 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
     return AlertDialog(
       title: Text(isEdit ? 'Редактировать филиал' : 'Новый филиал'),
       backgroundColor: Theme.of(context).colorScheme.surface,
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _nameController,
-            decoration: const InputDecoration(labelText: 'Название *'),
-            textCapitalization: TextCapitalization.words,
+      content: SizedBox(
+        width: 520,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: _nameController,
+                decoration: const InputDecoration(labelText: 'Название *'),
+                textCapitalization: TextCapitalization.words,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _addressController,
+                decoration: const InputDecoration(labelText: 'Адрес'),
+                textCapitalization: TextCapitalization.sentences,
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<int>(
+                initialValue: _utcOffsetMinutes,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Часовой пояс'),
+                items: _offsetOptions
+                    .map(
+                      (m) => DropdownMenuItem(
+                        value: m,
+                        child: Text(_utcOffsetLabel(m)),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) setState(() => _utcOffsetMinutes = v);
+                },
+              ),
+              if (isEdit) ...[
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Аудитории филиала',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    FilledButton.tonalIcon(
+                      onPressed: _openRoom,
+                      icon: const Icon(Icons.add_rounded),
+                      label: const Text('Добавить'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (_loadingRooms)
+                  const Center(child: CircularProgressIndicator())
+                else if (_roomsError != null)
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text('Не удалось загрузить аудитории.'),
+                      ),
+                      TextButton(
+                        onPressed: _loadRooms,
+                        child: const Text('Повторить'),
+                      ),
+                    ],
+                  )
+                else if (_rooms.isEmpty)
+                  const Text('Аудиторий пока нет.')
+                else
+                  for (final room in _rooms)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.meeting_room_outlined),
+                      title: Text(room['name']?.toString() ?? 'Аудитория'),
+                      subtitle: Text(
+                        'Вместимость: ${room['capacity']?.toString() ?? 'не указана'}',
+                      ),
+                      trailing: const Icon(Icons.edit_outlined),
+                      onTap: () => _openRoom(room),
+                    ),
+              ],
+            ],
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _addressController,
-            decoration: const InputDecoration(labelText: 'Адрес'),
-            textCapitalization: TextCapitalization.sentences,
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<int>(
-            initialValue: _utcOffsetMinutes,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Часовой пояс'),
-            items: _offsetOptions
-                .map(
-                  (m) => DropdownMenuItem(
-                    value: m,
-                    child: Text(_utcOffsetLabel(m)),
-                  ),
-                )
-                .toList(),
-            onChanged: (v) {
-              if (v != null) setState(() => _utcOffsetMinutes = v);
-            },
-          ),
-        ],
+        ),
       ),
       actions: [
         TextButton(

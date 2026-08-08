@@ -1,19 +1,19 @@
 # MagicMusicCRM v4 — Current-State Inventory
 
 **Task:** T8.1.2
-**Source digest:** `6875fb93545b6cc8ea6586d0103b24b4b3cc578a5ac1bb37b03e10961b040df6`
+**Source digest:** `59f784cc9065c85405ad8a78a85e601e3e9be36fc712ca678c17898a1c025937`
 **Validation:** PASS
 
 ## Coverage
 
 | Slice | Count |
 |---|---:|
-| backend routes | 318 |
+| backend routes | 320 |
 | role guards | 22 |
-| policy calls | 241 |
-| dto fields | 794 |
-| flutter role checks | 142 |
-| flutter navigation sources | 325 |
+| policy calls | 244 |
+| dto fields | 801 |
+| flutter role checks | 143 |
+| flutter navigation sources | 321 |
 | schedule entry points | 47 |
 | attendance mutations | 0 |
 | finance writes | 46 |
@@ -96,8 +96,8 @@ Indexes: `users_app_accounts_role_created_idx`, `users_email_lower_unique`, `use
 | backend-route | DELETE /crm/subscription-packages/:id | `server/src/crm/crm-finance.controller.ts:142` | commerce-migration-pending |
 | backend-route | POST /crm/subscription-packages/:id/restore | `server/src/crm/crm-finance.controller.ts:156` | commerce-migration-pending |
 | backend-route | POST /crm/leads/:leadId/subscriptions/issue | `server/src/crm/crm-leads.controller.ts:123` | commerce-migration-pending |
-| backend-route | POST /crm/teachers/:id/payouts | `server/src/crm/crm-people.controller.ts:81` | commerce-migration-pending |
-| backend-route | POST /crm/teachers/:id/rates | `server/src/crm/crm-people.controller.ts:90` | commerce-migration-pending |
+| backend-route | POST /crm/teachers/:id/payouts | `server/src/crm/crm-people.controller.ts:91` | commerce-migration-pending |
+| backend-route | POST /crm/teachers/:id/rates | `server/src/crm/crm-people.controller.ts:100` | commerce-migration-pending |
 | backend-route | PATCH /crm/lessons/teacher-rate | `server/src/crm/crm-schedule.controller.ts:264` | commerce-migration-pending |
 | backend-route | POST /crm/students/:id/adjustments | `server/src/crm/crm-students.controller.ts:126` | commerce-migration-pending |
 | backend-route | POST /crm/students/:id/transfer | `server/src/crm/crm-students.controller.ts:140` | commerce-migration-pending |

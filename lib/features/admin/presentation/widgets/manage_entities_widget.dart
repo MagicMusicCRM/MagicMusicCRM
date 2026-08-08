@@ -15,7 +15,6 @@ import 'staff_detail_dialog.dart';
 import 'group_detail_dialog.dart';
 import 'create_employee_dialog.dart';
 import 'create_group_dialog.dart';
-import 'create_room_dialog.dart';
 import 'create_teacher_dialog.dart';
 import 'branch_form_dialog.dart';
 import 'data_quality_widget.dart';
@@ -465,7 +464,10 @@ class _UsersSettingsState extends State<_UsersSettings> {
         ),
         Expanded(
           child: switch (_section) {
-            'staff' => _EmployeesList(searchQuery: _search.text),
+            'staff' => _EmployeesList(
+              searchQuery: _search.text,
+              currentRole: widget.currentRole,
+            ),
             'teachers' => _TeachersList(searchQuery: _search.text),
             _ => UserRolesWidget(
               currentRole: widget.currentRole,
@@ -494,7 +496,6 @@ class _OrganizationSettings extends ConsumerStatefulWidget {
 
 class _OrganizationSettingsState extends ConsumerState<_OrganizationSettings> {
   final _search = TextEditingController();
-  bool _rooms = false;
 
   @override
   void dispose() {
@@ -503,31 +504,29 @@ class _OrganizationSettingsState extends ConsumerState<_OrganizationSettings> {
   }
 
   Future<void> _create() async {
-    final dialog = _rooms ? const CreateRoomDialog() : const BranchFormDialog();
     final saved = await showDialog<bool>(
       context: context,
-      builder: (_) => dialog,
+      builder: (_) => const BranchFormDialog(),
     );
     if (saved == true) {
-      ref.invalidate(entitiesProvider(_rooms ? 'rooms' : 'branches'));
+      ref.invalidate(entitiesProvider('branches'));
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final canCreate = _rooms ? widget.canEdit : widget.canCreateBranch;
     return Column(
       children: [
         _SettingsToolbar(
           title: 'Организация',
           subtitle: widget.canEdit
-              ? 'Филиалы и аудитории'
+              ? 'Филиалы; аудитории настраиваются внутри филиала'
               : 'Только просмотр назначенных филиалов',
-          action: canCreate
+          action: widget.canCreateBranch
               ? FilledButton.icon(
                   onPressed: _create,
                   icon: const Icon(Icons.add_rounded),
-                  label: Text(_rooms ? 'Новая аудитория' : 'Новый филиал'),
+                  label: const Text('Новый филиал'),
                 )
               : null,
         ),
@@ -535,17 +534,6 @@ class _OrganizationSettingsState extends ConsumerState<_OrganizationSettings> {
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
           child: Row(
             children: [
-              SegmentedButton<bool>(
-                segments: const [
-                  ButtonSegment(value: false, label: Text('Филиалы')),
-                  ButtonSegment(value: true, label: Text('Аудитории')),
-                ],
-                selected: {_rooms},
-                onSelectionChanged: (value) {
-                  setState(() => _rooms = value.first);
-                },
-              ),
-              const SizedBox(width: 12),
               Expanded(
                 child: TextField(
                   controller: _search,
@@ -561,12 +549,10 @@ class _OrganizationSettingsState extends ConsumerState<_OrganizationSettings> {
           ),
         ),
         Expanded(
-          child: _rooms
-              ? _RoomsList(searchQuery: _search.text, canEdit: widget.canEdit)
-              : _BranchesList(
-                  searchQuery: _search.text,
-                  canEdit: widget.canEdit,
-                ),
+          child: _BranchesList(
+            searchQuery: _search.text,
+            canEdit: widget.canEdit,
+          ),
         ),
       ],
     );

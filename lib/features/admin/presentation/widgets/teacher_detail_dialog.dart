@@ -6,6 +6,7 @@ import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/widgets/teacher_rate_selector.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/provision_access_dialog.dart';
 
 part 'teacher_detail_widgets.dart';
 
@@ -33,7 +34,6 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
   late Map<String, dynamic> _localData;
   late TextEditingController _nameController;
   late TextEditingController _emailController;
-  late TextEditingController _specializationController;
   late TextEditingController _salaryController;
   late String _canonicalPhone;
   bool _saving = false;
@@ -90,9 +90,6 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
     _emailController = TextEditingController(
       text: _localData['email']?.toString() ?? '',
     );
-    _specializationController = TextEditingController(
-      text: _localData['specialization']?.toString() ?? '',
-    );
 
     final custom = _localData['custom_data'] is Map<String, dynamic>
         ? _localData['custom_data'] as Map<String, dynamic>
@@ -126,7 +123,6 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
-    _specializationController.dispose();
     _salaryController.dispose();
     super.dispose();
   }
@@ -143,7 +139,8 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
     if (raw is List) {
       return {
         for (final value in raw)
-          if (value?.toString().trim().isNotEmpty == true) value.toString().trim(),
+          if (value?.toString().trim().isNotEmpty == true)
+            value.toString().trim(),
       };
     }
     final text = raw?.toString().trim() ?? '';
@@ -157,19 +154,40 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
   Future<void> _loadReferences() async {
     try {
       final crm = ref.read(magicCrmServiceProvider);
-      final results = await Future.wait([
-        crm.listDisciplines(),
-        crm.listBranches(limit: 100),
-      ]);
+      final branches = await crm.listBranches(limit: 100);
       if (!mounted) return;
-      setState(() {
-        _allDisciplines = results[0];
-        _allBranches = results[1];
-      });
+      setState(() => _allBranches = branches);
+      await _loadDisciplinesForBranches();
     } catch (_) {
       // Справочники не критичны — оставляем чипы пустыми.
     }
     await _loadFieldOptions();
+  }
+
+  Future<void> _loadDisciplinesForBranches() async {
+    if (_branchIds.isEmpty) {
+      if (mounted) setState(() => _allDisciplines = const []);
+      return;
+    }
+    try {
+      final crm = ref.read(magicCrmServiceProvider);
+      final rows = await Future.wait(_branchIds.map(crm.listBranchDisciplines));
+      final byId = <String, Map<String, dynamic>>{};
+      for (final row in rows.expand((items) => items)) {
+        final id = row['discipline_id']?.toString();
+        if (id != null) byId[id] = {'id': id, 'name': row['name']};
+      }
+      if (!mounted) return;
+      setState(() {
+        _allDisciplines = byId.values.toList()
+          ..sort(
+            (a, b) => a['name'].toString().compareTo(b['name'].toString()),
+          );
+        _disciplineIds.removeWhere((id) => !byId.containsKey(id));
+      });
+    } catch (_) {
+      if (mounted) setState(() => _allDisciplines = const []);
+    }
   }
 
   /// Level/category options live in the CRM custom-field schema, so an admin
@@ -214,6 +232,20 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
   }
 
   Future<void> _save() async {
+    if (_nameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Укажите имя преподавателя.')),
+      );
+      return;
+    }
+    if (_branchIds.isEmpty || _disciplineIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Выберите филиал и хотя бы одну дисциплину.'),
+        ),
+      );
+      return;
+    }
     setState(() => _saving = true);
     try {
       final names = _nameController.text.trim().split(RegExp(r'\s+'));
@@ -233,7 +265,6 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
         lastName: ln,
         phone: _canonicalPhone,
         email: _emailController.text,
-        specialization: _specializationController.text,
         customDataPatch: {
           'birthday': _birthday == null
               ? ''
@@ -257,7 +288,9 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
       );
 
       // KVA-238: смена ставки — отдельная запись истории teacher_rates.
-      if (_rateTouched && _pendingRate != null && _pendingRate != _currentRate) {
+      if (_rateTouched &&
+          _pendingRate != null &&
+          _pendingRate != _currentRate) {
         await crm.setTeacherHourRate(
           teacherId: _teacherId,
           rate: _pendingRate!,
@@ -278,6 +311,33 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
       }
     } finally {
       if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _provisionAccess() async {
+    Map<String, dynamic>? updated;
+    final saved = await showProvisionAccessDialog(
+      context,
+      personLabel: _nameController.text.trim(),
+      initialEmail: _emailController.text,
+      onSubmit: (email, password, _) async {
+        updated = await ref
+            .read(magicCrmServiceProvider)
+            .provisionTeacherAccess(
+              teacherId: _teacherId,
+              email: email,
+              password: password,
+            );
+      },
+    );
+    if (saved == true && mounted && updated != null) {
+      setState(() {
+        _localData = updated!;
+        _emailController.text = updated!['email']?.toString() ?? '';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Доступ преподавателя создан')),
+      );
     }
   }
 
@@ -341,6 +401,17 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _buildSummary(context),
+              if (_localData['is_app_account'] != true) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: FilledButton.tonalIcon(
+                    onPressed: _provisionAccess,
+                    icon: const Icon(Icons.key_rounded),
+                    label: const Text('Создать доступ'),
+                  ),
+                ),
+              ],
               if (_payrollVisible) ...[
                 const SizedBox(height: 12),
                 _buildPayrollBlock(context),
@@ -358,8 +429,10 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
               const SizedBox(height: 12),
               TextField(
                 controller: _emailController,
+                readOnly: true,
                 decoration: const InputDecoration(
-                  labelText: 'Электронная почта',
+                  labelText: 'Email для входа',
+                  helperText: 'Управляется через раздел «Пользователи»',
                 ),
                 keyboardType: TextInputType.emailAddress,
               ),
@@ -386,11 +459,6 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _specializationController,
-                decoration: const InputDecoration(labelText: 'Специализация'),
-              ),
               if (_allDisciplines.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 _buildChipsSection(
@@ -408,7 +476,12 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
                 _buildChipsSection('Категории', _allCategories, _categories),
               if (_allBranches.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                _buildChipsSection('Филиалы', _allBranches, _branchIds),
+                _buildChipsSection(
+                  'Филиалы',
+                  _allBranches,
+                  _branchIds,
+                  _loadDisciplinesForBranches,
+                ),
               ],
               const SizedBox(height: 12),
               TeacherRateSelector(
@@ -540,8 +613,9 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
   Widget _buildChipsSection(
     String title,
     List<Map<String, dynamic>> options,
-    Set<String> selected,
-  ) {
+    Set<String> selected, [
+    VoidCallback? onChanged,
+  ]) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -562,13 +636,16 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
             return FilterChip(
               label: Text(option['name']?.toString() ?? '—'),
               selected: isSelected,
-              onSelected: (value) => setState(() {
-                if (value) {
-                  selected.add(id);
-                } else {
-                  selected.remove(id);
-                }
-              }),
+              onSelected: (value) {
+                setState(() {
+                  if (value) {
+                    selected.add(id);
+                  } else {
+                    selected.remove(id);
+                  }
+                });
+                onChanged?.call();
+              },
             );
           }).toList(),
         ),
@@ -644,4 +721,3 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
     return num.tryParse(value?.toString() ?? '') ?? 0;
   }
 }
-

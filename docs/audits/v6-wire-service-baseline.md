@@ -6,8 +6,8 @@
 | Slice | Count |
 |---|---:|
 | Service/API files | 34 |
-| HTTP-like callsites | 275 |
-| Production-reachable callsites | 275 |
+| HTTP-like callsites | 277 |
+| Production-reachable callsites | 277 |
 | Process roots | 2 |
 | Spawn sites | 2 |
 | Unowned | 0 |

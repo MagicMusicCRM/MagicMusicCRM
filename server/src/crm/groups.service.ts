@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
@@ -9,6 +13,7 @@ import { UpsertGroupDto } from "./dto/upsert-group.dto";
 import { CrmPolicy } from "./crm.policy";
 import { audienceForGroup, audienceForStudent } from "./audience";
 import { requiredTrim } from "./crm-util";
+import { assertSettingsBranchScope } from "./settings-branch-scope";
 
 interface GroupRow {
   id: string;
@@ -130,11 +135,26 @@ export class GroupsService {
   }
 
   async createGroup(actor: ActorContext, dto: UpsertGroupDto) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertCanManageSystemSettings(actor);
+    await assertSettingsBranchScope(this.database, actor, dto.branchId);
     const name = requiredTrim(dto.name, "Название группы обязательно.");
     const result = await this.database.query<GroupRow>(
       `
-        with inserted_group as (
+        with valid_references as (
+          select b.id as branch_id, t.id as teacher_id, r.id as room_id
+          from app.branches b
+          join app.teacher_branches tb
+            on tb.branch_id = b.id and tb.teacher_id = $1
+            and tb.active_from <= current_date
+            and (tb.active_until is null or tb.active_until >= current_date)
+          join app.teachers t
+            on t.id = tb.teacher_id and t.deleted_at is null
+            and lower(t.status) in ('active', 'working', 'активен', 'работает')
+          join app.rooms r
+            on r.id = $3 and r.branch_id = b.id and r.deleted_at is null
+          where b.id = $2 and b.deleted_at is null
+        ),
+        inserted_group as (
           insert into app.groups (
             teacher_id,
             branch_id,
@@ -143,7 +163,8 @@ export class GroupsService {
             price_per_lesson,
             teacher_rate
           )
-          values ($1, $2, $3, $4, $5, $6)
+          select teacher_id, branch_id, room_id, $4, $5, $6
+          from valid_references
           returning id, teacher_id, branch_id, room_id, name, price_per_lesson,
             teacher_rate, created_at
         )
@@ -161,15 +182,20 @@ export class GroupsService {
         limit 1
       `,
       [
-        dto.teacherId ?? null,
-        dto.branchId ?? null,
-        dto.roomId ?? null,
+        dto.teacherId,
+        dto.branchId,
+        dto.roomId,
         name,
         dto.pricePerLesson ?? null,
         dto.teacherRate ?? null,
       ],
     );
     const group = result.rows[0];
+    if (!group) {
+      throw new BadRequestException(
+        "Выберите действующий филиал, назначенного в него преподавателя и аудиторию этого филиала.",
+      );
+    }
     await this.audit.record({
       actor,
       action: "crm.group_created",
@@ -194,15 +220,49 @@ export class GroupsService {
    * оклад»; поле применяется только если передано (dto.teacherRate !== undefined).
    */
   async updateGroup(actor: ActorContext, groupId: string, dto: UpdateGroupDto) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertCanManageSystemSettings(actor);
+    if (dto.branchId) {
+      await assertSettingsBranchScope(this.database, actor, dto.branchId);
+    }
     const name =
       dto.name === undefined
         ? null
         : requiredTrim(dto.name, "Название группы обязательно.");
     const teacherRateProvided = dto.teacherRate !== undefined;
+    const referencesProvided =
+      dto.teacherId !== undefined ||
+      dto.branchId !== undefined ||
+      dto.roomId !== undefined;
     const result = await this.database.query<GroupRow>(
       `
-        with updated_group as (
+        with target as (
+          select g.*,
+            coalesce($3::uuid, g.teacher_id) as next_teacher_id,
+            coalesce($4::uuid, g.branch_id) as next_branch_id,
+            coalesce($5::uuid, g.room_id) as next_room_id
+          from app.groups g
+          where g.id = $1 and g.deleted_at is null
+        ),
+        valid_references as (
+          select target.id from target where not $9::boolean
+          union all
+          select target.id
+          from target
+          join app.branches b
+            on b.id = target.next_branch_id and b.deleted_at is null
+          join app.teacher_branches tb
+            on tb.branch_id = b.id and tb.teacher_id = target.next_teacher_id
+            and tb.active_from <= current_date
+            and (tb.active_until is null or tb.active_until >= current_date)
+          join app.teachers t
+            on t.id = tb.teacher_id and t.deleted_at is null
+            and lower(t.status) in ('active', 'working', 'активен', 'работает')
+          join app.rooms r
+            on r.id = target.next_room_id and r.branch_id = b.id
+            and r.deleted_at is null
+          where $9::boolean
+        ),
+        updated_group as (
           update app.groups g
           set name = coalesce($2, g.name),
             teacher_id = coalesce($3::uuid, g.teacher_id),
@@ -211,7 +271,8 @@ export class GroupsService {
             price_per_lesson = coalesce($6::numeric, g.price_per_lesson),
             teacher_rate = case when $7::boolean then $8::numeric else g.teacher_rate end,
             updated_at = now()
-          where g.id = $1 and g.deleted_at is null
+          from valid_references
+          where g.id = valid_references.id
           returning g.id, g.teacher_id, g.branch_id, g.room_id, g.name,
             g.price_per_lesson, g.teacher_rate, g.created_at
         )
@@ -237,10 +298,15 @@ export class GroupsService {
         dto.pricePerLesson ?? null,
         teacherRateProvided,
         teacherRateProvided ? dto.teacherRate : null,
+        referencesProvided,
       ],
     );
     const group = result.rows[0];
-    if (!group) throw new NotFoundException("Группа не найдена.");
+    if (!group) {
+      throw new BadRequestException(
+        "Группа не найдена или преподаватель/аудитория не относятся к выбранному филиалу.",
+      );
+    }
     await this.audit.record({
       actor,
       action: "crm.group_updated",

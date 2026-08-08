@@ -1,4 +1,14 @@
-import { IsEmail, IsOptional, IsString, MaxLength } from "class-validator";
+import {
+  ArrayMinSize,
+  ArrayUnique,
+  IsArray,
+  IsEmail,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  MinLength,
+} from "class-validator";
 
 export class CreateTeacherDto {
   @IsString()
@@ -15,18 +25,29 @@ export class CreateTeacherDto {
   @MaxLength(50)
   phone?: string;
 
-  @IsOptional()
   @IsEmail()
   @MaxLength(255)
-  email?: string;
+  email!: string;
 
-  @IsOptional()
   @IsString()
-  @MaxLength(100)
-  specialization?: string;
+  @MinLength(10)
+  @MaxLength(128)
+  password!: string;
 
   @IsOptional()
   @IsString()
   @MaxLength(50)
   status?: string;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsUUID("all", { each: true })
+  branchIds!: string[];
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsUUID("all", { each: true })
+  disciplineIds!: string[];
 }

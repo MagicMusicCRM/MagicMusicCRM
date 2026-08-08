@@ -248,6 +248,36 @@ Three-pane desktop flow where width permits: objects/categories → fields/optio
 | Conflict | Explain stale version, preserve input, offer reload/compare/retry |
 | Cancel/Back | Save/Discard/Cancel if dirty; same contract on all exit paths |
 
+### 8.1 Business-reference constructors
+
+- Teacher create/edit requires one or more active branches and one or more
+  disciplines from the union of those branches' active discipline catalogs.
+  `specialization` is a compatibility projection derived from selected
+  discipline labels and is never a second editable field. Create also requires
+  email/password and atomically creates an active `teacher` app user, profile,
+  Teacher, branch/discipline links and `user_crm_links` row.
+- Staff create/edit requires one or more branches and a canonical business role.
+  `staff_members.role` describes the operational entity and remains editable;
+  `app.users.role` controls application access and is changed only by the access
+  management flow after creation. Staff create requires email and password,
+  hashes the password through the existing PasswordService, and atomically
+  creates the active user, profile, staff entity, branch assignments and
+  `user_crm_links` record. The selected staff role seeds the initial access role;
+  later staff-role edits never mutate `app.users.role` implicitly.
+- Existing Teacher/Staff records without app access expose one provision-access
+  action. It hashes the supplied password and atomically upgrades the linked
+  technical user or creates the missing user/profile/link. Existing app
+  accounts are immutable through this action and duplicate provisioning fails.
+- Group create requires branch, teacher and room. Teacher choices are active
+  assignments of the selected branch; room choices belong to that branch. The
+  server validates the same effective tuple on create/update.
+- Rooms are managed from their owning Branch card, not a parallel organization
+  tab. Branch and capacity validation are explicit before submit and on API.
+- Async catalog failure/empty states block submit with an actionable explanation.
+  Direct API calls enforce the same scope/reference rules transactionally.
+- The unified `Варианты для полей` catalog is the only UI that creates select
+  values; legacy comma-separated inline option editors are not production code.
+
 ## 9. Content and action language
 
 - Buttons use verbs and objects: `Добавить оплату`, `Сохранить предпочтение`, `Перенести занятие`.

@@ -605,6 +605,37 @@ graph TD
   - **Зависимости**: T7.1.1.
   - **Приоритет**: P0.
 
+- [ ] **T7.1.3** [OWNER-2026-08-08]: Исключить неполные организационные конструкторы
+  - **Описание**: Исправить Teacher/Staff/Group/Room UI→API→DB: обязательные
+    филиальные связи, branch-filtered справочники, атомарные записи, разделение
+    бизнес-роли сотрудника и access-role пользователя; перенести аудитории в
+    карточку филиала и удалить legacy inline-варианты полей.
+  - **Входные данные**: production-дефекты T7.1.2, US-V7-014, существующие
+    branch/discipline/profile-link/settings contracts.
+  - **Выходные данные**: единые формы без свободных дублей, серверные guards,
+    transaction tests и role/scope regression.
+  - **Критерии приемки**:
+    - Given empty/mismatched required reference, When UI or direct API submits,
+      Then mutation is blocked before partial state and the reason is explicit.
+    - Given staff creation with required email/password, Then active user,
+      profile, CRM staff, branch links and user↔staff link commit atomically;
+      later business-role edits do not mutate access-role implicitly.
+    - Given teacher creation with required email/password, Then active Teacher
+      user, profile, CRM teacher, branch/discipline links and user↔teacher link
+      commit atomically and the account appears in Users immediately.
+    - Given an old Teacher/Staff row without app access, When Director provisions
+      email/password, Then its technical identity is upgraded (or missing
+      identity created) atomically and duplicate provisioning is rejected.
+    - Given a branch card, Then its rooms are listed/created/edited there and no
+      standalone room constructor remains.
+  - **Тип верификации**: Flutter widget/service + backend unit/PostgreSQL +
+    Actor Matrix + Windows Release production retest.
+  - **Инструкция по верификации**: targeted tests, full gates, direct-API negative
+    matrix and UI/API/DB evidence in the T7.1.2 defect/retest log.
+  - **Оценка**: 18 ч.
+  - **Зависимости**: T7.1.1; блокирует продолжение T7.1.2.
+  - **Приоритет**: P0.
+
 - [ ] **INT-S6** [MILESTONE]: Owner production decision
   - **Описание**: Сопоставить каждый результат мегатеста с UI/API/DB evidence и принять или отклонить production candidate.
   - **Входные данные**: T7.1.1–T7.1.2.
@@ -613,7 +644,7 @@ graph TD
   - **Тип верификации**: Owner acceptance.
   - **Инструкция по верификации**: независимая проверка evidence index, hashes, defects/retests and final reconciliation.
   - **Оценка**: 4 ч.
-  - **Зависимости**: T7.1.2.
+  - **Зависимости**: T7.1.2, T7.1.3.
   - **Приоритет**: P0.
 
 ## User Story Overlay

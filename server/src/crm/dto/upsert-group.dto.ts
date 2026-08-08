@@ -14,17 +14,14 @@ export class UpsertGroupDto {
   @MaxLength(120)
   name!: string;
 
-  @IsOptional()
   @IsUUID()
-  teacherId?: string;
+  teacherId!: string;
 
-  @IsOptional()
   @IsUUID()
-  branchId?: string;
+  branchId!: string;
 
-  @IsOptional()
   @IsUUID()
-  roomId?: string;
+  roomId!: string;
 
   @IsOptional()
   @Type(() => Number)

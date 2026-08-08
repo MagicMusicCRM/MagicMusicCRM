@@ -1,8 +1,12 @@
 import {
+  ArrayMinSize,
+  ArrayUnique,
+  IsArray,
   IsEmail,
   IsObject,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
 } from "class-validator";
 
@@ -45,4 +49,11 @@ export class UpdateStaffDto {
   @IsOptional()
   @IsObject()
   customDataPatch?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsUUID("all", { each: true })
+  branchIds?: string[];
 }

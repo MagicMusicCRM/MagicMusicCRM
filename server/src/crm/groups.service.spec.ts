@@ -13,6 +13,7 @@ describe("GroupsService", () => {
     const policy = {
       assertCanReadOperationalData: jest.fn(),
       assertCanWriteCrm: jest.fn(),
+      assertCanManageSystemSettings: jest.fn(),
     };
     const realtime = { emitCrmChanged: jest.fn() };
     const service = new GroupsService(
@@ -125,7 +126,7 @@ describe("GroupsService", () => {
     ]);
 
     await expect(
-      service.createGroup(actor, {
+      service.createGroup({ userId: "director-a", role: "director" }, {
         name: " Фортепиано ",
         teacherId: "teacher-a",
         branchId: "branch-a",
@@ -139,7 +140,10 @@ describe("GroupsService", () => {
       teacherName: "Мария Петрова",
     });
 
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(policy.assertCanManageSystemSettings).toHaveBeenCalledWith({
+      userId: "director-a",
+      role: "director",
+    });
     expect(query.mock.calls[0][1]).toEqual([
       "teacher-a",
       "branch-a",
@@ -148,6 +152,8 @@ describe("GroupsService", () => {
       3000,
       null, // KVA-238: teacherRate не передан
     ]);
+    expect(query.mock.calls[0][0]).toContain("tb.active_from <= current_date");
+    expect(query.mock.calls[0][0]).toContain("tb.active_until >= current_date");
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "crm.group_created",
@@ -155,6 +161,36 @@ describe("GroupsService", () => {
         entityId: "group-b",
       }),
     );
+  });
+
+  it("keeps rate-only updates available for imported incomplete groups", async () => {
+    const { service, query } = createService([
+      {
+        id: "legacy-group",
+        teacher_id: null,
+        branch_id: null,
+        room_id: null,
+        name: "Архивная группа",
+        price_per_lesson: null,
+        teacher_rate: "1200",
+        created_at: "2026-06-13T00:00:00.000Z",
+      },
+    ]);
+
+    await service.updateGroup(actor, "legacy-group", { teacherRate: 1200 });
+
+    expect(query.mock.calls[0][1]).toEqual([
+      "legacy-group",
+      null,
+      null,
+      null,
+      null,
+      null,
+      true,
+      1200,
+      false,
+    ]);
+    expect(query.mock.calls[0][0]).toContain("where not $9::boolean");
   });
 
   it("adds and removes group students through v3 contract", async () => {

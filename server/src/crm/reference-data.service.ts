@@ -5,6 +5,8 @@ import { DatabaseService } from "../db/database.service";
 import { CrmListQuery } from "./dto/crm-list.query";
 import { CrmPolicy } from "./crm.policy";
 import { HolliHopMetadataService } from "./hollihop-metadata.service";
+import { requiredTrim } from "./crm-util";
+import { assertSettingsBranchScope } from "./settings-branch-scope";
 
 interface LeadStatusRow {
   id: string;
@@ -168,10 +170,11 @@ export class ReferenceDataService {
   }
 
   async createDiscipline(actor: ActorContext, dto: { name: string }) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertCanManageSystemSettings(actor);
+    const name = requiredTrim(dto.name, "Название дисциплины обязательно.");
     const result = await this.database.query<{ id: string; name: string }>(
       `insert into app.disciplines (name) values ($1) returning id, name`,
-      [dto.name],
+      [name],
     );
     return { id: result.rows[0].id, name: result.rows[0].name };
   }
@@ -180,7 +183,8 @@ export class ReferenceDataService {
     actor: ActorContext,
     dto: { name: string; kind?: "lost" | "paused"; sortOrder?: number },
   ) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertCanManageSystemSettings(actor);
+    const name = requiredTrim(dto.name, "Название причины обязательно.");
     const result = await this.database.query<{
       id: string;
       name: string;
@@ -190,7 +194,7 @@ export class ReferenceDataService {
       `insert into app.lead_loss_reasons (name, kind, sort_order)
        values ($1, $2, $3)
        returning id, name, kind, sort_order`,
-      [dto.name, dto.kind ?? "lost", dto.sortOrder ?? 0],
+      [name, dto.kind ?? "lost", dto.sortOrder ?? 0],
     );
     const row = result.rows[0];
     return { id: row.id, name: row.name, kind: row.kind, sortOrder: row.sort_order };
@@ -201,7 +205,8 @@ export class ReferenceDataService {
     branchId: string,
     dto: { disciplineId: string; sortOrder?: number },
   ) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertCanManageSystemSettings(actor);
+    await assertSettingsBranchScope(this.database, actor, branchId);
     const result = await this.database.query<{
       id: string;
       discipline_id: string;
@@ -228,7 +233,8 @@ export class ReferenceDataService {
     branchId: string,
     dto: { disciplineIds: string[] },
   ) {
-    this.policy.assertCanWriteCrm(actor);
+    this.policy.assertCanManageSystemSettings(actor);
+    await assertSettingsBranchScope(this.database, actor, branchId);
     const result = await this.database.query(
       `update app.branch_disciplines bd
           set sort_order = t.ord - 1

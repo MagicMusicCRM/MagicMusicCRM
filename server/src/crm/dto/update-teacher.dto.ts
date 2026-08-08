@@ -1,5 +1,7 @@
 import { Type } from "class-transformer";
 import {
+  ArrayMinSize,
+  ArrayUnique,
   IsArray,
   IsEmail,
   IsNumber,
@@ -34,11 +36,6 @@ export class UpdateTeacherDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(100)
-  specialization?: string;
-
-  @IsOptional()
-  @IsString()
   @MaxLength(50)
   status?: string;
 
@@ -60,12 +57,16 @@ export class UpdateTeacherDto {
   // KVA-238: мультивыбор дисциплин (m2m app.teacher_disciplines).
   @IsOptional()
   @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
   @IsUUID("all", { each: true })
   disciplineIds?: string[];
 
   // KVA-238: явная привязка к филиалам (m2m app.teacher_branches).
   @IsOptional()
   @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
   @IsUUID("all", { each: true })
   branchIds?: string[];
 }

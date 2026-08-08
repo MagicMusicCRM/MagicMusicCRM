@@ -1117,6 +1117,27 @@ void main() {
             'createdAt': '2026-06-13T00:00:00.000Z',
           },
         ),
+        _FakeResponse(
+          path: '/crm/teachers/legacy-teacher/access',
+          statusCode: 201,
+          body: {
+            'id': 'legacy-teacher',
+            'email': 'legacy.teacher@example.com',
+            'appRole': 'teacher',
+            'isAppAccount': true,
+          },
+        ),
+        _FakeResponse(
+          path: '/crm/staff/legacy-staff/access',
+          statusCode: 201,
+          body: {
+            'id': 'legacy-staff',
+            'email': 'legacy.staff@example.com',
+            'role': 'admin',
+            'appRole': 'admin',
+            'isAppAccount': true,
+          },
+        ),
       ]);
       final service = MagicCrmService(_client(adapter));
 
@@ -1130,8 +1151,10 @@ void main() {
         firstName: 'Мария',
         lastName: 'Петрова',
         email: 'teacher@example.com',
+        password: 'password-123',
         phone: '+79991111111',
-        specialization: 'Вокал',
+        branchIds: const ['branch-a'],
+        disciplineIds: const ['discipline-a'],
       );
       final updatedTeacher = await service.updateTeacher(
         'teacher-a',
@@ -1139,14 +1162,17 @@ void main() {
         lastName: 'Петрова',
         email: 'teacher@example.com',
         phone: '+79991111111',
-        specialization: 'Фортепиано',
+        branchIds: const ['branch-a'],
+        disciplineIds: const ['discipline-b'],
       );
       final staff = await service.createStaff(
         firstName: 'Ольга',
         lastName: 'Смирнова',
         email: 'staff@example.com',
+        password: 'password-123',
         phone: '+79992222222',
         role: 'manager',
+        branchIds: const ['branch-a'],
       );
       final updatedStaff = await service.updateStaff(
         'staff-a',
@@ -1159,6 +1185,17 @@ void main() {
         status: 'working',
         customDataPatch: {'birthday': '1990-06-01'},
       );
+      final provisionedTeacher = await service.provisionTeacherAccess(
+        teacherId: 'legacy-teacher',
+        email: 'legacy.teacher@example.com',
+        password: 'password-123',
+      );
+      final provisionedStaff = await service.provisionStaffAccess(
+        staffId: 'legacy-staff',
+        email: 'legacy.staff@example.com',
+        password: 'password-123',
+        role: 'admin',
+      );
 
       expect(student['first_name'], 'Анна');
       expect(teacher['specialization'], 'Вокал');
@@ -1166,15 +1203,31 @@ void main() {
       expect(staff['role'], 'manager');
       expect(updatedStaff['position'], 'Операционный управляющий');
       expect(updatedStaff['custom_data']['birthday'], '1990-06-01');
+      expect(provisionedTeacher['is_app_account'], true);
+      expect(provisionedStaff['app_role'], 'admin');
       expect(adapter.requests[0].body['firstName'], 'Анна');
-      expect(adapter.requests[1].body['specialization'], 'Вокал');
-      expect(adapter.requests[2].body['specialization'], 'Фортепиано');
+      expect(adapter.requests[1].body['branchIds'], ['branch-a']);
+      expect(adapter.requests[1].body['disciplineIds'], ['discipline-a']);
+      expect(adapter.requests[1].body['password'], 'password-123');
+      expect(adapter.requests[2].body['branchIds'], ['branch-a']);
+      expect(adapter.requests[2].body['disciplineIds'], ['discipline-b']);
       expect(adapter.requests[3].body['role'], 'manager');
+      expect(adapter.requests[3].body['branchIds'], ['branch-a']);
+      expect(adapter.requests[3].body['password'], 'password-123');
       expect(adapter.requests[4].body['position'], 'Операционный управляющий');
       expect(
         adapter.requests[4].body['customDataPatch']['birthday'],
         '1990-06-01',
       );
+      expect(adapter.requests[5].body, {
+        'email': 'legacy.teacher@example.com',
+        'password': 'password-123',
+      });
+      expect(adapter.requests[6].body, {
+        'email': 'legacy.staff@example.com',
+        'password': 'password-123',
+        'role': 'admin',
+      });
     });
 
     test('creates student from lead with conversion payload', () async {
