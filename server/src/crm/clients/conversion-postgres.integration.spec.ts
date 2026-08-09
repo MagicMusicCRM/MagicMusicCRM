@@ -372,12 +372,13 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
       { type: "student", id: studentId },
       { expectedVersion: 2, body: "Администратор зафиксировал общий контекст" },
     );
-    await database.query(
-      `insert into app.audit_events (
-         actor_user_id, action, entity_type, entity_id, metadata
-       ) values ($1, 'crm.client_blacklisted', 'lead', $2, $3::jsonb)`,
-      [adminId, leadId, JSON.stringify({ reason: "Повторяющийся спам" })],
-    );
+    await new AuditService(database).record({
+      actor: { userId: adminId, role: "admin" },
+      action: "crm.client_blacklisted",
+      entityType: "lead",
+      entityId: leadId,
+      metadata: { reason: "Повторяющийся спам" },
+    });
     const history = await internalContext.listOperationalHistory(
       { userId: directorId, role: "director" },
       { type: "student", id: studentId },

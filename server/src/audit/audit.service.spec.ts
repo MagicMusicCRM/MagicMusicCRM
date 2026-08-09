@@ -13,6 +13,7 @@ describe('AuditService', () => {
       entityId: 'session-a',
       metadata: {
         ip: '127.0.0.1',
+        reason: 'Повторяющийся спам',
         refreshToken: 'secret-refresh-token'
       }
     });
@@ -21,6 +22,8 @@ describe('AuditService', () => {
     const params = query.mock.calls[0][1] as unknown[];
     expect(params[0]).toBe('user-a');
     expect(params[4]).toContain('[REDACTED]');
+    expect(params[4]).toContain('[PRIVATE]');
     expect(params[4]).not.toContain('secret-refresh-token');
+    expect(params[5]).toBe('Повторяющийся спам');
   });
 });
