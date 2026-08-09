@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_notifications_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
@@ -89,6 +91,22 @@ class _NotificationBellWidgetState
     } catch (e) {
       debugPrint('Notification mark-read error: $e');
     }
+  }
+
+  Future<void> _openNotification(
+    BuildContext sheetContext,
+    Map<String, dynamic> item,
+  ) async {
+    if (item['is_read'] == false) await _markRead(item['id'].toString());
+    final data = item['data'];
+    if (data is! Map) return;
+    final link = EntityLink.fromJson({
+      'entityType': data['entityType'],
+      'entityId': data['entityId'],
+    });
+    if (!link.isSupported || !mounted) return;
+    if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+    await openEntityLink(context, ref, link);
   }
 
   int get _unreadCount =>
@@ -206,7 +224,7 @@ class _NotificationBellWidgetState
               titleFor: _notificationTitle,
               bodyFor: _notificationBody,
               formatDate: _formatDate,
-              onTapItem: (id) => _markRead(id),
+              onTapItem: (item) => _openNotification(sheetContext, item),
               onMarkAll: () async {
                 await _markAllRead();
                 if (!sheetContext.mounted) return;
@@ -246,7 +264,7 @@ class _NotificationsBody extends StatelessWidget {
   final String Function(Map<String, dynamic> item) titleFor;
   final String Function(Map<String, dynamic> item) bodyFor;
   final String Function(String? value) formatDate;
-  final ValueChanged<String> onTapItem;
+  final Future<void> Function(Map<String, dynamic>) onTapItem;
   final Future<void> Function() onMarkAll;
 
   @override
@@ -256,9 +274,7 @@ class _NotificationsBody extends StatelessWidget {
     if (isLoading && notifications.isEmpty) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 48),
-        child: Center(
-          child: CircularProgressIndicator(color: AppColor.gold),
-        ),
+        child: Center(child: CircularProgressIndicator(color: AppColor.gold)),
       );
     }
 
@@ -286,10 +302,7 @@ class _NotificationsBody extends StatelessWidget {
               const SizedBox(height: AppSpace.md),
               Text(
                 'Нет уведомлений',
-                style: TextStyle(
-                  color: scheme.onSurfaceVariant,
-                  fontSize: 15,
-                ),
+                style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 15),
               ),
             ],
           ),
@@ -377,7 +390,7 @@ class _NotificationCard extends StatelessWidget {
   final String Function(Map<String, dynamic> item) titleFor;
   final String Function(Map<String, dynamic> item) bodyFor;
   final String Function(String? value) formatDate;
-  final ValueChanged<String> onTap;
+  final Future<void> Function(Map<String, dynamic>) onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -388,7 +401,7 @@ class _NotificationCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadius.card),
-        onTap: isUnread ? () => onTap(item['id'].toString()) : null,
+        onTap: () => onTap(item),
         child: Container(
           padding: const EdgeInsets.all(AppSpace.lg),
           decoration: BoxDecoration(
