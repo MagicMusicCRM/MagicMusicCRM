@@ -1,7 +1,7 @@
 # V7 owner mega-UAT — актуальные доказательства
 
-Дата прогона: `2026-08-08` — `2026-08-09`
-Клиент: `1.5.1+169`, Windows Release; Android Release `+167` (API 35)
+Дата прогона: `2026-08-08` — `2026-08-10`
+Клиент: `1.5.1+170`, Windows Release; Android Release `+167` (API 35)
 Среда данных: production API/DB
 
 Старый набор `00..25` удалён: он содержал устаревший отдельный экран
@@ -48,6 +48,15 @@
 | До явного выбора сохраняемой записи объединение заблокировано; исходный лид выбран осознанно | PASS | `windows-release/34-merge-winner-required-169.png` |
 | После объединения штатная отмена остаётся в постоянном окне, а не только в исчезающем уведомлении | PASS | `windows-release/35-merge-result-persistent-169.png` |
 | Отмена выполнена через UI; кандидат и обе записи восстановлены | PASS | `windows-release/36-merge-undone-169.png`, `windows-release/37-merge-candidate-restored-169.png` |
+
+## G4b — подписанная внешняя заявка
+
+| Проверка | Результат | Доказательство |
+|---|---|---|
+| Подписанный production-webhook создал ровно одного лида `Внешняя Заявка UAT-044`, телефон `+79990009003`, источник `Звонок` | PASS | `windows-release/38-external-lead-board-170.png` |
+| Повтор с тем же ingestion UUID вернул тот же `leadId` с `replayed=true`; в БД остались 1 Lead и 1 outbox-событие | PASS | production DB reconciliation, `ingestionId=a33f706f-26b2-48a1-8123-202608090044` |
+| Outbox-событие опубликовано с первой попытки без dead-letter и создало одно постоянное уведомление; 17 получателей и 17 уникальных push-доставок, дублей нет | PASS | `windows-release/39-webhook-notification-170.png` + production DB reconciliation |
+| Нажатие по тексту уведомления открывает новую именованную вкладку, сохраняет вкладку `Клиенты` и показывает маршрут `Клиенты → Лид · Заявка UAT-044 Внешняя` | PASS | `windows-release/40-notification-linked-route-170.png` |
 
 ## UX — длинные списки
 
@@ -119,6 +128,19 @@ UI-tree содержит `Чат`, `Расписание`, `Ученики`, fat
 тестовых записей `merge_log`. Health=`ok`; необъяснённых 5xx после исправления
 нет. Перед сборкой Flutter analyze был чистым; общий gate для изменения:
 Flutter `656/656`, backend `157/157` suites и `1248/1248` tests.
+
+В `1.5.1+170` пройден UAT-044: HMAC-секрет настроен в production без
+раскрытия значения, одинаковый webhook дважды вернул один `leadId`
+`9b35e688-45d7-4efb-bacc-1d3e952cf6b5` (`replayed=false` → `true`). Outbox
+`0643931d-48c4-4c95-ba44-306c9c7af11d` опубликован с первой попытки,
+notification/recipient/delivery reconciliation дал `1/17/17`, уникальность
+получателей и доставок — `17/17`, email-outbox — `0`, dead-letter — `0`.
+Найденный мегатестом разрыв materialization закрыт на сервере, а связанное
+уведомление теперь открывает каноническую именованную desktop-вкладку. Сервер
+работает на ревизии `9178064`, health=`ok`; миграций не было. Перед выкладками
+сохранены backups `pre-4ea273d-20260809T191343Z` и
+`pre-9178064-20260809T193246Z`. Flutter analyze чистый, Flutter `657/657`,
+backend `157/157` suites и `1249/1249` tests.
 
 Статус всего мегатеста: **IN PROGRESS**. Этот файл фиксирует только уже
 повторно пройденные части G3 и G4 и не заменяет итоговую матрицу UAT.
