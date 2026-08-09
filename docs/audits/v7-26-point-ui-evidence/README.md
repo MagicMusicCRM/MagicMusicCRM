@@ -1,6 +1,8 @@
 # V7 — каталог визуальных доказательств 26 пунктов ТЗ
 
-Дата съёмки: **2026-08-07**. Версия приложения: **1.5.1+157**.
+Дата съёмки: **2026-08-07 — 2026-08-09**. Актуальная проверенная
+сборка: **1.5.1+167**; ранние файлы каталога сохраняют исторические
+состояния предыдущих сборок.
 
 ## Уровни доказательств
 
@@ -17,6 +19,14 @@
 | `01-live-release-window.png` | LIVE, исторический blocker | rail, вкладки, Back/Forward, breadcrumb и прежний 404 до синхронизации backend |
 | `02-postdeploy-client-lessons-live.png` | LIVE post-deploy | production-раздел «Занятия», корректный empty state, без 404 |
 | `03-postdeploy-client-overview-live.png` | LIVE post-deploy | production-карточка, заметка, rail, вкладки и breadcrumb без 404 |
+| `lead-status-menu-compact-live.png` | LIVE, Admin | список статусов ограничен пятью видимыми строками и имеет собственную прокрутку |
+| `lead-board-status-refreshed-live.png` | LIVE, Admin | карточка лида сразу перемещена в колонку «Успешный» после сохранения без устаревшего кэша |
+| `lead-card-system-fields-live.png` | LIVE, Admin | реальные филиал, рекламный источник и ответственный находятся в основной карточке |
+| `lead-blacklist-reason-dialog-live.png` | LIVE, Admin | причина вводится до добавления клиента в чёрный список |
+| `lead-blacklisted-state-live.png` | LIVE, Admin | активное ограничение и точная причина видны в карточке |
+| `lead-blacklist-removed-live.png` | LIVE, Admin | ограничение снято, UI подтверждает действие |
+| `lead-operational-history-live.png` | LIVE, Admin, `1.5.1+167` | после снятия ограничения история сохраняет действие, точную причину, автора и время; отсутствие причины показано без технических маркеров |
+| `lead-status-history-live.png` | LIVE, Admin, `1.5.1+167` | все реальные переходы статуса лида и их автор видны в длинной карточке |
 | `real-role-1-client.png` … `real-role-5-director.png` | REAL ACCOUNT | пять реальных ролей и capability-проекция оболочки |
 | `real-role-2-teacher-schedule.png` | REAL ACCOUNT | отдельный read-only маршрут расписания преподавателя |
 | `windows-client-workspace-overview.png` | DEVICE RENDER | длинная desktop-карточка, заметка, секционные действия, история с причиной |
@@ -59,3 +69,11 @@
 - `22-final-apk-session-live.png` — финальный подписанный APK установлен поверх прежней версии; директорская сессия и production-данные сохранены.
 - `23-postdeploy-student-overview-live.png` — production-карточка после backend sync; заметка и основные поля загружены без 404.
 - `24-postdeploy-client-lessons-live.png` — production-раздел занятий после backend sync; корректный empty state постоянных расписаний без 404.
+- `25-teacher-session-preserved-167.png` — подписанный APK `1.5.1+167`: реальный вход `magic2`, затем холодный перезапуск; Teacher-сессия, «Расписание» и «Ученики» сохранены, fatal/ANR/`E/flutter` = 0.
+
+## Проверки кандидата 1.5.1+167
+
+- Flutter: `flutter analyze` — PASS; `flutter test` — **656/656**.
+- Backend: typecheck/build — PASS; Jest — **157/157 suites, 1248/1248 tests**.
+- Production: backup `pre-client-history-20260809T175624Z.sql.gz`, deploy без миграций, `/api/health` — `ok`.
+- Android: `versionCode=167`, `versionName=1.5.1`, APK Signature Scheme v2 — PASS, SHA-256 `497AD124E471CFC494853189AE920E96EE7715259038B5A024FC3F54EED8FCA0`.
