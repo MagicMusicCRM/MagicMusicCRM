@@ -39,6 +39,7 @@ class _LeadCard extends ConsumerWidget {
     final branchName = lead.branchName;
     final assignedName = lead.assignedName;
     final linkedStudentId = lead.linkedStudentId;
+    final linkedUserId = lead.linkedUserId;
     final openTasks = lead.openTasksCount;
     final forgotten = hasNoOpenTasks(openTasks);
     final comments = lead.commentsCount;
@@ -186,21 +187,22 @@ class _LeadCard extends ConsumerWidget {
                           ),
                         ),
                       ),
-                      IconButton(
-                        tooltip: 'Написать в чат',
-                        visualDensity: VisualDensity.compact,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(
-                          minWidth: 32,
-                          minHeight: 32,
+                      if (linkedUserId.isNotEmpty)
+                        IconButton(
+                          tooltip: 'Написать в чат',
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 32,
+                            minHeight: 32,
+                          ),
+                          icon: const Icon(
+                            Icons.chat_bubble_outline_rounded,
+                            size: 18,
+                            color: AppColor.gold,
+                          ),
+                          onPressed: () => _openChat(ref),
                         ),
-                        icon: const Icon(
-                          Icons.chat_bubble_outline_rounded,
-                          size: 18,
-                          color: AppColor.gold,
-                        ),
-                        onPressed: () => _openChat(context, ref),
-                      ),
                       PopupMenuButton<String>(
                         icon: isPending
                             ? const SizedBox(
@@ -544,40 +546,12 @@ class _LeadCard extends ConsumerWidget {
     );
   }
 
-  Future<void> _openChat(BuildContext context, WidgetRef ref) async {
-    final leadId = lead.id;
-    if (leadId.isEmpty) return;
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      final result = await ref
-          .read(magicCrmServiceProvider)
-          .resolveLeadChatUser(leadId);
-      final userId = result['userId']?.toString();
-      if (userId == null || userId.isEmpty) {
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Text(
-              'У этого лида пока нет связанного пользователя для чата. '
-              'Свяжите его по телефону в разделе «Пользователи».',
-            ),
-          ),
-        );
-        return;
-      }
-      // The leads board lives inside the messenger shell — setting the
-      // navigation target makes the shell open/create the direct chat and
-      // switch to the chat tab.
-      ref
-          .read(messengerNavigationProvider.notifier)
-          .navigateTo(MessengerNavigationState(partnerId: userId));
-    } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Не удалось открыть чат: $e'),
-          backgroundColor: AppColor.danger,
-        ),
-      );
-    }
+  void _openChat(WidgetRef ref) {
+    final userId = lead.linkedUserId;
+    if (userId.isEmpty) return;
+    ref
+        .read(messengerNavigationProvider.notifier)
+        .navigateTo(MessengerNavigationState(partnerId: userId));
   }
 
   void _openInSchedule(WidgetRef ref) {

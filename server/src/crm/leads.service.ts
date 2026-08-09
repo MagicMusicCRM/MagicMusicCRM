@@ -84,6 +84,7 @@ interface LeadBoardRow extends LeadRow {
   branch_id: string | null;
   branch_name: string | null;
   linked_student_id: string | null;
+  linked_user_id: string | null;
   open_tasks_count: string | number;
   comments_count: string | number;
   trial_lessons_count: string | number;
@@ -209,6 +210,18 @@ export class LeadsService {
             ${branchIdExpr("l")} as branch_id,
             b.name as branch_name,
             linked_student.id as linked_student_id,
+            (
+              select link.user_id
+              from app.user_crm_links link
+              join app.users chat_user on chat_user.id = link.user_id
+                and chat_user.deleted_at is null
+                and chat_user.is_app_account = true
+              where link.entity_type = 'lead'
+                and link.entity_id = l.id
+                and link.deleted_at is null
+              order by link.confirmed_at desc nulls last, link.created_at desc, link.id desc
+              limit 1
+            ) as linked_user_id,
             (
               select count(*)
               from app.canonical_tasks task
@@ -416,6 +429,18 @@ export class LeadsService {
           ${branchIdExpr("l")} as branch_id,
           b.name as branch_name,
           linked_student.id as linked_student_id,
+          (
+            select link.user_id
+            from app.user_crm_links link
+            join app.users chat_user on chat_user.id = link.user_id
+              and chat_user.deleted_at is null
+              and chat_user.is_app_account = true
+            where link.entity_type = 'lead'
+              and link.entity_id = l.id
+              and link.deleted_at is null
+            order by link.confirmed_at desc nulls last, link.created_at desc, link.id desc
+            limit 1
+          ) as linked_user_id,
           (
             select count(*)
             from app.canonical_tasks task
@@ -1413,6 +1438,7 @@ export class LeadsService {
       branchId: row.branch_id,
       branchName: row.branch_name,
       linkedStudentId: row.linked_student_id,
+      linkedUserId: row.linked_user_id,
       openTasksCount: this.toNumericStat(row.open_tasks_count),
       commentsCount: this.toNumericStat(row.comments_count),
       trialLessonsCount: this.toNumericStat(row.trial_lessons_count),

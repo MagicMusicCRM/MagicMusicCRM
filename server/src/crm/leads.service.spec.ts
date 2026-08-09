@@ -105,6 +105,7 @@ describe("LeadsService", () => {
     branch_id: null,
     branch_name: null,
     linked_student_id: null,
+    linked_user_id: null,
     open_tasks_count: "0",
     comments_count: "0",
     trial_lessons_count: "0",
@@ -150,6 +151,7 @@ describe("LeadsService", () => {
             branch_id: "branch-a",
             branch_name: "Центр",
             linked_student_id: "student-a",
+            linked_user_id: "client-a",
             open_tasks_count: "2",
             comments_count: "3",
             trial_lessons_count: "1",
@@ -183,6 +185,7 @@ describe("LeadsService", () => {
               assignedName: "Мария Менеджер",
               branchName: "Центр",
               linkedStudentId: "student-a",
+              linkedUserId: "client-a",
               openTasksCount: 2,
               commentsCount: 3,
               trialLessonsCount: 1,
@@ -204,6 +207,8 @@ describe("LeadsService", () => {
     expect(query.mock.calls[3][1]).toContain("Вокал");
     expect(query.mock.calls[3][1]).toContain(11);
     expect(String(query.mock.calls[3][0])).toContain("as cursor_created_at");
+    expect(String(query.mock.calls[3][0])).toContain("as linked_user_id");
+    expect(String(query.mock.calls[3][0])).toContain("is_app_account = true");
   });
 
   it("preserves PostgreSQL microseconds in the lead-board keyset cursor", async () => {

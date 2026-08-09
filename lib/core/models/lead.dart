@@ -54,6 +54,7 @@ class Lead {
   String get assignedName => _m['assigned_name']?.toString() ?? '';
   String get branchName => _m['branch_name']?.toString() ?? '';
   String get linkedStudentId => _m['linked_student_id']?.toString() ?? '';
+  String get linkedUserId => _m['linked_user_id']?.toString() ?? '';
   int get openTasksCount => _intOf(_m['open_tasks_count']);
   int get commentsCount => _intOf(_m['comments_count']);
   int get trialLessonsCount => _intOf(_m['trial_lessons_count']);

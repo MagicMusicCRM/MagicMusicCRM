@@ -453,6 +453,7 @@ Map<String, dynamic> _legacyLeadBoardItem(Map<String, dynamic> item) {
     'branch_id': item['branchId'] ?? lead['branch_id'],
     'branch_name': item['branchName'],
     'linked_student_id': item['linkedStudentId'],
+    'linked_user_id': item['linkedUserId'],
     'open_tasks_count': item['openTasksCount'] ?? 0,
     'comments_count': item['commentsCount'] ?? 0,
     'trial_lessons_count': item['trialLessonsCount'] ?? 0,

@@ -20,7 +20,12 @@ class _LeadBoardApi extends MagicApiClient {
   static const statusB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
   final boardQueries = <Map<String, dynamic>>[];
 
-  Map<String, dynamic> _lead(String id, String name, String? statusId) => {
+  Map<String, dynamic> _lead(
+    String id,
+    String name,
+    String? statusId, {
+    String? linkedUserId,
+  }) => {
     'id': id,
     'statusId': statusId,
     'statusName': statusId == null ? 'Без статуса' : 'Статус',
@@ -34,6 +39,7 @@ class _LeadBoardApi extends MagicApiClient {
     'customData': <String, dynamic>{},
     'createdAt': '2026-07-18T10:00:00.000Z',
     'updatedAt': '2026-07-18T10:00:00.000Z',
+    'linkedUserId': linkedUserId,
   };
 
   Map<String, dynamic> _column({
@@ -69,7 +75,9 @@ class _LeadBoardApi extends MagicApiClient {
                   id: statusA,
                   label: 'A',
                   nextCursor: 'cursor-a',
-                  items: [_lead('a-1', 'A one', statusA)],
+                  items: [
+                    _lead('a-1', 'A one', statusA, linkedUserId: 'client-a'),
+                  ],
                 ),
                 _column(
                   id: statusB,
@@ -183,6 +191,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      expect(find.byTooltip('Написать в чат'), findsOneWidget);
       expect(find.byIcon(Icons.expand_more_rounded), findsNWidgets(3));
       await tester.tap(find.byIcon(Icons.expand_more_rounded).first);
       await tester.pumpAndSettle();

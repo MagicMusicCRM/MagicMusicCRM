@@ -398,19 +398,22 @@ class _StudentCard extends StatelessWidget {
   }
 }
 
-class _CardBody extends StatelessWidget {
+class _CardBody extends ConsumerWidget {
   final Map<String, dynamic> student;
   final bool isPending;
 
   const _CardBody({required this.student, required this.isPending});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final firstName = student['first_name']?.toString() ?? '';
     final lastName = student['last_name']?.toString() ?? '';
     final displayName = '$firstName $lastName'.trim();
     final name = displayName.isEmpty ? 'Без имени' : displayName;
     final phone = student['phone']?.toString() ?? '';
+    final linkedUserId = student['is_app_account'] == true
+        ? student['linked_user_id']?.toString() ?? ''
+        : '';
     final branchName = student['branch_name']?.toString() ?? '';
     final customData = student['custom_data'];
     final discipline = customData is Map
@@ -456,6 +459,26 @@ class _CardBody extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                if (linkedUserId.isNotEmpty)
+                  IconButton(
+                    tooltip: 'Написать в чат',
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
+                    onPressed: () => ref
+                        .read(messengerNavigationProvider.notifier)
+                        .navigateTo(
+                          MessengerNavigationState(partnerId: linkedUserId),
+                        ),
+                    icon: const Icon(
+                      Icons.chat_bubble_outline_rounded,
+                      size: 18,
+                      color: AppColor.gold,
+                    ),
+                  ),
                 if (isPending)
                   const SizedBox(
                     width: 16,

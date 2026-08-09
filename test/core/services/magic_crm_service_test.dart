@@ -1492,6 +1492,7 @@ void main() {
                     'branchId': 'branch-a',
                     'branchName': 'Центр',
                     'linkedStudentId': 'student-a',
+                    'linkedUserId': 'client-a',
                     'openTasksCount': 2,
                     'commentsCount': 4,
                     'trialLessonsCount': 1,
@@ -1673,6 +1674,7 @@ void main() {
       expect(column['total_count'], 3);
       expect(lead['assigned_name'], 'Мария Менеджер');
       expect(lead['branch_name'], 'Центр');
+      expect(lead['linked_user_id'], 'client-a');
       expect(lead['open_tasks_count'], 2);
       expect(card['lead']['name'], 'Анна');
       expect((card['linked_students'] as List).single['first_name'], 'Анна');

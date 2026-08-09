@@ -15,10 +15,11 @@ import 'package:magic_music_crm/features/manager/presentation/widgets/reports_wi
 import 'package:magic_music_crm/features/manager/presentation/widgets/students_board_widget.dart';
 
 class _CountingApiClient extends MagicApiClient {
-  _CountingApiClient()
+  _CountingApiClient({this.studentItems = const []})
     : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   final counts = <String, int>{};
+  final List<Map<String, dynamic>> studentItems;
 
   int count(String path) => counts[path] ?? 0;
 
@@ -71,8 +72,8 @@ class _CountingApiClient extends MagicApiClient {
             ],
           },
           '/crm/students/search' => <String, dynamic>{
-            'items': <dynamic>[],
-            'total_count': 0,
+            'items': studentItems,
+            'totalCount': studentItems.length,
           },
           '/crm/client-pipelines' => <String, dynamic>{
             'clientType': queryParameters?['clientType'],
@@ -257,6 +258,44 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
 
     expect(api.count('/crm/students/search'), initialSearch);
+  });
+
+  testWidgets('student chat action exists only for a linked app account', (
+    tester,
+  ) async {
+    final api = _CountingApiClient(
+      studentItems: const [
+        {
+          'id': 'student-linked',
+          'status': 'learning',
+          'branchId': 'branch-a',
+          'firstName': 'Анна',
+          'linkedUserId': 'client-a',
+          'isAppAccount': true,
+        },
+        {
+          'id': 'student-crm-only',
+          'status': 'learning',
+          'branchId': 'branch-a',
+          'firstName': 'Борис',
+          'linkedUserId': null,
+          'isAppAccount': false,
+        },
+      ],
+    );
+    final realtime = StreamController<CrmChangedEvent>.broadcast();
+    addTearDown(realtime.close);
+
+    await tester.pumpWidget(
+      _host(
+        api: api,
+        realtime: realtime.stream,
+        child: const StudentsBoardWidget(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Написать в чат'), findsOneWidget);
   });
 
   testWidgets('student search is local and keeps focus while typing', (
