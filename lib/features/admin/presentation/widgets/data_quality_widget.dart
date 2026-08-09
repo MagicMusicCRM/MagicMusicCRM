@@ -176,9 +176,9 @@ class _DataQualityWidgetState extends ConsumerState<DataQualityWidget> {
   }
 
   Future<void> _confirmMerge(Map<String, dynamic> item, String rowKey) async {
-    final idA = _readString(item, ['winnerId', 'winner_id']);
-    final idB = _readString(item, ['loserId', 'loser_id']);
-    if (idA.isEmpty || idB.isEmpty) {
+    final firstId = _readString(item, ['loserId', 'loser_id']);
+    final secondId = _readString(item, ['winnerId', 'winner_id']);
+    if (firstId.isEmpty || secondId.isEmpty) {
       MagicToast.show(
         context,
         'Недостаточно данных для объединения',
@@ -194,19 +194,20 @@ class _DataQualityWidgetState extends ConsumerState<DataQualityWidget> {
       'phone_normalized',
     ]);
 
-    // Let the operator pick the winner (default = the primary, idA).
     final winnerId = await showDialog<String>(
       context: context,
       builder: (ctx) => _MergeConfirmDialog(
         name: name,
         phone: phone,
-        primaryId: idA,
-        secondaryId: idB,
+        firstId: firstId,
+        secondId: secondId,
+        first: _readMap(item, 'first'),
+        second: _readMap(item, 'second'),
       ),
     );
     if (winnerId == null || !mounted) return;
 
-    final loserId = winnerId == idA ? idB : idA;
+    final loserId = winnerId == firstId ? secondId : firstId;
 
     setState(() => _mergingKey = rowKey);
     try {
@@ -274,4 +275,9 @@ String _readString(Map<String, dynamic> map, List<String> keys) {
     }
   }
   return '';
+}
+
+Map<String, dynamic> _readMap(Map<String, dynamic> map, String key) {
+  final value = map[key];
+  return value is Map ? Map<String, dynamic>.from(value) : const {};
 }

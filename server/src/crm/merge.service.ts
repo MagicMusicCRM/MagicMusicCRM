@@ -30,15 +30,37 @@ export class MergeService {
       winner_id: string;
       phone: string | null;
       name: string;
+      loser_created_at: Date;
+      loser_source: string | null;
+      loser_status: string | null;
+      loser_branch: string | null;
+      winner_created_at: Date;
+      winner_source: string | null;
+      winner_status: string | null;
+      winner_branch: string | null;
     }>(
       `select l1.id as loser_id, l2.id as winner_id, l2.phone_normalized as phone,
-              btrim(concat_ws(' ', l2.first_name, l2.last_name)) as name
+              btrim(concat_ws(' ', l2.first_name, l2.last_name)) as name,
+              l1.created_at as loser_created_at,
+              source1.display_name as loser_source,
+              status1.name as loser_status,
+              branch1.name as loser_branch,
+              l2.created_at as winner_created_at,
+              source2.display_name as winner_source,
+              status2.name as winner_status,
+              branch2.name as winner_branch
          from app.leads l1
          join app.leads l2
            on l1.phone_normalized = l2.phone_normalized
           and lower(btrim(coalesce(l1.first_name, ''))) = lower(btrim(coalesce(l2.first_name, '')))
           and lower(btrim(coalesce(l1.last_name, '')))  = lower(btrim(coalesce(l2.last_name, '')))
           and l1.id < l2.id
+        left join app.lead_sources source1 on source1.id = l1.source_id
+        left join app.lead_statuses status1 on status1.id = l1.status_id
+        left join app.branches branch1 on branch1.id = l1.branch_id
+        left join app.lead_sources source2 on source2.id = l2.source_id
+        left join app.lead_statuses status2 on status2.id = l2.status_id
+        left join app.branches branch2 on branch2.id = l2.branch_id
         where l1.deleted_at is null and l2.deleted_at is null
           and l1.phone_normalized is not null
         order by l2.phone_normalized
@@ -51,6 +73,20 @@ export class MergeService {
         winnerId: row.winner_id,
         phone: row.phone,
         name: row.name,
+        first: {
+          id: row.loser_id,
+          createdAt: row.loser_created_at,
+          source: row.loser_source,
+          status: row.loser_status,
+          branch: row.loser_branch,
+        },
+        second: {
+          id: row.winner_id,
+          createdAt: row.winner_created_at,
+          source: row.winner_source,
+          status: row.winner_status,
+          branch: row.winner_branch,
+        },
       })),
     };
   }

@@ -222,6 +222,10 @@ class _MergeCandidateCard extends StatelessWidget {
       'phone_normalized',
     ]);
     final displayName = name.isEmpty ? 'Без имени' : name;
+    final first = _readMap(item, 'first');
+    final second = _readMap(item, 'second');
+    final firstId = _readString(item, ['loserId', 'loser_id']);
+    final secondId = _readString(item, ['winnerId', 'winner_id']);
 
     return Card(
       margin: const EdgeInsets.only(bottom: AppSpace.sm),
@@ -278,9 +282,17 @@ class _MergeCandidateCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: AppSpace.md),
-            const _LeadRow(label: 'Основной', color: AppColor.success),
+            _LeadRow(
+              label: 'Запись A',
+              detail: _candidateDetail(first, firstId),
+              color: cs.onSurfaceVariant,
+            ),
             const SizedBox(height: 6),
-            _LeadRow(label: 'Дубликат', color: cs.onSurfaceVariant),
+            _LeadRow(
+              label: 'Запись B',
+              detail: _candidateDetail(second, secondId),
+              color: cs.onSurfaceVariant,
+            ),
             const SizedBox(height: AppSpace.md),
             SizedBox(
               width: double.infinity,
@@ -320,9 +332,14 @@ class _MergeCandidateCard extends StatelessWidget {
 
 class _LeadRow extends StatelessWidget {
   final String label;
+  final String detail;
   final Color color;
 
-  const _LeadRow({required this.label, required this.color});
+  const _LeadRow({
+    required this.label,
+    required this.detail,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -335,12 +352,16 @@ class _LeadRow extends StatelessWidget {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 8),
-        Text(
-          label,
-          style: TextStyle(
-            color: cs.onSurfaceVariant,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
+        Expanded(
+          child: Text(
+            '$label — $detail',
+            style: TextStyle(
+              color: cs.onSurfaceVariant,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],
@@ -354,14 +375,18 @@ class _LeadRow extends StatelessWidget {
 class _MergeConfirmDialog extends StatefulWidget {
   final String name;
   final String phone;
-  final String primaryId;
-  final String secondaryId;
+  final String firstId;
+  final String secondId;
+  final Map<String, dynamic> first;
+  final Map<String, dynamic> second;
 
   const _MergeConfirmDialog({
     required this.name,
     required this.phone,
-    required this.primaryId,
-    required this.secondaryId,
+    required this.firstId,
+    required this.secondId,
+    required this.first,
+    required this.second,
   });
 
   @override
@@ -369,7 +394,7 @@ class _MergeConfirmDialog extends StatefulWidget {
 }
 
 class _MergeConfirmDialogState extends State<_MergeConfirmDialog> {
-  late String _winnerId = widget.primaryId;
+  String? _winnerId;
 
   @override
   Widget build(BuildContext context) {
@@ -388,15 +413,17 @@ class _MergeConfirmDialogState extends State<_MergeConfirmDialog> {
           ),
           const SizedBox(height: AppSpace.md),
           _WinnerOption(
-            selected: _winnerId == widget.primaryId,
-            label: 'Основной (по умолчанию)',
-            onTap: () => setState(() => _winnerId = widget.primaryId),
+            selected: _winnerId == widget.firstId,
+            label: 'Запись A',
+            detail: _candidateDetail(widget.first, widget.firstId),
+            onTap: () => setState(() => _winnerId = widget.firstId),
           ),
           const SizedBox(height: 8),
           _WinnerOption(
-            selected: _winnerId == widget.secondaryId,
-            label: 'Дубликат',
-            onTap: () => setState(() => _winnerId = widget.secondaryId),
+            selected: _winnerId == widget.secondId,
+            label: 'Запись B',
+            detail: _candidateDetail(widget.second, widget.secondId),
+            onTap: () => setState(() => _winnerId = widget.secondId),
           ),
         ],
       ),
@@ -406,7 +433,9 @@ class _MergeConfirmDialogState extends State<_MergeConfirmDialog> {
           child: const Text('Отмена'),
         ),
         TextButton(
-          onPressed: () => Navigator.pop(context, _winnerId),
+          onPressed: _winnerId == null
+              ? null
+              : () => Navigator.pop(context, _winnerId),
           child: const Text(
             'Объединить',
             style: TextStyle(color: AppColor.gold, fontWeight: FontWeight.w700),
@@ -420,11 +449,13 @@ class _MergeConfirmDialogState extends State<_MergeConfirmDialog> {
 class _WinnerOption extends StatelessWidget {
   final bool selected;
   final String label;
+  final String detail;
   final VoidCallback onTap;
 
   const _WinnerOption({
     required this.selected,
     required this.label,
+    required this.detail,
     required this.onTap,
   });
 
@@ -454,13 +485,23 @@ class _WinnerOption extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: cs.onSurface,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: cs.onSurface,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    detail,
+                    style: TextStyle(color: cs.onSurfaceVariant, fontSize: 11),
+                  ),
+                ],
               ),
             ),
           ],
@@ -468,6 +509,34 @@ class _WinnerOption extends StatelessWidget {
       ),
     );
   }
+}
+
+String _candidateDetail(Map<String, dynamic> candidate, String fallbackId) {
+  final createdAt = _formatCandidateDate(_readString(candidate, ['createdAt']));
+  final source = _readString(candidate, ['source']);
+  final status = _readString(candidate, ['status']);
+  final branch = _readString(candidate, ['branch']);
+  final id = _readString(candidate, ['id']);
+  final resolvedId = id.isEmpty ? fallbackId : id;
+  final shortId = resolvedId.length > 8
+      ? resolvedId.substring(resolvedId.length - 8)
+      : resolvedId;
+  final parts = <String>[
+    if (createdAt.isNotEmpty) createdAt,
+    if (source.isNotEmpty) source,
+    if (status.isNotEmpty) status,
+    if (branch.isNotEmpty) branch,
+    if (shortId.isNotEmpty) 'ID …$shortId',
+  ];
+  return parts.isEmpty ? 'Нет данных для сравнения' : parts.join(' · ');
+}
+
+String _formatCandidateDate(String value) {
+  final date = DateTime.tryParse(value)?.toLocal();
+  if (date == null) return value;
+  String two(int number) => number.toString().padLeft(2, '0');
+  return '${two(date.day)}.${two(date.month)}.${date.year} '
+      '${two(date.hour)}:${two(date.minute)}';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

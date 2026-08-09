@@ -69,12 +69,48 @@ describe("MergeService", () => {
 
   it("lists lead merge candidates by phone + name", async () => {
     const { service, query, policy } = createMergeService([
-      { rows: [{ loser_id: "l-lo", winner_id: "l-wi", phone: "+79091234567", name: "Иван Иванов" }] },
+      {
+        rows: [{
+          loser_id: "l-lo",
+          winner_id: "l-wi",
+          phone: "+79091234567",
+          name: "Иван Иванов",
+          loser_created_at: new Date("2026-08-08T09:00:00Z"),
+          loser_source: "Звонок",
+          loser_status: "Новый",
+          loser_branch: "Сокол",
+          winner_created_at: new Date("2026-08-09T10:00:00Z"),
+          winner_source: "Сайт",
+          winner_status: "Успешный",
+          winner_branch: "Оборонная",
+        }],
+      },
     ]);
     const result = await service.listMergeCandidates(actor);
-    expect(result.items[0]).toEqual({ loserId: "l-lo", winnerId: "l-wi", phone: "+79091234567", name: "Иван Иванов" });
+    expect(result.items[0]).toEqual({
+      loserId: "l-lo",
+      winnerId: "l-wi",
+      phone: "+79091234567",
+      name: "Иван Иванов",
+      first: {
+        id: "l-lo",
+        createdAt: new Date("2026-08-08T09:00:00Z"),
+        source: "Звонок",
+        status: "Новый",
+        branch: "Сокол",
+      },
+      second: {
+        id: "l-wi",
+        createdAt: new Date("2026-08-09T10:00:00Z"),
+        source: "Сайт",
+        status: "Успешный",
+        branch: "Оборонная",
+      },
+    });
     expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][0]).toContain("phone_normalized");
+    expect(query.mock.calls[0][0]).toContain("left join app.lead_sources");
+    expect(query.mock.calls[0][0]).toContain("source1.display_name");
   });
 
   it("mergeLeads re-points references, soft-deletes the loser, and logs", async () => {
