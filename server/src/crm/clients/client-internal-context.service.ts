@@ -345,10 +345,15 @@ export class ClientInternalContextService {
     const before = row.before_ref ?? {};
     const after = row.after_ref ?? {};
     const status = metadata["targetStatus"];
-    const metadataReason =
+    const rawMetadataReason =
       typeof metadata["reason"] === "string"
         ? metadata["reason"].trim()
         : "";
+    const metadataReason = /^\[(?:PRIVATE|PII|REDACTED)\]$/.test(
+      rawMetadataReason,
+    )
+      ? ""
+      : rawMetadataReason;
     const summary = status
       ? `Новый статус: ${this.paymentStatusLabel(String(status))}`
       : row.action === "crm.client_internal_note_changed"

@@ -379,6 +379,13 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
       entityId: leadId,
       metadata: { reason: "Повторяющийся спам" },
     });
+    await new AuditService(database).record({
+      actor: { userId: adminId, role: "admin" },
+      action: "crm.client_unblacklisted",
+      entityType: "lead",
+      entityId: leadId,
+      metadata: { reason: null },
+    });
     const history = await internalContext.listOperationalHistory(
       { userId: directorId, role: "director" },
       { type: "student", id: studentId },
@@ -397,6 +404,13 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
           actionKey: "crm.client_blacklisted",
           action: "Клиент добавлен в чёрный список",
           reason: "Повторяющийся спам",
+          actorName: "Анна Администратор",
+          occurredAt: expect.anything(),
+        }),
+        expect.objectContaining({
+          actionKey: "crm.client_unblacklisted",
+          action: "Клиент убран из чёрного списка",
+          reason: "Причина не указана",
           actorName: "Анна Администратор",
           occurredAt: expect.anything(),
         }),
