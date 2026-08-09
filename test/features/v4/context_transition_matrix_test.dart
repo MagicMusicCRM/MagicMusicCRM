@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/context_transition_registry.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
@@ -171,6 +172,7 @@ void main() {
     final permissions = CrmNavigationRequest.userRolesSearch(
       'user@example.com',
     );
+    final directChat = CrmNavigationRequest.directChat('client-a');
     final clients = EntityRouteRegistry.sectionRootLink('clients');
 
     expect(schedule.link.rawEntityType, 'lesson_list');
@@ -181,5 +183,8 @@ void main() {
     expect(crmTabForEntityLink(permissions.link, 'manager'), 8);
     expect(permissions.link.optionalFocus?.filter['query'], 'user@example.com');
     expect(crmTabForEntityLink(permissions.link, 'teacher'), isNull);
+    expect(directChat.link.entityType, EntityLinkType.chat);
+    expect(directChat.link.optionalFocus?.filter['partnerId'], 'client-a');
+    expect(crmTabForEntityLink(directChat.link, 'manager'), 0);
   });
 }

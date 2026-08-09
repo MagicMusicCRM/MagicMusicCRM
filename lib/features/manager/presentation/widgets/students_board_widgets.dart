@@ -469,9 +469,9 @@ class _CardBody extends ConsumerWidget {
                       minHeight: 32,
                     ),
                     onPressed: () => ref
-                        .read(messengerNavigationProvider.notifier)
+                        .read(crmNavigationRequestProvider.notifier)
                         .navigateTo(
-                          MessengerNavigationState(partnerId: linkedUserId),
+                          CrmNavigationRequest.directChat(linkedUserId),
                         ),
                     icon: const Icon(
                       Icons.chat_bubble_outline_rounded,

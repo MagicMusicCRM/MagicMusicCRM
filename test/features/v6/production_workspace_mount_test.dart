@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
+import 'package:magic_music_crm/core/providers/crm_navigation_provider.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/workspace/desktop_workspace_shell.dart';
 import 'package:magic_music_crm/core/workspace/production_workspace_host.dart';
@@ -187,6 +188,49 @@ void main() {
       tester.widget<Text>(find.byKey(const ValueKey('context-current'))).data,
       'Ученик · Иванов Иван',
     );
+  });
+
+  testWidgets('direct client chat keeps its partner in the workspace route', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1000, 800);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          accountWorkspaceStoreProvider.overrideWithValue(
+            AccountWorkspaceStore(InMemoryWorkspaceKeyValueStore()),
+          ),
+        ],
+        child: MaterialApp(
+          home: ProductionWorkspaceHost(
+            snapshot: snapshot,
+            tabBuilder: (_, tab) => Text(tab.currentRoute.link.entityId),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ProductionWorkspaceHost)),
+    );
+    container
+        .read(crmNavigationRequestProvider.notifier)
+        .navigateTo(CrmNavigationRequest.directChat('client-a'));
+    await tester.pumpAndSettle();
+
+    final link = tester
+        .widget<DesktopWorkspaceShell>(find.byType(DesktopWorkspaceShell))
+        .controller
+        .state
+        .activeTab
+        .currentRoute
+        .link;
+    expect(link.entityType, EntityLinkType.chat);
+    expect(link.optionalFocus?.filter['partnerId'], 'client-a');
   });
 
   testWidgets('a new direct link updates the current workspace history', (

@@ -588,18 +588,7 @@ class EntityRouteRegistry {
     ),
     EntityLinkType.chat: EntityRouteRegistration(
       isAllowed: (_, snapshot) => snapshot.accountId.isNotEmpty,
-      buildLocation: (link, snapshot) {
-        final home = switch (snapshot.role) {
-          'teacher' => '/teacher',
-          'client' => '/client',
-          'admin' || 'system_admin' => '/admin',
-          _ => '/manager',
-        };
-        return Uri(
-          path: home,
-          queryParameters: {'section': 'chat', 'entityId': link.entityId},
-        ).toString();
-      },
+      buildLocation: (link, snapshot) => _staffRoute(link, snapshot, 'chat'),
     ),
     EntityLinkType.report: EntityRouteRegistration(
       isAllowed: (link, snapshot) {

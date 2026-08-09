@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:magic_music_crm/core/providers/chat_providers.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
+import 'package:magic_music_crm/core/providers/crm_navigation_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
@@ -64,14 +64,12 @@ class _ClientAppUserPanelState extends ConsumerState<ClientAppUserPanel> {
     }
   }
 
-  /// Opens the in-app chat with [userId] by reusing the messenger navigation
-  /// mechanism from the student card: set the navigation target, then return to
-  /// the dashboard where the messenger screen is hosted.
+  /// Opens a canonical chat route that survives workspace tab replacement.
   void _openChat(String? userId) {
     if (userId == null || userId.isEmpty) return;
     ref
-        .read(messengerNavigationProvider.notifier)
-        .navigateTo(MessengerNavigationState(partnerId: userId));
+        .read(crmNavigationRequestProvider.notifier)
+        .navigateTo(CrmNavigationRequest.directChat(userId));
   }
 
   Future<void> _startLinkByPhone() async {

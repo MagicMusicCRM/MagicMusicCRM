@@ -550,8 +550,8 @@ class _LeadCard extends ConsumerWidget {
     final userId = lead.linkedUserId;
     if (userId.isEmpty) return;
     ref
-        .read(messengerNavigationProvider.notifier)
-        .navigateTo(MessengerNavigationState(partnerId: userId));
+        .read(crmNavigationRequestProvider.notifier)
+        .navigateTo(CrmNavigationRequest.directChat(userId));
   }
 
   void _openInSchedule(WidgetRef ref) {

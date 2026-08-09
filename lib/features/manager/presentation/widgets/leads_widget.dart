@@ -14,7 +14,6 @@ import 'package:magic_music_crm/core/widgets/no_open_tasks_highlight.dart';
 import 'package:magic_music_crm/core/utils/status_color.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
 import 'package:magic_music_crm/core/models/types.dart';
-import 'package:magic_music_crm/core/providers/chat_providers.dart';
 import 'package:magic_music_crm/core/services/hollihop_service.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';

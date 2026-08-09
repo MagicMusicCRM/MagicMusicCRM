@@ -51,6 +51,20 @@ class CrmNavigationRequest {
     );
   }
 
+  factory CrmNavigationRequest.directChat(String userId) {
+    return CrmNavigationRequest(
+      link: EntityLink.typed(
+        entityType: EntityLinkType.chat,
+        entityId: userId,
+        optionalFocus: EntityLinkFocus(
+          focus: 'direct',
+          filter: {'partnerId': userId},
+        ),
+      ),
+      sourceState: ContextViewState(filters: {'partnerId': userId}),
+    );
+  }
+
   final EntityLink link;
   final ContextViewState sourceState;
   final bool openInNewTab;

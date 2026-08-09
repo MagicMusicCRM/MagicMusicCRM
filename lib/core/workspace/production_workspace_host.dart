@@ -282,17 +282,7 @@ class _ProductionWorkspaceHostState
       next,
     ) {
       if (next == null || !mounted) return;
-      unawaited(
-        navigateEntityLink(
-          context,
-          widget.snapshot,
-          next.link,
-          target: next.openInNewTab
-              ? EntityOpenTarget.newTab
-              : EntityOpenTarget.current,
-          sourceViewState: next.sourceState,
-        ),
-      );
+      _navigateCrmRequest(next);
       Future.microtask(
         () => ref.read(crmNavigationRequestProvider.notifier).clear(),
       );
@@ -366,6 +356,47 @@ class _ProductionWorkspaceHostState
         );
       },
     );
+  }
+
+  void _navigateCrmRequest(CrmNavigationRequest request) {
+    if (MediaQuery.sizeOf(context).width < 840) {
+      unawaited(
+        navigateEntityLink(
+          context,
+          widget.snapshot,
+          request.link,
+          target: request.openInNewTab
+              ? EntityOpenTarget.newTab
+              : EntityOpenTarget.current,
+          sourceViewState: request.sourceState,
+        ),
+      );
+      return;
+    }
+
+    final resolution = EntityRouteRegistry().resolve(
+      request.link,
+      widget.snapshot,
+    );
+    if (!resolution.canOpen) {
+      unawaited(navigateEntityLink(context, widget.snapshot, request.link));
+      return;
+    }
+    try {
+      _controller.updateCurrentView(
+        _controller.state.activeTabId,
+        request.sourceState,
+      );
+      _controller.open(
+        request.link,
+        titleHint: resolution.canonicalLocation?.title,
+        explicitNew: true,
+      );
+    } on WorkspaceLimitReached {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Можно открыть не больше 10 вкладок.')),
+      );
+    }
   }
 
   static bool _sameLink(EntityLink? left, EntityLink? right) {
