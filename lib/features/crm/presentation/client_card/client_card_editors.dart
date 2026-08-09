@@ -275,6 +275,7 @@ extension _ClientCardEditors on _ClientCardState {
       } else {
         await _fetchCard();
       }
+      unawaited(_reloadOperationalHistory());
       if (mounted) {
         MagicToast.show(
           context,

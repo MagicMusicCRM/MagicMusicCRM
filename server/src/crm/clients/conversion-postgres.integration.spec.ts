@@ -185,6 +185,12 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
 
   afterAll(async () => {
     await database.query(
+      `delete from app.audit_events
+       where entity_type = any($1::text[])
+         and entity_id = any($2::text[])`,
+      [["lead", "student"], [leadId, studentId].filter(Boolean)],
+    );
+    await database.query(
       "delete from app.audit_events where action = 'crm.client_internal_note_changed' and entity_id = $1",
       [noteId],
     );
@@ -366,18 +372,35 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
       { type: "student", id: studentId },
       { expectedVersion: 2, body: "Администратор зафиксировал общий контекст" },
     );
+    await database.query(
+      `insert into app.audit_events (
+         actor_user_id, action, entity_type, entity_id, metadata
+       ) values ($1, 'crm.client_blacklisted', 'lead', $2, $3::jsonb)`,
+      [adminId, leadId, JSON.stringify({ reason: "Повторяющийся спам" })],
+    );
     const history = await internalContext.listOperationalHistory(
       { userId: directorId, role: "director" },
       { type: "student", id: studentId },
       { limit: 30 },
     );
-    expect(history.items[0]).toMatchObject({
-      actionKey: "crm.client_internal_note_changed",
-      action: "Общая заметка изменена",
-      reason: "Общая заметка обновлена",
-      actorName: "Анна Администратор",
-      occurredAt: expect.anything(),
-    });
+    expect(history.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          actionKey: "crm.client_internal_note_changed",
+          action: "Общая заметка изменена",
+          reason: "Общая заметка обновлена",
+          actorName: "Анна Администратор",
+          occurredAt: expect.anything(),
+        }),
+        expect.objectContaining({
+          actionKey: "crm.client_blacklisted",
+          action: "Клиент добавлен в чёрный список",
+          reason: "Повторяющийся спам",
+          actorName: "Анна Администратор",
+          occurredAt: expect.anything(),
+        }),
+      ]),
+    );
 
     await expect(
       archives.archiveConvertedLead(

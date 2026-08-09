@@ -58,6 +58,8 @@ const HISTORY_ACTIONS = [
   "crm.lessons_bulk_transitioned",
   "crm.schedule_plan_ended",
   "crm.client_internal_note_changed",
+  "crm.client_blacklisted",
+  "crm.client_unblacklisted",
 ] as const;
 
 const ACTION_LABELS: Record<string, string> = {
@@ -76,6 +78,8 @@ const ACTION_LABELS: Record<string, string> = {
   "crm.lessons_bulk_transitioned": "Занятия изменены",
   "crm.schedule_plan_ended": "Постоянное расписание завершено",
   "crm.client_internal_note_changed": "Общая заметка изменена",
+  "crm.client_blacklisted": "Клиент добавлен в чёрный список",
+  "crm.client_unblacklisted": "Клиент убран из чёрного списка",
 };
 
 @Injectable()
@@ -270,6 +274,12 @@ export class ClientInternalContextService {
                    and participant.student_id = lineage.student_id
                ))
            )
+           or audit.entity_type = 'lead'
+             and lineage.lead_id is not null
+             and audit.entity_id = lineage.lead_id::text
+           or audit.entity_type = 'student'
+             and lineage.student_id is not null
+             and audit.entity_id = lineage.student_id::text
          )
          and (
            $4::uuid is null
@@ -335,6 +345,10 @@ export class ClientInternalContextService {
     const before = row.before_ref ?? {};
     const after = row.after_ref ?? {};
     const status = metadata["targetStatus"];
+    const metadataReason =
+      typeof metadata["reason"] === "string"
+        ? metadata["reason"].trim()
+        : "";
     const summary = status
       ? `Новый статус: ${this.paymentStatusLabel(String(status))}`
       : row.action === "crm.client_internal_note_changed"
@@ -346,7 +360,11 @@ export class ClientInternalContextService {
       id: row.id,
       actionKey: row.action,
       action: ACTION_LABELS[row.action] ?? "Действие с клиентом",
-      reason: row.reason_text?.trim() || row.reason || "Причина не указана",
+      reason:
+        row.reason_text?.trim() ||
+        metadataReason ||
+        row.reason ||
+        "Причина не указана",
       summary,
       actorName: row.actor_name,
       occurredAt: row.created_at,
