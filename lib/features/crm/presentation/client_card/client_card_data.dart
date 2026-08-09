@@ -596,6 +596,14 @@ extension _ClientCardData on _ClientCardState {
           customDataPatch: customData,
         );
       }
+      // Routed desktop cards live in a separate workspace tab, so their caller
+      // cannot reliably receive a dialog result and refresh the board. Drop
+      // every cached filter variant here after the successful mutation.
+      if (_mode.hasLeadHalf) {
+        ref.invalidate(leadBoardProvider);
+        ref.invalidate(leadsStreamProvider);
+      }
+      if (_mode.hasStudentHalf) ref.invalidate(studentBoardProvider);
       if (mounted) {
         _emitState(() {
           _edited = false;

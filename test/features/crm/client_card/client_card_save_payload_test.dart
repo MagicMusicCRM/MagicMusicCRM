@@ -3,6 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/models/types.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
+import 'package:magic_music_crm/core/api/magic_api_providers.dart';
+import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
+import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'card_fake_api.dart';
 
@@ -99,6 +103,60 @@ void main() {
 
     expect(api.updateLeadBody, isNotNull);
     expect(api.updateLeadBody!['statusId'], uuid);
+  });
+
+  testWidgets('сохранение карточки сбрасывает все кеши доски лидов', (
+    tester,
+  ) async {
+    final api = FakeCardApiClient(lead: rawLead());
+    final container = ProviderContainer(
+      overrides: [
+        magicApiClientProvider.overrideWithValue(api),
+        crmRealtimeProvider.overrideWith(
+          (ref) => const Stream<CrmChangedEvent>.empty(),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    final subscription = container.listen(
+      leadBoardProvider(const LeadBoardFilters(q: 'UAT')),
+      (_, _) {},
+    );
+    addTearDown(subscription.close);
+    await container.read(
+      leadBoardProvider(const LeadBoardFilters(q: 'UAT')).future,
+    );
+
+    await pumpClientCard(
+      tester,
+      api: api,
+      seed: {'id': 'lead-1', 'name': 'Иван', 'custom_data': {}},
+      statuses: statuses,
+      container: container,
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Сохранить'));
+    await tester.pumpAndSettle();
+
+    expect(api.leadBoardQueries.where((query) => query == 'UAT').length, 2);
+  });
+
+  test('закрытая доска не возвращается из устаревшего family-кеша', () async {
+    final api = FakeCardApiClient();
+    final container = ProviderContainer(
+      overrides: [magicApiClientProvider.overrideWithValue(api)],
+    );
+    addTearDown(container.dispose);
+    final provider = leadBoardProvider(const LeadBoardFilters(q: 'UAT'));
+
+    final first = container.listen(provider, (_, _) {});
+    await container.read(provider.future);
+    first.close();
+    await container.pump();
+    final second = container.listen(provider, (_, _) {});
+    addTearDown(second.close);
+    await container.read(provider.future);
+
+    expect(api.leadBoardQueries, ['UAT', 'UAT']);
   });
 
   testWidgets('ответственный лида уходит канонически как assignedTo', (

@@ -28,11 +28,8 @@ final studentFunnelProvider =
 /// act as a status-based draggable kanban.
 ///
 /// Pass [kNoBranchBoardId] to load students that have no branch at all.
-final studentBoardProvider =
-    FutureProvider.family<List<Map<String, dynamic>>, String>((
-      ref,
-      branchId,
-    ) async {
+final studentBoardProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, branchId) async {
       final service = ref.watch(magicCrmServiceProvider);
       final funnel = await ref.watch(studentFunnelProvider(branchId).future);
       // TODO: добавить серверную пагинацию/board-эндпоинт, если ветка превышает этот лимит.

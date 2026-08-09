@@ -102,6 +102,8 @@ class FakeCardApiClient extends MagicApiClient {
   final List<CardPostCall> postRequests = [];
   final List<IdempotentCardCall> idempotentRequests = [];
   int studentCardLoadCount = 0;
+  int leadBoardLoadCount = 0;
+  final List<String> leadBoardQueries = [];
 
   @override
   Future<T> get<T>(
@@ -128,6 +130,11 @@ class FakeCardApiClient extends MagicApiClient {
     }
     if (path == '/crm/branches') {
       return <String, dynamic>{'items': branches} as T;
+    }
+    if (path == '/crm/leads/board') {
+      leadBoardLoadCount++;
+      leadBoardQueries.add(queryParameters?['q']?.toString() ?? '');
+      return <String, dynamic>{'columns': <dynamic>[], 'totalCount': 0} as T;
     }
     if (path == '/crm/teachers') {
       return <String, dynamic>{'items': teachers} as T;
@@ -613,41 +620,45 @@ Future<void> pumpClientCard(
   List<StatusRecord>? statuses,
   bool settle = true,
   bool routed = false,
+  ProviderContainer? container,
 }) async {
-  await tester.pumpWidget(
-    RepaintBoundary(
-      key: const Key('evidence-screenshot-root'),
-      child: ProviderScope(
-        overrides: [
-          magicApiClientProvider.overrideWithValue(api),
-          crmRealtimeProvider.overrideWith(
-            (ref) => const Stream<CrmChangedEvent>.empty(),
-          ),
-        ],
-        child: MaterialApp(
-          home: Builder(
-            builder: (context) => Scaffold(
-              body: Center(
-                child: ElevatedButton(
-                  onPressed: () => showDialog<bool>(
-                    context: context,
-                    builder: (_) {
-                      final card = ClientCard(
-                        lead: seed,
-                        entityType: entityType,
-                        allStatuses: statuses,
-                        routed: routed,
-                      );
-                      return routed ? Material(child: card) : card;
-                    },
-                  ),
-                  child: const Text('open'),
-                ),
-              ),
+  final app = MaterialApp(
+    home: Builder(
+      builder: (context) => Scaffold(
+        body: Center(
+          child: ElevatedButton(
+            onPressed: () => showDialog<bool>(
+              context: context,
+              builder: (_) {
+                final card = ClientCard(
+                  lead: seed,
+                  entityType: entityType,
+                  allStatuses: statuses,
+                  routed: routed,
+                );
+                return routed ? Material(child: card) : card;
+              },
             ),
+            child: const Text('open'),
           ),
         ),
       ),
+    ),
+  );
+  await tester.pumpWidget(
+    RepaintBoundary(
+      key: const Key('evidence-screenshot-root'),
+      child: container == null
+          ? ProviderScope(
+              overrides: [
+                magicApiClientProvider.overrideWithValue(api),
+                crmRealtimeProvider.overrideWith(
+                  (ref) => const Stream<CrmChangedEvent>.empty(),
+                ),
+              ],
+              child: app,
+            )
+          : UncontrolledProviderScope(container: container, child: app),
     ),
   );
   await tester.tap(find.text('open'));

@@ -181,11 +181,8 @@ class LeadBoardFilters {
   }
 }
 
-final leadBoardProvider =
-    FutureProvider.family<Map<String, dynamic>, LeadBoardFilters>((
-      ref,
-      filters,
-    ) {
+final leadBoardProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>, LeadBoardFilters>((ref, filters) {
       final service = ref.watch(magicCrmServiceProvider);
       return filters.fetchBoard(service);
     });
