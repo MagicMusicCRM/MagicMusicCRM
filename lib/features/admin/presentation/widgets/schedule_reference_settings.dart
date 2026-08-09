@@ -6,10 +6,17 @@ import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/core/widgets/v7/magic_toast.dart';
 
+enum ScheduleReferenceSection { branchHours, teacherSchedule }
+
 class ScheduleReferenceSettings extends ConsumerStatefulWidget {
-  const ScheduleReferenceSettings({super.key, required this.canEdit});
+  const ScheduleReferenceSettings({
+    super.key,
+    required this.canEdit,
+    required this.section,
+  });
 
   final bool canEdit;
+  final ScheduleReferenceSection section;
 
   @override
   ConsumerState<ScheduleReferenceSettings> createState() =>
@@ -60,14 +67,15 @@ class _ScheduleReferenceSettingsState
       final crm = ref.read(magicCrmServiceProvider);
       final result = await Future.wait([
         crm.listBranches(limit: 100),
-        crm.listTeachers(limit: 100),
+        if (widget.section == ScheduleReferenceSection.teacherSchedule)
+          crm.listTeachers(limit: 100),
       ]);
       if (!mounted) return;
       _branches = result[0];
-      _teachers = result[1];
+      _teachers = result.length > 1 ? result[1] : const [];
       _branchId = _validSelection(_branchId, _branches);
       _teacherId = _validSelection(_teacherId, _teachers);
-      if (_branchId != null && _teacherId != null) {
+      if (_canLoadReference) {
         await _loadReference();
       } else {
         setState(() => _loading = false);
@@ -76,6 +84,12 @@ class _ScheduleReferenceSettingsState
       if (mounted) setState(() => _error = error);
     }
   }
+
+  bool get _canLoadReference => switch (widget.section) {
+    ScheduleReferenceSection.branchHours => _branchId != null,
+    ScheduleReferenceSection.teacherSchedule =>
+      _branchId != null && _teacherId != null,
+  };
 
   String? _validSelection(String? selected, List<Map<String, dynamic>> items) {
     if (items.any((item) => item['id']?.toString() == selected)) {
@@ -86,58 +100,73 @@ class _ScheduleReferenceSettingsState
 
   Future<void> _loadReference() async {
     final branchId = _branchId;
-    final teacherId = _teacherId;
-    if (branchId == null || teacherId == null) return;
+    if (branchId == null) return;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final data = await ref
-          .read(magicCrmServiceProvider)
-          .getScheduleReference(branchId: branchId, teacherId: teacherId);
+      final crm = ref.read(magicCrmServiceProvider);
+      if (widget.section == ScheduleReferenceSection.branchHours) {
+        final branch = await crm.getBranchScheduleHours(branchId);
+        if (!mounted || branchId != _branchId) return;
+        _applyBranch(branch);
+        setState(() => _loading = false);
+        return;
+      }
+      final teacherId = _teacherId;
+      if (teacherId == null) return;
+      final data = await crm.getScheduleReference(
+        branchId: branchId,
+        teacherId: teacherId,
+      );
       if (!mounted || branchId != _branchId || teacherId != _teacherId) return;
-      final branch = data['branch'] as Map<String, dynamic>? ?? const {};
+      _applyBranch(data['branch'] as Map<String, dynamic>? ?? const {});
       final teacher = data['teacher'] as Map<String, dynamic>? ?? const {};
-      _weekly
-        ..clear()
-        ..addEntries(
-          _maps(
-            branch['weekly'],
-          ).map((row) => MapEntry((row['weekday'] as num).toInt(), {...row})),
-        );
-      _exceptions
-        ..clear()
-        ..addAll(_maps(branch['exceptions']).map((row) => {...row}));
-      _assignments.clear();
-      for (final row in _maps(teacher['assignments'])) {
-        final branchId = row['branchId']?.toString();
-        if (branchId != null) _assignments[branchId] = {...row};
-      }
-      _recurring.clear();
-      _extraRecurring.clear();
-      _intervals.clear();
-      for (final row in _maps(teacher['availability'])) {
-        if (row['kind'] == 'recurring' && row['weekday'] is num) {
-          final weekday = (row['weekday'] as num).toInt();
-          if (_recurring.containsKey(weekday)) {
-            _extraRecurring.add({...row});
-          } else {
-            _recurring[weekday] = {...row};
-          }
-        } else if (row['kind'] == 'interval') {
-          _intervals.add({...row});
-        }
-      }
-      setState(() {
-        _branchVersion = (branch['version'] as num?)?.toInt() ?? 1;
-        _teacherVersion = (teacher['version'] as num?)?.toInt() ?? 1;
-        _timezone = branch['timezone']?.toString() ?? 'Europe/Moscow';
-        _loading = false;
-      });
+      _applyTeacher(teacher);
+      setState(() => _loading = false);
     } catch (error) {
       if (mounted) setState(() => _error = error);
     }
+  }
+
+  void _applyBranch(Map<String, dynamic> branch) {
+    _weekly
+      ..clear()
+      ..addEntries(
+        _maps(
+          branch['weekly'],
+        ).map((row) => MapEntry((row['weekday'] as num).toInt(), {...row})),
+      );
+    _exceptions
+      ..clear()
+      ..addAll(_maps(branch['exceptions']).map((row) => {...row}));
+    _branchVersion = (branch['version'] as num?)?.toInt() ?? 1;
+    _timezone = branch['timezone']?.toString() ?? 'Europe/Moscow';
+  }
+
+  void _applyTeacher(Map<String, dynamic> teacher) {
+    _assignments.clear();
+    for (final row in _maps(teacher['assignments'])) {
+      final branchId = row['branchId']?.toString();
+      if (branchId != null) _assignments[branchId] = {...row};
+    }
+    _recurring.clear();
+    _extraRecurring.clear();
+    _intervals.clear();
+    for (final row in _maps(teacher['availability'])) {
+      if (row['kind'] == 'recurring' && row['weekday'] is num) {
+        final weekday = (row['weekday'] as num).toInt();
+        if (_recurring.containsKey(weekday)) {
+          _extraRecurring.add({...row});
+        } else {
+          _recurring[weekday] = {...row};
+        }
+      } else if (row['kind'] == 'interval') {
+        _intervals.add({...row});
+      }
+    }
+    _teacherVersion = (teacher['version'] as num?)?.toInt() ?? 1;
   }
 
   List<Map<String, dynamic>> _maps(dynamic value) => value is List
@@ -249,7 +278,11 @@ class _ScheduleReferenceSettingsState
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Не удалось загрузить настройки расписания.'),
+            Text(
+              widget.section == ScheduleReferenceSection.branchHours
+                  ? 'Не удалось загрузить часы работы филиала.'
+                  : 'Не удалось загрузить график преподавателя.',
+            ),
             const SizedBox(height: 12),
             FilledButton(
               onPressed: _loadCatalogs,
@@ -267,11 +300,18 @@ class _ScheduleReferenceSettingsState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Расписание', style: Theme.of(context).textTheme.titleLarge),
+              Text(
+                widget.section == ScheduleReferenceSection.branchHours
+                    ? 'Часы работы филиала'
+                    : 'Рабочий график преподавателя',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
               const SizedBox(height: 3),
               Text(
                 widget.canEdit
-                    ? 'Часы филиала, назначения и доступность преподавателей'
+                    ? widget.section == ScheduleReferenceSection.branchHours
+                          ? 'Еженедельные часы и исключения для выбранного филиала'
+                          : 'Назначения по филиалам, рабочие часы и недоступность'
                     : 'Только просмотр. Редактирование выдаёт директор.',
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -284,18 +324,24 @@ class _ScheduleReferenceSettingsState
         ),
         if (_loading) const LinearProgressIndicator(),
         Expanded(
-          child: _branchId == null || _teacherId == null
-              ? const Center(
-                  child: Text('Нужны хотя бы один филиал и преподаватель.'),
+          child: !_canLoadReference
+              ? Center(
+                  child: Text(
+                    widget.section == ScheduleReferenceSection.branchHours
+                        ? 'Сначала добавьте филиал.'
+                        : 'Нужны хотя бы один филиал и преподаватель.',
+                  ),
                 )
               : ListView(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                   children: [
-                    _hoursCard(),
-                    const SizedBox(height: 12),
-                    _assignmentsCard(),
-                    const SizedBox(height: 12),
-                    _availabilityCard(),
+                    if (widget.section == ScheduleReferenceSection.branchHours)
+                      _hoursCard()
+                    else ...[
+                      _assignmentsCard(),
+                      const SizedBox(height: 12),
+                      _availabilityCard(),
+                    ],
                   ],
                 ),
         ),
@@ -304,64 +350,45 @@ class _ScheduleReferenceSettingsState
   }
 
   Widget _selectors() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 650;
-        final width = compact
-            ? constraints.maxWidth
-            : (constraints.maxWidth - 12) / 2;
-        final fields = [
-          SearchablePickerField(
-            key: ValueKey('settings-branch-$_branchId'),
-            label: 'Филиал',
-            selectedId: _branchId,
-            isNullable: false,
-            items: [
-              for (final branch in _branches)
-                SearchableSelectItem(
-                  id: branch['id'].toString(),
-                  label: branch['name']?.toString() ?? 'Филиал',
-                ),
-            ],
-            onSelected: (item) {
-              final value = item?.id;
-              if (value == null || value == _branchId) return;
-              _branchId = value;
-              _loadReference();
-            },
+    if (widget.section == ScheduleReferenceSection.branchHours) {
+      return SearchablePickerField(
+        key: ValueKey('settings-branch-$_branchId'),
+        label: 'Филиал',
+        selectedId: _branchId,
+        isNullable: false,
+        items: [
+          for (final branch in _branches)
+            SearchableSelectItem(
+              id: branch['id'].toString(),
+              label: branch['name']?.toString() ?? 'Филиал',
+            ),
+        ],
+        onSelected: (item) {
+          final value = item?.id;
+          if (value == null || value == _branchId) return;
+          _branchId = value;
+          _loadReference();
+        },
+      );
+    }
+    return SearchablePickerField(
+      key: ValueKey('settings-teacher-$_teacherId'),
+      label: 'Преподаватель',
+      hintText: 'Введите имя или ФИО преподавателя',
+      selectedId: _teacherId,
+      isNullable: false,
+      items: [
+        for (final teacher in _teachers)
+          SearchableSelectItem(
+            id: teacher['id'].toString(),
+            label: _teacherName(teacher),
           ),
-          SearchablePickerField(
-            key: ValueKey('settings-teacher-$_teacherId'),
-            label: 'Преподаватель',
-            hintText: 'Введите имя или ФИО преподавателя',
-            selectedId: _teacherId,
-            isNullable: false,
-            items: [
-              for (final teacher in _teachers)
-                SearchableSelectItem(
-                  id: teacher['id'].toString(),
-                  label: _teacherName(teacher),
-                ),
-            ],
-            onSelected: (item) {
-              final value = item?.id;
-              if (value == null || value == _teacherId) return;
-              _teacherId = value;
-              _loadReference();
-            },
-          ),
-        ];
-        return compact
-            ? Column(
-                children: [fields[0], const SizedBox(height: 12), fields[1]],
-              )
-            : Row(
-                children: [
-                  SizedBox(width: width, child: fields[0]),
-                  const SizedBox(width: 12),
-                  SizedBox(width: width, child: fields[1]),
-                ],
-              );
+      ],
+      onSelected: (item) {
+        final value = item?.id;
+        if (value == null || value == _teacherId) return;
+        _teacherId = value;
+        _loadReference();
       },
     );
   }

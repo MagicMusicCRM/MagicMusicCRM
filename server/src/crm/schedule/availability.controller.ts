@@ -36,6 +36,14 @@ export class AvailabilityController {
     return this.availability.resolve(actor, query);
   }
 
+  @Get("branches/:branchId/hours")
+  getBranchHours(
+    @CurrentActor() actor: ActorContext,
+    @Param("branchId", ParseUUIDPipe) branchId: string,
+  ) {
+    return this.availability.getBranchHours(actor, branchId);
+  }
+
   @Put("branches/:branchId/hours")
   replaceBranchHours(
     @CurrentActor() actor: ActorContext,

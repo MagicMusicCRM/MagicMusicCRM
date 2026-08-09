@@ -9,8 +9,8 @@
     "screens": 21,
     "production_screens": 21,
     "isolated_screens": 0,
-    "modal_surface_calls": 97,
-    "production_surface_calls": 97,
+    "modal_surface_calls": 98,
+    "production_surface_calls": 98,
     "screen_state_gaps": 0,
     "unowned": 0
   },
@@ -469,7 +469,7 @@
         "loading": true,
         "empty": false,
         "error": true,
-        "forbidden": false,
+        "forbidden": true,
         "retry": true
       },
       "state_contract": "data",
@@ -1306,22 +1306,6 @@
     {
       "kind": "dialog",
       "call": "showDialog",
-      "owner": "SYS-APP-EXPERIENCE",
-      "production_reachable": true,
-      "status": "production-callsite",
-      "states": {
-        "loading": true,
-        "empty": true,
-        "error": true,
-        "forbidden": false,
-        "retry": false
-      },
-      "file": "lib/features/messenger/presentation/screens/messenger_screen_messaging.dart",
-      "line": 176
-    },
-    {
-      "kind": "dialog",
-      "call": "showDialog",
       "owner": "SYS-SCHEDULE",
       "production_reachable": true,
       "status": "production-callsite",
@@ -1349,7 +1333,39 @@
         "retry": false
       },
       "file": "lib/features/admin/presentation/widgets/teacher_detail_dialog.dart",
+      "line": 347
+    },
+    {
+      "kind": "dialog",
+      "call": "showDialog",
+      "owner": "SYS-SCHEDULE",
+      "production_reachable": true,
+      "status": "production-callsite",
+      "states": {
+        "loading": true,
+        "empty": true,
+        "error": true,
+        "forbidden": false,
+        "retry": false
+      },
+      "file": "lib/features/admin/presentation/widgets/teacher_detail_dialog.dart",
       "line": 22
+    },
+    {
+      "kind": "bottom-sheet",
+      "call": "showModalBottomSheet",
+      "owner": "SYS-UI-FOUNDATION",
+      "production_reachable": true,
+      "status": "production-callsite",
+      "states": {
+        "loading": false,
+        "empty": false,
+        "error": false,
+        "forbidden": false,
+        "retry": false
+      },
+      "file": "lib/core/widgets/v7/magic_sheet.dart",
+      "line": 20
     },
     {
       "kind": "magic-sheet",
@@ -1496,22 +1512,6 @@
       "line": 137
     },
     {
-      "kind": "bottom-sheet",
-      "call": "showModalBottomSheet",
-      "owner": "SYS-UI-FOUNDATION",
-      "production_reachable": true,
-      "status": "production-callsite",
-      "states": {
-        "loading": false,
-        "empty": false,
-        "error": false,
-        "forbidden": false,
-        "retry": false
-      },
-      "file": "lib/core/widgets/v7/magic_sheet.dart",
-      "line": 20
-    },
-    {
       "kind": "magic-sheet",
       "call": "showMagicSheet",
       "owner": "SYS-PLATFORM-QUALITY",
@@ -1526,6 +1526,22 @@
       },
       "file": "lib/core/widgets/telegram/message_bubble.dart",
       "line": 495
+    },
+    {
+      "kind": "dialog",
+      "call": "showDialog",
+      "owner": "SYS-PLATFORM-QUALITY",
+      "production_reachable": true,
+      "status": "production-callsite",
+      "states": {
+        "loading": true,
+        "empty": true,
+        "error": true,
+        "forbidden": false,
+        "retry": false
+      },
+      "file": "lib/core/widgets/telegram/create_group_dialog.dart",
+      "line": 14
     },
     {
       "kind": "dialog",
@@ -1672,22 +1688,6 @@
       "line": 123
     },
     {
-      "kind": "dialog",
-      "call": "showDialog",
-      "owner": "SYS-PLATFORM-QUALITY",
-      "production_reachable": true,
-      "status": "production-callsite",
-      "states": {
-        "loading": true,
-        "empty": true,
-        "error": true,
-        "forbidden": false,
-        "retry": false
-      },
-      "file": "lib/core/widgets/telegram/create_group_dialog.dart",
-      "line": 14
-    },
-    {
       "kind": "draggable-sheet",
       "call": "DraggableScrollableSheet",
       "owner": "SYS-UI-FOUNDATION",
@@ -1706,6 +1706,22 @@
     {
       "kind": "dialog",
       "call": "showDialog",
+      "owner": "SYS-APP-EXPERIENCE",
+      "production_reachable": true,
+      "status": "production-callsite",
+      "states": {
+        "loading": true,
+        "empty": true,
+        "error": true,
+        "forbidden": false,
+        "retry": false
+      },
+      "file": "lib/features/messenger/presentation/screens/messenger_screen_messaging.dart",
+      "line": 176
+    },
+    {
+      "kind": "dialog",
+      "call": "showDialog",
       "owner": "SYS-PLATFORM-QUALITY",
       "production_reachable": true,
       "status": "production-callsite",
@@ -1717,7 +1733,7 @@
         "retry": true
       },
       "file": "lib/features/admin/presentation/widgets/branch_form_dialog.dart",
-      "line": 86
+      "line": 91
     },
     {
       "kind": "adaptive-surface",
@@ -1797,7 +1813,7 @@
         "retry": true
       },
       "file": "lib/features/admin/presentation/widgets/schedule_reference_settings.dart",
-      "line": 656
+      "line": 690
     },
     {
       "kind": "magic-sheet",
@@ -1841,11 +1857,11 @@
         "loading": true,
         "empty": false,
         "error": true,
-        "forbidden": false,
+        "forbidden": true,
         "retry": true
       },
       "file": "lib/features/admin/presentation/widgets/manage_entities_widget.dart",
-      "line": 507
+      "line": 547
     },
     {
       "kind": "magic-sheet",
@@ -2074,18 +2090,18 @@
     {
       "kind": "dialog",
       "call": "showDialog",
-      "owner": "SYS-SCHEDULE",
+      "owner": "SYS-PLATFORM-QUALITY",
       "production_reachable": true,
       "status": "production-callsite",
       "states": {
         "loading": true,
         "empty": true,
-        "error": true,
+        "error": false,
         "forbidden": false,
-        "retry": false
+        "retry": true
       },
-      "file": "lib/features/admin/presentation/widgets/teacher_detail_dialog.dart",
-      "line": 347
+      "file": "lib/features/admin/presentation/widgets/branch_form_dialog.dart",
+      "line": 145
     },
     {
       "kind": "dialog",

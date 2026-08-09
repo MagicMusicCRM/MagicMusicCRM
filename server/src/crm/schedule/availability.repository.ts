@@ -24,6 +24,65 @@ interface TeacherReferenceRow {
 export class AvailabilityRepository {
   constructor(private readonly database: DatabaseService) {}
 
+  async getBranchHours(branchId: string, client?: PoolClient) {
+    const query = <T extends QueryResultRow>(sql: string, params: unknown[]) =>
+      client
+        ? client.query<T>(sql, params)
+        : this.database.query<T>(sql, params);
+    const branch = await query<BranchReferenceRow>(
+      `
+        select id, timezone_name, schedule_reference_version
+        from app.branches
+        where id = $1 and deleted_at is null
+      `,
+      [branchId],
+    );
+    const branchRow = branch.rows[0];
+    if (!branchRow) return null;
+
+    const [weekly, exceptions] = await Promise.all([
+      query<{
+        weekday: number;
+        open_local: string;
+        close_local: string;
+      }>(
+        `select weekday, open_local::text, close_local::text
+         from app.branch_hours where branch_id = $1 order by weekday`,
+        [branchId],
+      ),
+      query<{
+        local_date: string;
+        closed: boolean;
+        open_local: string | null;
+        close_local: string | null;
+        reason: string | null;
+      }>(
+        `select local_date::text, closed, open_local::text, close_local::text, reason
+         from app.branch_hour_exceptions
+         where branch_id = $1 order by local_date`,
+        [branchId],
+      ),
+    ]);
+
+    return {
+      id: branchRow.id,
+      timezone: branchRow.timezone_name,
+      version: Number(branchRow.schedule_reference_version),
+      weekly: weekly.rows.map((row) => ({
+        weekday: row.weekday,
+        open: row.open_local.slice(0, 5),
+        close: row.close_local.slice(0, 5),
+      })),
+      exceptions: exceptions.rows.map((row) => ({
+        date: row.local_date,
+        closed: row.closed,
+        open: row.open_local?.slice(0, 5),
+        close: row.close_local?.slice(0, 5),
+        reason: row.reason,
+      })),
+    };
+  }
+
   getTeacherOwner(teacherId: string, client?: PoolClient) {
     const query = <T extends QueryResultRow>(sql: string, params: unknown[]) =>
       client
@@ -55,16 +114,8 @@ export class AvailabilityRepository {
       client
         ? client.query<T>(sql, params)
         : this.database.query<T>(sql, params);
-    const branch = await query<BranchReferenceRow>(
-      `
-        select id, timezone_name, schedule_reference_version
-        from app.branches
-        where id = $1 and deleted_at is null
-      `,
-      [branchId],
-    );
-    const branchRow = branch.rows[0];
-    if (!branchRow) return null;
+    const branch = await this.getBranchHours(branchId, client);
+    if (!branch) return null;
 
     const teacher = await this.getTeacherOwner(teacherId, client);
     const teacherRow = teacher.rows[0];
@@ -87,7 +138,7 @@ export class AvailabilityRepository {
                     >= bounds.to_date
           ) as assigned
         `,
-      [from, to, branchRow.timezone_name, teacherId, branchId],
+      [from, to, branch.timezone, teacherId, branchId],
     );
     const branchWindows = await query<{
       local_date: string;
@@ -135,7 +186,7 @@ export class AvailabilityRepository {
             and (local_date + open_local) at time zone $3 < $2
           order by local_date
         `,
-      [from, to, branchRow.timezone_name, branchId],
+      [from, to, branch.timezone, branchId],
     );
     const availability = await query<{
       id: string;
@@ -198,27 +249,6 @@ export class AvailabilityRepository {
         `,
       [from, to, teacherId],
     );
-    const weekly = await query<{
-      weekday: number;
-      open_local: string;
-      close_local: string;
-    }>(
-      `select weekday, open_local::text, close_local::text
-       from app.branch_hours where branch_id = $1 order by weekday`,
-      [branchId],
-    );
-    const exceptions = await query<{
-      local_date: string;
-      closed: boolean;
-      open_local: string | null;
-      close_local: string | null;
-      reason: string | null;
-    }>(
-      `select local_date::text, closed, open_local::text, close_local::text, reason
-       from app.branch_hour_exceptions
-       where branch_id = $1 order by local_date`,
-      [branchId],
-    );
     const assignments = await query<{
       branch_id: string;
       active_from: string;
@@ -253,23 +283,7 @@ export class AvailabilityRepository {
     );
 
     return {
-      branch: {
-        id: branchRow.id,
-        timezone: branchRow.timezone_name,
-        version: Number(branchRow.schedule_reference_version),
-        weekly: weekly.rows.map((row) => ({
-          weekday: row.weekday,
-          open: row.open_local.slice(0, 5),
-          close: row.close_local.slice(0, 5),
-        })),
-        exceptions: exceptions.rows.map((row) => ({
-          date: row.local_date,
-          closed: row.closed,
-          open: row.open_local?.slice(0, 5),
-          close: row.close_local?.slice(0, 5),
-          reason: row.reason,
-        })),
-      },
+      branch,
       teacher: {
         id: teacherRow.id,
         version: Number(teacherRow.schedule_reference_version),
@@ -294,7 +308,7 @@ export class AvailabilityRepository {
       },
       teacherBranchAssigned: assignment.rows[0]?.assigned ?? false,
       branchHoursConfigured:
-        weekly.rows.length > 0 || exceptions.rows.length > 0,
+        branch.weekly.length > 0 || branch.exceptions.length > 0,
       branchWindows: branchWindows.rows.map((row) => ({
         localDate: row.local_date,
         opensAt: row.opens_at,

@@ -275,9 +275,11 @@ class _ScheduleSettings extends StatefulWidget {
   State<_ScheduleSettings> createState() => _ScheduleSettingsState();
 }
 
+enum _ScheduleSettingsView { branchHours, teacherSchedules, groups }
+
 class _ScheduleSettingsState extends State<_ScheduleSettings> {
   final _search = TextEditingController();
-  bool _groups = false;
+  _ScheduleSettingsView _view = _ScheduleSettingsView.branchHours;
 
   @override
   void dispose() {
@@ -294,14 +296,25 @@ class _ScheduleSettingsState extends State<_ScheduleSettings> {
 
   @override
   Widget build(BuildContext context) {
+    final groups = _view == _ScheduleSettingsView.groups;
+    final title = switch (_view) {
+      _ScheduleSettingsView.branchHours => 'Часы работы филиалов',
+      _ScheduleSettingsView.teacherSchedules => 'Графики преподавателей',
+      _ScheduleSettingsView.groups => 'Учебные группы',
+    };
+    final subtitle = switch (_view) {
+      _ScheduleSettingsView.branchHours =>
+        'Рабочие дни, время открытия и исключения',
+      _ScheduleSettingsView.teacherSchedules =>
+        'Назначения по филиалам, рабочие часы и недоступность',
+      _ScheduleSettingsView.groups => 'Состав и параметры учебных групп',
+    };
     return Column(
       children: [
         _SettingsToolbar(
-          title: 'Расписание',
-          subtitle: _groups
-              ? 'Учебные группы и их параметры'
-              : 'Рабочие часы, назначения и доступность',
-          action: _groups && widget.canManageGroups
+          title: title,
+          subtitle: subtitle,
+          action: groups && widget.canManageGroups
               ? FilledButton.icon(
                   onPressed: _createGroup,
                   icon: const Icon(Icons.add_rounded),
@@ -311,21 +324,36 @@ class _ScheduleSettingsState extends State<_ScheduleSettings> {
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SegmentedButton<bool>(
-                segments: const [
-                  ButtonSegment(value: false, label: Text('Правила')),
-                  ButtonSegment(value: true, label: Text('Группы')),
-                ],
-                selected: {_groups},
-                onSelectionChanged: (value) {
-                  setState(() => _groups = value.first);
-                },
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SegmentedButton<_ScheduleSettingsView>(
+                  segments: const [
+                    ButtonSegment(
+                      value: _ScheduleSettingsView.branchHours,
+                      label: Text('Часы филиалов'),
+                    ),
+                    ButtonSegment(
+                      value: _ScheduleSettingsView.teacherSchedules,
+                      label: Text('Графики преподавателей'),
+                    ),
+                    ButtonSegment(
+                      value: _ScheduleSettingsView.groups,
+                      label: Text('Группы'),
+                    ),
+                  ],
+                  selected: {_view},
+                  onSelectionChanged: (value) {
+                    setState(() => _view = value.first);
+                  },
+                ),
               ),
-              if (_groups) ...[
-                const SizedBox(width: 12),
-                Expanded(
+              if (groups) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: 420,
                   child: TextField(
                     controller: _search,
                     onChanged: (_) => setState(() {}),
@@ -341,9 +369,21 @@ class _ScheduleSettingsState extends State<_ScheduleSettings> {
           ),
         ),
         Expanded(
-          child: _groups
-              ? _GroupsList(searchQuery: _search.text)
-              : ScheduleReferenceSettings(canEdit: widget.canEditReferences),
+          child: switch (_view) {
+            _ScheduleSettingsView.branchHours => ScheduleReferenceSettings(
+              key: const ValueKey('branch-hours-settings'),
+              canEdit: widget.canEditReferences,
+              section: ScheduleReferenceSection.branchHours,
+            ),
+            _ScheduleSettingsView.teacherSchedules => ScheduleReferenceSettings(
+              key: const ValueKey('teacher-schedule-settings'),
+              canEdit: widget.canEditReferences,
+              section: ScheduleReferenceSection.teacherSchedule,
+            ),
+            _ScheduleSettingsView.groups => _GroupsList(
+              searchQuery: _search.text,
+            ),
+          },
         ),
       ],
     );

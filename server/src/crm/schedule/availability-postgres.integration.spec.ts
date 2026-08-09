@@ -116,6 +116,23 @@ describe("Availability reference data (PostgreSQL)", () => {
         timezone: "Europe/Berlin",
         version: 2,
       });
+      await expect(
+        repository.getBranchHours(branchId, client),
+      ).resolves.toEqual({
+        id: branchId,
+        timezone: "Europe/Berlin",
+        version: 2,
+        weekly: [{ weekday: 7, open: "01:30", close: "03:30" }],
+        exceptions: [
+          {
+            date: "2026-03-30",
+            closed: false,
+            open: "10:00",
+            close: "12:00",
+            reason: "extended",
+          },
+        ],
+      });
       expect(
         await repository.replaceBranchHours(client, {
           branchId,

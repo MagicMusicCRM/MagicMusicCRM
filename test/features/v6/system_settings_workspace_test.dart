@@ -135,6 +135,19 @@ class SettingsTestApi extends MagicApiClient {
           }
           as T;
     }
+    if (path ==
+        '/crm/schedule-reference/branches/20000000-0000-4000-8000-000000000001/hours') {
+      return <String, dynamic>{
+            'id': '20000000-0000-4000-8000-000000000001',
+            'timezone': 'Europe/Moscow',
+            'version': 2,
+            'weekly': const [
+              {'weekday': 1, 'open': '09:00', 'close': '21:00'},
+            ],
+            'exceptions': const <Map<String, dynamic>>[],
+          }
+          as T;
+    }
     throw StateError('Unexpected GET $path');
   }
 
@@ -263,34 +276,45 @@ void main() {
     expect(find.byIcon(Icons.edit_rounded), findsOneWidget);
   });
 
-  testWidgets('schedule reference uses human labels and remains read-only', (
-    tester,
-  ) async {
-    await _pump(
-      tester,
-      SettingsTestApi(
-        role: 'manager',
-        capabilities: const [
-          'system.settings.manage',
-          'schedule.lesson.read.assigned',
-        ],
-      ),
-    );
+  testWidgets(
+    'branch hours and teacher schedules are separate read-only views',
+    (tester) async {
+      await _pump(
+        tester,
+        SettingsTestApi(
+          role: 'manager',
+          capabilities: const [
+            'system.settings.manage',
+            'schedule.lesson.read.assigned',
+          ],
+        ),
+      );
 
-    await tester.tap(find.widgetWithText(ListTile, 'Расписание'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ListTile, 'Расписание'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Сокол'), findsWidgets);
-    expect(find.text('Петрова Мария'), findsWidgets);
-    expect(find.text('Рабочие часы филиала'), findsOneWidget);
-    expect(
-      find.text('Только просмотр. Редактирование выдаёт директор.'),
-      findsOneWidget,
-    );
-    expect(find.widgetWithText(FilledButton, 'Сохранить'), findsNothing);
-    final mondaySwitch = find.bySemanticsLabel('Понедельник: включено');
-    expect(mondaySwitch, findsOneWidget);
-  });
+      expect(find.text('Сокол'), findsWidgets);
+      expect(find.text('Часы работы филиалов'), findsOneWidget);
+      expect(find.text('Рабочие часы филиала'), findsOneWidget);
+      expect(find.text('Петрова Мария'), findsNothing);
+      expect(
+        find.text('Только просмотр. Редактирование выдаёт директор.'),
+        findsOneWidget,
+      );
+      expect(find.widgetWithText(FilledButton, 'Сохранить'), findsNothing);
+      final mondaySwitch = find.bySemanticsLabel('Понедельник: включено');
+      expect(mondaySwitch, findsOneWidget);
+
+      await tester.tap(find.text('Графики преподавателей'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Графики преподавателей'), findsWidgets);
+      expect(find.text('Петрова Мария'), findsWidgets);
+      expect(find.text('Филиалы преподавателя'), findsOneWidget);
+      expect(find.text('Доступность преподавателя'), findsOneWidget);
+      expect(find.text('Рабочие часы филиала'), findsNothing);
+    },
+  );
 
   testWidgets('manager creates staff from the mounted users workspace', (
     tester,

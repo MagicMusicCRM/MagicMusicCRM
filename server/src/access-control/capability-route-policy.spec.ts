@@ -49,6 +49,11 @@ describe("capability route policy", () => {
     ["POST", "/crm/lessons/id/settlement-correction/preview", "schedule.lesson.write"],
     ["POST", "/crm/lessons/id/settlement-correction", "schedule.lesson.write"],
     ["GET", "/crm/schedule-reference", "schedule.lesson.read.assigned"],
+    [
+      "GET",
+      "/crm/schedule-reference/branches/id/hours",
+      "schedule.lesson.read.assigned",
+    ],
     ["PUT", "/crm/schedule-reference/branches/id/hours", "config.crm.edit"],
     ["POST", "/crm/branches", "config.crm.edit"],
     ["PATCH", "/crm/branches/id", "config.crm.edit"],

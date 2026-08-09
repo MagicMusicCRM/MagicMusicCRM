@@ -3,6 +3,12 @@ part of 'magic_crm_service.dart';
 /// Schedule & lessons: matrix, lessons, tasks, comments,
 /// timeline, progress notes, subscriptions, ledger, schedule series.
 extension MagicCrmSchedule on MagicCrmService {
+  Future<Map<String, dynamic>> getBranchScheduleHours(String branchId) {
+    return _api.get<Map<String, dynamic>>(
+      '/crm/schedule-reference/branches/$branchId/hours',
+    );
+  }
+
   Future<Map<String, dynamic>> getScheduleReference({
     required String branchId,
     required String teacherId,

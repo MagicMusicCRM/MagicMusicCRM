@@ -1,7 +1,7 @@
 # V7 owner mega-UAT — актуальные доказательства
 
-Дата прогона: `2026-08-08`
-Клиент: `1.5.1+162`, Windows Release и Android Release (API 35)
+Дата прогона: `2026-08-08` — `2026-08-09`
+Клиент: `1.5.1+163`, Windows Release и Android Release (API 35)
 Среда данных: production API/DB
 
 Старый набор `00..25` удалён: он содержал устаревший отдельный экран
@@ -15,8 +15,10 @@
 | Филиал `UAT-20260808-01 Оборонная`, адрес `Оборонная 30` | PASS | `windows-release/01-branch-list.png` |
 | Дисциплина выбирается из существующего справочника внутри филиала | PASS | `windows-release/02-branch-discipline-picker.png` |
 | В филиале видны `Вокал` и аудитории A/B/C вместимостью `1/2/8` | PASS | `windows-release/03-branch-disciplines-and-rooms.png` |
-| Рабочие часы филиала и назначение преподавателя доступны в одном разделе | PASS | `windows-release/04-branch-hours-and-teacher.png` |
-| Пн–Сб `09:00–21:00`, воскресенье закрыто | PASS | `windows-release/05-branch-hours-sunday-closed.png` |
+| Часы филиала вынесены в отдельное окно без выбора преподавателя | PASS | `windows-release/13-branch-hours-separate-163.png` |
+| Пн–Сб `09:00–21:00`, воскресенье закрыто; исключения настраиваются здесь же | PASS | `windows-release/17-branch-hours-sunday-closed-163.png` |
+| Назначения по филиалам вынесены в отдельное окно графика преподавателя | PASS | `windows-release/14-teacher-schedule-separate-163.png` |
+| Рабочая доступность и недоступность по датам находятся только в окне преподавателя | PASS | `windows-release/15-teacher-hours-unavailability-163.png`, `windows-release/16-teacher-unavailability-163.png` |
 | Email, пароль, филиал и дисциплина обязательны до создания преподавателя | PASS | `windows-release/06-teacher-required-fields-ready.png` |
 | Создан преподаватель `UAT-20260808-01 Teacher`, специализация `Вокал` | PASS | `windows-release/07-teacher-created.png` |
 | Та же операция атомарно создала пользователя с ролью `Преподаватель` | PASS | `windows-release/08-teacher-linked-user.png` |
@@ -38,6 +40,18 @@ Production DB дополнительно подтверждает: дисцип�
 аудитории `1/2/8`, пользователь `uat.teacher.20260808.01@gmail.com` с ролью
 `teacher`, связанный профиль преподавателя, филиал и дисциплина. Секреты и
 хеши паролей в evidence не сохраняются.
+
+После разделения экранов production API повторно проверен: health=`ok`,
+отдельное чтение часов вернуло филиал `60958318-8d92-4c54-8d56-ded34ee8f8c1`,
+версию `2` и `6` рабочих дней; тот же endpoint без сессии вернул `401`.
+Перед выкладкой создан серверный backup
+`server-pre-schedule-settings-20260809T133353Z.tgz`; миграции и данные БД не
+изменялись.
+
+Android APK `versionCode=163`/`versionName=1.5.1` подписан схемой v2,
+установлен поверх предыдущей версии без очистки данных и после холодного
+перезапуска эмулятора открыл сохранённое рабочее пространство преподавателя;
+UI-tree содержит `Чат`, `Расписание`, `Ученики`, fatal/ANR в logcat — `0`.
 
 Статус всего мегатеста: **IN PROGRESS**. Этот файл фиксирует только уже
 повторно пройденную часть G3 и не заменяет итоговую матрицу UAT.

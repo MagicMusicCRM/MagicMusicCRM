@@ -61,6 +61,22 @@ export class AvailabilityService {
     return reference;
   }
 
+  async getBranchHours(actor: ActorContext, branchId: string) {
+    this.policy.assertCanReadOperationalData(actor);
+    const scopeBranchIds = await settingsBranchIdsForActor(
+      this.database,
+      actor,
+    );
+    if (scopeBranchIds !== null && !scopeBranchIds.includes(branchId)) {
+      throw new NotFoundException("Schedule reference not found.");
+    }
+    const branch = await this.repository.getBranchHours(branchId);
+    if (!branch) {
+      throw new NotFoundException("Schedule reference not found.");
+    }
+    return branch;
+  }
+
   async replaceBranchHours(
     actor: ActorContext,
     branchId: string,

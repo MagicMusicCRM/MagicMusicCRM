@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "task": "T1.1.1",
-  "source_digest": "6fb78d1599c6bba94698f0a4b2410dd7c59ab1282508c414afbf3eed53f51f37",
+  "source_digest": "904530ab0ecf62cfd3f21248e1b77998967d1b0c1a50c0a6fc22244488f77f99",
   "summary": {
     "matched_source_files": 53,
     "finance_callsites": 256,
@@ -674,7 +674,7 @@
       "operation": "call",
       "owner": "SYS-APP-EXPERIENCE",
       "file": "lib/core/services/magic_crm_service_schedule.dart",
-      "line": 493
+      "line": 499
     },
     {
       "kind": "wire",
