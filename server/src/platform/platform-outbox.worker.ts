@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
+import { NotificationsService } from "../notifications/notifications.service";
 import {
   CrmChangedPayload,
   CrmEntity,
@@ -31,6 +32,7 @@ export class PlatformOutboxWorker implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly integrity: PlatformIntegrityService,
     private readonly realtime: RealtimeBus,
+    private readonly notifications: NotificationsService,
   ) {}
 
   onModuleInit(): void {
@@ -72,7 +74,7 @@ export class PlatformOutboxWorker implements OnModuleInit, OnModuleDestroy {
     };
     for (const event of events) {
       try {
-        this.dispatch(event);
+        await this.dispatch(event);
         if (await this.integrity.markOutboxPublished(event.eventId, workerId)) {
           result.published += 1;
         }
@@ -105,7 +107,7 @@ export class PlatformOutboxWorker implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  private dispatch(event: ClaimedOutboxEvent): void {
+  private async dispatch(event: ClaimedOutboxEvent): Promise<void> {
     if (!this.realtime.isReady()) {
       throw new Error("RealtimeBusUnavailable");
     }
@@ -122,6 +124,13 @@ export class PlatformOutboxWorker implements OnModuleInit, OnModuleDestroy {
         event.aggregateVersion,
       );
       return;
+    }
+
+    if (event.type === "inbound.lead.created") {
+      await this.notifications.notifyInboundLead(
+        event.aggregateId,
+        event.eventId,
+      );
     }
 
     const entity = entityFor(event);

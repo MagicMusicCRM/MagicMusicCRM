@@ -9,6 +9,8 @@ import { ChatWorkTimelineService } from "../../messenger/chat-work-timeline.serv
 import { PlatformIntegrityRepository } from "../../platform/platform-integrity.repository";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
 import { RealtimeBus } from "../../realtime/realtime-bus";
+import { NotificationsPolicy } from "../../notifications/notifications.policy";
+import { NotificationsService } from "../../notifications/notifications.service";
 import { CrmPolicy } from "../crm.policy";
 import { LeadsService } from "../leads.service";
 import { TimelineService } from "../timeline.service";
@@ -31,11 +33,13 @@ jest.setTimeout(60_000);
 describe("manual and inbound Lead commands (PostgreSQL)", () => {
   let database: DatabaseService;
   let inbound: InboundLeadService;
+  let notifications: NotificationsService;
   let manual: LeadsService;
   let sourceId: string;
   let actor: ActorContext;
   const ingestionIds: string[] = [];
   const leadIds: string[] = [];
+  const notificationIds: string[] = [];
   const userIds: string[] = [];
 
   beforeAll(async () => {
@@ -56,6 +60,17 @@ describe("manual and inbound Lead commands (PostgreSQL)", () => {
       ),
       configRepository,
       new ClientWriteValidator(configRepository),
+    );
+    notifications = new NotificationsService(
+      database,
+      { record: jest.fn().mockResolvedValue(undefined) } as never,
+      new NotificationsPolicy(),
+      {
+        dispatchPendingEmails: jest.fn().mockResolvedValue({ processed: 0, failed: 0 }),
+        dispatchPendingPush: jest.fn().mockResolvedValue({ processed: 0, failed: 0 }),
+      } as never,
+      {} as never,
+      { emitCrmChanged: jest.fn() } as never,
     );
 
     const user = await database.query<{ id: string }>(
@@ -102,6 +117,12 @@ describe("manual and inbound Lead commands (PostgreSQL)", () => {
   });
 
   afterAll(async () => {
+    if (notificationIds.length > 0) {
+      await database.query(
+        "delete from app.notifications where id = any($1::uuid[])",
+        [notificationIds],
+      );
+    }
     if (ingestionIds.length > 0) {
       await database.query(
         `
@@ -193,6 +214,20 @@ describe("manual and inbound Lead commands (PostgreSQL)", () => {
     const replay = await inbound.ingest({ ingestionId, payload });
     leadIds.push(first.leadId);
 
+    const outbox = await database.query<{ event_id: string }>(
+      `
+        select event_id
+        from app.platform_outbox_events
+        where request_id = $1 and event_type = 'inbound.lead.created'
+        limit 1
+      `,
+      [`inbound-lead:${ingestionId}`],
+    );
+    const notificationId = outbox.rows[0]!.event_id;
+    notificationIds.push(notificationId);
+    await notifications.notifyInboundLead(ingestionId, notificationId);
+    await notifications.notifyInboundLead(ingestionId, notificationId);
+
     expect(first).toMatchObject({ replayed: false });
     expect(replay).toEqual({ leadId: first.leadId, replayed: true });
 
@@ -207,6 +242,12 @@ describe("manual and inbound Lead commands (PostgreSQL)", () => {
       email: string;
       source_id: string;
       notes: string;
+      manual_notifications: string;
+      inbound_notifications: string;
+      inbound_recipients: string;
+      distinct_inbound_recipients: string;
+      inbound_deliveries: string;
+      distinct_inbound_deliveries: string;
     }>(
       `
         select
@@ -232,16 +273,49 @@ describe("manual and inbound Lead commands (PostgreSQL)", () => {
           lead.phone,
           lead.email,
           lead.source_id,
-          lead.notes
+          lead.notes,
+          (
+            select count(*)::text from app.notifications
+            where data->>'entityId' = $4
+          ) as manual_notifications,
+          (
+            select count(*)::text from app.notifications
+            where id = $5
+          ) as inbound_notifications,
+          (
+            select count(*)::text from app.notification_recipients
+            where notification_id = $5
+          ) as inbound_recipients,
+          (
+            select count(distinct user_id)::text from app.notification_recipients
+            where notification_id = $5
+          ) as distinct_inbound_recipients,
+          (
+            select count(*)::text from app.notification_deliveries
+            where notification_id = $5
+          ) as inbound_deliveries,
+          (
+            select count(distinct (user_id, channel))::text
+            from app.notification_deliveries
+            where notification_id = $5
+          ) as distinct_inbound_deliveries
         from app.leads lead
         where lead.id = $3
       `,
-      [ingestionId, `inbound-lead:${ingestionId}`, first.leadId],
+      [
+        ingestionId,
+        `inbound-lead:${ingestionId}`,
+        first.leadId,
+        manualLead.id,
+        notificationId,
+      ],
     );
     expect(after.rows[0]).toMatchObject({
       inbound_leads: "1",
       inbound_outbox: "1",
-      notification_count: before.rows[0]!.notification_count,
+      notification_count: String(
+        Number(before.rows[0]!.notification_count) + 1,
+      ),
       total_outbox: String(Number(before.rows[0]!.outbox_count) + 1),
       first_name: "Входящий",
       last_name: "Лид",
@@ -249,6 +323,15 @@ describe("manual and inbound Lead commands (PostgreSQL)", () => {
       email: "inbound@example.com",
       source_id: sourceId,
       notes: "Дисциплина: Вокал\nНужен пробный урок",
+      manual_notifications: "0",
+      inbound_notifications: "1",
     });
+    expect(Number(after.rows[0]!.inbound_recipients)).toBeGreaterThan(0);
+    expect(after.rows[0]!.inbound_recipients).toBe(
+      after.rows[0]!.distinct_inbound_recipients,
+    );
+    expect(after.rows[0]!.inbound_deliveries).toBe(
+      after.rows[0]!.distinct_inbound_deliveries,
+    );
   });
 });

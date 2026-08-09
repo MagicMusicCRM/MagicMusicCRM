@@ -49,7 +49,12 @@ describe('PlatformOutboxWorker', () => {
       emitUserAccessInvalidated: jest.fn(),
       emitRoleAccessInvalidated: jest.fn()
     };
-    const worker = new PlatformOutboxWorker(integrity as never, realtime as never);
+    const notifications = { notifyInboundLead: jest.fn() };
+    const worker = new PlatformOutboxWorker(
+      integrity as never,
+      realtime as never,
+      notifications as never
+    );
 
     await expect(worker.runOnce('worker-a')).resolves.toEqual({
       claimed: 3,
@@ -72,6 +77,47 @@ describe('PlatformOutboxWorker', () => {
     );
   });
 
+  it('materializes an inbound Lead notification before publishing its event', async () => {
+    const event = {
+      eventId: 'event-inbound',
+      type: 'inbound.lead.created',
+      occurredAt: new Date(),
+      aggregateType: 'inbound_lead_ingestion',
+      aggregateId: 'ingestion-a',
+      aggregateVersion: 1,
+      requestId: 'request-a',
+      payload: {},
+      attempts: 1
+    };
+    const integrity = {
+      claimOutbox: jest.fn().mockResolvedValue([event]),
+      markOutboxPublished: jest.fn().mockResolvedValue(true),
+      markOutboxFailed: jest.fn()
+    };
+    const realtime = {
+      isReady: jest.fn().mockReturnValue(true),
+      emitCrmChanged: jest.fn()
+    };
+    const notifications = {
+      notifyInboundLead: jest.fn().mockResolvedValue(undefined)
+    };
+    const worker = new PlatformOutboxWorker(
+      integrity as never,
+      realtime as never,
+      notifications as never
+    );
+
+    await expect(worker.runOnce('worker-a')).resolves.toMatchObject({ published: 1 });
+
+    expect(notifications.notifyInboundLead).toHaveBeenCalledWith(
+      'ingestion-a',
+      'event-inbound'
+    );
+    expect(notifications.notifyInboundLead.mock.invocationCallOrder[0]).toBeLessThan(
+      integrity.markOutboxPublished.mock.invocationCallOrder[0]
+    );
+  });
+
   it('keeps an event pending until realtime is ready', async () => {
     const event = {
       eventId: 'event-task',
@@ -89,9 +135,11 @@ describe('PlatformOutboxWorker', () => {
       markOutboxPublished: jest.fn(),
       markOutboxFailed: jest.fn().mockResolvedValue('retry')
     };
-    const worker = new PlatformOutboxWorker(integrity as never, {
-      isReady: () => false
-    } as never);
+    const worker = new PlatformOutboxWorker(
+      integrity as never,
+      { isReady: () => false } as never,
+      { notifyInboundLead: jest.fn() } as never
+    );
 
     await expect(worker.runOnce('worker-a')).resolves.toMatchObject({
       published: 0,

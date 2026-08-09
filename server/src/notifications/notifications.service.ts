@@ -394,6 +394,121 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     this.schedulePushDispatch();
   }
 
+  async notifyInboundLead(
+    ingestionId: string,
+    notificationId: string
+  ): Promise<void> {
+    const roleChannels = await this.loadRoleChannels('new_lead');
+    const roles = [...roleChannels.keys()];
+    if (roles.length === 0) return;
+    const users = await this.database.query<{
+      id: string;
+      role: string;
+      email: string;
+    }>(
+      `
+        select id, role::text as role, email
+        from app.users
+        where role::text = any($1::text[]) and deleted_at is null
+        order by created_at desc
+        limit 10000
+      `,
+      [roles]
+    );
+    const recipients = users.rows
+      .map((user) => ({ ...user, channels: roleChannels.get(user.role) ?? [] }))
+      .filter((user) => user.channels.length > 0);
+    if (recipients.length === 0) return;
+    const lead = await this.database.query<{
+      id: string;
+      name: string;
+      source: string;
+    }>(
+      `
+        select lead.id,
+          btrim(concat_ws(' ', lead.last_name, lead.first_name)) as name,
+          coalesce(nullif(source.display_name, ''), nullif(lead.source, ''), 'Не указан') as source
+        from app.leads lead
+        left join app.lead_sources source on source.id = lead.source_id
+        where lead.inbound_id = $1 and lead.deleted_at is null
+        limit 1
+      `,
+      [ingestionId]
+    );
+    const row = lead.rows[0];
+    if (!row) throw new NotFoundException('Входящая заявка не найдена.');
+    const title = 'Новая заявка';
+    const body = `${row.name} — источник: ${row.source}`;
+    const data = { entityType: 'lead', entityId: row.id };
+    await this.database.transaction(async (client) => {
+      await client.query(
+        'select pg_advisory_xact_lock(hashtextextended($1::text, 0))',
+        [notificationId]
+      );
+      await client.query(
+        `
+          insert into app.notifications (id, type, title, body, data)
+          values ($1, 'new_lead', $2, $3, $4::jsonb)
+          on conflict (id) do nothing
+        `,
+        [notificationId, title, body, JSON.stringify(data)]
+      );
+      for (const recipient of recipients) {
+        await client.query(
+          `
+            insert into app.notification_recipients (notification_id, user_id, delivered_at)
+            values ($1, $2, now())
+            on conflict (notification_id, user_id) do nothing
+          `,
+          [notificationId, recipient.id]
+        );
+        if (recipient.channels.includes('push')) {
+          await client.query(
+            `
+              insert into app.notification_deliveries (
+                notification_id, user_id, channel, provider, status, attempt_count, last_error
+              )
+              select $1, $2, 'push', 'firebase', 'queued', 0, null
+              where not exists (
+                select 1 from app.notification_deliveries
+                where notification_id = $1 and user_id = $2 and channel = 'push'
+              )
+            `,
+            [notificationId, recipient.id]
+          );
+        }
+        if (recipient.channels.includes('email') && recipient.email) {
+          await client.query(
+            `
+              insert into app.email_outbox (user_id, to_email_hash, template, payload)
+              select $1, $2, 'new_lead', $3::jsonb
+              where not exists (
+                select 1 from app.email_outbox
+                where user_id = $1
+                  and template = 'new_lead'
+                  and payload->>'notificationId' = $4
+              )
+            `,
+            [
+              recipient.id,
+              this.sha256(recipient.email.toLowerCase()),
+              JSON.stringify({ notificationId, title, body }),
+              notificationId
+            ]
+          );
+        }
+      }
+    });
+    const channels = [...new Set(recipients.flatMap((item) => item.channels))];
+    this.scheduleDelivery(channels);
+    this.realtime.emitCrmChanged({
+      entity: 'notification',
+      action: 'created',
+      id: notificationId,
+      affectedUserIds: recipients.map((recipient) => recipient.id)
+    });
+  }
+
   async list(actor: ActorContext, query: ListNotificationsQuery) {
     const limit = Math.min(query.limit ?? 50, 100);
     const result = await this.database.query<NotificationRow & CountRow>(
