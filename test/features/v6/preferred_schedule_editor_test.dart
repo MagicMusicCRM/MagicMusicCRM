@@ -79,9 +79,10 @@ void main() {
     PreferredScheduleDraft? result;
     await _openEditor(tester, width: 840, onResult: (value) => result = value);
 
-    await tester.tap(
-      find.byKey(const ValueKey('preferred-schedule-weekday-1')),
-    );
+    final monday = find.byKey(const ValueKey('preferred-schedule-weekday-1'));
+    if (!tester.widget<FilterChip>(monday).selected) {
+      await tester.tap(monday);
+    }
     await _choose(
       tester,
       const ValueKey('preferred-schedule-teacher'),
