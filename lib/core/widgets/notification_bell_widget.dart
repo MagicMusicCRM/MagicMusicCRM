@@ -100,9 +100,18 @@ class _NotificationBellWidgetState
     if (item['is_read'] == false) await _markRead(item['id'].toString());
     final data = item['data'];
     if (data is! Map) return;
+    final body = _notificationBody(item);
+    final fallbackName = item['type'] == 'new_lead'
+        ? body.split(' — источник:').first.trim()
+        : '';
+    final entityName = data['entityName']?.toString().trim();
     final link = EntityLink.fromJson({
       'entityType': data['entityType'],
       'entityId': data['entityId'],
+      if (entityName?.isNotEmpty == true || fallbackName.isNotEmpty)
+        'presentation': {
+          'primary': entityName?.isNotEmpty == true ? entityName : fallbackName,
+        },
     });
     if (!link.isSupported || !mounted) return;
     if (sheetContext.mounted) Navigator.of(sheetContext).pop();

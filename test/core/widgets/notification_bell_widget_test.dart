@@ -22,8 +22,12 @@ class _FakeNotifications implements MagicNotificationsService {
       'type': 'new_lead',
       'title': 'Новая заявка',
       'body': 'Заявка UAT-044 Внешняя — источник: Звонок',
-      'data': {'entityType': 'lead', 'entityId': 'lead-1'},
-          'is_read': false,
+      'data': {
+        'entityType': 'lead',
+        'entityId': 'lead-1',
+        'entityName': 'Заявка UAT-044 Внешняя',
+      },
+      'is_read': false,
     },
   ];
 
@@ -91,5 +95,6 @@ void main() {
     expect(workspace.state.tabs, hasLength(2));
     expect(workspace.state.activeTab.currentRoute.link.rawEntityType, 'lead');
     expect(workspace.state.activeTab.currentRoute.link.entityId, 'lead-1');
+    expect(workspace.state.activeTab.titleHint, 'Лид · Заявка UAT-044 Внешняя');
   });
 }

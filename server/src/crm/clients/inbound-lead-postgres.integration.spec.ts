@@ -248,6 +248,7 @@ describe("manual and inbound Lead commands (PostgreSQL)", () => {
       distinct_inbound_recipients: string;
       inbound_deliveries: string;
       distinct_inbound_deliveries: string;
+      inbound_entity_name: string;
     }>(
       `
         select
@@ -298,7 +299,11 @@ describe("manual and inbound Lead commands (PostgreSQL)", () => {
             select count(distinct (user_id, channel))::text
             from app.notification_deliveries
             where notification_id = $5
-          ) as distinct_inbound_deliveries
+          ) as distinct_inbound_deliveries,
+          (
+            select data->>'entityName' from app.notifications
+            where id = $5
+          ) as inbound_entity_name
         from app.leads lead
         where lead.id = $3
       `,
@@ -325,6 +330,7 @@ describe("manual and inbound Lead commands (PostgreSQL)", () => {
       notes: "Дисциплина: Вокал\nНужен пробный урок",
       manual_notifications: "0",
       inbound_notifications: "1",
+      inbound_entity_name: "Лид Входящий",
     });
     expect(Number(after.rows[0]!.inbound_recipients)).toBeGreaterThan(0);
     expect(after.rows[0]!.inbound_recipients).toBe(

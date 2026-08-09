@@ -439,7 +439,11 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     if (!row) throw new NotFoundException('Входящая заявка не найдена.');
     const title = 'Новая заявка';
     const body = `${row.name} — источник: ${row.source}`;
-    const data = { entityType: 'lead', entityId: row.id };
+    const data = {
+      entityType: 'lead',
+      entityId: row.id,
+      entityName: row.name
+    };
     await this.database.transaction(async (client) => {
       await client.query(
         'select pg_advisory_xact_lock(hashtextextended($1::text, 0))',
