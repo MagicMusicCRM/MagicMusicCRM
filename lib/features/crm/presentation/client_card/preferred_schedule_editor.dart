@@ -366,6 +366,7 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
             if (widget.requireSubscription) ...[
               const SizedBox(height: AppSpace.md),
               DropdownButtonFormField<String>(
+                menuMaxHeight: 256,
                 key: const ValueKey('schedule-plan-subscription'),
                 initialValue: _subscriptionId,
                 decoration: const InputDecoration(labelText: 'Абонемент'),
@@ -382,6 +383,7 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
             const SizedBox(height: AppSpace.md),
           ],
           DropdownButtonFormField<String>(
+            menuMaxHeight: 256,
             key: const ValueKey('preferred-schedule-branch'),
             initialValue: _branchId.isEmpty ? null : _branchId,
             decoration: const InputDecoration(
@@ -446,6 +448,7 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
                     ),
                   ),
                   DropdownButtonFormField<int>(
+                    menuMaxHeight: 256,
                     key: const ValueKey('preferred-schedule-duration'),
                     initialValue: _durationMinutes,
                     decoration: const InputDecoration(
@@ -466,6 +469,7 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
                     },
                   ),
                   DropdownButtonFormField<int>(
+                    menuMaxHeight: 256,
                     key: const ValueKey('preferred-schedule-lessons-per-day'),
                     initialValue: _lessonsPerDay,
                     decoration: const InputDecoration(
@@ -554,6 +558,7 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
                 final catalog = _decisionCatalog;
                 final fields = [
                   DropdownButtonFormField<String>(
+                    menuMaxHeight: 256,
                     key: const ValueKey('schedule-plan-settlement-type'),
                     initialValue: _settlementTypeKey,
                     decoration: const InputDecoration(
@@ -571,6 +576,7 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
                         _changed(() => _settlementTypeKey = value),
                   ),
                   DropdownButtonFormField<String>(
+                    menuMaxHeight: 256,
                     key: const ValueKey('schedule-plan-compensation-rule'),
                     initialValue: _teacherCompensationRuleKey,
                     decoration: const InputDecoration(

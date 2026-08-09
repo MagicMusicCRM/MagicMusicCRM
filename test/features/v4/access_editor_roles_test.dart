@@ -111,7 +111,12 @@ Widget _host(String actorRole, AccessEditorTestDataSource source) {
 Future<void> _selectRole(WidgetTester tester, String label) async {
   await tester.tap(find.byKey(const Key('access-role-selector')));
   await tester.pumpAndSettle();
-  await tester.tap(find.text(label).last);
+  if (label == 'Администратор системы') {
+    await tester.drag(find.byType(ListView).last, const Offset(0, -200));
+    await tester.pumpAndSettle();
+  }
+  final option = find.text(label).last;
+  await tester.tap(option);
   await tester.pumpAndSettle();
 }
 

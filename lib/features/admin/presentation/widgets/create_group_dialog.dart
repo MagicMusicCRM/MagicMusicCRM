@@ -185,6 +185,7 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
+            menuMaxHeight: 256,
             key: ValueKey('group-branch-$_branchId'),
             initialValue: _branchId,
             isExpanded: true,

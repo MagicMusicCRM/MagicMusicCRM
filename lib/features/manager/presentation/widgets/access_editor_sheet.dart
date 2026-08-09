@@ -313,6 +313,7 @@ class _AccessEditorSheetState extends ConsumerState<AccessEditorSheet> {
                       padding: const EdgeInsets.all(AppSpace.lg),
                       children: [
                         DropdownButtonFormField<String>(
+                          menuMaxHeight: 256,
                           key: const Key('access-role-selector'),
                           initialValue: _selectedRole,
                           decoration: const InputDecoration(labelText: 'Роль'),

@@ -279,6 +279,7 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
         children: [
           Expanded(
             child: DropdownButtonFormField<String>(
+              menuMaxHeight: 256,
               key: ValueKey('schedule-branch-selector-${value ?? 'none'}'),
               initialValue: value,
               isExpanded: true,

@@ -444,6 +444,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
           ),
           const SizedBox(height: AppSpace.md),
           DropdownButtonFormField<String>(
+            menuMaxHeight: 256,
             key: const Key('lesson-decision-settlement'),
             initialValue: _settlementKey,
             isExpanded: true,
@@ -465,6 +466,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
           ),
           const SizedBox(height: AppSpace.md),
           DropdownButtonFormField<String>(
+            menuMaxHeight: 256,
             key: const Key('lesson-decision-compensation'),
             initialValue: _compensationKey,
             isExpanded: true,

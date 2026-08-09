@@ -1126,6 +1126,7 @@ class _MobileTaskFilter extends StatelessWidget {
           children: [
             Expanded(
               child: DropdownButtonFormField<String>(
+                menuMaxHeight: 256,
                 initialValue: value,
                 decoration: const InputDecoration(
                   isDense: true,
@@ -1643,6 +1644,7 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField<String>(
+              menuMaxHeight: 256,
               key: const Key('shared-task-priority'),
               initialValue: _priority,
               decoration: const InputDecoration(labelText: 'Приоритет'),
@@ -1703,6 +1705,7 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
             if (_audienceType != 'allBranches') ...[
               const SizedBox(height: 10),
               DropdownButtonFormField<String>(
+                menuMaxHeight: 256,
                 key: const Key('shared-task-audience-target'),
                 initialValue: _targetId,
                 decoration: InputDecoration(

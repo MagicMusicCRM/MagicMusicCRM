@@ -150,6 +150,7 @@ class _ProvisionAccessDialogState extends State<_ProvisionAccessDialog> {
               if (widget.roles case final roles?) ...[
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
+                  menuMaxHeight: 256,
                   initialValue: _role,
                   isExpanded: true,
                   decoration: const InputDecoration(

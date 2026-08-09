@@ -17,6 +17,7 @@ class SearchablePickerField extends StatefulWidget {
   final String hintText;
   final String? selectedId;
   final String? selectedLabel;
+  final String? errorText;
   final List<SearchableSelectItem> items;
   final ValueChanged<SearchableSelectItem?> onSelected;
 
@@ -34,6 +35,7 @@ class SearchablePickerField extends StatefulWidget {
     this.hintText = 'Начните вводить…',
     this.selectedId,
     this.selectedLabel,
+    this.errorText,
     this.onSearch,
     this.isNullable = true,
     this.enabled = true,
@@ -184,6 +186,7 @@ class _SearchablePickerFieldState extends State<SearchablePickerField> {
         label: Text(widget.label),
         hintText: widget.placeholder,
         helperText: widget.hintText,
+        errorText: widget.errorText,
         leadingIcon: _searching
             ? const Padding(
                 padding: EdgeInsets.all(12),

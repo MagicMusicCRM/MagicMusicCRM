@@ -97,6 +97,7 @@ Future<Map<String, dynamic>?> showEditContactPersonDialog(
             ),
             const SizedBox(height: AppSpace.md),
             DropdownButtonFormField<String>(
+              menuMaxHeight: 256,
               initialValue: relationOptions.contains(relation) ? relation : '',
               isExpanded: true,
               decoration: clientCardInputDecoration(
@@ -261,6 +262,7 @@ Future<FamilyMemberInput?> showAddFamilyMemberSheet(
               ),
               const SizedBox(height: AppSpace.sm),
               DropdownButtonFormField<String>(
+                menuMaxHeight: 256,
                 initialValue: role,
                 isExpanded: true,
                 decoration: clientCardInputDecoration(cs, isDense: true),
@@ -287,6 +289,7 @@ Future<FamilyMemberInput?> showAddFamilyMemberSheet(
               ),
               const SizedBox(height: AppSpace.sm),
               DropdownButtonFormField<String>(
+                menuMaxHeight: 256,
                 initialValue: entityType,
                 isExpanded: true,
                 decoration: clientCardInputDecoration(cs, isDense: true),

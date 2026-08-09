@@ -353,6 +353,7 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
+                  menuMaxHeight: 256,
                   initialValue: _role.isEmpty ? null : _role,
                   decoration: const InputDecoration(labelText: 'CRM роль'),
                   items: _dropdownItems(_roleLabels, _role),
@@ -408,6 +409,7 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
+                  menuMaxHeight: 256,
                   initialValue: _status.isEmpty ? null : _status,
                   decoration: const InputDecoration(labelText: 'Статус'),
                   items: _dropdownItems(_statusLabels, _status),

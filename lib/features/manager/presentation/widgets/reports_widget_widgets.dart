@@ -430,6 +430,7 @@ class _ReportFilterDropdown extends StatelessWidget {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 220, minWidth: 170),
       child: DropdownButtonFormField<String>(
+        menuMaxHeight: 256,
         key: ValueKey('$label-$normalized'),
         initialValue: normalized,
         isExpanded: true,

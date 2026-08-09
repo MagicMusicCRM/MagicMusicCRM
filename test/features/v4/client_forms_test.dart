@@ -205,6 +205,13 @@ void main() {
       expect(find.text('Укажите имя.'), findsOneWidget);
       expect(find.text('Укажите фамилию.'), findsOneWidget);
       expect(find.text('Выберите источник.'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('lead-source')),
+          matching: find.byType(DropdownMenu<String>),
+        ),
+        findsOneWidget,
+      );
 
       await _enterLeadMinimum(tester);
       await tester.tap(find.byKey(const ValueKey('lead-submit')));

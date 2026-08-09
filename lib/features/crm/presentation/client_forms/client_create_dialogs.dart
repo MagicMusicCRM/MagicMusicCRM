@@ -6,6 +6,8 @@ import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
+import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
+import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/core/widgets/v7/adaptive_surface.dart';
 
 import 'client_forms_api.dart';
@@ -280,23 +282,24 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
                         'Нет доступных филиалов. Создание лида недоступно.',
                   )
                 else
-                  DropdownButtonFormField<String>(
+                  SearchablePickerField(
                     key: const ValueKey('lead-branch'),
-                    initialValue: _branchId,
-                    isExpanded: true,
-                    decoration: InputDecoration(
-                      labelText: 'Филиал *',
-                      errorText: _fieldErrors['branchId'],
-                    ),
+                    label: 'Филиал *',
+                    selectedId: _branchId,
+                    placeholder: 'Выберите филиал',
+                    hintText: 'Введите название филиала',
+                    errorText: _fieldErrors['branchId'],
+                    isNullable: false,
+                    enabled: !_saving,
                     items: _branches
                         .map(
-                          (branch) => DropdownMenuItem(
-                            value: branch['id']?.toString(),
-                            child: Text(branch['name']?.toString() ?? '—'),
+                          (branch) => SearchableSelectItem(
+                            id: branch['id']?.toString() ?? '',
+                            label: branch['name']?.toString() ?? '—',
                           ),
                         )
                         .toList(growable: false),
-                    onChanged: _saving ? null : _selectBranch,
+                    onSelected: (item) => _selectBranch(item?.id),
                   ),
                 const SizedBox(height: AppSpace.sm),
                 if (_statuses.isEmpty)
@@ -306,6 +309,7 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
                   )
                 else
                   DropdownButtonFormField<String>(
+                    menuMaxHeight: 256,
                     key: ValueKey(
                       'lead-status-${_branchId ?? 'school'}-${_statuses.map((stage) => stage.key).join('-')}',
                     ),
@@ -334,33 +338,24 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
                         'Нет активных источников. Директор должен добавить источник.',
                   )
                 else
-                  KeyedSubtree(
+                  SearchablePickerField(
                     key: const ValueKey('lead-source'),
-                    child: DropdownButtonFormField<String>(
-                      key: ValueKey(
-                        'lead-source-${_sources.map((item) => item['id']).join('-')}',
-                      ),
-                      initialValue: _sourceId,
-                      isExpanded: true,
-                      decoration: InputDecoration(
-                        labelText: 'Рекламный источник *',
-                        errorText: _fieldErrors['sourceId'],
-                      ),
-                      hint: const Text('Выберите источник'),
-                      items: _sources
-                          .map(
-                            (source) => DropdownMenuItem(
-                              value: source['id']?.toString(),
-                              child: Text(
-                                source['displayName']?.toString() ?? '—',
-                              ),
-                            ),
-                          )
-                          .toList(growable: false),
-                      onChanged: _saving
-                          ? null
-                          : (value) => setState(() => _sourceId = value),
-                    ),
+                    label: 'Рекламный источник *',
+                    selectedId: _sourceId,
+                    placeholder: 'Выберите источник',
+                    hintText: 'Введите название источника',
+                    errorText: _fieldErrors['sourceId'],
+                    isNullable: false,
+                    enabled: !_saving,
+                    items: _sources
+                        .map(
+                          (source) => SearchableSelectItem(
+                            id: source['id']?.toString() ?? '',
+                            label: source['displayName']?.toString() ?? '—',
+                          ),
+                        )
+                        .toList(growable: false),
+                    onSelected: (item) => setState(() => _sourceId = item?.id),
                   ),
                 _ClientFieldInputs(
                   fields: _fields,
@@ -623,23 +618,24 @@ class _StudentCreateDialogV4State extends ConsumerState<StudentCreateDialogV4> {
                         'Нет доступных филиалов. Создание ученика недоступно.',
                   )
                 else
-                  DropdownButtonFormField<String>(
+                  SearchablePickerField(
                     key: const ValueKey('student-branch'),
-                    initialValue: _branchId,
-                    isExpanded: true,
-                    decoration: InputDecoration(
-                      labelText: 'Филиал *',
-                      errorText: _fieldErrors['branchId'],
-                    ),
+                    label: 'Филиал *',
+                    selectedId: _branchId,
+                    placeholder: 'Выберите филиал',
+                    hintText: 'Введите название филиала',
+                    errorText: _fieldErrors['branchId'],
+                    isNullable: false,
+                    enabled: !_saving,
                     items: _branches
                         .map(
-                          (branch) => DropdownMenuItem(
-                            value: branch['id']?.toString(),
-                            child: Text(branch['name']?.toString() ?? '—'),
+                          (branch) => SearchableSelectItem(
+                            id: branch['id']?.toString() ?? '',
+                            label: branch['name']?.toString() ?? '—',
                           ),
                         )
                         .toList(growable: false),
-                    onChanged: _saving ? null : _selectBranch,
+                    onSelected: (item) => _selectBranch(item?.id),
                   ),
                 const SizedBox(height: AppSpace.sm),
                 if (_sources.isEmpty)
@@ -648,27 +644,24 @@ class _StudentCreateDialogV4State extends ConsumerState<StudentCreateDialogV4> {
                         'Нет активных рекламных источников. Создание ученика недоступно.',
                   )
                 else
-                  DropdownButtonFormField<String>(
+                  SearchablePickerField(
                     key: const ValueKey('student-source'),
-                    initialValue: _sourceId,
-                    isExpanded: true,
-                    decoration: InputDecoration(
-                      labelText: 'Рекламный источник *',
-                      errorText: _fieldErrors['sourceId'],
-                    ),
+                    label: 'Рекламный источник *',
+                    selectedId: _sourceId,
+                    placeholder: 'Выберите источник',
+                    hintText: 'Введите название источника',
+                    errorText: _fieldErrors['sourceId'],
+                    isNullable: false,
+                    enabled: !_saving,
                     items: _sources
                         .map(
-                          (source) => DropdownMenuItem(
-                            value: source['id']?.toString(),
-                            child: Text(
-                              source['displayName']?.toString() ?? '—',
-                            ),
+                          (source) => SearchableSelectItem(
+                            id: source['id']?.toString() ?? '',
+                            label: source['displayName']?.toString() ?? '—',
                           ),
                         )
                         .toList(growable: false),
-                    onChanged: _saving
-                        ? null
-                        : (value) => setState(() => _sourceId = value),
+                    onSelected: (item) => setState(() => _sourceId = item?.id),
                   ),
                 const SizedBox(height: AppSpace.sm),
                 if (_statuses.isEmpty)
@@ -678,6 +671,7 @@ class _StudentCreateDialogV4State extends ConsumerState<StudentCreateDialogV4> {
                   )
                 else
                   DropdownButtonFormField<String>(
+                    menuMaxHeight: 256,
                     key: ValueKey(
                       'student-status-${_branchId ?? 'school'}-${_statuses.map((stage) => stage.key).join('-')}',
                     ),
@@ -910,17 +904,18 @@ class _ClientFieldInputs extends StatelessWidget {
           ),
         );
       }
-      return DropdownButtonFormField<String>(
+      return SearchablePickerField(
         key: ValueKey('custom-field-$key'),
-        initialValue: values[id]?.toString(),
-        isExpanded: true,
-        decoration: InputDecoration(labelText: label, errorText: error),
+        label: label,
+        selectedId: values[id]?.toString(),
+        placeholder: 'Выберите значение',
+        hintText: 'Введите значение для поиска',
+        errorText: error,
+        enabled: enabled,
         items: options
-            .map(
-              (option) => DropdownMenuItem(value: option, child: Text(option)),
-            )
+            .map((option) => SearchableSelectItem(id: option, label: option))
             .toList(growable: false),
-        onChanged: enabled ? (value) => onChanged(id, value) : null,
+        onSelected: (item) => onChanged(id, item?.id),
       );
     }
     if (type == 'multi_select' || type == 'checkbox_group') {

@@ -464,6 +464,7 @@ class _CrmConfigurationWorkspaceState
             SizedBox(
               width: 270,
               child: DropdownButtonFormField<String?>(
+                menuMaxHeight: 256,
                 key: const ValueKey('configuration-scope'),
                 initialValue: _branchId,
                 decoration: const InputDecoration(
@@ -1337,6 +1338,7 @@ class _CommerceCatalogEditorDialogState
             const SizedBox(height: AppSpace.sm),
             if (widget.settlement) ...[
               DropdownButtonFormField<String>(
+                menuMaxHeight: 256,
                 key: const ValueKey('commerce-settlement-color'),
                 initialValue: _color,
                 decoration: const InputDecoration(labelText: 'Цвет метки *'),
@@ -1398,6 +1400,7 @@ class _CommerceCatalogEditorDialogState
                 ),
             ] else ...[
               DropdownButtonFormField<String>(
+                menuMaxHeight: 256,
                 key: const ValueKey('commerce-compensation-mode'),
                 initialValue: _mode,
                 decoration: const InputDecoration(labelText: 'Расчёт *'),
@@ -1592,6 +1595,7 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
+                      menuMaxHeight: 256,
                       initialValue: _entity,
                       decoration: const InputDecoration(labelText: 'Объект'),
                       items: const [
@@ -1609,6 +1613,7 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
                   const SizedBox(width: AppSpace.sm),
                   Expanded(
                     child: DropdownButtonFormField<String>(
+                      menuMaxHeight: 256,
                       initialValue: _type,
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Тип'),
@@ -1638,6 +1643,7 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
+                      menuMaxHeight: 256,
                       initialValue: _category,
                       decoration: const InputDecoration(labelText: 'Категория'),
                       items: widget.categories
@@ -1654,6 +1660,7 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
                   const SizedBox(width: AppSpace.sm),
                   Expanded(
                     child: DropdownButtonFormField<String>(
+                      menuMaxHeight: 256,
                       initialValue: _width,
                       decoration: const InputDecoration(labelText: 'Ширина'),
                       items: const [
@@ -1678,6 +1685,7 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
               if (selection) ...[
                 const SizedBox(height: AppSpace.sm),
                 DropdownButtonFormField<String?>(
+                  menuMaxHeight: 256,
                   key: ValueKey(_optionSetKey),
                   initialValue: _optionSetKey,
                   isExpanded: true,

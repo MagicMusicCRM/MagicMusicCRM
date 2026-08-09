@@ -82,6 +82,7 @@ class _TeacherRateSelectorState extends State<TeacherRateSelector> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         DropdownButtonFormField<String>(
+          menuMaxHeight: 256,
           key: ValueKey('rate-mode-$_mode'),
           initialValue: _mode,
           isExpanded: true,

@@ -277,6 +277,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
             SizedBox(
               width: 260,
               child: DropdownButtonFormField<String?>(
+                menuMaxHeight: 256,
                 key: const ValueKey('dashboard-scope'),
                 initialValue: _dashboardFilter.branchId,
                 isExpanded: true,
@@ -358,6 +359,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
               child: SizedBox(
                 width: 320,
                 child: DropdownButtonFormField<String>(
+                  menuMaxHeight: 256,
                   key: ValueKey('analytics-journal-$selected'),
                   initialValue: selected,
                   isExpanded: true,

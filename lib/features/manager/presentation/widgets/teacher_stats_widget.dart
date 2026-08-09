@@ -384,6 +384,7 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
           SizedBox(
             width: 180,
             child: DropdownButtonFormField<String?>(
+              menuMaxHeight: 256,
               // Fixed-width filter box: without isExpanded the selected label plus
               // the arrow overflow the 180px SizedBox and paint the stripes.
               isExpanded: true,
@@ -418,6 +419,7 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
         SizedBox(
           width: 200,
           child: DropdownButtonFormField<String?>(
+            menuMaxHeight: 256,
             // Fixed-width filter box: without isExpanded the selected label plus
             // the arrow overflow the 180px SizedBox and paint the stripes.
             isExpanded: true,
@@ -454,6 +456,7 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
         SizedBox(
           width: 180,
           child: DropdownButtonFormField<String?>(
+            menuMaxHeight: 256,
             // Fixed-width filter box: without isExpanded the selected label plus
             // the arrow overflow the 180px SizedBox and paint the stripes.
             isExpanded: true,
@@ -496,6 +499,7 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
         SizedBox(
           width: 180,
           child: DropdownButtonFormField<String?>(
+            menuMaxHeight: 256,
             // Fixed-width filter box: without isExpanded the selected label plus
             // the arrow overflow the 180px SizedBox and paint the stripes.
             isExpanded: true,
@@ -525,6 +529,7 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
         SizedBox(
           width: 180,
           child: DropdownButtonFormField<String?>(
+            menuMaxHeight: 256,
             // Fixed-width filter box: without isExpanded the selected label plus
             // the arrow overflow the 180px SizedBox and paint the stripes.
             isExpanded: true,
@@ -551,6 +556,7 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
         SizedBox(
           width: 160,
           child: DropdownButtonFormField<String?>(
+            menuMaxHeight: 256,
             // Fixed-width filter box: without isExpanded the selected label plus
             // the arrow overflow the 180px SizedBox and paint the stripes.
             isExpanded: true,

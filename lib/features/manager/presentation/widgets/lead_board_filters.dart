@@ -34,6 +34,7 @@ Widget filterDropdown({
       child: SizedBox(
         width: width,
         child: DropdownButtonFormField<String>(
+          menuMaxHeight: 256,
           key: ValueKey('$label:$normalizedValue'),
           initialValue: normalizedValue,
           isExpanded: true,

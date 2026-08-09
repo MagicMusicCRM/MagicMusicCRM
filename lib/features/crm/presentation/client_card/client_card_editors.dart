@@ -68,29 +68,20 @@ extension _ClientCardEditors on _ClientCardState {
 
     if (field.type == 'select') {
       final current = rawValue?.toString() ?? '';
-      final initialValue = field.options.contains(current) ? current : '';
+      final selectedId = field.options.contains(current) ? current : null;
       return Padding(
         padding: const EdgeInsets.only(bottom: AppSpace.md),
-        child: DropdownButtonFormField<String>(
-          initialValue: initialValue,
-          isExpanded: true,
-          decoration: _inputDecoration(
-            cs,
-            label: label,
-            helperText: field.hint,
-            isDense: true,
-          ),
+        child: SearchablePickerField(
+          label: label,
+          selectedId: selectedId,
+          placeholder: 'Выберите значение',
+          hintText: field.hint ?? 'Введите значение для поиска',
           items: [
-            const DropdownMenuItem(value: '', child: Text('Не выбрано')),
-            ...field.options.map(
-              (option) => DropdownMenuItem(value: option, child: Text(option)),
-            ),
+            for (final option in field.options)
+              SearchableSelectItem(id: option, label: option),
           ],
-          onChanged: (value) => _updateCustomDataForEntity(
-            field.entity,
-            field.key,
-            value == null || value.isEmpty ? null : value,
-          ),
+          onSelected: (item) =>
+              _updateCustomDataForEntity(field.entity, field.key, item?.id),
         ),
       );
     }
@@ -666,55 +657,53 @@ extension _ClientCardEditors on _ClientCardState {
   Widget _buildBranchDropdown(ColorScheme cs, String label) {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.md),
-      child: DropdownButtonFormField<String>(
-        initialValue: _clientBranchId,
-        isExpanded: true,
-        decoration: _inputDecoration(cs, label: label, isDense: true),
+      child: SearchablePickerField(
+        label: label,
+        selectedId: _clientBranchId,
+        placeholder: 'Выберите филиал',
+        hintText: 'Введите название филиала',
+        isNullable: false,
         items: _branches
             .map(
-              (b) => DropdownMenuItem(
-                value: b['id'].toString(),
-                child: Text(b['name']),
+              (branch) => SearchableSelectItem(
+                id: branch['id'].toString(),
+                label: branch['name']?.toString() ?? '—',
               ),
             )
-            .toList(),
-        onChanged: (v) => _updateClientCore('branchId', v),
+            .toList(growable: false),
+        onSelected: (item) => _updateClientCore('branchId', item?.id),
       ),
     );
   }
 
   Widget _buildSourceDropdown(ColorScheme cs) {
     final current = _clientSourceId;
-    final initialValue =
-        _sources.any((source) => source['id']?.toString() == current)
-        ? current
-        : null;
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.md),
-      child: DropdownButtonFormField<String>(
+      child: SearchablePickerField(
         key: ValueKey('client-source-$_editorEpoch'),
-        initialValue: initialValue,
-        isExpanded: true,
-        decoration: _inputDecoration(
-          cs,
-          label: 'Рекламный источник *',
-          isDense: true,
-        ),
+        label: 'Рекламный источник *',
+        selectedId: current,
+        placeholder: 'Выберите источник',
+        hintText: 'Введите название источника',
+        isNullable: false,
         items: _sources
+            .where(
+              (source) =>
+                  source['isActive'] == true ||
+                  source['id']?.toString() == current,
+            )
             .map((source) {
               final id = source['id']?.toString() ?? '';
               final active = source['isActive'] == true;
-              return DropdownMenuItem(
-                value: id,
-                enabled: active || id == current,
-                child: Text(
-                  '${active ? '' : 'Архив · '}${source['displayName'] ?? '—'}',
-                  overflow: TextOverflow.ellipsis,
-                ),
+              return SearchableSelectItem(
+                id: id,
+                label:
+                    '${active ? '' : 'Архив · '}${source['displayName'] ?? '—'}',
               );
             })
             .toList(growable: false),
-        onChanged: (value) => _updateClientCore('sourceId', value),
+        onSelected: (item) => _updateClientCore('sourceId', item?.id),
       ),
     );
   }

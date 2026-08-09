@@ -340,6 +340,7 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
           );
 
     final branchField = DropdownButtonFormField<String>(
+      menuMaxHeight: 256,
       key: ValueKey('branch:$_selectedBranchId'),
       initialValue: _selectedBranchId,
       isExpanded: true,

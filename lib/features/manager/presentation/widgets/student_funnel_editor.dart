@@ -389,6 +389,7 @@ class _StudentFunnelEditorState extends ConsumerState<_StudentFunnelEditor> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           DropdownButtonFormField<String>(
+            menuMaxHeight: 256,
             key: ValueKey('pipeline-type-$_clientType'),
             initialValue: _clientType,
             decoration: const InputDecoration(labelText: 'Воронка'),
@@ -400,6 +401,7 @@ class _StudentFunnelEditorState extends ConsumerState<_StudentFunnelEditor> {
           ),
           const SizedBox(height: AppSpace.md),
           DropdownButtonFormField<String>(
+            menuMaxHeight: 256,
             key: ValueKey('funnel-scope-${_branchId ?? 'school'}'),
             initialValue: _branchId ?? '__school__',
             decoration: const InputDecoration(labelText: 'Область настройки'),
@@ -562,6 +564,7 @@ class _StageEditor extends StatelessWidget {
             ),
             const SizedBox(height: AppSpace.sm),
             DropdownButtonFormField<String>(
+              menuMaxHeight: 256,
               initialValue: stage.style,
               isExpanded: true,
               decoration: const InputDecoration(labelText: 'Цвет'),

@@ -237,6 +237,7 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
+            menuMaxHeight: 256,
             initialValue: _branchId,
             isExpanded: true,
             decoration: const InputDecoration(labelText: 'Филиал *'),
@@ -254,6 +255,7 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
+            menuMaxHeight: 256,
             initialValue: _selectedRole,
             isExpanded: true,
             decoration: const InputDecoration(labelText: 'Роль доступа *'),

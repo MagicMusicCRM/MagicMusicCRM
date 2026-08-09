@@ -233,6 +233,7 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
+            menuMaxHeight: 256,
             initialValue: _branchId,
             isExpanded: true,
             decoration: const InputDecoration(labelText: 'Филиал *'),

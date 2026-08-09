@@ -25,39 +25,40 @@ class _FakeApiClient extends MagicApiClient {
   }) async {
     if (path == '/crm/reports/teacher-stats') {
       return <String, dynamic>{
-        'items': [
-          {
-            'teacherId': 'teacher-a',
-            'teacherName': 'Иван Педагог',
-            'hoursTotal': 3,
-            'accruedTotal': 2300,
-            'paidTotal': 0,
-            'units': [
+            'items': [
               {
-                'unitType': 'trial',
-                'groupId': null,
-                'unitName': 'Пробное — Анна',
-                'rate': 700,
-                'days': <dynamic>[],
-                'lessonIds': ['lesson-1', 'lesson-2'],
-                'hoursTotal': 2,
-                'accruedTotal': 1400,
-              },
-              {
-                'unitType': 'group',
-                'groupId': 'group-a',
-                'unitName': 'Гитара-1',
-                'rate': 900,
-                'days': <dynamic>[],
-                'lessonIds': ['lesson-3'],
-                'hoursTotal': 1,
-                'accruedTotal': 900,
+                'teacherId': 'teacher-a',
+                'teacherName': 'Иван Педагог',
+                'hoursTotal': 3,
+                'accruedTotal': 2300,
+                'paidTotal': 0,
+                'units': [
+                  {
+                    'unitType': 'trial',
+                    'groupId': null,
+                    'unitName': 'Пробное — Анна',
+                    'rate': 700,
+                    'days': <dynamic>[],
+                    'lessonIds': ['lesson-1', 'lesson-2'],
+                    'hoursTotal': 2,
+                    'accruedTotal': 1400,
+                  },
+                  {
+                    'unitType': 'group',
+                    'groupId': 'group-a',
+                    'unitName': 'Гитара-1',
+                    'rate': 900,
+                    'days': <dynamic>[],
+                    'lessonIds': ['lesson-3'],
+                    'hoursTotal': 1,
+                    'accruedTotal': 900,
+                  },
+                ],
               },
             ],
-          },
-        ],
-        'totals': {'hoursTotal': 3, 'accruedTotal': 2300, 'paidTotal': 0},
-      } as T;
+            'totals': {'hoursTotal': 3, 'accruedTotal': 2300, 'paidTotal': 0},
+          }
+          as T;
     }
     // Reference lists (branches, teachers, disciplines).
     return <String, dynamic>{'items': <dynamic>[]} as T;
@@ -92,15 +93,19 @@ void main() {
   // the filter bar is wider still. The default 800x600 test viewport overflows
   // them, and the layout assertions drown the real ones.
   setUp(() {
-    final view =
-        TestWidgetsFlutterBinding.ensureInitialized().platformDispatcher.views.first;
+    final view = TestWidgetsFlutterBinding.ensureInitialized()
+        .platformDispatcher
+        .views
+        .first;
     view.physicalSize = const Size(1800, 1600);
     view.devicePixelRatio = 1.0;
   });
 
   tearDown(() {
-    final view =
-        TestWidgetsFlutterBinding.ensureInitialized().platformDispatcher.views.first;
+    final view = TestWidgetsFlutterBinding.ensureInitialized()
+        .platformDispatcher
+        .views
+        .first;
     view.resetPhysicalSize();
     view.resetDevicePixelRatio();
   });
@@ -137,7 +142,10 @@ void main() {
     // The rate is a dropdown: open it, then pick the preset.
     await tester.tap(find.text('Ставка педагога (по умолчанию)').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Входит в оклад').last);
+    await tester.drag(find.byType(ListView).last, const Offset(0, -200));
+    await tester.pumpAndSettle();
+    final salaried = find.text('Входит в оклад').last;
+    await tester.tap(salaried);
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Применить'));

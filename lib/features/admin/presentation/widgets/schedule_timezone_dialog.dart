@@ -32,6 +32,7 @@ Future<int?> showBranchTimezoneDialog(
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<int>(
+                menuMaxHeight: 256,
                 initialValue: selected,
                 decoration: const InputDecoration(labelText: 'Смещение'),
                 items: options

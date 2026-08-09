@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/models/types.dart';
+import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 
 import 'card_fake_api.dart';
 
@@ -290,8 +291,15 @@ void main() {
         statuses: statuses,
       );
 
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is SearchablePickerField &&
+              widget.label == 'Рекламный источник *',
+        ),
+        findsOneWidget,
+      );
       for (final label in const [
-        'Рекламный источник *',
         'Тип обращения',
         'Цель обучения',
         'Уровень',

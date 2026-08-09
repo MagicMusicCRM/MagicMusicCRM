@@ -741,6 +741,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
               const SizedBox(height: 16),
               _responsivePair(
                 DropdownButtonFormField<String>(
+                  menuMaxHeight: 256,
                   initialValue: _selectedBranchId,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Филиал *'),
@@ -828,6 +829,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
               _responsivePair(_dateButton(), _timeButton()),
               const SizedBox(height: 16),
               DropdownButtonFormField<int>(
+                menuMaxHeight: 256,
                 key: const ValueKey('lesson-duration-field'),
                 initialValue: _durationMinutes,
                 decoration: const InputDecoration(labelText: 'Длительность *'),
@@ -879,6 +881,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                 )
               else
                 DropdownButtonFormField<String>(
+                  menuMaxHeight: 256,
                   key: const ValueKey('lesson-completion-type-field'),
                   initialValue: _completionType,
                   decoration: const InputDecoration(
@@ -899,6 +902,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
               const SizedBox(height: 16),
               _responsivePair(
                 DropdownButtonFormField<String>(
+                  menuMaxHeight: 256,
                   key: const ValueKey('lesson-settlement-type-field'),
                   initialValue: _settlementTypeKey,
                   decoration: const InputDecoration(
@@ -921,6 +925,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                         }),
                 ),
                 DropdownButtonFormField<String>(
+                  menuMaxHeight: 256,
                   key: const ValueKey('lesson-compensation-rule-field'),
                   initialValue: _compensationRuleKey,
                   decoration: const InputDecoration(
@@ -942,6 +947,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
+                menuMaxHeight: 256,
                 key: const ValueKey('lesson-charge-type-field'),
                 initialValue: _clientChargeType,
                 decoration: const InputDecoration(

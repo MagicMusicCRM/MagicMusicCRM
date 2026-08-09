@@ -269,6 +269,7 @@ class _ClientPaymentFormState extends State<ClientPaymentForm> {
                       ),
                     ),
                     DropdownButtonFormField<SubscriptionPaymentMethod>(
+                      menuMaxHeight: 256,
                       key: const Key('payment-method'),
                       initialValue: _method,
                       decoration: const InputDecoration(
@@ -294,6 +295,7 @@ class _ClientPaymentFormState extends State<ClientPaymentForm> {
                             },
                     ),
                     DropdownButtonFormField<ClientPaymentStatus>(
+                      menuMaxHeight: 256,
                       key: const Key('payment-status'),
                       isExpanded: true,
                       initialValue: _status,
@@ -357,6 +359,7 @@ class _ClientPaymentFormState extends State<ClientPaymentForm> {
               ),
               const SizedBox(height: AppSpace.md),
               DropdownButtonFormField<String>(
+                menuMaxHeight: 256,
                 key: const Key('payment-subscription'),
                 initialValue: _subscriptionId,
                 decoration: const InputDecoration(
@@ -684,6 +687,7 @@ class _ClientPaymentTransitionFormState
           if (paid) ...[
             const SizedBox(height: AppSpace.sm),
             DropdownButtonFormField<SubscriptionPaymentMethod>(
+              menuMaxHeight: 256,
               initialValue: _method,
               decoration: const InputDecoration(labelText: 'Способ оплаты'),
               items: const [
@@ -1030,6 +1034,7 @@ class _ClientPaymentAdjustmentFormState
                 ),
               const SizedBox(height: AppSpace.md),
               DropdownButtonFormField<PaymentAdjustmentKind>(
+                menuMaxHeight: 256,
                 key: const Key('adjustment-kind'),
                 initialValue: _kind,
                 decoration: const InputDecoration(labelText: 'Операция'),
@@ -1054,6 +1059,7 @@ class _ClientPaymentAdjustmentFormState
               if (_kind == PaymentAdjustmentKind.correction) ...[
                 const SizedBox(height: AppSpace.md),
                 DropdownButtonFormField<String>(
+                  menuMaxHeight: 256,
                   key: const Key('adjustment-direction'),
                   initialValue: _direction,
                   decoration: const InputDecoration(labelText: 'Направление'),

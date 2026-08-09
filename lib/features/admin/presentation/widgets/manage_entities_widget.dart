@@ -173,6 +173,7 @@ class _SystemSettingsWorkspaceState
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: DropdownButtonFormField<String>(
+                          menuMaxHeight: 256,
                           initialValue: _area,
                           isExpanded: true,
                           decoration: const InputDecoration(

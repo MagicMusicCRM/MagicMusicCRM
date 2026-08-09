@@ -138,6 +138,7 @@ class _ArchivePreviewDialogState extends State<_ArchivePreviewDialog> {
               if (!alreadyArchived) ...[
                 const SizedBox(height: AppSpace.md),
                 DropdownButtonFormField<String>(
+                  menuMaxHeight: 256,
                   key: const ValueKey('client-archive-reason'),
                   initialValue: _reason,
                   isExpanded: true,

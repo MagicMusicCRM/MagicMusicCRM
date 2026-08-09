@@ -442,6 +442,7 @@ class _ExpenseSheetFormState extends State<_ExpenseSheetForm> {
         ),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
+          menuMaxHeight: 256,
           initialValue: _category,
           dropdownColor: colors.surface,
           decoration: InputDecoration(

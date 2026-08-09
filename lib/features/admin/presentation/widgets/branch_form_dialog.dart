@@ -245,6 +245,7 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<int>(
+                menuMaxHeight: 256,
                 initialValue: _utcOffsetMinutes,
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Часовой пояс'),

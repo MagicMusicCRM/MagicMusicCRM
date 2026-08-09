@@ -615,6 +615,7 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
               const _SectionTitle('График рассрочки'),
               const SizedBox(height: AppSpace.md),
               DropdownButtonFormField<int>(
+                menuMaxHeight: 256,
                 key: const Key('subscription-installment-count'),
                 initialValue: _installmentCount,
                 decoration: clientCardInputDecoration(

@@ -869,6 +869,7 @@ extension _ClientCardStudent on _ClientCardState {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.md),
       child: DropdownButtonFormField<String>(
+        menuMaxHeight: 256,
         // Легаси-фолбэк 'new' (лид «Без статуса») и имена статусов в списке
         // UUID-значений не встречаются — такой «статус» показываем как пустой
         // выбор, а не роняем dropdown-assert (#2).
@@ -947,6 +948,7 @@ extension _ClientCardStudent on _ClientCardState {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.md),
       child: DropdownButtonFormField<String>(
+        menuMaxHeight: 256,
         key: ValueKey('student-funnel-status-${funnel.scopeVersion}-$current'),
         initialValue: current.isEmpty ? null : current,
         isExpanded: true,

@@ -78,6 +78,7 @@ Future<ScheduleFilterResult?> showScheduleFiltersSheet(
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: DropdownButtonFormField<String?>(
+                  menuMaxHeight: 256,
                   initialValue: teacherId,
                   isExpanded: true,
                   decoration: const InputDecoration(
