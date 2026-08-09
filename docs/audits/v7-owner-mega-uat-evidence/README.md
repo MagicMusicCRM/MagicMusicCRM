@@ -1,7 +1,7 @@
 # V7 owner mega-UAT — актуальные доказательства
 
 Дата прогона: `2026-08-08` — `2026-08-09`
-Клиент: `1.5.1+163`, Windows Release и Android Release (API 35)
+Клиент: `1.5.1+164`, Windows Release и Android Release (API 35)
 Среда данных: production API/DB
 
 Старый набор `00..25` удалён: он содержал устаревший отдельный экран
@@ -15,15 +15,17 @@
 | Филиал `UAT-20260808-01 Оборонная`, адрес `Оборонная 30` | PASS | `windows-release/01-branch-list.png` |
 | Дисциплина выбирается из существующего справочника внутри филиала | PASS | `windows-release/02-branch-discipline-picker.png` |
 | В филиале видны `Вокал` и аудитории A/B/C вместимостью `1/2/8` | PASS | `windows-release/03-branch-disciplines-and-rooms.png` |
-| Часы филиала вынесены в отдельное окно без выбора преподавателя | PASS | `windows-release/13-branch-hours-separate-163.png` |
-| Пн–Сб `09:00–21:00`, воскресенье закрыто; исключения настраиваются здесь же | PASS | `windows-release/17-branch-hours-sunday-closed-163.png` |
-| Назначения по филиалам вынесены в отдельное окно графика преподавателя | PASS | `windows-release/14-teacher-schedule-separate-163.png` |
-| Рабочая доступность и недоступность по датам находятся только в окне преподавателя | PASS | `windows-release/15-teacher-hours-unavailability-163.png`, `windows-release/16-teacher-unavailability-163.png` |
+| Часы филиала вынесены в отдельное окно без выбора преподавателя | PASS | `windows-release/13-branch-hours-separate-164.png` |
+| Пн–Сб `09:00–21:00`, воскресенье закрыто; исключения настраиваются здесь же | PASS | `windows-release/17-branch-hours-sunday-closed-164.png` |
+| Назначения по филиалам вынесены в отдельное окно графика преподавателя | PASS | `windows-release/14-teacher-schedule-separate-164.png` |
+| Доступность первого преподавателя сохранена для пн/ср/пт `09:00–21:00` | PASS | `windows-release/15-teacher-recurring-rules-164.png`, `windows-release/19-teacher-availability-saved-164.png` |
+| Недоступность нельзя добавить без причины; причина сразу видна сотрудникам | PASS | `windows-release/16-teacher-unavailability-reason-required-164.png`, `windows-release/18-teacher-unavailability-reason-visible-164.png` |
 | Email, пароль, филиал и дисциплина обязательны до создания преподавателя | PASS | `windows-release/06-teacher-required-fields-ready.png` |
 | Создан преподаватель `UAT-20260808-01 Teacher`, специализация `Вокал` | PASS | `windows-release/07-teacher-created.png` |
 | Та же операция атомарно создала пользователя с ролью `Преподаватель` | PASS | `windows-release/08-teacher-linked-user.png` |
 | Новый аккаунт вошёл в Android и видит профиль с ролью `Преподаватель` | PASS | `android-release/01-teacher-profile.png` |
 | Раздел `Ученики` открывается и показывает честное пустое состояние | PASS | `android-release/02-teacher-students-access.png` |
+| Android Release `+164` установлен поверх данных и после холодного запуска сохранил сессию преподавателя | PASS | `android-release/03-teacher-session-preserved-164.png` |
 
 ## UX — длинные списки
 
@@ -48,7 +50,11 @@ Production DB дополнительно подтверждает: дисцип�
 `server-pre-schedule-settings-20260809T133353Z.tgz`; миграции и данные БД не
 изменялись.
 
-Android APK `versionCode=163`/`versionName=1.5.1` подписан схемой v2,
+График `Teacher UAT-20260808-01` сохранён через production UI и повторно
+прочитан через API: версия `2`, правила пн/ср/пт `09:00–21:00`, недоступность
+`20.08.2026 14:00–18:00`, причина `UAT-20260808 teacher unavailable`.
+
+Android APK `versionCode=164`/`versionName=1.5.1` подписан схемой v2,
 установлен поверх предыдущей версии без очистки данных и после холодного
 перезапуска эмулятора открыл сохранённое рабочее пространство преподавателя;
 UI-tree содержит `Чат`, `Расписание`, `Ученики`, fatal/ANR в logcat — `0`.

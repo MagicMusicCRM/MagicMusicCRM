@@ -316,6 +316,53 @@ void main() {
     },
   );
 
+  testWidgets('teacher unavailability requires and displays a reason', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      SettingsTestApi(
+        role: 'director',
+        capabilities: const [
+          'system.settings.manage',
+          'schedule.lesson.read.assigned',
+          'config.crm.edit',
+        ],
+      ),
+    );
+
+    await tester.tap(find.widgetWithText(ListTile, 'Расписание'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Графики преподавателей'));
+    await tester.pumpAndSettle();
+    final addInterval = find.widgetWithText(TextButton, 'Добавить');
+    await tester.ensureVisible(addInterval);
+    await tester.pumpAndSettle();
+    await tester.tap(addInterval);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('${DateTime.now().day}').last);
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Причина недоступности *'), findsOneWidget);
+    final addButton = find.widgetWithText(FilledButton, 'Добавить');
+    expect(tester.widget<FilledButton>(addButton).onPressed, isNull);
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Причина недоступности *'),
+      'UAT: преподаватель занят',
+    );
+    await tester.pump();
+    expect(tester.widget<FilledButton>(addButton).onPressed, isNotNull);
+    await tester.tap(addButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('UAT: преподаватель занят'), findsOneWidget);
+  });
+
   testWidgets('manager creates staff from the mounted users workspace', (
     tester,
   ) async {

@@ -739,7 +739,39 @@ class _ScheduleReferenceSettingsState
     final startText = await _pickTime('09:00');
     if (startText == null || !mounted) return;
     final endText = await _pickTime('18:00');
-    if (endText == null) return;
+    if (endText == null || !mounted) return;
+    var reasonText = '';
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Причина недоступности'),
+          content: TextField(
+            autofocus: true,
+            maxLength: 500,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              labelText: 'Причина недоступности *',
+              hintText: 'Будет видна сотрудникам в настройках расписания',
+            ),
+            onChanged: (value) => setDialogState(() => reasonText = value),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Отмена'),
+            ),
+            FilledButton(
+              onPressed: reasonText.trim().isEmpty
+                  ? null
+                  : () => Navigator.pop(context, reasonText.trim()),
+              child: const Text('Добавить'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (reason == null || !mounted) return;
     DateTime combine(String time) {
       final parts = time.split(':').map(int.parse).toList();
       return DateTime(
@@ -757,6 +789,7 @@ class _ScheduleReferenceSettingsState
         'available': false,
         'startsAt': combine(startText).toIso8601String(),
         'endsAt': combine(endText).toIso8601String(),
+        'reason': reason,
       });
     });
   }
