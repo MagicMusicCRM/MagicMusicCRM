@@ -221,14 +221,43 @@ class _DataQualityWidgetState extends ConsumerState<DataQualityWidget> {
       await _loadMerges();
       if (!mounted) return;
 
-      MagicToast.show(
-        context,
-        'Лиды объединены',
-        detail: name.isEmpty ? null : name,
-        type: MagicToastType.success,
-        actionLabel: mergeLogId.isEmpty ? null : 'Отменить',
-        onAction: mergeLogId.isEmpty ? null : () => _undoMerge(mergeLogId),
+      if (mergeLogId.isEmpty) {
+        MagicToast.show(
+          context,
+          'Лиды объединены',
+          detail: name.isEmpty ? null : name,
+          type: MagicToastType.success,
+        );
+        return;
+      }
+
+      final undo = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Лиды объединены'),
+          content: Text(
+            name.isEmpty
+                ? 'Связанные данные перенесены в выбранную основную запись.'
+                : '«$name»: связанные данные перенесены в выбранную '
+                      'основную запись.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Готово'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text(
+                'Отменить объединение',
+                style: TextStyle(color: AppColor.gold),
+              ),
+            ),
+          ],
+        ),
       );
+      if (undo == true && mounted) await _undoMerge(mergeLogId);
     } catch (e) {
       if (!mounted) return;
       setState(() => _mergingKey = null);
