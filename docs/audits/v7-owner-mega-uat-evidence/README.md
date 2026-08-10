@@ -1,7 +1,7 @@
 # V7 owner mega-UAT — актуальные доказательства
 
 Дата прогона: `2026-08-08` — `2026-08-10`
-Клиент: `1.5.1+175`, Windows Release; Android Release `+167` (API 35)
+Клиент: `1.5.1+179`, Windows Release; Android Release `+167` (API 35)
 Среда данных: production API/DB
 
 Старый набор `00..25` удалён: он содержал устаревший отдельный экран
@@ -73,7 +73,18 @@
 | В production workspace существует одна каноническая вкладка `Расписание`; отдельного раздела или вкладки `Отчёт` для занятий нет | PASS | `windows-release/44-one-canonical-schedule-unfiltered-175.png` |
 | Реальное пробное занятие лида видно 12 августа в обычном расписании филиала `UAT-20260808-01 Оборонная` | PASS | `windows-release/44-one-canonical-schedule-unfiltered-175.png` |
 | Переход из карточки правильного связанного лида переиспользует ту же вкладку, включает `Скрывать чужие занятия` и отмечает совпавший день и занятие зелёным | PASS | `windows-release/45-client-filtered-canonical-schedule-175.png` |
-| Сохранённые legacy-вкладки с датой как ID нормализуются и схлопываются без потери активной даты и клиентского фильтра | PASS | automated restore regression, Flutter `663/663` |
+| Сохранённые legacy-вкладки с датой как ID нормализуются и схлопываются без потери активной даты и клиентского фильтра | PASS | automated restore regression, Flutter `664/664` |
+
+## G4e — задачи только для операционных сотрудников
+
+| Проверка | Результат | Доказательство |
+|---|---|---|
+| «Вся школа» включает только `2` администраторов, `14` управляющих и `1` директора; преподаватели, клиенты и системный администратор не получают задачи | PASS | `windows-release/56-school-task-staff-only-179.png` + production DB reconciliation |
+| Индивидуальный список реально загружается отдельными role-filtered запросами и содержит только Администраторов/Управляющих/Директора | PASS | `windows-release/57-task-recipient-picker-staff-only-179.png` |
+| Директор назначил `UAT-046 Check lead` ровно одному получателю — `Администратор Тестов` | PASS | `windows-release/48-direct-admin-task-ready-178.png`, `windows-release/49-direct-admin-task-preview-178.png`, `windows-release/50-director-created-admin-task-178.png` |
+| У администратора доска открылась с фильтрами `Мои задачи` + `Сегодня`; задача на весь день сегодня не считается просроченной | PASS | `windows-release/52-admin-mine-today-not-overdue-179.png` |
+| Администратор закрыл задачу; открытых стало `0`, а запись появилась в `Закрытые` | PASS | `windows-release/53-admin-task-closed-open-zero-179.png`, `windows-release/54-admin-closed-task-visible-179.png` |
+| История показывает создание и изменение директором и одно закрытие администратором с датой и временем | PASS | `windows-release/55-task-history-director-admin-179.png` + production DB reconciliation |
 
 ## UX — длинные списки
 
@@ -180,6 +191,24 @@ Flutter analyze чистый, полный набор Flutter-тестов — `
 исправлено завершение устаревшей локальной сессии после неуспешного refresh.
 Flutter analyze чистый, полный набор Flutter-тестов — `663/663`; Windows Release
 `1.5.1+175` собран и проверен на том же сохранённом production-профиле.
+
+В `1.5.1+179` закрыты три дефекта, найденные UAT-046. Получатели задач теперь
+ограничены одним серверным правилом `Admin / Manager / Director`; Teacher не
+попадает ни в прямое назначение, ни в филиал, ни во «Всю школу», а
+`system_admin` сохраняет глобальную видимость без получения задачи и
+напоминания. Production-состав «Вся школа» уменьшился с `46` до корректных
+`17`. Индивидуальный селектор больше не делает два невалидных запроса с
+`limit=200`: сотрудники загружаются отдельными фильтрами ролей, филиалы — с
+допустимым лимитом `100`. Задача на весь день становится просроченной только со
+следующего московского дня. Production task
+`00c7ab5e-b526-4337-b948-fb8262719595` имеет единственную audience-связь с
+`magic3@gmail.com` (`admin`), `state=closed`, `version=3` и ровно один
+append-only close-факт от этого администратора. Production API после deploy
+healthy; targeted gates: backend `8/8`, Flutter tasks UI `15/15`, typecheck и
+Flutter analyze PASS. Финальный gate: Flutter `664/664`, backend `157/157`
+suites и `1250/1250` tests, backend build PASS. Публичный production health
+вернул `status=ok`; контейнер API healthy, за 30 минут после deploy ответов 5xx
+и runtime ERROR нет.
 
 Статус всего мегатеста: **IN PROGRESS**. Этот файл фиксирует только уже
 повторно пройденные части G3 и G4 и не заменяет итоговую матрицу UAT.

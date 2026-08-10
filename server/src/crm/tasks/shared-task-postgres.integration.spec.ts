@@ -43,10 +43,7 @@ describe("SharedTask API domain (PostgreSQL)", () => {
     tasks = new SharedTaskService(
       new SharedTaskRepository(database),
       new CrmPolicy(),
-      new PlatformIntegrityService(
-        database,
-        new PlatformIntegrityRepository(),
-      ),
+      new PlatformIntegrityService(database, new PlatformIntegrityRepository()),
       new RealtimeBus(),
     );
     fixture = await createFixture(pool);
@@ -196,6 +193,37 @@ describe("SharedTask API domain (PostgreSQL)", () => {
     ).rejects.toBeInstanceOf(UnprocessableEntityException);
   });
 
+  it("does not mark an all-day task overdue until the next Moscow day", async () => {
+    const offset = 3 * 60 * 60 * 1_000;
+    const moscowNow = new Date(Date.now() + offset);
+    const todayStart = new Date(
+      Date.UTC(
+        moscowNow.getUTCFullYear(),
+        moscowNow.getUTCMonth(),
+        moscowNow.getUTCDate(),
+      ) - offset,
+    );
+    const title = `All-day today ${randomUUID()}`;
+    await tasks.create(
+      fixture.director,
+      {
+        title,
+        allDay: true,
+        startAt: todayStart.toISOString(),
+        audiences: [
+          { type: "user" as const, targetId: fixture.director.userId },
+        ],
+      },
+      {
+        idempotencyKey: `create-${randomUUID()}`,
+        requestId: `request-${randomUUID()}`,
+      },
+    );
+
+    const result = await tasks.list(fixture.director, { q: title });
+    expect(result.counters).toMatchObject({ open: 1, overdue: 0 });
+  });
+
   it("filters, groups by day and lets another manager reassign an open task", async () => {
     const created = await tasks.create(
       fixture.manager,
@@ -248,7 +276,10 @@ describe("SharedTask API domain (PostgreSQL)", () => {
       "2026-08-13T00:00:00.000Z",
     );
     expect(updated.audiences).toEqual([
-      expect.objectContaining({ type: "user", targetId: fixture.manager.userId }),
+      expect.objectContaining({
+        type: "user",
+        targetId: fixture.manager.userId,
+      }),
     ]);
   });
 
@@ -334,7 +365,9 @@ describe("SharedTask API domain (PostgreSQL)", () => {
     expect(adminVisible.items.map((item) => item.id)).toContain(created.id);
     const managerVisible = await tasks.list(fixture.manager, { state: "open" });
     expect(managerVisible.items.map((item) => item.id)).toContain(created.id);
-    const directorVisible = await tasks.list(fixture.director, { state: "open" });
+    const directorVisible = await tasks.list(fixture.director, {
+      state: "open",
+    });
     expect(directorVisible.items.map((item) => item.id)).toContain(created.id);
     await expect(
       tasks.close(
@@ -567,7 +600,9 @@ async function cleanupFixture(
       "delete from app.shared_tasks where id = any($1::uuid[])",
       [taskIds],
     );
-    await client.query("delete from app.students where id = $1", [fixture.studentId]);
+    await client.query("delete from app.students where id = $1", [
+      fixture.studentId,
+    ]);
     await client.query(
       `
         delete from app.platform_outbox_events

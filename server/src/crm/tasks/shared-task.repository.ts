@@ -10,11 +10,7 @@ import {
   TaskCloseRow,
 } from "./shared-task.types";
 
-const taskRecipientRoles = [
-  "admin",
-  "manager",
-  "director",
-] as const;
+const taskRecipientRoles = ["admin", "manager", "director"] as const;
 
 @Injectable()
 export class SharedTaskRepository {
@@ -465,7 +461,12 @@ export class SharedTaskRepository {
     });
   }
 
-  close(client: PoolClient, taskId: string, actorUserId: string, requestId: string) {
+  close(
+    client: PoolClient,
+    taskId: string,
+    actorUserId: string,
+    requestId: string,
+  ) {
     return client.query<TaskCloseRow>(
       `
         with inserted as (
@@ -540,20 +541,27 @@ export class SharedTaskRepository {
     return this.listResolved(actorUserId, actorRole, {
       limit: 2_147_483_647,
       ...filters,
-    }).then(
-      (result) => {
-        const now = Date.now();
-        return {
-          open: result.rows.filter((row) => row.state === "open").length,
-          overdue: result.rows.filter(
-            (row) =>
-              row.state === "open" &&
-              row.start_at !== null &&
-              new Date(row.start_at).getTime() < now,
-          ).length,
-        };
-      },
-    );
+    }).then((result) => {
+      const now = Date.now();
+      const moscowNow = new Date(now + 3 * 60 * 60 * 1_000);
+      const moscowTodayStart =
+        Date.UTC(
+          moscowNow.getUTCFullYear(),
+          moscowNow.getUTCMonth(),
+          moscowNow.getUTCDate(),
+        ) -
+        3 * 60 * 60 * 1_000;
+      return {
+        open: result.rows.filter((row) => row.state === "open").length,
+        overdue: result.rows.filter(
+          (row) =>
+            row.state === "open" &&
+            row.start_at !== null &&
+            new Date(row.start_at).getTime() <
+              (row.all_day ? moscowTodayStart : now),
+        ).length,
+      };
+    });
   }
 
   claimDueReminders(
@@ -666,10 +674,7 @@ export class SharedTaskRepository {
         where audience.task_id = $1
           and recipient.user_id is not null
       `,
-      [
-        taskId,
-        taskRecipientRoles,
-      ],
+      [taskId, taskRecipientRoles],
     );
   }
 
@@ -764,10 +769,7 @@ export class SharedTaskRepository {
          and target_profile.deleted_at is null
         order by selector.selector_index, matched.user_id nulls last
       `,
-      [
-        JSON.stringify(audiences),
-        taskRecipientRoles,
-      ],
+      [JSON.stringify(audiences), taskRecipientRoles],
     );
   }
 
@@ -875,10 +877,7 @@ export class SharedTaskRepository {
             `select 1 from app.users
              where id = $1 and deleted_at is null
                and role::text = any($2::text[])`,
-            [
-              targetId,
-              taskRecipientRoles,
-            ],
+            [targetId, taskRecipientRoles],
           )
         : await this.database.query(
             "select 1 from app.branches where id = $1 and deleted_at is null",

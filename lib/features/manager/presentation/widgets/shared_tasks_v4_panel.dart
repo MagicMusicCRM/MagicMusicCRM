@@ -246,15 +246,16 @@ class _ServiceSharedTasksDataSource implements SharedTasksDataSource {
   @override
   Future<List<SharedTaskAudienceOption>> audienceOptions() async {
     const taskRoles = {'admin', 'manager', 'director'};
+    final profiles = ref.read(magicProfileAdminServiceProvider);
     final result = await Future.wait([
-      ref.read(magicProfileAdminServiceProvider).listProfiles(limit: 200),
-      ref.read(magicCrmServiceProvider).listBranches(limit: 200),
+      ...taskRoles.map((role) => profiles.listProfiles(role: role, limit: 100)),
+      ref.read(magicCrmServiceProvider).listBranches(limit: 100),
     ]);
+    final branches = result.removeLast();
     return [
-      ...result[0]
-          .where(
-            (row) => row['user_id'] != null && taskRoles.contains(row['role']),
-          )
+      ...result
+          .expand((rows) => rows)
+          .where((row) => row['user_id'] != null)
           .map(
             (row) => SharedTaskAudienceOption(
               type: 'user',
@@ -262,7 +263,7 @@ class _ServiceSharedTasksDataSource implements SharedTasksDataSource {
               label: _profileLabel(row),
             ),
           ),
-      ...result[1].map(
+      ...branches.map(
         (row) => SharedTaskAudienceOption(
           type: 'branch',
           id: row['id'].toString(),
@@ -447,13 +448,7 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
           ? rawItems.whereType<Map<String, dynamic>>().toList()
           : <Map<String, dynamic>>[];
       if (_filter == 'overdue') {
-        final now = DateTime.now();
-        items = items.where((task) {
-          final start = DateTime.tryParse(task['startAt']?.toString() ?? '');
-          return task['state'] == 'open' &&
-              start != null &&
-              start.isBefore(now);
-        }).toList();
+        items = items.where(_isOverdueSharedTask).toList();
       }
       if (!mounted) return;
       setState(() {
@@ -828,9 +823,14 @@ bool _sameDay(DateTime left, DateTime right) =>
 
 bool _isOverdueSharedTask(Map<String, dynamic> task) {
   final start = DateTime.tryParse(task['startAt']?.toString() ?? '');
-  return task['state'] == 'open' &&
-      start != null &&
-      start.isBefore(DateTime.now());
+  if (task['state'] != 'open' || start == null) return false;
+  if (task['allDay'] != true) return start.isBefore(DateTime.now());
+  final moscowStart = start.toUtc().add(const Duration(hours: 3));
+  return DateTime(
+    moscowStart.year,
+    moscowStart.month,
+    moscowStart.day,
+  ).isBefore(_moscowToday());
 }
 
 String _taskPriorityLabel(Object? value) => switch (value?.toString()) {

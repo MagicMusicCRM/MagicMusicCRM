@@ -61,7 +61,7 @@
   - Проверки: `flutter analyze` чисто, `flutter test` 163/163, `git diff server/`+`lib/core/services/` пусто.
   - Осталось: **P1-7** сетевой baseline (нужен seeded backend). Follow-up: вынести `_V7Field`/`_V7PrimaryButton` в общий файл; выверить текст онбординг-слайдов; owner-визуальная приёмка.
 
-**▶ Следующий шаг:** `T7.1.2` — production mega-UAT кандидата `1.5.1+159`
+**▶ Следующий шаг:** `T7.1.2` — production mega-UAT кандидата `1.5.1+179`
 по `docs/audits/v7-owner-production-mega-uat-plan.md`.
 
 ---
@@ -123,8 +123,8 @@
 
 - **Последняя версия архитектуры**: `.anws/v7` (Financial & Lesson Integrity)
 - **Активный список задач**: `.anws/v7/05_TASKS.md` — следующая T7.1.2
-- **Фаза**: production mega-UAT кандидата `1.5.1+160`
-- **Последнее обновление**: `2026-08-08`
+- **Фаза**: production mega-UAT кандидата `1.5.1+179`
+- **Последнее обновление**: `2026-08-10`
 
 ### 🌊 Wave v7/S0 — Architecture Foundation ✅
 _PRD подтверждён владельцем 2026-08-07. Concept model, Architecture Overview и ADR-007..010 фиксируют один существующий Flutter/NestJS/PostgreSQL runtime, `SYS-COMMERCE-INTEGRITY`, append-only payment lifecycle/reversal/exclusion, единый атомарный lesson transition и узкие client-finance capabilities Admin/Manager/Director со staff-visible reasons. Новые зависимости и deployable не вводятся. Следующий шаг `/design-system`: детальный дизайн v7._
@@ -456,6 +456,8 @@ _`V6-601..605` и `INT-S6` закрыты 2026-08-04: capability-projected shell
 _Финальный инженерный кандидат обновлён до `1.2.3+156` 2026-08-07: поверх проверенного `1.2.2+155` добавлены единая длинная Client Card, постоянный navigation rail, canonical client route tails, общий Leads/Students board contract и один обязательный Advertising source Lead→Student. Gate: Flutter analyze/full suite, backend 152/152 suites и 1159/1159 tests, migration `0102` down→up, inventory unowned=0, Windows release и APK v2 signature PASS (`docs/audits/v6-final-candidate-156.md`). Следующий шаг остаётся `V6-701` owner UAT на аккаунтах 1..5._
 
 _`V6-701` owner UAT продолжается; текущий Windows Release — `1.5.1+175` (2026-08-10). Реальными production-данными закрыты G3/G4: филиал/аудитории/teacher-user, Lead workflow, подписанный webhook, chat eligibility и единое каноническое Расписание. Удалён ложный schedule-«Отчёт», legacy-вкладки схлопываются, переход из карточки переиспользует одно Расписание, клиентский день/занятие зелёные и `Скрывать чужие занятия` включено по умолчанию. Gate: Flutter analyze clean, 663/663 tests, Windows Release runtime PASS (`docs/audits/v7-owner-mega-uat-evidence/README.md`). `V6-701` и `INT-S7` остаются открыты до полного мегаплана по всем ролям._
+
+_`V6-701/UAT-046` продолжен в production на Windows Release `1.5.1+179` (2026-08-10). Задачи полностью исключают Teacher: прямые, филиальные и школьные получатели ограничены Admin/Manager/Director; system_admin имеет только глобальную видимость. «Вся школа» подтверждена как `17`, индивидуальный селектор снова работает после удаления невалидных `limit=200`. Директор создал связанную с лидом задачу одному Admin; Admin увидел её с дефолтами `Мои задачи + Сегодня`, закрыл, история сохранила Director create/update и единственный Admin close. All-day сегодня больше не просрочена. Production API healthy; Flutter `664/664`, backend `157/157` suites и `1250/1250` tests, build PASS (`docs/audits/v7-owner-mega-uat-evidence/README.md`). `V6-701` и `INT-S7` остаются открыты до полного мегаплана._
 
 ### 🌊 Wave v4/S0 — Baseline & Evidence
 _`INT-S0` закрыт 2026-07-25: detached clean revision прошёл current-state inventory, lock install, backend typecheck/build, explicit platform PostgreSQL 5/5, full backend 103/103 suites и 929/929 tests, два стабильных read-only preflight-run, signed clean/drift reconciliation, Flutter analyze и 400/400 tests; skipped integration suites=0, lock/tracked diff=0._

@@ -24,13 +24,15 @@ class FakeSharedTasksDataSource extends SharedTasksDataSource {
   int calendarCalls = 0;
   Map<String, dynamic>? lastCreateData;
   bool failAudiencePreview = false;
+  bool taskAllDay = false;
+  DateTime? taskStartAt;
 
   Map<String, dynamic> get task => {
     'id': '11111111-1111-4111-8111-111111111111',
     'title': 'Подготовить отчёт',
     'body': 'Общая задача филиала',
-    'allDay': false,
-    'startAt': '2020-01-01T10:00:00.000Z',
+    'allDay': taskAllDay,
+    'startAt': taskStartAt?.toIso8601String() ?? '2020-01-01T10:00:00.000Z',
     'endAt': '2020-01-01T11:00:00.000Z',
     'state': closed ? 'closed' : 'open',
     'priority': 'medium',
@@ -393,6 +395,30 @@ void main() {
     await tester.tap(find.text('Мой филиал').last);
     await tester.pumpAndSettle();
     expect(source.listedScope, 'branch');
+  });
+
+  testWidgets('all-day task due today is not overdue', (tester) async {
+    final moscowNow = DateTime.now().toUtc().add(const Duration(hours: 3));
+    final source = FakeSharedTasksDataSource()
+      ..taskAllDay = true
+      ..taskStartAt = DateTime.utc(
+        moscowNow.year,
+        moscowNow.month,
+        moscowNow.day,
+      ).subtract(const Duration(hours: 3));
+    await tester.pumpWidget(
+      _host(
+        source,
+        linkedEntity: EntityLink.typed(
+          entityType: EntityLinkType.client,
+          entityId: '44444444-4444-4444-8444-444444444444',
+          variant: 'student',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Просроченных задач:'), findsNothing);
   });
 
   testWidgets('shows non-modal reminder and explicit close action', (
