@@ -38,10 +38,15 @@
 Последний полный автоматический baseline:
 
 - Flutter `666/666`;
-- backend `157/157` suites, `1256/1256` tests;
+- backend `158/158` suites, `1258/1258` tests;
 - backend build PASS;
 - production API healthy;
 - локальный candidate `1.5.1+180`, тёмная тема; production не изменялся.
+- server image `sha256:a07c39ff…`, revision `1559a45`: migration, fail-closed
+  flags, live/ready, degraded HTTP 503 и Trivy image scan PASS.
+- Inno Setup installer собран и install/launch/uninstall smoke PASS, но Windows
+  Authenticode отсутствует; нужен доверенный certificate либо явное принятие
+  unsigned distribution владельцем.
 
 ## Последние production-подтверждения
 

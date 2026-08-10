@@ -168,7 +168,14 @@
 - **[CHANGE]** Production runtime fail-closed: legacy/shadow допустимы только как
   явно управляемый non-production режим, а production требует v4 и parity zero.
 - **[ADD]** Локальный release candidate повышен до `1.5.1+180`: backend
-  `157/157` suites и `1256/1256` tests, Flutter `666/666`, clean migrations
+  `158/158` suites и `1258/1258` tests, Flutter `666/666`, clean migrations
   `0001..0118` с `0118..0116 down/up`, production-like health/reconcile и
   Windows/Android device smoke прошли. Production rollout и owner mega-UAT этим
   доказательством не подменяются.
+- **[FIX]** Container readiness отделена от liveness: `/health/ready` отвечает
+  HTTP 503 при migration/worker/outbox/v4 degradation, Docker и Compose
+  healthcheck используют readiness. Mutable `apk upgrade` удалён из pinned
+  runtime image; exact image получил OCI revision label, SBOM и runtime gate.
+- **[ADD]** Inno Setup `1.5.1+180` собран и прошёл silent
+  install/launch/uninstall smoke. Artifact остаётся unsigned до предоставления
+  доверенного Windows code-signing certificate или явного owner risk acceptance.

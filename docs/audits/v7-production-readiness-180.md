@@ -1,9 +1,11 @@
 # MagicMusicCRM v7 — production readiness candidate 1.5.1+180
 
 - Дата: `2026-08-10`
-- Commit: `964f79cae8dc03e448efb4d9fb9f1e8f0642456d`
+- Client implementation: `964f79cae8dc03e448efb4d9fb9f1e8f0642456d`
+- Server readiness: `1559a45461afcd8e692b5f0e047ba2a707e40987`
+- Image gate: `a0afb0a8b27fc0154c9ab3e0abb80db3467755a3`
 - Ветка: `codex/v7-production-readiness`
-**Основа:** `origin/main` at `7ff286347ad969a9faf729b8a2c549df79fb91d3`
+- Основа: `origin/main` at `7ff286347ad969a9faf729b8a2c549df79fb91d3`
 
 ## Решение
 
@@ -35,7 +37,7 @@ rollout и продолжение owner UAT. Они не являются под
 
 | Контур | Результат |
 |---|---|
-| Backend full Jest | `157/157` suites, `1256/1256` tests, PASS |
+| Backend full Jest | `158/158` suites, `1258/1258` tests, PASS |
 | Backend build | PASS |
 | Flutter full test | `666/666`, PASS |
 | Flutter analyze | `No issues found`, PASS |
@@ -45,6 +47,7 @@ rollout и продолжение owner UAT. Они не являются под
 | Production-like runtime | invalid flags fail startup; v4/parity-zero live+ready, PASS |
 | V7 reconciliation | `0 issues`, PASS |
 | Workspace device E2E | Windows `3/3`, Android `3/3`, revision `964f79c`, PASS |
+| Exact server image | migration, invalid flags, live/ready, degraded HTTP 503, PASS |
 
 Production-like gate использовал только выделенную временную БД
 `magiccrm_v7_prodlike_gate` и удалил её после проверки. Production API/DB не
@@ -59,6 +62,7 @@ Production-like gate использовал только выделенную в
 | Semgrep OWASP Top 10 | 91 rules, 2066 tracked files, `0` findings |
 | Trivy filesystem vuln+secret | `0` High/Critical vulnerabilities, `0` secrets |
 | Trivy pinned Node runtime | `0` High/Critical OS vulnerabilities |
+| Trivy exact server image | `0` High/Critical vulnerabilities, `0` secrets |
 | Trivy Dockerfile config | `0` High/Critical misconfigurations |
 | npm audit | `0` vulnerabilities |
 
@@ -75,8 +79,11 @@ historical risk из `v7-final-candidate.md`; новых находок staged d
 | Артефакт | Размер | SHA-256 |
 |---|---:|---|
 | `MagicMusicCRM-1.5.1-180-windows-x64.zip` | 19,314,097 | `A0217B9AD30D8AB11FA9E5A091569794A27C0B1F4B2346B04521B46AFB64DA2D` |
+| `MagicMusicCRM-1.5.1-180-Setup.exe` | 15,236,959 | `6C90F9D80FDD1C57BB21E8B24404BB34010AAD911B2A881A63803EC847FDAA34` |
 | `MagicMusicCRM-1.5.1-180.apk` | 84,688,801 | `39A1424804DB0177D12F212D04E6C1E3C1C0F7FF36AD12708F8F3DA1ABBB50B3` |
 | `MagicMusicCRM-1.5.1-180.aab` | 59,988,827 | `7A9FB287871CCCEF74AE1ABC72F125AE37FBD1A96E897D0A434637D503A0C3A3` |
+| `MagicMusicCRM-server-1.5.1-180-image.zip` | 82,378,962 | `0163C55A53A06FF134C1B9C40AD9D25B3AE4B142C7595C9C3893EE4F31FE0A8E` |
+| `MagicMusicCRM-server-1.5.1-180-sbom.cdx.json` | 430,246 | `D279EED56A9E257E9C7ACB0930DFC64CB0643F0FE415103CF3D057FE8E652ECC` |
 | `magic_music_crm.exe` внутри Windows bundle | 757,760 | `ED3A4CB86C3182D0B9F3D8FDE9184356BCB75F5951E860A862F9D7634E3F4BD1` |
 
 Локальный каталог: `dist/1.5.1+180/`. Windows EXE сообщает
@@ -87,9 +94,16 @@ historical risk из `v7-final-candidate.md`; новых находок staged d
 AAB JAR signature — PASS; upload certificate self-signed и без timestamp, что
 соответствует существующему upload-key workflow.
 
-Windows Inno Setup отсутствует в локальной среде, поэтому создан полный portable
-ZIP, а не неподтверждённый installer EXE. `windows_installer.iss` обновлён до
-`1.5.1+180` и может быть собран в доверенном packaging environment.
+Inno Setup `6.7.3` собрал installer; silent install, версия/EXE hash, запуск
+10 секунд и полный uninstall прошли. Authenticode status installer —
+`NotSigned`: самоподписанный сертификат не выдаётся за production trust.
+
+Exact server image:
+`magicmusiccrm-server:1.5.1-180-1559a45`, image ID
+`sha256:a07c39ffe05acf5743ae1a103a1358b2ad24305ef193b2e5579b4923baf9292f`,
+OCI revision `1559a454…`, non-root user `magiccrm`. Containerized migration,
+invalid production flags, live/ready, встроенный healthcheck и реальный HTTP 503
+при пустом migration ledger прошли; временные контейнеры/БД удалены.
 
 ## Device smoke
 
@@ -109,8 +123,8 @@ ZIP, а не неподтверждённый installer EXE. `windows_installer.
    `060/065/073-076/084-086/090-095/103/134/135/145` с UI/API/DB evidence.
 3. Завершить оставшиеся строки 100-сценарной матрицы, финальный reconciliation,
    DOCX и owner approval; только после этого закрывать `T7.1.2` и `INT-S6`.
-4. Для выпуска installer EXE выполнить `windows_installer.iss` в доверенной
-   Inno Setup среде и добавить его hash в production image ledger.
+4. Предоставить доверенный Windows Authenticode certificate и подписать
+   Setup/EXE либо явно принять unsigned Windows distribution как owner risk.
 
 ## Rollback
 
