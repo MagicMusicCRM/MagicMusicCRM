@@ -21,8 +21,10 @@
 | Platform outbox | pending/dead-letter `0`, oldest due отсутствует |
 | Current migration | `0115_school_task_staff_recipients` |
 | Current API image | `sha256:85578696878d…` |
+| Compose drift | только `/api/health` → `/api/health/ready` |
 | Encrypted backup inventory | `1`, latest SHA-256 PASS |
 | `/opt/magicmusiccrm` disk | 33% used, 33,380,176 KiB available |
+| Release transport | raw image tar, 82,675,712 bytes, SHA-256 `1F775A4D…AECC4` |
 
 API container намеренно не публикует порт `3000` на host network: internal
 health проверен через `docker compose exec api`, public health — через Caddy.
@@ -32,6 +34,10 @@ health проверен через `docker compose exec api`, public health — 
 
 Preflight не выявил runtime, worker, outbox, disk или backup blocker. Production
 находится на schema `0115`; кандидат содержит additive migrations `0116..0118`.
+Remote release directory существует; `docker`, `sha256sum` и `openssl`
+доступны. Backup script имеет mode `664` и должен запускаться через `bash`.
+Production Compose отличается от candidate только заменой liveness healthcheck
+на fail-closed readiness; иных локальных расхождений нет.
 
 До deployment остаётся обязательная отдельная команда владельца на production
 backup/rollout. После неё последовательность фиксирована:
