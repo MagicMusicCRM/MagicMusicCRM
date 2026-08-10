@@ -17,7 +17,7 @@ Run: `OWNER-20260808-01`
 | ID | Сценарий | Статус | Доказательство / остаток |
 |---|---|---|---|
 | UAT-000 | Зафиксировать commit, образы, миграции и hashes | PARTIAL | client `964f79c`, server `1559a45`, local ZIP/Setup/APK/AAB/server-image/SBOM hashes: `v7-production-readiness-180.md`; нужен production registry/image ledger после rollout |
-| UAT-001 | Backup, пробный restore, начальные counts | PARTIAL | production backups есть; нужен единый restore-drill и counts этого run |
+| UAT-001 | Backup, пробный restore, начальные counts | PARTIAL | read-only preflight подтвердил encrypted backup и SHA; нужен новый maintenance backup, off-host copy, isolated restore-drill и counts этого run |
 | UAT-002 | Release, production API, тёмная тема, реальные данные | PARTIAL | Windows/Android `+180` локально собраны и запущены в тёмной теме; нужен owner production Release proof после разрешённого rollout |
 | UAT-003 | ID-ledger и каталог evidence без секретов | PARTIAL | evidence index и redacted API JSON созданы; нужен полный ledger всех UAT facts |
 
@@ -173,7 +173,7 @@ Run: `OWNER-20260808-01`
 | UAT-132 | Stale expectedVersion и recovery | PARTIAL | automated contracts есть; нужен production UI scenario |
 | UAT-133 | Полная actor matrix private routes | PARTIAL | регулярные route/actor gates есть; нужен финальный candidate run |
 | UAT-134 | Full tests/build/migrations/clean schema | PARTIAL | локально Flutter `666/666`, backend `158/158`/`1258/1258`, build/analyze PASS; clean `0001..0118`, `0118..0116 down/up`, Windows Setup/ZIP, APK/AAB и server image собраны; нужен production candidate ledger |
-| UAT-135 | Health, constraints, reconcile, workers, logs | PARTIAL | host и exact image: fail-closed startup, `/health/live`, `/health/ready`, degraded HTTP 503 и v7 reconcile=0 PASS; нужен финальный production reconcile после rollout |
+| UAT-135 | Health, constraints, reconcile, workers, logs | PARTIAL | host/exact image gates PASS; production read-only preflight: live/ready all ok, v4/v4, worker/outbox zero; нужен финальный production reconcile после rollout |
 
 ## G14 — пять персон и итоговое доказательство
 

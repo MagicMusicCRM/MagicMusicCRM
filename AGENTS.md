@@ -29,6 +29,9 @@
 - Активная задача: `T7.1.2` — production mega-UAT.
 - `T7.1.3` — организационные конструкторы — завершена.
 - `INT-S6` не закрыт: кандидат ещё не получил итоговую owner-приёмку.
+- Владелец 2026-08-10 принял unsigned Windows distribution и разрешил
+  продолжать без Authenticode certificate; production rollout отдельно не
+  выполнялся.
 
 Рабочая UAT-матрица:
 

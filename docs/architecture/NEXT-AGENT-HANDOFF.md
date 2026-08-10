@@ -45,8 +45,8 @@
 - server image `sha256:a07c39ff…`, revision `1559a45`: migration, fail-closed
   flags, live/ready, degraded HTTP 503 и Trivy image scan PASS.
 - Inno Setup installer собран и install/launch/uninstall smoke PASS, но Windows
-  Authenticode отсутствует; нужен доверенный certificate либо явное принятие
-  unsigned distribution владельцем.
+  Authenticode отсутствует; владелец 2026-08-10 явно принял unsigned
+  distribution и разрешил продолжать без сертификата.
 
 ## Последние production-подтверждения
 
