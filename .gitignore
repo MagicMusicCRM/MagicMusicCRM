@@ -85,6 +85,9 @@ app.*.map.json
 /docs/Supabase_Custom_Domain_Setup_Guide.docx
 /docs/release/play_console/screenshots/raw/
 
+# Temporary Microsoft Office owner/lock files.
+~$*.docx
+
 # HolliHop data dumps (real client PII — never commit)
 hollihop-dump/
 /server/hollihop-dump/
