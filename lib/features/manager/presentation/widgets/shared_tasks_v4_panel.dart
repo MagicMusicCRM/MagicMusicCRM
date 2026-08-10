@@ -245,13 +245,7 @@ class _ServiceSharedTasksDataSource implements SharedTasksDataSource {
 
   @override
   Future<List<SharedTaskAudienceOption>> audienceOptions() async {
-    const taskRoles = {
-      'teacher',
-      'admin',
-      'manager',
-      'director',
-      'system_admin',
-    };
+    const taskRoles = {'admin', 'manager', 'director'};
     final result = await Future.wait([
       ref.read(magicProfileAdminServiceProvider).listProfiles(limit: 200),
       ref.read(magicCrmServiceProvider).listBranches(limit: 200),

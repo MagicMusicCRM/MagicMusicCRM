@@ -10,6 +10,12 @@ import {
   TaskCloseRow,
 } from "./shared-task.types";
 
+const taskRecipientRoles = [
+  "admin",
+  "manager",
+  "director",
+] as const;
+
 @Injectable()
 export class SharedTaskRepository {
   constructor(private readonly database: DatabaseService) {}
@@ -403,7 +409,7 @@ export class SharedTaskRepository {
       [
         actorUserId,
         actorRole,
-        ["teacher", "admin", "manager", "director", "system_admin"],
+        taskRecipientRoles,
         ["director", "system_admin"],
         input.state ?? null,
         input.limit,
@@ -644,26 +650,12 @@ export class SharedTaskRepository {
            and link.entity_id = staff.id
            and link.deleted_at is null
           join app.users actor
-            on actor.id = link.user_id and actor.deleted_at is null
+            on actor.id = link.user_id
+           and actor.deleted_at is null
+           and actor.role::text = any($2::text[])
           where audience.audience_type = 'branch'
             and assignment.branch_id = audience.target_id
             and assignment.deleted_at is null
-          union all
-          select link.user_id
-          from app.teacher_branches assignment
-          join app.teachers teacher
-            on teacher.id = assignment.teacher_id
-           and teacher.deleted_at is null
-          join app.user_crm_links link
-            on link.entity_type::text = 'teacher'
-           and link.entity_id = teacher.id
-           and link.deleted_at is null
-          join app.users actor
-            on actor.id = link.user_id and actor.deleted_at is null
-          where audience.audience_type = 'branch'
-            and assignment.branch_id = audience.target_id
-            and assignment.active_from <= now()
-            and (assignment.active_until is null or assignment.active_until > now())
           union all
           select actor.id
           from app.users actor
@@ -676,7 +668,7 @@ export class SharedTaskRepository {
       `,
       [
         taskId,
-        ["teacher", "admin", "manager", "director", "system_admin"],
+        taskRecipientRoles,
       ],
     );
   }
@@ -732,25 +724,6 @@ export class SharedTaskRepository {
            and actor.deleted_at is null
            and actor.role::text = any($2::text[])
           union all
-          select selector.selector_index, link.user_id
-          from selectors selector
-          join app.teacher_branches assignment
-            on selector.selector_type = 'branch'
-           and assignment.branch_id = selector.target_id
-           and assignment.active_from <= now()
-           and (assignment.active_until is null or assignment.active_until > now())
-          join app.teachers teacher
-            on teacher.id = assignment.teacher_id
-           and teacher.deleted_at is null
-          join app.user_crm_links link
-            on link.entity_type::text = 'teacher'
-           and link.entity_id = teacher.id
-           and link.deleted_at is null
-          join app.users actor
-            on actor.id = link.user_id
-           and actor.deleted_at is null
-           and actor.role::text = any($2::text[])
-          union all
           select selector.selector_index, actor.id
           from selectors selector
           join app.users actor
@@ -793,7 +766,7 @@ export class SharedTaskRepository {
       `,
       [
         JSON.stringify(audiences),
-        ["teacher", "admin", "manager", "director", "system_admin"],
+        taskRecipientRoles,
       ],
     );
   }
@@ -904,7 +877,7 @@ export class SharedTaskRepository {
                and role::text = any($2::text[])`,
             [
               targetId,
-              ["teacher", "admin", "manager", "director", "system_admin"],
+              taskRecipientRoles,
             ],
           )
         : await this.database.query(

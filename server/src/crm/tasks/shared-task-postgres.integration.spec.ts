@@ -174,7 +174,12 @@ describe("SharedTask API domain (PostgreSQL)", () => {
         }),
       ],
     });
-    expect(preview.totalRecipients).toBeGreaterThanOrEqual(4);
+    expect(preview.totalRecipients).toBeGreaterThanOrEqual(3);
+    expect(
+      preview.recipients.every((recipient) =>
+        ["admin", "manager", "director"].includes(recipient.role ?? ""),
+      ),
+    ).toBe(true);
     expect(preview.selectors[2]!.currentRecipientCount).toBe(
       preview.totalRecipients,
     );
@@ -182,6 +187,11 @@ describe("SharedTask API domain (PostgreSQL)", () => {
     await expect(
       tasks.previewAudience(fixture.director, [
         { type: "user", targetId: fixture.client.userId },
+      ]),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    await expect(
+      tasks.previewAudience(fixture.director, [
+        { type: "user", targetId: fixture.teacher.userId },
       ]),
     ).rejects.toBeInstanceOf(UnprocessableEntityException);
   });
@@ -304,7 +314,7 @@ describe("SharedTask API domain (PostgreSQL)", () => {
     expect(detail.items).toHaveLength(dashboard.rows[0]!.count);
   });
 
-  it("resolves allBranches dynamically for every task-capable role", async () => {
+  it("resolves allBranches only for school operational staff", async () => {
     const created = await tasks.create(
       fixture.director,
       {
@@ -319,9 +329,13 @@ describe("SharedTask API domain (PostgreSQL)", () => {
       },
     );
     const visible = await tasks.list(fixture.teacher, { state: "open" });
-    expect(visible.items.map((item) => item.id)).toContain(created.id);
+    expect(visible.items.map((item) => item.id)).not.toContain(created.id);
     const adminVisible = await tasks.list(fixture.admin, { state: "open" });
     expect(adminVisible.items.map((item) => item.id)).toContain(created.id);
+    const managerVisible = await tasks.list(fixture.manager, { state: "open" });
+    expect(managerVisible.items.map((item) => item.id)).toContain(created.id);
+    const directorVisible = await tasks.list(fixture.director, { state: "open" });
+    expect(directorVisible.items.map((item) => item.id)).toContain(created.id);
     await expect(
       tasks.close(
         { ...fixture.teacher, role: "client" },
