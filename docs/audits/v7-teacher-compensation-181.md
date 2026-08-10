@@ -56,8 +56,10 @@ tests (`10/10`) и Release-сборки Windows/APK/AAB.
   невидимого UAC; процесс остановлен, установка не произошла. Проверены ZIP
   launch и ранее пройденный install/launch/uninstall smoke неизменного packaging
   path для `+180`.
-- Android install/launch smoke не выполнен: подключённых устройств и эмуляторов
-  нет. APK build/signature не подменяют этот открытый device-check.
+- Android 15/API 35 emulator: подписанный APK установлен поверх emulator data,
+  package manager подтвердил `versionCode=181`; MainActivity стала foreground,
+  процесс оставался жив, `FATAL EXCEPTION`, app-specific ANR и `E/flutter` не
+  обнаружены. После smoke приложение остановлено, эмулятор штатно выключен.
 
 Exact server image: `magicmusiccrm-server:1.5.1-181-17ce254`, image ID
 `sha256:5fbd5a299bb43bb32f5269e446102c6014aac94f803d950b4cfafe217f7ba09f`,
@@ -74,7 +76,8 @@ healthcheck и HTTP 503 при нарушенном migration ledger; време
 
 ## Открытые условия
 
-1. Выполнить Android install/launch smoke build `181` при наличии устройства.
+1. Повторить install/launch/uninstall smoke нового Setup `+181` в интерактивной
+   elevated Windows-сессии; compile и portable ZIP launch уже подтверждены.
 2. Повторить затронутые owner-UAT строки с уникальными UI/API/DB evidence;
    технический smoke не переводит их автоматически в `PASS`.
 3. Production rollout `+181` требует отдельного решения владельца, нового

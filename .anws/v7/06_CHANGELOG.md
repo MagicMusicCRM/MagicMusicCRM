@@ -212,6 +212,8 @@
   APK/AAB signature gates и exact server image runtime/Trivy gate. Артефакты и
   hashes зафиксированы в `dist/1.5.1+181/`; технический audit —
   `docs/audits/v7-teacher-compensation-181.md`.
-- **[NOTE]** Android install/launch build `181` остаётся device-check: в текущей
-  среде нет устройства. Inno `+181` собран, но новый silent install не прошёл
-  через non-interactive UAC; production и update manifests не изменялись.
+- **[ADD]** Android 15/API 35 emulator установил и запустил APK build `181`;
+  versionCode, foreground MainActivity и отсутствие FATAL/ANR/E/flutter
+  подтверждены, после smoke эмулятор штатно остановлен.
+- **[NOTE]** Inno `+181` собран, но новый silent install не прошёл через
+  non-interactive UAC; production и update manifests не изменялись.

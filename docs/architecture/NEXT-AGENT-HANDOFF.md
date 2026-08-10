@@ -43,8 +43,8 @@
 - backend build PASS;
 - локальный `+181` exact image `sha256:5fbd5a29…`, revision `17ce254`:
   migration/fail-closed/live/ready/degraded-503 и Trivy `0/0` PASS;
-- Windows ZIP `+181` launch PASS, APK/AAB build+signature PASS; Android device
-  install/launch остаётся открытым из-за отсутствия подключённого устройства;
+- Windows ZIP `+181` launch PASS, APK/AAB build+signature PASS; Android 15/API
+  35 install/launch build `181` PASS без FATAL/ANR/E/flutter;
 - production API healthy на `1.5.1+180`, migration `0118`;
 - exact image `sha256:a07c39ff…`, worker active, worker/outbox/reconcile zero;
 - server image `sha256:a07c39ff…`, revision `1559a45`: migration, fail-closed
