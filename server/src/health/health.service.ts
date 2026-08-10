@@ -17,7 +17,8 @@ export interface HealthResponse {
   timestamp: string;
 }
 
-export interface ReadinessResponse extends HealthResponse {
+export interface ReadinessResponse extends Omit<HealthResponse, 'status'> {
+  status: 'ok' | 'degraded';
   checks: {
     database: 'ok' | 'error';
     migrations: 'ok' | 'error';
@@ -71,15 +72,19 @@ export class HealthService {
       domain => domain.configuredMode === 'v4' && !domain.enableAllowed
     );
 
+    const checks: ReadinessResponse['checks'] = {
+      database: 'ok',
+      migrations: latestMigrationId === null ? 'error' : 'ok',
+      lessonCompletionWorker: workerHealth.status,
+      platformOutbox: outboxHealth.status,
+      v4Rollout: v4Blocked ? 'blocked' : 'ok'
+    };
+    const ready = Object.values(checks).every(check => check === 'ok');
+
     return {
       ...this.check(),
-      checks: {
-        database: 'ok',
-        migrations: latestMigrationId === null ? 'error' : 'ok',
-        lessonCompletionWorker: workerHealth.status,
-        platformOutbox: outboxHealth.status,
-        v4Rollout: v4Blocked ? 'blocked' : 'ok'
-      },
+      status: ready ? 'ok' : 'degraded',
+      checks,
       latestMigrationId,
       lessonCompletionWorker: workerHealth.metrics,
       platformOutbox: outboxHealth.metrics,

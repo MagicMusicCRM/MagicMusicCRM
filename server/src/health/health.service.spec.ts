@@ -87,7 +87,7 @@ describe('HealthService', () => {
     } as never, worker as never, flags as never, outboxWorker as never);
 
     await expect(service.ready()).resolves.toMatchObject({
-      status: 'ok',
+      status: 'degraded',
       checks: {
         database: 'ok',
         migrations: 'error',
@@ -119,6 +119,7 @@ describe('HealthService', () => {
     } as never, degradedWorker as never, flags as never, outboxWorker as never);
 
     await expect(service.ready()).resolves.toMatchObject({
+      status: 'degraded',
       checks: { lessonCompletionWorker: 'degraded' },
       lessonCompletionWorker: {
         due: 1,
@@ -145,6 +146,7 @@ describe('HealthService', () => {
     } as never, worker as never, blockedFlags as never, outboxWorker as never);
 
     await expect(service.ready()).resolves.toMatchObject({
+      status: 'degraded',
       checks: { v4Rollout: 'blocked' },
       v4Rollout: [{ reason: 'unexplained_parity_diff' }]
     });
@@ -167,6 +169,7 @@ describe('HealthService', () => {
     } as never, worker as never, flags as never, degradedOutbox as never);
 
     await expect(service.ready()).resolves.toMatchObject({
+      status: 'degraded',
       checks: { platformOutbox: 'degraded' },
       platformOutbox: { pending: 1, oldestDueSeconds: 121 }
     });
