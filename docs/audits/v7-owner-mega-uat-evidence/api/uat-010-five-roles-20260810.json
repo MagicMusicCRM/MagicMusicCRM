@@ -1,0 +1,14 @@
+{
+  "capturedAt": "2026-08-10T15:00:00+03:00",
+  "environment": "production",
+  "baseUrl": "https://api.magicmusiccrm.ru/api",
+  "requests": ["POST /auth/login", "GET /profile/me"],
+  "secretsStored": false,
+  "results": [
+    {"account":"magic1","expected":"client","loginRole":"client","profileRole":"client","session":true,"pass":true},
+    {"account":"magic2","expected":"teacher","loginRole":"teacher","profileRole":"teacher","session":true,"pass":true},
+    {"account":"magic3","expected":"admin","loginRole":"admin","profileRole":"admin","session":true,"pass":true},
+    {"account":"magic4","expected":"manager","loginRole":"manager","profileRole":"manager","session":true,"pass":true},
+    {"account":"magic5","expected":"director","loginRole":"director","profileRole":"director","session":true,"pass":true}
+  ]
+}

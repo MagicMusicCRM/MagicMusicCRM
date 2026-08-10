@@ -173,8 +173,8 @@ void _expectRoleShell(String role) {
     case 'admin':
       visible('Расписание');
       visible('Клиенты');
+      visible('Задачи');
       absent('Обзор');
-      absent('Задачи');
       absent('Аналитика');
     case 'manager':
     case 'director':

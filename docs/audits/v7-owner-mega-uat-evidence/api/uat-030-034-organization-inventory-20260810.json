@@ -1,0 +1,26 @@
+{
+  "capturedAt": "2026-08-10T15:00:00+03:00",
+  "environment": "production",
+  "branch": {
+    "id": "60958318-8d92-4c54-8d56-ded34ee8f8c1",
+    "name": "UAT-20260808-01 Оборонная",
+    "address": "Оборонная 30",
+    "timezone": "Europe/Moscow",
+    "disciplines": ["Вокал", "Гитара", "Барабаны"],
+    "rooms": [
+      {"name":"UAT-20260808-01 Кабинет A","capacity":1},
+      {"name":"UAT-20260808-01 Кабинет B","capacity":2},
+      {"name":"UAT-20260808-01 Кабинет C","capacity":8}
+    ]
+  },
+  "teachers": [
+    {"email":"uat.teacher.20260808.01@gmail.com","discipline":"Вокал","rate":1000,"appRole":"teacher","branchAssigned":true},
+    {"email":"uat.teacher.20260808.02@gmail.com","discipline":"Гитара","rate":1200,"appRole":"teacher","branchAssigned":true},
+    {"email":"uat.teacher.20260808.03@gmail.com","discipline":"Барабаны","rate":800,"appRole":"teacher","branchAssigned":true}
+  ],
+  "staff": [
+    {"email":"uat.admin.20260808.01@gmail.com","businessRole":"admin","appRole":"admin","branchAssigned":true},
+    {"email":"uat.manager.20260808.01@gmail.com","businessRole":"manager","appRole":"manager","branchAssigned":true}
+  ],
+  "secretsStored": false
+}
