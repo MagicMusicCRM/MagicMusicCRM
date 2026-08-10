@@ -3,7 +3,7 @@
 > Зафиксировано: 2026-08-10
 > Локальный кандидат: `1.5.1+180`
 > Ветка: `codex/v7-production-readiness` от `main`/`origin/main`
-> Статус: технический release candidate; production rollout и mega-UAT не завершены
+> Статус: production rollout PASS; owner mega-UAT не завершён
 
 ## С чего начать
 
@@ -26,8 +26,8 @@
 
 | Статус | Количество |
 |---|---:|
-| PASS | 7 |
-| PARTIAL | 32 |
+| PASS | 10 |
+| PARTIAL | 29 |
 | PENDING | 61 |
 | FAIL | 0 |
 | BLOCKED | 0 |
@@ -40,13 +40,18 @@
 - Flutter `666/666`;
 - backend `158/158` suites, `1258/1258` tests;
 - backend build PASS;
-- production API healthy;
-- локальный candidate `1.5.1+180`, тёмная тема; production не изменялся.
+- production API healthy на `1.5.1+180`, migration `0118`;
+- exact image `sha256:a07c39ff…`, worker active, worker/outbox/reconcile zero;
 - server image `sha256:a07c39ff…`, revision `1559a45`: migration, fail-closed
   flags, live/ready, degraded HTTP 503 и Trivy image scan PASS.
 - Inno Setup installer собран и install/launch/uninstall smoke PASS, но Windows
   Authenticode отсутствует; владелец 2026-08-10 явно принял unsigned
   distribution и разрешил продолжать без сертификата.
+
+Production rollout 2026-08-10 прошёл с новым encrypted backup, совпавшей
+off-host SHA, isolated restore `0115`, candidate migration `0118`, двумя
+нулевыми reconciliation, five-role JWT smoke и автоматическим rollback gate.
+Подробности без секретов/PII: `docs/audits/v7-production-rollout-180.md`.
 
 ## Последние production-подтверждения
 

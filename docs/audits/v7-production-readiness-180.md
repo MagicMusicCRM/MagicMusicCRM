@@ -10,7 +10,8 @@
 ## Решение
 
 - **Технический release candidate:** `PASS`.
-- **Production rollout:** `NOT PERFORMED`; production не изменялся.
+- **Production rollout:** `PASS`; exact image развёрнут 2026-08-10, см.
+  [`v7-production-rollout-180.md`](v7-production-rollout-180.md).
 - **Итоговая сдача заказчику:** `NOT YET APPROVED`, потому что owner production
   mega-UAT остаётся `7 PASS / 32 PARTIAL / 61 PENDING` и `INT-S6` открыт.
 
@@ -126,11 +127,9 @@ invalid production flags, live/ready, встроенный healthcheck и реа
 
 ## Открытые условия перед окончательной сдачей
 
-1. Получить явную команду владельца на production backup/rollout; локальная
-   подготовка не даёт права менять production.
-2. После rollout повторить affected UAT rows
+1. Повторить affected UAT rows
    `060/065/073-076/084-086/090-095/103/134/135/145` с UI/API/DB evidence.
-3. Завершить оставшиеся строки 100-сценарной матрицы, финальный reconciliation,
+2. Завершить оставшиеся строки 100-сценарной матрицы, финальный reconciliation,
    DOCX и owner approval; только после этого закрывать `T7.1.2` и `INT-S6`.
 
 ## Rollback

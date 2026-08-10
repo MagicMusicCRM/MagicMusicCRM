@@ -1,15 +1,19 @@
 # V7 owner mega-UAT — актуальные доказательства
 
 Дата прогона: `2026-08-08` — `2026-08-10`
-Клиент: `1.5.1+179`, Windows Release; Android Release `+167` (API 35)
+Клиент: production API `1.5.1+180`; Windows/Android Release `+180` готовы к
+актуальному UI-retest
 Среда данных: production API/DB
 
-Это production-evidence предыдущего кандидата. Локальный `1.5.1+180` пока не
-развёрнут; его автоматические и device-доказательства не повышают статусы
-production UAT без отдельного rollout и owner-повтора.
+Production API развёрнут на exact image `1.5.1+180`. Исторические UI-кадры
+предыдущих кандидатов сохраняют доказанную предметную операцию, но не повышают
+изменённые UI-сценарии до PASS без актуального owner-повтора.
 
 Локальный технический gate и hashes:
 [`../v7-production-readiness-180.md`](../v7-production-readiness-180.md).
+
+Production rollout, backup/restore и runtime evidence:
+[`../v7-production-rollout-180.md`](../v7-production-rollout-180.md).
 
 Рабочая матрица всех `100` сценариев:
 [`../v7-owner-production-mega-uat-result.md`](../v7-owner-production-mega-uat-result.md).
@@ -17,6 +21,16 @@ production UAT без отдельного rollout и owner-повтора.
 Старый набор `00..25` удалён: он содержал устаревший отдельный экран
 аудиторий, прежнюю форму преподавателя и один кадр, снятый не из приложения.
 Ни один из этих кадров не используется как доказательство.
+
+## G0/G13 — rollout `1.5.1+180`
+
+| Проверка | Результат | Доказательство |
+|---|---|---|
+| Exact image, Compose, migration ledger и hashes | PASS | `../v7-production-rollout-180.md` |
+| Новый encrypted backup, off-host SHA и isolated restore | PASS | `../v7-production-rollout-180.md` |
+| Restore `0115` → candidate migrations `0118` → reconcile zero | PASS | `../v7-production-rollout-180.md` |
+| Five-role login + private JWT после rollout | PASS | `../v7-production-rollout-180.md` |
+| Worker/outbox, constraints/indexes, two reconciliations, logs/5xx/latency | PASS | `../v7-production-rollout-180.md` |
 
 ## G3 — филиал, аудитории и преподаватель
 

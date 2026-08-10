@@ -19,11 +19,6 @@ fi
 
 : "${BACKUP_PASSPHRASE:?BACKUP_PASSPHRASE is required in ${BACKUP_ENV}}"
 
-set -a
-# shellcheck disable=SC1090
-. "${ENV_FILE}"
-set +a
-
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 backup_name="magicmusiccrm-staging-${timestamp}"
 tmp_dir="$(mktemp -d)"
@@ -42,13 +37,21 @@ mkdir -p "${payload_dir}"
 
 cd "${STACK_DIR}"
 
-docker compose --env-file "${ENV_FILE}" exec -T postgres \
-  pg_dump -U "${POSTGRES_OWNER_USER}" -d "${POSTGRES_DB}" \
+compose=(docker compose --env-file "${ENV_FILE}")
+postgres_owner_user="$("${compose[@]}" exec -T postgres \
+  sh -ceu 'printf %s "$POSTGRES_USER"')"
+postgres_db="$("${compose[@]}" exec -T postgres \
+  sh -ceu 'printf %s "$POSTGRES_DB"')"
+postgres_app_user="$("${compose[@]}" exec -T postgres \
+  sh -ceu 'printf %s "$POSTGRES_APP_USER"')"
+
+"${compose[@]}" exec -T postgres \
+  pg_dump -U "${postgres_owner_user}" -d "${postgres_db}" \
   --format=custom --blobs --no-owner --no-acl \
   > "${payload_dir}/postgres.dump"
 
-docker compose --env-file "${ENV_FILE}" exec -T postgres \
-  pg_dumpall -U "${POSTGRES_OWNER_USER}" --globals-only \
+"${compose[@]}" exec -T postgres \
+  pg_dumpall -U "${postgres_owner_user}" --globals-only \
   > "${payload_dir}/postgres-globals.sql"
 
 install -m 600 "${ENV_FILE}" "${payload_dir}/staging.env"
@@ -65,9 +68,9 @@ created_at=${timestamp}
 host=$(hostname)
 stack_dir=${STACK_DIR}
 storage_dir=${STORAGE_DIR}
-postgres_db=${POSTGRES_DB}
-postgres_owner_user=${POSTGRES_OWNER_USER}
-postgres_app_user=${POSTGRES_APP_USER}
+postgres_db=${postgres_db}
+postgres_owner_user=${postgres_owner_user}
+postgres_app_user=${postgres_app_user}
 EOF
 
 (

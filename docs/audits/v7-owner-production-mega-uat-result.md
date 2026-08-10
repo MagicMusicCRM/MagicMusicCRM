@@ -2,7 +2,7 @@
 
 Run: `OWNER-20260808-01`
 Среда: production
-Локальный кандидат: `1.5.1+180`; production rollout не выполнялся
+Production candidate: `1.5.1+180`, image `sha256:a07c39ff…`
 Статус: **IN PROGRESS**
 
 `PARTIAL` и `PENDING` допустимы только во время исполнения. Перед `INT-S6`
@@ -16,16 +16,16 @@ Run: `OWNER-20260808-01`
 
 | ID | Сценарий | Статус | Доказательство / остаток |
 |---|---|---|---|
-| UAT-000 | Зафиксировать commit, образы, миграции и hashes | PARTIAL | client `964f79c`, server `1559a45`, local ZIP/Setup/APK/AAB/server-image/SBOM hashes: `v7-production-readiness-180.md`; нужен production registry/image ledger после rollout |
-| UAT-001 | Backup, пробный restore, начальные counts | PARTIAL | read-only preflight подтвердил encrypted backup и SHA; нужен новый maintenance backup, off-host copy, isolated restore-drill и counts этого run |
-| UAT-002 | Release, production API, тёмная тема, реальные данные | PARTIAL | Windows/Android `+180` локально собраны и запущены в тёмной теме; нужен owner production Release proof после разрешённого rollout |
+| UAT-000 | Зафиксировать commit, образы, миграции и hashes | PASS | client `964f79c`, server `1559a45`, production image `a07c39ff…`, schema `0118`, artifact/transport/Compose hashes: `v7-production-readiness-180.md`, `v7-production-rollout-180.md` |
+| UAT-001 | Backup, пробный restore, начальные counts | PASS | новый encrypted backup + off-host SHA, payload SHA, isolated restore `0115`, candidate up `0118`, baseline aggregate counts и cleanup: `v7-production-rollout-180.md` |
+| UAT-002 | Release, production API, тёмная тема, реальные данные | PARTIAL | production API уже на `+180`; Windows/Android `+180` собраны и локально запущены в тёмной теме, нужен актуальный owner UI proof с production data |
 | UAT-003 | ID-ledger и каталог evidence без секретов | PARTIAL | evidence index и redacted API JSON созданы; нужен полный ledger всех UAT facts |
 
 ## G1 — авторизация и навигация пяти ролей
 
 | ID | Сценарий | Статус | Доказательство / остаток |
 |---|---|---|---|
-| UAT-010 | Вход `magic1..5`, роли и навигация | PARTIAL | production API 5/5 PASS: `api/uat-010-five-roles-20260810.json`; ожидаются актуальные UI-кадры |
+| UAT-010 | Вход `magic1..5`, роли и навигация | PARTIAL | post-rollout production login + private JWT `5/5` PASS: `v7-production-rollout-180.md`; ожидаются актуальные UI-кадры навигации |
 | UAT-011 | Relogin Client↔Director и Teacher↔Admin | PARTIAL | automated secure-session regression есть; нужен текущий Release UI proof |
 | UAT-012 | 10 вкладок и связанные маршруты | PARTIAL | доказаны Lead/Chat/Schedule маршруты; полный набор десяти вкладок не снят |
 | UAT-013 | Android Back, клавиатура, safe areas | PARTIAL | teacher session/navigation есть; Client и полный safe-area сценарий ожидаются |
@@ -172,8 +172,8 @@ Run: `OWNER-20260808-01`
 | UAT-131 | Обрыв сети, сохранение формы и Retry | PENDING | — |
 | UAT-132 | Stale expectedVersion и recovery | PARTIAL | automated contracts есть; нужен production UI scenario |
 | UAT-133 | Полная actor matrix private routes | PARTIAL | регулярные route/actor gates есть; нужен финальный candidate run |
-| UAT-134 | Full tests/build/migrations/clean schema | PARTIAL | локально Flutter `666/666`, backend `158/158`/`1258/1258`, build/analyze PASS; clean `0001..0118`, `0118..0116 down/up`, Windows Setup/ZIP, APK/AAB и server image собраны; нужен production candidate ledger |
-| UAT-135 | Health, constraints, reconcile, workers, logs | PARTIAL | host/exact image gates PASS; production read-only preflight: live/ready all ok, v4/v4, worker/outbox zero; нужен финальный production reconcile после rollout |
+| UAT-134 | Full tests/build/migrations/clean schema | PARTIAL | Flutter `666/666`, backend `158/158`/`1258/1258`, build/analyze PASS; clean `0001..0118`, down/up, artifacts и exact production ledger PASS; остаётся финальная route/wire/inventory stale-сверка |
+| UAT-135 | Health, constraints, reconcile, workers, logs | PASS | internal/public ready, migration objects, PostgreSQL validation, worker/outbox, reconciliation twice, restart/log/5xx и latency: `v7-production-rollout-180.md` |
 
 ## G14 — пять персон и итоговое доказательство
 
