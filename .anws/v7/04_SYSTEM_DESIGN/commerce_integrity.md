@@ -22,6 +22,9 @@ settlement и начисления преподавателю. Она расши
 - отменить абонемент и сторнировать оплату без физического удаления;
 - валидировать planned client settlement/teacher pay, автоматически проводить их
   после lesson end и поддерживать append-only correction;
+- хранить базовую почасовую ставку преподавателя effective-dated историей,
+  собирать независимую от клиентского funding payroll-проекцию и регистрировать
+  выплаты без имитации банковского или кассового перевода;
 - давать reconciliation delta = 0 и bounded actor-safe projections.
 
 ### Non-Goals
@@ -61,6 +64,8 @@ flowchart LR
 | `PlannedLessonSettlementService` | binds manual decision to config revisions and reservation impact | расширяет settlement port |
 | `LessonSettlementCorrectionService` | atomic reversal/exclusion + optional replacement | переиспользует append-only facts |
 | `CommerceConfigurationAdapter` | effective settlement/pay rules | расширяет unified CRM Configuration snapshot |
+| `TeachersService` | атомарная карточка, филиалы/дисциплины/custom eligibility и effective-dated базовая ставка | расширяет один существующий Teacher create/update path |
+| `PayrollService` | проведённые/оплачиваемые занятия, часы, accrual, adjustments, payouts и debt | читает effective teacher facts и legacy fallback без второго payroll ledger |
 | `CommerceProjectionRepository` | единственный wallet/debt/pending/revenue/subscription/movements/history read contract для Client Card, dashboards, analytics и exports | расширяет один существующий SQL projection |
 | `CommerceReconciliation` | ledger/obligation/payment/exclusion/hours/accrual checks | расширяет v4 preflight/reconcile |
 
@@ -78,6 +83,9 @@ flowchart LR
 | Lesson settlement | valid lesson/config/subscription | settlement rule + teacher rule + reason | client facts + teacher accrual snapshots |
 | Planned settlement | scheduled lesson/current revisions | required client + teacher decisions | versioned plan + exact reservation impact |
 | Settlement correction | effective completed settlement | reason + replacement/cancel | reversal/exclusion + optional new effective facts |
+| Teacher create/update | actor may manage Teacher/payroll | identity, branches, disciplines, levels, categories, salary metadata, rate/effective date | одна Teacher mutation + append-only rate history; при create также user/profile/link |
+| Teacher payout | positive amount and payroll capability | teacher, kind, paidAt, comment | append-only payout/bonus/deduction + audit |
+| Teacher payroll report | payroll capability and bounded date filters | period, branch, teacher, teaching attributes | completed/payable counts, hours, effective accrual, adjustments, payouts and period balance; Teacher card retains all-time debt |
 
 ## 6. API interfaces
 
@@ -93,6 +101,10 @@ flowchart LR
 | `POST /crm/students/:studentId/payment-records/:id/reverse` | сторно/техническое удаление | `commerce.client_finance.write` |
 | существующие `.../cancel/preview`, `.../cancel` | refund original payer | `commerce.client_finance.write` |
 | `GET /crm/students/:id/commerce` | единая проекция | `commerce.client_finance.read` |
+| `POST /crm/teachers`, `PATCH /crm/teachers/:id` | единая карточка Teacher и ставка | existing Teacher manage + payroll guard for monetary fields |
+| `GET /crm/teachers/:id/payroll` | карточка начислений и общей задолженности | per-teacher payroll read |
+| `POST /crm/teachers/:id/payouts` | регистрация выплаты/доплаты/вычета | per-teacher payroll write |
+| `GET /crm/reports/teacher-stats` | периодная payroll-проекция | per-teacher payroll read |
 
 Существующий `subscriptions/issue` становится внутренним adapter либо удаляется
 после миграции production callers; одновременно активных семантически разных
@@ -158,6 +170,20 @@ stateDiagram-v2
 Lesson/client/teacher projections use only non-reversed effective facts. Planned
 decisions and failed worker reasons are operational state, not revenue/payroll.
 
+Teacher base rate is rubles per astronomical hour. Presets are presentation-only;
+the backend accepts any non-negative decimal. `0` means `Входит в оклад`: the
+lesson remains in completed/hour statistics but creates no piece-rate debt.
+`teachers.salary` is reference metadata and is never silently added to lesson
+accrual. A salary obligation would require an explicit future payroll fact, not a
+screen-local formula.
+
+For a selected payroll period the projection distinguishes all completed lessons,
+payable lessons (`effective amount > 0`) and zero-pay lessons, and reports accrued,
+bonus, deduction, payout and period balance separately. The Teacher card keeps the
+authoritative all-time debt `effective accrual + bonus - deduction - payout`; a
+period movement is not mislabelled as settlement of specific lessons because
+payouts are aggregate facts.
+
 Future installment schedule не является долгом; полная purchase obligation уже
 видна отдельно и не выдаётся за деньги на счёте.
 
@@ -188,6 +214,10 @@ Future installment schedule не является долгом; полная pur
 - PostgreSQL fault injection и two-writer races;
 - status/reversal/report predicate matrix;
 - Actor Matrix/payload leak for six roles and two-client scope;
+- atomic Teacher create/update with multi-branch/discipline/custom selections and
+  exactly one intended effective-rate history entry;
+- payroll calculation/report matrix for payable/zero-pay counts, arbitrary period,
+  correction-effective fact, bonus/deduction/payout and CSV parity;
 - migration down→up + lossless legacy paid backfill;
 - reconciliation twice, delta 0;
 - worker retry/poison and post-terminal correction races;
@@ -208,5 +238,6 @@ Future installment schedule не является долгом; полная pur
   configuration snapshot, access registry/route policy.
 - Database: additive migrations `0103+`.
 - Flutter: `magic_crm_service_finance.dart`, Client Card payment/subscription
-  sections and shared adaptive forms.
+  sections and shared adaptive forms, plus one shared Teacher employment/rate form
+  used by both create and edit.
 - Reports: один ordinary exclusion predicate; technical history отдельно.

@@ -100,6 +100,12 @@ describe("Teacher and staff app accounts (PostgreSQL)", () => {
       password: teacherPassword,
       branchIds: [branchId],
       disciplineIds: [disciplineId],
+      customDataPatch: {
+        levels: ["Начальный"],
+        categories: ["Дети"],
+      },
+      salary: 15000,
+      rate: 750,
     });
 
     expect(createdStaff).toMatchObject({
@@ -112,11 +118,78 @@ describe("Teacher and staff app accounts (PostgreSQL)", () => {
       appRole: "teacher",
       isAppAccount: true,
       specialization: "Вокал",
+      salary: 15000,
+      currentRate: 750,
     });
+
+    const updatedTeacher = await teachers.updateTeacher(
+      actor,
+      String(createdTeacher.id),
+      {
+        customDataPatch: {
+          levels: ["Начальный", "Средний"],
+          categories: ["Дети"],
+        },
+        salary: 20000,
+        rate: 900,
+        branchIds: [branchId],
+        disciplineIds: [disciplineId],
+      },
+    );
+    expect(updatedTeacher).toMatchObject({
+      salary: 20000,
+      currentRate: 900,
+      customData: {
+        levels: ["Начальный", "Средний"],
+        categories: ["Дети"],
+      },
+    });
+    const compensationSettings = await client.query<{
+      salary: string;
+      custom_data: Record<string, unknown>;
+      rate_count: string;
+      current_rate: string;
+    }>(
+      `select t.salary::text, t.custom_data,
+         count(tr.id)::text as rate_count,
+         (array_agg(tr.rate order by tr.effective_from desc, tr.created_at desc, tr.id desc))[1]::text
+           as current_rate
+       from app.teachers t
+       join app.teacher_rates tr on tr.teacher_id = t.id
+       where t.id = $1
+       group by t.id`,
+      [createdTeacher.id],
+    );
+    expect(compensationSettings.rows[0]).toMatchObject({
+      salary: "20000.00",
+      rate_count: "2",
+      current_rate: "900.00",
+      custom_data: {
+        levels: ["Начальный", "Средний"],
+        categories: ["Дети"],
+      },
+    });
+
+    const rejectedEmail = `rejected-${suffix}@test.local`;
+    await expect(
+      teachers.createTeacher(actor, {
+        firstName: "Ошибка",
+        email: rejectedEmail,
+        password: teacherPassword,
+        branchIds: [branchId],
+        disciplineIds: [randomUUID()],
+        rate: 700,
+      }),
+    ).rejects.toThrow("Выберите действующие филиалы и их дисциплины");
+    const rejectedAccount = await client.query<{ count: string }>(
+      `select count(*)::text as count from app.users where email = $1`,
+      [rejectedEmail],
+    );
+    expect(rejectedAccount.rows[0]?.count).toBe("0");
 
     await client.query(
       `update app.teacher_branches
-       set active_until = current_date - 1
+       set active_from = current_date - 2, active_until = current_date - 1
        where teacher_id = $1`,
       [createdTeacher.id],
     );

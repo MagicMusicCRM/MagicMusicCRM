@@ -1,7 +1,7 @@
 # MagicMusicCRM — актуальная передача следующему агенту
 
 > Зафиксировано: 2026-08-10
-> Локальный кандидат: `1.5.1+180`
+> Локальный кандидат: `1.5.1+181` (Teacher compensation refinement); production остаётся `1.5.1+180`
 > Ветка: `codex/v7-production-readiness` от `main`/`origin/main`
 > Статус: production rollout PASS; owner mega-UAT не завершён
 

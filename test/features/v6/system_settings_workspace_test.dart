@@ -436,18 +436,30 @@ void main() {
       find.widgetWithText(TextFormField, 'Повторите пароль *'),
       'password-123',
     );
-    await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+    final branchChip = find.widgetWithText(FilterChip, 'Сокол');
+    await tester.ensureVisible(branchChip);
+    await tester.tap(branchChip);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Сокол').last);
+    final disciplineChip = find.widgetWithText(FilterChip, 'Вокал');
+    await tester.ensureVisible(disciplineChip);
+    await tester.tap(disciplineChip);
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilterChip, 'Вокал'));
+    final rateSelector = find.byType(DropdownButtonFormField<String>);
+    await tester.ensureVisible(rateSelector);
+    await tester.tap(rateSelector);
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.widgetWithText(FilledButton, 'Создать преподавателя'),
-    );
+    await tester.tap(find.text('750 ₽').last);
+    await tester.pumpAndSettle();
+    final createButton = find.widgetWithText(FilledButton, 'Создать');
+    await tester.ensureVisible(createButton);
+    await tester.tap(createButton);
     await tester.pumpAndSettle();
 
     expect(api.mutations, contains('/crm/teachers'));
+    final payload = api.mutations['/crm/teachers']! as Map<String, dynamic>;
+    expect(payload['branchIds'], ['20000000-0000-4000-8000-000000000001']);
+    expect(payload['disciplineIds'], ['40000000-0000-4000-8000-000000000001']);
+    expect(payload['rate'], 750);
   });
 
   testWidgets('manager creates a group from the mounted schedule workspace', (

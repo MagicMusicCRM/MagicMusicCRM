@@ -2,11 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
-import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
-import 'package:magic_music_crm/core/widgets/teacher_rate_selector.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/provision_access_dialog.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_employment_fields.dart';
 
 part 'teacher_detail_widgets.dart';
 
@@ -34,39 +33,15 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
   late Map<String, dynamic> _localData;
   late TextEditingController _nameController;
   late TextEditingController _emailController;
-  late TextEditingController _salaryController;
   late String _canonicalPhone;
   bool _saving = false;
-
-  // KVA-238: custom-поля карточки педагога.
-  DateTime? _birthday;
-  DateTime? _workStartDate;
-  bool _isPartTime = false;
-  bool _isBlacklisted = false;
-
-  // KVA-238: дисциплины и филиалы (мультивыбор).
-  List<Map<String, dynamic>> _allDisciplines = const [];
-  List<Map<String, dynamic>> _allBranches = const [];
-  // Levels/categories used to be free text, so no two teachers spelled them
-  // alike and filtering by them could not work. Options come from the CRM
-  // custom-field schema — the same list students and leads pick from.
-  List<Map<String, dynamic>> _allLevels = const [];
-  List<Map<String, dynamic>> _allCategories = const [];
-  final Set<String> _levels = {};
-  final Set<String> _categories = {};
-  final Set<String> _disciplineIds = {};
-  final Set<String> _branchIds = {};
-
-  // KVA-238: ставка (история на бекенде; здесь — актуальное значение).
-  num? _currentRate;
-  num? _pendingRate;
-  bool _rateTouched = false;
+  final _employmentKey = GlobalKey<TeacherEmploymentFieldsState>();
+  late final TeacherEmploymentInitial _employmentInitial;
 
   // KVA-238: блок «Оплаты преподавателю». null = ещё грузится или нет прав.
   Map<String, dynamic>? _payroll;
   bool _payrollVisible = true;
 
-  final _dateFmt = DateFormat('dd.MM.yyyy');
   final _money = NumberFormat('#,##0', 'ru');
 
   String get _teacherId => _localData['id'].toString();
@@ -94,28 +69,25 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
     final custom = _localData['custom_data'] is Map<String, dynamic>
         ? _localData['custom_data'] as Map<String, dynamic>
         : const <String, dynamic>{};
-    _birthday = _parseDate(custom['birthday']);
-    _workStartDate = _parseDate(custom['workStartDate']);
-    _isPartTime = custom['isPartTime'] == true;
-    _isBlacklisted = custom['isBlacklisted'] == true;
-    _levels.addAll(_readMulti(custom, 'levels', 'level'));
-    _categories.addAll(_readMulti(custom, 'categories', 'category'));
-    _salaryController = TextEditingController(
-      text: _localData['salary']?.toString() ?? '',
-    );
-    _currentRate = _localData['current_rate'] is num
+    final currentRate = _localData['current_rate'] is num
         ? _localData['current_rate'] as num
         : num.tryParse(_localData['current_rate']?.toString() ?? '');
-    for (final discipline in _asMapList(_localData['disciplines'])) {
-      final id = discipline['id']?.toString();
-      if (id != null) _disciplineIds.add(id);
-    }
-    for (final branch in _asMapList(_localData['assigned_branches'])) {
-      final id = branch['id']?.toString();
-      if (id != null) _branchIds.add(id);
-    }
+    final salary = _localData['salary'] is num
+        ? _localData['salary'] as num
+        : num.tryParse(_localData['salary']?.toString() ?? '');
+    _employmentInitial = TeacherEmploymentInitial(
+      branches: _asMapList(_localData['assigned_branches']),
+      disciplines: _asMapList(_localData['disciplines']),
+      levels: _readMulti(custom, 'levels', 'level'),
+      categories: _readMulti(custom, 'categories', 'category'),
+      birthday: _parseDate(custom['birthday']),
+      workStartDate: _parseDate(custom['workStartDate']),
+      isPartTime: custom['isPartTime'] == true,
+      isBlacklisted: custom['isBlacklisted'] == true,
+      salary: salary,
+      rate: currentRate,
+    );
 
-    _loadReferences();
     _loadPayroll();
   }
 
@@ -123,7 +95,6 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
-    _salaryController.dispose();
     super.dispose();
   }
 
@@ -151,72 +122,6 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
     };
   }
 
-  Future<void> _loadReferences() async {
-    try {
-      final crm = ref.read(magicCrmServiceProvider);
-      final branches = await crm.listBranches(limit: 100);
-      if (!mounted) return;
-      setState(() => _allBranches = branches);
-      await _loadDisciplinesForBranches();
-    } catch (_) {
-      // Справочники не критичны — оставляем чипы пустыми.
-    }
-    await _loadFieldOptions();
-  }
-
-  Future<void> _loadDisciplinesForBranches() async {
-    if (_branchIds.isEmpty) {
-      if (mounted) setState(() => _allDisciplines = const []);
-      return;
-    }
-    try {
-      final crm = ref.read(magicCrmServiceProvider);
-      final rows = await Future.wait(_branchIds.map(crm.listBranchDisciplines));
-      final byId = <String, Map<String, dynamic>>{};
-      for (final row in rows.expand((items) => items)) {
-        final id = row['discipline_id']?.toString();
-        if (id != null) byId[id] = {'id': id, 'name': row['name']};
-      }
-      if (!mounted) return;
-      setState(() {
-        _allDisciplines = byId.values.toList()
-          ..sort(
-            (a, b) => a['name'].toString().compareTo(b['name'].toString()),
-          );
-        _disciplineIds.removeWhere((id) => !byId.containsKey(id));
-      });
-    } catch (_) {
-      if (mounted) setState(() => _allDisciplines = const []);
-    }
-  }
-
-  /// Level/category options live in the CRM custom-field schema, so an admin
-  /// can extend them without a release.
-  Future<void> _loadFieldOptions() async {
-    try {
-      final fields = await ref
-          .read(magicSettingsServiceProvider)
-          .getCrmCustomFields();
-      List<Map<String, dynamic>> optionsFor(String key) {
-        final field = fields
-            .where((f) => f.entity == 'teachers' && f.key == key)
-            .firstOrNull;
-        return [
-          for (final option in field?.options ?? const <String>[])
-            {'id': option, 'name': option},
-        ];
-      }
-
-      if (!mounted) return;
-      setState(() {
-        _allLevels = optionsFor('levels');
-        _allCategories = optionsFor('categories');
-      });
-    } catch (_) {
-      // Same rationale as above: no options → no chips, the rest still saves.
-    }
-  }
-
   Future<void> _loadPayroll() async {
     try {
       final payroll = await ref
@@ -225,7 +130,7 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
       if (!mounted) return;
       setState(() => _payroll = payroll);
     } catch (_) {
-      // 403 для админа: payroll виден только manager/system_admin.
+      // The card remains usable when the current role cannot read payroll.
       if (!mounted) return;
       setState(() => _payrollVisible = false);
     }
@@ -238,14 +143,8 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
       );
       return;
     }
-    if (_branchIds.isEmpty || _disciplineIds.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Выберите филиал и хотя бы одну дисциплину.'),
-        ),
-      );
-      return;
-    }
+    final employment = _employmentKey.currentState?.validateAndRead();
+    if (employment == null) return;
     setState(() => _saving = true);
     try {
       final names = _nameController.text.trim().split(RegExp(r'\s+'));
@@ -253,49 +152,22 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
       final ln = names.length > 1 ? names.sublist(1).join(' ') : '';
       final crm = ref.read(magicCrmServiceProvider);
 
-      final salaryText = _salaryController.text.trim().replaceAll(',', '.');
-      final salary = salaryText.isEmpty ? null : num.tryParse(salaryText);
-      final originalSalary = num.tryParse(
-        _localData['salary']?.toString() ?? '',
-      );
-
       await crm.updateTeacher(
         _teacherId,
         firstName: fn,
         lastName: ln,
         phone: _canonicalPhone,
         email: _emailController.text,
-        customDataPatch: {
-          'birthday': _birthday == null
-              ? ''
-              : DateFormat('yyyy-MM-dd').format(_birthday!),
-          'workStartDate': _workStartDate == null
-              ? ''
-              : DateFormat('yyyy-MM-dd').format(_workStartDate!),
-          'levels': _levels.toList(),
-          'categories': _categories.toList(),
-          // The teacher list filter still greps the legacy singular keys, so
-          // keep them in sync rather than stranding rows out of the filter.
-          'level': _levels.join(', '),
-          'category': _categories.join(', '),
-          'isPartTime': _isPartTime,
-          'isBlacklisted': _isBlacklisted,
-        },
-        // Оклад отправляем только при изменении: у админа нет прав payroll.
-        salary: salary != null && salary != originalSalary ? salary : null,
-        disciplineIds: _disciplineIds.toList(),
-        branchIds: _branchIds.toList(),
+        customDataPatch: employment.customDataPatch,
+        salary: employment.salaryChanged ? employment.salary : null,
+        disciplineIds: employment.disciplineIds,
+        branchIds: employment.branchIds,
+        rate: employment.rateChanged ? employment.rate : null,
+        rateEffectiveFrom:
+            employment.rateChanged && employment.rateEffectiveFrom != null
+            ? DateFormat('yyyy-MM-dd').format(employment.rateEffectiveFrom!)
+            : null,
       );
-
-      // KVA-238: смена ставки — отдельная запись истории teacher_rates.
-      if (_rateTouched &&
-          _pendingRate != null &&
-          _pendingRate != _currentRate) {
-        await crm.setTeacherHourRate(
-          teacherId: _teacherId,
-          rate: _pendingRate!,
-        );
-      }
 
       if (mounted) {
         Navigator.pop(context, true);
@@ -394,7 +266,7 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
     return AlertDialog(
       title: const Text('Карточка преподавателя'),
       content: SizedBox(
-        width: 480,
+        width: 620,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -436,80 +308,11 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
                 ),
                 keyboardType: TextInputType.emailAddress,
               ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: _DateField(
-                      label: 'Дата рождения',
-                      value: _birthday,
-                      format: _dateFmt,
-                      onChanged: (date) => setState(() => _birthday = date),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _DateField(
-                      label: 'Начало работы',
-                      value: _workStartDate,
-                      format: _dateFmt,
-                      onChanged: (date) =>
-                          setState(() => _workStartDate = date),
-                    ),
-                  ),
-                ],
-              ),
-              if (_allDisciplines.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                _buildChipsSection(
-                  'Дисциплины',
-                  _allDisciplines,
-                  _disciplineIds,
-                ),
-              ],
-              const SizedBox(height: 12),
-              if (_allLevels.isNotEmpty) ...[
-                _buildChipsSection('Уровни обучения', _allLevels, _levels),
-                const SizedBox(height: 12),
-              ],
-              if (_allCategories.isNotEmpty)
-                _buildChipsSection('Категории', _allCategories, _categories),
-              if (_allBranches.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                _buildChipsSection(
-                  'Филиалы',
-                  _allBranches,
-                  _branchIds,
-                  _loadDisciplinesForBranches,
-                ),
-              ],
-              const SizedBox(height: 12),
-              TeacherRateSelector(
-                initialRate: _currentRate,
-                onChanged: (rate) {
-                  _pendingRate = rate;
-                  _rateTouched = true;
-                },
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _salaryController,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                decoration: const InputDecoration(labelText: 'Оклад, ₽/мес'),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('По совместительству'),
-                value: _isPartTime,
-                onChanged: (value) => setState(() => _isPartTime = value),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Чёрный список'),
-                value: _isBlacklisted,
-                onChanged: (value) => setState(() => _isBlacklisted = value),
+              const SizedBox(height: 22),
+              TeacherEmploymentFields(
+                key: _employmentKey,
+                initial: _employmentInitial,
+                enabled: !_saving,
               ),
             ],
           ),
@@ -590,6 +393,17 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
                     fontSize: 12.5,
                   ),
                 ),
+                const SizedBox(height: 3),
+                Text(
+                  'Завершено ${_num(payroll['completedLessons']).toInt()} · '
+                  'оплачиваемых ${_num(payroll['payableLessons']).toInt()} · '
+                  'без поурочного начисления '
+                  '${_num(payroll['noAccrualLessons']).toInt()}',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontSize: 12.5,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
@@ -607,49 +421,6 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
                 ),
               ],
             ),
-    );
-  }
-
-  Widget _buildChipsSection(
-    String title,
-    List<Map<String, dynamic>> options,
-    Set<String> selected, [
-    VoidCallback? onChanged,
-  ]) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-            fontSize: 12,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: options.map((option) {
-            final id = option['id']?.toString() ?? '';
-            final isSelected = selected.contains(id);
-            return FilterChip(
-              label: Text(option['name']?.toString() ?? '—'),
-              selected: isSelected,
-              onSelected: (value) {
-                setState(() {
-                  if (value) {
-                    selected.add(id);
-                  } else {
-                    selected.remove(id);
-                  }
-                });
-                onChanged?.call();
-              },
-            );
-          }).toList(),
-        ),
-      ],
     );
   }
 

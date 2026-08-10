@@ -1155,6 +1155,13 @@ void main() {
         phone: '+79991111111',
         branchIds: const ['branch-a'],
         disciplineIds: const ['discipline-a'],
+        customDataPatch: const {
+          'levels': ['Начальный'],
+          'categories': ['Дети'],
+        },
+        salary: 15000,
+        rate: 750,
+        rateEffectiveFrom: '2026-08-01',
       );
       final updatedTeacher = await service.updateTeacher(
         'teacher-a',
@@ -1164,6 +1171,12 @@ void main() {
         phone: '+79991111111',
         branchIds: const ['branch-a'],
         disciplineIds: const ['discipline-b'],
+        customDataPatch: const {
+          'levels': ['Средний'],
+        },
+        salary: 20000,
+        rate: 900,
+        rateEffectiveFrom: '2026-08-10',
       );
       final staff = await service.createStaff(
         firstName: 'Ольга',
@@ -1209,8 +1222,20 @@ void main() {
       expect(adapter.requests[1].body['branchIds'], ['branch-a']);
       expect(adapter.requests[1].body['disciplineIds'], ['discipline-a']);
       expect(adapter.requests[1].body['password'], 'password-123');
+      expect(adapter.requests[1].body['customDataPatch']['levels'], [
+        'Начальный',
+      ]);
+      expect(adapter.requests[1].body['salary'], 15000);
+      expect(adapter.requests[1].body['rate'], 750);
+      expect(adapter.requests[1].body['rateEffectiveFrom'], '2026-08-01');
       expect(adapter.requests[2].body['branchIds'], ['branch-a']);
       expect(adapter.requests[2].body['disciplineIds'], ['discipline-b']);
+      expect(adapter.requests[2].body['customDataPatch']['levels'], [
+        'Средний',
+      ]);
+      expect(adapter.requests[2].body['salary'], 20000);
+      expect(adapter.requests[2].body['rate'], 900);
+      expect(adapter.requests[2].body['rateEffectiveFrom'], '2026-08-10');
       expect(adapter.requests[3].body['role'], 'manager');
       expect(adapter.requests[3].body['branchIds'], ['branch-a']);
       expect(adapter.requests[3].body['password'], 'password-123');

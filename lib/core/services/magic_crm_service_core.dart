@@ -398,6 +398,10 @@ extension MagicCrmCore on MagicCrmService {
     required List<String> branchIds,
     required List<String> disciplineIds,
     String status = 'active',
+    Map<String, dynamic>? customDataPatch,
+    num? salary,
+    num? rate,
+    String? rateEffectiveFrom,
   }) async {
     final data = <String, dynamic>{
       'firstName': firstName.trim(),
@@ -411,6 +415,14 @@ extension MagicCrmCore on MagicCrmService {
       data['lastName'] = lastName.trim();
     }
     if (phone != null && phone.trim().isNotEmpty) data['phone'] = phone.trim();
+    if (customDataPatch != null && customDataPatch.isNotEmpty) {
+      data['customDataPatch'] = customDataPatch;
+    }
+    if (salary != null) data['salary'] = salary;
+    if (rate != null) data['rate'] = rate;
+    if (rateEffectiveFrom != null && rateEffectiveFrom.isNotEmpty) {
+      data['rateEffectiveFrom'] = rateEffectiveFrom;
+    }
 
     final response = await _api.post<Map<String, dynamic>>(
       '/crm/teachers',
@@ -444,6 +456,8 @@ extension MagicCrmCore on MagicCrmService {
     num? salary,
     List<String>? disciplineIds,
     List<String>? branchIds,
+    num? rate,
+    String? rateEffectiveFrom,
   }) async {
     final data = <String, dynamic>{};
     if (firstName != null) data['firstName'] = firstName.trim();
@@ -457,6 +471,10 @@ extension MagicCrmCore on MagicCrmService {
     if (salary != null) data['salary'] = salary;
     if (disciplineIds != null) data['disciplineIds'] = disciplineIds;
     if (branchIds != null) data['branchIds'] = branchIds;
+    if (rate != null) data['rate'] = rate;
+    if (rateEffectiveFrom != null && rateEffectiveFrom.isNotEmpty) {
+      data['rateEffectiveFrom'] = rateEffectiveFrom;
+    }
 
     final response = await _api.patch<Map<String, dynamic>>(
       '/crm/teachers/$id',

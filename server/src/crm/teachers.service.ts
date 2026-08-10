@@ -151,10 +151,10 @@ export class TeachersService {
           -- KVA-238: оклад, актуальная ставка и явные связи для карточки.
           t.salary,
           (
-            select tr.rate
-            from app.teacher_rates tr
-            where tr.teacher_id = t.id and tr.effective_from <= current_date
-            order by tr.effective_from desc, tr.created_at desc
+              select tr.rate
+              from app.teacher_rates tr
+              where tr.teacher_id = t.id and tr.effective_from <= current_date
+              order by tr.effective_from desc, tr.created_at desc, tr.id desc
             limit 1
           ) as current_rate,
           (
@@ -402,6 +402,9 @@ export class TeachersService {
 
   async createTeacher(actor: ActorContext, dto: CreateTeacherDto) {
     this.policy.assertCanManageSystemSettings(actor);
+    if (dto.salary !== undefined || dto.rate !== undefined) {
+      this.policy.assertCanReadPayroll(actor);
+    }
     const firstName = requiredTrim(
       dto.firstName,
       "Имя преподавателя обязательно.",
@@ -413,6 +416,7 @@ export class TeachersService {
       "Email преподавателя обязателен.",
     ).toLowerCase();
     const status = trimOptional(dto.status) ?? "active";
+    const customDataPatch = sanitizeJsonObject(dto.customDataPatch);
     const fullName = [firstName, lastName].filter(Boolean).join(" ");
     for (const branchId of dto.branchIds) {
       await assertSettingsBranchScope(this.database, actor, branchId);
@@ -460,10 +464,13 @@ export class TeachersService {
             returning id, user_id, first_name, last_name, phone
           ),
           inserted_teacher as (
-            insert into app.teachers (profile_id, status, specialization)
-            select inserted_profile.id, $6, reference_guard.specialization
+            insert into app.teachers (
+              profile_id, status, specialization, custom_data, salary
+            )
+            select inserted_profile.id, $6, reference_guard.specialization,
+              $11::jsonb, $12::numeric
             from inserted_profile cross join reference_guard
-            returning id, status, specialization, profile_id
+            returning id, status, specialization, custom_data, salary, profile_id
           ),
           inserted_branches as (
             insert into app.teacher_branches (teacher_id, branch_id)
@@ -477,6 +484,16 @@ export class TeachersService {
             from inserted_teacher cross join valid_disciplines
             returning discipline_id
           ),
+          inserted_rate as (
+            insert into app.teacher_rates (
+              teacher_id, rate, effective_from, created_by, created_at
+            )
+            select inserted_teacher.id, $13::numeric,
+              coalesce($14::date, current_date), $10, clock_timestamp()
+            from inserted_teacher
+            where $13::numeric is not null
+            returning id, rate, effective_from, created_at
+          ),
           inserted_link as (
             insert into app.user_crm_links (
               user_id, entity_type, entity_id, matched_phone, link_source,
@@ -487,9 +504,14 @@ export class TeachersService {
             from inserted_user cross join inserted_teacher
             returning id
           )
-          select t.id, t.status, t.specialization, t.profile_id,
+          select t.id, t.status, t.specialization, t.custom_data, t.salary,
+            t.profile_id,
             p.user_id as profile_user_id, p.first_name, p.last_name, u.email,
             p.phone, u.role::text as app_role, u.is_app_account,
+            (select rate from inserted_rate
+              where effective_from <= current_date
+              order by effective_from desc, created_at desc, id desc limit 1
+            ) as current_rate,
             (select jsonb_agg(jsonb_build_object('id', b.id, 'name', b.name)
               order by b.name) from valid_branches b) as assigned_branches,
             (select jsonb_agg(jsonb_build_object('id', d.id, 'name', d.name)
@@ -500,7 +522,8 @@ export class TeachersService {
           join inserted_branches branch_guard on true
           join inserted_disciplines discipline_guard on true
           join inserted_link link_guard on true
-          group by t.id, t.status, t.specialization, t.profile_id,
+          group by t.id, t.status, t.specialization, t.custom_data, t.salary,
+            t.profile_id,
             p.user_id, p.first_name, p.last_name, u.email, p.phone,
             u.role, u.is_app_account
           limit 1
@@ -516,6 +539,10 @@ export class TeachersService {
           dto.branchIds,
           dto.disciplineIds,
           actor.userId,
+          JSON.stringify(customDataPatch),
+          dto.salary ?? null,
+          dto.rate ?? null,
+          dto.rateEffectiveFrom ?? null,
         ],
       );
       const teacher = result.rows[0];
@@ -529,6 +556,10 @@ export class TeachersService {
         action: "crm.teacher_created",
         entityType: "teacher",
         entityId: teacher.id,
+        metadata: {
+          rateConfigured: dto.rate !== undefined,
+          salaryConfigured: dto.salary !== undefined,
+        },
       });
       return this.toTeacherDto(teacher);
     } catch (error) {
@@ -680,7 +711,9 @@ export class TeachersService {
     dto: UpdateTeacherDto,
   ) {
     this.policy.assertCanWriteCrm(actor);
-    if (dto.salary !== undefined) this.policy.assertCanReadPayroll(actor);
+    if (dto.salary !== undefined || dto.rate !== undefined) {
+      this.policy.assertCanReadPayroll(actor);
+    }
     if (dto.branchIds || dto.disciplineIds) {
       this.policy.assertCanManageSystemSettings(actor);
     }
@@ -797,6 +830,16 @@ export class TeachersService {
             version = app.teacher_branches.version + 1,
             updated_at = now()
           returning branch_id
+        ),
+        inserted_rate as (
+          insert into app.teacher_rates (
+            teacher_id, rate, effective_from, created_by, created_at
+          )
+          select updated_teacher.id, $11::numeric,
+            coalesce($12::date, current_date), $13, clock_timestamp()
+          from updated_teacher
+          where $11::numeric is not null
+          returning id, rate, effective_from, created_at
         )
         select ut.id, ut.status, ut.specialization, ut.custom_data, ut.salary,
           ut.profile_id,
@@ -805,6 +848,22 @@ export class TeachersService {
           coalesce(updated_profile_dependency.first_name, p.first_name) as first_name,
           coalesce(updated_profile_dependency.last_name, p.last_name) as last_name,
           u.email, coalesce(updated_profile_dependency.phone, p.phone) as phone,
+          (select candidate.rate
+            from (
+              select inserted.id, inserted.rate, inserted.effective_from,
+                inserted.created_at
+              from inserted_rate inserted
+              union all
+              select existing.id, existing.rate, existing.effective_from,
+                existing.created_at
+              from app.teacher_rates existing
+              where existing.teacher_id = ut.id
+            ) candidate
+            where candidate.effective_from <= current_date
+            order by candidate.effective_from desc, candidate.created_at desc,
+              candidate.id desc
+            limit 1
+          ) as current_rate,
           (select jsonb_agg(jsonb_build_object('id', b.id, 'name', b.name)
             order by b.name) from valid_branches b) as assigned_branches,
           (select jsonb_agg(jsonb_build_object('id', d.id, 'name', d.name)
@@ -826,6 +885,9 @@ export class TeachersService {
         dto.salary ?? null,
         dto.disciplineIds ?? null,
         dto.branchIds ?? null,
+        dto.rate ?? null,
+        dto.rateEffectiveFrom ?? null,
+        actor.userId,
       ],
     );
     const teacher = result.rows[0];
@@ -839,6 +901,11 @@ export class TeachersService {
       action: "crm.teacher_updated",
       entityType: "teacher",
       entityId: teacher.id,
+      metadata: {
+        rateChanged: dto.rate !== undefined,
+        rateEffectiveFrom: dto.rateEffectiveFrom ?? null,
+        salaryChanged: dto.salary !== undefined,
+      },
     });
     return this.toTeacherDto(teacher);
   }

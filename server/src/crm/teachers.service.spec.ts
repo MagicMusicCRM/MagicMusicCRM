@@ -68,6 +68,9 @@ describe("TeachersService", () => {
         last_name: "Петрова",
         email: "teacher@example.com",
         phone: "+79991111111",
+        custom_data: { levels: ["Начальный"] },
+        salary: "15000.00",
+        current_rate: "750.00",
       },
     ]);
 
@@ -80,6 +83,10 @@ describe("TeachersService", () => {
         phone: "+79991111111",
         branchIds: ["branch-a"],
         disciplineIds: ["discipline-a"],
+        customDataPatch: { levels: ["Начальный"] },
+        salary: 15000,
+        rate: 750,
+        rateEffectiveFrom: "2026-08-01",
       }),
     ).resolves.toMatchObject({
       id: "teacher-a",
@@ -102,7 +109,16 @@ describe("TeachersService", () => {
       ["branch-a"],
       ["discipline-a"],
       "director-a",
+      '{"levels":["Начальный"]}',
+      15000,
+      750,
+      "2026-08-01",
     ]);
+    expect(String(query.mock.calls[0][0])).toContain("inserted_rate as");
+    expect(policy.assertCanReadPayroll).toHaveBeenCalledWith({
+      userId: "director-a",
+      role: "director",
+    });
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "crm.teacher_created",
@@ -278,6 +294,8 @@ describe("TeachersService", () => {
         last_name: "Петрова",
         email: "teacher@example.com",
         phone: "+79991111111",
+        salary: "20000.00",
+        current_rate: "900.00",
       },
     ]);
 
@@ -287,6 +305,10 @@ describe("TeachersService", () => {
         lastName: " Петрова ",
         email: "Teacher@Example.com",
         phone: "+79991111111",
+        customDataPatch: { categories: ["Дети"] },
+        salary: 20000,
+        rate: 900,
+        rateEffectiveFrom: "2026-08-10",
       }),
     ).resolves.toMatchObject({
       id: "teacher-a",
@@ -302,11 +324,16 @@ describe("TeachersService", () => {
       "+79991111111",
       "teacher@example.com",
       null,
-      "{}", // KVA-238: пустой customDataPatch
-      null, // KVA-238: salary не передан
+      '{"categories":["Дети"]}',
+      20000,
       null, // disciplineIds
       null, // branchIds
+      900,
+      "2026-08-10",
+      "manager-a",
     ]);
+    expect(String(query.mock.calls[0][0])).toContain("inserted_rate as");
+    expect(policy.assertCanReadPayroll).toHaveBeenCalledWith(actor);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "crm.teacher_updated",

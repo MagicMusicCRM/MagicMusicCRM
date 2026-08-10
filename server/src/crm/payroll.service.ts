@@ -257,7 +257,7 @@ export class PayrollService {
         select teacher_id, rate, effective_from
         from app.teacher_rates
         where teacher_id = any($1::uuid[])
-        order by teacher_id, effective_from asc, created_at asc
+        order by teacher_id, effective_from asc, created_at asc, id asc
       `,
       [teacherIds],
     );
@@ -283,10 +283,12 @@ export class PayrollService {
     const rates = await this.loadTeacherRates([teacherId]);
     let accruedTotal = 0;
     let hoursTotal = 0;
+    let payableLessons = 0;
     for (const lesson of lessons) {
       const { hours, amount } = this.computeLessonAccrual(lesson, rates);
       hoursTotal += hours;
       accruedTotal += amount;
+      if (amount > 0) payableLessons += 1;
     }
     const payoutsResult = await this.database.query<TeacherPayoutRow>(
       `
@@ -320,6 +322,9 @@ export class PayrollService {
     return {
       teacherId,
       hoursTotal: this.round2(hoursTotal),
+      completedLessons: lessons.length,
+      payableLessons,
+      noAccrualLessons: lessons.length - payableLessons,
       accruedTotal: this.round2(accruedTotal),
       bonusTotal: this.round2(bonusTotal),
       deductionTotal: this.round2(deductionTotal),
@@ -405,8 +410,12 @@ export class PayrollService {
     }
     const result = await this.database.query<TeacherRateRow>(
       `
-        insert into app.teacher_rates (teacher_id, rate, effective_from, created_by)
-        values ($1, $2, coalesce($3::date, current_date), $4)
+        insert into app.teacher_rates (
+          teacher_id, rate, effective_from, created_by, created_at
+        )
+        values (
+          $1, $2, coalesce($3::date, current_date), $4, clock_timestamp()
+        )
         returning id, teacher_id, rate, effective_from
       `,
       [teacherId, dto.rate, dto.effectiveFrom ?? null, actor.userId],
@@ -462,16 +471,30 @@ export class PayrollService {
         from,
         to,
         items: [],
-        totals: { hoursTotal: 0, accruedTotal: 0, paidTotal: 0 },
+        totals: {
+          completedLessons: 0,
+          payableLessons: 0,
+          noAccrualLessons: 0,
+          hoursTotal: 0,
+          accruedTotal: 0,
+          bonusTotal: 0,
+          deductionTotal: 0,
+          paidTotal: 0,
+          periodBalance: 0,
+        },
       };
     }
     const rates = await this.loadTeacherRates(teacherIds);
     // Doubles as the teacher-attribute filter: a teacher missing from this
     // result is dropped from the report below, so status/discipline/category
     // need no second pass over the lessons.
-    const namesResult = await this.database.query<{ id: string; name: string }>(
+    const namesResult = await this.database.query<{
+      id: string;
+      name: string;
+      salary: string | number | null;
+    }>(
       `
-        select t.id,
+        select t.id, t.salary,
           trim(coalesce(p.first_name, '') || ' ' || coalesce(p.last_name, '')) as name
         from app.teachers t
         left join app.profiles p on p.id = t.profile_id and p.deleted_at is null
@@ -506,13 +529,25 @@ export class PayrollService {
     const teacherNames = new Map(
       namesResult.rows.map((row) => [row.id, row.name || "Без имени"]),
     );
+    const salaryByTeacher = new Map(
+      namesResult.rows.map((row) => [
+        row.id,
+        row.salary === null || row.salary === undefined
+          ? null
+          : Number(row.salary),
+      ]),
+    );
     const payoutsResult = await this.database.query<{
       teacher_id: string;
       paid_total: string | number;
+      bonus_total: string | number;
+      deduction_total: string | number;
     }>(
       `
         select teacher_id,
-          sum(case when kind = 'payout' then amount else 0 end) as paid_total
+          sum(case when kind = 'payout' then amount else 0 end) as paid_total,
+          sum(case when kind = 'bonus' then amount else 0 end) as bonus_total,
+          sum(case when kind = 'deduction' then amount else 0 end) as deduction_total
         from app.teacher_payouts
         where deleted_at is null
           and teacher_id = any($1::uuid[])
@@ -522,8 +557,15 @@ export class PayrollService {
       `,
       [teacherIds, from, to],
     );
-    const paidByTeacher = new Map(
-      payoutsResult.rows.map((row) => [row.teacher_id, Number(row.paid_total)]),
+    const movementsByTeacher = new Map(
+      payoutsResult.rows.map((row) => [
+        row.teacher_id,
+        {
+          paid: Number(row.paid_total ?? 0),
+          bonus: Number(row.bonus_total ?? 0),
+          deduction: Number(row.deduction_total ?? 0),
+        },
+      ]),
     );
 
     interface UnitAcc {
@@ -536,12 +578,20 @@ export class PayrollService {
       // Lesson ids behind this unit: the report's drill-down sets the
       // per-lesson rate, and only an id can address a lesson.
       lessonIds: string[];
+      completedLessons: number;
+      payableLessons: number;
       hoursTotal: number;
       accruedTotal: number;
     }
     const teachers = new Map<
       string,
-      { hoursTotal: number; accruedTotal: number; units: Map<string, UnitAcc> }
+      {
+        completedLessons: number;
+        payableLessons: number;
+        hoursTotal: number;
+        accruedTotal: number;
+        units: Map<string, UnitAcc>;
+      }
     >();
     for (const lesson of lessons) {
       // teacherNames holds exactly the teachers that passed the status/
@@ -549,6 +599,8 @@ export class PayrollService {
       if (!teacherNames.has(lesson.teacher_id)) continue;
       const { hours, rate, amount } = this.computeLessonAccrual(lesson, rates);
       const teacher = teachers.get(lesson.teacher_id) ?? {
+        completedLessons: 0,
+        payableLessons: 0,
         hoursTotal: 0,
         accruedTotal: 0,
         units: new Map<string, UnitAcc>(),
@@ -567,11 +619,19 @@ export class PayrollService {
             : Number(lesson.group_rate),
         days: new Map<string, number>(),
         lessonIds: [],
+        completedLessons: 0,
+        payableLessons: 0,
         hoursTotal: 0,
         accruedTotal: 0,
       };
       teacher.units.set(unitKey, unit);
       unit.lessonIds.push(lesson.id);
+      unit.completedLessons += 1;
+      teacher.completedLessons += 1;
+      if (amount > 0) {
+        unit.payableLessons += 1;
+        teacher.payableLessons += 1;
+      }
       const day = this.toDateOnly(lesson.scheduled_at);
       unit.days.set(day, (unit.days.get(day) ?? 0) + hours);
       unit.hoursTotal += hours;
@@ -580,12 +640,35 @@ export class PayrollService {
       teacher.accruedTotal += amount;
     }
 
-    const totals = { hoursTotal: 0, accruedTotal: 0, paidTotal: 0 };
+    const totals = {
+      completedLessons: 0,
+      payableLessons: 0,
+      hoursTotal: 0,
+      accruedTotal: 0,
+      bonusTotal: 0,
+      deductionTotal: 0,
+      paidTotal: 0,
+      periodBalance: 0,
+    };
     const items = [...teachers.entries()].map(([teacherId, teacher]) => {
-      const paidTotal = paidByTeacher.get(teacherId) ?? 0;
+      const movements = movementsByTeacher.get(teacherId) ?? {
+        paid: 0,
+        bonus: 0,
+        deduction: 0,
+      };
+      const periodBalance =
+        teacher.accruedTotal +
+        movements.bonus -
+        movements.deduction -
+        movements.paid;
+      totals.completedLessons += teacher.completedLessons;
+      totals.payableLessons += teacher.payableLessons;
       totals.hoursTotal += teacher.hoursTotal;
       totals.accruedTotal += teacher.accruedTotal;
-      totals.paidTotal += paidTotal;
+      totals.bonusTotal += movements.bonus;
+      totals.deductionTotal += movements.deduction;
+      totals.paidTotal += movements.paid;
+      totals.periodBalance += periodBalance;
       // Актуальная ставка педагога — для колонки «ставка», когда у единицы
       // нет переопределения группы.
       const today = this.toDateOnly(new Date());
@@ -597,9 +680,17 @@ export class PayrollService {
       return {
         teacherId,
         teacherName: teacherNames.get(teacherId) ?? "Без имени",
+        salary: salaryByTeacher.get(teacherId) ?? null,
+        currentRate,
+        completedLessons: teacher.completedLessons,
+        payableLessons: teacher.payableLessons,
+        noAccrualLessons: teacher.completedLessons - teacher.payableLessons,
         hoursTotal: this.round2(teacher.hoursTotal),
         accruedTotal: this.round2(teacher.accruedTotal),
-        paidTotal: this.round2(paidTotal),
+        bonusTotal: this.round2(movements.bonus),
+        deductionTotal: this.round2(movements.deduction),
+        paidTotal: this.round2(movements.paid),
+        periodBalance: this.round2(periodBalance),
         units: [...teacher.units.values()].map((unit) => ({
           unitType: unit.unitType,
           groupId: unit.groupId,
@@ -610,6 +701,9 @@ export class PayrollService {
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([date, hours]) => ({ date, hours: this.round2(hours) })),
           lessonIds: unit.lessonIds,
+          completedLessons: unit.completedLessons,
+          payableLessons: unit.payableLessons,
+          noAccrualLessons: unit.completedLessons - unit.payableLessons,
           hoursTotal: this.round2(unit.hoursTotal),
           accruedTotal: this.round2(unit.accruedTotal),
         })),
@@ -622,8 +716,14 @@ export class PayrollService {
       items,
       totals: {
         hoursTotal: this.round2(totals.hoursTotal),
+        completedLessons: totals.completedLessons,
+        payableLessons: totals.payableLessons,
+        noAccrualLessons: totals.completedLessons - totals.payableLessons,
         accruedTotal: this.round2(totals.accruedTotal),
+        bonusTotal: this.round2(totals.bonusTotal),
+        deductionTotal: this.round2(totals.deductionTotal),
         paidTotal: this.round2(totals.paidTotal),
+        periodBalance: this.round2(totals.periodBalance),
       },
     };
   }
@@ -651,10 +751,15 @@ export class PayrollService {
         "Учебная единица",
         "Тип",
         "Дни",
+        "Занятий",
+        "Оплачиваемых занятий",
         "Часы",
-        "Ставка за ак. час",
+        "Ставка за астр. час",
         "Начислено",
+        "Доплаты",
+        "Вычеты",
         "Оплачено",
+        "Сальдо периода",
       ],
     ];
     for (const item of report.items) {
@@ -664,10 +769,15 @@ export class PayrollService {
           unit.unitName,
           unitTypeLabel(unit.unitType),
           unit.days.map((day) => day.date).join(" "),
+          String(unit.completedLessons),
+          String(unit.payableLessons),
           String(unit.hoursTotal),
           // 0 means «входит в оклад» — spell it out, a bare 0 reads as a bug.
           unit.rate === 0 ? "Входит в оклад" : String(unit.rate),
           String(unit.accruedTotal),
+          "",
+          "",
+          "",
           "",
         ]);
       }
@@ -676,10 +786,15 @@ export class PayrollService {
         "ИТОГО по преподавателю",
         "",
         "",
+        String(item.completedLessons),
+        String(item.payableLessons),
         String(item.hoursTotal),
         "",
         String(item.accruedTotal),
+        String(item.bonusTotal),
+        String(item.deductionTotal),
         String(item.paidTotal),
+        String(item.periodBalance),
       ]);
     }
     rows.push([
@@ -687,10 +802,15 @@ export class PayrollService {
       "",
       "",
       "",
+      String(report.totals.completedLessons),
+      String(report.totals.payableLessons),
       String(report.totals.hoursTotal),
       "",
       String(report.totals.accruedTotal),
+      String(report.totals.bonusTotal),
+      String(report.totals.deductionTotal),
       String(report.totals.paidTotal),
+      String(report.totals.periodBalance),
     ]);
 
     const escape = (value: string) =>

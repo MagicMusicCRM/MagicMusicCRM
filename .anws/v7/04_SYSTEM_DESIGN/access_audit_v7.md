@@ -27,6 +27,12 @@ audit/outbox/reconciliation. Второй RBAC или журнал не созд
 | `config.commerce.manage` | deny | deny | deny | deny | allow | allow |
 | `commerce.school_finance.read` | deny | deny | deny | deny | allow | allow |
 
+Per-teacher rate/payroll is operational restricted information, not school-wide
+finance. Admin/Manager/Director/system_admin may manage a Teacher inside their
+resource scope and read/register that Teacher's accruals and payouts; Teacher and
+Client receive neither the route nor monetary payload fields. Catalog publication
+and aggregate school-finance access remain Director/system_admin only.
+
 Legacy `commerce.subscription.issue` remains mapped only while old route adapter
 exists; production UI uses `commerce.client_finance.write`, then old key/adapter
 is removed or retained solely for backward compatibility with explicit inventory.
@@ -75,6 +81,9 @@ teacher-pay override, plan update/end and internal-note update.
 - Operational history allowlists actions and resolves actor-safe display labels.
 - Teacher/Client serializer and log redactor treat payer, debt, reasons,
   reversal/exclusion and teacher compensation as restricted fields.
+- Teacher constructor/update exposes branches, disciplines, levels and categories
+  to the existing CRM write roles; salary/rate/payroll fields additionally pass
+  the per-teacher payroll policy on the backend.
 - Ordinary revenue/payment queries share one reporting-exclusion predicate.
 - Technical audit rows never feed dashboard KPIs/exports.
 - Manager/Admin can see client-card facts but cannot instantiate school-finance

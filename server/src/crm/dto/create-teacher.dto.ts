@@ -1,12 +1,18 @@
+import { Type } from "class-transformer";
 import {
   ArrayMinSize,
   ArrayUnique,
   IsArray,
+  IsDateString,
   IsEmail,
+  IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   MaxLength,
+  Min,
   MinLength,
 } from "class-validator";
 
@@ -50,4 +56,27 @@ export class CreateTeacherDto {
   @ArrayUnique()
   @IsUUID("all", { each: true })
   disciplineIds!: string[];
+
+  @IsOptional()
+  @IsObject()
+  customDataPatch?: Record<string, unknown>;
+
+  /** Fixed monthly salary metadata. It is not a lesson accrual rule. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  salary?: number;
+
+  /** Base rate per astronomical hour. Zero means that lessons enter salary. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(1000000)
+  rate?: number;
+
+  @IsOptional()
+  @IsDateString()
+  rateEffectiveFrom?: string;
 }

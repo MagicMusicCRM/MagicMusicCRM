@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/teacher_rate_selector.dart';
@@ -40,6 +41,7 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
   String? _status;
   String? _discipline;
   String? _category;
+  List<String> _categoryOptions = const [];
   List<Map<String, dynamic>> _disciplines = const [];
   bool _exporting = false;
 
@@ -95,6 +97,24 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
         _teachers = results[offset];
         _disciplines = results[offset + 1];
       });
+      try {
+        final fields = await ref
+            .read(magicSettingsServiceProvider)
+            .getCrmCustomFields();
+        final categories =
+            fields
+                .where(
+                  (field) =>
+                      field.entity == 'teachers' && field.key == 'categories',
+                )
+                .expand((field) => field.options)
+                .toSet()
+                .toList()
+              ..sort();
+        if (mounted) setState(() => _categoryOptions = categories);
+      } catch (_) {
+        // The report remains usable when optional custom-field settings fail.
+      }
     } catch (_) {
       // Фильтры-справочники не критичны для отчёта — молча оставляем пустыми.
     }
@@ -566,13 +586,13 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
               labelText: 'Категория',
               isDense: true,
             ),
-            items: const [
-              DropdownMenuItem<String?>(value: null, child: Text('Все')),
-              DropdownMenuItem<String?>(
-                value: 'Взрослые',
-                child: Text('Взрослые'),
-              ),
-              DropdownMenuItem<String?>(value: 'Дети', child: Text('Дети')),
+            items: [
+              const DropdownMenuItem<String?>(value: null, child: Text('Все')),
+              for (final category in _categoryOptions)
+                DropdownMenuItem<String?>(
+                  value: category,
+                  child: Text(category, overflow: TextOverflow.ellipsis),
+                ),
             ],
             onChanged: (value) {
               setState(() => _category = value);
@@ -701,14 +721,28 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
                     ),
                   ),
                 ),
+                _rateBadge(item),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 10,
+              runSpacing: 4,
+              children: [
                 Text(
-                  '${_hours(item['hoursTotal'])} · '
-                  'начислено ${_rub(item['accruedTotal'])} · '
-                  'оплачено ${_rub(item['paidTotal'])}',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontSize: 12.5,
-                  ),
+                  '${_asInt(item['completedLessons'])} занятий · '
+                  '${_asInt(item['payableLessons'])} оплачиваемых',
+                ),
+                Text(_hours(item['hoursTotal'])),
+                Text('начислено ${_rub(item['accruedTotal'])}'),
+                if (_num(item['bonusTotal']) != 0)
+                  Text('доплаты ${_rub(item['bonusTotal'])}'),
+                if (_num(item['deductionTotal']) != 0)
+                  Text('вычеты ${_rub(item['deductionTotal'])}'),
+                Text('выплачено ${_rub(item['paidTotal'])}'),
+                Text(
+                  'сальдо периода ${_rub(item['periodBalance'])}',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
               ],
             ),
@@ -804,7 +838,8 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
                   ),
                   if (days.isNotEmpty)
                     Text(
-                      days,
+                      '$days · ${_asInt(unit['completedLessons'])} зан. · '
+                      '${_asInt(unit['payableLessons'])} оплач.',
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                         fontSize: 12,
@@ -845,16 +880,29 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppTheme.primaryGold.withAlpha(60)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Expanded(
-            child: Text('Итого', style: TextStyle(fontWeight: FontWeight.w700)),
-          ),
-          Text(
-            '${_hours(totals['hoursTotal'])} · '
-            'начислено ${_rub(totals['accruedTotal'])} · '
-            'оплачено ${_rub(totals['paidTotal'])}',
-            style: const TextStyle(fontWeight: FontWeight.w700),
+          const Text('Итого', style: TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 10,
+            runSpacing: 4,
+            children: [
+              Text(
+                '${_asInt(totals['completedLessons'])} занятий · '
+                '${_asInt(totals['payableLessons'])} оплачиваемых',
+              ),
+              Text(_hours(totals['hoursTotal'])),
+              Text('начислено ${_rub(totals['accruedTotal'])}'),
+              Text('доплаты ${_rub(totals['bonusTotal'])}'),
+              Text('вычеты ${_rub(totals['deductionTotal'])}'),
+              Text('выплачено ${_rub(totals['paidTotal'])}'),
+              Text(
+                'сальдо периода ${_rub(totals['periodBalance'])}',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ],
           ),
         ],
       ),
@@ -879,6 +927,24 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
   num _num(dynamic value) {
     if (value is num) return value;
     return num.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  int _asInt(dynamic value) => _num(value).toInt();
+
+  Widget _rateBadge(Map<String, dynamic> item) {
+    final salary = item['salary'];
+    final rate = _num(item['currentRate']);
+    final label = rate == 0
+        ? 'Входит в оклад'
+        : '${_money.format(rate)} ₽/астр.ч.';
+    final suffix = salary == null ? '' : ' · оклад ${_rub(salary)}';
+    return Text(
+      '$label$suffix',
+      style: TextStyle(
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+        fontSize: 12,
+      ),
+    );
   }
 }
 

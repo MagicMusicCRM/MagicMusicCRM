@@ -13,6 +13,9 @@ class TeacherRateSelector extends StatefulWidget {
   /// педагога» при [allowInherit] или «не выбрано».
   final num? initialRate;
   final bool allowInherit;
+  final bool allowUnset;
+  final bool required;
+  final bool enabled;
   final String label;
 
   /// null означает «наследовать ставку педагога» (только при [allowInherit]).
@@ -23,6 +26,9 @@ class TeacherRateSelector extends StatefulWidget {
     required this.onChanged,
     this.initialRate,
     this.allowInherit = false,
+    this.allowUnset = false,
+    this.required = false,
+    this.enabled = true,
     this.label = 'Ставка (₽/астр.ч.)',
   });
 
@@ -32,6 +38,7 @@ class TeacherRateSelector extends StatefulWidget {
 
 class _TeacherRateSelectorState extends State<TeacherRateSelector> {
   static const _inherit = 'inherit';
+  static const _unset = 'unset';
   static const _salary = 'salary';
   static const _custom = 'custom';
 
@@ -43,7 +50,11 @@ class _TeacherRateSelectorState extends State<TeacherRateSelector> {
     super.initState();
     final rate = widget.initialRate;
     if (rate == null) {
-      _mode = widget.allowInherit ? _inherit : _custom;
+      _mode = widget.allowInherit
+          ? _inherit
+          : widget.allowUnset
+          ? _unset
+          : _custom;
     } else if (rate == 0) {
       _mode = _salary;
     } else if (kTeacherRatePresets.contains(rate)) {
@@ -63,6 +74,8 @@ class _TeacherRateSelectorState extends State<TeacherRateSelector> {
   void _emit() {
     switch (_mode) {
       case _inherit:
+        widget.onChanged(null);
+      case _unset:
         widget.onChanged(null);
       case _salary:
         widget.onChanged(0);
@@ -88,6 +101,11 @@ class _TeacherRateSelectorState extends State<TeacherRateSelector> {
           isExpanded: true,
           decoration: InputDecoration(labelText: widget.label),
           items: [
+            if (widget.allowUnset)
+              const DropdownMenuItem(
+                value: _unset,
+                child: Text('Выберите ставку'),
+              ),
             if (widget.allowInherit)
               const DropdownMenuItem(
                 value: _inherit,
@@ -105,11 +123,15 @@ class _TeacherRateSelectorState extends State<TeacherRateSelector> {
             ),
             const DropdownMenuItem(value: _custom, child: Text('Другая…')),
           ],
-          onChanged: (value) {
-            if (value == null) return;
-            setState(() => _mode = value);
-            _emit();
-          },
+          validator: (_) =>
+              widget.required && _mode == _unset ? 'Выберите ставку' : null,
+          onChanged: !widget.enabled
+              ? null
+              : (value) {
+                  if (value == null) return;
+                  setState(() => _mode = value);
+                  _emit();
+                },
         ),
         if (_mode == _custom) ...[
           const SizedBox(height: 8),
@@ -119,6 +141,7 @@ class _TeacherRateSelectorState extends State<TeacherRateSelector> {
             decoration: const InputDecoration(
               labelText: 'Своя ставка, ₽/астр.ч.',
             ),
+            enabled: widget.enabled,
             onChanged: (_) => _emit(),
             validator: (value) {
               final text = value?.trim().replaceAll(',', '.') ?? '';

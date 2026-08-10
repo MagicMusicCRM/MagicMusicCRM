@@ -3,12 +3,14 @@ import {
   ArrayMinSize,
   ArrayUnique,
   IsArray,
+  IsDateString,
   IsEmail,
   IsNumber,
   IsObject,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   MaxLength,
   Min,
 } from "class-validator";
@@ -69,4 +71,16 @@ export class UpdateTeacherDto {
   @ArrayUnique()
   @IsUUID("all", { each: true })
   branchIds?: string[];
+
+  /** Base rate per astronomical hour. Zero means that lessons enter salary. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(1000000)
+  rate?: number;
+
+  @IsOptional()
+  @IsDateString()
+  rateEffectiveFrom?: string;
 }

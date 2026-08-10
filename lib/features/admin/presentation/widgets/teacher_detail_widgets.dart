@@ -117,51 +117,6 @@ class _BonusDeductionDialogState extends ConsumerState<_BonusDeductionDialog> {
   }
 }
 
-/// Поле даты: readOnly + системный date picker.
-class _DateField extends StatelessWidget {
-  final String label;
-  final DateTime? value;
-  final DateFormat format;
-  final ValueChanged<DateTime?> onChanged;
-
-  const _DateField({
-    required this.label,
-    required this.value,
-    required this.format,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return TextFormField(
-      key: ValueKey('$label-${value?.toIso8601String() ?? ''}'),
-      readOnly: true,
-      initialValue: value == null ? '' : format.format(value!),
-      decoration: InputDecoration(
-        labelText: label,
-        suffixIcon: value == null
-            ? const Icon(Icons.calendar_today_rounded, size: 16)
-            : IconButton(
-                tooltip: 'Очистить дату',
-                icon: const Icon(Icons.clear_rounded, size: 16),
-                onPressed: () => onChanged(null),
-              ),
-      ),
-      onTap: () async {
-        final picked = await showDatePicker(
-          context: context,
-          initialDate: value ?? DateTime(2000),
-          firstDate: DateTime(1940),
-          lastDate: DateTime(2035),
-          // Birthdates are decades away — typing beats paging a calendar.
-          initialEntryMode: DatePickerEntryMode.input,
-        );
-        if (picked != null) onChanged(picked);
-      },
-    );
-  }
-}
-
 class _TeacherMetric extends StatelessWidget {
   final IconData icon;
   final String label;

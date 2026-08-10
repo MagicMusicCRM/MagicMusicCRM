@@ -640,13 +640,16 @@ graph TD
   - **Описание**: По результату owner-review унифицировать финансовые проекции,
     исправить post-completion reschedule, конфликтные guards, payment/task
     semantics, bounded lists, room capacity, client offboarding и production
-    fail-closed flags без создания параллельных доменных путей.
+    fail-closed flags; по решению владельца 2026-08-11 также собрать HolliHop-
+    совместимую настройку Teacher и payroll в один доступный путь без создания
+    параллельных доменных моделей.
   - **Входные данные**: T7.1.2 audit findings, `commerce_integrity*`,
     `schedule_v7*`, canonical task repository и текущий Release UI.
   - **Выходные данные**: один finance/conflict source of truth, атомарный перенос
     завершённого занятия с reversal и scheduled successor, исправленные labels,
     cursor/infinite-scroll списки, optional room capacity, plan-aware archive,
-    production runtime guard и обновлённая UAT-матрица.
+    production runtime guard, единая create/edit Teacher-форма с effective-dated
+    ставкой и периодная payroll-проекция, обновлённая UAT-матрица.
   - **Критерии приемки**:
     - Given dashboard/analytics/client card, Then debt/pending/revenue используют
       одну Commerce projection semantics и не расходятся после reversal/correction.
@@ -670,11 +673,27 @@ graph TD
       immutable history and finance facts remain.
     - Given production environment, missing/non-v4 access or schedule flags and
       non-zero parity drift fail startup/readiness instead of selecting legacy.
+    - Given a new or existing Teacher, When authorised staff opens create/edit,
+      Then the same canonical form supports multi-branch assignment, disciplines,
+      configured learning levels/categories, 600/700/750/900/custom hourly rate
+      or `Входит в оклад`, salary metadata and effective date; create commits
+      user/profile/teacher/links/rate atomically and edit commits profile/links/rate
+      atomically while preserving append-only rate history.
+    - Given a completed lesson, Then teacher accrual is independent from client
+      account/subscription funding and uses the effective immutable compensation
+      fact; payroll for an arbitrary week/month/range shows completed, payable and
+      zero-pay lesson counts, hours, accrued, adjustments, payouts and period
+      balance, while the Teacher card shows authoritative all-time debt without
+      claiming that an aggregate payout paid specific lessons.
+    - Given rate `Входит в оклад`, Then the completed lesson remains in lesson/hour
+      statistics, piece-rate accrual is zero, and reference salary is not silently
+      converted into a lesson fact.
   - **Тип верификации**: backend unit/PostgreSQL transaction + Flutter widget +
-    pagination + actor/conflict matrix + production configuration smoke.
+    pagination + actor/conflict/payroll matrix + production configuration smoke.
   - **Инструкция по верификации**: targeted regressions, full gates, then retest
-    affected UAT-060/065/073/074/075/084-086/090-095/103/145 rows.
-  - **Оценка**: 32 ч.
+    affected UAT-060/065/073/074/075/084-086/090-095/103/145 rows and add unique
+    Teacher create/edit/payroll UI/API/DB evidence before release approval.
+  - **Оценка**: 44 ч.
   - **Зависимости**: T7.1.3; блокирует завершение T7.1.2 и INT-S6.
   - **Приоритет**: P0.
 

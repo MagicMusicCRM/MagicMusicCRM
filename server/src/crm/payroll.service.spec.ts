@@ -70,6 +70,9 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
 
     expect(payroll.accruedTotal).toBe(1500); // 600 + 900
     expect(payroll.hoursTotal).toBe(2);
+    expect(payroll.completedLessons).toBe(2);
+    expect(payroll.payableLessons).toBe(2);
+    expect(payroll.noAccrualLessons).toBe(0);
     expect(payroll.currentRate).toBe(900);
     expect(payroll.debt).toBe(1500);
   });
@@ -134,6 +137,9 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
 
     expect(payroll.accruedTotal).toBe(0 + 300 + 600 + 750 + 900);
     expect(payroll.hoursTotal).toBe(5.5);
+    expect(payroll.completedLessons).toBe(5);
+    expect(payroll.payableLessons).toBe(4);
+    expect(payroll.noAccrualLessons).toBe(1);
   });
 
   it("считает задолженность = начислено + доплаты − вычеты − выплаты", async () => {
@@ -214,7 +220,16 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
         ],
       },
       { rows: [{ id: "t-1", name: "Иван Петров" }] },
-      { rows: [{ teacher_id: "t-1", paid_total: "500" }] },
+      {
+        rows: [
+          {
+            teacher_id: "t-1",
+            paid_total: "500",
+            bonus_total: "100",
+            deduction_total: "50",
+          },
+        ],
+      },
     ]);
 
     const report = await service.getTeacherStatsReport(actor, {
@@ -227,6 +242,11 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
     expect(item.hoursTotal).toBe(3);
     expect(item.accruedTotal).toBe(2100);
     expect(item.paidTotal).toBe(500);
+    expect(item.completedLessons).toBe(3);
+    expect(item.payableLessons).toBe(3);
+    expect(item.bonusTotal).toBe(100);
+    expect(item.deductionTotal).toBe(50);
+    expect(item.periodBalance).toBe(1650);
     expect(item.units).toHaveLength(2);
     const groupUnit = item.units.find((unit) => unit.unitType === "group");
     expect(groupUnit?.unitName).toBe("Вокал (группа)");
@@ -242,8 +262,14 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
     expect(individualUnit?.unitName).toBe("Мария Иванова");
     expect(report.totals).toEqual({
       hoursTotal: 3,
+      completedLessons: 3,
+      payableLessons: 3,
+      noAccrualLessons: 0,
       accruedTotal: 2100,
+      bonusTotal: 100,
+      deductionTotal: 50,
       paidTotal: 500,
+      periodBalance: 1650,
     });
   });
 
