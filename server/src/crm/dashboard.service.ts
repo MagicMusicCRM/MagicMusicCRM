@@ -169,83 +169,20 @@ export class DashboardService {
               and ($3::uuid is null or ${branchIdExpr("s")} = $3::text)
           ) else null end as revenue,
           case when $5::boolean then (
-            select coalesce(sum(ep.amount), 0)
-            from app.expected_payments ep
-            join app.students s on s.id = ep.student_id and s.deleted_at is null
-            where ep.status in ('pending', 'open')
-              and (ep.due_date is null or ep.due_date < $2::date)
+            select coalesce(sum(receivable.amount_minor), 0)::numeric / 100
+            from app.commerce_receivable_schedule_projection receivable
+            join app.students s
+              on s.id = receivable.student_id and s.deleted_at is null
+            where receivable.due_at < $2::timestamptz
               and ($3::uuid is null or ${branchIdExpr("s")} = $3::text)
           ) else null end as expected_payments,
           case when $5::boolean then (
-            -- Live balance (paid − lesson costs + adjustments), mirroring
-            -- FinanceService.listStudentBalances. The app.student_balances
-            -- table is written by nothing, so counting it always showed
-            -- «Должники: 0» while the drill-down listed real debtors.
-            select count(*)
-            from (
-              select st.id,
-                coalesce(pay.total_paid, 0) - coalesce(cost.total_cost, 0)
-                  + coalesce(adj.total_adjustments, 0) as balance
-              from app.students st
-              left join (
-                select p.student_id, sum(p.amount) as total_paid
-                from app.commerce_ordinary_payments p
-                where p.deleted_at is null
-                group by p.student_id
-              ) pay on pay.student_id = st.id
-              left join (
-                select coalesce(sub.student_id, l.student_id, lp.student_id) as student_id,
-                  sum(
-                    coalesce(
-                      coalesce(sub_pay.amount, pkg.price)
-                        / nullif(sub.lessons_total, 0)
-                        * lp.charged_hours,
-                      coalesce(
-                        g.price_per_lesson,
-                        case
-                          when s2.custom_data->>'individualPrice' ~ '^[0-9]+(\\.[0-9]+)?$'
-                            then (s2.custom_data->>'individualPrice')::numeric
-                          when s2.custom_data->>'individual_price' ~ '^[0-9]+(\\.[0-9]+)?$'
-                            then (s2.custom_data->>'individual_price')::numeric
-                          else null
-                        end,
-                        0
-                      )
-                      * case
-                          when lp.id is null then 1
-                          when lp.attendance_kind in ('attended', 'paid_miss') then 1
-                          when lp.attendance_kind = 'partially_paid'
-                            then lp.charge_share
-                          else 0
-                        end
-                    )
-                  ) as total_cost
-                from app.lessons l
-                left join app.lesson_participation lp on lp.lesson_id = l.id
-                join app.students s2 on s2.id = coalesce(l.student_id, lp.student_id)
-                left join app.groups g on g.id = l.group_id and g.deleted_at is null
-                left join app.subscriptions sub on sub.id = lp.subscription_id
-                left join app.subscription_packages pkg on pkg.id = sub.package_id
-                left join app.commerce_ordinary_payments sub_pay
-                  on sub_pay.id = sub.payment_id
-                where l.deleted_at is null
-                  and l.status in ('completed', 'done')
-                  and l.is_trial = false
-                  and coalesce(l.student_id, lp.student_id) is not null
-                group by coalesce(sub.student_id, l.student_id, lp.student_id)
-              ) cost on cost.student_id = st.id
-              left join (
-                select adj.student_id, sum(adj.amount) as total_adjustments
-                from app.commerce_ordinary_account_adjustments adj
-                -- Отменённая запись не деньги — см. тот же фильтр в
-                -- FinanceService.listStudentBalances.
-                where adj.deleted_at is null and adj.status <> 'void'
-                group by adj.student_id
-              ) adj on adj.student_id = st.id
-              where st.deleted_at is null
-                and ($3::uuid is null or ${branchIdExpr("st")} = $3::text)
-            ) b
-            where b.balance < 0
+            select count(distinct projection.student_id)
+            from app.commerce_student_account_projection projection
+            join app.students st
+              on st.id = projection.student_id and st.deleted_at is null
+            where projection.debt_minor > 0
+              and ($3::uuid is null or ${branchIdExpr("st")} = $3::text)
           ) else null end as debt_students,
           (
             select count(*)
@@ -277,7 +214,13 @@ export class DashboardService {
             from app.shared_tasks t
             where t.deleted_at is null
               and t.state = 'open'
-              and t.start_at < now()
+              and t.start_at is not null
+              and t.start_at < case
+                when t.all_day then
+                  date_trunc('day', timezone('Europe/Moscow', now()))
+                    at time zone 'Europe/Moscow'
+                else now()
+              end
               and exists (
                 select 1 from app.shared_task_visibility visibility
                 where visibility.task_id = t.id and visibility.user_id = $4

@@ -548,7 +548,7 @@ export class PaymentLifecycleRepository {
           paymentRecordId: record.id,
           beforeStatus: null,
           afterStatus: "posted_pending",
-          reason: "Проверить оплату за рассрочку",
+          reason: "Срок оплаты наступил — требуется проверка",
           actorUserId: null,
           aggregateVersion: version,
           actualPaymentId: null,

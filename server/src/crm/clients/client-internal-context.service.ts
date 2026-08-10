@@ -69,7 +69,7 @@ const ACTION_LABELS: Record<string, string> = {
   "crm.subscription_cancelled": "Абонемент отменён",
   "crm.payment_record_created": "Оплата добавлена",
   "crm.payment_record_transitioned": "Статус оплаты изменён",
-  "crm.installment_payment_due": "Платёж рассрочки ожидает подтверждения",
+  "crm.installment_payment_due": "Срок платежа рассрочки наступил — требуется проверка",
   "crm.payment_reversed": "Оплата удалена из обычного учёта",
   "crm.payment_adjustment_recorded": "Возврат или корректировка",
   "crm.lesson_rescheduled": "Занятие перенесено",
@@ -378,7 +378,7 @@ export class ClientInternalContextService {
 
   private paymentStatusLabel(status: string) {
     if (status === "paid") return "Оплачен";
-    if (status === "posted_pending") return "Проведён, ожидает подтверждения";
+    if (status === "posted_pending") return "Срок наступил — требуется проверка";
     if (status === "unpaid") return "Не оплачен";
     return status;
   }

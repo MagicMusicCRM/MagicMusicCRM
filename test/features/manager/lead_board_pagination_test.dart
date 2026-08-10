@@ -192,25 +192,25 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byTooltip('Написать в чат'), findsOneWidget);
-      expect(find.byIcon(Icons.expand_more_rounded), findsNWidgets(3));
-      await tester.tap(find.byIcon(Icons.expand_more_rounded).first);
-      await tester.pumpAndSettle();
-      expect(api.boardQueries[1]['statusId'], _LeadBoardApi.statusA);
-      expect(api.boardQueries[1].containsKey('unassigned'), false);
+      expect(find.byIcon(Icons.expand_more_rounded), findsNothing);
+      expect(api.boardQueries, hasLength(4));
+      expect(
+        api.boardQueries
+            .skip(1)
+            .any((query) => query['statusId'] == _LeadBoardApi.statusA),
+        isTrue,
+      );
+      expect(
+        api.boardQueries
+            .skip(1)
+            .any((query) => query['statusId'] == _LeadBoardApi.statusB),
+        isTrue,
+      );
+      expect(
+        api.boardQueries.skip(1).any((query) => query['unassigned'] == true),
+        isTrue,
+      );
       expect(find.text('A one'), findsOneWidget);
-      expect(find.text('A two'), findsOneWidget);
-
-      // A has no cursor now, so the first remaining button belongs to B.
-      await tester.tap(find.byIcon(Icons.expand_more_rounded).first);
-      await tester.pumpAndSettle();
-      expect(api.boardQueries[2]['statusId'], _LeadBoardApi.statusB);
-      expect(find.text('A two'), findsOneWidget);
-      expect(find.text('B two'), findsOneWidget);
-
-      await tester.tap(find.byIcon(Icons.expand_more_rounded).first);
-      await tester.pumpAndSettle();
-      expect(api.boardQueries[3]['unassigned'], true);
-      expect(api.boardQueries[3].containsKey('statusId'), false);
       expect(find.text('A two'), findsOneWidget);
       expect(find.text('B two'), findsOneWidget);
       expect(find.text('U two'), findsOneWidget);

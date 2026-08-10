@@ -216,8 +216,8 @@ void main() {
         find.byKey(const ValueKey('schedule-lesson-lesson-other')),
         findsOneWidget,
       );
-      expect(_lessonBorder(tester, 'lesson-selected'), AppColor.success);
-      expect(_lessonBorder(tester, 'lesson-other'), AppColor.text2);
+      expect(_lessonBorder(tester, 'lesson-selected'), AppColor.danger);
+      expect(_lessonBorder(tester, 'lesson-other'), AppColor.success);
       expect(tester.takeException(), isNull);
     },
   );
@@ -292,8 +292,8 @@ void main() {
         find.byKey(const ValueKey('schedule-lesson-lesson-other')),
         findsOneWidget,
       );
-      expect(_lessonBorder(tester, 'lesson-lead'), AppColor.success);
-      expect(_lessonBorder(tester, 'lesson-other'), AppColor.text2);
+      expect(_lessonBorder(tester, 'lesson-lead'), AppColor.actionBlue);
+      expect(_lessonBorder(tester, 'lesson-other'), AppColor.success);
       expect(tester.takeException(), isNull);
     },
   );
@@ -335,14 +335,14 @@ void main() {
     );
     expect(_lessonBorder(tester, 'lesson-selected'), AppColor.gold);
     await tester.pump(const Duration(seconds: 4));
-    expect(_lessonBorder(tester, 'lesson-selected'), AppColor.success);
-    expect(_lessonBorder(tester, 'lesson-other'), AppColor.text2);
+    expect(_lessonBorder(tester, 'lesson-selected'), AppColor.danger);
+    expect(_lessonBorder(tester, 'lesson-other'), AppColor.success);
 
     await tester.tap(find.text('Неделя'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('schedule-week-view')), findsOneWidget);
-    expect(_lessonBorder(tester, 'lesson-selected'), AppColor.success);
-    expect(_lessonBorder(tester, 'lesson-other'), AppColor.text2);
+    expect(_lessonBorder(tester, 'lesson-selected'), AppColor.danger);
+    expect(_lessonBorder(tester, 'lesson-other'), AppColor.success);
 
     await tester.tap(find.text('Месяц'));
     await tester.pumpAndSettle();
@@ -386,11 +386,13 @@ void main() {
     expect(states.last.filters['view'], 'week');
     expect(states.last.filters['clientCalendarMode'], 'week');
 
-    await tester.tap(
-      find.byKey(const ValueKey('schedule-branch-selector-branch-a')),
-    );
+    await tester.tap(find.byKey(const ValueKey('schedule-filter-toggle')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('schedule-filter-branch')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Центр').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('schedule-filter-apply')));
     await tester.pumpAndSettle();
     expect(states.last.filters['branchId'], 'branch-b');
     expect(states.last.filters['clientCalendarBranchId'], 'branch-b');

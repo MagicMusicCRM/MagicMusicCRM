@@ -24,7 +24,7 @@ export interface LessonSnapshotInput {
 
 export interface LessonTransitionInput {
   lessonId: string;
-  fromState?: "scheduled" | "settlement_pending";
+  fromState?: "scheduled" | "settlement_pending" | "successfully_completed";
   toState: Exclude<LessonLifecycleState, "scheduled" | "settlement_pending">;
   reasonCode: string;
   reasonText?: string;

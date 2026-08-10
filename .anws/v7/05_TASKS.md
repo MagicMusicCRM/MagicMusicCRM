@@ -636,6 +636,48 @@ graph TD
   - **Зависимости**: T7.1.1; блокирует продолжение T7.1.2.
   - **Приоритет**: P0.
 
+- [ ] **T7.1.4** [OWNER-2026-08-10]: Устранить сквозные логические расхождения v7
+  - **Описание**: По результату owner-review унифицировать финансовые проекции,
+    исправить post-completion reschedule, конфликтные guards, payment/task
+    semantics, bounded lists, room capacity, client offboarding и production
+    fail-closed flags без создания параллельных доменных путей.
+  - **Входные данные**: T7.1.2 audit findings, `commerce_integrity*`,
+    `schedule_v7*`, canonical task repository и текущий Release UI.
+  - **Выходные данные**: один finance/conflict source of truth, атомарный перенос
+    завершённого занятия с reversal и scheduled successor, исправленные labels,
+    cursor/infinite-scroll списки, optional room capacity, plan-aware archive,
+    production runtime guard и обновлённая UAT-матрица.
+  - **Критерии приемки**:
+    - Given dashboard/analytics/client card, Then debt/pending/revenue используют
+      одну Commerce projection semantics и не расходятся после reversal/correction.
+    - Given a successfully completed lesson, When authorised staff reschedules it,
+      Then all effective lesson client/teacher/reservation facts are reversed or
+      excluded atomically, a scheduled successor is created, and the successor is
+      completed by the normal worker exactly once.
+    - Given any one-time or recurring lesson candidate, Then the canonical engine
+      blocks teacher, room, client/group, branch assignment, branch-hours and
+      closed-day conflicts; a conflicting plan remains editable by row/day/time
+      and creates no partial lessons before a clean preview.
+    - Given a due unverified payment, UI names it `Срок наступил — требуется
+      проверка`; all-day task overdue state is identical on board and dashboards.
+    - Given room create/edit, capacity is optional and does not imply an enforced
+      scheduling constraint; settlement type color never controls lesson-card
+      background, which is limited to booked/completed/conflict plus trial badge.
+    - Given more than one API page of students/teachers/lessons/options, scrolling
+      loads subsequent cursor pages without silent truncation or a manual button.
+    - Given client offboarding, active recurring plans/series and their future
+      scheduled lessons are ended/cancelled through canonical commands while
+      immutable history and finance facts remain.
+    - Given production environment, missing/non-v4 access or schedule flags and
+      non-zero parity drift fail startup/readiness instead of selecting legacy.
+  - **Тип верификации**: backend unit/PostgreSQL transaction + Flutter widget +
+    pagination + actor/conflict matrix + production configuration smoke.
+  - **Инструкция по верификации**: targeted regressions, full gates, then retest
+    affected UAT-060/065/073/074/075/084-086/090-095/103/145 rows.
+  - **Оценка**: 32 ч.
+  - **Зависимости**: T7.1.3; блокирует завершение T7.1.2 и INT-S6.
+  - **Приоритет**: P0.
+
 - [ ] **INT-S6** [MILESTONE]: Owner production decision
   - **Описание**: Сопоставить каждый результат мегатеста с UI/API/DB evidence и принять или отклонить production candidate.
   - **Входные данные**: T7.1.1–T7.1.2.
@@ -644,7 +686,7 @@ graph TD
   - **Тип верификации**: Owner acceptance.
   - **Инструкция по верификации**: независимая проверка evidence index, hashes, defects/retests and final reconciliation.
   - **Оценка**: 4 ч.
-  - **Зависимости**: T7.1.2, T7.1.3.
+  - **Зависимости**: T7.1.2, T7.1.3, T7.1.4.
   - **Приоритет**: P0.
 
 ## User Story Overlay

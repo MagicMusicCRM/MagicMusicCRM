@@ -33,6 +33,15 @@ atomically releases/reallocates reservations. After completion, correction uses
 signed preview and writes exclusion/reversal plus optional replacement facts in
 one transaction; source facts remain technical history.
 
+Post-completion reschedule is a correction, not mutation of the terminal source.
+The command locks source/version/effective facts, reverses or excludes every
+client settlement, teacher accrual and terminal reservation effect append-only,
+marks the source rescheduled for operational projection, and creates one fresh
+`scheduled` successor with the required planned decision. All writes, transition,
+audit and outbox commit atomically; rollback leaves the completed source fully
+effective. The ordinary completion worker later completes the successor exactly
+once.
+
 ## 2. Operation mapping
 
 | User action | Source outcome | Successor | Client settlement | Teacher accrual |
@@ -44,6 +53,7 @@ one transaction; source facts remain technical history.
 | Move with charge | rescheduled | scheduled | source charge | source teacher decision |
 | Move without charge | rescheduled | scheduled | zero explicit fact | source teacher decision |
 | Teacher/room only | rescheduled/continuation | updated successor | none | none until lesson result |
+| Move after completion | rescheduled technical source | scheduled successor | reverse/exclude prior effective facts; successor settles later | reverse prior accrual; successor accrues later |
 
 Successor is a new immutable lesson snapshot. If a charged move also creates a
 later normal lesson, preview explicitly states that the later settlement may
@@ -70,7 +80,11 @@ lesson reservation time.
 2. Sort/lock subject, teacher, room and subscription keys.
 3. Expand every row to branch-local occurrence dates and validate through the
    canonical constraint engine. Return row/date/resource/conflicting lesson ids.
-4. Create plan; call existing series creator for each row with `planId`.
+   A failed preview preserves all submitted rows and their stable row ids so UI
+   can change only the conflicting day/time/resources and preview again.
+4. Only a clean preview may create plan; call existing series creator for each
+   row with `planId`. Any conflict makes commit all-or-nothing with zero partial
+   plan/series/lesson/reservation writes.
 5. Generate lessons using current horizon/unique conflict semantics.
 6. Group plans snapshot participants and allocate per-client reservations.
 7. Audit/outbox once at plan aggregate plus created series ids.

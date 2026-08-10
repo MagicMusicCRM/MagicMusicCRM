@@ -56,13 +56,13 @@ flowchart LR
 
 | Компонент | Ответственность |
 |---|---|
-| `LessonTransitionService` | один preview/commit для reschedule/cancel/resource change/settle |
-| `ScheduleConstraintEngine` | teacher/room/client/branch/time conflicts |
+| `LessonTransitionService` | один preview/commit для reschedule/cancel/resource change и exception repair |
+| `ScheduleConstraintEngine` | единственный owner teacher/room/client/group/branch/time/closed-day conflicts для one-time, dashboard, room availability и recurring preview |
 | `LessonFinancialDecisionPort` | typed request/result Commerce без обратного вызова |
 | `RecurringSchedulePlanService` | create/update/end plan и plan-level preview |
 | `PlannedLessonSettlementService` | validate/version/revision binding and reservation recalculation |
 | `LessonCompletionWorker` | atomic auto-settle; safe review-required fallback |
-| `LessonSettlementCorrectionService` | append-only reversal/replacement after terminal settlement |
+| `LessonSettlementCorrectionService` | append-only reversal/replacement and completed-reschedule preparation after terminal settlement |
 | `LessonSeriesCommandService` | генерация и effective-date rows, теперь под plan |
 | `PlanTrayProjection` | bounded фактические даты/markers с cursor |
 | Flutter `LessonDecisionController` | единая форма для всех entry points |
@@ -76,8 +76,9 @@ flowchart LR
 | Planned decision preview/update | scheduled lesson/version | settlement/pay/per-client choices | fixed revisions + reservation impact |
 | Automatic completion | lesson due + valid plan | worker claim | completed + facts, or review-required with 0 partial facts |
 | Settlement correction | completed/version | reason + replacement or cancel | reversal/exclusion + optional replacement |
+| Completed reschedule | completed/version + fresh preview | reason + successor resources/time | append-only reversal/exclusion + scheduled successor in one transaction |
 | Bulk preview/commit | same branch/supported operation | lesson ids, one reason/decisions | per-item impact, all-or-nothing result |
-| Plan preview/create | subject scope valid | name/kind/period/1+ resource+decision rows | per-date violations / plan + series + lessons |
+| Plan preview/create | subject scope valid | name/kind/period/1+ resource+decision rows | per-row/date violations or plan + series + lessons; violations keep editor state and commit nothing |
 | Update plan | expected version | effectiveFrom + changed rows/subscriptions | old rows end + continuations |
 | End preview | active plan | last date | future lesson/reservation/finance impact |
 | End commit | fresh token/version | last date/reason/confirm | ended plan/series + future cancellations |
@@ -89,8 +90,8 @@ flowchart LR
 | existing `POST /crm/lessons/:id/reschedule/preview` | единый rich preview |
 | existing `POST /crm/lessons/:id/reschedule` | date/time/resource successor commit |
 | existing `POST /crm/lessons/:id/cancel[/preview]` | cancellation/paid-miss/etc. |
-| `POST /crm/lessons/:id/settle/preview` | manual normal/free/miss/penalty result |
-| `POST /crm/lessons/:id/settle` | terminal settlement |
+| `POST /crm/lessons/:id/settle/preview` | exception-only repair preview for `settlement_pending` |
+| `POST /crm/lessons/:id/settle` | exception-only repair; ordinary completion belongs to worker |
 | `POST /crm/lessons/:id/planned-settlement/preview` | preview pre-start decision/reservation |
 | `PUT /crm/lessons/:id/planned-settlement` | versioned pre-start decision update |
 | `POST /crm/lessons/:id/settlement-correction/preview` | terminal reversal/replacement preview |
@@ -153,11 +154,18 @@ stateDiagram-v2
   SettlementPending --> Completed: staff fixes decision and settles
   SettlementPending --> Rescheduled: authorised correction
   Completed --> Completed: append-only financial correction
+  Completed --> Rescheduled: atomic reversal + scheduled successor
 ```
 
 `SettlementPending` не создаёт client/teacher financial facts. Обе независимые
 настройки обязательны до создания; состояние означает только исключение, которое
 не удалось применить автоматически.
+
+Operational Lesson card uses exactly three background states: `Забронировано`
+for scheduled, `Завершено` for successfully completed and `Конфликт` for any
+blocking/review-required exception. Trial is an independent `Пробное` badge.
+Settlement catalog color is detail/history metadata and never changes the card
+background.
 
 ## 9. UX contract
 
@@ -200,6 +208,10 @@ stateDiagram-v2
 - inventory всех Flutter date/time/resource mutation callsites;
 - direct PATCH rejection contract;
 - PostgreSQL source/successor/financial rollback and two-writer race;
+- completed-reschedule reverses every effective client/teacher/reservation fact
+  and leaves one worker-completable successor;
+- executable conflict matrix covers teacher, room, client/group, branch scope,
+  branch hours and closed day for one-time, recurring, dashboard and room lookup;
 - group participant settlement and subscription selection;
 - plan create/edit/end, open-ended, mid-week, ended history and tray pagination;
 - Month/Week/Day/client tray parity on Windows/Android.

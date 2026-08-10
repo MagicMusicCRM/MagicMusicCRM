@@ -2,7 +2,7 @@
 
 Run: `OWNER-20260808-01`
 Среда: production
-Кандидат: `1.5.1+179`
+Локальный кандидат: `1.5.1+180`; production rollout не выполнялся
 Статус: **IN PROGRESS**
 
 `PARTIAL` и `PENDING` допустимы только во время исполнения. Перед `INT-S6`
@@ -16,9 +16,9 @@ Run: `OWNER-20260808-01`
 
 | ID | Сценарий | Статус | Доказательство / остаток |
 |---|---|---|---|
-| UAT-000 | Зафиксировать commit, образы, миграции и hashes | PARTIAL | commit `32e8dcf`, кандидат `+179`; нужны финальные image/migration/artifact hashes |
+| UAT-000 | Зафиксировать commit, образы, миграции и hashes | PARTIAL | локальный кандидат `+180`, release hashes и migrations evidence сняты; нужен финальный commit и production image ledger |
 | UAT-001 | Backup, пробный restore, начальные counts | PARTIAL | production backups есть; нужен единый restore-drill и counts этого run |
-| UAT-002 | Release, production API, тёмная тема, реальные данные | PARTIAL | Windows `+179` подтверждён; нужен актуальный Android Release proof |
+| UAT-002 | Release, production API, тёмная тема, реальные данные | PARTIAL | Windows/Android `+180` локально собраны и запущены в тёмной теме; нужен owner production Release proof после разрешённого rollout |
 | UAT-003 | ID-ledger и каталог evidence без секретов | PARTIAL | evidence index и redacted API JSON созданы; нужен полный ledger всех UAT facts |
 
 ## G1 — авторизация и навигация пяти ролей
@@ -84,7 +84,7 @@ Run: `OWNER-20260808-01`
 
 | ID | Сценарий | Статус | Доказательство / остаток |
 |---|---|---|---|
-| UAT-060 | Три статуса оплаты и долг | PENDING | — |
+| UAT-060 | Три статуса оплаты (`Срок наступил — требуется проверка`) и долг | PENDING | — |
 | UAT-061 | Наличные/безналичные, реквизиты и автор | PENDING | — |
 | UAT-062 | Каталог 12×60/30000 и альтернативный пакет | PENDING | — |
 | UAT-063 | Покупка абонемента со своего счёта | PENDING | — |
@@ -103,10 +103,10 @@ Run: `OWNER-20260808-01`
 | UAT-070 | Предпочтительное расписание | PENDING | — |
 | UAT-071 | Индивидуальный Plan на несколько дней | PENDING | — |
 | UAT-072 | Групповой Plan и participant subscriptions | PENDING | — |
-| UAT-073 | Ранние обязательные поля и конфликты | PENDING | — |
+| UAT-073 | Полная canonical conflict matrix и редактируемый конфликтный Plan | PENDING | — |
 | UAT-074 | Active/ended планы и завершение | PENDING | — |
 | UAT-075 | Tray, cursor и authoritative markers | PENDING | — |
-| UAT-076 | Скрывать чужие, зелёный target, серые остальные | PARTIAL | один production календарный контекст PASS; нужны Month/Week/Day |
+| UAT-076 | Скрывать чужие и независимо отмечать target | PARTIAL | один production календарный контекст PASS; нужны Month/Week/Day с маркером связи, не подменяющим три цвета состояния Lesson |
 
 ## G8 — списания и оплата преподавателю
 
@@ -117,8 +117,8 @@ Run: `OWNER-20260808-01`
 | UAT-082 | Абонемент по умолчанию и личный счёт | PENDING | — |
 | UAT-083 | Пробное и бесплатное занятия | PENDING | — |
 | UAT-084 | Реальное ожидание completion worker | PENDING | — |
-| UAT-085 | Безопасный settlement_pending при ошибке | PENDING | — |
-| UAT-086 | Post-completion correction | PENDING | — |
+| UAT-085 | `Конфликт` и `Исправить расчёт` при ошибке worker | PENDING | — |
+| UAT-086 | Post-completion correction/reschedule с reversal и successor | PENDING | — |
 | UAT-087 | Group common + per-client override | PENDING | — |
 
 ## G9 — переносы, отмены и конфликты
@@ -127,7 +127,7 @@ Run: `OWNER-20260808-01`
 |---|---|---|---|
 | UAT-090 | Перенос через форму без drag-and-drop | PENDING | — |
 | UAT-091 | Подмена преподавателя и аудитории | PENDING | — |
-| UAT-092 | Все overlap/branch/closed-day конфликты | PENDING | — |
+| UAT-092 | Все one-time/recurring conflict entry points | PENDING | — |
 | UAT-093 | Два Manager бронируют один слот | PENDING | — |
 | UAT-094 | Отмена применимыми типами | PENDING | — |
 | UAT-095 | Единая Lesson во всех представлениях | PENDING | — |
@@ -172,8 +172,8 @@ Run: `OWNER-20260808-01`
 | UAT-131 | Обрыв сети, сохранение формы и Retry | PENDING | — |
 | UAT-132 | Stale expectedVersion и recovery | PARTIAL | automated contracts есть; нужен production UI scenario |
 | UAT-133 | Полная actor matrix private routes | PARTIAL | регулярные route/actor gates есть; нужен финальный candidate run |
-| UAT-134 | Full tests/build/migrations/clean schema | PARTIAL | Flutter `664/664`, backend `157/157`/`1250/1250`, build PASS; нужны финальные migrations/artifacts |
-| UAT-135 | Health, constraints, reconcile, workers, logs | PARTIAL | API/container healthy и logs clean; нужен финальный полный reconcile |
+| UAT-134 | Full tests/build/migrations/clean schema | PARTIAL | локально Flutter `666/666`, backend `157/157`/`1256/1256`, build/analyze PASS; clean `0001..0118`, `0118..0116 down/up`, Windows/APK/AAB собраны; нужен production candidate ledger |
+| UAT-135 | Health, constraints, reconcile, workers, logs | PARTIAL | production-like startup `/health/live`+`/health/ready` PASS, v7 reconcile=0, fail-closed negative smoke PASS; нужен финальный production reconcile после rollout |
 
 ## G14 — пять персон и итоговое доказательство
 
@@ -184,7 +184,7 @@ Run: `OWNER-20260808-01`
 | UAT-142 | Admin Windows persona | PARTIAL | Lead/Schedule/Tasks доказаны; нужен полный functional tour |
 | UAT-143 | Manager Windows persona | PENDING | — |
 | UAT-144 | Director Windows persona | PARTIAL | organization/settings/tasks доказаны; нужен полный functional tour |
-| UAT-145 | Архивация и штатная очистка UAT | PENDING | только после приёмки остальных строк |
+| UAT-145 | Архивация завершает recurring work и сохраняет историю | PENDING | только после приёмки остальных строк |
 | UAT-146 | Итоговый DOCX и подпись владельца | PENDING | генерируется после 100 финальных результатов |
 
 ## Решение кандидата

@@ -29,6 +29,7 @@ import 'schedule_day_mode_toggle.dart';
 import 'schedule_timezone_dialog.dart';
 import 'schedule_filters_sheet.dart';
 import 'schedule_search_dialog.dart';
+import 'schedule_teacher_timeline.dart';
 
 part 'schedule_widget_widgets.dart';
 part 'schedule_widget_actions.dart';
@@ -128,6 +129,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   // is_trial / conflict_types / teacher_id all ride along in the matrix).
   bool _onlyTrial = false;
   bool _onlyConflicts = false;
+  bool _filtersExpanded = false;
   String? _filterTeacherId;
   String? _filterRoomId;
   String? _filterClientType;

@@ -6,7 +6,7 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_day_canvas.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_teacher_timeline.dart';
 import 'package:magic_music_crm/features/teacher/presentation/widgets/teacher_schedule_widget.dart';
 
 class _TeacherCalendarApiClient extends MagicApiClient {
@@ -183,7 +183,7 @@ void main() {
       expect(find.textContaining('Зажать и тянуть'), findsNothing);
       expect(find.textContaining('Перетащить'), findsNothing);
       expect(find.textContaining('Край — растянуть'), findsNothing);
-      expect(find.byType(ScheduleDayCanvas), findsOneWidget);
+      expect(find.byType(ScheduleTeacherTimeline), findsOneWidget);
       expect(
         find.byKey(const ValueKey('schedule-lesson-lesson-1')),
         findsOneWidget,

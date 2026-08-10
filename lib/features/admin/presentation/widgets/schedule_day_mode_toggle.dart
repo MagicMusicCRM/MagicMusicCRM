@@ -32,7 +32,7 @@ class ScheduleDayModeToggle extends StatelessWidget {
             ButtonSegment(
               value: DayViewMode.byTeacher,
               icon: Icon(Icons.person_outline_rounded, size: 17),
-              label: Text('По педагогу'),
+              label: Text('По преподавателям'),
             ),
           ],
           selected: {mode},

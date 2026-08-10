@@ -57,7 +57,7 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
         final controls = <Widget>[
           _buildViewSwitcher(),
           _buildDateNavigation(),
-          _buildBranchSelector(),
+          if (compact) _buildBranchSelector(),
         ];
 
         return Container(
@@ -116,21 +116,56 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
                         : 'Найти занятие',
                     onPressed: firstLoad ? null : _showScheduleSearch,
                   ),
-                  IconButton(
-                    icon: Icon(
-                      _hasExtraFilters
-                          ? Icons.filter_alt_rounded
-                          : Icons.tune_rounded,
-                      size: 21,
+                  if (compact)
+                    IconButton(
+                      icon: Icon(
+                        _hasExtraFilters
+                            ? Icons.filter_alt_rounded
+                            : Icons.tune_rounded,
+                        size: 21,
+                      ),
+                      color: _hasExtraFilters
+                          ? AppColor.gold
+                          : cs.onSurfaceVariant,
+                      tooltip: _hasExtraFilters
+                          ? 'Фильтры расписания применены'
+                          : 'Фильтры расписания',
+                      onPressed: firstLoad ? null : _showScheduleFilters,
+                    )
+                  else
+                    OutlinedButton.icon(
+                      key: const ValueKey('schedule-filter-toggle'),
+                      onPressed: firstLoad
+                          ? null
+                          : () => _emitState(
+                              () => _filtersExpanded = !_filtersExpanded,
+                            ),
+                      icon: Icon(
+                        _hasExtraFilters
+                            ? Icons.filter_alt_rounded
+                            : Icons.tune_rounded,
+                        size: 18,
+                        color: _hasExtraFilters
+                            ? AppColor.gold
+                            : cs.onSurfaceVariant,
+                      ),
+                      label: Text(
+                        _activeScheduleFilterCount == 0
+                            ? 'Фильтры'
+                            : 'Фильтры ($_activeScheduleFilterCount)',
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 40),
+                        foregroundColor: _hasExtraFilters
+                            ? AppColor.gold
+                            : cs.onSurface,
+                        side: BorderSide(
+                          color: _filtersExpanded || _hasExtraFilters
+                              ? AppColor.goldLine
+                              : cs.onSurfaceVariant.withAlpha(48),
+                        ),
+                      ),
                     ),
-                    color: _hasExtraFilters
-                        ? AppColor.gold
-                        : cs.onSurfaceVariant,
-                    tooltip: _hasExtraFilters
-                        ? 'Фильтры расписания применены'
-                        : 'Фильтры расписания',
-                    onPressed: firstLoad ? null : _showScheduleFilters,
-                  ),
                   if (!compact)
                     IconButton(
                       tooltip: 'Обновить расписание',
@@ -165,6 +200,26 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: controls,
                   ),
+                if (!compact && _filtersExpanded) ...[
+                  const SizedBox(height: AppSpace.md),
+                  Divider(color: cs.onSurfaceVariant.withAlpha(28), height: 1),
+                  const SizedBox(height: AppSpace.md),
+                  ScheduleFiltersPanel(
+                    initialBranchId: _selectedBranchId,
+                    initialMode: _dayViewMode,
+                    branches: _branches,
+                    isDayView: _currentView == ScheduleView.day,
+                    initialOnlyTrial: _onlyTrial,
+                    initialOnlyConflicts: _onlyConflicts,
+                    initialTeacherId: _filterTeacherId,
+                    teacherOptions: _teacherFilterOptions,
+                    showHeader: true,
+                    onApply: (result) {
+                      _filtersExpanded = false;
+                      _applyScheduleFilterResult(result);
+                    },
+                  ),
+                ],
               ],
             ],
           ),

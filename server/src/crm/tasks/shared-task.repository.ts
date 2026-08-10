@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { PoolClient } from "pg";
 import { DatabaseService } from "../../db/database.service";
+import { isTaskOverdue } from "./task-due-state";
 import {
   ResolvedSharedTaskRow,
   SharedTaskMigrationEvidenceRow,
@@ -543,22 +544,17 @@ export class SharedTaskRepository {
       ...filters,
     }).then((result) => {
       const now = Date.now();
-      const moscowNow = new Date(now + 3 * 60 * 60 * 1_000);
-      const moscowTodayStart =
-        Date.UTC(
-          moscowNow.getUTCFullYear(),
-          moscowNow.getUTCMonth(),
-          moscowNow.getUTCDate(),
-        ) -
-        3 * 60 * 60 * 1_000;
       return {
         open: result.rows.filter((row) => row.state === "open").length,
-        overdue: result.rows.filter(
-          (row) =>
-            row.state === "open" &&
-            row.start_at !== null &&
-            new Date(row.start_at).getTime() <
-              (row.all_day ? moscowTodayStart : now),
+        overdue: result.rows.filter((row) =>
+          isTaskOverdue(
+            {
+              state: row.state,
+              startAt: row.start_at,
+              allDay: row.all_day,
+            },
+            now,
+          ),
         ).length,
       };
     });

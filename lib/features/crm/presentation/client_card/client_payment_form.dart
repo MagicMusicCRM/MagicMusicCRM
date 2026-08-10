@@ -310,7 +310,7 @@ class _ClientPaymentFormState extends State<ClientPaymentForm> {
                         ),
                         DropdownMenuItem(
                           value: ClientPaymentStatus.postedPending,
-                          child: Text('Проведён, ожидает подтверждения'),
+                          child: Text('Срок наступил — требуется проверка'),
                         ),
                         DropdownMenuItem(
                           value: ClientPaymentStatus.paid,
@@ -526,7 +526,7 @@ class _ReadonlyPaymentField extends StatelessWidget {
 
 String clientPaymentStatusLabel(Object? raw) => switch (raw?.toString()) {
   'unpaid' => 'Не оплачен',
-  'posted_pending' => 'Проведён, ожидает подтверждения',
+  'posted_pending' => 'Срок наступил — требуется проверка',
   'paid' => 'Оплачен',
   _ => 'Статус не указан',
 };

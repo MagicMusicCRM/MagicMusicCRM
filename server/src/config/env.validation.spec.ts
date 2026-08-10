@@ -6,6 +6,13 @@ const STRONG_SECRET = 'a'.repeat(40); // 40-символьный сильный 
 const baseEnv = {
   DATABASE_URL: 'postgres://user:pass@localhost:5432/db',
 };
+const productionV4 = {
+  V4_ACCESS_MODE: 'v4',
+  V4_ACCESS_KILL_SWITCH: false,
+  V4_SCHEDULE_MODE: 'v4',
+  V4_SCHEDULE_KILL_SWITCH: false,
+  V4_PARITY_UNEXPLAINED_DIFFS: 0,
+};
 
 describe('envValidationSchema — JWT_ACCESS_SECRET', () => {
   describe('в production', () => {
@@ -40,8 +47,20 @@ describe('envValidationSchema — JWT_ACCESS_SECRET', () => {
         ...baseEnv,
         NODE_ENV: 'production',
         JWT_ACCESS_SECRET: STRONG_SECRET,
+        ...productionV4,
       });
       expect(error).toBeUndefined();
+    });
+
+    it('не запускается на legacy/shadow маршрутах', () => {
+      const { error } = envValidationSchema.validate({
+        ...baseEnv,
+        NODE_ENV: 'production',
+        JWT_ACCESS_SECRET: STRONG_SECRET,
+        ...productionV4,
+        V4_SCHEDULE_MODE: 'shadow',
+      });
+      expect(error).toBeDefined();
     });
   });
 

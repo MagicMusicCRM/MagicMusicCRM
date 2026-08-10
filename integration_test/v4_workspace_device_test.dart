@@ -116,7 +116,7 @@ void main() {
 
     expect(desktopTabs['client'], isEmpty);
     expect(desktopTabs['teacher'], [0, 1, 2]);
-    expect(desktopTabs['admin'], [0, 2, 3]);
+    expect(desktopTabs['admin'], [0, 2, 3, 6]);
     expect(desktopTabs['manager'], isNot(contains(5)));
     expect(desktopTabs['director'], isNot(contains(5)));
     expect(desktopTabs['system_admin'], desktopTabs['director']);

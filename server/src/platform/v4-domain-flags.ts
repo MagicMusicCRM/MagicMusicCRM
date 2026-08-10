@@ -37,6 +37,14 @@ export function resolveV4DomainRollout(
   }
   const configuredMode = rawMode as V4CompatibilityMode;
   const killSwitch = environment[killVariable(domain)] === "true";
+  if (
+    environment.NODE_ENV === "production" &&
+    (configuredMode !== "v4" || killSwitch || unexplainedParityDiffs !== 0)
+  ) {
+    throw new Error(
+      `${domain} must use verified v4 execution in production.`,
+    );
+  }
   if (killSwitch) {
     return {
       domain,

@@ -317,13 +317,11 @@ class ScheduleMonthView extends StatelessWidget {
     final conflicts = conflictTypes(lesson['conflict_types']);
     final relationContext = clientContext || searchContext;
     final related = relationContext && isContextClientLesson(lesson);
-    final color = searchContext
-        ? (related ? AppColor.success : AppColor.text2)
-        : conflicts.isNotEmpty
-        ? AppColor.danger
-        : clientContext
-        ? (related ? AppColor.success : AppColor.text2)
-        : LessonStateProjection.fromMap(lesson).token.accent;
+    final projection = LessonStateProjection.fromMap(
+      lesson,
+      hasConflict: conflicts.isNotEmpty,
+    );
+    final color = projection.token.accent;
     final time = start == null
         ? ''
         : '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')} ';
@@ -348,6 +346,8 @@ class ScheduleMonthView extends StatelessWidget {
               trial && constraints.maxWidth >= (relationContext ? 90 : 70);
           final showTrialIcon =
               trial && constraints.maxWidth >= (relationContext ? 38 : 22);
+          final showStatusIcon =
+              !trial || constraints.maxWidth >= (relationContext ? 112 : 92);
           return Row(
             children: [
               if (relationContext) ...[
@@ -360,12 +360,19 @@ class ScheduleMonthView extends StatelessWidget {
                 ),
                 const SizedBox(width: 2),
               ],
+              if (showStatusIcon) ...[
+                Tooltip(
+                  message: projection.label,
+                  child: Icon(projection.token.icon, size: 10, color: color),
+                ),
+                const SizedBox(width: 2),
+              ],
               if (showTrialText) ...[
                 const LessonTrialBadge(compact: true),
                 const SizedBox(width: 3),
               ] else if (showTrialIcon) ...[
                 const Tooltip(
-                  message: 'Пробный урок',
+                  message: 'Пробное',
                   child: Icon(
                     Icons.star_rounded,
                     size: 10,

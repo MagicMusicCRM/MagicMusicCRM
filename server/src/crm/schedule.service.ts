@@ -127,7 +127,7 @@ export class ScheduleService {
     const result = await this.database.query<ScheduleLessonRow>(
       `
         with scoped as (
-          select l.id, l.student_id, l.group_id, l.lead_id, l.teacher_id,
+          select l.id, l.lifecycle_state, l.student_id, l.group_id, l.lead_id, l.teacher_id,
             l.branch_id, l.room_id, l.scheduled_at, l.duration_minutes,
             l.status, l.is_trial, l.notes,
             sp.user_id as student_user_id, tp.user_id as teacher_user_id,
@@ -150,6 +150,7 @@ export class ScheduleService {
           left join app.rooms r on r.id = l.room_id and r.deleted_at is null
           left join app.groups g on g.id = l.group_id and g.deleted_at is null
           where l.deleted_at is null
+            and l.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')
             and l.scheduled_at >= $1::timestamptz
             and l.scheduled_at < $2::timestamptz
             and ($3::uuid is null or l.branch_id = $3 or g.branch_id = $3 or r.branch_id = $3)
@@ -162,7 +163,7 @@ export class ScheduleService {
           order by l.scheduled_at asc, l.id asc
           limit $9
         )
-        select scoped.id, scoped.student_id, scoped.group_id, scoped.lead_id,
+        select scoped.id, scoped.lifecycle_state, scoped.student_id, scoped.group_id, scoped.lead_id,
           scoped.teacher_id, scoped.branch_id, scoped.room_id,
           scoped.scheduled_at, scoped.duration_minutes, scoped.status,
           scoped.is_trial, scoped.notes, scoped.student_user_id,
@@ -179,7 +180,7 @@ export class ScheduleService {
               select 1
               from app.lessons other_room
               where other_room.deleted_at is null
-                and other_room.status <> 'cancelled'
+                and other_room.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')
                 and other_room.id <> scoped.id
                 and other_room.room_id = scoped.room_id
                 and other_room.scheduled_at >= $1::timestamptz
@@ -194,7 +195,7 @@ export class ScheduleService {
               select 1
               from app.lessons other_teacher
               where other_teacher.deleted_at is null
-                and other_teacher.status <> 'cancelled'
+                and other_teacher.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')
                 and other_teacher.id <> scoped.id
                 and other_teacher.teacher_id = scoped.teacher_id
                 and other_teacher.scheduled_at >= $1::timestamptz
@@ -216,7 +217,7 @@ export class ScheduleService {
             from app.lessons other_room
             where scoped.room_id is not null
               and other_room.deleted_at is null
-              and other_room.status <> 'cancelled'
+              and other_room.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')
               and other_room.id <> scoped.id
               and other_room.room_id = scoped.room_id
               and other_room.scheduled_at >= $1::timestamptz
@@ -231,7 +232,7 @@ export class ScheduleService {
             from app.lessons other_teacher
             where scoped.teacher_id is not null
               and other_teacher.deleted_at is null
-              and other_teacher.status <> 'cancelled'
+              and other_teacher.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')
               and other_teacher.id <> scoped.id
               and other_teacher.teacher_id = scoped.teacher_id
               and other_teacher.scheduled_at >= $1::timestamptz
@@ -358,6 +359,7 @@ export class ScheduleService {
         left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
         left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
         where l.deleted_at is null
+          and l.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')
           and l.scheduled_at >= $1::timestamptz
           and l.scheduled_at <  $2::timestamptz
           and ($3::uuid is null or l.branch_id = $3 or r.branch_id = $3)
@@ -497,6 +499,7 @@ export class ScheduleService {
           limit 1
         ) reservation on true
         where l.deleted_at is null
+          and l.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')
           and (
             $3::uuid is null
             or l.student_id = $3
@@ -585,10 +588,10 @@ export class ScheduleService {
   /**
    * Shared overlap SQL for contract 1 (GET conflicts) and contract 2 (the
    * 409-on-busy guard). Sargable bounds lean on the partial indexes
-   * lessons_teacher_active_overlap_idx / lessons_room_active_overlap_idx
-   * (btree on scheduled_at, deleted_at is null and status <> 'cancelled');
-   * the exact check is the tstzrange overlap. A lesson longer than 24h does
-   * not exist (durationMinutes is capped at 360), so the cheap left bound of
+   * lessons_teacher_active_overlap_idx / lessons_room_active_overlap_idx. The
+   * lifecycle predicate removes terminal cancellation/reschedule sources; the
+   * exact check is the tstzrange overlap. A lesson longer than 24h does not
+   * exist (durationMinutes is capped at 360), so the cheap left bound of
    * «start > startsAt - 24h» is safe.
    */
   private async queryConflicts(
@@ -627,7 +630,7 @@ export class ScheduleService {
         left join app.groups g on g.id = l.group_id and g.deleted_at is null
         left join app.leads ld on ld.id = l.lead_id and ld.deleted_at is null
         where l.deleted_at is null
-          and l.status <> 'cancelled'
+          and l.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')
           and ($5::uuid is null or l.id <> $5)
           and l.scheduled_at < $4::timestamptz
           and l.scheduled_at > $3::timestamptz - interval '24 hours'
@@ -701,8 +704,7 @@ export class ScheduleService {
 
   /**
    * Contract 2: throw 409 {message, conflicts} when the teacher OR the room is
-   * busy in the slot — unless force===true (admin+ override; every caller who
-   * can reach this code path is already admin+ via assertCanWriteCrm).
+   * busy in the slot. No role may bypass a scheduling conflict.
    */
   private async assertNoScheduleConflicts(
     params: {
@@ -712,7 +714,6 @@ export class ScheduleService {
       durationMinutes: number;
       excludeLessonId?: string | null;
       groupId?: string | null;
-      force?: boolean;
     },
     executor: ScheduleQueryExecutor,
   ): Promise<void> {
@@ -721,7 +722,6 @@ export class ScheduleService {
       params.teacherId,
       params.roomId,
     );
-    if (params.force === true) return;
     if (!params.teacherId && !params.roomId) return;
     const startsAt = new Date(params.startsAt);
     if (Number.isNaN(startsAt.getTime())) return;
@@ -929,6 +929,11 @@ export class ScheduleService {
   async createLesson(actor: ActorContext, rawDto: UpsertLessonDto) {
     this.policy.assertCanWriteCrm(actor);
     const dto = this.applyClientRef(rawDto);
+    if (dto.force === true) {
+      throw new BadRequestException(
+        "Обход конфликтов расписания запрещён для всех ролей.",
+      );
+    }
     this.assertUnambiguousLessonSubject(dto, true);
     if (!dto.scheduledAt) {
       throw new BadRequestException("Дата урока обязательна.");
@@ -973,7 +978,6 @@ export class ScheduleService {
           startsAt: dto.scheduledAt!,
           durationMinutes: dto.durationMinutes ?? 60,
           groupId: dto.groupId ?? null,
-          force: dto.force,
         },
         client as unknown as ScheduleQueryExecutor,
       );
@@ -1109,7 +1113,7 @@ export class ScheduleService {
         from candidates c
         join app.lessons l
           on l.deleted_at is null
-          and l.status <> 'cancelled'
+          and l.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')
           and (
             l.series_id is distinct from c.series_id
             or l.series_date is distinct from c.series_date

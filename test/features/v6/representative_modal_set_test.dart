@@ -69,7 +69,7 @@ void main() {
     expect(find.text('Развернуть'), findsOneWidget);
     expect(find.text('Анна Смирнова'), findsNWidgets(2));
 
-    expect(find.text('Зафиксировать результат'), findsOneWidget);
+    expect(find.text('Исправить расчёт'), findsOneWidget);
     expect(find.text('Перенести или изменить'), findsOneWidget);
     await tester.tap(find.text('Отменить занятие'));
     await tester.pumpAndSettle();

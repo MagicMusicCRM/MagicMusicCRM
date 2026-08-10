@@ -6,6 +6,7 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_day_canvas.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_teacher_timeline.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
 
 /// KVA-195 redesign coverage: Месяц/Неделя/День navigation, the day-grid canvas,
@@ -140,11 +141,38 @@ void main() {
       await tester.tap(find.text('День'));
       await tester.pumpAndSettle();
 
-      // The legend carries the rules…
+      // The legend has exactly three color statuses and one independent type badge.
+      expect(find.text('Забронировано'), findsOneWidget);
+      expect(find.text('Завершено'), findsOneWidget);
       expect(find.text('Конфликт'), findsOneWidget);
+      expect(find.text('Пробное'), findsOneWidget);
+      expect(find.textContaining('Бесплат'), findsNothing);
       // …and the old per-cell instruction is gone (owner rule #10).
       expect(find.text('Нажмите,\nчтобы назначить'), findsNothing);
       expect(find.textContaining('Нажмите'), findsNothing);
+    });
+
+    testWidgets('teacher mode uses horizontal time bands and teacher rows', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1400, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(_host(const ScheduleWidget()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('День'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('По преподавателям'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ScheduleTeacherTimeline), findsOneWidget);
+      expect(find.text('Преподаватель'), findsOneWidget);
+      expect(find.text('08:00–10:00'), findsOneWidget);
+      expect(find.text('Анна Сусарина'), findsOneWidget);
+      expect(find.text('1 занятие · 2 ч'), findsOneWidget);
+      expect(find.text('Ольга Ученик'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('tapping an empty hour opens the (single) create dialog', (

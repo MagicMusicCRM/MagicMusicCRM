@@ -139,14 +139,54 @@ void main() {
     expect(tester.takeException(), isNull, reason: 'filter sheet at 360px');
     expect(find.byKey(const ValueKey('magic-sheet-mobile')), findsOneWidget);
     expect(find.text('Развернуть'), findsOneWidget);
-    await tester.tap(find.text('Только пробные'));
+    await tester.tap(find.byKey(const ValueKey('schedule-filter-lesson-type')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Применить'));
+    await tester.tap(find.text('Только пробные').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('schedule-filter-apply')));
     await tester.pumpAndSettle();
 
     // Only the trial survives; no refetch was needed.
     expect(find.text('Борис Пробный'), findsOneWidget);
     expect(find.text('Анна Обычная'), findsNothing);
+  });
+
+  testWidgets('desktop exposes the filters as an inline dropdown panel', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 1100);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(_host(const ScheduleWidget()));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('schedule-filter-toggle')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('schedule-filter-branch')), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('schedule-filter-toggle')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('schedule-filter-branch')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('schedule-filter-teacher')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('schedule-filter-lesson-type')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('schedule-filter-conflicts')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('the month view shows a single «today» button (dupe removed)', (

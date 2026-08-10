@@ -27,7 +27,7 @@ extension on LessonDecisionOperation {
   String get title => switch (this) {
     LessonDecisionOperation.reschedule => 'Перенос занятия',
     LessonDecisionOperation.cancel => 'Отмена занятия',
-    LessonDecisionOperation.settle => 'Результат занятия',
+    LessonDecisionOperation.settle => 'Исправление расчёта',
     LessonDecisionOperation.plannedSettlement => 'Изменение расчёта',
     LessonDecisionOperation.correction => 'Корректировка расчёта',
   };
@@ -35,7 +35,7 @@ extension on LessonDecisionOperation {
   String get action => switch (this) {
     LessonDecisionOperation.reschedule => 'Перенести',
     LessonDecisionOperation.cancel => 'Отменить занятие',
-    LessonDecisionOperation.settle => 'Зафиксировать результат',
+    LessonDecisionOperation.settle => 'Исправить расчёт',
     LessonDecisionOperation.plannedSettlement => 'Изменить расчёт',
     LessonDecisionOperation.correction => 'Сохранить корректировку',
   };
@@ -646,7 +646,7 @@ class _PreviewCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   preview.canConfirm
-                      ? 'Расчёт готов к подтверждению'
+                      ? 'Изменение готово к подтверждению'
                       : 'Изменение заблокировано',
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),

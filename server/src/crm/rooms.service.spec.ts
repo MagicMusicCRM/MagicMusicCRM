@@ -185,6 +185,29 @@ describe("RoomsService", () => {
     );
   });
 
+  it("creates a room without capacity", async () => {
+    const { service, query } = createService([
+      {
+        id: "room-no-capacity",
+        branch_id: "branch-a",
+        branch_name: "Центр",
+        name: "Репетиционная",
+        capacity: null,
+        created_at: "2026-06-12T00:00:00.000Z",
+      },
+    ]);
+
+    await expect(service.createRoom(director, {
+      branchId: "branch-a",
+      name: "Репетиционная",
+    })).resolves.toMatchObject({ capacity: null });
+    expect(query.mock.calls[0][1]).toEqual([
+      "branch-a",
+      "Репетиционная",
+      null,
+    ]);
+  });
+
   it("updates and soft-deletes rooms through CRM write policy", async () => {
     const { service, query, audit, policy } = createServiceWithQueryResults([
       {
@@ -220,7 +243,13 @@ describe("RoomsService", () => {
     });
 
     expect(policy.assertCanManageSystemSettings).toHaveBeenCalledTimes(2);
-    expect(query.mock.calls[0][1]).toEqual(["room-a", "branch-b", "201", 8]);
+    expect(query.mock.calls[0][1]).toEqual([
+      "room-a",
+      "branch-b",
+      "201",
+      true,
+      8,
+    ]);
     expect(query.mock.calls[1][1]).toEqual(["room-a"]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({

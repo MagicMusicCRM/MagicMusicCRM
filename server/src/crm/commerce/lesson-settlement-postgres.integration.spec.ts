@@ -205,6 +205,44 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
     }
   });
 
+  it("ignores an archived participant in group settlement and on idempotent retry", async () => {
+    const fixture = await createFixture(pool, database);
+    try {
+      await pool.query(
+        `insert into app.lesson_participant_exclusions (
+           lesson_id, student_id, reason_code, actor_user_id
+         ) values ($1, $2, 'client.archive:test', $3)`,
+        [fixture.groupLessonId, fixture.studentId, fixture.managerId],
+      );
+      const input = {
+        context: "settle" as const,
+        decision: {
+          settlementTypeKey: "lesson",
+          clientDecisions: [
+            {
+              clientId: fixture.studentId,
+              settlementTypeKey: "free_lesson",
+            },
+            {
+              clientId: fixture.secondStudentId,
+              settlementTypeKey: "lesson",
+            },
+          ],
+          teacherCompensationRuleKey: "fixed",
+        },
+      };
+
+      const settled = await service.settleStandalone(fixture.groupLessonId, input);
+      expect(settled.clientFacts).toHaveLength(1);
+      expect(settled.clientFacts[0]?.clientId).toBe(fixture.secondStudentId);
+      expect(settled.clientFacts[0]?.settlementTypeKey).toBe("lesson");
+      await expect(service.settleStandalone(fixture.groupLessonId, input))
+        .resolves.toEqual(settled);
+    } finally {
+      await cleanupFixture(pool, fixture);
+    }
+  });
+
   it("persists the 0-200%/penalty/group decision and keeps its catalog snapshot", async () => {
     const fixture = await createFixture(pool, database);
     try {
@@ -694,6 +732,10 @@ async function cleanupFixture(
     );
     await client.query(
       "delete from app.lesson_client_charge_facts where lesson_id = any($1::uuid[])",
+      [fixture.lessonIds],
+    );
+    await client.query(
+      "delete from app.lesson_participant_exclusions where lesson_id = any($1::uuid[])",
       [fixture.lessonIds],
     );
     await client.query(

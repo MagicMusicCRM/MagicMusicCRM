@@ -43,14 +43,17 @@ String lessonStatusLabel(String? status) {
   switch (status) {
     case 'completed':
     case 'done':
-      return 'Проведено';
+    case 'successfully_completed':
+      return 'Завершено';
+    case 'settlement_pending':
+      return 'Конфликт';
     case 'cancelled':
       return 'Отменено';
     case 'scheduled':
     case 'planned':
-      return 'Запланировано';
+      return 'Забронировано';
     default:
-      return status ?? 'Запланировано';
+      return status ?? 'Забронировано';
   }
 }
 
@@ -233,7 +236,7 @@ Future<void> showLessonDetailsSheet(
                 await onSettle();
               },
               icon: const Icon(Icons.fact_check_outlined, size: 18),
-              label: const Text('Зафиксировать результат'),
+              label: const Text('Исправить расчёт'),
             ),
             const SizedBox(height: AppSpace.sm),
           ],

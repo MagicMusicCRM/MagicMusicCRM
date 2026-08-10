@@ -1,5 +1,7 @@
 import { ConfigService } from "@nestjs/config";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { Pool } from "pg";
 import { DatabaseService } from "../../db/database.service";
 import { MigrationRunner } from "../../db/migration-runner";
@@ -39,11 +41,11 @@ describe("SharedTask conservative migration (PostgreSQL)", () => {
 
   it("merges only proven exact copies and preserves ambiguous rows separately", async () => {
     await cleanupStaleRuntimeFixtures(pool);
-    await rollbackThrough(runner, "0092_shared_tasks_audience_schema");
+    await applyTaskMigrations(pool, "down");
     let migrationApplied = false;
     const fixture = await createLegacyFixture(pool);
     try {
-      await runner.up();
+      await applyTaskMigrations(pool, "up");
       migrationApplied = true;
 
       const evidence = await new SharedTaskRepository(database).migrationEvidence(
@@ -188,22 +190,45 @@ describe("SharedTask conservative migration (PostgreSQL)", () => {
     } finally {
       if (migrationApplied) {
         await cleanupFixture(pool, fixture);
-        await rollbackThrough(runner, "0092_shared_tasks_audience_schema");
       } else {
         await cleanupLegacyFixture(pool, fixture);
+        await applyTaskMigrations(pool, "up");
       }
-      await runner.up();
     }
   });
 });
 
-async function rollbackThrough(runner: MigrationRunner, targetId: string) {
-  while (true) {
-    const reverted = await runner.down();
-    if (!reverted) {
-      throw new Error(`Migration ${targetId} is not applied.`);
+const taskMigrationIds = [
+  "0092_shared_tasks_audience_schema",
+  "0101_canonical_shared_tasks",
+  "0114_admin_task_board",
+  "0115_school_task_staff_recipients",
+] as const;
+
+async function applyTaskMigrations(
+  pool: Pool,
+  direction: "up" | "down",
+) {
+  const client = await pool.connect();
+  const ids = direction === "up"
+    ? taskMigrationIds
+    : [...taskMigrationIds].reverse();
+  try {
+    await client.query("begin");
+    for (const id of ids) {
+      await client.query(
+        readFileSync(
+          resolve(process.cwd(), `db/migrations/${id}.${direction}.sql`),
+          "utf8",
+        ),
+      );
     }
-    if (reverted === targetId) return;
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
   }
 }
 

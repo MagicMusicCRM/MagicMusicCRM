@@ -38,7 +38,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Пробный урок'), findsOneWidget);
+    expect(find.text('Пробное'), findsOneWidget);
     expect(find.textContaining('Ирина Петрова'), findsOneWidget);
     expect(find.textContaining('Сокол'), findsOneWidget);
   });

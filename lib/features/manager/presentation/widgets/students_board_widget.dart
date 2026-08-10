@@ -46,6 +46,9 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
   bool _filtersOpen = false;
   bool _branchesLoaded = false;
   String? _branchLoadError;
+  final List<Map<String, dynamic>> _extraStudents = [];
+  String? _nextStudentCursor;
+  bool _loadingMoreStudents = false;
 
   // ── Optimistic move state (mirrors leads_widget) ──────────────────────────
   /// studentId → status currently shown while a move is in flight / settled.
@@ -107,8 +110,61 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
 
   void _refreshBoard() {
     if (_selectedBranchId != null) {
+      _resetStudentPages();
       ref.invalidate(studentFunnelProvider(_selectedBranchId!));
       ref.invalidate(studentBoardProvider(_selectedBranchId!));
+    }
+  }
+
+  void _resetStudentPages() {
+    _extraStudents.clear();
+    _nextStudentCursor = null;
+    _loadingMoreStudents = false;
+  }
+
+  Future<void> _loadMoreStudents(String branchId, String? cursor) async {
+    final activeCursor = cursor?.trim();
+    if (activeCursor == null || activeCursor.isEmpty || _loadingMoreStudents) {
+      return;
+    }
+    setState(() => _loadingMoreStudents = true);
+    try {
+      final crm = ref.read(magicCrmServiceProvider);
+      final page = branchId == kNoBranchBoardId
+          ? await crm.searchStudents(
+              noBranch: true,
+              cursor: activeCursor,
+              limit: 100,
+            )
+          : await crm.searchStudents(
+              branchId: branchId,
+              cursor: activeCursor,
+              limit: 100,
+            );
+      if (!mounted || _selectedBranchId != branchId) return;
+      final known = _extraStudents
+          .map((student) => student['id']?.toString())
+          .whereType<String>()
+          .toSet();
+      final initial = ref.read(studentBoardProvider(branchId)).value?.students;
+      if (initial != null) {
+        known.addAll(
+          initial
+              .map((student) => student['id']?.toString())
+              .whereType<String>(),
+        );
+      }
+      setState(() {
+        _extraStudents.addAll(
+          (page['items'] as List? ?? const [])
+              .whereType<Map<String, dynamic>>()
+              .where((student) => known.add(student['id']?.toString() ?? '')),
+        );
+        _nextStudentCursor = page['next_cursor']?.toString();
+        _loadingMoreStudents = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingMoreStudents = false);
     }
   }
 
@@ -349,7 +405,10 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
       items: items,
       onChanged: (value) {
         if (value != null && value.isNotEmpty) {
-          setState(() => _selectedBranchId = value);
+          setState(() {
+            _resetStudentPages();
+            _selectedBranchId = value;
+          });
         }
       },
     );
@@ -613,7 +672,15 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
           ),
         ),
       ),
-      data: (columns) {
+      data: (page) {
+        final students = <Map<String, dynamic>>[
+          ...page.students,
+          ..._extraStudents,
+        ];
+        final columns = groupStudentsByStatus(students, page.stages);
+        if (_extraStudents.isEmpty && _nextStudentCursor == null) {
+          _nextStudentCursor = page.nextCursor;
+        }
         final data = _applyOptimistic(columns);
         final filtered = _query.isEmpty
             ? data
@@ -650,6 +717,10 @@ class _StudentsBoardWidgetState extends ConsumerState<StudentsBoardWidget> {
                   onMove: _moveStatus,
                   onDragUpdate: _handleDragUpdate,
                   onDragEnd: _stopAutoScroll,
+                  nextCursor: _nextStudentCursor,
+                  loadingMore: _loadingMoreStudents,
+                  onLoadMore: () =>
+                      _loadMoreStudents(branchId, _nextStudentCursor),
                 );
                 if (transfer.isActive && column.status != null) {
                   return TransferDropZone(

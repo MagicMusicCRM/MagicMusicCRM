@@ -105,6 +105,39 @@ export interface LessonSettlementPort {
     lessonId: string,
     input?: LessonSettlementInput,
   ): Promise<LessonSettlementResult>;
+  preparePlan(
+    client: PoolClient,
+    branchId: string,
+    decision: LessonFinancialDecision,
+  ): Promise<PreparedLessonSettlementPlan>;
+  assignPlan(
+    client: PoolClient,
+    input: {
+      lessonId: string;
+      branchId: string;
+      decision: LessonFinancialDecision;
+      selectedBy: string;
+      reasonText?: string;
+    },
+  ): Promise<PreparedLessonSettlementPlan>;
+  clonePlan(
+    client: PoolClient,
+    input: {
+      sourceLessonId: string;
+      targetLessonId: string;
+      selectedBy: string;
+      reasonText?: string;
+      fallback?: {
+        branchId: string;
+        decision: LessonFinancialDecision;
+      };
+    },
+  ): Promise<PreparedLessonSettlementPlan>;
+  plannedSubscriptionAllocations(
+    client: PoolClient,
+    lessonId: string,
+    plan: PreparedLessonSettlementPlan,
+  ): Promise<PlannedSubscriptionAllocation[]>;
 }
 
 export const LESSON_SETTLEMENT_PORT = Symbol("LESSON_SETTLEMENT_PORT");

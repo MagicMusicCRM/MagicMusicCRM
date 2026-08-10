@@ -393,6 +393,15 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
     const client = await pool.connect();
     await client.query("begin");
     try {
+      await client.query(
+        readFileSync(
+          resolve(
+            process.cwd(),
+            "db/migrations/0116_v7_canonical_commerce_projections.down.sql",
+          ),
+          "utf8",
+        ),
+      );
       await client.query(`
         drop view app.commerce_ordinary_payments,
           app.commerce_ordinary_account_adjustments,
@@ -495,6 +504,15 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
     await client.query("begin");
     try {
       const migrationRoot = resolve(process.cwd(), "db/migrations");
+      await client.query(
+        readFileSync(
+          resolve(
+            migrationRoot,
+            "0116_v7_canonical_commerce_projections.down.sql",
+          ),
+          "utf8",
+        ),
+      );
       await client.query(`
         drop view app.commerce_ordinary_payments,
           app.commerce_ordinary_account_adjustments,
@@ -547,6 +565,15 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
       const migrationRoot = resolve(process.cwd(), "db/migrations");
       await client.query(
         readFileSync(
+          resolve(
+            migrationRoot,
+            "0116_v7_canonical_commerce_projections.down.sql",
+          ),
+          "utf8",
+        ),
+      );
+      await client.query(
+        readFileSync(
           resolve(migrationRoot, "0107_v7_payment_reversal.down.sql"),
           "utf8",
         ),
@@ -562,6 +589,15 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
       await client.query(
         readFileSync(
           resolve(migrationRoot, "0107_v7_payment_reversal.up.sql"),
+          "utf8",
+        ),
+      );
+      await client.query(
+        readFileSync(
+          resolve(
+            migrationRoot,
+            "0116_v7_canonical_commerce_projections.up.sql",
+          ),
           "utf8",
         ),
       );

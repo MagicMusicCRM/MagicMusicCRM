@@ -42,6 +42,10 @@ describe("Client archive preview and tombstone (PostgreSQL)", () => {
   let adminId: string;
   let directorId: string;
   let lessonId: string;
+  let recurringLessonId: string;
+  let schedulePlanId: string;
+  let scheduleSeriesId: string;
+  let groupId: string;
   let taskId: string;
   let subscriptionId: string;
   let paymentId: string;
@@ -163,6 +167,65 @@ describe("Client archive preview and tombstone (PostgreSQL)", () => {
       [studentId],
     );
     subscriptionId = subscription.rows[0]!.id;
+    const group = await database.query<{ id: string }>(
+      `insert into app.groups (branch_id, name)
+       values ($1, $2) returning id`,
+      [branchId, `Archive recurring ${randomUUID()}`],
+    );
+    groupId = group.rows[0]!.id;
+    await database.query(
+      `insert into app.group_students (group_id, student_id)
+       values ($1, $2)`,
+      [groupId, studentId],
+    );
+    const plan = await database.query<{ id: string }>(
+      `insert into app.schedule_plans (
+         kind, title, group_id, active_from, created_by
+       ) values ('group', $1, $2, current_date, $3)
+       returning id`,
+      [`Archive plan ${randomUUID()}`, groupId, directorId],
+    );
+    schedulePlanId = plan.rows[0]!.id;
+    await database.query(
+      `insert into app.schedule_plan_participants (
+         plan_id, student_id, subscription_id, effective_from
+       ) values ($1, $2, $3, current_date)`,
+      [schedulePlanId, studentId, subscriptionId],
+    );
+    const series = await database.query<{ id: string }>(
+      `insert into app.schedule_series (
+         group_id, branch_id, weekday, begin_time, duration_minutes,
+         valid_from, plan_id, created_by
+       ) values ($1, $2, 1, '10:00', 60, current_date, $3, $4)
+       returning id`,
+      [groupId, branchId, schedulePlanId, directorId],
+    );
+    scheduleSeriesId = series.rows[0]!.id;
+    const recurringLesson = await database.query<{ id: string }>(
+      `insert into app.lessons (
+         group_id, branch_id, scheduled_at, status, series_id, series_date,
+         created_by
+       ) values (
+         $1, $2, now() + interval '8 days', 'scheduled', $3,
+         current_date + 8, $4
+       ) returning id`,
+      [groupId, branchId, scheduleSeriesId, directorId],
+    );
+    recurringLessonId = recurringLesson.rows[0]!.id;
+    await database.query(
+      `insert into app.lesson_snapshots (
+         lesson_id, group_id, completion_type, client_charge_type,
+         client_charge_value, teacher_compensation_type,
+         teacher_compensation_value
+       ) values ($1, $2, 'standard.success', 'none', 0, 'none', 0)`,
+      [recurringLessonId, groupId],
+    );
+    await database.query(
+      `insert into app.lesson_snapshot_participants (
+         lesson_id, student_id, charge_type, charge_value
+       ) values ($1, $2, 'personal_account', 100)`,
+      [recurringLessonId, studentId],
+    );
     const payment = await database.query<{ id: string }>(
       `
         insert into app.payments (
@@ -234,16 +297,55 @@ describe("Client archive preview and tombstone (PostgreSQL)", () => {
     await database.query("delete from app.expected_payments where id = $1", [
       expectedPaymentId,
     ]);
-    await database.query("delete from app.subscriptions where id = $1", [
-      subscriptionId,
-    ]);
     await database.transaction(async (client) => {
       await client.query("set local session_replication_role = replica");
       await client.query("delete from app.payments where id = $1", [paymentId]);
     });
     await database.query("delete from app.task_audiences where task_id = $1", [taskId]);
     await database.query("delete from app.shared_tasks where id = $1", [taskId]);
-    await database.query("delete from app.lessons where id = $1", [lessonId]);
+    await database.transaction(async (client) => {
+      await client.query("set local session_replication_role = replica");
+      await client.query(
+        "delete from app.lesson_transitions where lesson_id = $1",
+        [recurringLessonId],
+      );
+      await client.query(
+        "delete from app.lesson_participant_exclusions where lesson_id = $1",
+        [recurringLessonId],
+      );
+      await client.query(
+        "delete from app.lesson_snapshot_participants where lesson_id = $1",
+        [recurringLessonId],
+      );
+      await client.query("delete from app.lesson_snapshots where lesson_id = $1", [
+        recurringLessonId,
+      ]);
+      await client.query("delete from app.lessons where id = any($1::uuid[])", [
+        [lessonId, recurringLessonId],
+      ]);
+      await client.query("delete from app.schedule_series where id = $1", [
+        scheduleSeriesId,
+      ]);
+      await client.query(
+        "delete from app.schedule_plan_participants where plan_id = $1",
+        [schedulePlanId],
+      );
+      await client.query(
+        `delete from app.aggregate_versions
+         where aggregate_type = 'schedule:plan' and aggregate_id = $1`,
+        [schedulePlanId],
+      );
+      await client.query("delete from app.schedule_plans where id = $1", [
+        schedulePlanId,
+      ]);
+      await client.query("delete from app.group_students where group_id = $1", [
+        groupId,
+      ]);
+      await client.query("delete from app.groups where id = $1", [groupId]);
+    });
+    await database.query("delete from app.subscriptions where id = $1", [
+      subscriptionId,
+    ]);
     await database.query(
       "delete from app.user_crm_links where entity_type = 'student' and entity_id = $1",
       [studentId],
@@ -275,7 +377,7 @@ describe("Client archive preview and tombstone (PostgreSQL)", () => {
       confirmRequired: true,
       linkedUserCount: 1,
       impact: {
-        futureLessons: 1,
+        futureLessons: 2,
         openTasks: 1,
         activeSubscriptions: 1,
         financeFacts: 3,
@@ -335,6 +437,50 @@ describe("Client archive preview and tombstone (PostgreSQL)", () => {
       },
     });
     expect(archived.tombstone.archivedAt).not.toBeNull();
+
+    const recurring = await database.query<{
+      plan_status: string;
+      plan_ended: boolean;
+      series_ended: boolean;
+      membership_ended: boolean;
+      participant_period_ended: boolean;
+      lesson_state: string;
+      exclusion_count: number;
+      transition_count: number;
+    }>(
+      `select
+         (select status from app.schedule_plans where id = $1) as plan_status,
+         (select ended_at is not null from app.schedule_plans where id = $1)
+           as plan_ended,
+         (select valid_until is not null and valid_until <= current_date
+           from app.schedule_series where id = $2) as series_ended,
+         (select left_at is not null from app.group_students
+           where group_id = $3 and student_id = $4) as membership_ended,
+         (select effective_until is not null from app.schedule_plan_participants
+           where plan_id = $1 and student_id = $4) as participant_period_ended,
+         (select lifecycle_state from app.lessons where id = $5) as lesson_state,
+         (select count(*)::int from app.lesson_participant_exclusions
+           where lesson_id = $5 and student_id = $4) as exclusion_count,
+         (select count(*)::int from app.lesson_transitions
+           where lesson_id = $5 and to_state = 'cancelled') as transition_count`,
+      [
+        schedulePlanId,
+        scheduleSeriesId,
+        groupId,
+        studentId,
+        recurringLessonId,
+      ],
+    );
+    expect(recurring.rows[0]).toEqual({
+      plan_status: "ended",
+      plan_ended: true,
+      series_ended: true,
+      membership_ended: true,
+      participant_period_ended: true,
+      lesson_state: "cancelled",
+      exclusion_count: 1,
+      transition_count: 1,
+    });
 
     await expect(
       archive.archive(

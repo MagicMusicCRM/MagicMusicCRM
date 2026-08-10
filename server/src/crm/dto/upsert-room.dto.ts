@@ -22,5 +22,5 @@ export class UpsertRoomDto {
   @IsInt()
   @Min(1)
   @Max(1000)
-  capacity?: number;
+  capacity?: number | null;
 }

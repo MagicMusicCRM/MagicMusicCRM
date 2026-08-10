@@ -116,7 +116,9 @@ describe("AnalyticsService", () => {
     );
     const result = await service.debts(actor, {});
     expect(policy.assertCanReadSchoolFinance).toHaveBeenCalledWith(actor);
-    expect(query.mock.calls[0][0]).toContain("app.expected_payments");
+    expect(query.mock.calls[0][0]).toContain(
+      "app.commerce_receivable_schedule_projection",
+    );
     expect(result.buckets).toEqual([
       { bucket: "0-7", students: 5, amount: 50000 },
       { bucket: "8-14", students: 0, amount: 0 },
@@ -132,7 +134,9 @@ describe("AnalyticsService", () => {
     const { service, query, policy } = build([{ next7: "10000", next14: "25000", next30: "60000" }]);
     const result = await service.revenueForecast(actor, {});
     expect(policy.assertCanReadSchoolFinance).toHaveBeenCalledWith(actor);
-    expect(query.mock.calls[0][0]).toContain("app.expected_payments");
+    expect(query.mock.calls[0][0]).toContain(
+      "app.commerce_receivable_schedule_projection",
+    );
     expect(result).toEqual({ next7: 10000, next14: 25000, next30: 60000 });
   });
 

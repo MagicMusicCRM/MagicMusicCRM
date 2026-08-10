@@ -271,7 +271,7 @@ class _UpcomingTaskTile extends StatelessWidget {
     final dueAt = task['startAt'] != null
         ? DateTime.tryParse(task['startAt'].toString())?.toLocal()
         : null;
-    final isOverdue = dueAt != null && dueAt.isBefore(DateTime.now());
+    final isOverdue = task['isOverdue'] == true;
     final due = dueAt == null
         ? '—'
         : DateFormat('d MMM, HH:mm', 'ru').format(dueAt);

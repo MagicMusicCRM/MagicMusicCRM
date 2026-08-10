@@ -432,6 +432,11 @@ extension _ScheduleActions on _ScheduleWidgetState {
       _filterRoomId != null ||
       _filterClientId != null;
 
+  int get _activeScheduleFilterCount =>
+      (_onlyTrial ? 1 : 0) +
+      (_onlyConflicts ? 1 : 0) +
+      (_filterTeacherId != null ? 1 : 0);
+
   List<Map<String, dynamic>> _lessonsForDate(DateTime date) {
     return _filteredLessons.where((l) {
       final dt = _parseLessonTime(l);
@@ -806,6 +811,10 @@ extension _ScheduleActions on _ScheduleWidgetState {
       teacherOptions: _teacherFilterOptions,
     );
     if (result == null) return;
+    _applyScheduleFilterResult(result);
+  }
+
+  void _applyScheduleFilterResult(ScheduleFilterResult result) {
     final branchChanged = result.branchId != _selectedBranchId;
     final modeChanged = result.mode != _dayViewMode;
     _emitState(() {

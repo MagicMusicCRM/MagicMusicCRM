@@ -1341,7 +1341,9 @@ class _CommerceCatalogEditorDialogState
                 menuMaxHeight: 256,
                 key: const ValueKey('commerce-settlement-color'),
                 initialValue: _color,
-                decoration: const InputDecoration(labelText: 'Цвет метки *'),
+                decoration: const InputDecoration(
+                  labelText: 'Цвет метки в деталях и истории *',
+                ),
                 items: [
                   for (final entry in _decisionColorLabels.entries)
                     DropdownMenuItem(

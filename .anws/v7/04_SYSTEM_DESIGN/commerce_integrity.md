@@ -61,7 +61,7 @@ flowchart LR
 | `PlannedLessonSettlementService` | binds manual decision to config revisions and reservation impact | расширяет settlement port |
 | `LessonSettlementCorrectionService` | atomic reversal/exclusion + optional replacement | переиспользует append-only facts |
 | `CommerceConfigurationAdapter` | effective settlement/pay rules | расширяет unified CRM Configuration snapshot |
-| `CommerceProjectionRepository` | wallet/debt/pending/subscription/movements/history | расширяет один существующий SQL projection |
+| `CommerceProjectionRepository` | единственный wallet/debt/pending/revenue/subscription/movements/history read contract для Client Card, dashboards, analytics и exports | расширяет один существующий SQL projection |
 | `CommerceReconciliation` | ledger/obligation/payment/exclusion/hours/accrual checks | расширяет v4 preflight/reconcile |
 
 ## 5. Operation contracts
@@ -126,7 +126,7 @@ erDiagram
 
 ```mermaid
 stateDiagram-v2
-  [*] --> PostedPending: due worker / manual
+  [*] --> PostedPending: due worker / manual (`Срок наступил — требуется проверка`)
   [*] --> Unpaid: manual debt
   [*] --> Paid: verified immediate payment
   PostedPending --> Paid: verified
@@ -138,6 +138,11 @@ stateDiagram-v2
 
 `voided/reversed` — технический lifecycle, не четвёртый статус оплаты. Он
 скрывает запись из ordinary views через exclusion link, сохраняя history.
+
+`posted_pending` не утверждает, что банк или касса уже провели платёж. Это
+операционное состояние наступившего срока, требующее проверки сотрудником;
+пользовательский label в каждом UI и экспорте — `Срок наступил — требуется
+проверка`.
 
 ## 9. Projection semantics
 

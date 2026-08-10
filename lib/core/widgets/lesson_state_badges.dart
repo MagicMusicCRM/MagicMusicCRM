@@ -23,13 +23,20 @@ class LessonStateBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: accent.withValues(alpha: 0.35)),
       ),
-      child: Text(
-        projection.label,
-        style: TextStyle(
-          color: accent,
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(projection.token.icon, color: accent, size: 11),
+          const SizedBox(width: 4),
+          Text(
+            projection.label,
+            style: TextStyle(
+              color: accent,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -52,13 +59,24 @@ class LessonTrialBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: AppColor.goldLine),
       ),
-      child: Text(
-        compact ? 'Проб.' : 'Пробный урок',
-        style: const TextStyle(
-          color: AppColor.gold,
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.star_rounded,
+            color: AppColor.gold,
+            size: compact ? 9 : 11,
+          ),
+          SizedBox(width: compact ? 2 : 4),
+          Text(
+            compact ? 'Проб.' : 'Пробное',
+            style: const TextStyle(
+              color: AppColor.gold,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }

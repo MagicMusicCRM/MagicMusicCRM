@@ -22,7 +22,7 @@
   `@Controller` в одном файле; устранены ложные route prefixes для профилей,
   уведомлений, настроек и deletion requests.
 - **[FIX]** `AGENTS.md` и `docs/architecture/NEXT-AGENT-HANDOFF.md` сведены к
-  одному актуальному состоянию кандидата `1.5.1+179` и открытой задаче
+  одному актуальному состоянию production-кандидата `1.5.1+179` и открытой задаче
   `T7.1.2`; готовность больше не выводится из старых этапов или тестов.
 - **[REMOVE]** Из канонических инструкций удалены прежняя ветка
   `codex/v5-configurable-crm`, HEAD `532bf1e`, ранние candidate versions,
@@ -144,3 +144,31 @@
 - **[CHANGE]** Аудитории управляются внутри карточки филиала; standalone-раздел
   удаляется. Legacy inline-варианты custom fields удаляются в пользу единого
   раздела «Варианты для полей».
+
+## 2026-08-10 — Owner logical-integrity refinement
+
+- **[CHANGE]** T7.1.4 фиксирует единый CommerceProjection для карточки,
+  дашбордов, аналитики и экспортов вместо повторных legacy debt/revenue формул.
+- **[CHANGE]** Перенос уже завершённого занятия сохраняется как исправление
+  бизнес-ошибки: effective settlement/accrual/reservation отменяются append-only
+  одной транзакцией, создаётся scheduled successor, который снова завершает
+  штатный worker.
+- **[CHANGE]** Один canonical constraint engine обязан блокировать все one-time
+  и recurring конфликты; конфликтный Plan не коммитит частичные занятия и
+  остаётся редактируемым по отдельной строке, дню и времени до чистого preview.
+- **[CHANGE]** `posted_pending` получает пользовательское название `Срок наступил
+  — требуется проверка`; manual lesson result не является штатным действием.
+- **[CHANGE]** Фон Lesson ограничен состояниями `Забронировано`, `Завершено`,
+  `Конфликт`; `Пробное` остаётся отдельным badge, catalog color типа списания
+  используется только как детальная метка.
+- **[CHANGE]** Вместимость аудитории становится необязательной; большие списки
+  используют автоматическую cursor-подгрузку при scroll без скрытых hard limits.
+- **[CHANGE]** Архивирование клиента завершает активные повторяющиеся планы и
+  отменяет их будущие занятия штатными transition-командами, сохраняя историю.
+- **[CHANGE]** Production runtime fail-closed: legacy/shadow допустимы только как
+  явно управляемый non-production режим, а production требует v4 и parity zero.
+- **[ADD]** Локальный release candidate повышен до `1.5.1+180`: backend
+  `157/157` suites и `1256/1256` tests, Flutter `666/666`, clean migrations
+  `0001..0118` с `0118..0116 down/up`, production-like health/reconcile и
+  Windows/Android device smoke прошли. Production rollout и owner mega-UAT этим
+  доказательством не подменяются.

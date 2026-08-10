@@ -33,6 +33,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
   let database: DatabaseService;
   let service: LessonTransitionService;
   let failingService: LessonTransitionService;
+  let settlement: LessonSettlementService;
 
   beforeAll(async () => {
     pool = new Pool({ connectionString: url });
@@ -69,12 +70,13 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       constraints,
       lifecycle,
     ] as const;
+    settlement = new LessonSettlementService(
+      database,
+      new LessonSettlementRepository(),
+    );
     service = new LessonTransitionService(
       ...base,
-      new LessonSettlementService(
-        database,
-        new LessonSettlementRepository(),
-      ),
+      settlement,
       reservations,
       tokens,
     );
@@ -84,10 +86,127 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         settle: async () => {
           throw new Error("injected commerce failure");
         },
-      } as LessonSettlementPort,
+      } as unknown as LessonSettlementPort,
       reservations,
       tokens,
     );
+  });
+
+  it("atomically reverses a completed lesson and schedules it for completion again", async () => {
+    const fixture = await createFixture(
+      pool,
+      new LessonLifecycleRepository(database),
+    );
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const paidDecision = {
+      settlementTypeKey: "paid_miss",
+      teacherCompensationRuleKey: "standard",
+    };
+    const metadata = (label: string) => ({
+      idempotencyKey: `${label}-${randomUUID()}`,
+      requestId: `request-${label}-${randomUUID()}`,
+    });
+    try {
+      await database.transaction((client) => settlement.assignPlan(client, {
+        lessonId: fixture.settleId,
+        branchId: fixture.branchId,
+        decision: paidDecision,
+        selectedBy: fixture.managerId,
+        reasonText: "Исходный план расчёта",
+      }));
+      const completionPreview = await service.previewSettle(
+        actor,
+        fixture.settleId,
+        { expectedVersion: 1, financialDecision: paidDecision },
+      );
+      await service.settle(
+        actor,
+        fixture.settleId,
+        {
+          expectedVersion: 1,
+          financialDecision: paidDecision,
+          previewToken: completionPreview.previewToken!,
+          confirm: true,
+        },
+        metadata("complete-before-reschedule"),
+      );
+
+      const reschedulePreview = await service.previewReschedule(
+        actor,
+        fixture.settleId,
+        {
+          expectedVersion: 2,
+          reasonCode: "business.error",
+          reasonText: "Исправление ошибочно завершённого занятия",
+          financialDecision: paidDecision,
+          successor: { scheduledAt: "2026-08-03T08:00:00.000Z" },
+        },
+      );
+      expect(reschedulePreview).toMatchObject({
+        canConfirm: true,
+        financialDecision: {
+          settlementTypeKey: "free_lesson",
+          teacherCompensationRuleKey: "none",
+        },
+        warnings: ["COMPLETED_LESSON_EFFECTS_WILL_BE_REVERSED"],
+      });
+      const moved = await service.reschedule(
+        actor,
+        fixture.settleId,
+        {
+          expectedVersion: 2,
+          reasonCode: "business.error",
+          reasonText: "Исправление ошибочно завершённого занятия",
+          financialDecision: paidDecision,
+          successor: { scheduledAt: "2026-08-03T08:00:00.000Z" },
+          previewToken: reschedulePreview.previewToken!,
+          confirm: true,
+        },
+        metadata("completed-reschedule"),
+      );
+      expect(moved.financialDecision).toEqual({
+        settlementTypeKey: "free_lesson",
+        teacherCompensationRuleKey: "none",
+      });
+      const state = await pool.query<{
+        lifecycle_state: string;
+        correction_count: number;
+        transition_count: number;
+        teacher_amount_minor: string;
+        successor_state: string;
+        successor_plan_key: string;
+      }>(
+        `select source.lifecycle_state,
+           (select count(*)::int from app.lesson_settlement_corrections
+             where lesson_id = source.id) as correction_count,
+           (select count(*)::int from app.lesson_transitions
+             where lesson_id = source.id) as transition_count,
+           (select amount_minor::text
+             from app.lesson_teacher_compensation_facts_effective
+             where lesson_id = source.id) as teacher_amount_minor,
+           successor.lifecycle_state as successor_state,
+           plan.decision->>'settlementTypeKey' as successor_plan_key
+         from app.lessons source
+         join app.lessons successor on successor.id = source.successor_id
+         join app.lesson_settlement_plans plan on plan.lesson_id = successor.id
+         where source.id = $1`,
+        [fixture.settleId],
+      );
+      expect(moved).toMatchObject({
+        source: { state: "rescheduled", version: 3 },
+        successor: { state: "scheduled", version: 1 },
+      });
+      expect(state.rows[0]).toEqual({
+        lifecycle_state: "rescheduled",
+        correction_count: 1,
+        transition_count: 2,
+        teacher_amount_minor: "0",
+        successor_state: "scheduled",
+        successor_plan_key: "paid_miss",
+      });
+    } finally {
+      await cleanup(pool, fixture);
+    }
   });
 
   afterAll(async () => {
@@ -832,8 +951,22 @@ async function cleanup(
       "lesson_reservations",
       "lesson_client_charge_facts",
       "lesson_teacher_compensation_facts",
+      "lesson_participant_exclusions",
       "lesson_snapshot_participants",
       "lesson_snapshots",
+    ]) {
+      await client.query(
+        `delete from app.${table}
+         where lesson_id in (
+           select id from app.lessons where created_by = $1
+         )`,
+        [fixture.managerId],
+      );
+    }
+    for (const table of [
+      "lesson_settlement_corrections",
+      "lesson_settlement_plan_revisions",
+      "lesson_settlement_plans",
     ]) {
       await client.query(
         `delete from app.${table}

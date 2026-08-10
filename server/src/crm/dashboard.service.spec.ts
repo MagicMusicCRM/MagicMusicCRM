@@ -127,17 +127,14 @@ describe("DashboardService", () => {
       "manager-a",
       true,
     ]);
-    expect(String(query.mock.calls[0][0])).toContain("l.is_trial = false");
-    expect(String(query.mock.calls[0][0])).toContain(
-      "lp.attendance_kind = 'partially_paid'",
-    );
     const overviewSql = String(query.mock.calls[0][0]);
-    expect(overviewSql).toContain("coalesce(sub_pay.amount, pkg.price)");
-    expect(overviewSql).toContain("/ nullif(sub.lessons_total, 0)");
-    expect(overviewSql).toContain("* lp.charged_hours");
     expect(overviewSql).toContain(
-      "group by coalesce(sub.student_id, l.student_id, lp.student_id)",
+      "app.commerce_receivable_schedule_projection",
     );
+    expect(overviewSql).toContain(
+      "app.commerce_student_account_projection",
+    );
+    expect(overviewSql).not.toContain("app.expected_payments");
   });
 
   it("redacts and skips school finance for a manager", async () => {

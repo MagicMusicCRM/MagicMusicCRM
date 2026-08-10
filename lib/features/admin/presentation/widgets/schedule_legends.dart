@@ -1,94 +1,54 @@
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
+import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
 
-/// Colour legend for the month view. The «Сегодня» shortcut used to live here
-/// too, but the date-navigation row already carries one (white, in every
-/// view) — two identical buttons on the month screen was the reported dupe, so
-/// this keeps only the colour legend.
 class ScheduleMonthLegend extends StatelessWidget {
   const ScheduleMonthLegend({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    Widget chip(Color c, String label) {
-      return Container(
-        margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-        decoration: BoxDecoration(
-          color: c.withAlpha(22),
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-          border: Border.all(color: c.withAlpha(70)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(color: c, shape: BoxShape.circle),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface,
-                fontSize: 11.5,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            chip(AppColor.actionBlue, 'Обычные'),
-            chip(AppColor.success, 'Пробные'),
-            chip(AppColor.warning, 'Пиковая'),
-            chip(AppColor.danger, 'Конфликт'),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      const _ScheduleLessonLegend(padding: EdgeInsets.fromLTRB(16, 2, 16, 8));
 }
 
-/// Colour/gesture legend for the day view. Extracted from _ScheduleWidgetState
-/// — pure display.
 class ScheduleDayLegend extends StatelessWidget {
   final bool week;
 
   const ScheduleDayLegend({super.key, this.week = false});
 
   @override
+  Widget build(BuildContext context) =>
+      const _ScheduleLessonLegend(padding: EdgeInsets.fromLTRB(16, 2, 16, 6));
+}
+
+/// One canonical legend for every operational schedule view.
+class _ScheduleLessonLegend extends StatelessWidget {
+  const _ScheduleLessonLegend({required this.padding});
+
+  final EdgeInsets padding;
+
+  @override
   Widget build(BuildContext context) {
-    Widget chip(Color c, String label) {
+    final cs = Theme.of(context).colorScheme;
+
+    Widget statusChip(LessonStateToken token) {
+      final accent = token.accent;
       return Container(
-        margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
         decoration: BoxDecoration(
-          color: c.withAlpha(22),
+          color: token.soft,
           borderRadius: BorderRadius.circular(AppRadius.pill),
-          border: Border.all(color: c.withAlpha(70)),
+          border: Border.all(color: accent.withValues(alpha: 0.35)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(color: c, shape: BoxShape.circle),
-            ),
-            const SizedBox(width: 6),
+            Icon(token.icon, size: 13, color: accent),
+            const SizedBox(width: 5),
             Text(
-              label,
+              token.label,
               style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface,
+                color: cs.onSurface,
                 fontSize: 11.5,
                 fontWeight: FontWeight.w600,
               ),
@@ -99,14 +59,16 @@ class ScheduleDayLegend extends StatelessWidget {
     }
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
+      padding: padding,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            chip(AppColor.transferCyan, 'Свободный час — создать занятие'),
-            chip(AppColor.actionBlue, 'Занятие — открыть и изменить'),
-            chip(AppColor.danger, 'Конфликт'),
+            for (final token in LessonStateToken.values) ...[
+              statusChip(token),
+              const SizedBox(width: 8),
+            ],
+            const LessonTrialBadge(),
           ],
         ),
       ),

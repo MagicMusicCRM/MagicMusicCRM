@@ -36,6 +36,27 @@ export class ConstraintEngineRepository {
     );
   }
 
+  async roomMatchesBranch(
+    roomId: string,
+    branchId: string,
+    client?: PoolClient,
+  ): Promise<boolean> {
+    const query = client
+      ? client.query.bind(client)
+      : this.database.query.bind(this.database);
+    const result = await query<{ matches: boolean }>(
+      `select exists (
+         select 1
+         from app.rooms room
+         where room.id = $1
+           and room.branch_id = $2
+           and room.deleted_at is null
+       ) as matches`,
+      [roomId, branchId],
+    );
+    return result.rows[0]?.matches ?? false;
+  }
+
   async findConflicts(
     draft: LessonConstraintDraft,
     startAt: Date,

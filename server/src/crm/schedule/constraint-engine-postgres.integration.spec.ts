@@ -127,6 +127,115 @@ describe("Schedule constraint engine (PostgreSQL)", () => {
           },
         ],
       });
+
+      const wrongRoomBranch = await engine.validate(
+        {
+          ...baseDraft,
+          roomId: fixture.otherRoomId,
+          startAt: "2026-07-27T09:00:00.000Z",
+          endAt: "2026-07-27T10:00:00.000Z",
+        },
+        client,
+      );
+      expect(wrongRoomBranch.violations).toEqual([
+        {
+          code: "ROOM_BRANCH_MISMATCH",
+          resource: { type: "room", id: fixture.otherRoomId },
+          conflictingLessonIds: [],
+          ruleIds: [],
+        },
+      ]);
+
+      const outsideHours = await engine.validate(
+        {
+          ...baseDraft,
+          startAt: "2026-07-27T15:00:00.000Z",
+          endAt: "2026-07-27T16:00:00.000Z",
+        },
+        client,
+      );
+      expect(outsideHours.violations).toEqual([
+        expect.objectContaining({ code: "OUTSIDE_BRANCH_HOURS" }),
+      ]);
+
+      const breakRule = await client.query<{ id: string }>(
+        `insert into app.teacher_availability_rules (
+           teacher_id, kind, available, timezone_name, weekday,
+           local_start, local_end, valid_from, valid_until
+         ) values ($1, 'recurring', false, 'Europe/Moscow', 1,
+           '12:00', '13:00', '2026-01-01', '2026-12-31') returning id`,
+        [fixture.teacherId],
+      );
+      const unavailable = await engine.validate(
+        {
+          ...baseDraft,
+          startAt: "2026-07-27T09:00:00.000Z",
+          endAt: "2026-07-27T10:00:00.000Z",
+        },
+        client,
+      );
+      expect(unavailable.violations).toEqual([
+        {
+          code: "TEACHER_UNAVAILABLE",
+          resource: { type: "teacher", id: fixture.teacherId },
+          conflictingLessonIds: [],
+          ruleIds: [breakRule.rows[0]!.id],
+        },
+      ]);
+
+      await client.query(
+        "delete from app.teacher_availability_rules where id = $1",
+        [breakRule.rows[0]!.id],
+      );
+      await client.query(
+        "update app.lessons set lifecycle_state = 'successfully_completed' where id = $1",
+        [fixture.lessonId],
+      );
+      const terminalDoesNotBlock = await engine.validate(
+        {
+          ...baseDraft,
+          startAt: "2026-07-27T07:30:00.000Z",
+          endAt: "2026-07-27T08:30:00.000Z",
+        },
+        client,
+      );
+      expect(terminalDoesNotBlock).toEqual({ valid: true, violations: [] });
+
+      const group = await client.query<{ id: string }>(
+        `insert into app.groups (name, branch_id) values ($1, $2) returning id`,
+        [`Constraint group ${randomUUID()}`, fixture.branchId],
+      );
+      await client.query(
+        `insert into app.group_students (group_id, student_id) values ($1, $2)`,
+        [group.rows[0]!.id, fixture.studentId],
+      );
+      const groupLesson = await client.query<{ id: string }>(
+        `insert into app.lessons (
+           group_id, teacher_id, branch_id, room_id,
+           scheduled_at, duration_minutes
+         ) values ($1,$2,$3,$4,'2026-07-27T10:00:00.000Z',60)
+         returning id`,
+        [
+          group.rows[0]!.id,
+          fixture.teacherId,
+          fixture.branchId,
+          fixture.roomId,
+        ],
+      );
+      const groupParticipantOverlap = await engine.validate(
+        {
+          ...baseDraft,
+          startAt: "2026-07-27T10:30:00.000Z",
+          endAt: "2026-07-27T11:30:00.000Z",
+        },
+        client,
+      );
+      expect(groupParticipantOverlap.violations).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          code: "CLIENT_OVERLAP",
+          conflictingLessonIds: [groupLesson.rows[0]!.id],
+        }),
+      ]));
     } finally {
       await client.query("rollback");
       client.release();

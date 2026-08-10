@@ -5,6 +5,8 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { Pool, PoolClient } from "pg";
 import { AuditService } from "../../audit/audit.service";
 import {
@@ -526,48 +528,33 @@ describe("Subscription Package catalog (PostgreSQL)", () => {
       can_delete: false,
     });
 
-    const runner = new MigrationRunner(pool);
-    const peeledMigrations: string[] = [];
-    while (true) {
-      const latest = await pool.query<{ id: string }>(
-        `
-          select id
-          from app_schema_migrations
-          order by applied_at desc
-          limit 1
-        `,
-      );
-      if (latest.rows[0]?.id === "0090_commerce_package_aggregate_versions") {
-        break;
-      }
-      const rolledBack = await runner.down();
-      if (!rolledBack) throw new Error("Migration chain ended before 0090.");
-      peeledMigrations.push(rolledBack);
-    }
-    expect(peeledMigrations).toEqual(
-      expect.arrayContaining([
-        "0091_commerce_issued_subscription_aggregate_versions",
-        "0092_shared_tasks_audience_schema",
-      ]),
-    );
+    const client = await pool.connect();
     try {
-      await expect(runner.down()).rejects.toMatchObject({
+      await client.query("begin");
+      const down = readFileSync(
+        resolve(
+          process.cwd(),
+          "db/migrations/0090_commerce_package_aggregate_versions.down.sql",
+        ),
+        "utf8",
+      );
+      await expect(client.query(down)).rejects.toMatchObject({
         code: "23514",
         message:
           "catalog version history exists; rollback would break idempotent replay",
       });
-      const applied = await pool.query<{ count: string }>(
+    } finally {
+      await client.query("rollback");
+      client.release();
+    }
+    const applied = await pool.query<{ count: string }>(
         `
           select count(*)::text as count
           from app_schema_migrations
           where id = '0090_commerce_package_aggregate_versions'
         `,
       );
-      expect(applied.rows[0]!.count).toBe("1");
-    } finally {
-      const restored = await runner.up();
-      expect(restored).toEqual(expect.arrayContaining(peeledMigrations));
-    }
+    expect(applied.rows[0]!.count).toBe("1");
   });
 
   function packageInput(

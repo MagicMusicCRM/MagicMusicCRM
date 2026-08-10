@@ -28,18 +28,39 @@ final studentFunnelProvider =
 /// act as a status-based draggable kanban.
 ///
 /// Pass [kNoBranchBoardId] to load students that have no branch at all.
+class StudentBoardPage {
+  final List<Map<String, dynamic>> students;
+  final List<StudentFunnelStage> stages;
+  final String? nextCursor;
+  final int totalCount;
+
+  const StudentBoardPage({
+    required this.students,
+    required this.stages,
+    required this.nextCursor,
+    required this.totalCount,
+  });
+
+  List<Map<String, dynamic>> get columns =>
+      groupStudentsByStatus(students, stages);
+}
+
 final studentBoardProvider = FutureProvider.autoDispose
-    .family<List<Map<String, dynamic>>, String>((ref, branchId) async {
+    .family<StudentBoardPage, String>((ref, branchId) async {
       final service = ref.watch(magicCrmServiceProvider);
       final funnel = await ref.watch(studentFunnelProvider(branchId).future);
-      // TODO: добавить серверную пагинацию/board-эндпоинт, если ветка превышает этот лимит.
       final search = branchId == kNoBranchBoardId
-          ? await service.searchStudents(noBranch: true, limit: 500)
-          : await service.searchStudents(branchId: branchId, limit: 500);
+          ? await service.searchStudents(noBranch: true, limit: 100)
+          : await service.searchStudents(branchId: branchId, limit: 100);
       final students = (search['items'] as List? ?? const [])
           .whereType<Map<String, dynamic>>()
           .toList();
-      return groupStudentsByStatus(students, funnel.activeStages);
+      return StudentBoardPage(
+        students: students,
+        stages: funnel.activeStages,
+        nextCursor: search['next_cursor']?.toString(),
+        totalCount: (search['total_count'] as num?)?.toInt() ?? students.length,
+      );
     });
 
 /// Pure: bucket students into the column whose `status` matches (case-

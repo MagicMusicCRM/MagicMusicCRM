@@ -63,7 +63,8 @@ joins it explicitly.
 
 `ConfigSnapshot` gains:
 
-- `lessonSettlementTypes[]`: stableKey, label, colorToken, hourShareBasisPoints
+- `lessonSettlementTypes[]`: stableKey, label, colorToken (detail/history marker
+  only; never Lesson card background), hourShareBasisPoints
   `0..20000`, fixedPenaltyMinor?, allowedContexts, active, order;
 - `teacherCompensationRules[]`: stableKey, label, mode
   `none|standard|percent|fixed|hourly`, value, active, order.
@@ -170,6 +171,10 @@ Every ordinary payment/revenue query excludes a source when
 `commerce_reporting_exclusions.source_kind/source_id` matches. The predicate is
 implemented once in repository SQL fragments or one database view and covered by
 inventory tests; copying ad-hoc `deleted_at` filters is forbidden.
+
+Dashboard, analytics, exports and Client Card must consume this same projection
+semantics. Legacy `expected_payments`, lesson-cost recomputation or screen-local
+debt formulas are forbidden for v7 totals.
 
 Technical history is the inverse: it intentionally includes source, counterpart,
 human reason, actor and time, bounded by client lineage and capability.

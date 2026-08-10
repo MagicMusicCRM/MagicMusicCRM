@@ -22,14 +22,14 @@ class CreateRoomDialog extends ConsumerStatefulWidget {
 class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  final _capacityController = TextEditingController(text: '1');
+  final _capacityController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     if (widget.room != null) {
       _nameController.text = widget.room!['name'] ?? '';
-      _capacityController.text = widget.room!['capacity']?.toString() ?? '1';
+      _capacityController.text = widget.room!['capacity']?.toString() ?? '';
     }
   }
 
@@ -49,7 +49,8 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
     setState(() => _saving = true);
 
     try {
-      final capacity = int.parse(_capacityController.text.trim());
+      final capacityText = _capacityController.text.trim();
+      final capacity = capacityText.isEmpty ? null : int.parse(capacityText);
       final crm = ref.read(magicCrmServiceProvider);
 
       if (widget.room == null) {
@@ -69,6 +70,7 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
           name: name,
           branchId: widget.branchId,
           capacity: capacity,
+          clearCapacity: capacity == null,
         );
       }
       if (mounted) Navigator.pop(context, true);
@@ -150,11 +152,14 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
             TextFormField(
               controller: _capacityController,
               decoration: const InputDecoration(
-                labelText: 'Вместимость, человек *',
+                labelText: 'Вместимость, человек',
+                hintText: 'Необязательно',
               ),
               keyboardType: TextInputType.number,
               validator: (value) {
-                final capacity = int.tryParse(value?.trim() ?? '');
+                final text = value?.trim() ?? '';
+                if (text.isEmpty) return null;
+                final capacity = int.tryParse(text);
                 return capacity == null || capacity < 1 || capacity > 1000
                     ? 'Введите целое число от 1 до 1000'
                     : null;

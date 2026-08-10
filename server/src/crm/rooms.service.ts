@@ -267,9 +267,6 @@ export class RoomsService {
     if (!dto.branchId) {
       throw new BadRequestException("Для аудитории необходимо выбрать филиал.");
     }
-    if (dto.capacity === undefined) {
-      throw new BadRequestException("Вместимость аудитории обязательна.");
-    }
     await assertSettingsBranchScope(this.database, actor, dto.branchId);
     const name = dto.name?.trim();
     if (!name) {
@@ -290,7 +287,7 @@ export class RoomsService {
         from inserted i
         left join app.branches b on b.id = i.branch_id and b.deleted_at is null
       `,
-      [dto.branchId, name, dto.capacity],
+      [dto.branchId, name, dto.capacity ?? null],
     );
     const room = result.rows[0];
     if (!room) throw new BadRequestException("Выбранный филиал недоступен.");
@@ -326,7 +323,7 @@ export class RoomsService {
           update app.rooms
           set branch_id = coalesce($2, branch_id),
             name = coalesce($3, name),
-            capacity = coalesce($4, capacity),
+            capacity = case when $4::boolean then $5::integer else capacity end,
             updated_at = now()
           where id = $1 and deleted_at is null
           returning id, branch_id, name, capacity, created_at
@@ -335,7 +332,13 @@ export class RoomsService {
         from updated u
         left join app.branches b on b.id = u.branch_id and b.deleted_at is null
       `,
-      [roomId, dto.branchId ?? null, name ?? null, dto.capacity ?? null],
+      [
+        roomId,
+        dto.branchId ?? null,
+        name ?? null,
+        Object.prototype.hasOwnProperty.call(dto, "capacity"),
+        dto.capacity ?? null,
+      ],
     );
     const room = result.rows[0];
     if (!room) throw new NotFoundException("Аудитория не найдена.");

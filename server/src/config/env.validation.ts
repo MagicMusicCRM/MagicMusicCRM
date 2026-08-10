@@ -39,11 +39,31 @@ export const envValidationSchema = Joi.object({
   NOTIFICATION_TOKEN_ENCRYPTION_KEY: Joi.string().allow('').default(''),
   LESSON_REMINDERS_ENABLED: Joi.boolean().default(false),
   TASK_REMINDERS_ENABLED: Joi.boolean().default(false),
-  V4_ACCESS_MODE: Joi.string().valid('legacy', 'shadow', 'v4').default('shadow'),
-  V4_ACCESS_KILL_SWITCH: Joi.boolean().default(false),
-  V4_SCHEDULE_MODE: Joi.string().valid('legacy', 'shadow', 'v4').default('shadow'),
-  V4_SCHEDULE_KILL_SWITCH: Joi.boolean().default(false),
-  V4_PARITY_UNEXPLAINED_DIFFS: Joi.number().integer().min(0).default(1),
+  V4_ACCESS_MODE: Joi.when('NODE_ENV', {
+    is: 'production',
+    then: Joi.string().valid('v4').required(),
+    otherwise: Joi.string().valid('legacy', 'shadow', 'v4').default('shadow')
+  }),
+  V4_ACCESS_KILL_SWITCH: Joi.when('NODE_ENV', {
+    is: 'production',
+    then: Joi.boolean().valid(false).required(),
+    otherwise: Joi.boolean().default(false)
+  }),
+  V4_SCHEDULE_MODE: Joi.when('NODE_ENV', {
+    is: 'production',
+    then: Joi.string().valid('v4').required(),
+    otherwise: Joi.string().valid('legacy', 'shadow', 'v4').default('shadow')
+  }),
+  V4_SCHEDULE_KILL_SWITCH: Joi.when('NODE_ENV', {
+    is: 'production',
+    then: Joi.boolean().valid(false).required(),
+    otherwise: Joi.boolean().default(false)
+  }),
+  V4_PARITY_UNEXPLAINED_DIFFS: Joi.when('NODE_ENV', {
+    is: 'production',
+    then: Joi.number().integer().valid(0).required(),
+    otherwise: Joi.number().integer().min(0).default(1)
+  }),
   LEAD_WEBHOOK_SECRET: Joi.string().allow('').min(32).default(''),
   HOLLIHOP_BASE_URL: Joi.string().uri().default('https://sokol.t8s.ru/Api/V2/'),
   HOLLIHOP_AUTH_KEY: Joi.string().allow('').default(''),

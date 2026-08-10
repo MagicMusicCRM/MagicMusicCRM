@@ -130,21 +130,13 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
   // ── Day view by Teacher ───────────────────────────────────────────────────
   Widget _buildDayViewByTeacher() {
     final dayLessons = _lessonsForDate(_selectedDate);
-    final teacherIds =
-        dayLessons
-            .map((lesson) => lesson['teacher_id']?.toString())
-            .whereType<String>()
-            .toSet()
-            .toList()
-          ..sort(
-            (left, right) => (_teacherNames[left] ?? '').compareTo(
-              _teacherNames[right] ?? '',
-            ),
-          );
+    final teacherIds = _filterTeacherId == null
+        ? _teacherFilterOptions.map((teacher) => teacher.id).toList()
+        : <String>[_filterTeacherId!];
     if (teacherIds.isEmpty) {
       return Center(
         child: Text(
-          'Нет занятий на этот день',
+          'Нет преподавателей в выбранном филиале',
           style: TextStyle(
             color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
@@ -152,19 +144,28 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
       );
     }
 
-    final columns = [
-      for (var i = 0; i < teacherIds.length; i++)
-        ScheduleColumn(
-          id: teacherIds[i],
-          name: _teacherNames[teacherIds[i]] ?? 'Педагог',
+    final rows = <ScheduleTeacherRow>[];
+    for (var i = 0; i < teacherIds.length; i++) {
+      final teacherId = teacherIds[i];
+      final teacherLessons = dayLessons
+          .where((lesson) => lesson['teacher_id']?.toString() == teacherId)
+          .toList();
+      rows.add(
+        ScheduleTeacherRow(
+          id: teacherId,
+          name: _teacherNames[teacherId] ?? 'Преподаватель',
           color: _roomColors[i % _roomColors.length],
-          hasConflict: dayLessons.any(
-            (lesson) =>
-                lesson['teacher_id']?.toString() == teacherIds[i] &&
-                conflictTypes(lesson['conflict_types']).isNotEmpty,
+          lessonCount: teacherLessons.length,
+          totalMinutes: teacherLessons.fold<int>(
+            0,
+            (total, lesson) => total + _durationMinutes(lesson),
+          ),
+          hasConflict: teacherLessons.any(
+            (lesson) => conflictTypes(lesson['conflict_types']).isNotEmpty,
           ),
         ),
-    ];
+      );
+    }
     final entries = <ScheduleEntry>[];
     for (final lesson in dayLessons) {
       final start = _parseLessonTime(lesson);
@@ -205,13 +206,13 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
       );
     }
 
-    return ScheduleDayCanvas(
+    return ScheduleTeacherTimeline(
       key: ValueKey(
         'teacher-day-${dateOnly(_selectedDate)}-'
-        '${_selectedBranchId ?? ''}-${columns.length}',
+        '${_selectedBranchId ?? ''}-${rows.length}',
       ),
       date: _selectedDate,
-      columns: columns,
+      rows: rows,
       entries: entries,
       allowCreate: widget.canWrite,
       onCreateSlot: (_, start, duration) => _openWeekCreate(start, duration),
@@ -508,7 +509,7 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
       if (!mounted) return;
       MagicToast.show(
         context,
-        'Результат занятия зафиксирован',
+        'Расчёт занятия исправлен',
         type: MagicToastType.success,
       );
     }

@@ -17,6 +17,8 @@ class _TeacherStudentsWidgetState extends ConsumerState<TeacherStudentsWidget> {
   List<Map<String, dynamic>> _students = [];
   bool _loading = true;
   Object? _loadError;
+  String? _nextCursor;
+  bool _loadingMore = false;
 
   @override
   void initState() {
@@ -39,23 +41,22 @@ class _TeacherStudentsWidgetState extends ConsumerState<TeacherStudentsWidget> {
         return;
       }
 
-      final students = await crm.listStudents(limit: 100);
-      final lessons = await crm.listLessons(
-        teacherId: teacher['id']?.toString(),
-        limit: 200,
-      );
+      final page = await crm.searchStudents(limit: 100);
       if (!mounted) return;
-
-      final counts = <String, int>{};
-      for (final l in lessons) {
-        final sid = l['student_id'] as String?;
-        if (sid != null) counts[sid] = (counts[sid] ?? 0) + 1;
-      }
+      final students = (page['items'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>();
 
       setState(() {
         _students = students.map((s) {
-          return {...s, '_lesson_count': counts[s['id'] as String? ?? ''] ?? 0};
+          return {
+            ...s,
+            '_lesson_count':
+                (s['lessons_count'] as num?)?.toInt() ??
+                int.tryParse('${s['lessons_count']}') ??
+                0,
+          };
         }).toList();
+        _nextCursor = page['next_cursor']?.toString();
         _loadError = null;
         _loading = false;
       });
@@ -65,6 +66,42 @@ class _TeacherStudentsWidgetState extends ConsumerState<TeacherStudentsWidget> {
         _loadError = e;
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _loadMore() async {
+    final cursor = _nextCursor?.trim();
+    if (cursor == null || cursor.isEmpty || _loadingMore) return;
+    setState(() => _loadingMore = true);
+    try {
+      final page = await ref
+          .read(magicCrmServiceProvider)
+          .searchStudents(cursor: cursor, limit: 100);
+      if (!mounted) return;
+      final known = _students
+          .map((student) => student['id']?.toString())
+          .whereType<String>()
+          .toSet();
+      setState(() {
+        _students.addAll(
+          (page['items'] as List? ?? const [])
+              .whereType<Map<String, dynamic>>()
+              .where((student) => known.add(student['id']?.toString() ?? ''))
+              .map(
+                (student) => {
+                  ...student,
+                  '_lesson_count':
+                      (student['lessons_count'] as num?)?.toInt() ??
+                      int.tryParse('${student['lessons_count']}') ??
+                      0,
+                },
+              ),
+        );
+        _nextCursor = page['next_cursor']?.toString();
+        _loadingMore = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingMore = false);
     }
   }
 
@@ -137,9 +174,53 @@ class _TeacherStudentsWidgetState extends ConsumerState<TeacherStudentsWidget> {
       onRefresh: _loadStudents,
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: _students.length,
-        itemBuilder: (context, i) => _StudentCard(student: _students[i]),
+        itemCount: _students.length + (_nextCursor?.isNotEmpty == true ? 1 : 0),
+        itemBuilder: (context, i) {
+          if (i >= _students.length) {
+            return _TeacherStudentsPageLoader(
+              cursor: _nextCursor!,
+              loading: _loadingMore,
+              onLoad: _loadMore,
+            );
+          }
+          return _StudentCard(student: _students[i]);
+        },
       ),
+    );
+  }
+}
+
+class _TeacherStudentsPageLoader extends StatefulWidget {
+  final String cursor;
+  final bool loading;
+  final VoidCallback onLoad;
+
+  const _TeacherStudentsPageLoader({
+    required this.cursor,
+    required this.loading,
+    required this.onLoad,
+  });
+
+  @override
+  State<_TeacherStudentsPageLoader> createState() =>
+      _TeacherStudentsPageLoaderState();
+}
+
+class _TeacherStudentsPageLoaderState
+    extends State<_TeacherStudentsPageLoader> {
+  String? _requested;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.loading && _requested != widget.cursor) {
+      _requested = widget.cursor;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onLoad();
+      });
+    }
+    return const Padding(
+      padding: EdgeInsets.all(16),
+      child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
     );
   }
 }

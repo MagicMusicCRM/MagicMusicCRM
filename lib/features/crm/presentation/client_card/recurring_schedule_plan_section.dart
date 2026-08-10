@@ -1247,8 +1247,9 @@ class _TrayTile extends StatelessWidget {
       'lifecycle_state': item.state,
     });
     final marker = item.settlementMarkers.firstOrNull;
-    final accent = marker == null
-        ? state.token.accent
+    final accent = state.token.accent;
+    final markerAccent = marker == null
+        ? accent
         : _settlementColor(marker['colorToken']?.toString());
     final markerLabels = item.settlementMarkers
         .map((value) => value['label']?.toString())
@@ -1294,7 +1295,11 @@ class _TrayTile extends StatelessWidget {
                 Positioned(
                   top: 2,
                   right: 3,
-                  child: Icon(Icons.sell_outlined, size: 9, color: accent),
+                  child: Icon(
+                    Icons.sell_outlined,
+                    size: 9,
+                    color: markerAccent,
+                  ),
                 ),
               if (item.relationMarker != 'none')
                 Positioned(

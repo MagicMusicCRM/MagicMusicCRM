@@ -54,6 +54,22 @@ export class LessonSettlementService implements LessonSettlementPort {
     return this.repository.assignPlan(client, input);
   }
 
+  clonePlan(
+    client: PoolClient,
+    input: {
+      sourceLessonId: string;
+      targetLessonId: string;
+      selectedBy: string;
+      reasonText?: string;
+      fallback?: {
+        branchId: string;
+        decision: LessonFinancialDecision;
+      };
+    },
+  ) {
+    return this.repository.clonePlan(client, input);
+  }
+
   loadPlan(client: PoolClient, lessonId: string, lock = false) {
     return this.repository.loadPlan(client, lessonId, lock);
   }

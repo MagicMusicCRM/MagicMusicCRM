@@ -28,6 +28,9 @@ class _StatusColumn extends StatelessWidget {
   final Future<void> Function(Map<String, dynamic>, String) onMove;
   final ValueChanged<Offset> onDragUpdate;
   final VoidCallback onDragEnd;
+  final String? nextCursor;
+  final bool loadingMore;
+  final VoidCallback onLoadMore;
 
   const _StatusColumn({
     required this.column,
@@ -37,6 +40,9 @@ class _StatusColumn extends StatelessWidget {
     required this.onMove,
     required this.onDragUpdate,
     required this.onDragEnd,
+    required this.nextCursor,
+    required this.loadingMore,
+    required this.onLoadMore,
   });
 
   bool get _droppable => column.status != null;
@@ -173,8 +179,17 @@ class _StatusColumn extends StatelessWidget {
                             'students_col_${column.status ?? 'other'}',
                           ),
                           padding: const EdgeInsets.symmetric(horizontal: 8),
-                          itemCount: column.students.length,
+                          itemCount:
+                              column.students.length +
+                              (nextCursor?.isNotEmpty == true ? 1 : 0),
                           itemBuilder: (context, index) {
+                            if (index >= column.students.length) {
+                              return _AutomaticStudentPageLoader(
+                                cursor: nextCursor!,
+                                loading: loadingMore,
+                                onLoad: onLoadMore,
+                              );
+                            }
                             final student = column.students[index];
                             final id = student['id']?.toString() ?? '';
                             return _StudentCard(
@@ -233,6 +248,47 @@ class _StatusColumn extends StatelessWidget {
               ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AutomaticStudentPageLoader extends StatefulWidget {
+  final String cursor;
+  final bool loading;
+  final VoidCallback onLoad;
+
+  const _AutomaticStudentPageLoader({
+    required this.cursor,
+    required this.loading,
+    required this.onLoad,
+  });
+
+  @override
+  State<_AutomaticStudentPageLoader> createState() =>
+      _AutomaticStudentPageLoaderState();
+}
+
+class _AutomaticStudentPageLoaderState
+    extends State<_AutomaticStudentPageLoader> {
+  String? _requestedCursor;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.loading && _requestedCursor != widget.cursor) {
+      _requestedCursor = widget.cursor;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onLoad();
+      });
+    }
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 12),
+      child: Center(
+        child: SizedBox(
+          width: 18,
+          height: 18,
+          child: CircularProgressIndicator(strokeWidth: 2),
         ),
       ),
     );

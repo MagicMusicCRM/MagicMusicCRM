@@ -1,31 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
-/// Closed visual vocabulary for every Lesson surface.
-enum LessonStateToken { neutral, success, rescheduled }
+/// Closed visual vocabulary for operational lesson surfaces.
+///
+/// Trial is a lesson type and is rendered as a separate badge. Reservation and
+/// settlement configuration are financial details and never change card color.
+enum LessonStateToken { booked, completed, conflict }
 
 class LessonStateProjection {
   final LessonStateToken token;
   final String state;
   final String label;
-  final String? reservationState;
 
   const LessonStateProjection({
     required this.token,
     required this.state,
     required this.label,
-    this.reservationState,
   });
 
-  factory LessonStateProjection.fromMap(Map<String, dynamic> lesson) {
+  factory LessonStateProjection.fromMap(
+    Map<String, dynamic> lesson, {
+    bool? hasConflict,
+  }) {
     return lessonStateProjection(
       lifecycleState:
           lesson['lifecycle_state']?.toString() ??
           lesson['lifecycleState']?.toString(),
       legacyStatus: lesson['status']?.toString(),
-      reservationState:
-          lesson['reservation_state']?.toString() ??
-          lesson['reservationState']?.toString(),
+      hasConflict: hasConflict ?? _mapHasConflicts(lesson),
     );
   }
 }
@@ -33,29 +35,28 @@ class LessonStateProjection {
 LessonStateProjection lessonStateProjection({
   String? lifecycleState,
   String? legacyStatus,
-  String? reservationState,
+  bool hasConflict = false,
 }) {
   final state = _normalizeState(lifecycleState, legacyStatus);
-  final covered = reservationState == 'reserved';
-  final token = state == 'rescheduled'
-      ? LessonStateToken.rescheduled
-      : state == 'successfully_completed' || covered
-      ? LessonStateToken.success
-      : LessonStateToken.neutral;
-  final label = switch (state) {
-    'settlement_pending' => 'Ожидает расчёта',
-    'successfully_completed' => 'Завершено',
-    'rescheduled' => 'Перенесено',
-    'cancelled' => 'Отменено',
-    _ when covered => 'Забронировано',
-    _ => 'Запланировано',
+  final token =
+      hasConflict ||
+          state == 'settlement_pending' ||
+          state == 'cancelled' ||
+          state == 'rescheduled'
+      ? LessonStateToken.conflict
+      : state == 'successfully_completed'
+      ? LessonStateToken.completed
+      : LessonStateToken.booked;
+  return LessonStateProjection(token: token, state: state, label: token.label);
+}
+
+bool _mapHasConflicts(Map<String, dynamic> lesson) {
+  final raw = lesson['conflict_types'] ?? lesson['conflictTypes'];
+  return switch (raw) {
+    final Iterable<dynamic> values => values.isNotEmpty,
+    final String value => value.trim().isNotEmpty,
+    _ => false,
   };
-  return LessonStateProjection(
-    token: token,
-    state: state,
-    label: label,
-    reservationState: reservationState,
-  );
 }
 
 String _normalizeState(String? lifecycleState, String? legacyStatus) {
@@ -72,15 +73,27 @@ String _normalizeState(String? lifecycleState, String? legacyStatus) {
 
 extension LessonStateTokenColors on LessonStateToken {
   Color get accent => switch (this) {
-    LessonStateToken.neutral => AppColor.text2,
-    LessonStateToken.success => AppColor.success,
-    LessonStateToken.rescheduled => AppColor.danger,
+    LessonStateToken.booked => AppColor.actionBlue,
+    LessonStateToken.completed => AppColor.success,
+    LessonStateToken.conflict => AppColor.danger,
   };
 
   Color get soft => switch (this) {
-    LessonStateToken.neutral => AppColor.divider.withValues(alpha: 0.48),
-    LessonStateToken.success => AppColor.success.withValues(alpha: 0.12),
-    LessonStateToken.rescheduled => AppColor.dangerSoft,
+    LessonStateToken.booked => AppColor.actionBlue.withValues(alpha: 0.12),
+    LessonStateToken.completed => AppColor.success.withValues(alpha: 0.12),
+    LessonStateToken.conflict => AppColor.dangerSoft,
+  };
+
+  String get label => switch (this) {
+    LessonStateToken.booked => 'Забронировано',
+    LessonStateToken.completed => 'Завершено',
+    LessonStateToken.conflict => 'Конфликт',
+  };
+
+  IconData get icon => switch (this) {
+    LessonStateToken.booked => Icons.event_available_outlined,
+    LessonStateToken.completed => Icons.check_circle_outline_rounded,
+    LessonStateToken.conflict => Icons.warning_amber_rounded,
   };
 }
 

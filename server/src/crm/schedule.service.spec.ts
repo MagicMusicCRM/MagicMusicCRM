@@ -240,6 +240,7 @@ describe("ScheduleService", () => {
     const { service, query } = createService([
       {
         id: "lesson-a",
+        lifecycle_state: "successfully_completed",
         student_id: "student-a",
         group_id: null,
         lead_id: null,
@@ -274,6 +275,10 @@ describe("ScheduleService", () => {
       ],
     });
 
+    expect(String(query.mock.calls[0][0])).toContain(
+      "l.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')",
+    );
+
     expect(query.mock.calls[0][1]).toEqual([
       "manager",
       "manager-a",
@@ -284,6 +289,26 @@ describe("ScheduleService", () => {
       true,
       10,
     ]);
+  });
+
+  it("keeps terminal cancellation and reschedule sources out of month totals", async () => {
+    const { service, query, policy } = createService([
+      { day: "2026-06-15", count: "2", room_ids: ["room-a"] },
+    ]);
+
+    await expect(
+      service.getScheduleMonthSummary(actor, {
+        from: "2026-06-01T00:00:00.000Z",
+        to: "2026-07-01T00:00:00.000Z",
+      }),
+    ).resolves.toMatchObject({
+      items: [{ day: "2026-06-15", count: 2, roomIds: ["room-a"] }],
+    });
+
+    expect(String(query.mock.calls[0][0])).toContain(
+      "l.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')",
+    );
+    expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
   });
 
   it("keeps post-conversion lessons visible to manual-link and family clients", async () => {
@@ -315,6 +340,7 @@ describe("ScheduleService", () => {
     const { service, query, policy } = createService([
       {
         id: "lesson-a",
+        lifecycle_state: "scheduled",
         student_id: "student-a",
         group_id: null,
         lead_id: null,
@@ -374,8 +400,16 @@ describe("ScheduleService", () => {
     });
     expect(matrix.items[0]).toMatchObject({
       id: "lesson-a",
+      lifecycleState: "scheduled",
       conflictTypes: ["room_overlap"],
     });
+    const sql = String(query.mock.calls[0][0]);
+    expect(sql).toContain(
+      "l.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')",
+    );
+    expect(sql).toContain(
+      "other_room.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')",
+    );
 
     expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][1]).toEqual([
@@ -1462,9 +1496,12 @@ describe("ScheduleService", () => {
 
       expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
       const sql = String(query.mock.calls[0][0]);
-      // Matrix overlap semantics: cancelled never conflicts, same group is
-      // one class, and the check is a half-open tstzrange overlap.
-      expect(sql).toContain("l.status <> 'cancelled'");
+      // Operational overlap semantics: terminal cancellation/reschedule
+      // sources never conflict, the same group is one class, and the check is
+      // a half-open tstzrange overlap.
+      expect(sql).toContain(
+        "l.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')",
+      );
       expect(sql).toContain("l.deleted_at is null");
       expect(sql).toContain("tstzrange");
       expect(sql).toContain("l.group_id <> $6");
@@ -1516,49 +1553,20 @@ describe("ScheduleService", () => {
       });
     });
 
-    it("force:true skips the pre-check entirely (admin+ override)", async () => {
-      const { service, query } = createServiceWithQueryResults([
-        {
-          rows: [
-            {
-              id: "lesson-a",
-              student_id: "student-a",
-              group_id: null,
-              lead_id: null,
-              teacher_id: "teacher-a",
-              branch_id: null,
-              room_id: null,
-              scheduled_at: "2026-07-20T10:30:00.000Z",
-              duration_minutes: 60,
-              status: "scheduled",
-              is_trial: false,
-              notes: null,
-              student_user_id: null,
-              teacher_user_id: null,
-              student_name: null,
-              teacher_name: null,
-              branch_name: null,
-              room_name: null,
-              group_name: null,
-              group_price_per_lesson: null,
-            },
-          ],
-        },
-      ]);
+    it("rejects force:true for every role before touching storage", async () => {
+      const { service, query } = createServiceWithQueryResults([]);
 
-      await service.createLesson(actor, {
+      await expect(service.createLesson(actor, {
         studentId: "student-a",
         teacherId: "teacher-a",
         scheduledAt: "2026-07-20T10:30:00.000Z",
         force: true,
+      })).rejects.toMatchObject({
+        response: expect.objectContaining({
+          message: "Обход конфликтов расписания запрещён для всех ролей.",
+        }),
       });
-
-      // No conflict SELECT ran — the first call is the INSERT itself.
-      const sqls = query.mock.calls.map((call) => String(call[0]));
-      expect(sqls.some((sql) => sql.includes("tstzrange"))).toBe(false);
-      expect(sqls.some((sql) => sql.includes("insert into app.lessons"))).toBe(
-        true,
-      );
+      expect(query).not.toHaveBeenCalled();
     });
 
     it("rejects cancel-only PATCH in favor of the explicit command", async () => {

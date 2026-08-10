@@ -14,7 +14,7 @@ rehearsal command accepts only `staging` and cannot target production.
 | Maintenance window, deploy and rollback | Release operator |
 | PostgreSQL backup/restore and reconciliation | Data operator |
 | Worker/outbox metrics and alerts | On-call operator |
-| Security incident or access leak | Security owner; immediately kill-switch |
+| Security incident or access leak | Security owner; stop traffic and start release rollback |
 
 ## Pre-deploy
 
@@ -33,36 +33,39 @@ rehearsal command accepts only `staging` and cannot target production.
 ## Deploy and observe
 
 1. Deploy an immutable image tag matching the accepted commit.
-2. Start with `V4_ACCESS_MODE=shadow` and `V4_SCHEDULE_MODE=shadow`; keep both
-   kill switches `false` and require `V4_PARITY_UNEXPLAINED_DIFFS=0`.
+2. Start production with `V4_ACCESS_MODE=v4`, `V4_SCHEDULE_MODE=v4`, both kill
+   switches `false` and `V4_PARITY_UNEXPLAINED_DIFFS=0`. The process must fail
+   before serving traffic if any of these invariants is missing.
 3. Check `/api/health/live` and `/api/health/ready`, authentication, one scoped
    REST read per role, realtime reconnect, outbox lag and worker backlog.
-4. Enable one domain at a time by changing its mode to `v4`. Observe at least
-   one normal workload interval before enabling the next domain.
+4. Confirm both domains remain on the v4 effective path. Domain-by-domain
+   shadow and enablement were completed in staging before this deployment.
 5. Resume the worker with `LESSON_COMPLETION_WORKER_ENABLED=true`; confirm due,
    retry, poison and oldest-due metrics. Confirm outbox returns to zero lag.
 
 ## Rollback and forward recovery
 
-Rollback is a compatibility switch, not a destructive schema down-migration:
+Rollback is a release rollback, not a hidden compatibility switch and not a
+destructive schema down-migration:
 
-1. Set the affected `V4_*_KILL_SWITCH=true`; readiness must report the legacy
-   effective path.
+1. Stop traffic to the failing candidate and redeploy the accepted previous
+   immutable release with its matching configuration. The current production
+   candidate must not start with a kill switch, `legacy`, or `shadow` mode.
 2. Pause the worker, preserve logs/request IDs, and drain committed outbox.
 3. Verify financial fact counts and signed reconciliation. Never delete or
    rewrite new immutable payment, settlement or lifecycle facts.
 4. If storage recovery is required, restore the verified backup into an
    isolated database first. A production restore needs a separate explicit
    decision and documented recovery point.
-5. Apply a forward fix, set unexplained parity to zero, clear the kill switch,
-   return to `shadow`, then re-enable `v4` one domain at a time.
+5. Apply a forward fix, prove zero unexplained parity in staging, then deploy a
+   new immutable candidate with both production domains explicitly in `v4`.
 
 ## Alerts and incident threshold
 
 Page the on-call operator for readiness failure, non-zero unexplained drift,
 dead-letter outbox, poison completion work, oldest due work above 120 seconds,
 or any access/privacy leak. A Critical/High security finding or cross-role data
-leak immediately blocks rollout and activates both kill switches.
+leak immediately blocks rollout and triggers traffic stop plus release rollback.
 
 ## Rehearsal
 

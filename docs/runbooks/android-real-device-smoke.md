@@ -63,7 +63,7 @@ from the path reported by `flutter doctor -v` and capture `logcat -d`.
 - CRM manager/admin slice, when using a manager/admin smoke account:
   - student card metrics and invitation action are visible;
   - lead attach-to-existing-student flow is visible for a safe duplicate;
-  - lead saved presets and `Загрузить ещё` work;
+  - lead saved presets and automatic loading on scroll work;
   - staff detail edit/link navigation opens;
   - schedule availability/conflict labels render;
   - task timeline/add-history and reassignment actions render;

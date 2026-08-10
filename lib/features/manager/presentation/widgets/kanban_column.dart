@@ -44,6 +44,8 @@ class _KanbanColumn extends StatefulWidget {
 }
 
 class _KanbanColumnState extends State<_KanbanColumn> {
+  String? _requestedCursor;
+
   @override
   Widget build(BuildContext context) {
     final hasMore =
@@ -173,27 +175,25 @@ class _KanbanColumnState extends State<_KanbanColumn> {
                           itemCount: widget.leads.length + (hasMore ? 1 : 0),
                           itemBuilder: (context, index) {
                             if (index >= widget.leads.length) {
-                              return Padding(
-                                padding: const EdgeInsets.fromLTRB(0, 6, 0, 10),
-                                child: OutlinedButton.icon(
-                                  onPressed: widget.loadingMore
-                                      ? null
-                                      : () => widget.onLoadMore(
-                                          widget.nextCursor,
-                                        ),
-                                  icon: widget.loadingMore
-                                      ? const SizedBox(
-                                          width: 16,
-                                          height: 16,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                          ),
-                                        )
-                                      : const Icon(Icons.expand_more_rounded),
-                                  label: Text(
-                                    widget.loadingMore
-                                        ? 'Загрузка...'
-                                        : 'Загрузить ещё',
+                              final cursor = widget.nextCursor!;
+                              if (!widget.loadingMore &&
+                                  _requestedCursor != cursor) {
+                                _requestedCursor = cursor;
+                                WidgetsBinding.instance.addPostFrameCallback((
+                                  _,
+                                ) {
+                                  if (mounted) widget.onLoadMore(cursor);
+                                });
+                              }
+                              return const Padding(
+                                padding: EdgeInsets.fromLTRB(0, 10, 0, 14),
+                                child: Center(
+                                  child: SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
                                   ),
                                 ),
                               );

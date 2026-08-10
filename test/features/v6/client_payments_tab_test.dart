@@ -315,7 +315,7 @@ void main() {
       }
       await tester.tap(find.text('Поступления и списания'));
       await tester.pumpAndSettle();
-      expect(find.text('Проведён, ожидает подтверждения'), findsWidgets);
+      expect(find.text('Срок наступил — требуется проверка'), findsWidgets);
 
       await tester.tap(
         find.byKey(

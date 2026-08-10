@@ -767,12 +767,13 @@ describe("CrmService", () => {
         }),
       ],
       totalCount: 1,
+      nextCursor: null,
     });
 
     expect(policy.assertCanListStudents).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][1]).toContain("анна");
     expect(query.mock.calls[0][1]).toContain("Вокал");
-    expect(query.mock.calls[0][1]).toContain(20);
+    expect(query.mock.calls[0][1]).toContain(21);
   });
 
   it("records a student_status_history row when status changes", async () => {

@@ -39,6 +39,14 @@ describe("T8.3.3 domain compatibility flags", () => {
       enableAllowed: false,
     });
   });
+
+  it("fails closed when production is not on verified v4", () => {
+    expect(() => resolveV4DomainRollout(
+      "schedule",
+      { NODE_ENV: "production", V4_SCHEDULE_MODE: "shadow" },
+      0,
+    )).toThrow("verified v4 execution");
+  });
 });
 
 describe("V4DomainFlagsService runtime boundary", () => {

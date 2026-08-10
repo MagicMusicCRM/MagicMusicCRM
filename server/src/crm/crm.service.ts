@@ -67,6 +67,7 @@ import { TimelineService } from "./timeline.service";
 import { StudentFunnelService } from "./student-funnel.service";
 
 interface StudentSearchRow extends StudentRow {
+  total_count: string | number;
   branch_id: string | null;
   branch_name: string | null;
   groups_count: string | number;
@@ -194,14 +195,13 @@ export class CrmService {
 
   async searchStudents(actor: ActorContext, query: StudentSearchQuery) {
     this.policy.assertCanListStudents(actor);
-    // Board pulls a whole branch (up to ~1.5k students); cap matches DTO @Max(500).
     const limit = Math.min(query.limit ?? 50, 500);
     const filter = this.buildStudentSearchFilter(actor, query);
     const result = await this.database.query<StudentSearchRow>(
       `
         select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
           s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone,
-          s.created_at,
+          s.created_at, count(*) over() as total_count,
           coalesce(array_remove(array_agg(distinct tp.user_id), null), '{}'::uuid[]) as teacher_user_ids,
           ${branchIdExpr('s')} as branch_id,
           b.name as branch_name,
@@ -271,11 +271,17 @@ export class CrmService {
         order by ${filter.searchRank ? `${filter.searchRank} asc,` : ""} s.created_at desc, s.id desc
         limit $${filter.params.length + 1}
       `,
-      [...filter.params, limit],
+      [...filter.params, limit + 1],
     );
+    const page = result.rows.slice(0, limit);
+    const hasMore = result.rows.length > limit;
+    const boundary = page.at(-1);
     return {
-      items: result.rows.map((row) => this.toStudentSearchDto(row)),
-      totalCount: result.rows.length,
+      items: page.map((row) => this.toStudentSearchDto(row)),
+      totalCount: Number(result.rows[0]?.total_count ?? page.length),
+      nextCursor: hasMore && boundary
+        ? `${new Date(boundary.created_at).toISOString()}|${boundary.id}`
+        : null,
     };
   }
 
@@ -1207,6 +1213,16 @@ export class CrmService {
             )
         )
       `);
+    }
+    if (query.cursor) {
+      const [createdAt, id] = query.cursor.split("|");
+      if (createdAt && id) {
+        const created = add(createdAt);
+        const studentId = add(id);
+        filters.push(
+          `(s.created_at, s.id) < (${created}::timestamptz, ${studentId}::uuid)`,
+        );
+      }
     }
     return { where: filters.join("\n          and "), params, searchRank };
   }

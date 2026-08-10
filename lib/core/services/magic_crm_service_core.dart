@@ -195,6 +195,7 @@ extension MagicCrmCore on MagicCrmService {
     bool? noEmail,
     bool? noOpenTasks,
     bool? noBranch,
+    String? cursor,
     int limit = 50,
   }) async {
     final queryParameters = <String, dynamic>{'limit': limit};
@@ -218,6 +219,7 @@ extension MagicCrmCore on MagicCrmService {
     if (noEmail != null) queryParameters['noEmail'] = noEmail;
     if (noOpenTasks != null) queryParameters['noOpenTasks'] = noOpenTasks;
     if (noBranch != null) queryParameters['noBranch'] = noBranch;
+    addString('cursor', cursor);
 
     final response = await _api.get<Map<String, dynamic>>(
       '/crm/students/search',
@@ -226,6 +228,7 @@ extension MagicCrmCore on MagicCrmService {
     return {
       'items': _items(response).map(_legacyStudentSearchItem).toList(),
       'total_count': response['totalCount'] ?? 0,
+      'next_cursor': response['nextCursor'],
     };
   }
 

@@ -192,29 +192,34 @@ export class AnalyticsService {
     const result = await this.database.query<{ bucket: string; students: string; amount: string }>(
       `select
          case
-           when now()::date - ep.due_date between 0 and 7 then '0-7'
-           when now()::date - ep.due_date between 8 and 14 then '8-14'
-           when now()::date - ep.due_date between 15 and 30 then '15-30'
+           when timezone('Europe/Moscow', now())::date
+             - timezone('Europe/Moscow', receivable.due_at)::date between 0 and 7 then '0-7'
+           when timezone('Europe/Moscow', now())::date
+             - timezone('Europe/Moscow', receivable.due_at)::date between 8 and 14 then '8-14'
+           when timezone('Europe/Moscow', now())::date
+             - timezone('Europe/Moscow', receivable.due_at)::date between 15 and 30 then '15-30'
            else '30+'
          end as bucket,
-         count(distinct ep.student_id) as students,
-         coalesce(sum(ep.amount), 0) as amount
-       from app.expected_payments ep
-       join app.students s on s.id = ep.student_id and s.deleted_at is null
-      where ep.status in ('pending', 'open')
-        and ep.due_date is not null
-        and ep.due_date <= now()::date
+         count(distinct receivable.student_id) as students,
+         coalesce(sum(receivable.amount_minor), 0)::numeric / 100 as amount
+       from app.commerce_receivable_schedule_projection receivable
+       join app.students s
+         on s.id = receivable.student_id and s.deleted_at is null
+      where receivable.status = 'unpaid'
+        and timezone('Europe/Moscow', receivable.due_at)::date
+          <= timezone('Europe/Moscow', now())::date
         and ($1::uuid is null or ${branchIdExpr("s")} = $1::text)
       group by 1`,
       [query.branchId ?? null],
     );
     const distinctResult = await this.database.query<{ distinct_students: string }>(
-      `select count(distinct ep.student_id) as distinct_students
-         from app.expected_payments ep
-         join app.students s on s.id = ep.student_id and s.deleted_at is null
-        where ep.status in ('pending', 'open')
-          and ep.due_date is not null
-          and ep.due_date <= now()::date
+      `select count(distinct receivable.student_id) as distinct_students
+         from app.commerce_receivable_schedule_projection receivable
+         join app.students s
+           on s.id = receivable.student_id and s.deleted_at is null
+        where receivable.status = 'unpaid'
+          and timezone('Europe/Moscow', receivable.due_at)::date
+            <= timezone('Europe/Moscow', now())::date
           and ($1::uuid is null or ${branchIdExpr("s")} = $1::text)`,
       [query.branchId ?? null],
     );
@@ -237,12 +242,25 @@ export class AnalyticsService {
     this.policy.assertCanReadSchoolFinance(actor);
     const result = await this.database.query<{ next7: string; next14: string; next30: string }>(
       `select
-         coalesce(sum(ep.amount) filter (where ep.due_date >= now()::date and ep.due_date <= now()::date + 7), 0) as next7,
-         coalesce(sum(ep.amount) filter (where ep.due_date >= now()::date and ep.due_date <= now()::date + 14), 0) as next14,
-         coalesce(sum(ep.amount) filter (where ep.due_date >= now()::date and ep.due_date <= now()::date + 30), 0) as next30
-       from app.expected_payments ep
-       join app.students s on s.id = ep.student_id and s.deleted_at is null
-      where ep.status in ('pending', 'open')
+         coalesce(sum(receivable.amount_minor) filter (
+           where timezone('Europe/Moscow', receivable.due_at)::date
+             between timezone('Europe/Moscow', now())::date
+             and timezone('Europe/Moscow', now())::date + 7
+         ), 0)::numeric / 100 as next7,
+         coalesce(sum(receivable.amount_minor) filter (
+           where timezone('Europe/Moscow', receivable.due_at)::date
+             between timezone('Europe/Moscow', now())::date
+             and timezone('Europe/Moscow', now())::date + 14
+         ), 0)::numeric / 100 as next14,
+         coalesce(sum(receivable.amount_minor) filter (
+           where timezone('Europe/Moscow', receivable.due_at)::date
+             between timezone('Europe/Moscow', now())::date
+             and timezone('Europe/Moscow', now())::date + 30
+         ), 0)::numeric / 100 as next30
+       from app.commerce_receivable_schedule_projection receivable
+       join app.students s
+         on s.id = receivable.student_id and s.deleted_at is null
+      where receivable.status in ('scheduled', 'unpaid', 'posted_pending')
         and ($1::uuid is null or ${branchIdExpr("s")} = $1::text)`,
       [query.branchId ?? null],
     );

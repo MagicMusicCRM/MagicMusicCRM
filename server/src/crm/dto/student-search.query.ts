@@ -3,6 +3,7 @@ import {
   IsBoolean,
   IsDateString,
   IsInt,
+  Matches,
   IsOptional,
   IsString,
   IsUUID,
@@ -10,6 +11,9 @@ import {
   MaxLength,
   Min,
 } from "class-validator";
+
+const STUDENT_SEARCH_CURSOR_PATTERN =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{1,6}Z\|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export class StudentSearchQuery {
   @IsOptional()
@@ -74,6 +78,12 @@ export class StudentSearchQuery {
   @Transform(({ value }) => value === true || value === "true")
   @IsBoolean()
   noBranch?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @Matches(STUDENT_SEARCH_CURSOR_PATTERN)
+  @MaxLength(180)
+  cursor?: string;
 
   @IsOptional()
   @Type(() => Number)

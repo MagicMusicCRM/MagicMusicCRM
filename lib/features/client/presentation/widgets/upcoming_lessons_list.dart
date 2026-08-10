@@ -229,56 +229,20 @@ class _UpcomingLessonsListState extends ConsumerState<UpcomingLessonsList> {
                                             fontSize: 12,
                                           ),
                                         ),
-                                        Row(
-                                          children: [
-                                            Text(
-                                              'Филиал: $branchName',
-                                              style: TextStyle(
-                                                color: Theme.of(
-                                                  context,
-                                                ).colorScheme.onSurfaceVariant,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                            if (room.isNotEmpty) ...[
-                                              Text(
-                                                ' · ',
-                                                style: TextStyle(
-                                                  color: Theme.of(context)
-                                                      .colorScheme
-                                                      .onSurfaceVariant,
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                room,
-                                                style: TextStyle(
-                                                  color: Theme.of(context)
-                                                      .colorScheme
-                                                      .onSurfaceVariant,
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                            Text(
-                                              ' · ',
-                                              style: TextStyle(
-                                                color: Theme.of(
-                                                  context,
-                                                ).colorScheme.onSurfaceVariant,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                            Text(
-                                              '$duration мин',
-                                              style: TextStyle(
-                                                color: Theme.of(
-                                                  context,
-                                                ).colorScheme.onSurfaceVariant,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                          ],
+                                        Text(
+                                          [
+                                            'Филиал: $branchName',
+                                            if (room.isNotEmpty) room,
+                                            '$duration мин',
+                                          ].join(' · '),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.onSurfaceVariant,
+                                            fontSize: 12,
+                                          ),
                                         ),
                                       ],
                                     ),

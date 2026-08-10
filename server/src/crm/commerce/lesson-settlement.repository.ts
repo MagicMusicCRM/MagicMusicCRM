@@ -101,6 +101,46 @@ export class LessonSettlementRepository {
     return prepared;
   }
 
+  async clonePlan(
+    client: PoolClient,
+    input: {
+      sourceLessonId: string;
+      targetLessonId: string;
+      selectedBy: string;
+      reasonText?: string;
+      fallback?: {
+        branchId: string;
+        decision: LessonFinancialDecision;
+      };
+    },
+  ): Promise<PreparedLessonSettlementPlan> {
+    const source = await this.loadPlan(client, input.sourceLessonId, true);
+    if (!source && !input.fallback) {
+      throw new ConflictException({
+        code: "LESSON_SETTLEMENT_PLAN_MISSING",
+        lessonId: input.sourceLessonId,
+      });
+    }
+    const prepared: PreparedLessonSettlementPlan = source
+      ? {
+          decision: source.decision,
+          settlementRevisionId: source.settlementRevisionId,
+          compensationRevisionId: source.compensationRevisionId,
+        }
+      : await this.preparePlan(
+          client,
+          input.fallback!.branchId,
+          input.fallback!.decision,
+        );
+    await this.insertPreparedPlan(client, {
+      lessonId: input.targetLessonId,
+      selectedBy: input.selectedBy,
+      reasonText: input.reasonText ?? source?.reasonText ?? undefined,
+      ...prepared,
+    });
+    return prepared;
+  }
+
   async insertPreparedPlan(
     client: PoolClient,
     input: PreparedLessonSettlementPlan & {
@@ -178,6 +218,11 @@ export class LessonSettlementRepository {
          participant.subscription_id
        from app.lesson_snapshot_participants participant
        where participant.lesson_id = $1
+         and not exists (
+           select 1 from app.lesson_participant_exclusions exclusion
+           where exclusion.lesson_id = participant.lesson_id
+             and exclusion.student_id = participant.student_id
+         )
        order by client_type, client_id`,
       [lessonId],
     );
@@ -341,7 +386,7 @@ export class LessonSettlementRepository {
 
     const existing = await this.loadFacts(client, lessonId);
     if (existing && !input?.correction) {
-      if (input) this.assertExistingDecision(existing, input);
+      if (input) await this.assertExistingDecision(client, existing, input);
       return existing;
     }
 
@@ -421,6 +466,11 @@ export class LessonSettlementRepository {
             participant.subscription_id
           from app.lesson_snapshot_participants participant
           where participant.lesson_id = $1
+            and not exists (
+              select 1 from app.lesson_participant_exclusions exclusion
+              where exclusion.lesson_id = participant.lesson_id
+                and exclusion.student_id = participant.student_id
+            )
         ), effective as (
           select charges.*,
             case
@@ -702,12 +752,22 @@ export class LessonSettlementRepository {
           participant.subscription_id
         from app.lesson_snapshot_participants participant
         where participant.lesson_id = $1
+          and not exists (
+            select 1 from app.lesson_participant_exclusions exclusion
+            where exclusion.lesson_id = participant.lesson_id
+              and exclusion.student_id = participant.student_id
+          )
         order by client_type, client_id
       `,
       [source.lesson_id],
     );
     const knownClients = new Set(chargesResult.rows.map((row) => row.client_id));
-    if ([...clientDecisions.keys()].some((id) => !knownClients.has(id))) {
+    const excludedClients = await this.loadExcludedParticipantIds(
+      client,
+      source.lesson_id,
+    );
+    if ([...clientDecisions.keys()].some((id) =>
+      !knownClients.has(id) && !excludedClients.has(id))) {
       this.invalidDecision("UNKNOWN_LESSON_CLIENT", "clientDecisions");
     }
 
@@ -1128,15 +1188,19 @@ export class LessonSettlementRepository {
     }
   }
 
-  private assertExistingDecision(
+  private async assertExistingDecision(
+    client: PoolClient,
     existing: LessonSettlementResult,
     input: LessonSettlementInput,
-  ) {
+  ): Promise<void> {
+    const excludedClients = await this.loadExcludedParticipantIds(
+      client,
+      existing.lessonId,
+    );
     const clients = new Map(
-      (input.decision.clientDecisions ?? []).map((decision) => [
-        decision.clientId,
-        decision,
-      ]),
+      (input.decision.clientDecisions ?? [])
+        .filter((decision) => !excludedClients.has(decision.clientId))
+        .map((decision) => [decision.clientId, decision]),
     );
     const existingClientIds = new Set(
       existing.clientFacts.map((fact) => fact.clientId),
@@ -1159,6 +1223,19 @@ export class LessonSettlementRepository {
         lessonId: existing.lessonId,
       });
     }
+  }
+
+  private async loadExcludedParticipantIds(
+    client: PoolClient,
+    lessonId: string,
+  ): Promise<Set<string>> {
+    const result = await client.query<{ student_id: string }>(
+      `select student_id
+       from app.lesson_participant_exclusions
+       where lesson_id = $1`,
+      [lessonId],
+    );
+    return new Set(result.rows.map((row) => row.student_id));
   }
 
   private invalidDecision(code: string, field?: string): never {

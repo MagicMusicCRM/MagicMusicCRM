@@ -73,18 +73,15 @@ class _LessonCard extends StatelessWidget {
 
   const _LessonCard({required this.entry});
 
-  Color get _accent {
-    if (entry.clientContext || entry.searchContext) {
-      return entry.relatedClient ? AppColor.success : AppColor.text2;
-    }
-    if (entry.conflicts.isNotEmpty) return AppColor.danger;
-    return LessonStateProjection.fromMap(entry.lesson).token.accent;
-  }
-
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final accent = entry.highlighted ? AppColor.gold : _accent;
+    final projection = LessonStateProjection.fromMap(
+      entry.lesson,
+      hasConflict: entry.conflicts.isNotEmpty,
+    );
+    final accent = projection.token.accent;
+    final borderColor = entry.highlighted ? AppColor.gold : accent;
     final start = entry.startLocal;
     final end = start.add(Duration(minutes: entry.durationMinutes));
     String hm(DateTime d) =>
@@ -95,9 +92,12 @@ class _LessonCard extends StatelessWidget {
       key: ValueKey('schedule-lesson-${entry.id}'),
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
       decoration: BoxDecoration(
-        color: accent.withAlpha(34),
+        color: projection.token.soft,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: accent, width: entry.highlighted ? 2 : 1),
+        border: Border.all(
+          color: borderColor,
+          width: entry.highlighted ? 2 : 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -126,12 +126,10 @@ class _LessonCard extends StatelessWidget {
                   ),
                 ),
               ),
-              if (entry.conflicts.isNotEmpty)
-                const Icon(
-                  Icons.warning_amber_rounded,
-                  color: AppColor.danger,
-                  size: 12,
-                ),
+              Tooltip(
+                message: projection.label,
+                child: Icon(projection.token.icon, color: accent, size: 12),
+              ),
               if (entry.isTrial && entry.durationMinutes >= 45) ...[
                 const SizedBox(width: 3),
                 const LessonTrialBadge(compact: true),

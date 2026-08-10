@@ -35,11 +35,16 @@ export class ScheduleConstraintEngine {
       };
     }
 
-    const [reference, conflicts] = await Promise.all([
+    const [reference, roomMatchesBranch, conflicts] = await Promise.all([
       this.repository.resolveReference(
         draft,
         interval.startAt,
         interval.endAt,
+        transaction,
+      ),
+      this.repository.roomMatchesBranch(
+        draft.roomId,
+        draft.branchId,
         transaction,
       ),
       this.repository.findConflicts(
@@ -54,6 +59,14 @@ export class ScheduleConstraintEngine {
         branchId: draft.branchId,
         teacherId: draft.teacherId,
       }),
+      ...(!roomMatchesBranch
+        ? [
+            violation("ROOM_BRANCH_MISMATCH", {
+              type: "room",
+              id: draft.roomId,
+            }),
+          ]
+        : []),
       ...this.groupConflicts(conflicts),
     ];
     const sorted = sortConstraintViolations(violations);

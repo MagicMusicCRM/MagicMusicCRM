@@ -19,10 +19,11 @@
 
 - Активная архитектура: `.anws/v7` — Financial & Lesson Integrity.
 - Основная ветка: `main`; целевое зеркало: `origin/main`.
-- Release candidate: `1.5.1+179`, только тёмная тема.
+- Локальный release candidate: `1.5.1+180`, только тёмная тема; production
+  продолжает работать на ранее принятом кандидате до отдельной команды на rollout.
 - Production API при последней проверке healthy.
-- Последний полный автоматический gate: Flutter `664/664`, backend
-  `157/157` suites и `1250/1250` tests, backend build PASS.
+- Последний полный автоматический gate: Flutter `666/666`, backend
+  `157/157` suites и `1256/1256` tests, backend build PASS.
 - Активная задача: `T7.1.2` — production mega-UAT.
 - `T7.1.3` — организационные конструкторы — завершена.
 - `INT-S6` не закрыт: кандидат ещё не получил итоговую owner-приёмку.

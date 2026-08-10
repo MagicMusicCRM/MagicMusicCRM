@@ -163,11 +163,12 @@ extension MagicCrmOrg on MagicCrmService {
     String? name,
     String? branchId,
     int? capacity,
+    bool clearCapacity = false,
   }) async {
     final data = <String, dynamic>{};
     if (name != null) data['name'] = name.trim();
     if (branchId != null) data['branchId'] = branchId;
-    if (capacity != null) data['capacity'] = capacity;
+    if (capacity != null || clearCapacity) data['capacity'] = capacity;
 
     final response = await _api.patch<Map<String, dynamic>>(
       '/crm/rooms/$id',

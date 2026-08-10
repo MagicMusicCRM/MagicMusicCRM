@@ -227,95 +227,6 @@ export class CommerceProjectionRepository {
         from unnest($1::uuid[]) with ordinality
           as selected(student_id, position)
         left join lateral (
-          with monetary_facts as (
-            select
-              payment.currency as currency_code,
-              payment.amount_minor::numeric as actual_payment_minor,
-              0::numeric as adjustment_minor,
-              0::numeric as obligation_debit_minor,
-              0::numeric as obligation_credit_minor,
-              0::numeric as write_off_minor,
-              0::numeric as pending_minor,
-              0::numeric as debt_minor
-            from app.commerce_ordinary_payments payment
-            where payment.student_id = selected.student_id
-              and payment.deleted_at is null
-              and payment.amount_minor is not null
-            union all
-            select
-              obligation.currency_code,
-              0::numeric,
-              0::numeric,
-              case
-                when obligation.direction = 'debit'
-                  then obligation.amount_minor::numeric
-                else 0::numeric
-              end,
-              case
-                when obligation.direction = 'credit'
-                  then obligation.amount_minor::numeric
-                else 0::numeric
-              end,
-              0::numeric,
-              0::numeric,
-              0::numeric
-            from app.subscription_obligation_facts obligation
-            where obligation.student_id = selected.student_id
-            union all
-            select
-              lesson_charge.currency_code,
-              0::numeric,
-              0::numeric,
-              0::numeric,
-              0::numeric,
-              lesson_charge.amount_minor::numeric,
-              0::numeric,
-              0::numeric
-            from app.lesson_client_charge_facts_effective lesson_charge
-            where lesson_charge.client_type = 'student'
-              and lesson_charge.client_id = selected.student_id
-            union all
-            select
-              adjustment.currency_code,
-              0::numeric,
-              adjustment.amount_minor::numeric,
-              0::numeric,
-              0::numeric,
-              0::numeric,
-              0::numeric,
-              0::numeric
-            from app.commerce_ordinary_account_adjustments adjustment
-            where adjustment.student_id = selected.student_id
-              and adjustment.deleted_at is null
-              and adjustment.status = 'paid'
-            union all
-            select
-              record.currency_code,
-              0::numeric,
-              0::numeric,
-              0::numeric,
-              0::numeric,
-              0::numeric,
-              case when record.status = 'posted_pending'
-                then record.amount_minor::numeric else 0::numeric end,
-              case when record.status = 'unpaid'
-                then record.amount_minor::numeric else 0::numeric end
-            from app.commerce_ordinary_payment_records record
-            where record.student_id = selected.student_id
-          ),
-          totals as (
-            select
-              currency_code,
-              sum(actual_payment_minor) as actual_payments_minor,
-              sum(adjustment_minor) as adjustments_minor,
-              sum(obligation_debit_minor) as obligation_debits_minor,
-              sum(obligation_credit_minor) as obligation_credits_minor,
-              sum(write_off_minor) as write_offs_minor,
-              sum(pending_minor) as pending_minor,
-              sum(debt_minor) as debt_minor
-            from monetary_facts
-            group by currency_code
-          )
           select jsonb_agg(
             jsonb_build_object(
               'currencyCode', totals.currency_code,
@@ -324,29 +235,15 @@ export class CommerceProjectionRepository {
               'obligationDebitsMinor', totals.obligation_debits_minor::text,
               'obligationCreditsMinor', totals.obligation_credits_minor::text,
               'writeOffsMinor', totals.write_offs_minor::text,
-              'balanceMinor', (
-                totals.actual_payments_minor
-                + totals.adjustments_minor
-                + totals.obligation_credits_minor
-                - totals.obligation_debits_minor
-                - totals.write_offs_minor
-              )::text,
+              'balanceMinor', totals.balance_minor::text,
               'debtMinor', totals.debt_minor::text,
               'pendingMinor', totals.pending_minor::text,
-              'remainingObligationMinor', greatest(
-                -(
-                  totals.actual_payments_minor
-                  + totals.adjustments_minor
-                  + totals.obligation_credits_minor
-                  - totals.obligation_debits_minor
-                  - totals.write_offs_minor
-                ),
-                0
-              )::text
+              'remainingObligationMinor', totals.remaining_obligation_minor::text
             )
             order by totals.currency_code
           ) as items
-          from totals
+          from app.commerce_student_account_projection totals
+          where totals.student_id = selected.student_id
         ) account_projection on true
         left join lateral (
           select jsonb_agg(

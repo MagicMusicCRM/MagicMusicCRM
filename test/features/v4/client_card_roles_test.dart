@@ -177,7 +177,7 @@ void main() {
     expect(find.text('Анна Клиент'), findsOneWidget);
     expect(find.text('Активен · Центр'), findsOneWidget);
     expect(find.textContaining('01.08.2026'), findsOneWidget);
-    expect(find.text('Запланировано'), findsOneWidget);
+    expect(find.text('Забронировано'), findsOneWidget);
     expect(find.text('+79990000000'), findsNothing);
     expect(find.text('Финансовый секрет'), findsNothing);
     expect(find.text('Оплаты'), findsNothing);

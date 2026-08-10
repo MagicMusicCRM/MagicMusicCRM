@@ -1,9 +1,9 @@
 # MagicMusicCRM — актуальная передача следующему агенту
 
 > Зафиксировано: 2026-08-10
-> Кандидат: `1.5.1+179`
-> Ветка: `main` → `origin/main`
-> Статус: release candidate, production mega-UAT не завершён
+> Локальный кандидат: `1.5.1+180`
+> Ветка: `codex/v7-production-readiness` от `main`/`origin/main`
+> Статус: технический release candidate; production rollout и mega-UAT не завершены
 
 ## С чего начать
 
@@ -36,11 +36,11 @@
 
 Последний полный автоматический baseline:
 
-- Flutter `664/664`;
-- backend `157/157` suites, `1250/1250` tests;
+- Flutter `666/666`;
+- backend `157/157` suites, `1256/1256` tests;
 - backend build PASS;
 - production API healthy;
-- candidate `1.5.1+179`, тёмная тема.
+- локальный candidate `1.5.1+180`, тёмная тема; production не изменялся.
 
 ## Последние production-подтверждения
 

@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import { ActorContext } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
+import { PoolClient } from "pg";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
 import { RealtimeBus } from "../../realtime/realtime-bus";
 import { CrmPolicy } from "../crm.policy";
@@ -192,6 +193,12 @@ export class ClientArchiveService {
         },
       },
       mutate: async (client, nextVersion) => {
+        const recurringActions = await this.cancelRecurringActions(
+          client,
+          dto,
+          actor.userId,
+          dto.reason,
+        );
         const updated = await client.query<{
           deleted_at: Date | string;
           version: number | string;
@@ -221,6 +228,7 @@ export class ClientArchiveService {
           lifecycleState: "archived",
           archivedAt: row.deleted_at,
           version: Number(row.version),
+          recurringActions,
         };
       },
     });
@@ -240,6 +248,236 @@ export class ClientArchiveService {
       });
     }
     return { tombstone, replayed: result.replayed };
+  }
+
+  private async cancelRecurringActions(
+    client: PoolClient,
+    ref: ClientRefDto,
+    actorUserId: string,
+    reasonCode: string,
+  ) {
+    const plans = ref.type === "student"
+      ? await client.query<{ id: string; version: number | string }>(
+          `select plan.id, plan.version
+           from app.schedule_plans plan
+           where plan.status = 'active' and (
+             plan.student_id = $1
+             or (
+               plan.kind = 'group'
+               and exists (
+                 select 1 from app.schedule_plan_participants participant
+                 where participant.plan_id = plan.id
+                   and participant.student_id = $1
+                   and participant.effective_from <= current_date
+                   and (participant.effective_until is null
+                     or participant.effective_until >= current_date)
+               )
+               and not exists (
+                 select 1 from app.schedule_plan_participants other
+                 where other.plan_id = plan.id
+                   and other.student_id <> $1
+                   and other.effective_from <= current_date
+                   and (other.effective_until is null
+                     or other.effective_until >= current_date)
+               )
+             )
+           )
+           order by plan.id for update`,
+          [ref.id],
+        )
+      : { rows: [] as Array<{ id: string; version: number | string }> };
+    const planIds = plans.rows.map((plan) => plan.id);
+
+    if (ref.type === "student") {
+      await client.query(
+        `update app.group_students
+         set left_at = coalesce(left_at, now())
+         where student_id = $1 and left_at is null`,
+        [ref.id],
+      );
+      await client.query(
+        `delete from app.schedule_plan_participants
+         where student_id = $1 and effective_from > current_date`,
+        [ref.id],
+      );
+      await client.query(
+        `update app.schedule_plan_participants
+         set effective_until = least(coalesce(effective_until, current_date),
+               current_date),
+             version = version + 1,
+             updated_at = now()
+         where student_id = $1 and effective_from <= current_date
+           and (effective_until is null or effective_until >= current_date)`,
+        [ref.id],
+      );
+    }
+
+    if (planIds.length > 0) {
+      await client.query(
+        `update app.schedule_plans
+         set status = 'ended',
+             active_until = greatest(active_from, current_date),
+             version = version + 1,
+             ended_at = now(),
+             ended_by = $2,
+             end_reason = $3,
+             updated_at = now()
+         where id = any($1::uuid[]) and status = 'active'`,
+        [planIds, actorUserId, `client.archive:${reasonCode}`],
+      );
+      await client.query(
+        `insert into app.aggregate_versions (
+           aggregate_type, aggregate_id, version
+         )
+         select 'schedule:plan', plan.id::text, plan.version
+         from app.schedule_plans plan where plan.id = any($1::uuid[])
+         on conflict (aggregate_type, aggregate_id) do update
+         set version = greatest(app.aggregate_versions.version, excluded.version),
+             updated_at = now()`,
+        [planIds],
+      );
+    }
+
+    await client.query(
+      `update app.schedule_series series
+       set valid_until = greatest(
+             series.valid_from,
+             least(coalesce(series.valid_until, current_date), current_date)
+           ),
+           deleted_at = case when series.valid_from > current_date
+             then coalesce(series.deleted_at, now()) else series.deleted_at end,
+           version = series.version + 1,
+           updated_at = now()
+       where series.deleted_at is null and series.superseded_by is null
+         and (
+           series.plan_id = any($1::uuid[])
+           or (
+             series.plan_id is null and (
+               ($2::text = 'student' and series.student_id = $3::uuid)
+               or (series.client_type = $2 and series.client_id = $3::uuid)
+             )
+           )
+         )`,
+      [planIds, ref.type, ref.id],
+    );
+
+    let excludedGroupLessons = 0;
+    if (ref.type === "student") {
+      const exclusions = await client.query(
+        `insert into app.lesson_participant_exclusions (
+           lesson_id, student_id, reason_code, actor_user_id
+         )
+         select lesson.id, participant.student_id, $2, $3
+         from app.lessons lesson
+         join app.lesson_snapshot_participants participant
+           on participant.lesson_id = lesson.id and participant.student_id = $1
+         where lesson.group_id is not null
+           and lesson.deleted_at is null
+           and lesson.scheduled_at >= now()
+           and lesson.lifecycle_state in ('scheduled', 'settlement_pending')
+         on conflict (lesson_id, student_id) do nothing`,
+        [ref.id, `client.archive:${reasonCode}`, actorUserId],
+      );
+      excludedGroupLessons = exclusions.rowCount ?? 0;
+      await client.query(
+        `update app.lesson_reservations reservation
+         set state = 'released', financial_fact_id = null, updated_at = now()
+         from app.subscriptions subscription,
+              app.lesson_participant_exclusions exclusion
+         where reservation.subscription_id = subscription.id
+           and exclusion.lesson_id = reservation.lesson_id
+           and exclusion.student_id = $1
+           and subscription.student_id = $1
+           and reservation.state = 'reserved'`,
+        [ref.id],
+      );
+    }
+
+    const candidates = await client.query<{
+      id: string;
+      lifecycle_state: "scheduled" | "settlement_pending";
+    }>(
+      `select lesson.id, lesson.lifecycle_state
+       from app.lessons lesson
+       left join app.schedule_series series on series.id = lesson.series_id
+       where lesson.deleted_at is null
+         and lesson.scheduled_at >= now()
+         and lesson.lifecycle_state in ('scheduled', 'settlement_pending')
+         and (
+           series.plan_id = any($1::uuid[])
+           or (
+             series.plan_id is null and series.id is not null and (
+               ($2::text = 'student' and series.student_id = $3::uuid)
+               or (series.client_type = $2 and series.client_id = $3::uuid)
+             )
+           )
+           or (
+             $2::text = 'student' and lesson.group_id is not null
+             and exists (
+               select 1 from app.lesson_snapshot_participants participant
+               where participant.lesson_id = lesson.id
+             )
+             and not exists (
+               select 1 from app.lesson_snapshot_participants participant
+               where participant.lesson_id = lesson.id
+                 and not exists (
+                   select 1 from app.lesson_participant_exclusions exclusion
+                   where exclusion.lesson_id = participant.lesson_id
+                     and exclusion.student_id = participant.student_id
+                 )
+             )
+           )
+         )
+       order by lesson.id for update of lesson`,
+      [planIds, ref.type, ref.id],
+    );
+    const lessonIds = candidates.rows.map((lesson) => lesson.id);
+    if (lessonIds.length > 0) {
+      await client.query(
+        `update app.lessons set lifecycle_state = 'cancelled', updated_at = now()
+         where id = any($1::uuid[])
+           and lifecycle_state in ('scheduled', 'settlement_pending')`,
+        [lessonIds],
+      );
+      await client.query(
+        `insert into app.lesson_transitions (
+           lesson_id, from_state, to_state, reason_code, reason_text,
+           actor_user_id, financial_decision
+         )
+         select item.id, item.from_state, 'cancelled', $2,
+           'Архивирование клиента отменило повторяющееся действие', $3,
+           '{"settlementTypeKey":"free_lesson","teacherCompensationRuleKey":"none"}'::jsonb
+         from jsonb_to_recordset($1::jsonb)
+           as item(id uuid, from_state text)`,
+        [
+          JSON.stringify(candidates.rows.map((lesson) => ({
+            id: lesson.id,
+            from_state: lesson.lifecycle_state,
+          }))),
+          "client.archive",
+          actorUserId,
+        ],
+      );
+      await client.query(
+        `update app.lesson_reservations
+         set state = 'released', financial_fact_id = null, updated_at = now()
+         where lesson_id = any($1::uuid[]) and state = 'reserved'`,
+        [lessonIds],
+      );
+      await client.query(
+        `update app.lesson_settlement_plans
+         set state = 'cancelled', version = version + 1, updated_at = now()
+         where lesson_id = any($1::uuid[])
+           and state in ('planned', 'review_required')`,
+        [lessonIds],
+      );
+    }
+
+    return {
+      endedPlans: planIds.length,
+      cancelledLessons: lessonIds.length,
+      excludedGroupLessons,
+    };
   }
 
   private assertCommand(dto: ArchiveClientCommandDto): void {
@@ -337,7 +575,35 @@ export class ClientArchiveService {
                 (target.type = 'lead' and lesson.lead_id = target.id)
                 or (
                   target.related_student_id is not null
-                  and lesson.student_id = target.related_student_id
+                  and (
+                    lesson.student_id = target.related_student_id
+                    or exists (
+                      select 1
+                      from app.lesson_snapshot_participants participant
+                      where participant.lesson_id = lesson.id
+                        and participant.student_id = target.related_student_id
+                        and not exists (
+                          select 1
+                          from app.lesson_participant_exclusions exclusion
+                          where exclusion.lesson_id = participant.lesson_id
+                            and exclusion.student_id = participant.student_id
+                        )
+                    )
+                    or exists (
+                      select 1
+                      from app.schedule_series series
+                      join app.schedule_plan_participants participant
+                        on participant.plan_id = series.plan_id
+                       and participant.student_id = target.related_student_id
+                       and participant.effective_from <= current_date
+                       and (
+                         participant.effective_until is null
+                         or participant.effective_until >= current_date
+                       )
+                      where series.id = lesson.series_id
+                        and series.deleted_at is null
+                    )
+                  )
                 )
               )
           ) as future_lesson_count,
@@ -440,7 +706,8 @@ export class ClientArchiveService {
       warnings.push({
         code: "FUTURE_LESSONS_PRESERVED",
         count: impact.futureLessons,
-        message: "Будущие занятия останутся в истории и расписании.",
+        message:
+          "Повторяющиеся действия будут отменены; разовые будущие занятия останутся в расписании.",
       });
     }
     if (impact.openTasks > 0) {

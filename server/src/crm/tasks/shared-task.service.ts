@@ -21,6 +21,7 @@ import {
   SharedTaskRow,
   TaskCloseRow,
 } from "./shared-task.types";
+import { isTaskOverdue } from "./task-due-state";
 
 interface MutationMetadata {
   idempotencyKey: string;
@@ -557,6 +558,11 @@ export class SharedTaskService {
       startAt: row.start_at,
       endAt: row.end_at,
       state: row.state,
+      isOverdue: isTaskOverdue({
+        state: row.state,
+        startAt: row.start_at,
+        allDay: row.all_day,
+      }),
       priority: row.priority,
       linkedEntity:
         row.linked_entity_type && row.linked_entity_id

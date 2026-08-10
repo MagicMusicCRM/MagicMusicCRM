@@ -218,7 +218,7 @@ String _teacherCardStatusLabel(Object? raw) {
     'active' => 'Активен',
     'inactive' => 'Неактивен',
     'archived' => 'В архиве',
-    'scheduled' => 'Запланировано',
+    'scheduled' => 'Забронировано',
     'completed' || 'done' => 'Завершено',
     'cancelled' => 'Отменено',
     'assigned' => 'Назначено',
