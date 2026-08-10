@@ -8,6 +8,9 @@
 развёрнут; его автоматические и device-доказательства не повышают статусы
 production UAT без отдельного rollout и owner-повтора.
 
+Локальный технический gate и hashes:
+[`../v7-production-readiness-180.md`](../v7-production-readiness-180.md).
+
 Рабочая матрица всех `100` сценариев:
 [`../v7-owner-production-mega-uat-result.md`](../v7-owner-production-mega-uat-result.md).
 

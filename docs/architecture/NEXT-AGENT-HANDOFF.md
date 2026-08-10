@@ -15,7 +15,8 @@
 4. В `.anws/v7/05_TASKS.md` открыть только определения `T7.1.2` и `INT-S6`.
 5. Открыть текущую UAT-матрицу и evidence index:
    - `docs/audits/v7-owner-production-mega-uat-result.md`;
-   - `docs/audits/v7-owner-mega-uat-evidence/README.md`.
+   - `docs/audits/v7-owner-mega-uat-evidence/README.md`;
+   - `docs/audits/v7-production-readiness-180.md`.
 5. Продолжать только незакрытые строки матрицы. Новый глобальный аудит не нужен.
 
 ## Честный статус

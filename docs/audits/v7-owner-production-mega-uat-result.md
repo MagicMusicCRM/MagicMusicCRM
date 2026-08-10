@@ -16,7 +16,7 @@ Run: `OWNER-20260808-01`
 
 | ID | Сценарий | Статус | Доказательство / остаток |
 |---|---|---|---|
-| UAT-000 | Зафиксировать commit, образы, миграции и hashes | PARTIAL | локальный кандидат `+180`, release hashes и migrations evidence сняты; нужен финальный commit и production image ledger |
+| UAT-000 | Зафиксировать commit, образы, миграции и hashes | PARTIAL | commit `964f79c`, локальные ZIP/APK/AAB hashes и migrations evidence: `v7-production-readiness-180.md`; нужен production image ledger после rollout |
 | UAT-001 | Backup, пробный restore, начальные counts | PARTIAL | production backups есть; нужен единый restore-drill и counts этого run |
 | UAT-002 | Release, production API, тёмная тема, реальные данные | PARTIAL | Windows/Android `+180` локально собраны и запущены в тёмной теме; нужен owner production Release proof после разрешённого rollout |
 | UAT-003 | ID-ledger и каталог evidence без секретов | PARTIAL | evidence index и redacted API JSON созданы; нужен полный ledger всех UAT facts |
