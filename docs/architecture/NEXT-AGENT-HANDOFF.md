@@ -17,6 +17,7 @@
    - `docs/audits/v7-owner-production-mega-uat-result.md`;
    - `docs/audits/v7-owner-mega-uat-evidence/README.md`;
    - `docs/audits/v7-production-readiness-180.md`.
+   - `docs/audits/v7-teacher-compensation-181.md`.
 5. Продолжать только незакрытые строки матрицы. Новый глобальный аудит не нужен.
 
 ## Честный статус
@@ -37,9 +38,13 @@
 
 Последний полный автоматический baseline:
 
-- Flutter `666/666`;
+- Flutter `667/667`;
 - backend `158/158` suites, `1258/1258` tests;
 - backend build PASS;
+- локальный `+181` exact image `sha256:5fbd5a29…`, revision `17ce254`:
+  migration/fail-closed/live/ready/degraded-503 и Trivy `0/0` PASS;
+- Windows ZIP `+181` launch PASS, APK/AAB build+signature PASS; Android device
+  install/launch остаётся открытым из-за отсутствия подключённого устройства;
 - production API healthy на `1.5.1+180`, migration `0118`;
 - exact image `sha256:a07c39ff…`, worker active, worker/outbox/reconcile zero;
 - server image `sha256:a07c39ff…`, revision `1559a45`: migration, fail-closed

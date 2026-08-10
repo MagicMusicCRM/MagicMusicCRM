@@ -200,3 +200,18 @@
   UI/API/DB evidence до продолжения production mega-UAT.
 - **[ADD]** Локальный кандидат повышен до `1.5.1+181`; production до отдельного
   rollout-решения остаётся на проверенном `1.5.1+180`.
+- **[ADD]** Teacher create/edit реализован одной формой и одной атомарной
+  backend-командой; PostgreSQL regression подтверждает сохранение branches,
+  disciplines, salary/custom data и effective-dated rate history, а также
+  полный rollback identity/profile/teacher при invalid discipline.
+- **[ADD]** Payroll period report показывает completed/payable/zero-accrual
+  counts, астрономические часы, accrual, adjustments, payouts и period balance;
+  CSV использует ту же семантику и не связывает aggregate payout с уроком.
+- **[ADD]** Кандидат `+181` прошёл backend `158/158` suites (`1258/1258`),
+  Flutter `667/667`, analyze/build/typecheck, Windows Release UI/ZIP smoke,
+  APK/AAB signature gates и exact server image runtime/Trivy gate. Артефакты и
+  hashes зафиксированы в `dist/1.5.1+181/`; технический audit —
+  `docs/audits/v7-teacher-compensation-181.md`.
+- **[NOTE]** Android install/launch build `181` остаётся device-check: в текущей
+  среде нет устройства. Inno `+181` собран, но новый silent install не прошёл
+  через non-interactive UAC; production и update manifests не изменялись.
