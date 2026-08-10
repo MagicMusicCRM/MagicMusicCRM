@@ -1,101 +1,104 @@
-# 🔎 MagicMusicCRM v7 — Deep Probe и 26-point UI acceptance
+# MagicMusicCRM v7 — Deep Probe актуального client/server кода
 
 | Поле | Значение |
 |---|---|
-| Дата | 2026-08-07 |
+| Дата | 2026-08-10 |
 | Режим | Deep PROFILE → REASON → OBJECT → BENCHMARK → EMIT |
-| Объём | Flutter + NestJS + PostgreSQL + Windows + Android 15/API 35 + production API |
-| Кандидат | `1.5.1+157` |
-| Решение | **ENGINEERING PASS; PRODUCTION BLOCKED BY VERSION SKEW** |
+| Сценарий | Б — проверка реализации относительно `.anws/v7` |
+| Кандидат | `1.5.1+179` |
+| Карта | `.nexus-map/INDEX.md` |
+| Решение | **STRUCTURAL MAP PASS; OWNER UAT IN PROGRESS** |
 
-## 1. Executive conclusion
+## 1. Системный отпечаток
 
-Кодовая и UI-поверхность v7 подтверждена по исходным 26 пунктам ТЗ: длинная/адаптивная карточка, навигационный workspace, расписания, commerce, задачи, analytics/configuration и role projection реально отрисованы на Windows/Android. Все 26 пунктов имеют UI evidence либо, для чисто серверных правил, авторитетный contract/reconciliation gate.
+Карта построена заново из текущего `main`, без исторических планов как источника
+реализации. Большие machine-readable файлы находятся в `.nexus-map/inventory/`.
 
-Приёмка выявила критичный deployment-разрыв: healthy production API отвечает `404` на три маршрута, которые присутствуют и проходят tests в текущем `server/`:
+| Слой | Фактическое покрытие |
+|---|---:|
+| Flutter production files | 261 |
+| Dart declarations | 4 354 |
+| Именованные Widget classes | 378 |
+| Dart methods / functions | 2 566 / 383 |
+| Riverpod providers | 63 |
+| GoRouter routes / production screens | 22 / 21 |
+| Modal, sheet и drawer surfaces | 100 |
+| Flutter API callsites | 280 |
+| Server modules / classes / functions-methods | 768 / 397 / 2 315 |
+| NestJS endpoints / DTO fields / policy calls | 321 / 801 / 245 |
+| SQL migration files | 232 |
 
-- `GET /crm/clients/student/:id/internal-note`;
-- `GET /crm/clients/student/:id/operational-history`;
-- `GET /crm/schedule-plans?clientType=student&clientId=:id`.
+Общий AST содержит 1 281 файл, 4 269 nodes, `truncated=false`, parse errors=0.
+Dart, отсутствовавший в structural queries generic mapper, дополнительно разобран
+официальным analyzer; поэтому виджеты, методы и функции больше не теряются.
 
-Следовательно, публичный frontend-only rollout запрещён. Нужен синхронный backend/migration deployment и повторный LIVE smoke.
+## 2. Runtime topology
 
-## 2. Свежий профиль территории
+1. `lib/main.dart` — Flutter/Riverpod/GoRouter client.
+2. `server/src/main.ts` — NestJS HTTP/JSON + Socket.IO server.
+3. PostgreSQL — источник истины для access, CRM, schedule, commerce и tasks.
 
-Deep inventory построен из AST/Git/runtime roots без изменения production-кода.
+Межпроцессные границы:
 
-| Слой | Модули / классы | Строки | Наблюдение |
-|---|---:|---:|---|
-| `lib/core` | 116 модулей | 27 383 | navigation/session/service trust boundary |
-| `lib/features` | 144 модуля | 63 573 | основные production UI workflows |
-| `server/src` | 528 модулей / 395 классов | 126 546 | NestJS policy/domain/API boundary |
-| `server/db` | 232 файла | 50 814 | additive schema, migrations, reconcile |
-| `integration_test` | 14+ сценариев | 2 401+ | Windows/Android runtime acceptance |
-| `test/features` | 81 файла | 17 862 | widget/contract regressions |
+- Flutter → NestJS: HTTPS/JSON `/api` и Socket.IO `/realtime`;
+- NestJS → PostgreSQL: repositories/transactions;
+- Windows updater: `Process.start` в
+  `lib/core/update/windows_update_service.dart`;
+- synchronous security gate: `spawnSync` в
+  `server/src/security/security-gate.ts`.
 
-High-churn seams остаются прежними: client card, schedule, CRM service/controller, router, tasks and reporting. Это аргумент за targeted device evidence, не за rewrite.
+Backend DTO/policy boundary типизирован. Часть Flutter response decoding остаётся
+map-shaped и требует Release UI smoke; статическая карта не заменяет UAT.
 
-## 3. Runtime inspector
+## 3. Client → server wire
 
-### Process roots
+| Класс связи | Количество | Значение |
+|---|---:|---|
+| Однозначно сопоставлено | 273 | verb/path соответствует одному endpoint |
+| Dynamic dispatch | 3 | blacklist и lesson operation выбирают один из допустимых routes во время выполнения |
+| External/transport dynamic | 2 | общий API transport и Windows update manifest |
+| Unreferenced client method | 2 | legacy `updateAdjustment`/`voidAdjustment`, вызовов в `lib/` нет и backend-route отсутствует |
 
-1. `lib/main.dart` — Flutter/Riverpod/GoRouter, account session, realtime, notification and Windows updater lifecycle.
-2. `server/src/main.ts` — NestJS strict validation, auth/policy boundary, `/api`, CORS, Socket.IO and shutdown hooks.
-3. PostgreSQL services/repositories — source of truth for finance, schedule collisions, subscriptions, tasks and access.
+Эти две unreferenced записи не объявлены существующим функционалом. Они сохранены
+в карте как явный dead-code факт, пока отдельная задача не разрешит их удаление.
 
-### Trust and recovery boundaries
+## 4. Gap analysis
 
-- REST DTO/policy/DB boundary is strong; some Flutter reads remain map-decoded and therefore require runtime smoke.
-- Realtime transport is account-scoped and reset before token replacement.
-- Workspace persistence is account-scoped and cleared on logout/role change.
-- External process spawn remains confined to the signed Windows update broker and repository security gate.
+| ID | Разрыв | Состояние |
+|---|---|---|
+| MAP-01 | Generic Tree-sitter видел Dart только на уровне файлов | Закрыт Dart analyzer inventory |
+| MAP-02 | Backend inventory использовал первый `@Controller` для всего файла | Закрыт nearest-controller parsing + regression check |
+| MAP-03 | Два client adjustment метода не имеют callers/server routes | Явно помечены `unreferenced_client_method`, не production functionality |
+| MAP-04 | Старые v4/v6 имена генераторов могут выглядеть как версия продукта | В активной `.nexus-map` используются только фактические строки; legacy status отброшен |
+| MAP-05 | Static code presence может быть ошибочно принято за готовность | Owner UAT остаётся отдельным открытым gate |
 
-## 4. Что реально нашёл probe
+Архитектурные владельцы текущего кода согласуются с v7: App Experience, Access
+Scope, CRM Workspace, Schedule, Commerce Integrity, Operations, UI Foundation и
+Platform Quality. Необъяснённых route/surface/inventory owners: 0.
 
-| ID | Находка | Root cause | Действие | Retest |
-|---|---|---|---|---|
-| P7-01 | На Android tap по Student возвращал на сохранённую доску | async workspace restore происходил после incoming direct link | direct link повторно применяется после restore, если разрешён и отличается | regression + LIVE Android PASS |
-| P7-02 | Замена абонемента падала на desktop layout | `Row(crossAxisAlignment: stretch)` находился в вертикально unbounded scroll | cross-axis заменён на `start` в общем comparison widget | Windows lifecycle integration PASS |
-| P7-03 | Analytics device-test ожидал старую вкладку `Каталог` | тест отстал от unified IA | ожидание синхронизировано с `Обзор / Журналы`; добавлена XLSX evidence | Windows integration PASS |
-| P7-04 | Note/history/plans не работают на real app | production backend старее frontend/server candidate | не маскировать; блокировать rollout до deployment | API probe: `404/404/404` |
+## 5. Risk matrix
 
-## 5. Evidence и gates
+| Риск | Критичность | Контроль |
+|---|:---:|---|
+| Карта устаревает после изменения production source | Высокая | source digest + inventory `-Check` перед кодингом |
+| Агент загружает многомегабайтный JSON целиком | Средняя | `INDEX.md` требует точечный `rg`/PowerShell query |
+| Dynamic route ошибочно принят за отсутствующий endpoint | Средняя | `wire_matrix.json` хранит все candidates и status |
+| Dead client method принят за доступную функцию | Средняя | отдельный `unreferenced_client_method` status |
+| Static PASS принят за owner acceptance | Высокая | `T7.1.2`/`INT-S6` и UAT result остаются открыты |
 
-- Каноническая матрица: [`docs/audits/v7-26-point-final-verification.md`](../../docs/audits/v7-26-point-final-verification.md).
-- Каталог снимков: [`docs/audits/v7-26-point-ui-evidence/README.md`](../../docs/audits/v7-26-point-ui-evidence/README.md).
-- Flutter analyze: PASS.
-- Flutter full: **645/645**.
-- Backend typecheck/build: PASS/PASS.
-- Backend full: **155/155 suites, 1237/1237 tests**.
-- Real accounts: **5/5 role shells** plus restart/logout/account-switch PASS.
-- Android release update-over-install: stored session preserved.
-- Production health: `200`; required v7 note/history/plan routes: `404`.
+## 6. Проверки
 
-## 6. Risk matrix after retest
+- `scripts/v4_inventory.ps1 -Check` — PASS, routes=321, unowned=0.
+- `scripts/v6_ux_inventory.ps1 -Check` — PASS, routes=22, reachable=260,
+  unowned=0.
+- `scripts/v7_commerce_schedule_inventory.ps1 -Check` — PASS, finance=256,
+  lesson writes=7, unowned=0.
+- Dart mapper analyze — no issues.
+- JSON/path/concept validation — PASS.
+- AST — `truncated=false`, parse errors=0.
 
-| Риск | Вероятность | Влияние | Состояние |
-|---|---:|---:|---|
-| Backend/frontend version skew | certain | critical | **OPEN — release blocker** |
-| Restored workspace overrides compact deep link | low | high | fixed + regression |
-| Wide subscription replacement layout crash | low | high | fixed + Windows integration |
-| Real-client data variation reveals map-decoding drift | medium | high | keep LIVE smoke after deployment |
-| Forbidden finance/config request from lower role | low | critical | Actor/full suites and real role shells green |
-| Owner acceptance inferred from source presence | low | high | 26-row screenshot/contract matrix now canonical |
+## 7. Решение
 
-## 7. Decision and next gate
-
-### PASS
-
-- implementation coverage of all 26 requirements;
-- Windows/Android production UI rendering;
-- five-account authentication and session replacement;
-- complete Flutter/backend regression gates;
-- root fixes P7-01..P7-03.
-
-### BLOCKED
-
-- final production acceptance while the deployed server lacks current v7 endpoints.
-
-### Required next action
-
-Deploy the backend and migrations from the same accepted revision, then repeat real-account Windows/Android rows 3, 6, 7 and 26. Only a `200`/actor-correct response and clean UI on both platforms can change the release decision to APPROVED.
+Структурная карта пригодна как актуальная память будущих агентов. Она не меняет
+статус production mega-UAT: текущая 100-строчная матрица остаётся открытой и
+является единственным источником owner acceptance.

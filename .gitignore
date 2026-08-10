@@ -75,7 +75,8 @@ app.*.map.json
 # Generated local analysis/capture artifacts
 /s8_*.png
 /server/db/backups/
-/.nexus-map/
+/.nexus-map/.deps/
+/.nexus-map/.tmp/
 /.understand-anything/
 /_archive/
 /installer_output/

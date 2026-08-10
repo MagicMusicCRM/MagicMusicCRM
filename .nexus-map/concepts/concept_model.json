@@ -1,0 +1,105 @@
+{
+  "$schema": "nexus-mapper/concept-model/v1",
+  "generated_at": "2026-08-10T14:11:29.427591+00:00",
+  "repo_path": ".",
+  "nodes": [
+    {
+      "id": "app-experience",
+      "type": "System",
+      "label": "App Experience",
+      "responsibility": "See concepts/domains.md",
+      "implementation_status": "implemented",
+      "code_path": "lib/core/router/",
+      "tech_stack": [
+        "Flutter",
+        "NestJS",
+        "PostgreSQL"
+      ],
+      "complexity": "high"
+    },
+    {
+      "id": "access-scope",
+      "type": "System",
+      "label": "Access Scope",
+      "responsibility": "See concepts/domains.md",
+      "implementation_status": "implemented",
+      "code_path": "server/src/access-control/",
+      "tech_stack": [
+        "Flutter",
+        "NestJS",
+        "PostgreSQL"
+      ],
+      "complexity": "high"
+    },
+    {
+      "id": "crm-workspace",
+      "type": "System",
+      "label": "Crm Workspace",
+      "responsibility": "See concepts/domains.md",
+      "implementation_status": "implemented",
+      "code_path": "server/src/crm/",
+      "tech_stack": [
+        "Flutter",
+        "NestJS",
+        "PostgreSQL"
+      ],
+      "complexity": "high"
+    },
+    {
+      "id": "schedule",
+      "type": "System",
+      "label": "Schedule",
+      "responsibility": "See concepts/domains.md",
+      "implementation_status": "implemented",
+      "code_path": "server/src/crm/schedule/",
+      "tech_stack": [
+        "Flutter",
+        "NestJS",
+        "PostgreSQL"
+      ],
+      "complexity": "high"
+    },
+    {
+      "id": "commerce-integrity",
+      "type": "System",
+      "label": "Commerce Integrity",
+      "responsibility": "See concepts/domains.md",
+      "implementation_status": "implemented",
+      "code_path": "server/src/crm/commerce/",
+      "tech_stack": [
+        "Flutter",
+        "NestJS",
+        "PostgreSQL"
+      ],
+      "complexity": "high"
+    },
+    {
+      "id": "operations",
+      "type": "System",
+      "label": "Operations",
+      "responsibility": "See concepts/domains.md",
+      "implementation_status": "implemented",
+      "code_path": "server/src/crm/tasks/",
+      "tech_stack": [
+        "Flutter",
+        "NestJS",
+        "PostgreSQL"
+      ],
+      "complexity": "high"
+    },
+    {
+      "id": "platform-quality",
+      "type": "System",
+      "label": "Platform Quality",
+      "responsibility": "See concepts/domains.md",
+      "implementation_status": "implemented",
+      "code_path": "server/src/platform/",
+      "tech_stack": [
+        "Flutter",
+        "NestJS",
+        "PostgreSQL"
+      ],
+      "complexity": "high"
+    }
+  ]
+}

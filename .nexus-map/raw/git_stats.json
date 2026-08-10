@@ -1,0 +1,561 @@
+{
+  "analysis_period_days": 90,
+  "stats": {
+    "total_commits": 782,
+    "total_authors": 4
+  },
+  "hotspots": [
+    {
+      "path": "AGENTS.md",
+      "changes": 133,
+      "risk": "high"
+    },
+    {
+      "path": "server/src/crm/crm.service.ts",
+      "changes": 108,
+      "risk": "high"
+    },
+    {
+      "path": "server/src/crm/crm.service.spec.ts",
+      "changes": 96,
+      "risk": "high"
+    },
+    {
+      "path": "lib/features/crm/presentation/client_card/client_card.dart",
+      "changes": 79,
+      "risk": "high"
+    },
+    {
+      "path": "pubspec.yaml",
+      "changes": 55,
+      "risk": "high"
+    },
+    {
+      "path": "lib/features/messenger/presentation/screens/messenger_screen.dart",
+      "changes": 54,
+      "risk": "high"
+    },
+    {
+      "path": "server/src/crm/crm.module.ts",
+      "changes": 52,
+      "risk": "high"
+    },
+    {
+      "path": "server/src/crm/crm.controller.ts",
+      "changes": 50,
+      "risk": "high"
+    },
+    {
+      "path": "lib/features/admin/presentation/widgets/schedule_widget.dart",
+      "changes": 49,
+      "risk": "high"
+    },
+    {
+      "path": "lib/features/manager/presentation/widgets/leads_widget.dart",
+      "changes": 49,
+      "risk": "high"
+    },
+    {
+      "path": ".anws/v4/05_TASKS.md",
+      "changes": 45,
+      "risk": "high"
+    },
+    {
+      "path": "lib/core/services/magic_crm_service.dart",
+      "changes": 43,
+      "risk": "high"
+    },
+    {
+      "path": "docs/audits/v6-input-back-inventory.json",
+      "changes": 36,
+      "risk": "high"
+    },
+    {
+      "path": "docs/audits/v6-navigation-inventory.json",
+      "changes": 35,
+      "risk": "high"
+    },
+    {
+      "path": "docs/audits/v6-route-surface-inventory.json",
+      "changes": 35,
+      "risk": "high"
+    },
+    {
+      "path": ".anws/v7/05_TASKS.md",
+      "changes": 31,
+      "risk": "high"
+    },
+    {
+      "path": "lib/features/crm/presentation/client_card/client_card_tabs_a.dart",
+      "changes": 31,
+      "risk": "high"
+    },
+    {
+      "path": "lib/features/manager/presentation/widgets/tasks_widget.dart",
+      "changes": 31,
+      "risk": "high"
+    },
+    {
+      "path": "server/src/messenger/messenger.service.ts",
+      "changes": 31,
+      "risk": "high"
+    },
+    {
+      "path": ".anws/v6/05_TASKS.md",
+      "changes": 30,
+      "risk": "high"
+    },
+    {
+      "path": "server/src/messenger/messenger.service.spec.ts",
+      "changes": 30,
+      "risk": "high"
+    },
+    {
+      "path": "lib/features/crm/presentation/client_card/client_card_student.dart",
+      "changes": 29,
+      "risk": "high"
+    },
+    {
+      "path": "lib/features/manager/presentation/widgets/reports_widget.dart",
+      "changes": 28,
+      "risk": "high"
+    },
+    {
+      "path": "lib/features/admin/presentation/widgets/create_lesson_dialog.dart",
+      "changes": 26,
+      "risk": "high"
+    },
+    {
+      "path": "docs/audits/v6-route-surface-inventory.md",
+      "changes": 26,
+      "risk": "high"
+    },
+    {
+      "path": "server/src/analytics/analytics.service.ts",
+      "changes": 26,
+      "risk": "high"
+    },
+    {
+      "path": "lib/core/router/app_router.dart",
+      "changes": 26,
+      "risk": "high"
+    },
+    {
+      "path": "docs/audits/v6-input-back-inventory.md",
+      "changes": 25,
+      "risk": "high"
+    },
+    {
+      "path": "lib/features/crm/presentation/client_card/client_card_data.dart",
+      "changes": 24,
+      "risk": "high"
+    },
+    {
+      "path": "docs/audits/v6-navigation-inventory.md",
+      "changes": 23,
+      "risk": "high"
+    },
+    {
+      "path": "docs/audits/v7-commerce-schedule-inventory.json",
+      "changes": 23,
+      "risk": "high"
+    },
+    {
+      "path": "docs/audits/v4-current-state-inventory.json",
+      "changes": 23,
+      "risk": "high"
+    },
+    {
+      "path": "docs/audits/v4-current-state-inventory.md",
+      "changes": 23,
+      "risk": "high"
+    },
+    {
+      "path": "lib/features/manager/presentation/widgets/finance_widget.dart",
+      "changes": 23,
+      "risk": "high"
+    },
+    {
+      "path": "server/src/analytics/analytics.service.spec.ts",
+      "changes": 23,
+      "risk": "high"
+    },
+    {
+      "path": "lib/features/admin/presentation/widgets/manage_entities_widget.dart",
+      "changes": 22,
+      "risk": "high"
+    },
+    {
+      "path": "lib/features/crm/presentation/client_card/client_card_widgets.dart",
+      "changes": 22,
+      "risk": "high"
+    },
+    {
+      "path": "lib/core/services/magic_crm_service_mappers.dart",
+      "changes": 21,
+      "risk": "high"
+    },
+    {
+      "path": "test/core/services/magic_crm_service_test.dart",
+      "changes": 21,
+      "risk": "high"
+    },
+    {
+      "path": "server/src/crm/leads.service.ts",
+      "changes": 20,
+      "risk": "high"
+    },
+    {
+      "path": "lib/core/services/magic_crm_service_schedule.dart",
+      "changes": 20,
+      "risk": "high"
+    },
+    {
+      "path": "lib/features/manager/presentation/widgets/students_board_widget.dart",
+      "changes": 19,
+      "risk": "high"
+    },
+    {
+      "path": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
+      "changes": 19,
+      "risk": "high"
+    },
+    {
+      "path": "server/src/access-control/capability-route-policy.spec.ts",
+      "changes": 18,
+      "risk": "high"
+    },
+    {
+      "path": "server/src/access-control/capability-route-policy.ts",
+      "changes": 18,
+      "risk": "high"
+    },
+    {
+      "path": "server/package.json",
+      "changes": 18,
+      "risk": "high"
+    },
+    {
+      "path": "lib/features/crm/presentation/client_card/client_card_display.dart",
+      "changes": 18,
+      "risk": "high"
+    },
+    {
+      "path": "server/src/analytics/analytics.controller.ts",
+      "changes": 18,
+      "risk": "high"
+    },
+    {
+      "path": "server/src/migration/hollihop-import.ts",
+      "changes": 18,
+      "risk": "high"
+    },
+    {
+      "path": "test/features/crm/client_card/card_fake_api.dart",
+      "changes": 17,
+      "risk": "high"
+    }
+  ],
+  "coupling_pairs": [
+    {
+      "file_a": "server/src/crm/crm.service.spec.ts",
+      "file_b": "server/src/crm/crm.service.ts",
+      "co_changes": 93,
+      "coupling_score": 0.969
+    },
+    {
+      "file_a": "server/src/crm/crm.controller.ts",
+      "file_b": "server/src/crm/crm.service.ts",
+      "co_changes": 48,
+      "coupling_score": 0.96
+    },
+    {
+      "file_a": "server/src/crm/crm.controller.ts",
+      "file_b": "server/src/crm/crm.service.spec.ts",
+      "co_changes": 47,
+      "coupling_score": 0.94
+    },
+    {
+      "file_a": ".anws/v4/05_TASKS.md",
+      "file_b": "AGENTS.md",
+      "co_changes": 39,
+      "coupling_score": 0.867
+    },
+    {
+      "file_a": "docs/audits/v6-input-back-inventory.json",
+      "file_b": "docs/audits/v6-route-surface-inventory.json",
+      "co_changes": 35,
+      "coupling_score": 1.0
+    },
+    {
+      "file_a": "docs/audits/v6-input-back-inventory.json",
+      "file_b": "docs/audits/v6-navigation-inventory.json",
+      "co_changes": 34,
+      "coupling_score": 0.971
+    },
+    {
+      "file_a": "docs/audits/v6-navigation-inventory.json",
+      "file_b": "docs/audits/v6-route-surface-inventory.json",
+      "co_changes": 34,
+      "coupling_score": 0.971
+    },
+    {
+      "file_a": "server/src/crm/crm.module.ts",
+      "file_b": "server/src/crm/crm.service.ts",
+      "co_changes": 33,
+      "coupling_score": 0.635
+    },
+    {
+      "file_a": "server/src/crm/crm.module.ts",
+      "file_b": "server/src/crm/crm.service.spec.ts",
+      "co_changes": 30,
+      "coupling_score": 0.577
+    },
+    {
+      "file_a": ".anws/v7/05_TASKS.md",
+      "file_b": "AGENTS.md",
+      "co_changes": 29,
+      "coupling_score": 0.935
+    },
+    {
+      "file_a": "AGENTS.md",
+      "file_b": "docs/audits/v6-input-back-inventory.json",
+      "co_changes": 29,
+      "coupling_score": 0.806
+    },
+    {
+      "file_a": ".anws/v6/05_TASKS.md",
+      "file_b": "AGENTS.md",
+      "co_changes": 29,
+      "coupling_score": 0.967
+    },
+    {
+      "file_a": "AGENTS.md",
+      "file_b": "docs/audits/v6-route-surface-inventory.json",
+      "co_changes": 28,
+      "coupling_score": 0.8
+    },
+    {
+      "file_a": "AGENTS.md",
+      "file_b": "docs/audits/v6-navigation-inventory.json",
+      "co_changes": 27,
+      "coupling_score": 0.771
+    },
+    {
+      "file_a": "server/src/messenger/messenger.service.spec.ts",
+      "file_b": "server/src/messenger/messenger.service.ts",
+      "co_changes": 27,
+      "coupling_score": 0.9
+    },
+    {
+      "file_a": "lib/features/crm/presentation/client_card/client_card.dart",
+      "file_b": "lib/features/crm/presentation/client_card/client_card_student.dart",
+      "co_changes": 26,
+      "coupling_score": 0.897
+    },
+    {
+      "file_a": "docs/audits/v6-input-back-inventory.json",
+      "file_b": "docs/audits/v6-route-surface-inventory.md",
+      "co_changes": 26,
+      "coupling_score": 1.0
+    },
+    {
+      "file_a": "docs/audits/v6-route-surface-inventory.json",
+      "file_b": "docs/audits/v6-route-surface-inventory.md",
+      "co_changes": 26,
+      "coupling_score": 1.0
+    },
+    {
+      "file_a": "docs/audits/v6-input-back-inventory.json",
+      "file_b": "docs/audits/v6-input-back-inventory.md",
+      "co_changes": 25,
+      "coupling_score": 1.0
+    },
+    {
+      "file_a": "docs/audits/v6-input-back-inventory.md",
+      "file_b": "docs/audits/v6-route-surface-inventory.json",
+      "co_changes": 25,
+      "coupling_score": 1.0
+    },
+    {
+      "file_a": "docs/audits/v6-navigation-inventory.json",
+      "file_b": "docs/audits/v6-route-surface-inventory.md",
+      "co_changes": 25,
+      "coupling_score": 0.962
+    },
+    {
+      "file_a": "lib/features/crm/presentation/client_card/client_card.dart",
+      "file_b": "lib/features/crm/presentation/client_card/client_card_tabs_a.dart",
+      "co_changes": 25,
+      "coupling_score": 0.806
+    },
+    {
+      "file_a": "server/src/crm/crm.controller.ts",
+      "file_b": "server/src/crm/crm.module.ts",
+      "co_changes": 25,
+      "coupling_score": 0.5
+    },
+    {
+      "file_a": "docs/audits/v6-input-back-inventory.md",
+      "file_b": "docs/audits/v6-navigation-inventory.json",
+      "co_changes": 24,
+      "coupling_score": 0.96
+    },
+    {
+      "file_a": "docs/audits/v6-input-back-inventory.json",
+      "file_b": "docs/audits/v6-navigation-inventory.md",
+      "co_changes": 23,
+      "coupling_score": 1.0
+    },
+    {
+      "file_a": "docs/audits/v6-navigation-inventory.json",
+      "file_b": "docs/audits/v6-navigation-inventory.md",
+      "co_changes": 23,
+      "coupling_score": 1.0
+    },
+    {
+      "file_a": "docs/audits/v6-navigation-inventory.md",
+      "file_b": "docs/audits/v6-route-surface-inventory.json",
+      "co_changes": 23,
+      "coupling_score": 1.0
+    },
+    {
+      "file_a": "docs/audits/v4-current-state-inventory.json",
+      "file_b": "docs/audits/v4-current-state-inventory.md",
+      "co_changes": 23,
+      "coupling_score": 1.0
+    },
+    {
+      "file_a": "AGENTS.md",
+      "file_b": "lib/features/crm/presentation/client_card/client_card.dart",
+      "co_changes": 23,
+      "coupling_score": 0.291
+    },
+    {
+      "file_a": "server/src/analytics/analytics.service.spec.ts",
+      "file_b": "server/src/analytics/analytics.service.ts",
+      "co_changes": 23,
+      "coupling_score": 1.0
+    },
+    {
+      "file_a": "docs/audits/v6-input-back-inventory.md",
+      "file_b": "docs/audits/v6-route-surface-inventory.md",
+      "co_changes": 22,
+      "coupling_score": 0.88
+    },
+    {
+      "file_a": "AGENTS.md",
+      "file_b": "docs/audits/v6-route-surface-inventory.md",
+      "co_changes": 22,
+      "coupling_score": 0.846
+    },
+    {
+      "file_a": "lib/features/crm/presentation/client_card/client_card.dart",
+      "file_b": "lib/features/crm/presentation/client_card/client_card_data.dart",
+      "co_changes": 21,
+      "coupling_score": 0.875
+    },
+    {
+      "file_a": "AGENTS.md",
+      "file_b": "lib/features/crm/presentation/client_card/client_card_student.dart",
+      "co_changes": 21,
+      "coupling_score": 0.724
+    },
+    {
+      "file_a": ".anws/v6/05_TASKS.md",
+      "file_b": "docs/audits/v6-input-back-inventory.json",
+      "co_changes": 21,
+      "coupling_score": 0.7
+    },
+    {
+      "file_a": "lib/core/services/magic_crm_service.dart",
+      "file_b": "server/src/crm/crm.service.ts",
+      "co_changes": 21,
+      "coupling_score": 0.488
+    },
+    {
+      "file_a": "docs/audits/v6-input-back-inventory.md",
+      "file_b": "docs/audits/v6-navigation-inventory.md",
+      "co_changes": 20,
+      "coupling_score": 0.87
+    },
+    {
+      "file_a": "docs/audits/v6-navigation-inventory.md",
+      "file_b": "docs/audits/v6-route-surface-inventory.md",
+      "co_changes": 20,
+      "coupling_score": 0.87
+    },
+    {
+      "file_a": "AGENTS.md",
+      "file_b": "docs/audits/v6-input-back-inventory.md",
+      "co_changes": 20,
+      "coupling_score": 0.8
+    },
+    {
+      "file_a": "AGENTS.md",
+      "file_b": "server/src/crm/crm.module.ts",
+      "co_changes": 20,
+      "coupling_score": 0.385
+    },
+    {
+      "file_a": ".anws/v6/05_TASKS.md",
+      "file_b": "docs/audits/v6-route-surface-inventory.json",
+      "co_changes": 20,
+      "coupling_score": 0.667
+    },
+    {
+      "file_a": "lib/core/services/magic_crm_service.dart",
+      "file_b": "server/src/crm/crm.service.spec.ts",
+      "co_changes": 20,
+      "coupling_score": 0.465
+    },
+    {
+      "file_a": "AGENTS.md",
+      "file_b": "docs/audits/v6-navigation-inventory.md",
+      "co_changes": 19,
+      "coupling_score": 0.826
+    },
+    {
+      "file_a": "lib/features/crm/presentation/client_card/client_card.dart",
+      "file_b": "lib/features/crm/presentation/client_card/client_card_widgets.dart",
+      "co_changes": 19,
+      "coupling_score": 0.864
+    },
+    {
+      "file_a": "AGENTS.md",
+      "file_b": "docs/audits/v4-current-state-inventory.json",
+      "co_changes": 19,
+      "coupling_score": 0.826
+    },
+    {
+      "file_a": "AGENTS.md",
+      "file_b": "docs/audits/v4-current-state-inventory.md",
+      "co_changes": 19,
+      "coupling_score": 0.826
+    },
+    {
+      "file_a": ".anws/v6/05_TASKS.md",
+      "file_b": "docs/audits/v6-navigation-inventory.json",
+      "co_changes": 19,
+      "coupling_score": 0.633
+    },
+    {
+      "file_a": ".anws/v7/05_TASKS.md",
+      "file_b": "docs/audits/v7-commerce-schedule-inventory.json",
+      "co_changes": 18,
+      "coupling_score": 0.783
+    },
+    {
+      "file_a": "AGENTS.md",
+      "file_b": "server/src/access-control/capability-route-policy.spec.ts",
+      "co_changes": 17,
+      "coupling_score": 0.944
+    },
+    {
+      "file_a": "AGENTS.md",
+      "file_b": "server/src/access-control/capability-route-policy.ts",
+      "co_changes": 17,
+      "coupling_score": 0.944
+    }
+  ]
+}

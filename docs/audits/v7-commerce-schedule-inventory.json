@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "task": "T1.1.1",
-  "source_digest": "904530ab0ecf62cfd3f21248e1b77998967d1b0c1a50c0a6fc22244488f77f99",
+  "source_digest": "81c44a6ac09b7990a5911c650ef245954cbda8b4949e60a47f2eb3ab6f5bebad",
   "summary": {
     "matched_source_files": 53,
     "finance_callsites": 256,
@@ -722,7 +722,7 @@
       "operation": "call",
       "owner": "SYS-CRM-WORKSPACE",
       "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 31
+      "line": 33
     },
     {
       "kind": "wire",
@@ -730,7 +730,7 @@
       "operation": "call",
       "owner": "SYS-CRM-WORKSPACE",
       "file": "lib/features/crm/presentation/client_card/client_card.dart",
-      "line": 32
+      "line": 34
     },
     {
       "kind": "wire",
@@ -1666,7 +1666,7 @@
       "operation": "read",
       "owner": "SYS-CRM-WORKSPACE",
       "file": "server/src/crm/clients/client-internal-context.service.ts",
-      "line": 238
+      "line": 242
     },
     {
       "kind": "sql-table",

@@ -1,0 +1,21 @@
+=== Impact radius: server/src/crm/commerce/subscription-issue.service.ts ===
+
+Depends on (this file imports):
+  → ../../common/security/actor-context (external)
+  → ../../platform/platform-integrity.service (external)
+  → ../../platform/platform-integrity.types (external)
+  → ../../platform/platform-integrity.util (external)
+  → ../crm.policy (external)
+  → ../dto/issue-subscription.dto (external)
+  → ./commerce-schema.types (external)
+  → ./subscription-issue.repository (external)
+  → ./subscription-preview-token (external)
+  → ./subscription-preview-token.service (external)
+  → ./subscription-reservation.service (external)
+  → @nestjs/common (external)
+  → crypto (external)
+
+Depended by (other files import this):
+  (none)
+
+Impact summary: 0 upstream dependencies, 0 downstream dependents

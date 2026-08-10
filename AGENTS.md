@@ -8,9 +8,11 @@
 Перед изменениями прочитать в указанном порядке:
 
 1. Прочитать `AGENTS.md` и `docs/architecture/NEXT-AGENT-HANDOFF.md`.
-2. В `.anws/v7/05_TASKS.md` открыть только определения активных
+2. Прочитать короткий `.nexus-map/INDEX.md`; большие JSON открывать только
+   точечным запросом по нужному экрану, виджету, функции или endpoint.
+3. В `.anws/v7/05_TASKS.md` открыть только определения активных
    `T7.1.2`/`INT-S6`, не весь завершённый backlog.
-3. PRD, ADR, system design и исторические аудиты открывать только по затронутому
+4. PRD, ADR, system design и исторические аудиты открывать только по затронутому
    домену.
 
 ## Актуальное состояние
@@ -130,6 +132,7 @@ UI/API/DB-доказательства.
 - `.anws/v7/05_TASKS.md` — активный backlog.
 - `.anws/v7/06_CHANGELOG.md` — изменения текущей версии.
 - `docs/architecture/NEXT-AGENT-HANDOFF.md` — актуальная передача.
+- `.nexus-map/INDEX.md` — актуальная карта client/server кода.
 
 ## Env и production
 

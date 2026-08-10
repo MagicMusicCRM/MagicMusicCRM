@@ -48,7 +48,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/api/magic_api_client.dart",
-      "line": 369
+      "line": 374
     },
     {
       "verb": "POST",
@@ -687,7 +687,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/features/auth/data/services/magic_auth_service.dart",
-      "line": 257
+      "line": 259
     },
     {
       "verb": "POST",
@@ -696,7 +696,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/features/auth/data/services/magic_auth_service.dart",
-      "line": 265
+      "line": 267
     },
     {
       "verb": "GET",
@@ -705,7 +705,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/features/auth/data/services/magic_auth_service.dart",
-      "line": 269
+      "line": 271
     },
     {
       "verb": "PATCH",
@@ -714,7 +714,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/features/auth/data/services/magic_auth_service.dart",
-      "line": 287
+      "line": 289
     },
     {
       "verb": "GET",
@@ -723,7 +723,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/features/auth/data/services/magic_auth_service.dart",
-      "line": 298
+      "line": 300
     },
     {
       "verb": "PATCH",
@@ -732,7 +732,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/features/auth/data/services/magic_auth_service.dart",
-      "line": 309
+      "line": 311
     },
     {
       "verb": "GET",
@@ -894,7 +894,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/features/auth/data/services/magic_auth_service.dart",
-      "line": 246
+      "line": 248
     },
     {
       "verb": "POST",
@@ -984,7 +984,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/features/auth/data/services/magic_auth_service.dart",
-      "line": 221
+      "line": 223
     },
     {
       "verb": "POST",
@@ -993,7 +993,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/features/auth/data/services/magic_auth_service.dart",
-      "line": 202
+      "line": 204
     },
     {
       "verb": "POST",
@@ -1155,7 +1155,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/features/auth/data/services/magic_auth_service.dart",
-      "line": 169
+      "line": 171
     },
     {
       "verb": "POST",
@@ -1164,7 +1164,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/features/auth/data/services/magic_auth_service.dart",
-      "line": 142
+      "line": 144
     },
     {
       "verb": "GET",
@@ -1209,7 +1209,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/features/auth/data/services/magic_auth_service.dart",
-      "line": 210
+      "line": 212
     },
     {
       "verb": "PATCH",
@@ -1632,7 +1632,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/api/magic_api_client.dart",
-      "line": 459
+      "line": 464
     },
     {
       "verb": "DELETE",

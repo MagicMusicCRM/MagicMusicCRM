@@ -148,16 +148,11 @@ $routeDecoratorCount = 0
 foreach ($file in $controllerFiles) {
   $relative = Get-RelativePath $file.FullName
   $text = [IO.File]::ReadAllText($file.FullName)
-  $controllerMatch = [regex]::Match(
+  $controllerMatches = [regex]::Matches(
     $text,
     '@Controller\s*\(\s*(?:[''"](?<path>[^''"]*)[''"])?\s*\)',
     [Text.RegularExpressions.RegexOptions]::Multiline
   )
-  $controllerPath = if ($controllerMatch.Success) {
-    $controllerMatch.Groups['path'].Value
-  } else {
-    ''
-  }
 
   $routeMatches = [regex]::Matches(
     $text,
@@ -167,6 +162,13 @@ foreach ($file in $controllerFiles) {
 
   for ($index = 0; $index -lt $routeMatches.Count; $index++) {
     $match = $routeMatches[$index]
+    $controllerMatch = @($controllerMatches | Where-Object { $_.Index -lt $match.Index }) |
+      Select-Object -Last 1
+    $controllerPath = if ($null -ne $controllerMatch) {
+      $controllerMatch.Groups['path'].Value
+    } else {
+      ''
+    }
     $segmentEnd = if ($index + 1 -lt $routeMatches.Count) {
       $routeMatches[$index + 1].Index
     } else {
@@ -708,6 +710,8 @@ $markdown = [Text.StringBuilder]::new()
 [void]$markdown.AppendLine('**Task:** T8.1.2')
 [void]$markdown.AppendLine("**Source digest:** ``$($inventory.source_digest_sha256)``")
 [void]$markdown.AppendLine("**Validation:** $(if ($inventory.validation.passed) { 'PASS' } else { 'FAIL' })")
+[void]$markdown.AppendLine()
+[void]$markdown.AppendLine('> Имя генератора и migration-status labels сохранены для совместимости старых gates. Фактические counts/paths актуальны; текущие ownership/state брать из `.nexus-map/`, где legacy status отброшен.')
 [void]$markdown.AppendLine()
 [void]$markdown.AppendLine('## Coverage')
 [void]$markdown.AppendLine()

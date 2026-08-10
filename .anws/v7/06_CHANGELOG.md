@@ -14,6 +14,13 @@
 
 ## 2026-08-10 — Фиксация актуального состояния CRM
 
+- **[ADD]** Создана отслеживаемая `.nexus-map`: все Dart declarations и
+  именованные widgets, production screens/surfaces/routes, providers/API calls,
+  все server modules/classes/functions, endpoints/DTO/policies и client→server
+  wire matrix. `INDEX.md` остаётся коротким, большие JSON читаются точечно.
+- **[FIX]** Backend inventory теперь корректно разбирает несколько
+  `@Controller` в одном файле; устранены ложные route prefixes для профилей,
+  уведомлений, настроек и deletion requests.
 - **[FIX]** `AGENTS.md` и `docs/architecture/NEXT-AGENT-HANDOFF.md` сведены к
   одному актуальному состоянию кандидата `1.5.1+179` и открытой задаче
   `T7.1.2`; готовность больше не выводится из старых этапов или тестов.

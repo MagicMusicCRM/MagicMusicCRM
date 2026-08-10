@@ -10,8 +10,10 @@
 1. Прочитать `AGENTS.md`.
 2. Проверить `git status --short --branch`, `git fetch origin` и совпадение
    `HEAD` с `origin/main`.
-3. В `.anws/v7/05_TASKS.md` открыть только определения `T7.1.2` и `INT-S6`.
-4. Открыть текущую UAT-матрицу и evidence index:
+3. Прочитать `.nexus-map/INDEX.md`, затем запрашивать только нужные строки
+   исчерпывающих JSON из `.nexus-map/inventory/`.
+4. В `.anws/v7/05_TASKS.md` открыть только определения `T7.1.2` и `INT-S6`.
+5. Открыть текущую UAT-матрицу и evidence index:
    - `docs/audits/v7-owner-production-mega-uat-result.md`;
    - `docs/audits/v7-owner-mega-uat-evidence/README.md`.
 5. Продолжать только незакрытые строки матрицы. Новый глобальный аудит не нужен.

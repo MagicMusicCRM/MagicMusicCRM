@@ -1,0 +1,5268 @@
+{
+  "schema_version": 1,
+  "source_revision": "13a9734356eca27f3d7b60dec00c639f1d85264b",
+  "source_digest_sha256": "cc6c200f55daa66889d4cd3a5de0176abe3d95eaf450576addb0db652f42a15f",
+  "summary": {
+    "client_calls": 280,
+    "matched": 273,
+    "ambiguous": 3,
+    "unreferenced_client_method": 2,
+    "external_or_dynamic": 2,
+    "server_routes": 321,
+    "server_routes_without_direct_literal_flutter_call": 48
+  },
+  "client_to_server": [
+    {
+      "verb": "request",
+      "target": "_dio",
+      "http_method_expression": null,
+      "path_expression": "_normalizePath(path)",
+      "class": "MagicApiClient",
+      "callable": "_send",
+      "file": "lib/core/api/magic_api_client.dart",
+      "line": 374,
+      "callable_invocations": 2,
+      "normalized_path": null,
+      "normalized_verb": "REQUEST",
+      "status": "external_or_dynamic",
+      "server_routes": []
+    },
+    {
+      "verb": "post",
+      "target": "_dio",
+      "http_method_expression": null,
+      "path_expression": "_normalizePath('/auth/refresh')",
+      "class": "MagicApiClient",
+      "callable": "_refreshTokens",
+      "file": "lib/core/api/magic_api_client.dart",
+      "line": 464,
+      "callable_invocations": 1,
+      "normalized_path": "/auth/refresh",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /auth/refresh"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/access/users/$userId'",
+      "class": "MagicAccessManagementService",
+      "callable": "getUserAccess",
+      "file": "lib/core/security/access_management.dart",
+      "line": 104,
+      "callable_invocations": 1,
+      "normalized_path": "/access/users/:param",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /access/users/:userId"
+      ]
+    },
+    {
+      "verb": "request",
+      "target": "_api",
+      "http_method_expression": "'PUT'",
+      "path_expression": "'/access/users/$userId/role'",
+      "class": "MagicAccessManagementService",
+      "callable": "assignRole",
+      "file": "lib/core/security/access_management.dart",
+      "line": 120,
+      "callable_invocations": 1,
+      "normalized_path": "/access/users/:param/role",
+      "normalized_verb": "PUT",
+      "status": "matched",
+      "server_routes": [
+        "PUT /access/users/:userId/role"
+      ]
+    },
+    {
+      "verb": "request",
+      "target": "_api",
+      "http_method_expression": "'PUT'",
+      "path_expression": "'/access/users/$userId/overrides/$capabilityKey'",
+      "class": "MagicAccessManagementService",
+      "callable": "setOverride",
+      "file": "lib/core/security/access_management.dart",
+      "line": 144,
+      "callable_invocations": 1,
+      "normalized_path": "/access/users/:param/overrides/:param",
+      "normalized_verb": "PUT",
+      "status": "matched",
+      "server_routes": [
+        "PUT /access/users/:userId/overrides/:capabilityKey"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/access/me'",
+      "class": "MagicAccessService",
+      "callable": "getMySnapshot",
+      "file": "lib/core/security/capability_snapshot.dart",
+      "line": 49,
+      "callable_invocations": 1,
+      "normalized_path": "/access/me",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /access/me"
+      ]
+    },
+    {
+      "verb": "delete",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/files/$value'",
+      "class": "ChatAttachmentService",
+      "callable": "deleteAvatar",
+      "file": "lib/core/services/chat_attachment_service.dart",
+      "line": 80,
+      "callable_invocations": 1,
+      "normalized_path": "/files/:param",
+      "normalized_verb": "DELETE",
+      "status": "matched",
+      "server_routes": [
+        "DELETE /files/:id"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/files/$fileId/download-token'",
+      "class": "ChatAttachmentService",
+      "callable": "_requestBackendFileUrl",
+      "file": "lib/core/services/chat_attachment_service.dart",
+      "line": 117,
+      "callable_invocations": 1,
+      "normalized_path": "/files/:param/download-token",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /files/:id/download-token"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/files'",
+      "class": "ChatAttachmentService",
+      "callable": "_upload",
+      "file": "lib/core/services/chat_attachment_service.dart",
+      "line": 165,
+      "callable_invocations": 3,
+      "normalized_path": "/files",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /files"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/hollihop/disciplines'",
+      "class": "HolliHopService",
+      "callable": "getDisciplines",
+      "file": "lib/core/services/hollihop_service.dart",
+      "line": 15,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/hollihop/disciplines",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/hollihop/disciplines"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/hollihop/levels'",
+      "class": "HolliHopService",
+      "callable": "getLevels",
+      "file": "lib/core/services/hollihop_service.dart",
+      "line": 22,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/hollihop/levels",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/hollihop/levels"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/hollihop/categories'",
+      "class": "HolliHopService",
+      "callable": "getCategories",
+      "file": "lib/core/services/hollihop_service.dart",
+      "line": 29,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/hollihop/categories",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/hollihop/categories"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/hollihop/lead-statuses'",
+      "class": "HolliHopService",
+      "callable": "getLeadStatuses",
+      "file": "lib/core/services/hollihop_service.dart",
+      "line": 36,
+      "callable_invocations": 0,
+      "normalized_path": "/crm/hollihop/lead-statuses",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/hollihop/lead-statuses"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/clients/$clientType/$clientId/internal-note'",
+      "class": null,
+      "callable": "getClientInternalNote",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 9,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/clients/:param/:param/internal-note",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/clients/:type/:id/internal-note"
+      ]
+    },
+    {
+      "verb": "put",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/clients/$clientType/$clientId/internal-note'",
+      "class": null,
+      "callable": "updateClientInternalNote",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 21,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/clients/:param/:param/internal-note",
+      "normalized_verb": "PUT",
+      "status": "matched",
+      "server_routes": [
+        "PUT /crm/clients/:type/:id/internal-note"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/clients/$clientType/$clientId/operational-history'",
+      "class": null,
+      "callable": "getClientOperationalHistory",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 34,
+      "callable_invocations": 3,
+      "normalized_path": "/crm/clients/:param/:param/operational-history",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/clients/:type/:id/operational-history"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/client-pipelines'",
+      "class": null,
+      "callable": "getClientPipeline",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 45,
+      "callable_invocations": 7,
+      "normalized_path": "/crm/client-pipelines",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/client-pipelines"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/client-pipelines/revisions'",
+      "class": null,
+      "callable": "listClientPipelineRevisions",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 56,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/client-pipelines/revisions",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/client-pipelines/revisions"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/client-pipelines/preview'",
+      "class": null,
+      "callable": "previewClientPipeline",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 71,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/client-pipelines/preview",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/client-pipelines/preview"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/client-pipelines/publish'",
+      "class": null,
+      "callable": "publishClientPipeline",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 89,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/client-pipelines/publish",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/client-pipelines/publish"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/client-pipelines/rollback'",
+      "class": null,
+      "callable": "rollbackClientPipeline",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 108,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/client-pipelines/rollback",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/client-pipelines/rollback"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/me'",
+      "class": null,
+      "callable": "getMySummary",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 121,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/me",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/me"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/overview'",
+      "class": null,
+      "callable": "getOverviewStats",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 135,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/overview",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/overview"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/dashboard/manager'",
+      "class": null,
+      "callable": "getManagerDashboard",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 154,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/dashboard/manager",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/dashboard/manager"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/reports/finance'",
+      "class": null,
+      "callable": "getFinanceReport",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 169,
+      "callable_invocations": 0,
+      "normalized_path": "/crm/reports/finance",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/reports/finance"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/students'",
+      "class": null,
+      "callable": "listStudents",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 177,
+      "callable_invocations": 2,
+      "normalized_path": "/crm/students",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/students"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/students/search'",
+      "class": null,
+      "callable": "searchStudents",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 222,
+      "callable_invocations": 4,
+      "normalized_path": "/crm/students/search",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/students/search"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/students'",
+      "class": null,
+      "callable": "createStudent",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 255,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/students",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/students"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/students/$id'",
+      "class": null,
+      "callable": "getStudent",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 263,
+      "callable_invocations": 0,
+      "normalized_path": "/crm/students/:param",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/students/:id"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/students/$id/card'",
+      "class": null,
+      "callable": "getStudentCard",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 268,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/students/:param/card",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/students/:id/card"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/students/$studentId/groups'",
+      "class": null,
+      "callable": "listStudentGroups",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 295,
+      "callable_invocations": 0,
+      "normalized_path": "/crm/students/:param/groups",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/students/:id/groups"
+      ]
+    },
+    {
+      "verb": "patch",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/students/$id'",
+      "class": null,
+      "callable": "updateStudent",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 323,
+      "callable_invocations": 2,
+      "normalized_path": "/crm/students/:param",
+      "normalized_verb": "PATCH",
+      "status": "matched",
+      "server_routes": [
+        "PATCH /crm/students/:id"
+      ]
+    },
+    {
+      "verb": "delete",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/students/$id'",
+      "class": null,
+      "callable": "deleteStudent",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 332,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/students/:param",
+      "normalized_verb": "DELETE",
+      "status": "matched",
+      "server_routes": [
+        "DELETE /crm/students/:id"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/students/$id/return-to-lead'",
+      "class": null,
+      "callable": "returnStudentToLead",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 336,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/students/:param/return-to-lead",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/students/:id/return-to-lead"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/teachers'",
+      "class": null,
+      "callable": "listTeachers",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 375,
+      "callable_invocations": 10,
+      "normalized_path": "/crm/teachers",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/teachers"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/teachers/$id'",
+      "class": null,
+      "callable": "getTeacher",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 385,
+      "callable_invocations": 0,
+      "normalized_path": "/crm/teachers/:param",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/teachers/:id"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/teachers'",
+      "class": null,
+      "callable": "createTeacher",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 412,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/teachers",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/teachers"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/teachers/$teacherId/access'",
+      "class": null,
+      "callable": "provisionTeacherAccess",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 424,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/teachers/:param/access",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/teachers/:id/access"
+      ]
+    },
+    {
+      "verb": "patch",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/teachers/$id'",
+      "class": null,
+      "callable": "updateTeacher",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 458,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/teachers/:param",
+      "normalized_verb": "PATCH",
+      "status": "matched",
+      "server_routes": [
+        "PATCH /crm/teachers/:id"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/teachers/$teacherId/payroll'",
+      "class": null,
+      "callable": "getTeacherPayroll",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 468,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/teachers/:param/payroll",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/teachers/:id/payroll"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/teachers/$teacherId/payouts'",
+      "class": null,
+      "callable": "createTeacherPayout",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 482,
+      "callable_invocations": 2,
+      "normalized_path": "/crm/teachers/:param/payouts",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/teachers/:id/payouts"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/teachers/$teacherId/rates'",
+      "class": null,
+      "callable": "setTeacherHourRate",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 497,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/teachers/:param/rates",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/teachers/:id/rates"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/reports/teacher-stats'",
+      "class": null,
+      "callable": "getTeacherStatsReport",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 516,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/reports/teacher-stats",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/reports/teacher-stats"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/reports/teacher-stats/export'",
+      "class": null,
+      "callable": "exportTeacherStatsReport",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 542,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/reports/teacher-stats/export",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/reports/teacher-stats/export"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/staff'",
+      "class": null,
+      "callable": "createStaff",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 598,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/staff",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/staff"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/staff/$staffId/access'",
+      "class": null,
+      "callable": "provisionStaffAccess",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 607,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/staff/:param/access",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/staff/:id/access"
+      ]
+    },
+    {
+      "verb": "patch",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/staff/$id'",
+      "class": null,
+      "callable": "updateStaff",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 646,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/staff/:param",
+      "normalized_verb": "PATCH",
+      "status": "matched",
+      "server_routes": [
+        "PATCH /crm/staff/:id"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/staff'",
+      "class": null,
+      "callable": "listStaff",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 681,
+      "callable_invocations": 2,
+      "normalized_path": "/crm/staff",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/staff"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/activity'",
+      "class": null,
+      "callable": "listActivityLog",
+      "file": "lib/core/services/magic_crm_service_core.dart",
+      "line": 718,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/activity",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/activity"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/analytics/v4/client-status/summary'",
+      "class": null,
+      "callable": "getV4ClientStatusSummary",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 968,
+      "callable_invocations": 1,
+      "normalized_path": "/analytics/v4/client-status/summary",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /analytics/v4/client-status/summary"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/analytics/v4/client-status/clients'",
+      "class": null,
+      "callable": "getV4ClientStatusList",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 986,
+      "callable_invocations": 1,
+      "normalized_path": "/analytics/v4/client-status/clients",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /analytics/v4/client-status/clients"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/analytics/v4/lesson-success'",
+      "class": null,
+      "callable": "getV4LessonSuccess",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1008,
+      "callable_invocations": 1,
+      "normalized_path": "/analytics/v4/lesson-success",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /analytics/v4/lesson-success"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/analytics/v4/lesson-success/lessons'",
+      "class": null,
+      "callable": "getV4LessonSuccessList",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1019,
+      "callable_invocations": 1,
+      "normalized_path": "/analytics/v4/lesson-success/lessons",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /analytics/v4/lesson-success/lessons"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/analytics/v4/school-finance'",
+      "class": null,
+      "callable": "getV4SchoolFinance",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1038,
+      "callable_invocations": 1,
+      "normalized_path": "/analytics/v4/school-finance",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /analytics/v4/school-finance"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/analytics/v4/exports/$jobId'",
+      "class": null,
+      "callable": "getV4ReportExportJob",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1083,
+      "callable_invocations": 1,
+      "normalized_path": "/analytics/v4/exports/:param",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /analytics/v4/exports/:jobId"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/students/$studentId/adjustments'",
+      "class": null,
+      "callable": "createAdjustment",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1131,
+      "callable_invocations": 0,
+      "normalized_path": "/crm/students/:param/adjustments",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/students/:id/adjustments"
+      ]
+    },
+    {
+      "verb": "patch",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/students/$studentId/adjustments/$adjustmentId'",
+      "class": null,
+      "callable": "updateAdjustment",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1156,
+      "callable_invocations": 0,
+      "normalized_path": "/crm/students/:param/adjustments/:param",
+      "normalized_verb": "PATCH",
+      "status": "unreferenced_client_method",
+      "server_routes": []
+    },
+    {
+      "verb": "delete",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/students/$studentId/adjustments/$adjustmentId'",
+      "class": null,
+      "callable": "voidAdjustment",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1169,
+      "callable_invocations": 0,
+      "normalized_path": "/crm/students/:param/adjustments/:param",
+      "normalized_verb": "DELETE",
+      "status": "unreferenced_client_method",
+      "server_routes": []
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/me/commerce'",
+      "class": null,
+      "callable": "getMyCommerceProjection",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1177,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/me/commerce",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/me/commerce"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/students/$studentId/commerce'",
+      "class": null,
+      "callable": "getStudentCommerceProjection",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1186,
+      "callable_invocations": 2,
+      "normalized_path": "/crm/students/:param/commerce",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/students/:studentId/commerce"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/payments'",
+      "class": null,
+      "callable": "listPayments",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1205,
+      "callable_invocations": 0,
+      "normalized_path": "/crm/payments",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/payments"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/payments'",
+      "class": null,
+      "callable": "listPaymentsWithTotal",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1229,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/payments",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/payments"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/student-balances'",
+      "class": null,
+      "callable": "listStudentBalances",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1260,
+      "callable_invocations": 0,
+      "normalized_path": "/crm/student-balances",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/student-balances"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/expenses'",
+      "class": null,
+      "callable": "listExpenses",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1281,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/expenses",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/expenses"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/expenses'",
+      "class": null,
+      "callable": "createExpense",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1295,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/expenses",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/expenses"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/subscription-packages'",
+      "class": null,
+      "callable": "listSubscriptionPackages",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1308,
+      "callable_invocations": 4,
+      "normalized_path": "/crm/subscription-packages",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/subscription-packages"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/subscription-packages'",
+      "class": null,
+      "callable": "createSubscriptionPackage",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1337,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/subscription-packages",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/subscription-packages"
+      ]
+    },
+    {
+      "verb": "patch",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/subscription-packages/$id'",
+      "class": null,
+      "callable": "updateSubscriptionPackage",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1352,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/subscription-packages/:param",
+      "normalized_verb": "PATCH",
+      "status": "matched",
+      "server_routes": [
+        "PATCH /crm/subscription-packages/:id"
+      ]
+    },
+    {
+      "verb": "delete",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/subscription-packages/$id'",
+      "class": null,
+      "callable": "archiveSubscriptionPackage",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1362,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/subscription-packages/:param",
+      "normalized_verb": "DELETE",
+      "status": "matched",
+      "server_routes": [
+        "DELETE /crm/subscription-packages/:id"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/subscription-packages/$id/restore'",
+      "class": null,
+      "callable": "restoreSubscriptionPackage",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1372,
+      "callable_invocations": 0,
+      "normalized_path": "/crm/subscription-packages/:param/restore",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/subscription-packages/:id/restore"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/students/$recipientStudentId/subscriptions/purchase/preview'",
+      "class": null,
+      "callable": "previewSubscriptionPurchase",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1383,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/students/:param/subscriptions/purchase/preview",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/students/:studentId/subscriptions/purchase/preview"
+      ]
+    },
+    {
+      "verb": "postIdempotent",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/students/$recipientStudentId/subscriptions/purchase'",
+      "class": null,
+      "callable": "purchaseSubscription",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1396,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/students/:param/subscriptions/purchase",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/students/:studentId/subscriptions/purchase"
+      ]
+    },
+    {
+      "verb": "postIdempotent",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/students/$studentId/payment-records'",
+      "class": null,
+      "callable": "createClientPaymentRecord",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1412,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/students/:param/payment-records",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/students/:studentId/payment-records"
+      ]
+    },
+    {
+      "verb": "postIdempotent",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/students/$studentId/payment-records/$paymentRecordId/transition'",
+      "class": null,
+      "callable": "transitionClientPaymentRecord",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1425,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/students/:param/payment-records/:param/transition",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/students/:studentId/payment-records/:paymentRecordId/transition"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/students/$studentId/payment-records/' '$paymentRecordId/reversal/preview'",
+      "class": null,
+      "callable": "previewClientPaymentReversal",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1437,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/students/:param/payment-records/' ':param/reversal/preview",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/students/:studentId/payment-records/:paymentRecordId/reversal/preview"
+      ]
+    },
+    {
+      "verb": "postIdempotent",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/students/$studentId/payment-records/$paymentRecordId/reversal'",
+      "class": null,
+      "callable": "reverseClientPayment",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1452,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/students/:param/payment-records/:param/reversal",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/students/:studentId/payment-records/:paymentRecordId/reversal"
+      ]
+    },
+    {
+      "verb": "postIdempotent",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/students/$studentId/adjustments'",
+      "class": null,
+      "callable": "recordPaymentAdjustment",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1468,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/students/:param/adjustments",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/students/:id/adjustments"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/students/$studentId/subscriptions/' '$issuedSubscriptionId/replace/preview'",
+      "class": null,
+      "callable": "previewSubscriptionReplacement",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1480,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/students/:param/subscriptions/' ':param/replace/preview",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/students/:studentId/subscriptions/:issuedSubscriptionId/replace/preview"
+      ]
+    },
+    {
+      "verb": "postIdempotent",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/students/$studentId/subscriptions/' '$issuedSubscriptionId/replace'",
+      "class": null,
+      "callable": "replaceSubscription",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1494,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/students/:param/subscriptions/' ':param/replace",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/students/:studentId/subscriptions/:issuedSubscriptionId/replace"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/students/$studentId/subscriptions/' '$issuedSubscriptionId/cancel/preview'",
+      "class": null,
+      "callable": "previewSubscriptionCancellation",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1507,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/students/:param/subscriptions/' ':param/cancel/preview",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/students/:studentId/subscriptions/:issuedSubscriptionId/cancel/preview"
+      ]
+    },
+    {
+      "verb": "postIdempotent",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/students/$studentId/subscriptions/' '$issuedSubscriptionId/cancel'",
+      "class": null,
+      "callable": "cancelSubscription",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1521,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/students/:param/subscriptions/' ':param/cancel",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/students/:studentId/subscriptions/:issuedSubscriptionId/cancel"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/leads/$leadId/subscriptions/issue'",
+      "class": null,
+      "callable": "issueLeadSubscription",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1539,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/leads/:param/subscriptions/issue",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/leads/:leadId/subscriptions/issue"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/homeworks'",
+      "class": null,
+      "callable": "listHomeworks",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1559,
+      "callable_invocations": 3,
+      "normalized_path": "/crm/homeworks",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/homeworks"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/homeworks'",
+      "class": null,
+      "callable": "createHomework",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1589,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/homeworks",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/homeworks"
+      ]
+    },
+    {
+      "verb": "patch",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/homeworks/$id'",
+      "class": null,
+      "callable": "updateHomeworkStatus",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1596,
+      "callable_invocations": 0,
+      "normalized_path": "/crm/homeworks/:param",
+      "normalized_verb": "PATCH",
+      "status": "matched",
+      "server_routes": [
+        "PATCH /crm/homeworks/:id"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/homeworks/$id/submit'",
+      "class": null,
+      "callable": "submitHomework",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1603,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/homeworks/:param/submit",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/homeworks/:id/submit"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/analytics/funnel'",
+      "class": null,
+      "callable": "getAnalyticsFunnel",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1620,
+      "callable_invocations": 0,
+      "normalized_path": "/analytics/funnel",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /analytics/funnel"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/analytics/sources'",
+      "class": null,
+      "callable": "getAnalyticsSources",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1636,
+      "callable_invocations": 0,
+      "normalized_path": "/analytics/sources",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /analytics/sources"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/analytics/data-quality'",
+      "class": null,
+      "callable": "getAnalyticsDataQuality",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1647,
+      "callable_invocations": 0,
+      "normalized_path": "/analytics/data-quality",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /analytics/data-quality"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/analytics/responsible'",
+      "class": null,
+      "callable": "getAnalyticsResponsible",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1662,
+      "callable_invocations": 0,
+      "normalized_path": "/analytics/responsible",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /analytics/responsible"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/analytics/finance/monthly'",
+      "class": null,
+      "callable": "getAnalyticsFinanceMonthly",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1677,
+      "callable_invocations": 0,
+      "normalized_path": "/analytics/finance/monthly",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /analytics/finance/monthly"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/analytics/branches'",
+      "class": null,
+      "callable": "getAnalyticsBranches",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1690,
+      "callable_invocations": 0,
+      "normalized_path": "/analytics/branches",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /analytics/branches"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/analytics/loss-reasons'",
+      "class": null,
+      "callable": "getAnalyticsLossReasons",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1705,
+      "callable_invocations": 0,
+      "normalized_path": "/analytics/loss-reasons",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /analytics/loss-reasons"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/analytics/debts'",
+      "class": null,
+      "callable": "getAnalyticsDebts",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1714,
+      "callable_invocations": 0,
+      "normalized_path": "/analytics/debts",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /analytics/debts"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/analytics/forecast'",
+      "class": null,
+      "callable": "getAnalyticsForecast",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1723,
+      "callable_invocations": 0,
+      "normalized_path": "/analytics/forecast",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /analytics/forecast"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/analytics/churn-risk'",
+      "class": null,
+      "callable": "getAnalyticsChurn",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1736,
+      "callable_invocations": 0,
+      "normalized_path": "/analytics/churn-risk",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /analytics/churn-risk"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/analytics/chats/sla'",
+      "class": null,
+      "callable": "getAnalyticsChatSla",
+      "file": "lib/core/services/magic_crm_service_finance.dart",
+      "line": 1749,
+      "callable_invocations": 0,
+      "normalized_path": "/analytics/chats/sla",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /analytics/chats/sla"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/lead-statuses'",
+      "class": null,
+      "callable": "listLeadStatuses",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 6,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/lead-statuses",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/lead-statuses"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/leads'",
+      "class": null,
+      "callable": "listLeads",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 17,
+      "callable_invocations": 0,
+      "normalized_path": "/crm/leads",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/leads"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/leads/board'",
+      "class": null,
+      "callable": "listLeadBoard",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 79,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/leads/board",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/leads/board"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/leads/$id/card'",
+      "class": null,
+      "callable": "getLeadCard",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 87,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/leads/:param/card",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/leads/:id/card"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/leads/$leadId/link-student'",
+      "class": null,
+      "callable": "linkStudentToLead",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 112,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/leads/:param/link-student",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/leads/:id/link-student"
+      ]
+    },
+    {
+      "verb": "patch",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/$entity/$id/blacklist'",
+      "class": null,
+      "callable": "setClientBlacklist",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 133,
+      "callable_invocations": 2,
+      "normalized_path": "/crm/:param/:param/blacklist",
+      "normalized_verb": "PATCH",
+      "status": "ambiguous",
+      "server_routes": [
+        "PATCH /crm/students/:id/blacklist",
+        "PATCH /crm/leads/:id/blacklist"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/leads/$leadId/status-history'",
+      "class": null,
+      "callable": "getLeadStatusHistory",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 143,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/leads/:param/status-history",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/leads/:leadId/status-history"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/leads/$leadId/applications'",
+      "class": null,
+      "callable": "listLeadApplications",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 151,
+      "callable_invocations": 0,
+      "normalized_path": "/crm/leads/:param/applications",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/leads/:id/applications"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/families/by-entity/$entityType/$entityId'",
+      "class": null,
+      "callable": "getFamilyForEntity",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 173,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/families/by-entity/:param/:param",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/families/by-entity/:entityType/:entityId"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/families'",
+      "class": null,
+      "callable": "createFamily",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 192,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/families",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/families"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/families/$familyId/members'",
+      "class": null,
+      "callable": "addFamilyMember",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 208,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/families/:param/members",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/families/:familyId/members"
+      ]
+    },
+    {
+      "verb": "delete",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/family-members/$memberId'",
+      "class": null,
+      "callable": "removeFamilyMember",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 215,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/family-members/:param",
+      "normalized_verb": "DELETE",
+      "status": "matched",
+      "server_routes": [
+        "DELETE /crm/family-members/:memberId"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/phone-review-queue/count'",
+      "class": null,
+      "callable": "countPhoneReviewQueue",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 220,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/phone-review-queue/count",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/phone-review-queue/count"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/phone-review-queue'",
+      "class": null,
+      "callable": "listPhoneReviewQueue",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 229,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/phone-review-queue",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/phone-review-queue"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/merge-candidates'",
+      "class": null,
+      "callable": "listMergeCandidates",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 239,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/merge-candidates",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/merge-candidates"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/leads/$winnerId/merge/$loserId'",
+      "class": null,
+      "callable": "mergeLeads",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 250,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/leads/:param/merge/:param",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/leads/:winnerId/merge/:loserId"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/merges/$mergeLogId/undo'",
+      "class": null,
+      "callable": "undoMerge",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 257,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/merges/:param/undo",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/merges/:mergeLogId/undo"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/leads'",
+      "class": null,
+      "callable": "createLead",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 294,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/leads",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/leads"
+      ]
+    },
+    {
+      "verb": "patch",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/leads/$id'",
+      "class": null,
+      "callable": "updateLead",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 341,
+      "callable_invocations": 2,
+      "normalized_path": "/crm/leads/:param",
+      "normalized_verb": "PATCH",
+      "status": "matched",
+      "server_routes": [
+        "PATCH /crm/leads/:id"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/loss-reasons'",
+      "class": null,
+      "callable": "listLossReasons",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 350,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/loss-reasons",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/loss-reasons"
+      ]
+    },
+    {
+      "verb": "delete",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/leads/$id'",
+      "class": null,
+      "callable": "deleteLead",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 355,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/leads/:param",
+      "normalized_verb": "DELETE",
+      "status": "matched",
+      "server_routes": [
+        "DELETE /crm/leads/:id"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/leads/$leadId/chat-user'",
+      "class": null,
+      "callable": "resolveLeadChatUser",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 361,
+      "callable_invocations": 0,
+      "normalized_path": "/crm/leads/:param/chat-user",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/leads/:id/chat-user"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/contacts/by-user/$userId'",
+      "class": null,
+      "callable": "resolveContactForUser",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 367,
+      "callable_invocations": 2,
+      "normalized_path": "/crm/contacts/by-user/:param",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/contacts/by-user/:userId"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/contacts/save-from-chat'",
+      "class": null,
+      "callable": "saveContactFromChat",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 377,
+      "callable_invocations": 0,
+      "normalized_path": "/crm/contacts/save-from-chat",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/contacts/save-from-chat"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/clients/$entityType/$entityId/linked-users'",
+      "class": null,
+      "callable": "getClientLinkedUsers",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 391,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/clients/:param/:param/linked-users",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/clients/:entityType/:entityId/linked-users"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/clients/$entityType/$entityId/user-candidates'",
+      "class": null,
+      "callable": "listClientUserCandidates",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 403,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/clients/:param/:param/user-candidates",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/clients/:entityType/:entityId/user-candidates"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/clients/$entityType/$entityId/link-user'",
+      "class": null,
+      "callable": "linkUserToClient",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 415,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/clients/:param/:param/link-user",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/clients/:entityType/:entityId/link-user"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/duplicates'",
+      "class": null,
+      "callable": "listDuplicateCandidates",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 431,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/duplicates",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/duplicates"
+      ]
+    },
+    {
+      "verb": "patch",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/duplicates/$id'",
+      "class": null,
+      "callable": "decideDuplicateCandidate",
+      "file": "lib/core/services/magic_crm_service_leads.dart",
+      "line": 447,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/duplicates/:param",
+      "normalized_verb": "PATCH",
+      "status": "matched",
+      "server_routes": [
+        "PATCH /crm/duplicates/:id"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/branches'",
+      "class": null,
+      "callable": "listBranches",
+      "file": "lib/core/services/magic_crm_service_org.dart",
+      "line": 6,
+      "callable_invocations": 23,
+      "normalized_path": "/crm/branches",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/branches"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/leads/app-count'",
+      "class": null,
+      "callable": "getAppLeadsCount",
+      "file": "lib/core/services/magic_crm_service_org.dart",
+      "line": 14,
+      "callable_invocations": 0,
+      "normalized_path": "/crm/leads/app-count",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/leads/app-count"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/branches/$branchId/disciplines'",
+      "class": null,
+      "callable": "listBranchDisciplines",
+      "file": "lib/core/services/magic_crm_service_org.dart",
+      "line": 26,
+      "callable_invocations": 3,
+      "normalized_path": "/crm/branches/:param/disciplines",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/branches/:branchId/disciplines"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/disciplines'",
+      "class": null,
+      "callable": "listDisciplines",
+      "file": "lib/core/services/magic_crm_service_org.dart",
+      "line": 40,
+      "callable_invocations": 3,
+      "normalized_path": "/crm/disciplines",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/disciplines"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/branches/$branchId/disciplines'",
+      "class": null,
+      "callable": "assignBranchDiscipline",
+      "file": "lib/core/services/magic_crm_service_org.dart",
+      "line": 50,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/branches/:param/disciplines",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/branches/:branchId/disciplines"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/branches'",
+      "class": null,
+      "callable": "createBranch",
+      "file": "lib/core/services/magic_crm_service_org.dart",
+      "line": 67,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/branches",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/branches"
+      ]
+    },
+    {
+      "verb": "patch",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/branches/$id'",
+      "class": null,
+      "callable": "updateBranch",
+      "file": "lib/core/services/magic_crm_service_org.dart",
+      "line": 84,
+      "callable_invocations": 2,
+      "normalized_path": "/crm/branches/:param",
+      "normalized_verb": "PATCH",
+      "status": "matched",
+      "server_routes": [
+        "PATCH /crm/branches/:id"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/rooms'",
+      "class": null,
+      "callable": "listRooms",
+      "file": "lib/core/services/magic_crm_service_org.dart",
+      "line": 98,
+      "callable_invocations": 7,
+      "normalized_path": "/crm/rooms",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/rooms"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/rooms/availability'",
+      "class": null,
+      "callable": "listRoomAvailability",
+      "file": "lib/core/services/magic_crm_service_org.dart",
+      "line": 133,
+      "callable_invocations": 2,
+      "normalized_path": "/crm/rooms/availability",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/rooms/availability"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/rooms'",
+      "class": null,
+      "callable": "createRoom",
+      "file": "lib/core/services/magic_crm_service_org.dart",
+      "line": 154,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/rooms",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/rooms"
+      ]
+    },
+    {
+      "verb": "patch",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/rooms/$id'",
+      "class": null,
+      "callable": "updateRoom",
+      "file": "lib/core/services/magic_crm_service_org.dart",
+      "line": 172,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/rooms/:param",
+      "normalized_verb": "PATCH",
+      "status": "matched",
+      "server_routes": [
+        "PATCH /crm/rooms/:id"
+      ]
+    },
+    {
+      "verb": "delete",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/rooms/$id'",
+      "class": null,
+      "callable": "deleteRoom",
+      "file": "lib/core/services/magic_crm_service_org.dart",
+      "line": 180,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/rooms/:param",
+      "normalized_verb": "DELETE",
+      "status": "matched",
+      "server_routes": [
+        "DELETE /crm/rooms/:id"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/groups'",
+      "class": null,
+      "callable": "listGroups",
+      "file": "lib/core/services/magic_crm_service_org.dart",
+      "line": 190,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/groups",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/groups"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/groups/$id'",
+      "class": null,
+      "callable": "getGroup",
+      "file": "lib/core/services/magic_crm_service_org.dart",
+      "line": 200,
+      "callable_invocations": 0,
+      "normalized_path": "/crm/groups/:param",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/groups/:id"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/groups'",
+      "class": null,
+      "callable": "createGroup",
+      "file": "lib/core/services/magic_crm_service_org.dart",
+      "line": 222,
+      "callable_invocations": 2,
+      "normalized_path": "/crm/groups",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/groups"
+      ]
+    },
+    {
+      "verb": "patch",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/groups/$id'",
+      "class": null,
+      "callable": "updateGroup",
+      "file": "lib/core/services/magic_crm_service_org.dart",
+      "line": 250,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/groups/:param",
+      "normalized_verb": "PATCH",
+      "status": "matched",
+      "server_routes": [
+        "PATCH /crm/groups/:id"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/groups/$groupId/students'",
+      "class": null,
+      "callable": "listGroupStudents",
+      "file": "lib/core/services/magic_crm_service_org.dart",
+      "line": 261,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/groups/:param/students",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/groups/:id/students"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/groups/$groupId/students'",
+      "class": null,
+      "callable": "addGroupStudent",
+      "file": "lib/core/services/magic_crm_service_org.dart",
+      "line": 272,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/groups/:param/students",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/groups/:id/students"
+      ]
+    },
+    {
+      "verb": "delete",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/groups/$groupId/students/$studentId'",
+      "class": null,
+      "callable": "removeGroupStudent",
+      "file": "lib/core/services/magic_crm_service_org.dart",
+      "line": 282,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/groups/:param/students/:param",
+      "normalized_verb": "DELETE",
+      "status": "matched",
+      "server_routes": [
+        "DELETE /crm/groups/:id/students/:studentId"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/schedule-reference/branches/$branchId/hours'",
+      "class": null,
+      "callable": "getBranchScheduleHours",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 7,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/schedule-reference/branches/:param/hours",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/schedule-reference/branches/:branchId/hours"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/schedule-reference'",
+      "class": null,
+      "callable": "getScheduleReference",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 17,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/schedule-reference",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/schedule-reference"
+      ]
+    },
+    {
+      "verb": "put",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/schedule-reference/branches/$branchId/hours'",
+      "class": null,
+      "callable": "replaceBranchHours",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 35,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/schedule-reference/branches/:param/hours",
+      "normalized_verb": "PUT",
+      "status": "matched",
+      "server_routes": [
+        "PUT /crm/schedule-reference/branches/:branchId/hours"
+      ]
+    },
+    {
+      "verb": "put",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/schedule-reference/teachers/$teacherId/branches'",
+      "class": null,
+      "callable": "replaceTeacherBranches",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 51,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/schedule-reference/teachers/:param/branches",
+      "normalized_verb": "PUT",
+      "status": "matched",
+      "server_routes": [
+        "PUT /crm/schedule-reference/teachers/:teacherId/branches"
+      ]
+    },
+    {
+      "verb": "put",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/schedule-reference/teachers/$teacherId/availability'",
+      "class": null,
+      "callable": "replaceTeacherAvailability",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 62,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/schedule-reference/teachers/:param/availability",
+      "normalized_verb": "PUT",
+      "status": "matched",
+      "server_routes": [
+        "PUT /crm/schedule-reference/teachers/:teacherId/availability"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/shared-tasks'",
+      "class": null,
+      "callable": "listSharedTasks",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 80,
+      "callable_invocations": 4,
+      "normalized_path": "/crm/shared-tasks",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/shared-tasks"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/shared-tasks/calendar'",
+      "class": null,
+      "callable": "sharedTaskCalendar",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 118,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/shared-tasks/calendar",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/shared-tasks/calendar"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/shared-tasks/$taskId/history'",
+      "class": null,
+      "callable": "listSharedTaskHistory",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 143,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/shared-tasks/:param/history",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/shared-tasks/:taskId/history"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/shared-tasks/audience-preview'",
+      "class": null,
+      "callable": "previewSharedTaskAudience",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 155,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/shared-tasks/audience-preview",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/shared-tasks/audience-preview"
+      ]
+    },
+    {
+      "verb": "postIdempotent",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/shared-tasks'",
+      "class": null,
+      "callable": "createSharedTask",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 165,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/shared-tasks",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/shared-tasks"
+      ]
+    },
+    {
+      "verb": "request",
+      "target": "_api",
+      "http_method_expression": "'PATCH'",
+      "path_expression": "'/crm/shared-tasks/$taskId'",
+      "class": null,
+      "callable": "updateSharedTask",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 177,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/shared-tasks/:param",
+      "normalized_verb": "PATCH",
+      "status": "matched",
+      "server_routes": [
+        "PATCH /crm/shared-tasks/:taskId"
+      ]
+    },
+    {
+      "verb": "postIdempotent",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/shared-tasks/$taskId/close'",
+      "class": null,
+      "callable": "closeSharedTask",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 190,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/shared-tasks/:param/close",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/shared-tasks/:taskId/close"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/schedule/matrix'",
+      "class": null,
+      "callable": "getScheduleMatrix",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 227,
+      "callable_invocations": 3,
+      "normalized_path": "/crm/schedule/matrix",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/schedule/matrix"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/schedule/month-summary'",
+      "class": null,
+      "callable": "getScheduleMonthSummary",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 261,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/schedule/month-summary",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/schedule/month-summary"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/lessons'",
+      "class": null,
+      "callable": "listLessons",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 298,
+      "callable_invocations": 3,
+      "normalized_path": "/crm/lessons",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/lessons"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/clients/search'",
+      "class": null,
+      "callable": "searchClientRefs",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 314,
+      "callable_invocations": 5,
+      "normalized_path": "/crm/clients/search",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/clients/search"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/lessons'",
+      "class": null,
+      "callable": "createLesson",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 356,
+      "callable_invocations": 0,
+      "normalized_path": "/crm/lessons",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/lessons"
+      ]
+    },
+    {
+      "verb": "patch",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/lessons/teacher-rate'",
+      "class": null,
+      "callable": "setLessonsTeacherRate",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 373,
+      "callable_invocations": 2,
+      "normalized_path": "/crm/lessons/teacher-rate",
+      "normalized_verb": "PATCH",
+      "status": "matched",
+      "server_routes": [
+        "PATCH /crm/lessons/teacher-rate"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/timeline'",
+      "class": null,
+      "callable": "listTimeline",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 401,
+      "callable_invocations": 0,
+      "normalized_path": "/crm/timeline",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/timeline"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/comments'",
+      "class": null,
+      "callable": "listComments",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 418,
+      "callable_invocations": 2,
+      "normalized_path": "/crm/comments",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/comments"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/comments'",
+      "class": null,
+      "callable": "createComment",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 439,
+      "callable_invocations": 2,
+      "normalized_path": "/crm/comments",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/comments"
+      ]
+    },
+    {
+      "verb": "patch",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/comments/$commentId/visibility'",
+      "class": null,
+      "callable": "setCommentVisibility",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 459,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/comments/:param/visibility",
+      "normalized_verb": "PATCH",
+      "status": "matched",
+      "server_routes": [
+        "PATCH /crm/comments/:id/visibility"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/subscriptions'",
+      "class": null,
+      "callable": "listSubscriptions",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 498,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/subscriptions",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/subscriptions"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/students/$studentId/ledger'",
+      "class": null,
+      "callable": "getStudentLedger",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 514,
+      "callable_invocations": 0,
+      "normalized_path": "/crm/students/:param/ledger",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/students/:id/ledger"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/schedule-plans'",
+      "class": null,
+      "callable": "listSchedulePlans",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 543,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/schedule-plans",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/schedule-plans"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/schedule-plans/$planId/tray'",
+      "class": null,
+      "callable": "getSchedulePlanTray",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 560,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/schedule-plans/:param/tray",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/schedule-plans/:id/tray"
+      ]
+    },
+    {
+      "verb": "postIdempotent",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/schedule-plans'",
+      "class": null,
+      "callable": "createSchedulePlan",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 580,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/schedule-plans",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/schedule-plans"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/schedule-plans/constraints/preview'",
+      "class": null,
+      "callable": "previewSchedulePlanConstraints",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 603,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/schedule-plans/constraints/preview",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/schedule-plans/constraints/preview"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/schedule-plans/$planId/end/preview'",
+      "class": null,
+      "callable": "previewSchedulePlanEnd",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 647,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/schedule-plans/:param/end/preview",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/schedule-plans/:id/end/preview"
+      ]
+    },
+    {
+      "verb": "postIdempotent",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/schedule-plans/$planId/end'",
+      "class": null,
+      "callable": "endSchedulePlan",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 666,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/schedule-plans/:param/end",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/schedule-plans/:id/end"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/schedule-series'",
+      "class": null,
+      "callable": "listScheduleSeries",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 693,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/schedule-series",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/schedule-series"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/schedule-series'",
+      "class": null,
+      "callable": "createScheduleSeries",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 753,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/schedule-series",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/schedule-series"
+      ]
+    },
+    {
+      "verb": "patch",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/schedule-series/$id'",
+      "class": null,
+      "callable": "updateScheduleSeries",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 781,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/schedule-series/:param",
+      "normalized_verb": "PATCH",
+      "status": "matched",
+      "server_routes": [
+        "PATCH /crm/schedule-series/:id"
+      ]
+    },
+    {
+      "verb": "delete",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/schedule-series/$id'",
+      "class": null,
+      "callable": "deleteScheduleSeries",
+      "file": "lib/core/services/magic_crm_service_schedule.dart",
+      "line": 791,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/schedule-series/:param",
+      "normalized_verb": "DELETE",
+      "status": "matched",
+      "server_routes": [
+        "DELETE /crm/schedule-series/:id"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/chats'",
+      "class": "MagicMessengerService",
+      "callable": "listChats",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 26,
+      "callable_invocations": 3,
+      "normalized_path": "/messenger/chats",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /messenger/chats"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/chats/direct'",
+      "class": "MagicMessengerService",
+      "callable": "ensureDirectChat",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 50,
+      "callable_invocations": 2,
+      "normalized_path": "/messenger/chats/direct",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /messenger/chats/direct"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/chats/direct'",
+      "class": "MagicMessengerService",
+      "callable": "ensureAdministrationChat",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 58,
+      "callable_invocations": 1,
+      "normalized_path": "/messenger/chats/direct",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /messenger/chats/direct"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/chats/$chatId'",
+      "class": "MagicMessengerService",
+      "callable": "getChat",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 66,
+      "callable_invocations": 1,
+      "normalized_path": "/messenger/chats/:param",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /messenger/chats/:chatId"
+      ]
+    },
+    {
+      "verb": "put",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/chats/$chatId/mute'",
+      "class": "MagicMessengerService",
+      "callable": "setChatMute",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 73,
+      "callable_invocations": 1,
+      "normalized_path": "/messenger/chats/:param/mute",
+      "normalized_verb": "PUT",
+      "status": "matched",
+      "server_routes": [
+        "PUT /messenger/chats/:chatId/mute"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/groups'",
+      "class": "MagicMessengerService",
+      "callable": "createGroup",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 83,
+      "callable_invocations": 2,
+      "normalized_path": "/messenger/groups",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /messenger/groups"
+      ]
+    },
+    {
+      "verb": "patch",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/groups/$chatId/members'",
+      "class": "MagicMessengerService",
+      "callable": "updateGroupMembers",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 95,
+      "callable_invocations": 1,
+      "normalized_path": "/messenger/groups/:param/members",
+      "normalized_verb": "PATCH",
+      "status": "matched",
+      "server_routes": [
+        "PATCH /messenger/groups/:id/members"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/chats/$chatId/assign'",
+      "class": "MagicMessengerService",
+      "callable": "assignChat",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 108,
+      "callable_invocations": 1,
+      "normalized_path": "/messenger/chats/:param/assign",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /messenger/chats/:chatId/assign"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/chats/$chatId/unassign'",
+      "class": "MagicMessengerService",
+      "callable": "unassignChat",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 116,
+      "callable_invocations": 1,
+      "normalized_path": "/messenger/chats/:param/unassign",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /messenger/chats/:chatId/unassign"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/chats/$chatId/archive'",
+      "class": "MagicMessengerService",
+      "callable": "archiveChat",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 124,
+      "callable_invocations": 0,
+      "normalized_path": "/messenger/chats/:param/archive",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /messenger/chats/:chatId/archive"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/chats/$chatId/unarchive'",
+      "class": "MagicMessengerService",
+      "callable": "unarchiveChat",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 132,
+      "callable_invocations": 0,
+      "normalized_path": "/messenger/chats/:param/unarchive",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /messenger/chats/:chatId/unarchive"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/groups/$chatId/leave'",
+      "class": "MagicMessengerService",
+      "callable": "leaveGroup",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 140,
+      "callable_invocations": 1,
+      "normalized_path": "/messenger/groups/:param/leave",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /messenger/groups/:id/leave"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/chats/$chatId/members'",
+      "class": "MagicMessengerService",
+      "callable": "listChatMembers",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 147,
+      "callable_invocations": 2,
+      "normalized_path": "/messenger/chats/:param/members",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /messenger/chats/:chatId/members"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/chats/$chatId/messages'",
+      "class": "MagicMessengerService",
+      "callable": "listMessages",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 161,
+      "callable_invocations": 3,
+      "normalized_path": "/messenger/chats/:param/messages",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /messenger/chats/:chatId/messages"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/chats/$chatId/messages'",
+      "class": "MagicMessengerService",
+      "callable": "sendMessage",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 184,
+      "callable_invocations": 4,
+      "normalized_path": "/messenger/chats/:param/messages",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /messenger/chats/:chatId/messages"
+      ]
+    },
+    {
+      "verb": "delete",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/messages/$messageId'",
+      "class": "MagicMessengerService",
+      "callable": "deleteMessage",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 195,
+      "callable_invocations": 1,
+      "normalized_path": "/messenger/messages/:param",
+      "normalized_verb": "DELETE",
+      "status": "matched",
+      "server_routes": [
+        "DELETE /messenger/messages/:id"
+      ]
+    },
+    {
+      "verb": "patch",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/messages/$messageId'",
+      "class": "MagicMessengerService",
+      "callable": "updateMessage",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 206,
+      "callable_invocations": 1,
+      "normalized_path": "/messenger/messages/:param",
+      "normalized_verb": "PATCH",
+      "status": "matched",
+      "server_routes": [
+        "PATCH /messenger/messages/:id"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/messages/$messageId/pin'",
+      "class": "MagicMessengerService",
+      "callable": "pinMessage",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 214,
+      "callable_invocations": 1,
+      "normalized_path": "/messenger/messages/:param/pin",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /messenger/messages/:id/pin"
+      ]
+    },
+    {
+      "verb": "delete",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/messages/$messageId/pin'",
+      "class": "MagicMessengerService",
+      "callable": "unpinMessage",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 221,
+      "callable_invocations": 1,
+      "normalized_path": "/messenger/messages/:param/pin",
+      "normalized_verb": "DELETE",
+      "status": "matched",
+      "server_routes": [
+        "DELETE /messenger/messages/:id/pin"
+      ]
+    },
+    {
+      "verb": "put",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/messages/$messageId/reactions/${Uri.encodeComponent(emoji)}'",
+      "class": "MagicMessengerService",
+      "callable": "setReaction",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 231,
+      "callable_invocations": 1,
+      "normalized_path": "/messenger/messages/:param/reactions/:param",
+      "normalized_verb": "PUT",
+      "status": "matched",
+      "server_routes": [
+        "PUT /messenger/messages/:id/reactions/:emoji"
+      ]
+    },
+    {
+      "verb": "delete",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/messages/$messageId/reactions/${Uri.encodeComponent(emoji)}'",
+      "class": "MagicMessengerService",
+      "callable": "removeReaction",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 240,
+      "callable_invocations": 1,
+      "normalized_path": "/messenger/messages/:param/reactions/:param",
+      "normalized_verb": "DELETE",
+      "status": "matched",
+      "server_routes": [
+        "DELETE /messenger/messages/:id/reactions/:emoji"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/chats/$chatId/read'",
+      "class": "MagicMessengerService",
+      "callable": "markRead",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 246,
+      "callable_invocations": 2,
+      "normalized_path": "/messenger/chats/:param/read",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /messenger/chats/:chatId/read"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/channels'",
+      "class": "MagicMessengerService",
+      "callable": "listChannels",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 253,
+      "callable_invocations": 2,
+      "normalized_path": "/messenger/channels",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /messenger/channels"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/channels'",
+      "class": "MagicMessengerService",
+      "callable": "createChannel",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 264,
+      "callable_invocations": 0,
+      "normalized_path": "/messenger/channels",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /messenger/channels"
+      ]
+    },
+    {
+      "verb": "patch",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/channels/$channelId'",
+      "class": "MagicMessengerService",
+      "callable": "updateChannel",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 281,
+      "callable_invocations": 1,
+      "normalized_path": "/messenger/channels/:param",
+      "normalized_verb": "PATCH",
+      "status": "matched",
+      "server_routes": [
+        "PATCH /messenger/channels/:id"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/channels/$channelId/access'",
+      "class": "MagicMessengerService",
+      "callable": "getChannelAccess",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 293,
+      "callable_invocations": 0,
+      "normalized_path": "/messenger/channels/:param/access",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /messenger/channels/:id/access"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/channels/$channelId/permissions'",
+      "class": "MagicMessengerService",
+      "callable": "listChannelPermissions",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 306,
+      "callable_invocations": 0,
+      "normalized_path": "/messenger/channels/:param/permissions",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /messenger/channels/:id/permissions"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/channels/$channelId/posts'",
+      "class": "MagicMessengerService",
+      "callable": "listChannelPosts",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 320,
+      "callable_invocations": 3,
+      "normalized_path": "/messenger/channels/:param/posts",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /messenger/channels/:id/posts"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/channels/$channelId/posts'",
+      "class": "MagicMessengerService",
+      "callable": "createChannelPost",
+      "file": "lib/core/services/magic_messenger_service.dart",
+      "line": 332,
+      "callable_invocations": 1,
+      "normalized_path": "/messenger/channels/:param/posts",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /messenger/channels/:id/posts"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/notifications'",
+      "class": "MagicNotificationsService",
+      "callable": "list",
+      "file": "lib/core/services/magic_notifications_service.dart",
+      "line": 28,
+      "callable_invocations": 2,
+      "normalized_path": "/notifications",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /notifications"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/notifications/read-all'",
+      "class": "MagicNotificationsService",
+      "callable": "markAllRead",
+      "file": "lib/core/services/magic_notifications_service.dart",
+      "line": 38,
+      "callable_invocations": 1,
+      "normalized_path": "/notifications/read-all",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /notifications/read-all"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/admin/notifications/preferences'",
+      "class": "MagicNotificationsService",
+      "callable": "listPreferences",
+      "file": "lib/core/services/magic_notifications_service.dart",
+      "line": 44,
+      "callable_invocations": 1,
+      "normalized_path": "/admin/notifications/preferences",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /admin/notifications/preferences"
+      ]
+    },
+    {
+      "verb": "put",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/admin/notifications/preferences'",
+      "class": "MagicNotificationsService",
+      "callable": "updatePreference",
+      "file": "lib/core/services/magic_notifications_service.dart",
+      "line": 61,
+      "callable_invocations": 1,
+      "normalized_path": "/admin/notifications/preferences",
+      "normalized_verb": "PUT",
+      "status": "matched",
+      "server_routes": [
+        "PUT /admin/notifications/preferences"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/notifications/$id/read'",
+      "class": "MagicNotificationsService",
+      "callable": "markRead",
+      "file": "lib/core/services/magic_notifications_service.dart",
+      "line": 74,
+      "callable_invocations": 2,
+      "normalized_path": "/notifications/:param/read",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /notifications/:id/read"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/notifications/devices'",
+      "class": "MagicNotificationsService",
+      "callable": "registerDevice",
+      "file": "lib/core/services/magic_notifications_service.dart",
+      "line": 84,
+      "callable_invocations": 1,
+      "normalized_path": "/notifications/devices",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /notifications/devices"
+      ]
+    },
+    {
+      "verb": "delete",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/notifications/devices/$id'",
+      "class": "MagicNotificationsService",
+      "callable": "deleteDevice",
+      "file": "lib/core/services/magic_notifications_service.dart",
+      "line": 101,
+      "callable_invocations": 0,
+      "normalized_path": "/notifications/devices/:param",
+      "normalized_verb": "DELETE",
+      "status": "matched",
+      "server_routes": [
+        "DELETE /notifications/devices/:id"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/admin/notifications'",
+      "class": "MagicNotificationsService",
+      "callable": "adminSend",
+      "file": "lib/core/services/magic_notifications_service.dart",
+      "line": 122,
+      "callable_invocations": 0,
+      "normalized_path": "/admin/notifications",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /admin/notifications"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/admin/profiles'",
+      "class": "MagicProfileAdminService",
+      "callable": "listProfiles",
+      "file": "lib/core/services/magic_profile_admin_service.dart",
+      "line": 29,
+      "callable_invocations": 6,
+      "normalized_path": "/admin/profiles",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /admin/profiles"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/admin/profiles/$profileId'",
+      "class": "MagicProfileAdminService",
+      "callable": "getProfile",
+      "file": "lib/core/services/magic_profile_admin_service.dart",
+      "line": 39,
+      "callable_invocations": 1,
+      "normalized_path": "/admin/profiles/:param",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /admin/profiles/:id"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/profile/me'",
+      "class": "MagicProfileAdminService",
+      "callable": "getMyProfile",
+      "file": "lib/core/services/magic_profile_admin_service.dart",
+      "line": 53,
+      "callable_invocations": 1,
+      "normalized_path": "/profile/me",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /profile/me"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/admin/profiles/$profileId/links'",
+      "class": "MagicProfileAdminService",
+      "callable": "getProfileLinks",
+      "file": "lib/core/services/magic_profile_admin_service.dart",
+      "line": 59,
+      "callable_invocations": 1,
+      "normalized_path": "/admin/profiles/:param/links",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /admin/profiles/:id/links"
+      ]
+    },
+    {
+      "verb": "patch",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/admin/profiles/$profileId/role'",
+      "class": "MagicProfileAdminService",
+      "callable": "updateRole",
+      "file": "lib/core/services/magic_profile_admin_service.dart",
+      "line": 77,
+      "callable_invocations": 0,
+      "normalized_path": "/admin/profiles/:param/role",
+      "normalized_verb": "PATCH",
+      "status": "matched",
+      "server_routes": [
+        "PATCH /admin/profiles/:id/role"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/admin/deletion-requests'",
+      "class": "MagicProfileAdminService",
+      "callable": "listDeletionRequests",
+      "file": "lib/core/services/magic_profile_admin_service.dart",
+      "line": 92,
+      "callable_invocations": 1,
+      "normalized_path": "/admin/deletion-requests",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /admin/deletion-requests"
+      ]
+    },
+    {
+      "verb": "patch",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/admin/deletion-requests/$id'",
+      "class": "MagicProfileAdminService",
+      "callable": "updateDeletionRequest",
+      "file": "lib/core/services/magic_profile_admin_service.dart",
+      "line": 110,
+      "callable_invocations": 1,
+      "normalized_path": "/admin/deletion-requests/:param",
+      "normalized_verb": "PATCH",
+      "status": "matched",
+      "server_routes": [
+        "PATCH /admin/deletion-requests/:id"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/admin/profiles/$profileId/link-candidates'",
+      "class": "MagicProfileAdminService",
+      "callable": "listLinkCandidates",
+      "file": "lib/core/services/magic_profile_admin_service.dart",
+      "line": 117,
+      "callable_invocations": 1,
+      "normalized_path": "/admin/profiles/:param/link-candidates",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /admin/profiles/:id/link-candidates"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/admin/profiles/$profileId/links/auto'",
+      "class": "MagicProfileAdminService",
+      "callable": "autoLinkByPhone",
+      "file": "lib/core/services/magic_profile_admin_service.dart",
+      "line": 129,
+      "callable_invocations": 2,
+      "normalized_path": "/admin/profiles/:param/links/auto",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /admin/profiles/:id/links/auto"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/admin/profiles/$profileId/links'",
+      "class": "MagicProfileAdminService",
+      "callable": "linkCrmEntity",
+      "file": "lib/core/services/magic_profile_admin_service.dart",
+      "line": 139,
+      "callable_invocations": 1,
+      "normalized_path": "/admin/profiles/:param/links",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /admin/profiles/:id/links"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/admin/profiles/$profileId/notes'",
+      "class": "MagicProfileAdminService",
+      "callable": "listProfileNotes",
+      "file": "lib/core/services/magic_profile_admin_service.dart",
+      "line": 146,
+      "callable_invocations": 1,
+      "normalized_path": "/admin/profiles/:param/notes",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /admin/profiles/:id/notes"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/admin/profiles/$profileId/notes'",
+      "class": "MagicProfileAdminService",
+      "callable": "createProfileNote",
+      "file": "lib/core/services/magic_profile_admin_service.dart",
+      "line": 161,
+      "callable_invocations": 1,
+      "normalized_path": "/admin/profiles/:param/notes",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /admin/profiles/:id/notes"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/settings/admin-chat-avatar'",
+      "class": "MagicSettingsService",
+      "callable": "getAdminChatAvatar",
+      "file": "lib/core/services/magic_settings_service.dart",
+      "line": 83,
+      "callable_invocations": 2,
+      "normalized_path": "/settings/admin-chat-avatar",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /settings/admin-chat-avatar"
+      ]
+    },
+    {
+      "verb": "patch",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/admin/settings/admin-chat-avatar'",
+      "class": "MagicSettingsService",
+      "callable": "updateAdminChatAvatar",
+      "file": "lib/core/services/magic_settings_service.dart",
+      "line": 98,
+      "callable_invocations": 0,
+      "normalized_path": "/admin/settings/admin-chat-avatar",
+      "normalized_verb": "PATCH",
+      "status": "matched",
+      "server_routes": [
+        "PATCH /admin/settings/admin-chat-avatar"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/settings/crm-custom-fields'",
+      "class": "MagicSettingsService",
+      "callable": "getCrmCustomFields",
+      "file": "lib/core/services/magic_settings_service.dart",
+      "line": 110,
+      "callable_invocations": 2,
+      "normalized_path": "/settings/crm-custom-fields",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /settings/crm-custom-fields"
+      ]
+    },
+    {
+      "verb": "patch",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/admin/settings/crm-custom-fields'",
+      "class": "MagicSettingsService",
+      "callable": "updateCrmCustomFields",
+      "file": "lib/core/services/magic_settings_service.dart",
+      "line": 126,
+      "callable_invocations": 0,
+      "normalized_path": "/admin/settings/crm-custom-fields",
+      "normalized_verb": "PATCH",
+      "status": "matched",
+      "server_routes": [
+        "PATCH /admin/settings/crm-custom-fields"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/sections/unseen'",
+      "class": "SectionUnseenService",
+      "callable": "unseen",
+      "file": "lib/core/services/section_unseen_service.dart",
+      "line": 53,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/sections/unseen",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/sections/unseen"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/sections/seen'",
+      "class": "SectionUnseenService",
+      "callable": "markSeen",
+      "file": "lib/core/services/section_unseen_service.dart",
+      "line": 59,
+      "callable_invocations": 2,
+      "normalized_path": "/crm/sections/seen",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/sections/seen"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_dio",
+      "http_method_expression": null,
+      "path_expression": "manifestUrl",
+      "class": "WindowsUpdateService",
+      "callable": "check",
+      "file": "lib/core/update/windows_update_service.dart",
+      "line": 186,
+      "callable_invocations": 1,
+      "normalized_path": null,
+      "normalized_verb": "GET",
+      "status": "external_or_dynamic",
+      "server_routes": []
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/configuration/lesson-decisions'",
+      "class": "LessonDecisionController",
+      "callable": "loadCatalog",
+      "file": "lib/features/admin/presentation/widgets/lesson_decision_flow.dart",
+      "line": 156,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/configuration/lesson-decisions",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/configuration/lesson-decisions"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/lessons/${lesson['id']}/${operation.key}/preview'",
+      "class": "LessonDecisionController",
+      "callable": "preview",
+      "file": "lib/features/admin/presentation/widgets/lesson_decision_flow.dart",
+      "line": 187,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/lessons/:param/:param/preview",
+      "normalized_verb": "POST",
+      "status": "ambiguous",
+      "server_routes": [
+        "POST /crm/lessons/:id/settle/preview",
+        "POST /crm/lessons/:id/cancel/preview",
+        "POST /crm/lessons/:id/reschedule/preview",
+        "POST /crm/lessons/:id/settlement-correction/preview",
+        "POST /crm/lessons/:id/planned-settlement/preview"
+      ]
+    },
+    {
+      "verb": "request",
+      "target": "_api",
+      "http_method_expression": "'PUT'",
+      "path_expression": "'/crm/lessons/${lesson['id']}/${operation.key}'",
+      "class": "LessonDecisionController",
+      "callable": "commit",
+      "file": "lib/features/admin/presentation/widgets/lesson_decision_flow.dart",
+      "line": 210,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/lessons/:param/:param",
+      "normalized_verb": "PUT",
+      "status": "matched",
+      "server_routes": [
+        "PUT /crm/lessons/:id/planned-settlement"
+      ]
+    },
+    {
+      "verb": "postIdempotent",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/lessons/${lesson['id']}/${operation.key}'",
+      "class": "LessonDecisionController",
+      "callable": "commit",
+      "file": "lib/features/admin/presentation/widgets/lesson_decision_flow.dart",
+      "line": 217,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/lessons/:param/:param",
+      "normalized_verb": "POST",
+      "status": "ambiguous",
+      "server_routes": [
+        "POST /crm/lessons/:id/settle",
+        "POST /crm/lessons/:id/cancel",
+        "POST /crm/lessons/:id/reschedule",
+        "POST /crm/lessons/:id/settlement-correction"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/auth/login'",
+      "class": "MagicAuthService",
+      "callable": "signInWithPassword",
+      "file": "lib/features/auth/data/services/magic_auth_service.dart",
+      "line": 144,
+      "callable_invocations": 1,
+      "normalized_path": "/auth/login",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /auth/login"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/auth/signup'",
+      "class": "MagicAuthService",
+      "callable": "signUpWithPassword",
+      "file": "lib/features/auth/data/services/magic_auth_service.dart",
+      "line": 171,
+      "callable_invocations": 1,
+      "normalized_path": "/auth/signup",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /auth/signup"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/auth/logout-all'",
+      "class": "MagicAuthService",
+      "callable": "logoutAllDevices",
+      "file": "lib/features/auth/data/services/magic_auth_service.dart",
+      "line": 204,
+      "callable_invocations": 0,
+      "normalized_path": "/auth/logout-all",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /auth/logout-all"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/auth/otp/request'",
+      "class": "MagicAuthService",
+      "callable": "sendEmailOtp",
+      "file": "lib/features/auth/data/services/magic_auth_service.dart",
+      "line": 212,
+      "callable_invocations": 3,
+      "normalized_path": "/auth/otp/request",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /auth/otp/request"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/auth/otp/verify'",
+      "class": "MagicAuthService",
+      "callable": "verifyEmailOtp",
+      "file": "lib/features/auth/data/services/magic_auth_service.dart",
+      "line": 223,
+      "callable_invocations": 2,
+      "normalized_path": "/auth/otp/verify",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /auth/otp/verify"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/auth/password-reset/request'",
+      "class": "MagicAuthService",
+      "callable": "requestPasswordReset",
+      "file": "lib/features/auth/data/services/magic_auth_service.dart",
+      "line": 248,
+      "callable_invocations": 1,
+      "normalized_path": "/auth/password-reset/request",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /auth/password-reset/request"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/auth/password-reset/confirm'",
+      "class": "MagicAuthService",
+      "callable": "resetPassword",
+      "file": "lib/features/auth/data/services/magic_auth_service.dart",
+      "line": 259,
+      "callable_invocations": 1,
+      "normalized_path": "/auth/password-reset/confirm",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /auth/password-reset/confirm"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/auth/password'",
+      "class": "MagicAuthService",
+      "callable": "setPassword",
+      "file": "lib/features/auth/data/services/magic_auth_service.dart",
+      "line": 267,
+      "callable_invocations": 1,
+      "normalized_path": "/auth/password",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /auth/password"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/auth/identities'",
+      "class": "MagicAuthService",
+      "callable": "getUserIdentities",
+      "file": "lib/features/auth/data/services/magic_auth_service.dart",
+      "line": 271,
+      "callable_invocations": 1,
+      "normalized_path": "/auth/identities",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /auth/identities"
+      ]
+    },
+    {
+      "verb": "patch",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/profile/me'",
+      "class": "MagicAuthService",
+      "callable": "setEmailOtpMfaEnabled",
+      "file": "lib/features/auth/data/services/magic_auth_service.dart",
+      "line": 289,
+      "callable_invocations": 1,
+      "normalized_path": "/profile/me",
+      "normalized_verb": "PATCH",
+      "status": "matched",
+      "server_routes": [
+        "PATCH /profile/me"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/profile/me'",
+      "class": "MagicAuthService",
+      "callable": "currentProfile",
+      "file": "lib/features/auth/data/services/magic_auth_service.dart",
+      "line": 300,
+      "callable_invocations": 6,
+      "normalized_path": "/profile/me",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /profile/me"
+      ]
+    },
+    {
+      "verb": "patch",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/profile/me'",
+      "class": "MagicAuthService",
+      "callable": "updateCurrentProfile",
+      "file": "lib/features/auth/data/services/magic_auth_service.dart",
+      "line": 311,
+      "callable_invocations": 1,
+      "normalized_path": "/profile/me",
+      "normalized_verb": "PATCH",
+      "status": "matched",
+      "server_routes": [
+        "PATCH /profile/me"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/legal/gate'",
+      "class": "MagicReleaseGateService",
+      "callable": "getGateStatus",
+      "file": "lib/features/auth/data/services/magic_release_gate_service.dart",
+      "line": 10,
+      "callable_invocations": 1,
+      "normalized_path": "/legal/gate",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /legal/gate"
+      ]
+    },
+    {
+      "verb": "patch",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/profile/me'",
+      "class": "MagicReleaseGateService",
+      "callable": "completeOnboarding",
+      "file": "lib/features/auth/data/services/magic_release_gate_service.dart",
+      "line": 19,
+      "callable_invocations": 1,
+      "normalized_path": "/profile/me",
+      "normalized_verb": "PATCH",
+      "status": "matched",
+      "server_routes": [
+        "PATCH /profile/me"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/legal/documents/current'",
+      "class": "MagicReleaseGateService",
+      "callable": "getCurrentLegalDocuments",
+      "file": "lib/features/auth/data/services/magic_release_gate_service.dart",
+      "line": 30,
+      "callable_invocations": 2,
+      "normalized_path": "/legal/documents/current",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /legal/documents/current"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/legal/consents/current'",
+      "class": "MagicReleaseGateService",
+      "callable": "acceptCurrentLegalDocuments",
+      "file": "lib/features/auth/data/services/magic_release_gate_service.dart",
+      "line": 39,
+      "callable_invocations": 1,
+      "normalized_path": "/legal/consents/current",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /legal/consents/current"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/profile/deletion-request'",
+      "class": "MagicReleaseGateService",
+      "callable": "requestAccountDeletion",
+      "file": "lib/features/auth/data/services/magic_release_gate_service.dart",
+      "line": 47,
+      "callable_invocations": 1,
+      "normalized_path": "/profile/deletion-request",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /profile/deletion-request"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/profile/deletion-request'",
+      "class": "MagicReleaseGateService",
+      "callable": "getPendingDeletionRequest",
+      "file": "lib/features/auth/data/services/magic_release_gate_service.dart",
+      "line": 59,
+      "callable_invocations": 1,
+      "normalized_path": "/profile/deletion-request",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /profile/deletion-request"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/messenger/chats/direct'",
+      "class": "MagicReleaseGateService",
+      "callable": "ensureAdminChatThread",
+      "file": "lib/features/auth/data/services/magic_release_gate_service.dart",
+      "line": 67,
+      "callable_invocations": 1,
+      "normalized_path": "/messenger/chats/direct",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /messenger/chats/direct"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/clients/$entityType/$entityId/card'",
+      "class": "ClientCardV4Api",
+      "callable": "loadCard",
+      "file": "lib/features/crm/presentation/client_card/client_card_v4_api.dart",
+      "line": 18,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/clients/:param/:param/card",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/clients/:type/:id/card"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/clients/archive/preview'",
+      "class": "ClientCardV4Api",
+      "callable": "previewArchive",
+      "file": "lib/features/crm/presentation/client_card/client_card_v4_api.dart",
+      "line": 27,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/clients/archive/preview",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/clients/archive/preview"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/clients/archive'",
+      "class": "ClientCardV4Api",
+      "callable": "archive",
+      "file": "lib/features/crm/presentation/client_card/client_card_v4_api.dart",
+      "line": 39,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/clients/archive",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/clients/archive"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/configuration/lesson-decisions'",
+      "class": "_RecurringSchedulePlanSectionState",
+      "callable": "_references",
+      "file": "lib/features/crm/presentation/client_card/recurring_schedule_plan_section.dart",
+      "line": 483,
+      "callable_invocations": 2,
+      "normalized_path": "/crm/configuration/lesson-decisions",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/configuration/lesson-decisions"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/client-config/sources'",
+      "class": "ClientFormsApi",
+      "callable": "listSources",
+      "file": "lib/features/crm/presentation/client_forms/client_forms_api.dart",
+      "line": 17,
+      "callable_invocations": 3,
+      "normalized_path": "/crm/client-config/sources",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/client-config/sources"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/client-config/fields'",
+      "class": "ClientFormsApi",
+      "callable": "listFields",
+      "file": "lib/features/crm/presentation/client_forms/client_forms_api.dart",
+      "line": 28,
+      "callable_invocations": 2,
+      "normalized_path": "/crm/client-config/fields",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/client-config/fields"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/branches'",
+      "class": "ClientFormsApi",
+      "callable": "listBranches",
+      "file": "lib/features/crm/presentation/client_forms/client_forms_api.dart",
+      "line": 39,
+      "callable_invocations": 23,
+      "normalized_path": "/crm/branches",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/branches"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/configuration/draft'",
+      "class": "ClientFormsApi",
+      "callable": "getConfigurationDraft",
+      "file": "lib/features/crm/presentation/client_forms/client_forms_api.dart",
+      "line": 47,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/configuration/draft",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/configuration/draft"
+      ]
+    },
+    {
+      "verb": "put",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/configuration/draft'",
+      "class": "ClientFormsApi",
+      "callable": "saveConfigurationDraft",
+      "file": "lib/features/crm/presentation/client_forms/client_forms_api.dart",
+      "line": 58,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/configuration/draft",
+      "normalized_verb": "PUT",
+      "status": "matched",
+      "server_routes": [
+        "PUT /crm/configuration/draft"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/configuration/preview'",
+      "class": "ClientFormsApi",
+      "callable": "previewConfiguration",
+      "file": "lib/features/crm/presentation/client_forms/client_forms_api.dart",
+      "line": 73,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/configuration/preview",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/configuration/preview"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/configuration/publish'",
+      "class": "ClientFormsApi",
+      "callable": "publishConfiguration",
+      "file": "lib/features/crm/presentation/client_forms/client_forms_api.dart",
+      "line": 89,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/configuration/publish",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/configuration/publish"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/configuration/revisions'",
+      "class": "ClientFormsApi",
+      "callable": "listConfigurationRevisions",
+      "file": "lib/features/crm/presentation/client_forms/client_forms_api.dart",
+      "line": 103,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/configuration/revisions",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /crm/configuration/revisions"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/configuration/rollback'",
+      "class": "ClientFormsApi",
+      "callable": "rollbackConfiguration",
+      "file": "lib/features/crm/presentation/client_forms/client_forms_api.dart",
+      "line": 116,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/configuration/rollback",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/configuration/rollback"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/leads'",
+      "class": "ClientFormsApi",
+      "callable": "createLead",
+      "file": "lib/features/crm/presentation/client_forms/client_forms_api.dart",
+      "line": 136,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/leads",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/leads"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/students'",
+      "class": "ClientFormsApi",
+      "callable": "createStudent",
+      "file": "lib/features/crm/presentation/client_forms/client_forms_api.dart",
+      "line": 159,
+      "callable_invocations": 1,
+      "normalized_path": "/crm/students",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/students"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/client-config/sources'",
+      "class": "ClientFormsApi",
+      "callable": "createSource",
+      "file": "lib/features/crm/presentation/client_forms/client_forms_api.dart",
+      "line": 177,
+      "callable_invocations": 0,
+      "normalized_path": "/crm/client-config/sources",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/client-config/sources"
+      ]
+    },
+    {
+      "verb": "patch",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/client-config/sources/$id'",
+      "class": "ClientFormsApi",
+      "callable": "updateSource",
+      "file": "lib/features/crm/presentation/client_forms/client_forms_api.dart",
+      "line": 193,
+      "callable_invocations": 0,
+      "normalized_path": "/crm/client-config/sources/:param",
+      "normalized_verb": "PATCH",
+      "status": "matched",
+      "server_routes": [
+        "PATCH /crm/client-config/sources/:id"
+      ]
+    },
+    {
+      "verb": "delete",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/client-config/sources/$id'",
+      "class": "ClientFormsApi",
+      "callable": "archiveSource",
+      "file": "lib/features/crm/presentation/client_forms/client_forms_api.dart",
+      "line": 208,
+      "callable_invocations": 0,
+      "normalized_path": "/crm/client-config/sources/:param",
+      "normalized_verb": "DELETE",
+      "status": "matched",
+      "server_routes": [
+        "DELETE /crm/client-config/sources/:id"
+      ]
+    },
+    {
+      "verb": "post",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/client-config/fields'",
+      "class": "ClientFormsApi",
+      "callable": "createField",
+      "file": "lib/features/crm/presentation/client_forms/client_forms_api.dart",
+      "line": 222,
+      "callable_invocations": 0,
+      "normalized_path": "/crm/client-config/fields",
+      "normalized_verb": "POST",
+      "status": "matched",
+      "server_routes": [
+        "POST /crm/client-config/fields"
+      ]
+    },
+    {
+      "verb": "patch",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/client-config/fields/$id'",
+      "class": "ClientFormsApi",
+      "callable": "updateField",
+      "file": "lib/features/crm/presentation/client_forms/client_forms_api.dart",
+      "line": 244,
+      "callable_invocations": 0,
+      "normalized_path": "/crm/client-config/fields/:param",
+      "normalized_verb": "PATCH",
+      "status": "matched",
+      "server_routes": [
+        "PATCH /crm/client-config/fields/:id"
+      ]
+    },
+    {
+      "verb": "delete",
+      "target": "_api",
+      "http_method_expression": null,
+      "path_expression": "'/crm/client-config/fields/$id'",
+      "class": "ClientFormsApi",
+      "callable": "archiveField",
+      "file": "lib/features/crm/presentation/client_forms/client_forms_api.dart",
+      "line": 261,
+      "callable_invocations": 0,
+      "normalized_path": "/crm/client-config/fields/:param",
+      "normalized_verb": "DELETE",
+      "status": "matched",
+      "server_routes": [
+        "DELETE /crm/client-config/fields/:id"
+      ]
+    },
+    {
+      "verb": "get",
+      "target": "dio",
+      "http_method_expression": null,
+      "path_expression": "'${Env.magicApiBaseUrl}/health'",
+      "class": null,
+      "callable": "warmApiConnection",
+      "file": "lib/main.dart",
+      "line": 78,
+      "callable_invocations": 1,
+      "normalized_path": "/:param/health",
+      "normalized_verb": "GET",
+      "status": "matched",
+      "server_routes": [
+        "GET /files/:id"
+      ]
+    }
+  ],
+  "server_routes_without_direct_literal_flutter_call": [
+    {
+      "id": "DELETE /crm/lessons/:id",
+      "verb": "DELETE",
+      "route": "/crm/lessons/:id",
+      "controller": "deleteLesson",
+      "roles": [],
+      "owner": "SYS-SCHEDULE",
+      "file": "server/src/crm/crm-schedule.controller.ts",
+      "line": 446
+    },
+    {
+      "id": "POST /crm/students/:studentId/subscriptions/issue",
+      "verb": "POST",
+      "route": "/crm/students/:studentId/subscriptions/issue",
+      "controller": "issueSubscription",
+      "roles": [],
+      "owner": "SYS-COMMERCE-INTEGRITY",
+      "file": "server/src/crm/subscription-commerce.controller.ts",
+      "line": 50
+    },
+    {
+      "id": "POST /crm/students/:id/transfer",
+      "verb": "POST",
+      "route": "/crm/students/:id/transfer",
+      "controller": "createAccountTransfer",
+      "roles": [],
+      "owner": "SYS-COMMERCE-INTEGRITY",
+      "file": "server/src/crm/crm-students.controller.ts",
+      "line": 140
+    },
+    {
+      "id": "POST /public/lead-webhook",
+      "verb": "POST",
+      "route": "/public/lead-webhook",
+      "controller": "receiveLead",
+      "roles": [],
+      "owner": "SYS-CRM-WORKSPACE",
+      "file": "server/src/crm/lead-webhook.controller.ts",
+      "line": 27
+    },
+    {
+      "id": "POST /crm/students/:id/invite",
+      "verb": "POST",
+      "route": "/crm/students/:id/invite",
+      "controller": "inviteStudent",
+      "roles": [],
+      "owner": "SYS-CRM-WORKSPACE",
+      "file": "server/src/crm/crm-students.controller.ts",
+      "line": 194
+    },
+    {
+      "id": "POST /crm/lessons/transitions/bulk",
+      "verb": "POST",
+      "route": "/crm/lessons/transitions/bulk",
+      "controller": "bulkLessonTransitions",
+      "roles": [],
+      "owner": "SYS-SCHEDULE",
+      "file": "server/src/crm/crm-schedule.controller.ts",
+      "line": 357
+    },
+    {
+      "id": "PATCH /crm/branches/:branchId/disciplines/order",
+      "verb": "PATCH",
+      "route": "/crm/branches/:branchId/disciplines/order",
+      "controller": "reorderBranchDisciplines",
+      "roles": [],
+      "owner": "SYS-CRM-WORKSPACE",
+      "file": "server/src/crm/crm-reference-data.controller.ts",
+      "line": 85
+    },
+    {
+      "id": "POST /crm/loss-reasons",
+      "verb": "POST",
+      "route": "/crm/loss-reasons",
+      "controller": "createLossReason",
+      "roles": [],
+      "owner": "SYS-CRM-WORKSPACE",
+      "file": "server/src/crm/crm-reference-data.controller.ts",
+      "line": 68
+    },
+    {
+      "id": "POST /crm/disciplines",
+      "verb": "POST",
+      "route": "/crm/disciplines",
+      "controller": "createDiscipline",
+      "roles": [],
+      "owner": "SYS-CRM-WORKSPACE",
+      "file": "server/src/crm/crm-reference-data.controller.ts",
+      "line": 60
+    },
+    {
+      "id": "GET /crm/lead-sources",
+      "verb": "GET",
+      "route": "/crm/lead-sources",
+      "controller": "listLeadSources",
+      "roles": [],
+      "owner": "SYS-CRM-WORKSPACE",
+      "file": "server/src/crm/crm-reference-data.controller.ts",
+      "line": 42
+    },
+    {
+      "id": "PATCH /crm/schedule-plans/:id",
+      "verb": "PATCH",
+      "route": "/crm/schedule-plans/:id",
+      "controller": "updateSchedulePlan",
+      "roles": [],
+      "owner": "SYS-SCHEDULE",
+      "file": "server/src/crm/crm-schedule.controller.ts",
+      "line": 142
+    },
+    {
+      "id": "POST /crm/lessons/transitions/bulk/preview",
+      "verb": "POST",
+      "route": "/crm/lessons/transitions/bulk/preview",
+      "controller": "previewBulkLessonTransitions",
+      "roles": [],
+      "owner": "SYS-SCHEDULE",
+      "file": "server/src/crm/crm-schedule.controller.ts",
+      "line": 348
+    },
+    {
+      "id": "PATCH /crm/lessons/:id",
+      "verb": "PATCH",
+      "route": "/crm/lessons/:id",
+      "controller": "updateLesson",
+      "roles": [],
+      "owner": "SYS-SCHEDULE",
+      "file": "server/src/crm/crm-schedule.controller.ts",
+      "line": 331
+    },
+    {
+      "id": "GET /crm/lessons/:id/settlement-history",
+      "verb": "GET",
+      "route": "/crm/lessons/:id/settlement-history",
+      "controller": "getLessonSettlementHistory",
+      "roles": [],
+      "owner": "SYS-SCHEDULE",
+      "file": "server/src/crm/crm-schedule.controller.ts",
+      "line": 307
+    },
+    {
+      "id": "GET /crm/schedule/conflicts",
+      "verb": "GET",
+      "route": "/crm/schedule/conflicts",
+      "controller": "getScheduleConflicts",
+      "roles": [],
+      "owner": "SYS-SCHEDULE",
+      "file": "server/src/crm/crm-schedule.controller.ts",
+      "line": 230
+    },
+    {
+      "id": "POST /crm/lessons/constraints/preview",
+      "verb": "POST",
+      "route": "/crm/lessons/constraints/preview",
+      "controller": "previewLessonConstraints",
+      "roles": [],
+      "owner": "SYS-SCHEDULE",
+      "file": "server/src/crm/crm-schedule.controller.ts",
+      "line": 254
+    },
+    {
+      "id": "GET /files/download/:token",
+      "verb": "GET",
+      "route": "/files/download/:token",
+      "controller": "download",
+      "roles": [],
+      "owner": "SYS-PLATFORM-QUALITY",
+      "file": "server/src/files/files.controller.ts",
+      "line": 57
+    },
+    {
+      "id": "POST /crm/students/:studentId/subscription-payments",
+      "verb": "POST",
+      "route": "/crm/students/:studentId/subscription-payments",
+      "controller": "recordActualPayment",
+      "roles": [],
+      "owner": "SYS-COMMERCE-INTEGRITY",
+      "file": "server/src/crm/subscription-commerce.controller.ts",
+      "line": 158
+    },
+    {
+      "id": "GET /health",
+      "verb": "GET",
+      "route": "/health",
+      "controller": "check",
+      "roles": [],
+      "owner": "SYS-PLATFORM-QUALITY",
+      "file": "server/src/health/health.controller.ts",
+      "line": 8
+    },
+    {
+      "id": "GET /health/live",
+      "verb": "GET",
+      "route": "/health/live",
+      "controller": "live",
+      "roles": [],
+      "owner": "SYS-PLATFORM-QUALITY",
+      "file": "server/src/health/health.controller.ts",
+      "line": 13
+    },
+    {
+      "id": "GET /health/ready",
+      "verb": "GET",
+      "route": "/health/ready",
+      "controller": "ready",
+      "roles": [],
+      "owner": "SYS-PLATFORM-QUALITY",
+      "file": "server/src/health/health.controller.ts",
+      "line": 18
+    },
+    {
+      "id": "PATCH /chats/:chatId/archive",
+      "verb": "PATCH",
+      "route": "/chats/:chatId/archive",
+      "controller": "setArchived",
+      "roles": [],
+      "owner": "SYS-PLATFORM-QUALITY",
+      "file": "server/src/messenger/chats.controller.ts",
+      "line": 26
+    },
+    {
+      "id": "GET /crm/clients/resolve",
+      "verb": "GET",
+      "route": "/crm/clients/resolve",
+      "controller": "resolve",
+      "roles": [],
+      "owner": "SYS-CRM-WORKSPACE",
+      "file": "server/src/crm/crm-clients.controller.ts",
+      "line": 49
+    },
+    {
+      "id": "GET /admin/staff",
+      "verb": "GET",
+      "route": "/admin/staff",
+      "controller": "listStaff",
+      "roles": [],
+      "owner": "SYS-ACCESS-SCOPE",
+      "file": "server/src/crm/admin-staff.controller.ts",
+      "line": 37
+    },
+    {
+      "id": "POST /auth/google/link-id-token",
+      "verb": "POST",
+      "route": "/auth/google/link-id-token",
+      "controller": "googleLinkIdToken",
+      "roles": [],
+      "owner": "SYS-ACCESS-SCOPE",
+      "file": "server/src/auth/auth.controller.ts",
+      "line": 105
+    },
+    {
+      "id": "POST /auth/google/id-token",
+      "verb": "POST",
+      "route": "/auth/google/id-token",
+      "controller": "googleIdToken",
+      "roles": [],
+      "owner": "SYS-ACCESS-SCOPE",
+      "file": "server/src/auth/auth.controller.ts",
+      "line": 97
+    },
+    {
+      "id": "POST /auth/google/callback",
+      "verb": "POST",
+      "route": "/auth/google/callback",
+      "controller": "googleCallback",
+      "roles": [],
+      "owner": "SYS-ACCESS-SCOPE",
+      "file": "server/src/auth/auth.controller.ts",
+      "line": 89
+    },
+    {
+      "id": "GET /crm/configuration/effective",
+      "verb": "GET",
+      "route": "/crm/configuration/effective",
+      "controller": "getEffective",
+      "roles": [],
+      "owner": "SYS-CRM-WORKSPACE",
+      "file": "server/src/crm/crm-configuration.controller.ts",
+      "line": 26
+    },
+    {
+      "id": "POST /crm/clients/leads/:leadId/archive-source",
+      "verb": "POST",
+      "route": "/crm/clients/leads/:leadId/archive-source",
+      "controller": "archiveConvertedLead",
+      "roles": [],
+      "owner": "SYS-CRM-WORKSPACE",
+      "file": "server/src/crm/crm-clients.controller.ts",
+      "line": 126
+    },
+    {
+      "id": "POST /crm/clients/leads/:leadId/convert",
+      "verb": "POST",
+      "route": "/crm/clients/leads/:leadId/convert",
+      "controller": "convertLead",
+      "roles": [],
+      "owner": "SYS-CRM-WORKSPACE",
+      "file": "server/src/crm/crm-clients.controller.ts",
+      "line": 117
+    },
+    {
+      "id": "POST /auth/google/start",
+      "verb": "POST",
+      "route": "/auth/google/start",
+      "controller": "googleStart",
+      "roles": [],
+      "owner": "SYS-ACCESS-SCOPE",
+      "file": "server/src/auth/auth.controller.ts",
+      "line": 81
+    },
+    {
+      "id": "GET /analytics/dashboard",
+      "verb": "GET",
+      "route": "/analytics/dashboard",
+      "controller": "dashboard",
+      "roles": [],
+      "owner": "SYS-OPERATIONS",
+      "file": "server/src/analytics/analytics.controller.ts",
+      "line": 110
+    },
+    {
+      "id": "GET /analytics/overview",
+      "verb": "GET",
+      "route": "/analytics/overview",
+      "controller": "overview",
+      "roles": [],
+      "owner": "SYS-OPERATIONS",
+      "file": "server/src/analytics/analytics.controller.ts",
+      "line": 105
+    },
+    {
+      "id": "GET /analytics/v4/exports/:jobId/download",
+      "verb": "GET",
+      "route": "/analytics/v4/exports/:jobId/download",
+      "controller": "downloadExport",
+      "roles": [],
+      "owner": "SYS-OPERATIONS",
+      "file": "server/src/analytics/analytics.controller.ts",
+      "line": 94
+    },
+    {
+      "id": "POST /analytics/v4/exports",
+      "verb": "POST",
+      "route": "/analytics/v4/exports",
+      "controller": "requestExport",
+      "roles": [],
+      "owner": "SYS-OPERATIONS",
+      "file": "server/src/analytics/analytics.controller.ts",
+      "line": 74
+    },
+    {
+      "id": "PUT /access/role-packages/:role",
+      "verb": "PUT",
+      "route": "/access/role-packages/:role",
+      "controller": "replaceRolePackage",
+      "roles": [
+        "director",
+        "system_admin"
+      ],
+      "owner": "SYS-ACCESS-SCOPE",
+      "file": "server/src/access-control/access-mutations.controller.ts",
+      "line": 74
+    },
+    {
+      "id": "GET /access/role-packages/:role",
+      "verb": "GET",
+      "route": "/access/role-packages/:role",
+      "controller": "getRolePackage",
+      "roles": [
+        "director",
+        "system_admin"
+      ],
+      "owner": "SYS-ACCESS-SCOPE",
+      "file": "server/src/access-control/access-mutations.controller.ts",
+      "line": 65
+    },
+    {
+      "id": "GET /access/role-packages",
+      "verb": "GET",
+      "route": "/access/role-packages",
+      "controller": "listRolePackages",
+      "roles": [
+        "director",
+        "system_admin"
+      ],
+      "owner": "SYS-ACCESS-SCOPE",
+      "file": "server/src/access-control/access-mutations.controller.ts",
+      "line": 59
+    },
+    {
+      "id": "POST /auth/verify-email",
+      "verb": "POST",
+      "route": "/auth/verify-email",
+      "controller": "verifyEmail",
+      "roles": [],
+      "owner": "SYS-ACCESS-SCOPE",
+      "file": "server/src/auth/auth.controller.ts",
+      "line": 41
+    },
+    {
+      "id": "GET /analytics/finance/monthly.xlsx",
+      "verb": "GET",
+      "route": "/analytics/finance/monthly.xlsx",
+      "controller": "financeMonthlyXlsx",
+      "roles": [],
+      "owner": "SYS-OPERATIONS",
+      "file": "server/src/analytics/analytics.controller.ts",
+      "line": 184
+    },
+    {
+      "id": "GET /analytics/finance/monthly.csv",
+      "verb": "GET",
+      "route": "/analytics/finance/monthly.csv",
+      "controller": "financeMonthlyCsv",
+      "roles": [],
+      "owner": "SYS-OPERATIONS",
+      "file": "server/src/analytics/analytics.controller.ts",
+      "line": 172
+    },
+    {
+      "id": "GET /analytics/weekly-report",
+      "verb": "GET",
+      "route": "/analytics/weekly-report",
+      "controller": "weeklyReport",
+      "roles": [],
+      "owner": "SYS-OPERATIONS",
+      "file": "server/src/analytics/analytics.controller.ts",
+      "line": 154
+    },
+    {
+      "id": "DELETE /crm/expenses/:id",
+      "verb": "DELETE",
+      "route": "/crm/expenses/:id",
+      "controller": "deleteExpense",
+      "roles": [],
+      "owner": "SYS-COMMERCE-INTEGRITY",
+      "file": "server/src/crm/crm-finance.controller.ts",
+      "line": 99
+    },
+    {
+      "id": "PATCH /crm/expenses/:id",
+      "verb": "PATCH",
+      "route": "/crm/expenses/:id",
+      "controller": "updateExpense",
+      "roles": [],
+      "owner": "SYS-COMMERCE-INTEGRITY",
+      "file": "server/src/crm/crm-finance.controller.ts",
+      "line": 90
+    },
+    {
+      "id": "POST /crm/payments",
+      "verb": "POST",
+      "route": "/crm/payments",
+      "controller": "createPayment",
+      "roles": [],
+      "owner": "SYS-COMMERCE-INTEGRITY",
+      "file": "server/src/crm/crm-finance.controller.ts",
+      "line": 66
+    },
+    {
+      "id": "POST /crm/families/:familyId/primary-payer/:memberId",
+      "verb": "POST",
+      "route": "/crm/families/:familyId/primary-payer/:memberId",
+      "controller": "setPrimaryPayer",
+      "roles": [],
+      "owner": "SYS-CRM-WORKSPACE",
+      "file": "server/src/crm/crm-contacts.controller.ts",
+      "line": 92
+    },
+    {
+      "id": "POST /crm/homeworks/:id/attachments",
+      "verb": "POST",
+      "route": "/crm/homeworks/:id/attachments",
+      "controller": "addHomeworkAttachment",
+      "roles": [],
+      "owner": "SYS-CRM-WORKSPACE",
+      "file": "server/src/crm/crm-engagement.controller.ts",
+      "line": 146
+    },
+    {
+      "id": "GET /crm/expected-payments",
+      "verb": "GET",
+      "route": "/crm/expected-payments",
+      "controller": "listExpectedPayments",
+      "roles": [],
+      "owner": "SYS-COMMERCE-INTEGRITY",
+      "file": "server/src/crm/crm-finance.controller.ts",
+      "line": 50
+    }
+  ],
+  "note": "Unresolved does not imply broken: variables, public webhooks, downloads, realtime and server-only routes may not have a direct literal Flutter call."
+}

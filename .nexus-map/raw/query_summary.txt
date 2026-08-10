@@ -1,0 +1,103 @@
+=== Directory Summary ===
+
+.agents/skills/ (3 modules, 2 classes, 40 functions, 1459 lines)
+  Key classes: GitStats, ASTGraph
+  Key imports from: (none / external only)
+.dart_tool/flutter_build/ (1 modules, 0 classes, 0 functions, 263 lines)
+  Key imports from: (none / external only)
+
+android/ (2 modules, 0 classes, 0 functions, 69 lines)
+  Key imports from: (none / external only)
+
+android/app/ (3 modules, 2 classes, 2 functions, 216 lines)
+  Key classes: GeneratedPluginRegistrant, MainActivity
+  Key imports from: (none / external only)
+
+infra/scripts/ (8 modules, 0 classes, 0 functions, 541 lines)
+  Key imports from: (none / external only)
+
+infra/staging/ (1 modules, 0 classes, 0 functions, 17 lines)
+  Key imports from: (none / external only)
+
+integration_test/ (18 modules, 0 classes, 0 functions, 2922 lines)
+  Key imports from: (none / external only)
+
+ios/Flutter/ (2 modules, 0 classes, 2 functions, 47 lines)
+  Key imports from: (none / external only)
+
+ios/Runner/ (4 modules, 2 classes, 2 functions, 46 lines)
+  Key classes: AppDelegate, SceneDelegate
+  Key imports from: (none / external only)
+
+ios/RunnerTests/ (1 modules, 1 classes, 1 functions, 13 lines)
+  Key classes: RunnerTests
+  Key imports from: (none / external only)
+
+lib/ (2 modules, 0 classes, 0 functions, 324 lines)
+  Key imports from: (none / external only)
+
+lib/core/ (115 modules, 0 classes, 0 functions, 27551 lines)
+  Key imports from: (none / external only)
+
+lib/features/ (144 modules, 0 classes, 0 functions, 63208 lines)
+  Key imports from: (none / external only)
+
+linux/flutter/ (2 modules, 0 classes, 1 functions, 52 lines)
+  Key imports from: (none / external only)
+
+linux/runner/ (3 modules, 0 classes, 9 functions, 178 lines)
+  Key imports from: (none / external only)
+
+macos/Flutter/ (2 modules, 0 classes, 1 functions, 50 lines)
+  Key imports from: (none / external only)
+
+macos/Runner/ (2 modules, 2 classes, 3 functions, 30 lines)
+  Key classes: AppDelegate, MainFlutterWindow
+  Key imports from: (none / external only)
+
+macos/RunnerTests/ (1 modules, 1 classes, 1 functions, 13 lines)
+  Key classes: RunnerTests
+  Key imports from: (none / external only)
+
+outputs/feature-quality/ (2 modules, 0 classes, 8 functions, 965 lines)
+  Key imports from: (none / external only)
+
+scripts/demo/ (3 modules, 0 classes, 0 functions, 1227 lines)
+  Key imports from: (none / external only)
+
+scripts/fixtures/ (2 modules, 0 classes, 0 functions, 98 lines)
+  Key imports from: (none / external only)
+
+server/ (1 modules, 0 classes, 0 functions, 11 lines)
+  Key imports from: (none / external only)
+
+server/db/ (236 modules, 0 classes, 0 functions, 51302 lines)
+  Key imports from: (none / external only)
+
+server/src/ (532 modules, 397 classes, 2315 functions, 128686 lines)
+  Key classes: AccessControlModule, AccessMutationsController, AccessMutationsRepository, AccessMutationsService, ActorClientProjectionFactory, CapabilityRegistryRepository, CapabilityRequestAuthorizer, AssignAccessRoleDto ... +389
+  Key imports from: (none / external only)
+
+test/ (2 modules, 0 classes, 0 functions, 160 lines)
+  Key imports from: (none / external only)
+
+test/core/ (36 modules, 0 classes, 0 functions, 9361 lines)
+  Key imports from: (none / external only)
+
+test/features/ (82 modules, 0 classes, 0 functions, 18909 lines)
+  Key imports from: (none / external only)
+
+test/theme/ (1 modules, 0 classes, 0 functions, 112 lines)
+  Key imports from: (none / external only)
+
+tools/demo-runner/ (20 modules, 9 classes, 110 functions, 1831 lines)
+  Key classes: ActionExecutor, AdbClient, LocalAppiumServer, CheckpointStore, CredentialProvider, SafeLogger, SecretVault, SessionManager ... +1
+  Key imports from: (none / external only)
+
+windows/flutter/ (42 modules, 11 classes, 56 functions, 4652 lines)
+  Key classes: FlutterDesktopMessenger, _FlutterPlatformMessageResponseHandle, FlutterDesktopPluginRegistrar, FlutterDesktopTextureRegistrar, FlutterDesktopTextureRegistrar, FlutterDesktopViewController, FlutterDesktopViewController, FlutterDesktopView ... +3
+  Key imports from: (none / external only)
+
+windows/runner/ (8 modules, 2 classes, 8 functions, 679 lines)
+  Key classes: WindowClassRegistrar, Size
+  Key imports from: (none / external only)

@@ -1,20 +1,22 @@
 # MagicMusicCRM v4 — Current-State Inventory
 
 **Task:** T8.1.2
-**Source digest:** `75b4f26e46c3ba9a83c624f428245bbe265eb0c589bd1a13366cf9572b7270a4`
+**Source digest:** `3439f51a0cfa4e8c773de90b0a1c66a130bc659f2ff596365f64aa46f8c697f8`
 **Validation:** PASS
+
+> Имя генератора и migration-status labels сохранены для совместимости старых gates. Фактические counts/paths актуальны; текущие ownership/state брать из `.nexus-map/`, где legacy status отброшен.
 
 ## Coverage
 
 | Slice | Count |
 |---|---:|
-| backend routes | 320 |
+| backend routes | 321 |
 | role guards | 22 |
-| policy calls | 244 |
+| policy calls | 245 |
 | dto fields | 801 |
 | flutter role checks | 143 |
-| flutter navigation sources | 321 |
-| schedule entry points | 47 |
+| flutter navigation sources | 334 |
+| schedule entry points | 48 |
 | attendance mutations | 0 |
 | finance writes | 46 |
 | schema tables | 5 |
