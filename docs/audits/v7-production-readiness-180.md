@@ -84,6 +84,7 @@ historical risk из `v7-final-candidate.md`; новых находок staged d
 | `MagicMusicCRM-1.5.1-180.aab` | 59,988,827 | `7A9FB287871CCCEF74AE1ABC72F125AE37FBD1A96E897D0A434637D503A0C3A3` |
 | `MagicMusicCRM-server-1.5.1-180-image.zip` | 82,378,962 | `0163C55A53A06FF134C1B9C40AD9D25B3AE4B142C7595C9C3893EE4F31FE0A8E` |
 | `MagicMusicCRM-server-1.5.1-180-sbom.cdx.json` | 430,246 | `D279EED56A9E257E9C7ACB0930DFC64CB0643F0FE415103CF3D057FE8E652ECC` |
+| `RELEASE-MANIFEST.json` | 2,445 | `05AB0739FEB962BB522D11DB3B8C60408E5099E14CF61F1E4C4AB938CAAC5924` |
 | `magic_music_crm.exe` внутри Windows bundle | 757,760 | `ED3A4CB86C3182D0B9F3D8FDE9184356BCB75F5951E860A862F9D7634E3F4BD1` |
 
 Локальный каталог: `dist/1.5.1+180/`. Windows EXE сообщает
@@ -96,14 +97,18 @@ AAB JAR signature — PASS; upload certificate self-signed и без timestamp, 
 
 Inno Setup `6.7.3` собрал installer; silent install, версия/EXE hash, запуск
 10 секунд и полный uninstall прошли. Authenticode status installer —
-`NotSigned`: самоподписанный сертификат не выдаётся за production trust.
+`NotSigned`: в CurrentUser/LocalMachine store нет действующего Code Signing
+certificate с private key, а самоподписанный сертификат не выдаётся за
+production trust.
 
 Exact server image:
 `magicmusiccrm-server:1.5.1-180-1559a45`, image ID
 `sha256:a07c39ffe05acf5743ae1a103a1358b2ad24305ef193b2e5579b4923baf9292f`,
 OCI revision `1559a454…`, non-root user `magiccrm`. Containerized migration,
 invalid production flags, live/ready, встроенный healthcheck и реальный HTTP 503
-при пустом migration ledger прошли; временные контейнеры/БД удалены.
+при пустом migration ledger прошли; временные контейнеры/БД удалены. Release ZIP
+отдельно распакован и загружен через `docker load`; восстановленный image ID
+полностью совпал с ledger.
 
 ## Device smoke
 
