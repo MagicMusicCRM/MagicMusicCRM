@@ -1,18 +1,17 @@
 # AGENTS.md — MagicMusicCRM
 
-Этот файл — короткий якорь проекта. Он хранит только актуальные правила и
-состояние. История предыдущих версий находится в `.anws/v3`, `.anws/v4`,
-`.anws/v6` и `docs/audits`; она не является инструкцией для текущей работы.
+Этот файл хранит только актуальные правила и состояние. Исторические документы
+не загружать без прямой связи с текущей задачей.
 
 ## Быстрое восстановление
 
 Перед изменениями прочитать в указанном порядке:
 
-1. `AGENTS.md`.
-2. `docs/architecture/NEXT-AGENT-HANDOFF.md`.
-3. `.anws/v7/05_TASKS.md`.
-4. Релевантные PRD, ADR и system design из `.anws/v7/`.
-5. Для production-приёмки — текущую матрицу и evidence index.
+1. Прочитать `AGENTS.md` и `docs/architecture/NEXT-AGENT-HANDOFF.md`.
+2. В `.anws/v7/05_TASKS.md` открыть только определения активных
+   `T7.1.2`/`INT-S6`, не весь завершённый backlog.
+3. PRD, ADR, system design и исторические аудиты открывать только по затронутому
+   домену.
 
 ## Актуальное состояние
 
@@ -124,22 +123,6 @@ UI/API/DB-доказательства.
 
 ## Карта проекта
 
-```text
-MagicMusicCRM/
-├── lib/                      # Flutter app/UI/domain integration
-├── server/
-│   ├── src/access-control/   # capabilities и resource scope
-│   ├── src/crm/commerce/     # деньги, абонементы, settlement
-│   ├── src/crm/schedule/     # занятия и планы
-│   └── db/migrations/        # PostgreSQL evolution
-├── test/                     # Flutter regression
-├── integration_test/         # device acceptance
-├── docs/audits/              # проверка и evidence
-└── .anws/v7/                 # активная архитектура и backlog
-```
-
-Ключевые файлы:
-
 - `.anws/v7/01_PRD.md` — требования v7.
 - `.anws/v7/02_ARCHITECTURE_OVERVIEW.md` — границы систем.
 - `.anws/v7/03_ADR/` — кросс-системные решения.
@@ -150,19 +133,7 @@ MagicMusicCRM/
 
 ## Env и production
 
-Реальные env-файлы ignored. Никогда не коммитить ключи, токены, пароли,
-Firebase private key, HolliHop credential, service role или DB URL с паролем.
-
-| Файл | Назначение |
-|---|---|
-| `server/.env` | Локальный NestJS runtime и секреты |
-| `server/.migration.env` | Безопасные параметры миграций без секретов |
-| `infra/staging/.env` | Docker Compose runtime |
-| `infra/staging/.backup.env` | Backup/restore параметры |
-| `infra/staging/.monitor.env` | Health/alerts |
-| `infra/staging/.deploy.env` | Игнорируемые SSH/deploy координаты |
-| `.flutter.env` | Build-time Flutter values |
-
-После env-правок минимум: `docker compose config -q`, backend typecheck и
-`flutter analyze`. Production mutation/deploy требует backup, rollback plan и
-явной команды владельца.
+Все реальные env-файлы ignored. Не коммитить секреты, PII, production dumps и
+backups. После env-правок проверить Docker config, backend typecheck и Flutter
+analyze. Production mutation/deploy требует backup, rollback plan и явной
+команды владельца.
