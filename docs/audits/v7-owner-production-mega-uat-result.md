@@ -172,7 +172,7 @@ Production candidate: `1.5.1+180`, image `sha256:a07c39ff…`
 | UAT-131 | Обрыв сети, сохранение формы и Retry | PENDING | — |
 | UAT-132 | Stale expectedVersion и recovery | PARTIAL | automated contracts есть; нужен production UI scenario |
 | UAT-133 | Полная actor matrix private routes | PARTIAL | регулярные route/actor gates есть; нужен финальный candidate run |
-| UAT-134 | Full tests/build/migrations/clean schema | PARTIAL | Flutter `666/666`, backend `158/158`/`1258/1258`, build/analyze PASS; clean `0001..0118`, down/up, artifacts и exact production ledger PASS; остаётся финальная route/wire/inventory stale-сверка |
+| UAT-134 | Full tests/build/migrations/clean schema | PARTIAL | production `+180`: Flutter `666/666`, backend `158/158`/`1258/1258`, clean `0001..0118`, exact ledger PASS; local `+181`: Flutter `667/667`, тот же backend full gate и exact image runtime/Trivy PASS (`v7-teacher-compensation-181.md`); остаются production rollout proof и финальная route/wire/inventory stale-сверка |
 | UAT-135 | Health, constraints, reconcile, workers, logs | PASS | internal/public ready, migration objects, PostgreSQL validation, worker/outbox, reconciliation twice, restart/log/5xx и latency: `v7-production-rollout-180.md` |
 
 ## G14 — пять персон и итоговое доказательство

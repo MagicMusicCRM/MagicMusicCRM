@@ -21,12 +21,16 @@
 - Основная ветка: `main`; целевое зеркало: `origin/main`.
 - Production release candidate: `1.5.1+180`, только тёмная тема; exact server
   image `sha256:a07c39ff…` развёрнут 2026-08-10.
+- Локальный unreleased candidate: `1.5.1+181`, commit `17ce254`, Teacher
+  compensation refinement; production и update manifests не изменялись.
 - Production API при последней проверке healthy на migration `0118`; worker
   активен, worker/outbox/reconcile drift `0`.
-- Последний полный автоматический gate: Flutter `666/666`, backend
+- Последний полный автоматический gate: Flutter `667/667`, backend
   `158/158` suites и `1258/1258` tests, backend build PASS. Exact production
   server image прошёл migration/live/ready/503 runtime gate и Trivy=0
   High/Critical/secret.
+- Exact local `+181` image `sha256:5fbd5a29…` прошёл migration/fail-closed/
+  live/ready/503 и Trivy=0; Windows ZIP и Android API 35 launch smoke PASS.
 - Активная задача: `T7.1.2` — production mega-UAT.
 - `T7.1.3` — организационные конструкторы — завершена.
 - `INT-S6` не закрыт: кандидат ещё не получил итоговую owner-приёмку.
@@ -40,6 +44,8 @@
 - `docs/audits/v7-owner-production-mega-uat-result.md` — единственный текущий
   статус 100 сценариев;
 - `docs/audits/v7-owner-mega-uat-evidence/README.md` — индекс доказательств.
+- `docs/audits/v7-teacher-compensation-181.md` — технический audit локального
+  кандидата `+181`, не заменяющий production owner-UAT.
 
 На 2026-08-10 матрица содержит 100 уникальных строк: `10 PASS`, `29 PARTIAL`,
 `61 PENDING`, `0 FAIL`, `0 BLOCKED`. Нельзя объявлять приложение окончательно

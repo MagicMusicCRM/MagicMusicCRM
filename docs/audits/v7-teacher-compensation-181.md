@@ -34,6 +34,8 @@
 | Flutter analyze | `No issues found`, PASS |
 | Финальная adaptive-form выборка | `10/10`, PASS |
 | Diff/format integrity | PASS |
+| Candidate Gitleaks | new commits, `0` findings |
+| Backend production dependency audit | `0` vulnerabilities (offline cache) |
 
 Полный Flutter gate был выполнен после основной реализации; после последней
 адаптивной правки текстовых tab-labels повторно выполнены все затронутые widget
@@ -68,6 +70,10 @@ migration `0118`, fail-closed production flags, live/ready, встроенный
 healthcheck и HTTP 503 при нарушенном migration ledger; временные контейнеры и
 БД удалены. Trivy image scan: `0` High/Critical, `0` secrets. Image ZIP повторно
 загружен через `docker load`; SBOM сохранён в CycloneDX JSON.
+
+После всех локальных операций production API проверен только на чтение:
+`/health/live=ok`, `/health/ready=ok`, migration `0118`, database/migrations/
+worker/outbox/v4Rollout checks — `ok`. Deployment `+180` не менялся.
 
 ## Артефакты
 

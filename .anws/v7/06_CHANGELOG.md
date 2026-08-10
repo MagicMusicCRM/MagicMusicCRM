@@ -217,3 +217,6 @@
   подтверждены, после smoke эмулятор штатно остановлен.
 - **[NOTE]** Inno `+181` собран, но новый silent install не прошёл через
   non-interactive UAC; production и update manifests не изменялись.
+- **[ADD]** Candidate-specific Gitleaks для `da3474a..HEAD` дал `0` findings,
+  backend production dependency audit — `0` vulnerabilities; post-check
+  production `/live` и `/ready` остался `ok` на migration `0118` без deployment.

@@ -9,6 +9,15 @@ Production API развёрнут на exact image `1.5.1+180`. Историче
 предыдущих кандидатов сохраняют доказанную предметную операцию, но не повышают
 изменённые UI-сценарии до PASS без актуального owner-повтора.
 
+## Локальный кандидат `1.5.1+181` — не production evidence
+
+Teacher compensation refinement, полные regression-gates, Windows/Android
+smoke, exact server image runtime/Trivy и release hashes зафиксированы в
+[`v7-teacher-compensation-181.md`](../v7-teacher-compensation-181.md). Эти
+доказательства подтверждают техническую готовность локального кандидата, но не
+меняют production-статусы строк до отдельного rollout и повторного UI/API/DB
+прогона.
+
 Локальный технический gate и hashes:
 [`../v7-production-readiness-180.md`](../v7-production-readiness-180.md).
 
