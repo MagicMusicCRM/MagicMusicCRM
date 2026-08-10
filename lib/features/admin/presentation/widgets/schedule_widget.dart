@@ -263,7 +263,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
       if (_filterClientType != null) 'clientType': _filterClientType,
       if (_filterClientId != null) 'clientId': _filterClientId,
       if (_filterClientName != null) 'clientName': _filterClientName,
-      if (widget.clientId != null && !_hideOtherClientLessons)
+      if (_hasClientContext && !_hideOtherClientLessons)
         'showOtherClientLessons': true,
       if (_scheduleSearchQuery.isNotEmpty)
         'scheduleQuery': _scheduleSearchQuery,
@@ -289,11 +289,16 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   }
 
   bool _isContextClientLesson(Map<String, dynamic> lesson) {
-    final clientId = widget.clientId;
+    final clientId = _contextClientId;
     if (clientId == null || clientId.isEmpty) return false;
-    final key = widget.clientType == 'lead' ? 'lead_id' : 'student_id';
+    final key = _contextClientType == 'lead' ? 'lead_id' : 'student_id';
     return lesson[key]?.toString() == clientId;
   }
+
+  String? get _contextClientId => widget.clientId ?? _filterClientId;
+  String? get _contextClientType => widget.clientType ?? _filterClientType;
+  String? get _contextClientName => widget.clientName ?? _filterClientName;
+  bool get _hasClientContext => _contextClientId?.isNotEmpty == true;
 
   bool get _hasScheduleSearch => _scheduleSearchQuery.isNotEmpty;
 

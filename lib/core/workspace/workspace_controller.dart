@@ -79,13 +79,36 @@ class WorkspaceController extends ChangeNotifier {
       throw StateError('Cannot restore another account workspace.');
     }
     _formActions.clear();
+    final activeIsSchedule = _isScheduleRoot(
+      restored.activeTab.currentRoute.link,
+    );
+    final scheduleTabId = activeIsSchedule
+        ? restored.activeTabId
+        : restored.tabs
+                  .where(
+                    (tab) =>
+                        _isScheduleRoot(tab.currentRoute.link) &&
+                        tab.currentRoute.link.entityId == '__section__',
+                  )
+                  .firstOrNull
+                  ?.tabId ??
+              restored.tabs
+                  .where((tab) => _isScheduleRoot(tab.currentRoute.link))
+                  .firstOrNull
+                  ?.tabId;
+    final restoredTabs = [
+      for (final tab in restored.tabs)
+        if (!_isScheduleRoot(tab.currentRoute.link) ||
+            tab.tabId == scheduleTabId)
+          _normalizeScheduleRoutes(tab),
+    ];
     _state = restored.copyWith(
       tabs: [
-        for (final tab in restored.tabs)
+        for (final tab in restoredTabs)
           tab.copyWith(titleHint: _titleFor(tab.currentRoute.link)),
       ],
     );
-    _nextTabNumber = _nextAvailableTabNumber(restored.tabs);
+    _nextTabNumber = _nextAvailableTabNumber(restoredTabs);
     notifyListeners();
   }
 
@@ -547,6 +570,33 @@ class WorkspaceController extends ChangeNotifier {
   static bool _sameEntity(EntityLink left, EntityLink right) {
     return left.rawEntityType == right.rawEntityType &&
         left.entityId == right.entityId;
+  }
+
+  static bool _isScheduleRoot(EntityLink link) =>
+      link.rawEntityType == 'lesson_list';
+
+  static WorkspaceTabState _normalizeScheduleRoutes(WorkspaceTabState tab) {
+    ContextRouteState normalize(ContextRouteState route) {
+      final link = route.link;
+      if (!_isScheduleRoot(link) || link.entityId == '__section__') {
+        return route;
+      }
+      return route.copyWith(
+        link: EntityLink(
+          version: link.version,
+          entityType: link.entityType,
+          rawEntityType: link.rawEntityType,
+          entityId: '__section__',
+          optionalFocus: link.optionalFocus,
+          presentation: link.presentation,
+        ),
+      );
+    }
+
+    return tab.copyWith(
+      routeStack: [for (final route in tab.routeStack) normalize(route)],
+      forwardStack: [for (final route in tab.forwardStack) normalize(route)],
+    );
   }
 
   static String _defaultTitle(EntityLink link) =>

@@ -19,12 +19,10 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
         selectedDate: _selectedDate,
         displayedMonth: _displayedMonth,
         studentNames: _studentNames,
-        monthDaySummary: _filterClientId == null && widget.clientId == null
-            ? _monthDaySummary
-            : const {},
+        monthDaySummary: !_hasClientContext ? _monthDaySummary : const {},
         lessonsForDate: _lessonsForDate,
         parseLessonTime: _parseLessonTime,
-        clientContext: widget.clientId != null,
+        clientContext: _hasClientContext,
         searchContext: _hasScheduleSearch,
         isContextClientLesson: _isRelatedLesson,
         onDayTap: _onMonthDayTap,
@@ -498,7 +496,7 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
           highlighted:
               _highlightLessonId != null &&
               lesson['id']?.toString() == _highlightLessonId,
-          clientContext: widget.clientId != null,
+          clientContext: _hasClientContext,
           searchContext: _hasScheduleSearch,
           relatedClient: _isRelatedLesson(lesson),
         ),
@@ -522,25 +520,42 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
     final fallback = _filterClientType == 'lead' ? 'Лид' : 'Ученик';
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: InputChip(
-          avatar: const Icon(Icons.person_search_rounded, size: 18),
-          label: Text(
-            'Клиент: ${_filterClientName?.trim().isNotEmpty == true ? _filterClientName : fallback}',
+      child: Wrap(
+        spacing: AppSpace.lg,
+        runSpacing: AppSpace.xs,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          InputChip(
+            avatar: const Icon(Icons.person_search_rounded, size: 18),
+            label: Text(
+              'Клиент: ${_filterClientName?.trim().isNotEmpty == true ? _filterClientName : fallback}',
+            ),
+            onDeleted: () => _emitState(() {
+              _filterClientType = null;
+              _filterClientId = null;
+              _filterClientName = null;
+            }),
           ),
-          onDeleted: () => _emitState(() {
-            _filterClientType = null;
-            _filterClientId = null;
-            _filterClientName = null;
-          }),
-        ),
+          FilterChip(
+            key: const ValueKey('client-calendar-hide-others'),
+            selected: _hideOtherClientLessons,
+            label: const Text('Скрывать чужие занятия'),
+            onSelected: (selected) =>
+                _emitState(() => _hideOtherClientLessons = selected),
+          ),
+          if (!_hideOtherClientLessons)
+            _clientContextLegend(
+              Icons.people_outline_rounded,
+              AppColor.text2,
+              'Другие клиенты',
+            ),
+        ],
       ),
     );
   }
 
   Widget _buildClientContextBanner() {
-    final name = widget.clientName?.trim();
+    final name = _contextClientName?.trim();
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
       child: Wrap(
@@ -811,7 +826,7 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
           highlighted:
               _highlightLessonId != null &&
               l['id']?.toString() == _highlightLessonId,
-          clientContext: widget.clientId != null,
+          clientContext: _hasClientContext,
           searchContext: _hasScheduleSearch,
           relatedClient: _isRelatedLesson(l),
         ),

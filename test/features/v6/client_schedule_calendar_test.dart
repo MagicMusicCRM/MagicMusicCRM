@@ -77,6 +77,23 @@ const _lessons = [
     'isTrial': false,
     'conflictTypes': <String>[],
   },
+  {
+    'id': 'lesson-lead',
+    'leadId': 'lead-1',
+    'leadName': 'Лид Тестовый',
+    'teacherId': 'teacher-1',
+    'teacherName': 'Мария Педагог',
+    'branchId': 'branch-a',
+    'branchName': 'Сокол',
+    'roomId': 'room-a',
+    'roomName': 'Класс 1',
+    'scheduledAt': '2026-08-04T11:00:00.000Z',
+    'durationMinutes': 60,
+    'status': 'scheduled',
+    'lifecycleState': 'scheduled',
+    'isTrial': true,
+    'conflictTypes': <String>[],
+  },
 ];
 
 ContextViewState _dayState() => ContextViewState(
@@ -95,6 +112,7 @@ Widget _calendarApp(
   ValueChanged<ContextViewState>? onChanged,
   bool active = true,
   bool clientContext = true,
+  EntityLink? initialLink,
 }) {
   return ProviderScope(
     overrides: [
@@ -110,6 +128,7 @@ Widget _calendarApp(
           height: 760,
           child: ScheduleWidget(
             title: 'Календарь занятий',
+            initialLink: initialLink,
             clientType: clientContext ? 'student' : null,
             clientId: clientContext ? 'student-1' : null,
             clientName: clientContext ? 'Анна Смирнова' : null,
@@ -198,6 +217,82 @@ void main() {
         findsOneWidget,
       );
       expect(_lessonBorder(tester, 'lesson-selected'), AppColor.success);
+      expect(_lessonBorder(tester, 'lesson-other'), AppColor.text2);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'canonical Schedule lead filter hides others locally and can reveal them',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(1200, 900);
+      addTearDown(tester.view.reset);
+      final api = FakeCardApiClient(
+        branches: _branches,
+        rooms: _rooms,
+        scheduleMatrix: _lessons,
+      );
+      final route = EntityLink.typed(
+        entityType: EntityLinkType.report,
+        entityId: '__section__',
+        variant: 'lesson_list',
+        optionalFocus: EntityLinkFocus(
+          focus: 'date',
+          filter: const {
+            'clientType': 'lead',
+            'clientId': 'lead-1',
+            'clientName': 'Лид Тестовый',
+          },
+        ),
+      );
+
+      await tester.pumpWidget(
+        _calendarApp(
+          api,
+          initial: _dayState(),
+          clientContext: false,
+          initialLink: route,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('schedule-lesson-lesson-lead')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('schedule-lesson-lesson-other')),
+        findsNothing,
+      );
+      expect(
+        tester
+            .widget<FilterChip>(
+              find.byKey(const ValueKey('client-calendar-hide-others')),
+            )
+            .selected,
+        isTrue,
+      );
+      expect(
+        api.getCalls
+            .where((call) => call.path == '/crm/schedule/matrix')
+            .every(
+              (call) =>
+                  !call.query.containsKey('leadId') &&
+                  !call.query.containsKey('studentId'),
+            ),
+        isTrue,
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey('client-calendar-hide-others')),
+      );
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey('schedule-lesson-lesson-other')),
+        findsOneWidget,
+      );
+      expect(_lessonBorder(tester, 'lesson-lead'), AppColor.success);
       expect(_lessonBorder(tester, 'lesson-other'), AppColor.text2);
       expect(tester.takeException(), isNull);
     },

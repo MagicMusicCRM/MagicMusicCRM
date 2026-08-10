@@ -176,6 +176,7 @@ void main() {
     final clients = EntityRouteRegistry.sectionRootLink('clients');
 
     expect(schedule.link.rawEntityType, 'lesson_list');
+    expect(schedule.link.entityId, '__section__');
     expect(schedule.link.optionalFocus?.filter['lessonId'], 'lesson-1');
     expect(crmTabForEntityLink(schedule.link, 'manager'), 2);
     expect(crmTabForEntityLink(schedule.link, 'teacher'), 1);

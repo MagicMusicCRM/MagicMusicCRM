@@ -108,8 +108,6 @@ extension _ScheduleActions on _ScheduleWidgetState {
           branchId: defaultBranch,
           groupBy: _dayViewMode == DayViewMode.byTeacher ? 'teacher' : 'room',
           teacherId: widget.fixedTeacherId ?? _filterTeacherId,
-          studentId: _filterClientType == 'student' ? _filterClientId : null,
-          leadId: _filterClientType == 'lead' ? _filterClientId : null,
           limit: _currentView == ScheduleView.week || _filterClientId != null
               ? 500
               : 300,
@@ -322,8 +320,6 @@ extension _ScheduleActions on _ScheduleWidgetState {
             branchId: branchId,
             groupBy: _dayViewMode == DayViewMode.byTeacher ? 'teacher' : 'room',
             teacherId: widget.fixedTeacherId ?? _filterTeacherId,
-            studentId: _filterClientType == 'student' ? _filterClientId : null,
-            leadId: _filterClientType == 'lead' ? _filterClientId : null,
             limit: 500,
           );
       final items = result['items'];
@@ -407,11 +403,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
       if (_filterRoomId != null && l['room_id']?.toString() != _filterRoomId) {
         return false;
       }
-      if (_filterClientId != null) {
-        final key = _filterClientType == 'lead' ? 'lead_id' : 'student_id';
-        if (l[key]?.toString() != _filterClientId) return false;
-      }
-      if (widget.clientId != null &&
+      if (_hasClientContext &&
           _hideOtherClientLessons &&
           !_isContextClientLesson(l)) {
         return false;

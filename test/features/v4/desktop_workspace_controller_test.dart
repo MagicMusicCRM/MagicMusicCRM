@@ -5,6 +5,7 @@ import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/workspace/desktop_workspace_shell.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
+import 'package:magic_music_crm/core/workspace/workspace_state.dart';
 
 void main() {
   EntityLink link(String id) =>
@@ -140,6 +141,69 @@ void main() {
     expect(restored.viewState.filters['branchId'], 'branch-1');
     expect(restored.viewState.date, DateTime(2026, 8, 4));
     expect(restored.viewState.scrollOffset, 320);
+  });
+
+  test('restore collapses legacy schedule reports into one Schedule tab', () {
+    final workspace = controller();
+    final legacySchedule = EntityLink.typed(
+      entityType: EntityLinkType.report,
+      entityId: '2026-08-12T00:00:00.000',
+      variant: 'lesson_list',
+      optionalFocus: EntityLinkFocus(
+        focus: 'schedule',
+        filter: const {'clientId': 'client-9'},
+      ),
+    );
+    final canonicalSchedule = EntityLink.typed(
+      entityType: EntityLinkType.report,
+      entityId: '__section__',
+      variant: 'lesson_list',
+    );
+
+    workspace.restore(
+      WorkspaceState(
+        accountId: 'account-1',
+        activeTabId: 'tab-2',
+        tabs: [
+          WorkspaceTabState(
+            tabId: 'tab-1',
+            titleHint: 'Расписание',
+            routeStack: [
+              ContextRouteState(
+                link: canonicalSchedule,
+                viewState: ContextViewState(),
+              ),
+            ],
+          ),
+          WorkspaceTabState(
+            tabId: 'tab-2',
+            titleHint: 'Отчёт',
+            routeStack: [
+              ContextRouteState(
+                link: legacySchedule,
+                viewState: ContextViewState(
+                  filters: const {'clientId': 'client-9'},
+                  date: DateTime(2026, 8, 12),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    expect(workspace.state.tabs, hasLength(1));
+    expect(workspace.state.activeTabId, 'tab-2');
+    expect(workspace.state.activeTab.titleHint, 'Расписание');
+    expect(workspace.state.activeTab.currentRoute.link.entityId, '__section__');
+    expect(
+      workspace.state.activeTab.currentRoute.link.optionalFocus?.filter,
+      containsPair('clientId', 'client-9'),
+    );
+    expect(
+      workspace.state.activeTab.currentRoute.viewState.date,
+      DateTime(2026, 8, 12),
+    );
   });
 
   testWidgets('top strip switches tabs without replacing shared scope', (

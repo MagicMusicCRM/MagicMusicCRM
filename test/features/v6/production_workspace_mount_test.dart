@@ -233,6 +233,87 @@ void main() {
     expect(link.optionalFocus?.filter['partnerId'], 'client-a');
   });
 
+  testWidgets('schedule requests reuse the canonical Schedule tab', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1000, 800);
+    addTearDown(tester.view.reset);
+    const scheduleSnapshot = CapabilitySnapshot(
+      accountId: 'account-1',
+      role: 'manager',
+      accessVersion: 1,
+      capabilities: {'schedule.lesson.write'},
+      scopes: {},
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          accountWorkspaceStoreProvider.overrideWithValue(
+            AccountWorkspaceStore(InMemoryWorkspaceKeyValueStore()),
+          ),
+        ],
+        child: MaterialApp(
+          home: ProductionWorkspaceHost(
+            snapshot: scheduleSnapshot,
+            tabBuilder: (_, tab) => Text(tab.currentRoute.link.entityId),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ProductionWorkspaceHost)),
+    );
+    final firstDate = DateTime.utc(2026, 8, 12);
+    container
+        .read(crmNavigationRequestProvider.notifier)
+        .navigateTo(
+          CrmNavigationRequest.schedule(
+            date: firstDate,
+            clientType: 'lead',
+            clientId: 'lead-1',
+          ),
+        );
+    await tester.pumpAndSettle();
+
+    final shell = tester.widget<DesktopWorkspaceShell>(
+      find.byType(DesktopWorkspaceShell),
+    );
+    expect(shell.controller.state.activeTab.titleHint, 'Расписание');
+    expect(
+      shell.controller.state.activeTab.currentRoute.link.entityId,
+      '__section__',
+    );
+    expect(
+      shell
+          .controller
+          .state
+          .activeTab
+          .currentRoute
+          .viewState
+          .filters['clientId'],
+      'lead-1',
+    );
+
+    final tabCount = shell.controller.state.tabs.length;
+    container
+        .read(crmNavigationRequestProvider.notifier)
+        .navigateTo(
+          CrmNavigationRequest.schedule(date: DateTime.utc(2026, 8, 13)),
+        );
+    await tester.pumpAndSettle();
+
+    expect(shell.controller.state.tabs, hasLength(tabCount));
+    expect(shell.controller.state.activeTab.titleHint, 'Расписание');
+    expect(
+      shell.controller.state.activeTab.currentRoute.viewState.date,
+      DateTime.utc(2026, 8, 13),
+    );
+  });
+
   testWidgets('a new direct link updates the current workspace history', (
     tester,
   ) async {

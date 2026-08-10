@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
@@ -387,10 +388,18 @@ class _ProductionWorkspaceHostState
         _controller.state.activeTabId,
         request.sourceState,
       );
-      _controller.open(
+      final tabId = _controller.open(
         request.link,
         titleHint: resolution.canonicalLocation?.title,
-        explicitNew: true,
+        explicitNew: request.openInNewTab,
+      );
+      _controller.replaceCurrentLink(
+        tabId,
+        request.link,
+        viewState: ContextViewState(
+          filters: request.link.optionalFocus?.filter ?? const {},
+          date: request.sourceState.date,
+        ),
       );
     } on WorkspaceLimitReached {
       ScaffoldMessenger.of(context).showSnackBar(

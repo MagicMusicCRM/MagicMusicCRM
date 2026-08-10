@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/api/magic_api_tokens.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/features/auth/data/services/magic_auth_service.dart';
@@ -441,6 +442,50 @@ void main() {
       expect(adapter.requests.single.body.containsKey('role'), isFalse);
       expect(adapter.requests.single.body.containsKey('email'), isFalse);
     });
+
+    test(
+      'exits stale signed-in shell when refresh is no longer valid',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/profile/me',
+            statusCode: 401,
+            body: {'message': 'Unauthorized'},
+          ),
+          _FakeResponse(
+            path: '/auth/refresh',
+            statusCode: 401,
+            body: {'message': 'Refresh expired'},
+          ),
+        ]);
+        final store = MemoryMagicTokenStore(
+          const MagicApiTokens(
+            accessToken: 'expired-access-token',
+            refreshToken: 'expired-refresh-token',
+            tokenType: 'Bearer',
+            expiresIn: 900,
+          ),
+        );
+        var beforeChanges = 0;
+        var afterChanges = 0;
+        final service = MagicAuthService(
+          _client(adapter, store),
+          onBeforeSessionChange: () => beforeChanges++,
+          onAfterSessionChange: () => afterChanges++,
+        );
+        final events = service.watchSession().take(2).toList();
+
+        await expectLater(
+          service.currentProfile(),
+          throwsA(isA<MagicApiException>()),
+        );
+
+        expect(await events, [isA<MagicAuthSession>(), isNull]);
+        expect(await store.read(), isNull);
+        expect(beforeChanges, 1);
+        expect(afterChanges, 1);
+      },
+    );
   });
 }
 

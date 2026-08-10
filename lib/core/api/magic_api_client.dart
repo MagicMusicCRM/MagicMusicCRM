@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -50,6 +51,10 @@ class MagicApiClient {
   final Dio _dio;
   final MagicTokenStore _tokenStore;
   static Future<bool>? _sharedRefreshInFlight;
+
+  /// Called after an unrecoverable refresh failure has cleared local tokens.
+  /// The auth layer uses this to leave the stale signed-in shell immediately.
+  FutureOr<void> Function()? onSessionInvalidated;
 
   MagicApiClient({
     required String baseUrl,
@@ -474,6 +479,7 @@ class MagicApiClient {
         return true;
       }
       await _tokenStore.clear();
+      await onSessionInvalidated?.call();
       return false;
     }
   }

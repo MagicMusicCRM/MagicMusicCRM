@@ -708,6 +708,8 @@ String _entityTypeTitle(EntityLink link) => switch (link.entityType) {
   EntityLinkType.user => 'Пользователь',
   EntityLinkType.homework => 'Домашнее задание',
   EntityLinkType.chat => 'Чат',
+  EntityLinkType.report when link.rawEntityType == 'lesson_list' =>
+    'Расписание',
   EntityLinkType.report => 'Отчёт',
   EntityLinkType.teacher => 'Преподаватель',
   EntityLinkType.group => 'Группа',

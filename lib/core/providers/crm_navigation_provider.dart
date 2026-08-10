@@ -19,7 +19,7 @@ class CrmNavigationRequest {
     return CrmNavigationRequest(
       link: EntityLink.typed(
         entityType: EntityLinkType.report,
-        entityId: date.toUtc().toIso8601String(),
+        entityId: '__section__',
         variant: 'lesson_list',
         optionalFocus: EntityLinkFocus(
           focus: lessonId == null ? 'date' : 'lesson',

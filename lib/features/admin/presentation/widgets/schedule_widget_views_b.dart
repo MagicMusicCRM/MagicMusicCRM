@@ -17,6 +17,7 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
         _filterClientType = focus.clientType;
         _filterClientId = focus.clientId;
         _filterClientName = focus.clientName;
+        _hideOtherClientLessons = true;
       });
       ref.read(scheduleNavigationProvider.notifier).clear();
       unawaited(_fetchAll());
@@ -197,7 +198,7 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
           highlighted:
               _highlightLessonId != null &&
               lesson['id']?.toString() == _highlightLessonId,
-          clientContext: widget.clientId != null,
+          clientContext: _hasClientContext,
           searchContext: _hasScheduleSearch,
           relatedClient: _isRelatedLesson(lesson),
         ),

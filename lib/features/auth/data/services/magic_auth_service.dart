@@ -121,7 +121,9 @@ class MagicAuthService {
     FutureOr<void> Function()? onBeforeSessionChange,
     FutureOr<void> Function()? onAfterSessionChange,
   }) : _onBeforeSessionChange = onBeforeSessionChange,
-       _onAfterSessionChange = onAfterSessionChange;
+       _onAfterSessionChange = onAfterSessionChange {
+    _api.onSessionInvalidated = _handleSessionInvalidated;
+  }
 
   Stream<MagicAuthSession?> watchSession() async* {
     yield await currentSession();
@@ -386,6 +388,12 @@ class MagicAuthService {
   Future<void> _clearLocalSession() async {
     await _beforeSessionChange();
     await _api.clearTokens();
+    _sessionController.add(null);
+    await _afterSessionChange();
+  }
+
+  Future<void> _handleSessionInvalidated() async {
+    await _beforeSessionChange();
     _sessionController.add(null);
     await _afterSessionChange();
   }

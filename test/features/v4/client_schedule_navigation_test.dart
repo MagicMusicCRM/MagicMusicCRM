@@ -66,7 +66,7 @@ void main() {
     expect(find.textContaining('Анна Тестова'), findsWidgets);
     expect(find.textContaining('Борис Другой'), findsNothing);
     expect(find.text('Год'), findsNothing);
-    expect(api.matrixQuery?['studentId'], 'student-1');
+    expect(api.matrixQuery?.containsKey('studentId'), isFalse);
   });
 }
 
