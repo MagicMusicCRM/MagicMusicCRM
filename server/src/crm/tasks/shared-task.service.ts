@@ -187,31 +187,35 @@ export class SharedTaskService {
         "Тип и идентификатор связанного объекта обязательны вместе.",
       );
     }
-    const result = await this.repository.listResolved(actor.userId, actor.role, {
-      state: query.state,
-      // ponytail: one bounded school work queue; add a cursor if it exceeds 2k.
-      limit: query.limit ?? 2000,
-      taskId: query.taskId,
-      linkedEntityType: query.linkedEntityType,
-      linkedEntityId: query.linkedEntityId,
-      q: query.q?.trim() || undefined,
-      priority: query.priority,
-      scope: query.scope,
-      from: query.from,
-      to: query.to,
-    });
-    await this.repository.recordListResolutions(result.rows, actor.userId);
-    const items = await this.toDtos(result.rows);
-    return {
-      items,
-      counters: await this.repository.counters(actor.userId, actor.role, {
+    const result = await this.repository.listResolved(
+      actor.userId,
+      actor.role,
+      {
+        state: query.state,
+        // ponytail: one bounded school work queue; add a cursor if it exceeds 2k.
+        limit: query.limit ?? 2000,
+        taskId: query.taskId,
+        linkedEntityType: query.linkedEntityType,
+        linkedEntityId: query.linkedEntityId,
+        q: query.q?.trim() || undefined,
+        priority: query.priority,
+        scope: query.scope,
+        from: query.from,
+        to: query.to,
+      },
+    );
+    const [items, counters] = await Promise.all([
+      this.toDtos(result.rows),
+      this.repository.counters(actor.userId, actor.role, {
         q: query.q?.trim() || undefined,
         priority: query.priority,
         scope: query.scope,
         from: query.from,
         to: query.to,
       }),
-    };
+      this.repository.recordListResolutions(result.rows, actor.userId),
+    ]);
+    return { items, counters };
   }
 
   async calendar(actor: ActorContext, query: SharedTaskListQuery) {
@@ -532,11 +536,29 @@ export class SharedTaskService {
       this.repository.audienceProjectionForTasks(ids),
       this.repository.reminderProjectionForTasks(ids),
     ]);
+    const audiencesByTask = new Map<
+      string,
+      (typeof audiences.rows)[number][]
+    >();
+    for (const audience of audiences.rows) {
+      const values = audiencesByTask.get(audience.task_id) ?? [];
+      values.push(audience);
+      audiencesByTask.set(audience.task_id, values);
+    }
+    const remindersByTask = new Map<
+      string,
+      (typeof reminders.rows)[number][]
+    >();
+    for (const reminder of reminders.rows) {
+      const values = remindersByTask.get(reminder.task_id) ?? [];
+      values.push(reminder);
+      remindersByTask.set(reminder.task_id, values);
+    }
     return rows.map((row) =>
       this.buildDto(
         row,
-        audiences.rows.filter((item) => item.task_id === row.id),
-        reminders.rows.filter((item) => item.task_id === row.id),
+        audiencesByTask.get(row.id) ?? [],
+        remindersByTask.get(row.id) ?? [],
       ),
     );
   }

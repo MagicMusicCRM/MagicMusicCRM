@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { PoolClient } from "pg";
 import { DatabaseService } from "../../db/database.service";
-import { isTaskOverdue } from "./task-due-state";
+import { moscowTodayStartMs } from "./task-due-state";
 import {
   ResolvedSharedTaskRow,
   SharedTaskMigrationEvidenceRow,
@@ -521,16 +521,40 @@ export class SharedTaskRepository {
     actorUserId: string,
   ): Promise<void> {
     if (rows.length === 0) return Promise.resolve();
-    return this.database.transaction(async (client) => {
-      for (const row of rows) {
-        await this.recordResolution(client, row, "list", actorUserId);
-      }
-    });
+    const resolutions = rows.map((row) => ({
+      task_id: row.id,
+      matched_audience_id: row.matched_audience_id,
+      matched_selector: {
+        type: row.matched_audience_type,
+        targetId: row.matched_target_id,
+      },
+      membership_version: row.membership_version,
+    }));
+    return this.database
+      .query(
+        `
+          insert into app.task_audience_resolution_audits (
+            task_id, action, actor_user_id, matched_audience_id,
+            matched_selector, membership_version, membership_at, request_id
+          )
+          select resolution.task_id, 'list', $2::uuid,
+            resolution.matched_audience_id, resolution.matched_selector,
+            resolution.membership_version, now(), null
+          from jsonb_to_recordset($1::jsonb) as resolution(
+            task_id uuid,
+            matched_audience_id uuid,
+            matched_selector jsonb,
+            membership_version text
+          )
+        `,
+        [JSON.stringify(resolutions), actorUserId],
+      )
+      .then(() => undefined);
   }
 
   counters(
     actorUserId: string,
-    actorRole: string,
+    _actorRole: string,
     filters: {
       q?: string;
       priority?: "low" | "medium" | "high";
@@ -539,25 +563,56 @@ export class SharedTaskRepository {
       to?: string;
     } = {},
   ) {
-    return this.listResolved(actorUserId, actorRole, {
-      limit: 2_147_483_647,
-      ...filters,
-    }).then((result) => {
-      const now = Date.now();
-      return {
-        open: result.rows.filter((row) => row.state === "open").length,
-        overdue: result.rows.filter((row) =>
-          isTaskOverdue(
-            {
-              state: row.state,
-              startAt: row.start_at,
-              allDay: row.all_day,
-            },
-            now,
-          ),
-        ).length,
-      };
-    });
+    const nowMs = Date.now();
+    return this.database
+      .query<{ open: number | string; overdue: number | string }>(
+        `
+          select
+            count(*) filter (where task.state = 'open')::int as open,
+            count(*) filter (
+              where task.state = 'open'
+                and task.start_at < case
+                  when task.all_day then $7::timestamptz
+                  else $8::timestamptz
+                end
+            )::int as overdue
+          from app.shared_tasks task
+          where task.deleted_at is null
+            and exists (
+              select 1
+              from app.shared_task_visibility visibility
+              where visibility.task_id = task.id
+                and visibility.user_id = $1::uuid
+                and (
+                  $6::text is null
+                  or $6 = 'all'
+                  or visibility.scope_kind = $6
+                )
+            )
+            and (
+              $2::text is null
+              or lower(task.title || ' ' || coalesce(task.body, ''))
+                like '%' || lower($2) || '%'
+            )
+            and ($3::text is null or task.priority = $3)
+            and ($4::timestamptz is null or task.start_at >= $4)
+            and ($5::timestamptz is null or task.start_at < $5)
+        `,
+        [
+          actorUserId,
+          filters.q ?? null,
+          filters.priority ?? null,
+          filters.from ?? null,
+          filters.to ?? null,
+          filters.scope ?? null,
+          new Date(moscowTodayStartMs(nowMs)).toISOString(),
+          new Date(nowMs).toISOString(),
+        ],
+      )
+      .then((result) => ({
+        open: Number(result.rows[0]?.open ?? 0),
+        overdue: Number(result.rows[0]?.overdue ?? 0),
+      }));
   }
 
   claimDueReminders(

@@ -174,6 +174,70 @@ describe("SettingsService", () => {
     expect(result.fields.map((field) => field.key)).toEqual(["learningGoal"]);
   });
 
+  it("reuses canonical CRM level and category options for teacher fields", async () => {
+    const { service } = createService([
+      {
+        key: "crm_custom_fields",
+        value: [
+          {
+            entity: "teachers",
+            key: "levels",
+            label: "Уровни обучения",
+            type: "select",
+            options: [],
+          },
+          {
+            entity: "teachers",
+            key: "categories",
+            label: "Категории",
+            type: "select",
+            options: [],
+          },
+        ],
+        updated_at: "2026-08-11T00:00:00.000Z",
+        configuration_snapshot: {
+          fields: [
+            {
+              entityType: "lead",
+              key: "level",
+              valueType: "select",
+              options: ["Без опыта", "Начальный", "Средний"],
+              active: true,
+            },
+            {
+              entityType: "student",
+              key: "category",
+              valueType: "multi_select",
+              optionSetKey: "student_categories",
+              active: true,
+            },
+          ],
+          optionSets: [
+            {
+              key: "student_categories",
+              options: [
+                { key: "adult", label: "Взрослые", active: true },
+                { key: "child", label: "Дети", active: true },
+                { key: "old", label: "Архив", active: false },
+              ],
+            },
+          ],
+        },
+      },
+    ]);
+
+    const result = await service.getCrmCustomFields(admin);
+    const levels = result.fields.find(
+      (field) => field.entity === "teachers" && field.key === "levels",
+    );
+    const categories = result.fields.find(
+      (field) => field.entity === "teachers" && field.key === "categories",
+    );
+
+    expect(levels?.options).toEqual(["Без опыта", "Начальный", "Средний"]);
+    expect(categories?.options).toEqual(["Взрослые", "Дети"]);
+  });
+
   it("updates CRM custom field schema only for admins and records audit", async () => {
     const savedFields: CrmCustomFieldDefinitionDto[] = [
       {

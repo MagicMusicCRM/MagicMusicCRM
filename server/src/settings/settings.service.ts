@@ -26,6 +26,7 @@ interface JsonSettingRow {
   key: string;
   value: unknown;
   updated_at: Date | string;
+  configuration_snapshot?: unknown;
 }
 
 type CrmCustomFieldDefinition = Required<
@@ -652,18 +653,32 @@ export class SettingsService {
   async getCrmCustomFields(_actor: ActorContext) {
     const result = await this.database.query<JsonSettingRow>(
       `
-        select key, value, updated_at
-        from app.system_settings
-        where key = $1
-        limit 1
+        select $1::text as key,
+          setting.value,
+          setting.updated_at,
+          (
+            select revision.effective_snapshot
+            from app.crm_configuration_revisions revision
+            where revision.branch_id is null
+            order by revision.version desc
+            limit 1
+          ) as configuration_snapshot
+        from (select 1) seed
+        left join app.system_settings setting on setting.key = $1
       `,
       [CRM_CUSTOM_FIELDS_KEY],
     );
     const row = result.rows[0];
+    const rawFields = Array.isArray(row?.value)
+      ? row.value
+      : DEFAULT_CRM_CUSTOM_FIELDS;
     return {
       key: CRM_CUSTOM_FIELDS_KEY,
       fields: this.normalizeCustomFields(
-        Array.isArray(row?.value) ? row.value : DEFAULT_CRM_CUSTOM_FIELDS,
+        this.withCanonicalTeacherOptions(
+          rawFields,
+          row?.configuration_snapshot,
+        ),
       ),
       updatedAt: row?.updated_at ?? null,
     };
@@ -776,6 +791,125 @@ export class SettingsService {
       }
       return normalized;
     }).filter((field) => !REJECTED_CRM_CUSTOM_FIELD_KEYS.has(field.key));
+  }
+
+  private withCanonicalTeacherOptions(
+    fields: unknown[],
+    snapshotValue: unknown,
+  ): unknown[] {
+    if (
+      snapshotValue === null ||
+      typeof snapshotValue !== "object" ||
+      Array.isArray(snapshotValue)
+    ) {
+      return fields;
+    }
+    const snapshot = snapshotValue as Record<string, unknown>;
+    const configuredFields = Array.isArray(snapshot.fields)
+      ? snapshot.fields
+      : [];
+    const optionSets = new Map<string, Record<string, unknown>>();
+    if (Array.isArray(snapshot.optionSets)) {
+      for (const value of snapshot.optionSets) {
+        if (
+          value === null ||
+          typeof value !== "object" ||
+          Array.isArray(value)
+        ) {
+          continue;
+        }
+        const optionSet = value as Record<string, unknown>;
+        const key = typeof optionSet.key === "string" ? optionSet.key : null;
+        if (key) optionSets.set(key, optionSet);
+      }
+    }
+
+    const canonical = {
+      levels: [] as string[],
+      categories: [] as string[],
+    };
+    const seen = {
+      levels: new Set<string>(),
+      categories: new Set<string>(),
+    };
+    for (const value of configuredFields) {
+      if (value === null || typeof value !== "object" || Array.isArray(value)) {
+        continue;
+      }
+      const field = value as Record<string, unknown>;
+      if (field.active === false) continue;
+      const entity =
+        typeof field.entityType === "string"
+          ? field.entityType.toLowerCase()
+          : "";
+      if (
+        ![
+          "lead",
+          "leads",
+          "student",
+          "students",
+          "teacher",
+          "teachers",
+        ].includes(entity)
+      ) {
+        continue;
+      }
+      const key = typeof field.key === "string" ? field.key.toLowerCase() : "";
+      const target =
+        key === "level" || key === "levels"
+          ? "levels"
+          : key === "category" || key === "categories"
+            ? "categories"
+            : null;
+      if (target === null) continue;
+      const optionSetKey =
+        typeof field.optionSetKey === "string" ? field.optionSetKey : null;
+      const options = optionSetKey
+        ? optionSets.get(optionSetKey)?.options
+        : field.options;
+      for (const label of this.configuredOptionLabels(options)) {
+        if (seen[target].has(label)) continue;
+        seen[target].add(label);
+        canonical[target].push(label);
+      }
+    }
+
+    return fields.map((value) => {
+      if (value === null || typeof value !== "object" || Array.isArray(value)) {
+        return value;
+      }
+      const field = value as Record<string, unknown>;
+      if (field.entity !== "teachers") return field;
+      const target =
+        field.key === "level" || field.key === "levels"
+          ? "levels"
+          : field.key === "category" || field.key === "categories"
+            ? "categories"
+            : null;
+      if (target === null || canonical[target].length === 0) return field;
+      return { ...field, options: canonical[target] };
+    });
+  }
+
+  private configuredOptionLabels(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    const labels: string[] = [];
+    for (const option of value) {
+      const raw =
+        typeof option === "string"
+          ? option
+          : option !== null &&
+              typeof option === "object" &&
+              !Array.isArray(option)
+            ? (option as Record<string, unknown>).active === false
+              ? null
+              : (option as Record<string, unknown>).label
+            : null;
+      if (typeof raw !== "string") continue;
+      const label = raw.trim();
+      if (label.length > 0 && label.length <= 80) labels.push(label);
+    }
+    return labels;
   }
 
   private normalizeFieldKey(value: unknown): string {
