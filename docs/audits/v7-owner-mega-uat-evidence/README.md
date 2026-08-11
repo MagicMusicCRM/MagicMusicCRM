@@ -1,27 +1,29 @@
 # V7 owner mega-UAT — актуальные доказательства
 
-Дата прогона: `2026-08-08` — `2026-08-10`
-Клиент: production API `1.5.1+180`; Windows/Android Release `+180` готовы к
-актуальному UI-retest
+Дата прогона: `2026-08-08` — `2026-08-11`
+Клиент: production API и update channels `1.5.1+181`; Windows/Android Release
+`+181` готовы к актуальному owner UI-retest
 Среда данных: production API/DB
 
-Production API развёрнут на exact image `1.5.1+180`. Исторические UI-кадры
+Production API развёрнут на exact image `1.5.1+181`. Исторические UI-кадры
 предыдущих кандидатов сохраняют доказанную предметную операцию, но не повышают
 изменённые UI-сценарии до PASS без актуального owner-повтора.
 
-## Локальный кандидат `1.5.1+181` — не production evidence
+## Production rollout `1.5.1+181`
 
 Teacher compensation refinement, полные regression-gates, Windows/Android
 smoke, exact server image runtime/Trivy и release hashes зафиксированы в
-[`v7-teacher-compensation-181.md`](../v7-teacher-compensation-181.md). Эти
-доказательства подтверждают техническую готовность локального кандидата, но не
-меняют production-статусы строк до отдельного rollout и повторного UI/API/DB
-прогона.
+[`v7-teacher-compensation-181.md`](../v7-teacher-compensation-181.md). Backup,
+isolated restore, серверный cutover, five-role/API/reconciliation checks и
+публикация клиентов зафиксированы в
+[`v7-production-rollout-181.md`](../v7-production-rollout-181.md). Это повышает
+только прямо доказанные технические строки; предметные UI-сценарии требуют
+отдельного owner-повтора.
 
 Локальный технический gate и hashes:
 [`../v7-production-readiness-180.md`](../v7-production-readiness-180.md).
 
-Production rollout, backup/restore и runtime evidence:
+Предыдущий production rollout `+180`, backup/restore и runtime evidence:
 [`../v7-production-rollout-180.md`](../v7-production-rollout-180.md).
 
 Рабочая матрица всех `100` сценариев:
@@ -31,15 +33,16 @@ Production rollout, backup/restore и runtime evidence:
 аудиторий, прежнюю форму преподавателя и один кадр, снятый не из приложения.
 Ни один из этих кадров не используется как доказательство.
 
-## G0/G13 — rollout `1.5.1+180`
+## G0/G13 — rollout `1.5.1+181`
 
 | Проверка | Результат | Доказательство |
 |---|---|---|
-| Exact image, Compose, migration ledger и hashes | PASS | `../v7-production-rollout-180.md` |
-| Новый encrypted backup, off-host SHA и isolated restore | PASS | `../v7-production-rollout-180.md` |
-| Restore `0115` → candidate migrations `0118` → reconcile zero | PASS | `../v7-production-rollout-180.md` |
-| Five-role login + private JWT после rollout | PASS | `../v7-production-rollout-180.md` |
-| Worker/outbox, constraints/indexes, two reconciliations, logs/5xx/latency | PASS | `../v7-production-rollout-180.md` |
+| Exact image, revision, migration ledger и release hashes | PASS | `../v7-production-rollout-181.md` |
+| Новый encrypted backup, off-host SHA и isolated restore | PASS | `../v7-production-rollout-181.md` |
+| Restore → candidate migration `0118` → reconcile zero | PASS | `../v7-production-rollout-181.md` |
+| Five-role login/profile после rollout | PASS | `../v7-production-rollout-181.md` |
+| Worker/outbox, two reconciliations, restart/log/5xx/latency | PASS | `../v7-production-rollout-181.md` |
+| Оба update-манифеста и четыре client artifacts build `181` | PASS | `../v7-production-rollout-181.md` |
 
 ## G3 — филиал, аудитории и преподаватель
 

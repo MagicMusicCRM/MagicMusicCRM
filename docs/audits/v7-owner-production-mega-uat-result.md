@@ -2,7 +2,7 @@
 
 Run: `OWNER-20260808-01`
 Среда: production
-Production candidate: `1.5.1+180`, image `sha256:a07c39ff…`
+Production candidate: `1.5.1+181`, image `sha256:5fbd5a29…`
 Статус: **IN PROGRESS**
 
 `PARTIAL` и `PENDING` допустимы только во время исполнения. Перед `INT-S6`
@@ -16,16 +16,16 @@ Production candidate: `1.5.1+180`, image `sha256:a07c39ff…`
 
 | ID | Сценарий | Статус | Доказательство / остаток |
 |---|---|---|---|
-| UAT-000 | Зафиксировать commit, образы, миграции и hashes | PASS | client `964f79c`, server `1559a45`, production image `a07c39ff…`, schema `0118`, artifact/transport/Compose hashes: `v7-production-readiness-180.md`, `v7-production-rollout-180.md` |
-| UAT-001 | Backup, пробный restore, начальные counts | PASS | новый encrypted backup + off-host SHA, payload SHA, isolated restore `0115`, candidate up `0118`, baseline aggregate counts и cleanup: `v7-production-rollout-180.md` |
-| UAT-002 | Release, production API, тёмная тема, реальные данные | PARTIAL | production API уже на `+180`; Windows/Android `+180` собраны и локально запущены в тёмной теме, нужен актуальный owner UI proof с production data |
+| UAT-000 | Зафиксировать commit, образы, миграции и hashes | PASS | production `+181`: client/server revision `17ce254`, exact image `5fbd5a29…`, schema `0118`, artifact/update/transport hashes: `v7-teacher-compensation-181.md`, `v7-production-rollout-181.md` |
+| UAT-001 | Backup, пробный restore, начальные counts | PASS | новый `+181` encrypted backup + off-host SHA, isolated restore, candidate migration `0118`, count/reconciliation и cleanup: `v7-production-rollout-181.md` |
+| UAT-002 | Release, production API, тёмная тема, реальные данные | PARTIAL | production API и update channels уже на `+181`; Windows/Android `+181` прошли post-rollout launch smoke, но нужен актуальный owner UI proof с production data |
 | UAT-003 | ID-ledger и каталог evidence без секретов | PARTIAL | evidence index и redacted API JSON созданы; нужен полный ledger всех UAT facts |
 
 ## G1 — авторизация и навигация пяти ролей
 
 | ID | Сценарий | Статус | Доказательство / остаток |
 |---|---|---|---|
-| UAT-010 | Вход `magic1..5`, роли и навигация | PARTIAL | post-rollout production login + private JWT `5/5` PASS: `v7-production-rollout-180.md`; ожидаются актуальные UI-кадры навигации |
+| UAT-010 | Вход `magic1..5`, роли и навигация | PARTIAL | post-rollout production login/profile `5/5` PASS: `v7-production-rollout-181.md`; ожидаются актуальные UI-кадры навигации |
 | UAT-011 | Relogin Client↔Director и Teacher↔Admin | PARTIAL | automated secure-session regression есть; нужен текущий Release UI proof |
 | UAT-012 | 10 вкладок и связанные маршруты | PARTIAL | доказаны Lead/Chat/Schedule маршруты; полный набор десяти вкладок не снят |
 | UAT-013 | Android Back, клавиатура, safe areas | PARTIAL | teacher session/navigation есть; Client и полный safe-area сценарий ожидаются |
@@ -172,8 +172,8 @@ Production candidate: `1.5.1+180`, image `sha256:a07c39ff…`
 | UAT-131 | Обрыв сети, сохранение формы и Retry | PENDING | — |
 | UAT-132 | Stale expectedVersion и recovery | PARTIAL | automated contracts есть; нужен production UI scenario |
 | UAT-133 | Полная actor matrix private routes | PARTIAL | регулярные route/actor gates есть; нужен финальный candidate run |
-| UAT-134 | Full tests/build/migrations/clean schema | PARTIAL | production `+180`: Flutter `666/666`, backend `158/158`/`1258/1258`, clean `0001..0118`, exact ledger PASS; local `+181`: Flutter `667/667`, тот же backend full gate и exact image runtime/Trivy PASS (`v7-teacher-compensation-181.md`); остаются production rollout proof и финальная route/wire/inventory stale-сверка |
-| UAT-135 | Health, constraints, reconcile, workers, logs | PASS | internal/public ready, migration objects, PostgreSQL validation, worker/outbox, reconciliation twice, restart/log/5xx и latency: `v7-production-rollout-180.md` |
+| UAT-134 | Full tests/build/migrations/clean schema | PARTIAL | production `+181`: Flutter `667/667`, backend `158/158`/`1258/1258`, clean `0001..0118`, exact image runtime/Trivy и rollout PASS (`v7-teacher-compensation-181.md`, `v7-production-rollout-181.md`); остаётся финальная route/wire/inventory stale-сверка |
+| UAT-135 | Health, constraints, reconcile, workers, logs | PASS | `+181` internal/public ready, migration `0118`, worker/outbox, reconciliation twice, restart/log/5xx и latency: `v7-production-rollout-181.md` |
 
 ## G14 — пять персон и итоговое доказательство
 

@@ -19,24 +19,24 @@
 
 - Активная архитектура: `.anws/v7` — Financial & Lesson Integrity.
 - Основная ветка: `main`; целевое зеркало: `origin/main`.
-- Production release candidate: `1.5.1+180`, только тёмная тема; exact server
-  image `sha256:a07c39ff…` развёрнут 2026-08-10.
-- Локальный unreleased candidate: `1.5.1+181`, commit `17ce254`, Teacher
-  compensation refinement; production и update manifests не изменялись.
+- Production release: `1.5.1+181`, только тёмная тема; exact server image
+  `sha256:5fbd5a29…`, revision `17ce254`, развёрнут 2026-08-11. Оба update-
+  манифеста и Windows/Android artifacts опубликованы для build `181`.
 - Production API при последней проверке healthy на migration `0118`; worker
   активен, worker/outbox/reconcile drift `0`.
 - Последний полный автоматический gate: Flutter `667/667`, backend
   `158/158` suites и `1258/1258` tests, backend build PASS. Exact production
   server image прошёл migration/live/ready/503 runtime gate и Trivy=0
   High/Critical/secret.
-- Exact local `+181` image `sha256:5fbd5a29…` прошёл migration/fail-closed/
+- Exact production `+181` image `sha256:5fbd5a29…` прошёл migration/fail-closed/
   live/ready/503 и Trivy=0; Windows ZIP и Android API 35 launch smoke PASS.
 - Активная задача: `T7.1.2` — production mega-UAT.
 - `T7.1.3` — организационные конструкторы — завершена.
 - `INT-S6` не закрыт: кандидат ещё не получил итоговую owner-приёмку.
-- Владелец 2026-08-10 принял unsigned Windows distribution и явно разрешил
-  production backup/rollout. Rollout, новый encrypted off-host backup,
-  isolated restore-check и автоматические rollback gates прошли.
+- Владелец 2026-08-10 принял unsigned Windows distribution, а 2026-08-11 явно
+  разрешил production backup/rollout `+181` после зелёных gates. Новый encrypted
+  off-host backup, isolated restore-check, rollout и автоматические rollback
+  gates прошли; rollback не потребовался.
 
 Рабочая UAT-матрица:
 
@@ -44,10 +44,10 @@
 - `docs/audits/v7-owner-production-mega-uat-result.md` — единственный текущий
   статус 100 сценариев;
 - `docs/audits/v7-owner-mega-uat-evidence/README.md` — индекс доказательств.
-- `docs/audits/v7-teacher-compensation-181.md` — технический audit локального
-  кандидата `+181`, не заменяющий production owner-UAT.
+- `docs/audits/v7-teacher-compensation-181.md` — технический audit кандидата;
+- `docs/audits/v7-production-rollout-181.md` — production evidence `+181`.
 
-На 2026-08-10 матрица содержит 100 уникальных строк: `10 PASS`, `29 PARTIAL`,
+На 2026-08-11 матрица содержит 100 уникальных строк: `10 PASS`, `29 PARTIAL`,
 `61 PENDING`, `0 FAIL`, `0 BLOCKED`. Нельзя объявлять приложение окончательно
 принятым, пока каждая обязательная строка не имеет итоговый статус и требуемые
 UI/API/DB-доказательства.

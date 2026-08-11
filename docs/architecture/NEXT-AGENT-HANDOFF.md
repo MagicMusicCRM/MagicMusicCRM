@@ -1,7 +1,7 @@
 # MagicMusicCRM — актуальная передача следующему агенту
 
-> Зафиксировано: 2026-08-10
-> Локальный кандидат: `1.5.1+181` (Teacher compensation refinement); production остаётся `1.5.1+180`
+> Зафиксировано: 2026-08-11
+> Production: `1.5.1+181` (Teacher compensation refinement), exact image `sha256:5fbd5a29…`
 > Ветка: `codex/v7-production-readiness` от `main`/`origin/main`
 > Статус: production rollout PASS; owner mega-UAT не завершён
 
@@ -16,14 +16,15 @@
 5. Открыть текущую UAT-матрицу и evidence index:
    - `docs/audits/v7-owner-production-mega-uat-result.md`;
    - `docs/audits/v7-owner-mega-uat-evidence/README.md`;
-   - `docs/audits/v7-production-readiness-180.md`.
-   - `docs/audits/v7-teacher-compensation-181.md`.
-5. Продолжать только незакрытые строки матрицы. Новый глобальный аудит не нужен.
+   - `docs/audits/v7-production-readiness-180.md`;
+   - `docs/audits/v7-teacher-compensation-181.md`;
+   - `docs/audits/v7-production-rollout-181.md`.
+6. Продолжать только незакрытые строки матрицы. Новый глобальный аудит не нужен.
 
 ## Честный статус
 
 Реализация v7 и финальный кандидат собраны, но полная пользовательская приёмка
-ещё не доказана. На 2026-08-10 матрица содержит ровно 100 уникальных сценариев:
+ещё не доказана. На 2026-08-11 матрица содержит ровно 100 уникальных сценариев:
 
 | Статус | Количество |
 |---|---:|
@@ -41,22 +42,27 @@
 - Flutter `667/667`;
 - backend `158/158` suites, `1258/1258` tests;
 - backend build PASS;
-- локальный `+181` exact image `sha256:5fbd5a29…`, revision `17ce254`:
+- production `+181` exact image `sha256:5fbd5a29…`, revision `17ce254`:
   migration/fail-closed/live/ready/degraded-503 и Trivy `0/0` PASS;
 - Windows ZIP `+181` launch PASS, APK/AAB build+signature PASS; Android 15/API
   35 install/launch build `181` PASS без FATAL/ANR/E/flutter;
-- production API healthy на `1.5.1+180`, migration `0118`;
-- exact image `sha256:a07c39ff…`, worker active, worker/outbox/reconcile zero;
-- server image `sha256:a07c39ff…`, revision `1559a45`: migration, fail-closed
-  flags, live/ready, degraded HTTP 503 и Trivy image scan PASS.
-- Inno Setup installer собран и install/launch/uninstall smoke PASS, но Windows
-  Authenticode отсутствует; владелец 2026-08-10 явно принял unsigned
-  distribution и разрешил продолжать без сертификата.
+- production API и оба update-манифеста работают на `1.5.1+181`, migration
+  `0118`; worker active, worker/outbox/reconcile drift `0`;
+- Inno Setup `+181` собран, но его интерактивный elevated install smoke из
+  non-interactive сессии не выполнен; portable ZIP launch PASS. Windows
+  Authenticode отсутствует, и владелец 2026-08-10 явно принял unsigned
+  distribution.
 
 Production rollout 2026-08-10 прошёл с новым encrypted backup, совпавшей
 off-host SHA, isolated restore `0115`, candidate migration `0118`, двумя
 нулевыми reconciliation, five-role JWT smoke и автоматическим rollback gate.
 Подробности без секретов/PII: `docs/audits/v7-production-rollout-180.md`.
+
+Production rollout `1.5.1+181` 2026-08-11 также прошёл с новым encrypted
+off-host backup, isolated restore, worker pause/resume и автоматическим
+rollback gate. Серверный и клиентский каналы переключены на build `181`, обе
+reconciliation пусты, five-role smoke `5/5`, restart/runtime error/Caddy 5xx —
+`0`. Подробности: `docs/audits/v7-production-rollout-181.md`.
 
 ## Последние production-подтверждения
 

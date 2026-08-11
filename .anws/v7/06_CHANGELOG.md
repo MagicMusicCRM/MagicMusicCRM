@@ -220,3 +220,15 @@
 - **[ADD]** Candidate-specific Gitleaks для `da3474a..HEAD` дал `0` findings,
   backend production dependency audit — `0` vulnerabilities; post-check
   production `/live` и `/ready` остался `ok` на migration `0118` без deployment.
+- **[RELEASE]** Владелец 2026-08-11 разрешил production rollout после зелёных
+  gates. Создан новый encrypted off-host backup, isolated restore и candidate
+  migration/reconciliation прошли; exact image `sha256:5fbd5a29…` с revision
+  `17ce254` развёрнут как `1.5.1+181` с автоматическим rollback gate.
+- **[RELEASE]** Worker был безопасно приостановлен на cutover и снова включён;
+  API healthy на migration `0118`, две reconciliation пусты, five-role login
+  `5/5`, restarts/runtime errors/Caddy 5xx — `0`. Rollback не потребовался,
+  immutable server rollback tag сохранён.
+- **[RELEASE]** Windows ZIP/Setup и Android APK/AAB опубликованы под versioned
+  именами; `latest.json` и `latest-v2.json` атомарно переключены на build `181`
+  после hash/HTTPS-проверки. Windows launch и Android API 35 post-rollout smoke
+  прошли без FATAL/ANR/E/flutter. Owner mega-UAT остаётся незавершённой.
