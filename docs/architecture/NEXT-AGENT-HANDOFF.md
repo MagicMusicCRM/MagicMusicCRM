@@ -1,7 +1,7 @@
 # MagicMusicCRM — актуальная передача следующему агенту
 
 > Зафиксировано: 2026-08-11
-> Production: `1.5.1+181` (Teacher compensation refinement), exact image `sha256:5fbd5a29…`
+> Production: client `1.5.1+181`, server hotfix `b04f177`, exact image `sha256:6e8fc887…`
 > Ветка: `codex/v7-production-readiness` от `main`/`origin/main`
 > Статус: production rollout PASS; owner mega-UAT не завершён
 
@@ -18,7 +18,8 @@
    - `docs/audits/v7-owner-mega-uat-evidence/README.md`;
    - `docs/audits/v7-production-readiness-180.md`;
    - `docs/audits/v7-teacher-compensation-181.md`;
-   - `docs/audits/v7-production-rollout-181.md`.
+   - `docs/audits/v7-production-rollout-181.md`;
+   - `docs/audits/v7-production-rollout-server-hotfix-b04f177.md`.
 6. Продолжать только незакрытые строки матрицы. Новый глобальный аудит не нужен.
 
 ## Честный статус
@@ -40,9 +41,9 @@
 Последний полный автоматический baseline:
 
 - Flutter `667/667`;
-- backend `158/158` suites, `1258/1258` tests;
+- backend `158/158` suites, `1259/1259` tests;
 - backend build PASS;
-- production `+181` exact image `sha256:5fbd5a29…`, revision `17ce254`:
+- production server exact image `sha256:6e8fc887…`, revision `b04f177`:
   migration/fail-closed/live/ready/degraded-503 и Trivy `0/0` PASS;
 - Windows ZIP `+181` launch PASS, APK/AAB build+signature PASS; Android 15/API
   35 install/launch build `181` PASS без FATAL/ANR/E/flutter;
@@ -63,6 +64,14 @@ off-host backup, isolated restore, worker pause/resume и автоматичес
 rollback gate. Серверный и клиентский каналы переключены на build `181`, обе
 reconciliation пусты, five-role smoke `5/5`, restart/runtime error/Caddy 5xx —
 `0`. Подробности: `docs/audits/v7-production-rollout-181.md`.
+
+Production server hotfix `b04f177` 2026-08-11 развернут поверх неизменного
+client build `181`. Он ускоряет серверную выдачу задач и возвращает teacher
+levels/categories из канонической CRM-конфигурации. Первый кандидат был
+отклонён runtime-smoke и откатан; исправленный exact image
+`sha256:6e8fc887…` прошёл новый encrypted off-host backup, isolated restore,
+compiled production-data smoke, двойной reconciliation и публичный readiness.
+Подробности: `docs/audits/v7-production-rollout-server-hotfix-b04f177.md`.
 
 ## Последние production-подтверждения
 

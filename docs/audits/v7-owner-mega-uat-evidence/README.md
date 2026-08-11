@@ -5,7 +5,8 @@
 `+181` готовы к актуальному owner UI-retest
 Среда данных: production API/DB
 
-Production API развёрнут на exact image `1.5.1+181`. Исторические UI-кадры
+Production API развёрнут на client-compatible exact server image `b04f177`
+поверх неизменного client build `1.5.1+181`. Исторические UI-кадры
 предыдущих кандидатов сохраняют доказанную предметную операцию, но не повышают
 изменённые UI-сценарии до PASS без актуального owner-повтора.
 
@@ -19,6 +20,10 @@ isolated restore, серверный cutover, five-role/API/reconciliation check
 [`v7-production-rollout-181.md`](../v7-production-rollout-181.md). Это повышает
 только прямо доказанные технические строки; предметные UI-сценарии требуют
 отдельного owner-повтора.
+
+Актуальный server hotfix, новый backup/restore, контролируемый rollback первой
+попытки, teacher-options API smoke и task performance smoke зафиксированы в
+[`v7-production-rollout-server-hotfix-b04f177.md`](../v7-production-rollout-server-hotfix-b04f177.md).
 
 Локальный технический gate и hashes:
 [`../v7-production-readiness-180.md`](../v7-production-readiness-180.md).
@@ -37,6 +42,7 @@ isolated restore, серверный cutover, five-role/API/reconciliation check
 
 | Проверка | Результат | Доказательство |
 |---|---|---|
+| Актуальный server hotfix: teacher options и task performance | PASS | `../v7-production-rollout-server-hotfix-b04f177.md` |
 | Exact image, revision, migration ledger и release hashes | PASS | `../v7-production-rollout-181.md` |
 | Новый encrypted backup, off-host SHA и isolated restore | PASS | `../v7-production-rollout-181.md` |
 | Restore → candidate migration `0118` → reconcile zero | PASS | `../v7-production-rollout-181.md` |
