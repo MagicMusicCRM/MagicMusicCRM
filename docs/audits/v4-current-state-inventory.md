@@ -1,10 +1,9 @@
-# MagicMusicCRM v4 — Current-State Inventory
+# MagicMusicCRM — Current-State Inventory
 
-**Task:** T8.1.2
-**Source digest:** `3439f51a0cfa4e8c773de90b0a1c66a130bc659f2ff596365f64aa46f8c697f8`
+**Source digest:** `47270233d0c5308a053f14fc023eec7b4bb684fe480d3cceb2b4a6fa5db518b8`
 **Validation:** PASS
 
-> Имя генератора и migration-status labels сохранены для совместимости старых gates. Фактические counts/paths актуальны; текущие ownership/state брать из `.nexus-map/`, где legacy status отброшен.
+> Имя generator-файла и legacy JSON field names сохранены для artifact compatibility. Фактические counts/paths актуальны; code ownership и dependency graph проверяются через RepoWise по текущему checkout.
 
 ## Coverage
 
@@ -12,18 +11,18 @@
 |---|---:|
 | backend routes | 321 |
 | role guards | 22 |
-| policy calls | 245 |
-| dto fields | 801 |
+| policy calls | 246 |
+| dto fields | 808 |
 | flutter role checks | 143 |
 | flutter navigation sources | 334 |
 | schedule entry points | 48 |
 | attendance mutations | 0 |
-| finance writes | 46 |
+| finance writes | 48 |
 | schema tables | 5 |
 | unowned items | 0 |
 | missing status items | 0 |
 
-Every row in the JSON artifact has one v4 system owner and an explicit migration status. The JSON file is the exhaustive machine-readable inventory; this document is its review summary.
+Every row in the JSON artifact has one subsystem owner and an explicit implementation status. The JSON file is the exhaustive machine-readable inventory; this document is its review summary.
 
 ## Ownership and status model
 
@@ -120,12 +119,14 @@ Indexes: `users_app_accounts_role_created_idx`, `users_email_lower_unique`, `use
 | sql-mutation | insert into app.expenses | `server/src/crm/finance.service.ts:789` | commerce-migration-pending |
 | sql-mutation | update app.expenses | `server/src/crm/finance.service.ts:826` | commerce-migration-pending |
 | sql-mutation | update app.expenses | `server/src/crm/finance.service.ts:865` | commerce-migration-pending |
-| sql-mutation | insert into app.teacher_payouts | `server/src/crm/payroll.service.ts:360` | commerce-migration-pending |
-| sql-mutation | insert into app.teacher_rates | `server/src/crm/payroll.service.ts:408` | commerce-migration-pending |
+| sql-mutation | insert into app.teacher_payouts | `server/src/crm/payroll.service.ts:365` | commerce-migration-pending |
+| sql-mutation | insert into app.teacher_rates | `server/src/crm/payroll.service.ts:413` | commerce-migration-pending |
 | sql-mutation | insert into app.payments | `server/src/crm/subscriptions.service.ts:285` | commerce-migration-pending |
 | sql-mutation | insert into app.subscriptions | `server/src/crm/subscriptions.service.ts:294` | commerce-migration-pending |
 | sql-mutation | insert into app.payments | `server/src/crm/subscriptions.service.ts:669` | commerce-migration-pending |
 | sql-mutation | insert into app.subscriptions | `server/src/crm/subscriptions.service.ts:687` | commerce-migration-pending |
+| sql-mutation | insert into app.teacher_rates | `server/src/crm/teachers.service.ts:488` | commerce-migration-pending |
+| sql-mutation | insert into app.teacher_rates | `server/src/crm/teachers.service.ts:835` | commerce-migration-pending |
 | sql-mutation | insert into app.subscriptions | `server/src/crm/commerce/commerce-schema.repository.ts:185` | commerce-migration-pending |
 | sql-mutation | insert into app.payments | `server/src/crm/commerce/commerce-schema.repository.ts:333` | commerce-migration-pending |
 | sql-mutation | update app.payments | `server/src/crm/commerce/payment-lifecycle.repository.ts:340` | commerce-migration-pending |

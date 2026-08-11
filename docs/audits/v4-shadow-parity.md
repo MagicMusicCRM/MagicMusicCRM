@@ -35,7 +35,7 @@ Runtime readiness publishes both resolved domain states and reports
 
 The release security audit is operational again after installing system
 Node.js/npm. It reports an inherited `exceljs → uuid` issue at moderate
-severity; no dependency was changed in this ANWS package. This is explicit
+severity; no dependency was changed in that release candidate. This is explicit
 input to T8.4.1, not an unexplained parity or migration failure.
 
 ```powershell

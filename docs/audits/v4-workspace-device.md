@@ -4,7 +4,7 @@
 
 **Дата:** 2026-08-01
 
-**Ветка:** `codex/v4-anws`
+**Исходная ветка:** legacy v4 delivery branch (удалена после governance cleanup)
 
 **Машинный результат:** `docs/audits/v4-workspace-device-result.json`
 

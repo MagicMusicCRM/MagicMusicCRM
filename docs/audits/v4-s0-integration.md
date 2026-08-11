@@ -10,11 +10,8 @@
 
 ## Scope
 
-Gate запущен командой:
-
-```powershell
-pwsh -File scripts/v4_sprint_gate.ps1 -Sprint S0
-```
+Gate был выполнен legacy orchestration script, удалённым после governance
+cleanup. Machine result и tested revision сохранены как историческое evidence.
 
 Скрипт создал detached clean worktree из tested revision, выполнил все gates
 из lock-файлов, проверил отсутствие skipped integration suites и удалил

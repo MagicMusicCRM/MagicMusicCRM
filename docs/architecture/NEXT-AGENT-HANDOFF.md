@@ -1,112 +1,88 @@
-# MagicMusicCRM — актуальная передача следующему агенту
+# MagicMusicCRM — актуальная передача
 
-> Зафиксировано: 2026-08-11
-> Production: client `1.5.1+181`, server hotfix `b04f177`, exact image `sha256:6e8fc887…`
-> Ветка: `codex/v7-production-readiness` от `main`/`origin/main`
+> Обновлено: 2026-08-11
+> Production: client `1.5.1+181`, server `b04f177`,
+> image `sha256:6e8fc887…`, migration `0118`
+> Рабочая ветка: `codex/v7-production-readiness`
 > Статус: production rollout PASS; owner mega-UAT не завершён
 
-## С чего начать
+## Быстрый старт
 
-1. Прочитать `AGENTS.md`.
-2. Проверить `git status --short --branch`, `git fetch origin` и совпадение
-   `HEAD` с `origin/main`.
-3. Прочитать `.nexus-map/INDEX.md`, затем запрашивать только нужные строки
-   исчерпывающих JSON из `.nexus-map/inventory/`.
-4. В `.anws/v7/05_TASKS.md` открыть только определения `T7.1.2` и `INT-S6`.
-5. Открыть текущую UAT-матрицу и evidence index:
+1. Прочитать `AGENTS.md` и проверить `git status --short --branch`.
+2. Использовать RepoWise для ответа на конкретный вопрос по коду. При
+   low-confidence/mock результате подтвердить ответ живым исходником.
+3. Если задача касается приёмки, открыть:
    - `docs/audits/v7-owner-production-mega-uat-result.md`;
-   - `docs/audits/v7-owner-mega-uat-evidence/README.md`;
-   - `docs/audits/v7-production-readiness-180.md`;
-   - `docs/audits/v7-teacher-compensation-181.md`;
-   - `docs/audits/v7-production-rollout-181.md`;
-   - `docs/audits/v7-production-rollout-server-hotfix-b04f177.md`.
-6. Продолжать только незакрытые строки матрицы. Новый глобальный аудит не нужен.
+   - `docs/audits/v7-owner-mega-uat-evidence/README.md`.
+4. Если задача касается найденных пробелов продукта, открыть
+   `docs/audits/2026-08-11-repowise-application-audit.md`.
 
-## Честный статус
+Не нужно читать глобальный backlog, проходить фазовый workflow или создавать
+служебный отчёт до начала обычной правки.
 
-Реализация v7 и финальный кандидат собраны, но полная пользовательская приёмка
-ещё не доказана. На 2026-08-11 матрица содержит ровно 100 уникальных сценариев:
+## Честный production-статус
 
-| Статус | Количество |
+| Проверка | Результат |
 |---|---:|
-| PASS | 10 |
-| PARTIAL | 29 |
-| PENDING | 61 |
-| FAIL | 0 |
-| BLOCKED | 0 |
+| Flutter | 667/667 |
+| Backend | 158/158 suites, 1259/1259 tests |
+| Backend build | PASS |
+| Exact image runtime/security gate | PASS, Trivy 0 High/Critical/secret |
+| Windows ZIP launch | PASS |
+| Android 15/API 35 install/launch | PASS |
+| UAT PASS | 10 |
+| UAT PARTIAL | 29 |
+| UAT PENDING | 61 |
 
-`PARTIAL` не равен `PASS`. `INT-S6` остаётся открытым, пока каждая обязательная
-строка не получит итоговый статус и предусмотренные UI/API/DB-доказательства.
+`PARTIAL` не равен `PASS`. Приложение нельзя объявлять окончательно принятым,
+пока обязательные строки не имеют итоговый статус и требуемые UI/API/DB
+доказательства.
 
-Последний полный автоматический baseline:
+Production rollout build 181 прошёл encrypted off-host backup, isolated restore,
+worker pause/resume, reconciliation и automatic rollback gate. Первый кандидат
+server hotfix был отклонён runtime smoke и откатан; исправленный `b04f177`
+прошёл повторный gate.
 
-- Flutter `667/667`;
-- backend `158/158` suites, `1259/1259` tests;
-- backend build PASS;
-- production server exact image `sha256:6e8fc887…`, revision `b04f177`:
-  migration/fail-closed/live/ready/degraded-503 и Trivy `0/0` PASS;
-- Windows ZIP `+181` launch PASS, APK/AAB build+signature PASS; Android 15/API
-  35 install/launch build `181` PASS без FATAL/ANR/E/flutter;
-- production API и оба update-манифеста работают на `1.5.1+181`, migration
-  `0118`; worker active, worker/outbox/reconcile drift `0`;
-- Inno Setup `+181` собран, но его интерактивный elevated install smoke из
-  non-interactive сессии не выполнен; portable ZIP launch PASS. Windows
-  Authenticode отсутствует, и владелец 2026-08-10 явно принял unsigned
-  distribution.
+Evidence:
 
-Production rollout 2026-08-10 прошёл с новым encrypted backup, совпавшей
-off-host SHA, isolated restore `0115`, candidate migration `0118`, двумя
-нулевыми reconciliation, five-role JWT smoke и автоматическим rollback gate.
-Подробности без секретов/PII: `docs/audits/v7-production-rollout-180.md`.
+- `docs/audits/v7-production-rollout-181.md`;
+- `docs/audits/v7-production-rollout-server-hotfix-b04f177.md`;
+- `docs/audits/v7-teacher-compensation-181.md`.
 
-Production rollout `1.5.1+181` 2026-08-11 также прошёл с новым encrypted
-off-host backup, isolated restore, worker pause/resume и автоматическим
-rollback gate. Серверный и клиентский каналы переключены на build `181`, обе
-reconciliation пусты, five-role smoke `5/5`, restart/runtime error/Caddy 5xx —
-`0`. Подробности: `docs/audits/v7-production-rollout-181.md`.
+## Главный незавершённый продуктовый блок
 
-Production server hotfix `b04f177` 2026-08-11 развернут поверх неизменного
-client build `181`. Он ускоряет серверную выдачу задач и возвращает teacher
-levels/categories из канонической CRM-конфигурации. Первый кандидат был
-отклонён runtime-smoke и откатан; исправленный exact image
-`sha256:6e8fc887…` прошёл новый encrypted off-host backup, isolated restore,
-compiled production-data smoke, двойной reconciliation и публичный readiness.
-Подробности: `docs/audits/v7-production-rollout-server-hotfix-b04f177.md`.
+Организационный контур create-centric:
 
-## Последние production-подтверждения
+| Сущность | Сейчас | Не хватает |
+|---|---|---|
+| Branch | list/create/update | close preview, blockers, archive, history, restore |
+| Room | list/create/update/soft-delete | usage preview, active-link guards, restore |
+| Group | list/create/update/members | end/archive с обработкой plans/future lessons |
+| Teacher | create/update | status UI и атомарный offboarding |
+| Staff | create/update/status | отзыв account/sessions/access вместе со статусом |
+| Branch discipline | add/restore/reorder | unassign/archive action |
+| Discipline/loss reason | list/create | rename/archive/restore и usage guard |
 
-- Вход/profile пяти реальных ролей подтверждён API `5/5`; секреты в evidence
-  не сохранены.
-- UAT-филиал, три аудитории, три Teacher app accounts, ставки и UAT
-  Admin/Manager подтверждены API inventory.
-- Lead workflow, merge/undo, webhook idempotency и связанная задача Admin
-  прошли production-проверку.
-- Admin закрыл задачу, созданную Director; история сохранила actor/time.
-- Production API повторно проверен healthy после task fixes.
-
-Точные файлы и скриншоты перечислены только в
-`docs/audits/v7-owner-mega-uat-evidence/README.md`; не копировать один и тот же
-кадр в разные сценарии без реального соответствия.
+Физический cascade delete филиала недопустим: схема смешивает `CASCADE`,
+`SET NULL` и restrict/default references, а финансовая, учебная и audit-история
+должна оставаться неизменяемой. Нужен canonical
+`preview → remediation/blockers → commit` с состояниями
+`active → closing → archived` и tombstone-записью Branch.
 
 ## Следующая работа
 
-Продолжить `T7.1.2` по порядку из рабочей матрицы:
+1. Реализовать organization decommission flow, начиная с Branch preview/close.
+2. Сделать Room delete usage-aware и добавить restore.
+3. Реализовать Group end/archive.
+4. Объединить Staff/Teacher status, branch assignments, будущую работу и отзыв
+   sessions/access в один offboarding flow.
+5. Добавить новые owner-UAT строки для lifecycle, затем продолжить оставшиеся
+   `PENDING/PARTIAL` сценарии.
+6. Перед следующим release проверить, что `origin/main` воспроизводит
+   production-reachable код.
 
-1. Закрывать `PENDING/PARTIAL` реальным Release UI для нужной роли и платформы.
-2. Для Client и Teacher использовать Android emulator; для
-   Admin/Manager/Director — Windows Release.
-3. Проверять persisted результат через API/DB и reconciliation там, где это
-   требуется планом.
-4. При дефекте: воспроизведение → root-cause fix → релевантный regression →
-   production retest → уникальное evidence.
-5. Остановиться при финансовом drift, утечке прав, дубле эффекта или
-   необъяснённом 5xx.
+## Стоп-условия
 
-Финальное условие: `INT-S6` может быть закрыт только после независимой сверки
-100 строк, hashes, defects/retests, итогового reconciliation и owner approval.
-
-## Неподвижные правила
-
-- Не объявлять готовность по наличию кода или теста без доступного UI-сценария.
-- Не коммитить секреты, env, PII, production dumps и Office lock-файлы.
-- Не закрывать открытые UAT-строки предположением.
+Остановить mutation/release при финансовом drift, утечке прав, дубле эффекта,
+необъяснённом 5xx или невозможности восстановить backup. Не исправлять такие
+состояния ручной очисткой production-истории.

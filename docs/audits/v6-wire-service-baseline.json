@@ -372,7 +372,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_org.dart",
-      "line": 180
+      "line": 181
     },
     {
       "verb": "GET",
@@ -381,7 +381,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_org.dart",
-      "line": 190
+      "line": 191
     },
     {
       "verb": "GET",
@@ -390,7 +390,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_org.dart",
-      "line": 200
+      "line": 201
     },
     {
       "verb": "POST",
@@ -399,7 +399,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_org.dart",
-      "line": 222
+      "line": 223
     },
     {
       "verb": "PATCH",
@@ -408,7 +408,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_org.dart",
-      "line": 250
+      "line": 251
     },
     {
       "verb": "GET",
@@ -417,7 +417,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_org.dart",
-      "line": 261
+      "line": 262
     },
     {
       "verb": "POST",
@@ -426,7 +426,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_org.dart",
-      "line": 272
+      "line": 273
     },
     {
       "verb": "DELETE",
@@ -435,7 +435,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_org.dart",
-      "line": 282
+      "line": 283
     },
     {
       "verb": "GET",
@@ -660,7 +660,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_org.dart",
-      "line": 172
+      "line": 173
     },
     {
       "verb": "GET",
@@ -1317,7 +1317,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_core.dart",
-      "line": 385
+      "line": 388
     },
     {
       "verb": "POST",
@@ -1326,7 +1326,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_core.dart",
-      "line": 412
+      "line": 427
     },
     {
       "verb": "POST",
@@ -1335,7 +1335,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_core.dart",
-      "line": 424
+      "line": 439
     },
     {
       "verb": "PATCH",
@@ -1344,7 +1344,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_core.dart",
-      "line": 458
+      "line": 479
     },
     {
       "verb": "GET",
@@ -1353,7 +1353,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_core.dart",
-      "line": 468
+      "line": 489
     },
     {
       "verb": "POST",
@@ -1362,7 +1362,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_core.dart",
-      "line": 482
+      "line": 503
     },
     {
       "verb": "POST",
@@ -1371,7 +1371,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_core.dart",
-      "line": 497
+      "line": 518
     },
     {
       "verb": "GET",
@@ -1380,7 +1380,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_core.dart",
-      "line": 516
+      "line": 537
     },
     {
       "verb": "GET",
@@ -1389,7 +1389,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_core.dart",
-      "line": 542
+      "line": 563
     },
     {
       "verb": "POST",
@@ -1398,7 +1398,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_core.dart",
-      "line": 598
+      "line": 619
     },
     {
       "verb": "POST",
@@ -1407,7 +1407,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_core.dart",
-      "line": 607
+      "line": 628
     },
     {
       "verb": "PATCH",
@@ -1416,7 +1416,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_core.dart",
-      "line": 646
+      "line": 667
     },
     {
       "verb": "GET",
@@ -1425,7 +1425,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_core.dart",
-      "line": 681
+      "line": 702
     },
     {
       "verb": "GET",
@@ -1434,7 +1434,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_core.dart",
-      "line": 718
+      "line": 739
     },
     {
       "verb": "GET",
@@ -1524,7 +1524,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_core.dart",
-      "line": 375
+      "line": 378
     },
     {
       "verb": "PATCH",
@@ -1614,7 +1614,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_core.dart",
-      "line": 336
+      "line": 339
     },
     {
       "verb": "PATCH",
@@ -1623,7 +1623,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_core.dart",
-      "line": 323
+      "line": 326
     },
     {
       "verb": "POST",
@@ -1785,7 +1785,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_core.dart",
-      "line": 295
+      "line": 298
     },
     {
       "verb": "GET",
@@ -1794,7 +1794,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_core.dart",
-      "line": 268
+      "line": 271
     },
     {
       "verb": "GET",
@@ -1803,7 +1803,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_core.dart",
-      "line": 263
+      "line": 266
     },
     {
       "verb": "POST",
@@ -1812,7 +1812,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_core.dart",
-      "line": 255
+      "line": 258
     },
     {
       "verb": "GET",
@@ -1821,7 +1821,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_core.dart",
-      "line": 222
+      "line": 224
     },
     {
       "verb": "GET",
@@ -1839,7 +1839,7 @@
       "production_reachable": true,
       "status": "static-wire-baseline",
       "file": "lib/core/services/magic_crm_service_core.dart",
-      "line": 332
+      "line": 335
     },
     {
       "verb": "GET",

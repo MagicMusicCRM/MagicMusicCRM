@@ -3,8 +3,8 @@
   "task": "V6-001",
   "generated_from": "lib/main.dart import graph + GoRouter + presentation callsites",
   "summary": {
-    "dart_files": 261,
-    "production_reachable_files": 260,
+    "dart_files": 263,
+    "production_reachable_files": 262,
     "go_routes": 22,
     "screens": 21,
     "production_screens": 21,
@@ -933,7 +933,7 @@
         "retry": false
       },
       "file": "lib/features/admin/presentation/widgets/teacher_detail_dialog.dart",
-      "line": 385
+      "line": 257
     },
     {
       "kind": "dialog",
@@ -1077,7 +1077,7 @@
         "retry": true
       },
       "file": "lib/features/manager/presentation/widgets/teacher_stats_widget.dart",
-      "line": 302
+      "line": 322
     },
     {
       "kind": "dialog",
@@ -1093,7 +1093,7 @@
         "retry": true
       },
       "file": "lib/features/manager/presentation/widgets/teacher_stats_widget.dart",
-      "line": 234
+      "line": 254
     },
     {
       "kind": "dialog",
@@ -1109,7 +1109,7 @@
         "retry": true
       },
       "file": "lib/features/manager/presentation/widgets/teacher_stats_widget.dart",
-      "line": 167
+      "line": 187
     },
     {
       "kind": "dialog",
@@ -1333,7 +1333,7 @@
         "retry": false
       },
       "file": "lib/features/admin/presentation/widgets/teacher_detail_dialog.dart",
-      "line": 347
+      "line": 219
     },
     {
       "kind": "dialog",
@@ -1349,7 +1349,7 @@
         "retry": false
       },
       "file": "lib/features/admin/presentation/widgets/teacher_detail_dialog.dart",
-      "line": 22
+      "line": 21
     },
     {
       "kind": "dialog",
@@ -1845,7 +1845,7 @@
         "retry": false
       },
       "file": "lib/features/admin/presentation/widgets/schedule_filters_sheet.dart",
-      "line": 34
+      "line": 339
     },
     {
       "kind": "dialog",
@@ -1957,7 +1957,7 @@
         "retry": false
       },
       "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
-      "line": 143
+      "line": 146
     },
     {
       "kind": "dialog",
@@ -2050,10 +2050,10 @@
         "empty": true,
         "error": true,
         "forbidden": false,
-        "retry": true
+        "retry": false
       },
       "file": "lib/features/admin/presentation/widgets/create_teacher_dialog.dart",
-      "line": 9
+      "line": 11
     },
     {
       "kind": "dialog",
@@ -2069,7 +2069,7 @@
         "retry": false
       },
       "file": "lib/features/admin/presentation/widgets/create_room_dialog.dart",
-      "line": 88
+      "line": 90
     },
     {
       "kind": "dialog",

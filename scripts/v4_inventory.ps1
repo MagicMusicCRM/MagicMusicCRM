@@ -705,13 +705,12 @@ $inventory = [ordered]@{
 $json = ($inventory | ConvertTo-Json -Depth 16).Replace("`r`n", "`n") + "`n"
 
 $markdown = [Text.StringBuilder]::new()
-[void]$markdown.AppendLine('# MagicMusicCRM v4 — Current-State Inventory')
+[void]$markdown.AppendLine('# MagicMusicCRM — Current-State Inventory')
 [void]$markdown.AppendLine()
-[void]$markdown.AppendLine('**Task:** T8.1.2')
 [void]$markdown.AppendLine("**Source digest:** ``$($inventory.source_digest_sha256)``")
 [void]$markdown.AppendLine("**Validation:** $(if ($inventory.validation.passed) { 'PASS' } else { 'FAIL' })")
 [void]$markdown.AppendLine()
-[void]$markdown.AppendLine('> Имя генератора и migration-status labels сохранены для совместимости старых gates. Фактические counts/paths актуальны; текущие ownership/state брать из `.nexus-map/`, где legacy status отброшен.')
+[void]$markdown.AppendLine('> Имя generator-файла и legacy JSON field names сохранены для artifact compatibility. Фактические counts/paths актуальны; code ownership и dependency graph проверяются через RepoWise по текущему checkout.')
 [void]$markdown.AppendLine()
 [void]$markdown.AppendLine('## Coverage')
 [void]$markdown.AppendLine()
@@ -722,7 +721,7 @@ foreach ($entry in $summary.GetEnumerator()) {
 }
 [void]$markdown.AppendLine()
 [void]$markdown.AppendLine(
-  'Every row in the JSON artifact has one v4 system owner and an explicit migration status. ' +
+  'Every row in the JSON artifact has one subsystem owner and an explicit implementation status. ' +
   'The JSON file is the exhaustive machine-readable inventory; this document is its review summary.'
 )
 [void]$markdown.AppendLine()

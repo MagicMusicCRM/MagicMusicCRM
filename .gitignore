@@ -75,9 +75,12 @@ app.*.map.json
 # Generated local analysis/capture artifacts
 /s8_*.png
 /server/db/backups/
-/.nexus-map/.deps/
-/.nexus-map/.tmp/
-/.understand-anything/
+/.repowise/
+/.mcp.json
+/.codex/config.toml
+/.codex/hooks.json
+/.vscode/mcp.json
+/.impeccable/
 /_archive/
 /installer_output/
 /outputs/stage9-release-*/

@@ -301,7 +301,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1458
+      "line": 1460
     },
     {
       "kind": "navigator",
@@ -311,7 +311,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1491
+      "line": 1493
     },
     {
       "kind": "navigator",
@@ -321,7 +321,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1511
+      "line": 1513
     },
     {
       "kind": "navigator",
@@ -331,7 +331,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1745
+      "line": 1747
     },
     {
       "kind": "navigator",
@@ -341,7 +341,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1852
+      "line": 1854
     },
     {
       "kind": "navigator",
@@ -361,7 +361,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1863
+      "line": 1865
     },
     {
       "kind": "navigator",
@@ -711,7 +711,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1939
+      "line": 1941
     },
     {
       "kind": "typed-entity",
@@ -731,7 +731,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/manager/presentation/widgets/teacher_stats_widget.dart",
-      "line": 263
+      "line": 283
     },
     {
       "kind": "navigator",
@@ -741,7 +741,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/manager/presentation/widgets/teacher_stats_widget.dart",
-      "line": 267
+      "line": 287
     },
     {
       "kind": "navigator",
@@ -751,7 +751,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/manager/presentation/widgets/teacher_stats_widget.dart",
-      "line": 921
+      "line": 987
     },
     {
       "kind": "navigator",
@@ -761,7 +761,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/manager/presentation/widgets/teacher_stats_widget.dart",
-      "line": 948
+      "line": 1014
     },
     {
       "kind": "navigator",
@@ -871,7 +871,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/manager/presentation/widgets/teacher_stats_widget.dart",
-      "line": 200
+      "line": 220
     },
     {
       "kind": "navigator",
@@ -1041,7 +1041,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/crm/presentation/client_forms/crm_configuration_workspace.dart",
-      "line": 1959
+      "line": 1961
     },
     {
       "kind": "navigator",
@@ -1051,7 +1051,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/manager/presentation/widgets/teacher_stats_widget.dart",
-      "line": 196
+      "line": 216
     },
     {
       "kind": "navigator",
@@ -2091,7 +2091,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
-      "line": 242
+      "line": 245
     },
     {
       "kind": "navigator",
@@ -2101,7 +2101,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
-      "line": 252
+      "line": 255
     },
     {
       "kind": "navigator",
@@ -2181,7 +2181,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/admin/presentation/widgets/schedule_filters_sheet.dart",
-      "line": 140
+      "line": 352
     },
     {
       "kind": "navigator",
@@ -2231,7 +2231,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
-      "line": 232
+      "line": 235
     },
     {
       "kind": "navigator",
@@ -2291,7 +2291,7 @@
       "definition_only": false,
       "status": "typed-context",
       "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
-      "line": 275
+      "line": 276
     },
     {
       "kind": "typed-entity",
@@ -2301,7 +2301,7 @@
       "definition_only": false,
       "status": "typed-context",
       "file": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
-      "line": 430
+      "line": 431
     },
     {
       "kind": "navigator",
@@ -2341,7 +2341,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/admin/presentation/widgets/teacher_detail_dialog.dart",
-      "line": 301
+      "line": 173
     },
     {
       "kind": "navigator",
@@ -2351,7 +2351,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/admin/presentation/widgets/teacher_detail_dialog.dart",
-      "line": 354
+      "line": 226
     },
     {
       "kind": "navigator",
@@ -2361,7 +2361,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/admin/presentation/widgets/teacher_detail_dialog.dart",
-      "line": 358
+      "line": 230
     },
     {
       "kind": "navigator",
@@ -2371,7 +2371,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/admin/presentation/widgets/teacher_detail_dialog.dart",
-      "line": 520
+      "line": 323
     },
     {
       "kind": "navigator",
@@ -2411,7 +2411,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
-      "line": 221
+      "line": 224
     },
     {
       "kind": "navigator",
@@ -2561,7 +2561,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/admin/presentation/widgets/create_room_dialog.dart",
-      "line": 74
+      "line": 76
     },
     {
       "kind": "navigator",
@@ -2571,7 +2571,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/admin/presentation/widgets/lesson_details_sheet.dart",
-      "line": 172
+      "line": 175
     },
     {
       "kind": "navigator",
@@ -2581,7 +2581,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/admin/presentation/widgets/create_room_dialog.dart",
-      "line": 95
+      "line": 97
     },
     {
       "kind": "navigator",
@@ -2591,7 +2591,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/admin/presentation/widgets/create_room_dialog.dart",
-      "line": 116
+      "line": 118
     },
     {
       "kind": "navigator",
@@ -2601,7 +2601,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/admin/presentation/widgets/create_room_dialog.dart",
-      "line": 176
+      "line": 181
     },
     {
       "kind": "navigator",
@@ -2611,7 +2611,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/admin/presentation/widgets/create_teacher_dialog.dart",
-      "line": 129
+      "line": 77
     },
     {
       "kind": "navigator",
@@ -2621,7 +2621,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/admin/presentation/widgets/create_teacher_dialog.dart",
-      "line": 290
+      "line": 181
     },
     {
       "kind": "navigator",
@@ -2731,7 +2731,7 @@
       "definition_only": false,
       "status": "overlay-or-local-navigation-review",
       "file": "lib/features/admin/presentation/widgets/create_room_dialog.dart",
-      "line": 99
+      "line": 101
     },
     {
       "kind": "go-router",

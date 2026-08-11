@@ -8,11 +8,8 @@
 
 ## Интеграционный gate
 
-Команда:
-
-```powershell
-pwsh -File scripts/v4_sprint_gate.ps1 -Sprint S5 -Windows -Android -Excel
-```
+Gate был выполнен legacy orchestration script, удалённым после governance
+cleanup. Machine result сохранён как историческое evidence.
 
 | Gate | Результат |
 |---|---:|
