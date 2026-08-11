@@ -887,7 +887,7 @@ export class SettingsService {
             ? "categories"
             : null;
       if (target === null || canonical[target].length === 0) return field;
-      return { ...field, options: canonical[target] };
+      return { ...field, type: "select", options: canonical[target] };
     });
   }
 

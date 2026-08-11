@@ -183,15 +183,13 @@ describe("SettingsService", () => {
             entity: "teachers",
             key: "levels",
             label: "Уровни обучения",
-            type: "select",
-            options: [],
+            type: "text",
           },
           {
             entity: "teachers",
             key: "categories",
             label: "Категории",
-            type: "select",
-            options: [],
+            type: "text",
           },
         ],
         updated_at: "2026-08-11T00:00:00.000Z",
@@ -234,7 +232,9 @@ describe("SettingsService", () => {
       (field) => field.entity === "teachers" && field.key === "categories",
     );
 
+    expect(levels?.type).toBe("select");
     expect(levels?.options).toEqual(["Без опыта", "Начальный", "Средний"]);
+    expect(categories?.type).toBe("select");
     expect(categories?.options).toEqual(["Взрослые", "Дети"]);
   });
 
