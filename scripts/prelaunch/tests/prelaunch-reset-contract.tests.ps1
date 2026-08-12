@@ -51,6 +51,10 @@ Assert-Contains $wrapperText 'Test-EncryptedBackupRestore' "Reset must restore-c
 Assert-Contains $wrapperText 'Stop-ApplicationRuntime' "Reset must stop writers before mutation."
 Assert-Contains $wrapperText 'Reset-StorageAndCache' "Reset must clear non-database state."
 Assert-Contains $wrapperText 'Test-CommerceReconciliation' "Reset must reconcile after mutation."
+Assert-Contains $wrapperText 'bash ''$BackupRoot/../infra/scripts/backup-staging.sh''' "Backup must run through bash even without an executable bit."
+Assert-Contains $wrapperText 'set -a' "Restore-check must export the backup environment for openssl."
+Assert-Contains $wrapperText 'docker start magicmusiccrm-v3-api-1 magicmusiccrm-v3-caddy-1' "Restart must preserve the exact release containers."
+Assert-True (-not $wrapperText.Contains('docker compose --env-file .env up -d api caddy')) "Reset must not recreate API from the base compose file."
 
 $backupIndex = $wrapperText.LastIndexOf('$backup = New-EncryptedBackup')
 $restoreIndex = $wrapperText.LastIndexOf('Test-EncryptedBackupRestore -BackupPath $backup.Path')

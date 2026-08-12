@@ -297,7 +297,7 @@ printf 'STORAGE_RESET|OK|%s\n' "$quarantine"
 
 function Start-ApplicationRuntime {
   Write-Step "Start API and public proxy"
-  [void](Invoke-SshCommand -Command "set -eu; cd '$StackDir'; docker compose --env-file .env up -d storage-init; docker compose --env-file .env up -d api caddy")
+  [void](Invoke-SshCommand -Command "set -eu; docker start magicmusiccrm-v3-api-1 magicmusiccrm-v3-caddy-1 >/dev/null")
 }
 
 function Test-ApiHealth {
