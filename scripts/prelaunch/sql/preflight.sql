@@ -132,8 +132,8 @@ begin
   end if;
 
   if (select count(*) from app.client_custom_field_definitions
-      where field_key = 'hollihopId' and deleted_at is null) <> 1 then
-    raise exception 'expected one active HolliHop field to remove';
+      where field_key = 'hollihopId' and deleted_at is null) > 1 then
+    raise exception 'expected at most one active HolliHop field before or after reset';
   end if;
 
   if (select count(*) from app.capability_definitions where active) = 0

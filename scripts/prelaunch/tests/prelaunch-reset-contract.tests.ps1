@@ -74,6 +74,7 @@ foreach ($text in @($preflightText, $resetText)) {
 }
 
 Assert-Contains $preflightText 'retained_custom_field_count <> 40' "Preflight must retain exactly 40 custom fields."
+Assert-Contains $preflightText "field_key = 'hollihopId' and deleted_at is null) > 1" "Preflight must accept the post-reset absence of HolliHop ID while rejecting duplicates."
 Assert-Contains $resetText "field_key = 'hollihopId'" "HolliHop ID must be removed."
 Assert-Contains $resetText 'reset_keep_custom_fields' "Retained custom fields must be captured and post-checked."
 Assert-Contains $resetText 'retained password hash changed' "Credentials must be post-checked."
