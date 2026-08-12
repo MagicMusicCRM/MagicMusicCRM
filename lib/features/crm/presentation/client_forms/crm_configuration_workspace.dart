@@ -11,6 +11,7 @@ import 'package:magic_music_crm/core/widgets/v7/dirty_form_exit.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/student_funnel_editor.dart';
 
 import 'client_forms_api.dart';
+import 'client_sources_editor.dart';
 
 const _selectionFieldTypes = {
   'select',
@@ -142,6 +143,7 @@ class _CrmConfigurationWorkspaceState
       _access?.allows('config.crm.read') == true;
   bool get _canManageCommerceCatalogs =>
       _canSeeCommerceCatalogs && _canEdit && _canPublish;
+  bool get _isInitialSchoolSetup => _branchId == null && _baseVersion == 0;
   List<(String, String, IconData)> get _areas => [
     ..._commonAreas,
     if (_canSeeCommerceCatalogs)
@@ -500,11 +502,19 @@ class _CrmConfigurationWorkspaceState
             ),
             Chip(
               avatar: Icon(
-                _dirty ? Icons.edit_note_rounded : Icons.verified_outlined,
+                _isInitialSchoolSetup
+                    ? Icons.rocket_launch_outlined
+                    : _dirty
+                    ? Icons.edit_note_rounded
+                    : Icons.verified_outlined,
                 size: 18,
               ),
               label: Text(
-                '${_dirty ? 'Черновик' : 'Опубликовано'} · версия $_baseVersion',
+                '${_isInitialSchoolSetup
+                    ? 'Начальная настройка'
+                    : _dirty
+                    ? 'Черновик'
+                    : 'Опубликовано'} · версия $_baseVersion',
               ),
             ),
             if (_canEdit)
@@ -516,7 +526,9 @@ class _CrmConfigurationWorkspaceState
             if (_canPublish)
               FilledButton.icon(
                 key: const ValueKey('configuration-publish'),
-                onPressed: _busy || !_dirty ? null : _previewAndPublish,
+                onPressed: _busy || (!_dirty && !_isInitialSchoolSetup)
+                    ? null
+                    : _previewAndPublish,
                 icon: const Icon(Icons.publish_rounded),
                 label: const Text('Проверить и опубликовать'),
               ),
@@ -1094,6 +1106,40 @@ class _CrmConfigurationWorkspaceState
   }
 
   Widget _fieldPreview(Map<String, dynamic> field) {
+    if (field['key'] == 'sourceId') {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpace.lg,
+              AppSpace.lg,
+              AppSpace.lg,
+              AppSpace.sm,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  field['label']?.toString() ?? 'Источник',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: AppSpace.xs),
+                Text(
+                  'Общий список значений для лидов и учеников. Выбранный источник можно изменить в карточке клиента.',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: AppColor.text2),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: ClientSourcesEditor(canEdit: _canEdit && _branchId == null),
+          ),
+        ],
+      );
+    }
     return ListView(
       padding: const EdgeInsets.all(AppSpace.lg),
       children: [

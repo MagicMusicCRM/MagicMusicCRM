@@ -15,6 +15,7 @@ import {
   Min,
   MinLength,
 } from "class-validator";
+import { MIN_PASSWORD_LENGTH } from "../../auth/password-policy";
 
 export class CreateTeacherDto {
   @IsString()
@@ -38,7 +39,7 @@ export class CreateTeacherDto {
 
   @IsOptional()
   @IsString()
-  @MinLength(10)
+  @MinLength(MIN_PASSWORD_LENGTH)
   @MaxLength(128)
   password?: string;
 

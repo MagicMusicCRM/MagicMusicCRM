@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
+import 'package:magic_music_crm/core/security/password_policy.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/responsive_constraint.dart';
@@ -315,7 +316,8 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
                             labelText: 'Текущий пароль',
                             prefixIcon: const Icon(Icons.lock_outline),
                           ),
-                          validator: (value) => (value?.length ?? 0) < 10
+                          validator: (value) =>
+                              (value?.length ?? 0) < minPasswordLength
                               ? 'Введите текущий пароль'
                               : null,
                         ),
@@ -364,8 +366,9 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
                             ),
                           ),
                           validator: (value) =>
-                              (value == null || value.length < 10)
-                              ? 'Минимум 10 символов'
+                              (value == null ||
+                                  value.length < minPasswordLength)
+                              ? passwordMinimumHint
                               : null,
                         ),
                         const SizedBox(height: AppSpace.md),

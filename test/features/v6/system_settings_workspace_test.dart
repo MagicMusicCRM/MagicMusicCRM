@@ -19,10 +19,7 @@ class SettingsTestApi extends MagicApiClient {
         'firstName': 'Мария',
         'lastName': 'Петрова',
         'assignedBranches': [
-          {
-            'id': '20000000-0000-4000-8000-000000000001',
-            'name': 'Сокол',
-          },
+          {'id': '20000000-0000-4000-8000-000000000001', 'name': 'Сокол'},
         ],
       },
     ],
@@ -524,8 +521,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        final branchesPath =
-            '/crm/schedule-reference/teachers/$id/branches';
+        final branchesPath = '/crm/schedule-reference/teachers/$id/branches';
         final availabilityPath =
             '/crm/schedule-reference/teachers/$id/availability';
         expect(api.mutations[branchesPath], {
@@ -540,12 +536,7 @@ void main() {
         final availability =
             api.mutations[availabilityPath]! as Map<String, dynamic>;
         expect(availability['expectedVersion'], 4);
-        expect(
-          availability['rules'],
-          contains(
-            containsPair('weekday', 1),
-          ),
-        );
+        expect(availability['rules'], contains(containsPair('weekday', 1)));
       }
       await tester.pump(const Duration(seconds: 4));
     },
@@ -580,6 +571,18 @@ void main() {
       find.widgetWithText(TextFormField, 'Пароль (необязательно)'),
       findsOneWidget,
     );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Электронная почта (необязательно)'),
+      'staff@example.test',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Пароль (необязательно)'),
+      '12345678',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Повторите пароль'),
+      '12345678',
+    );
     await tester.tap(find.byType(DropdownButtonFormField<String>).first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Сокол').last);
@@ -588,6 +591,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(api.mutations, contains('/crm/staff'));
+    final payload = api.mutations['/crm/staff']! as Map<String, dynamic>;
+    expect(payload['password'], '12345678');
   });
 
   for (final actorRole in const ['manager', 'director']) {
@@ -609,10 +614,7 @@ void main() {
               'appRole': 'admin',
               'passwordConfigured': true,
               'branches': [
-                {
-                  'id': '20000000-0000-4000-8000-000000000001',
-                  'name': 'Сокол',
-                },
+                {'id': '20000000-0000-4000-8000-000000000001', 'name': 'Сокол'},
               ],
             },
           ],
@@ -658,6 +660,18 @@ void main() {
     expect(
       find.widgetWithText(TextFormField, 'Пароль (необязательно)'),
       findsOneWidget,
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Email для входа (необязательно)'),
+      'teacher@example.test',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Пароль (необязательно)'),
+      '12345678',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Повторите пароль'),
+      '12345678',
     );
     final branchChip = find.widgetWithText(FilterChip, 'Сокол');
     await tester.ensureVisible(branchChip);

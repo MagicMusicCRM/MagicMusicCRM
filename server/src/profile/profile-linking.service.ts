@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { AuditService } from "../audit/audit.service";
 import { ActorContext, UserRole } from "../common/security/actor-context";
 import { normalizePhoneRu } from "../crm/phone.util";
+import { mergeAndAssignStudentProfile } from "../crm/student-profile-link";
 import { DatabaseService } from "../db/database.service";
 import { LinkProfileCrmDto } from "./dto/link-profile-crm.dto";
 import { ProfilePolicy } from "./profile.policy";
@@ -131,6 +132,31 @@ export class ProfileLinkingService {
     }
 
     const students = await this.findStudentCandidates(profile);
+    if (profile.role === "client") {
+      // A phone can legitimately be shared by a family. Client auto-linking
+      // must therefore select only one unambiguous CRM identity and must never
+      // attach a client account to Teacher/Staff records. Student wins over
+      // Lead because it is the later lifecycle state.
+      if (students.length === 1) {
+        await this.linkStudentToProfile(
+          actor,
+          profile,
+          students[0].id,
+          source,
+        );
+        return this.linkSummary(profile);
+      }
+      if (students.length > 1) {
+        return this.linkSummary(profile);
+      }
+
+      const leads = await this.findLeadCandidates(profile);
+      if (leads.length === 1) {
+        await this.linkLeadToProfile(actor, profile, leads[0].id, source);
+      }
+      return this.linkSummary(profile);
+    }
+
     for (const student of students) {
       await this.linkStudentToProfile(actor, profile, student.id, source);
     }
@@ -377,16 +403,16 @@ export class ProfileLinkingService {
       );
     }
 
-    await this.database.query(
-      `
-        update app.students
-        set profile_id = $2,
-            updated_at = now()
-        where id = $1
-          and deleted_at is null
-      `,
-      [studentId, profile.id],
+    const assigned = await mergeAndAssignStudentProfile(
+      this.database,
+      studentId,
+      profile.id,
     );
+    if (!assigned) {
+      throw new BadRequestException(
+        "Карточка ученика изменилась во время привязки. Повторите попытку.",
+      );
+    }
     await this.insertCrmLink(
       actor,
       profile,

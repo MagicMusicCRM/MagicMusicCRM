@@ -71,20 +71,22 @@ class StudentFunnelConfiguration {
   });
 
   factory StudentFunnelConfiguration.fromJson(Map<String, dynamic> json) {
+    final schoolVersion = (json['schoolVersion'] as num?)?.toInt() ?? 0;
+    final branchVersion = (json['branchVersion'] as num?)?.toInt() ?? 0;
     final stages = (json['stages'] as List? ?? const [])
         .whereType<Map<String, dynamic>>()
         .map(StudentFunnelStage.fromJson)
         .where((stage) => stage.key.isNotEmpty && stage.label.isNotEmpty)
         .toList(growable: false);
-    if (stages.isEmpty) {
+    if (stages.isEmpty && (schoolVersion > 0 || branchVersion > 0)) {
       throw const FormatException('Student funnel has no configured stages.');
     }
     return StudentFunnelConfiguration(
       clientType: json['clientType']?.toString() ?? 'student',
       branchId: json['branchId']?.toString(),
       source: json['source']?.toString() ?? 'school',
-      schoolVersion: (json['schoolVersion'] as num?)?.toInt() ?? 0,
-      branchVersion: (json['branchVersion'] as num?)?.toInt() ?? 0,
+      schoolVersion: schoolVersion,
+      branchVersion: branchVersion,
       stages: stages,
       remediationStatuses: (json['remediationStatuses'] as List? ?? const [])
           .whereType<Map<String, dynamic>>()

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
+import 'package:magic_music_crm/core/security/password_policy.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/widgets/v7/adaptive_surface.dart';
@@ -142,7 +143,7 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
                 obscureText: !_showPassword,
                 decoration: InputDecoration(
                   labelText: 'Пароль (необязательно)',
-                  helperText: 'Для доступа — не менее 10 символов',
+                  helperText: 'Для доступа — $passwordMinimumHint',
                   suffixIcon: IconButton(
                     tooltip: _showPassword
                         ? 'Скрыть пароль'
@@ -161,8 +162,8 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
                         ? null
                         : 'Укажите пароль вместе с email';
                   }
-                  return password.length < 10
-                      ? 'Пароль должен содержать минимум 10 символов'
+                  return password.length < minPasswordLength
+                      ? passwordMinimumError
                       : null;
                 },
               ),

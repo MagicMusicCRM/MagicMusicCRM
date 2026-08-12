@@ -10,6 +10,7 @@ class ConfigurationTestApi extends MagicApiClient {
   ConfigurationTestApi({
     required this.role,
     required this.capabilities,
+    this.baseVersion = 1,
     Map<String, dynamic>? snapshot,
   }) : snapshot = snapshot ?? _defaultSnapshot,
        super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
@@ -17,11 +18,14 @@ class ConfigurationTestApi extends MagicApiClient {
   final String role;
   final List<String> capabilities;
   final Map<String, dynamic> snapshot;
+  int baseVersion;
   int configurationReads = 0;
   int publishes = 0;
   int draftSaves = 0;
   int rollbacks = 0;
+  int sourceCreates = 0;
   Map<String, dynamic>? submittedSnapshot;
+  final List<Map<String, dynamic>> sources = [];
 
   @override
   Future<T> get<T>(
@@ -47,10 +51,13 @@ class ConfigurationTestApi extends MagicApiClient {
           }
           as T;
     }
+    if (path == '/crm/client-config/sources') {
+      return <String, dynamic>{'items': sources} as T;
+    }
     if (path == '/crm/configuration/draft') {
       configurationReads++;
       return <String, dynamic>{
-            'baseVersion': 1,
+            'baseVersion': baseVersion,
             'dirty': false,
             'snapshot': snapshot,
           }
@@ -97,15 +104,73 @@ class ConfigurationTestApi extends MagicApiClient {
           }
           as T;
     }
+    if (path == '/crm/client-config/sources') {
+      final payload = Map<String, dynamic>.from(data! as Map);
+      sourceCreates++;
+      final source = <String, dynamic>{
+        'id': 'source-$sourceCreates',
+        'canonicalName': payload['canonicalName'],
+        'displayName': payload['displayName'],
+        'isActive': true,
+        'isSystem': false,
+        'version': 1,
+      };
+      sources.add(source);
+      return source as T;
+    }
     if (path == '/crm/configuration/publish') {
       publishes++;
-      return <String, dynamic>{'version': 2} as T;
+      baseVersion++;
+      return <String, dynamic>{'version': baseVersion} as T;
     }
     if (path == '/crm/configuration/rollback') {
       rollbacks++;
       return <String, dynamic>{'version': 2, 'rollbackFromVersion': 0} as T;
     }
     throw StateError('Unexpected POST $path');
+  }
+
+  @override
+  Future<T> patch<T>(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) async {
+    if (path.startsWith('/crm/client-config/sources/')) {
+      final id = path.split('/').last;
+      final source = sources.firstWhere((item) => item['id'] == id);
+      final payload = Map<String, dynamic>.from(data! as Map);
+      if (payload['canonicalName'] != null) {
+        source['canonicalName'] = payload['canonicalName'];
+      }
+      if (payload['displayName'] != null) {
+        source['displayName'] = payload['displayName'];
+      }
+      if (payload['isActive'] != null) {
+        source['isActive'] = payload['isActive'];
+      }
+      source['version'] = (source['version'] as int) + 1;
+      return source as T;
+    }
+    throw StateError('Unexpected PATCH $path');
+  }
+
+  @override
+  Future<T> delete<T>(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) async {
+    if (path.startsWith('/crm/client-config/sources/')) {
+      final id = path.split('/').last;
+      final source = sources.firstWhere((item) => item['id'] == id);
+      source['isActive'] = false;
+      source['version'] = (source['version'] as int) + 1;
+      return source as T;
+    }
+    throw StateError('Unexpected DELETE $path');
   }
 
   @override
@@ -131,6 +196,21 @@ class ConfigurationTestApi extends MagicApiClient {
     ],
     'fields': [
       {
+        'id': '30000000-0000-4000-8000-000000000000',
+        'entityType': 'lead',
+        'key': 'sourceId',
+        'label': 'Рекламный источник',
+        'valueType': 'select',
+        'required': true,
+        'active': true,
+        'system': true,
+        'categoryKey': 'general',
+        'order': 0,
+        'width': 'half',
+        'placements': ['create', 'edit', 'card', 'table'],
+        'options': <String>[],
+      },
+      {
         'id': '30000000-0000-4000-8000-000000000001',
         'entityType': 'lead',
         'key': 'goal',
@@ -140,7 +220,7 @@ class ConfigurationTestApi extends MagicApiClient {
         'active': true,
         'system': false,
         'categoryKey': 'general',
-        'order': 0,
+        'order': 1,
         'width': 'full',
         'placements': ['create', 'edit', 'card'],
         'options': <String>[],
@@ -219,6 +299,106 @@ Future<void> _pump(
 }
 
 void main() {
+  testWidgets('director can publish the untouched baseline as version one', (
+    tester,
+  ) async {
+    final api = ConfigurationTestApi(
+      role: 'director',
+      baseVersion: 0,
+      capabilities: const [
+        'config.crm.read',
+        'config.crm.edit',
+        'config.crm.publish',
+      ],
+    );
+    await _pump(tester, api);
+
+    expect(find.text('Начальная настройка · версия 0'), findsOneWidget);
+    final publish = find.byKey(const ValueKey('configuration-publish'));
+    expect(tester.widget<FilledButton>(publish).onPressed, isNotNull);
+    await tester.tap(publish);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Причина публикации *'),
+      'Первая настройка школы',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Опубликовать'));
+    await tester.pumpAndSettle();
+
+    expect(api.publishes, 1);
+    expect(api.baseVersion, 1);
+    expect(find.text('Опубликовано · версия 1'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('director manages sources inside the system source field', (
+    tester,
+  ) async {
+    final api = ConfigurationTestApi(
+      role: 'director',
+      capabilities: const [
+        'config.crm.read',
+        'config.crm.edit',
+        'config.crm.publish',
+      ],
+    );
+    api.sources.add({
+      'id': 'source-app',
+      'canonicalName': 'app',
+      'displayName': 'Приложение',
+      'isActive': true,
+      'isSystem': true,
+      'version': 1,
+    });
+    await _pump(tester, api, size: const Size(900, 900));
+
+    expect(find.text('Источники клиентов'), findsNothing);
+    await tester.tap(find.text('Рекламный источник'));
+    await tester.pumpAndSettle();
+    expect(find.text('Приложение'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('client-source-menu-source-app')),
+      findsNothing,
+    );
+    await tester.tap(find.byKey(const ValueKey('add-client-source')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('client-source-name')),
+      'Рекомендация',
+    );
+    await tester.tap(find.byKey(const ValueKey('save-client-source')));
+    await tester.pumpAndSettle();
+
+    expect(api.sourceCreates, 1);
+    expect(find.text('Рекомендация'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('client-source-menu-source-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Изменить'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('client-source-name')),
+      'По рекомендации',
+    );
+    await tester.tap(find.byKey(const ValueKey('save-client-source')));
+    await tester.pumpAndSettle();
+    expect(find.text('По рекомендации'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('client-source-menu-source-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Архивировать'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Архивировать'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('В архиве'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('client-source-menu-source-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Восстановить'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('В архиве'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('director edits a draft and publishes through impact preview', (
     tester,
   ) async {
@@ -387,7 +567,9 @@ void main() {
     await tester.tap(find.text('Опубликовать'));
     await tester.pumpAndSettle();
 
-    final field = (api.submittedSnapshot!['fields'] as List).single as Map;
+    final field = (api.submittedSnapshot!['fields'] as List)
+        .cast<Map>()
+        .firstWhere((item) => item['key'] == 'goal');
     expect(field['valueType'], 'textarea');
     expect(field['width'], 'half');
     expect(field['placements'], ['edit', 'card', 'table']);

@@ -8,6 +8,7 @@ function createService(overrides: {
   audit?: Record<string, jest.Mock>;
   policy?: Record<string, jest.Mock>;
   linking?: Record<string, jest.Mock>;
+  leadIntake?: Record<string, jest.Mock>;
 } = {}) {
   const database = {
     query: jest.fn(),
@@ -27,6 +28,13 @@ function createService(overrides: {
     linkProfileByPhone: jest.fn().mockResolvedValue({}),
     ...overrides.linking,
   };
+  const leadIntake = {
+    autoCreateLeadFromChat: jest.fn().mockResolvedValue({
+      leadId: null,
+      created: false,
+    }),
+    ...overrides.leadIntake,
+  };
 
   return {
     service: new ProfileService(
@@ -34,11 +42,13 @@ function createService(overrides: {
       audit as any,
       policy as any,
       linking as any,
+      leadIntake as any,
     ),
     database,
     audit,
     policy,
     linking,
+    leadIntake,
   };
 }
 
@@ -202,7 +212,7 @@ describe("ProfileService profile notes", () => {
 
 describe("ProfileService profile updates", () => {
   it("marks user profile as completed when first name, last name and phone are present", async () => {
-    const { service, database } = createService({
+    const { service, database, leadIntake } = createService({
       database: {
         query: jest
           .fn()
@@ -262,6 +272,11 @@ describe("ProfileService profile updates", () => {
       3,
       expect.stringContaining("update app.users"),
       ["manager-a"],
+    );
+    expect(leadIntake.autoCreateLeadFromChat).toHaveBeenCalledWith(
+      actor,
+      "manager-a",
+      "onboarding",
     );
   });
 

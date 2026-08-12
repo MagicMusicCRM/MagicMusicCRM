@@ -107,6 +107,64 @@ describe("Unified CRM configuration (PostgreSQL)", () => {
     await pool.end();
   });
 
+  it("bootstraps and publishes the first school configuration from version zero", async () => {
+    await client.query("savepoint empty_school_configuration");
+    try {
+      await client.query(
+        `insert into app.client_custom_field_definitions (
+           entity_type, field_key, label, value_type, is_required,
+           is_active, is_system, category_key, category_label, sort_order,
+           width, placements, options
+         ) values (
+           'lead', 'zeroStateOptionalField', 'Поле чистого старта', 'text',
+           false, true, false, 'general', 'Основная информация', 999,
+           'full', '["create","edit","card"]'::jsonb, '[]'::jsonb
+         )
+         on conflict (entity_type, field_key) do update
+         set deleted_at = null, is_active = true, is_system = false`,
+      );
+      await client.query(
+        "drop trigger crm_configuration_revision_immutable on app.crm_configuration_revisions",
+      );
+      await client.query("delete from app.crm_configuration_revisions");
+
+      const emptySchool = await service.getEffective(director);
+      const snapshot = emptySchool.snapshot as ConfigSnapshot;
+      expect(emptySchool).toMatchObject({
+        source: "school",
+        schoolVersion: 0,
+        branchVersion: 0,
+      });
+      expect(snapshot.fields).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ key: "firstName", system: true }),
+          expect.objectContaining({
+            key: "zeroStateOptionalField",
+            system: false,
+          }),
+        ]),
+      );
+      expect(snapshot.businessSettings).toHaveLength(2);
+      expect(snapshot.lessonSettlementTypes).toHaveLength(7);
+      expect(snapshot.teacherCompensationRules).toHaveLength(5);
+      await expect(service.listRevisions(director)).resolves.toMatchObject({
+        items: [],
+      });
+
+      const published = await service.publish(director, {
+        baseVersion: 0,
+        reason: "Первая настройка школы",
+        snapshot: snapshot as unknown as Record<string, unknown>,
+      });
+      expect(published).toMatchObject({ version: 1, branchId: null });
+      await expect(service.getEffective(director)).resolves.toMatchObject({
+        schoolVersion: 1,
+      });
+    } finally {
+      await client.query("rollback to savepoint empty_school_configuration");
+    }
+  });
+
   it("publishes the supported type matrix and syncs existing client forms", async () => {
     const current = await service.getEffective(director);
     const baseVersion = current.schoolVersion as number;
@@ -120,25 +178,25 @@ describe("Unified CRM configuration (PostgreSQL)", () => {
       "Неоплачиваемый пропуск",
       "Занятие со штрафом",
     ]);
-    expect(
-      snapshot.teacherCompensationRules.map((rule) => rule.label),
-    ).toEqual([
-      "Не оплачивать",
-      "Полная стандартная ставка",
-      "Процент ставки",
-      "Фиксированная сумма",
-      "Почасовая сумма",
-    ]);
+    expect(snapshot.teacherCompensationRules.map((rule) => rule.label)).toEqual(
+      [
+        "Не оплачивать",
+        "Полная стандартная ставка",
+        "Процент ставки",
+        "Фиксированная сумма",
+        "Почасовая сумма",
+      ],
+    );
     snapshot.lessonSettlementTypes = snapshot.lessonSettlementTypes.map(
       (type) =>
         type.stableKey === "partially_paid_lesson"
           ? { ...type, hourShareBasisPoints: 6000 }
           : type,
     );
-    snapshot.teacherCompensationRules =
-      snapshot.teacherCompensationRules.map((rule) =>
+    snapshot.teacherCompensationRules = snapshot.teacherCompensationRules.map(
+      (rule) =>
         rule.stableKey === "percent" ? { ...rule, value: "12500" } : rule,
-      );
+    );
     snapshot.categories.push({
       key: "v6_fields",
       label: "V6 поля",
@@ -377,11 +435,11 @@ describe("Unified CRM configuration (PostgreSQL)", () => {
       snapshot: override as unknown as Record<string, unknown>,
     });
     expect(published.version).toBe(2);
-    await expect(service.getEffective(director, branchId)).resolves.toMatchObject(
-      {
-        sources: { lessonSettlementTypes: "branch_override" },
-      },
-    );
+    await expect(
+      service.getEffective(director, branchId),
+    ).resolves.toMatchObject({
+      sources: { lessonSettlementTypes: "branch_override" },
+    });
 
     const rollback = await service.rollback(director, {
       branchId,
@@ -390,11 +448,11 @@ describe("Unified CRM configuration (PostgreSQL)", () => {
       reason: "Restore school settlement catalog",
     });
     expect(rollback).toMatchObject({ version: 3, rollbackFromVersion: 1 });
-    await expect(service.getEffective(director, branchId)).resolves.toMatchObject(
-      {
-        sources: { lessonSettlementTypes: "school" },
-      },
-    );
+    await expect(
+      service.getEffective(director, branchId),
+    ).resolves.toMatchObject({
+      sources: { lessonSettlementTypes: "school" },
+    });
   });
 
   it("validates catalog bounds and requires stable-key archival", async () => {

@@ -1,11 +1,11 @@
 import { ActorContext } from "./security/actor-context";
 
 /**
- * Narrow port the messenger needs from the CRM: promote a chat sender into a
- * lead. Messenger depends on this one-method contract instead of the whole
- * CrmService, so the two modules can split independently (B2). CrmModule binds
- * the token to its current implementation; when the lead logic moves to a
- * dedicated service (B5) only that binding changes.
+ * Narrow client-intake port shared by onboarding and messenger. The historical
+ * method name remains for compatibility, but the operation is the canonical,
+ * idempotent "ensure this app client has a CRM identity" command. CrmModule
+ * binds the token to the implementation so consumers do not depend on the
+ * whole CRM module surface.
  */
 export const LEAD_INTAKE_PORT = Symbol("LEAD_INTAKE_PORT");
 
@@ -13,5 +13,6 @@ export interface LeadIntakePort {
   autoCreateLeadFromChat(
     actor: ActorContext,
     senderUserId: string,
+    trigger?: "chat" | "onboarding",
   ): Promise<{ leadId: string | null; created: boolean }>;
 }

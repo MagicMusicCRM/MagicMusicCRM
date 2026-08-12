@@ -429,6 +429,18 @@ class _StudentFunnelEditorState extends ConsumerState<_StudentFunnelEditor> {
             style: const TextStyle(color: AppColor.text2, fontSize: 12),
           ),
           const SizedBox(height: AppSpace.md),
+          if (_stages.isEmpty) ...[
+            const Card(
+              child: Padding(
+                padding: EdgeInsets.all(AppSpace.md),
+                child: Text(
+                  'Воронка ещё не настроена. Добавьте первый этап и опубликуйте начальную версию.',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpace.sm),
+          ],
           for (var index = 0; index < _stages.length; index++)
             _StageEditor(
               key: ValueKey(_stages[index].key),

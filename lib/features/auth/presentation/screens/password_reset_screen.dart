@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
+import 'package:magic_music_crm/core/security/password_policy.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/app_logo.dart';
 import 'package:magic_music_crm/core/widgets/responsive_constraint.dart';
@@ -78,8 +79,8 @@ class _PasswordResetScreenState extends ConsumerState<PasswordResetScreen> {
       _showError('Введите код из письма');
       return;
     }
-    if (password.length < 10) {
-      _showError('Пароль должен быть не короче 10 символов');
+    if (password.length < minPasswordLength) {
+      _showError(passwordMinimumError);
       return;
     }
     if (password != _confirmPasswordController.text) {
@@ -211,7 +212,9 @@ class _PasswordResetScreenState extends ConsumerState<PasswordResetScreen> {
                       ),
                       const SizedBox(height: AppSpace.sm),
                       TextButton(
-                        onPressed: _isLoading ? null : () => context.go('/login'),
+                        onPressed: _isLoading
+                            ? null
+                            : () => context.go('/login'),
                         style: TextButton.styleFrom(
                           foregroundColor: AppColor.gold,
                           textStyle: const TextStyle(
@@ -276,7 +279,10 @@ class _PasswordResetScreenState extends ConsumerState<PasswordResetScreen> {
 
   Widget _buildErrorPill(String message) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: AppSpace.sm),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 11,
+        vertical: AppSpace.sm,
+      ),
       decoration: BoxDecoration(
         color: AppColor.dangerSoft,
         border: Border.all(color: const Color(0x52E53935)),

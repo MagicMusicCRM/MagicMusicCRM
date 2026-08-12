@@ -79,9 +79,13 @@ export class InboundLeadService {
               source.id,
               $6,
               (
-                select min(status.id::text)::uuid
+                select status.id
                 from app.lead_statuses status
-                where lower(btrim(status.name)) = 'новый'
+                where status.stage_key = 'new'
+                   or lower(btrim(status.name)) in ('новый', 'новые')
+                order by (status.stage_key = 'new') desc,
+                  status.sort_order, status.id
+                limit 1
               ),
               $7
             from app.lead_sources source

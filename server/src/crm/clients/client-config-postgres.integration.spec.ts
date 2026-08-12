@@ -189,6 +189,57 @@ describe("Client configuration and strict validators (PostgreSQL)", () => {
     });
   });
 
+  it("always exposes the protected application source", async () => {
+    const listed = await config.listSources(director, { includeArchived: true });
+    const application = listed.items.find(
+      (source) => source.canonicalName === "app",
+    );
+
+    expect(application).toMatchObject({
+      displayName: "Приложение",
+      isActive: true,
+      isSystem: true,
+    });
+    const guards = await database.query<{ tgname: string }>(
+      `select tgname
+       from pg_trigger
+       where tgrelid = 'app.lead_sources'::regclass
+         and not tgisinternal`,
+    );
+    expect(guards.rows.map((row) => row.tgname)).toEqual(
+      expect.arrayContaining([
+        "lead_sources_system_guard",
+        "lead_sources_truncate_guard",
+      ]),
+    );
+    await expect(
+      config.updateSource(director, application!.id, {
+        expectedVersion: application!.version,
+        displayName: "Другое название",
+      }),
+    ).rejects.toMatchObject({
+      response: { code: "SYSTEM_SOURCE_IMMUTABLE" },
+    });
+    await expect(
+      config.updateSource(director, application!.id, {
+        expectedVersion: application!.version,
+        isActive: false,
+      }),
+    ).rejects.toMatchObject({
+      response: { code: "SYSTEM_SOURCE_IMMUTABLE" },
+    });
+    await expect(
+      database.query("delete from app.lead_sources where id = $1", [
+        application!.id,
+      ]),
+    ).rejects.toMatchObject({ code: "P0001" });
+    await expect(
+      database.transaction((client) =>
+        client.query("truncate table app.lead_sources cascade"),
+      ),
+    ).rejects.toMatchObject({ code: "P0001" });
+  });
+
   it("rejects missing core fields, inactive source and invalid phone with 422", async () => {
     const source = await createSource();
     const before = await database.query<{ count: string }>(

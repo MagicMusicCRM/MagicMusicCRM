@@ -12,6 +12,10 @@ import { authorizeCurrentCapability } from "../access-control/capability-request
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
+import {
+  buildCrmConfigurationBaseline,
+  ClientFieldDefinitionRow,
+} from "./crm-configuration-baseline";
 import { CrmPolicy } from "./crm.policy";
 import {
   PublishCrmConfigurationDto,
@@ -556,7 +560,21 @@ export class CrmConfigurationService {
        where branch_id is null order by version desc limit 1`,
     );
     const row = result.rows[0];
-    if (!row) throw new NotFoundException("Школьная конфигурация не создана.");
+    if (!row) {
+      const definitions = await runQuery<ClientFieldDefinitionRow>(
+        queryable,
+        `select id, entity_type, field_key, label, value_type, is_required,
+           is_active, is_system, category_key, category_label, sort_order, width,
+           placements, options
+         from app.client_custom_field_definitions
+         where is_active = true and deleted_at is null
+         order by entity_type, sort_order, label`,
+      );
+      return {
+        version: 0,
+        snapshot: buildCrmConfigurationBaseline(definitions.rows),
+      };
+    }
     return { version: Number(row.version), snapshot: row.effective_snapshot };
   }
 
@@ -724,12 +742,8 @@ export class CrmConfigurationService {
         ...(settingsChanged
           ? ["schedule.lesson.create", "client.payments"]
           : []),
-        ...(settlementTypesChanged > 0
-          ? ["schedule.lesson.decision"]
-          : []),
-        ...(compensationRulesChanged > 0
-          ? ["teacher.compensation"]
-          : []),
+        ...(settlementTypesChanged > 0 ? ["schedule.lesson.decision"] : []),
+        ...(compensationRulesChanged > 0 ? ["teacher.compensation"] : []),
       ],
     };
   }
@@ -1212,10 +1226,7 @@ export class CrmConfigurationService {
       businessSettings: desired.businessSettings.filter(
         (setting) => setting.value !== defaults.get(setting.key)?.value,
       ),
-      ...(!sameJson(
-        desired.lessonSettlementTypes,
-        school.lessonSettlementTypes,
-      )
+      ...(!sameJson(desired.lessonSettlementTypes, school.lessonSettlementTypes)
         ? { lessonSettlementTypes: desired.lessonSettlementTypes }
         : {}),
       ...(!sameJson(
@@ -1259,10 +1270,7 @@ export class CrmConfigurationService {
       ]),
       [
         "lessonSettlementTypes",
-        sameJson(
-          snapshot.lessonSettlementTypes,
-          school.lessonSettlementTypes,
-        )
+        sameJson(snapshot.lessonSettlementTypes, school.lessonSettlementTypes)
           ? "school"
           : "branch_override",
       ],
@@ -1287,10 +1295,7 @@ export class CrmConfigurationService {
   ): Promise<void> {
     if (
       sameJson(next.lessonSettlementTypes, current.lessonSettlementTypes) &&
-      sameJson(
-        next.teacherCompensationRules,
-        current.teacherCompensationRules,
-      )
+      sameJson(next.teacherCompensationRules, current.teacherCompensationRules)
     ) {
       return;
     }

@@ -11,6 +11,7 @@ export interface LeadSourceRow {
   canonical_name: string;
   display_name: string;
   is_active: boolean;
+  is_system: boolean;
   version: number | string;
   created_at: Date | string;
   updated_at: Date | string;
@@ -208,7 +209,7 @@ export class ClientConfigRepository {
   async listSources(includeArchived: boolean): Promise<LeadSourceRow[]> {
     const result = await this.database.query<LeadSourceRow>(
       `
-        select id, canonical_name, display_name, is_active, version,
+        select id, canonical_name, display_name, is_active, is_system, version,
           created_at, updated_at, deleted_at
         from app.lead_sources
         where ($1::boolean or (is_active and deleted_at is null))
@@ -225,7 +226,7 @@ export class ClientConfigRepository {
   async findActiveSource(sourceId: string): Promise<LeadSourceRow | null> {
     const result = await this.database.query<LeadSourceRow>(
       `
-        select id, canonical_name, display_name, is_active, version,
+        select id, canonical_name, display_name, is_active, is_system, version,
           created_at, updated_at, deleted_at
         from app.lead_sources
         where id = $1
@@ -250,7 +251,7 @@ export class ClientConfigRepository {
           is_active
         )
         values ($1, $2, true)
-        returning id, canonical_name, display_name, is_active, version,
+        returning id, canonical_name, display_name, is_active, is_system, version,
           created_at, updated_at, deleted_at
       `,
       [input.canonicalName, input.displayName],
@@ -283,7 +284,7 @@ export class ClientConfigRepository {
           updated_at = now()
         where id = $1
           and version = $2
-        returning id, canonical_name, display_name, is_active, version,
+        returning id, canonical_name, display_name, is_active, is_system, version,
           created_at, updated_at, deleted_at
       `,
       [

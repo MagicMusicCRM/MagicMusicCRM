@@ -141,6 +141,37 @@ describe("LeadIntakeService", () => {
     expect(result).toEqual({ studentId: "student-existing", created: false });
   });
 
+  it("assigns the application source to a student created from an app user", async () => {
+    const { service, query } = createServiceWithQueryResults([
+      { rows: [] }, // per-user advisory lock
+      {
+        rows: [
+          {
+            profile_id: "p1",
+            user_id: "u1",
+            first_name: "Иван",
+            last_name: null,
+            phone: "+79991112233",
+          },
+        ],
+      },
+      { rows: [] }, // no existing student
+      { rows: [] }, // no linked lead
+      { rows: [{ id: "student-new" }] },
+      { rows: [] }, // crm link
+    ]);
+
+    await expect(
+      service.saveContactFromChat(actor, { userId: "u1", as: "student" }),
+    ).resolves.toEqual({ studentId: "student-new", created: true });
+
+    const insert = query.mock.calls.find((call: unknown[]) =>
+      String(call[0]).includes("insert into app.students"),
+    );
+    expect(String(insert?.[0])).toContain("source_id");
+    expect(String(insert?.[0])).toContain("canonical_name");
+  });
+
   it("serializes chat student promotion with lead-card conversion", async () => {
     const { service, query } = createServiceWithQueryResults([
       { rows: [] }, // per-user lead-intake lock
@@ -208,6 +239,8 @@ describe("LeadIntakeService", () => {
       String(call[0]).includes("insert into app.leads"),
     );
     expect(insertLead?.[1]).toContain("status-new");
+    expect(String(insertLead?.[0])).toContain("source_id");
+    expect(String(insertLead?.[0])).toContain("canonical_name");
     expect(String(clientQuery.mock.calls[0][0])).toContain(
       "pg_advisory_xact_lock",
     );
@@ -311,7 +344,16 @@ describe("LeadIntakeService", () => {
     const clientQuery = jest
       .fn()
       .mockResolvedValueOnce({ rows: [] }) // advisory lock
-      .mockResolvedValueOnce({ rows: [{ entity_type: "lead", entity_id: "lead-existing" }] });
+      .mockResolvedValueOnce({
+        rows: [{
+          profile_id: "profile-1",
+          first_name: "Иван",
+          last_name: "Петров",
+          phone: "+79991234567",
+        }],
+      })
+      .mockResolvedValueOnce({ rows: [] }) // no student identity
+      .mockResolvedValueOnce({ rows: [{ entity_id: "lead-existing" }] });
     const transaction = jest.fn(
       async (work: (client: { query: jest.Mock }) => Promise<unknown>) =>
         work({ query: clientQuery }),
@@ -324,7 +366,7 @@ describe("LeadIntakeService", () => {
     expect(clientQuery.mock.calls[0][1]).toEqual(["lead-intake:user-1"]);
     const allSql = clientQuery.mock.calls.map((c: unknown[]) => String(c[0])).join("\n");
     expect(allSql).toContain("lead.deleted_at is null");
-    expect(allSql).toContain("student.deleted_at is null");
+    expect(allSql).toContain("s.profile_id = $2");
     expect(allSql).not.toContain("insert into app.leads");
     expect(audit.record).not.toHaveBeenCalled();
   });
@@ -333,9 +375,12 @@ describe("LeadIntakeService", () => {
     const clientQuery = jest
       .fn()
       .mockResolvedValueOnce({ rows: [] }) // advisory lock
-      .mockResolvedValueOnce({ rows: [] }) // user_crm_links → not linked
       .mockResolvedValueOnce({ rows: [{ profile_id: "profile-1", first_name: "Иван", last_name: "Петров", phone: "+79991234567" }] })
       .mockResolvedValueOnce({ rows: [] }) // no direct/profile student
+      .mockResolvedValueOnce({ rows: [] }) // no existing lead link
+      .mockResolvedValueOnce({ rows: [] }) // advisory phone lock
+      .mockResolvedValueOnce({ rows: [{ id: null, count: "0" }] })
+      .mockResolvedValueOnce({ rows: [{ id: null, count: "0" }] })
       .mockResolvedValueOnce({ rows: [{ id: "status-new" }] })
       .mockResolvedValueOnce({ rows: [{ id: "lead-new" }] })
       .mockResolvedValueOnce({ rows: [] });
@@ -346,14 +391,15 @@ describe("LeadIntakeService", () => {
     const { service, audit } = makeLeads({ transaction });
     const result = await service.autoCreateLeadFromChat(actor, "user-1");
     expect(result).toEqual({ leadId: "lead-new", created: true });
-    expect(clientQuery).toHaveBeenCalledTimes(7);
+    expect(clientQuery).toHaveBeenCalledTimes(10);
     expect(String(clientQuery.mock.calls[0][0])).toContain("pg_advisory_xact_lock");
     const statusCall = clientQuery.mock.calls.find((c: unknown[]) => String(c[0]).includes("новый"));
     expect(statusCall).toBeDefined();
     expect(String(statusCall![0])).toContain("'новый'");
     const insertCall = clientQuery.mock.calls.find((c: unknown[]) => String(c[0]).includes("insert into app.leads"));
     expect(insertCall).toBeDefined();
-    expect(String(insertCall![0])).toContain("'Через приложение'");
+    expect(String(insertCall![0])).toContain("source_id");
+    expect(String(insertCall![0])).toContain("canonical_name");
     const linkCall = clientQuery.mock.calls.find((c: unknown[]) => String(c[0]).includes("insert into app.user_crm_links"));
     expect(linkCall).toBeDefined();
     expect(String(linkCall![0])).toContain("'auto_phone'");
@@ -371,7 +417,6 @@ describe("LeadIntakeService", () => {
     const clientQuery = jest
       .fn()
       .mockResolvedValueOnce({ rows: [] }) // advisory lock
-      .mockResolvedValueOnce({ rows: [] }) // user_crm_links → not linked
       .mockResolvedValueOnce({ rows: [] }); // profile → missing
     const transaction = jest.fn(
       async (work: (client: { query: jest.Mock }) => Promise<unknown>) =>
@@ -389,7 +434,6 @@ describe("LeadIntakeService", () => {
     const clientQuery = jest
       .fn()
       .mockResolvedValueOnce({ rows: [] }) // advisory lock
-      .mockResolvedValueOnce({ rows: [] }) // user_crm_links → not linked
       .mockResolvedValueOnce({
         rows: [{
           profile_id: "profile-1",
@@ -417,6 +461,138 @@ describe("LeadIntakeService", () => {
     expect(audit.record).not.toHaveBeenCalled();
   });
 
+  it("autoCreateLeadFromChat links one matching student and never evaluates leads", async () => {
+    const clientQuery = jest
+      .fn()
+      .mockResolvedValueOnce({ rows: [] }) // user lock
+      .mockResolvedValueOnce({
+        rows: [{
+          profile_id: "profile-1",
+          first_name: "Иван",
+          last_name: "Петров",
+          phone: "+79991234567",
+        }],
+      })
+      .mockResolvedValueOnce({ rows: [] }) // no existing student identity
+      .mockResolvedValueOnce({ rows: [] }) // no existing lead link
+      .mockResolvedValueOnce({ rows: [] }) // phone lock
+      .mockResolvedValueOnce({ rows: [{ id: "student-phone", count: "1" }] })
+      .mockResolvedValueOnce({ rows: [{ entity_id: "student-phone" }] })
+      .mockResolvedValueOnce({
+        rows: [{ id: "student-phone" }],
+        rowCount: 1,
+      }); // merge + assign Student profile
+    const transaction = jest.fn(
+      async (work: (client: { query: jest.Mock }) => Promise<unknown>) =>
+        work({ query: clientQuery }),
+    );
+    const { service, audit, realtime } = makeLeads({ transaction });
+
+    await expect(
+      service.autoCreateLeadFromChat(actor, "user-student", "onboarding"),
+    ).resolves.toEqual({ leadId: null, created: false });
+
+    const allSql = clientQuery.mock.calls
+      .map((call: unknown[]) => String(call[0]))
+      .join("\n");
+    expect(allSql).toContain("profile.phone_normalized = $1");
+    expect(allSql).toContain("update app.students");
+    expect(allSql).not.toContain("from app.leads lead\n              where lead.phone_normalized");
+    expect(allSql).not.toContain("insert into app.leads");
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "crm.client_user_linked",
+        entityType: "student",
+        entityId: "student-phone",
+        metadata: expect.objectContaining({ intakeTrigger: "onboarding" }),
+      }),
+    );
+    expect(realtime.emitCrmChanged).toHaveBeenCalledWith({
+      entity: "student",
+      action: "updated",
+      id: "student-phone",
+    });
+  });
+
+  it("autoCreateLeadFromChat leaves multiple student matches for manual review", async () => {
+    const clientQuery = jest
+      .fn()
+      .mockResolvedValueOnce({ rows: [] }) // user lock
+      .mockResolvedValueOnce({
+        rows: [{
+          profile_id: "profile-1",
+          first_name: "Иван",
+          last_name: "Петров",
+          phone: "+79991234567",
+        }],
+      })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] }) // phone lock
+      .mockResolvedValueOnce({ rows: [{ id: "student-a", count: "2" }] });
+    const transaction = jest.fn(
+      async (work: (client: { query: jest.Mock }) => Promise<unknown>) =>
+        work({ query: clientQuery }),
+    );
+    const { service, audit, realtime } = makeLeads({ transaction });
+
+    await expect(
+      service.autoCreateLeadFromChat(actor, "user-ambiguous", "onboarding"),
+    ).resolves.toEqual({ leadId: null, created: false });
+
+    const allSql = clientQuery.mock.calls
+      .map((call: unknown[]) => String(call[0]))
+      .join("\n");
+    expect(allSql).not.toContain("insert into app.user_crm_links");
+    expect(allSql).not.toContain("insert into app.leads");
+    expect(audit.record).not.toHaveBeenCalled();
+    expect(realtime.emitCrmChanged).not.toHaveBeenCalled();
+  });
+
+  it("autoCreateLeadFromChat links one matching lead instead of creating a duplicate", async () => {
+    const clientQuery = jest
+      .fn()
+      .mockResolvedValueOnce({ rows: [] }) // user lock
+      .mockResolvedValueOnce({
+        rows: [{
+          profile_id: "profile-1",
+          first_name: "Иван",
+          last_name: "Петров",
+          phone: "+79991234567",
+        }],
+      })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] }) // phone lock
+      .mockResolvedValueOnce({ rows: [{ id: null, count: "0" }] })
+      .mockResolvedValueOnce({ rows: [{ id: "lead-phone", count: "1" }] })
+      .mockResolvedValueOnce({
+        rows: [{ id: null, count: "0", unavailable_count: "0" }],
+      })
+      .mockResolvedValueOnce({ rows: [{ entity_id: "lead-phone" }] });
+    const transaction = jest.fn(
+      async (work: (client: { query: jest.Mock }) => Promise<unknown>) =>
+        work({ query: clientQuery }),
+    );
+    const { service, audit } = makeLeads({ transaction });
+
+    await expect(
+      service.autoCreateLeadFromChat(actor, "user-lead", "onboarding"),
+    ).resolves.toEqual({ leadId: "lead-phone", created: false });
+
+    const allSql = clientQuery.mock.calls
+      .map((call: unknown[]) => String(call[0]))
+      .join("\n");
+    expect(allSql).not.toContain("insert into app.leads");
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "crm.client_user_linked",
+        entityType: "lead",
+        entityId: "lead-phone",
+      }),
+    );
+  });
+
   it("counts app-sourced leads", async () => {
     const { service, query, policy } = createServiceWithQueryResults([
       { rows: [{ count: "7" }] },
@@ -424,7 +600,7 @@ describe("LeadIntakeService", () => {
     const result = await service.countAppLeads(actor);
     expect(result).toEqual({ count: 7 });
     expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
-    expect(query.mock.calls[0][0]).toContain("'Через приложение'");
+    expect(query.mock.calls[0][0]).toContain("canonical_name");
   });
 
 });

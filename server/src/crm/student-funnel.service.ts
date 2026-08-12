@@ -78,9 +78,10 @@ export class StudentFunnelService {
       clientType,
     );
     const keys = effective.stages.map((stage) => stage.key);
-    const unknown = actor.role === "teacher"
-      ? []
-      : await this.remediationRows(clientType, branchId, keys);
+    const unknown =
+      actor.role === "teacher"
+        ? []
+        : await this.remediationRows(clientType, branchId, keys);
     return {
       clientType,
       branchId: branchId ?? null,
@@ -386,15 +387,12 @@ export class StudentFunnelService {
 
       const school = dto.branchId
         ? await this.resolveSchool(client, clientType)
-        : current?.effective_snapshot;
-      if (!school) throw new NotFoundException("Школьная воронка не найдена.");
-      const previousStages = dto.branchId && current
-        ? this.applyPatch(school.stages, current.patch as FunnelPatch)
-        : current?.effective_snapshot.stages ?? school.stages;
-      this.assertStableKeys(
-        previousStages,
-        stages,
-      );
+        : (current?.effective_snapshot ?? { stages: [] });
+      const previousStages =
+        dto.branchId && current
+          ? this.applyPatch(school.stages, current.patch as FunnelPatch)
+          : (current?.effective_snapshot.stages ?? school.stages);
+      this.assertStableKeys(previousStages, stages);
       const patch: FunnelPatch | FunnelSnapshot = dto.branchId
         ? this.diffFromSchool(school.stages, stages)
         : { stages };
@@ -445,10 +443,17 @@ export class StudentFunnelService {
       clientType,
       false,
     );
-    if (!school) throw new NotFoundException("Школьная воронка не настроена.");
-    const schoolStages = this.normalizeStages(
-      school.effective_snapshot.stages,
-    );
+    if (!school) {
+      if (branchId) {
+        throw new NotFoundException("Сначала настройте школьную воронку.");
+      }
+      return {
+        stages: [] as ClientPipelineStageDto[],
+        schoolVersion: 0,
+        branchVersion: 0,
+      };
+    }
+    const schoolStages = this.normalizeStages(school.effective_snapshot.stages);
     if (!branchId) {
       return {
         stages: schoolStages,
@@ -481,7 +486,8 @@ export class StudentFunnelService {
       clientType,
       false,
     );
-    if (!revision) throw new NotFoundException("Школьная воронка не настроена.");
+    if (!revision)
+      throw new NotFoundException("Школьная воронка не настроена.");
     return { stages: this.normalizeStages(revision.effective_snapshot.stages) };
   }
 
@@ -549,7 +555,9 @@ export class StudentFunnelService {
         terminal: raw.terminal === true,
         requiresReason: raw.requiresReason === true,
         allowedTransitions: [
-          ...new Set((raw.allowedTransitions ?? []).map((value) => value.trim())),
+          ...new Set(
+            (raw.allowedTransitions ?? []).map((value) => value.trim()),
+          ),
         ].filter((value) => value !== key),
       } satisfies ClientPipelineStageDto;
     });
@@ -612,9 +620,7 @@ export class StudentFunnelService {
     school: ClientPipelineStageDto[],
     patch: FunnelPatch,
   ): ClientPipelineStageDto[] {
-    const byKey = new Map(
-      school.map((stage) => [stage.key, { ...stage }]),
-    );
+    const byKey = new Map(school.map((stage) => [stage.key, { ...stage }]));
     for (const [key, stage] of Object.entries(patch.stages ?? {})) {
       byKey.set(key, stage);
     }
@@ -685,9 +691,10 @@ export class StudentFunnelService {
     stageKeys: string[],
   ): Promise<number> {
     if (stageKeys.length === 0) return 0;
-    const result = clientType === "lead"
-      ? await this.database.query<{ count: string | number }>(
-          `
+    const result =
+      clientType === "lead"
+        ? await this.database.query<{ count: string | number }>(
+            `
             select count(*) as count
             from app.leads lead
             join app.lead_statuses status on status.id = lead.status_id
@@ -695,18 +702,18 @@ export class StudentFunnelService {
               and ($1::uuid is null or lead.branch_id = $1)
               and status.stage_key = any($2::text[])
           `,
-          [branchId ?? null, stageKeys],
-        )
-      : await this.database.query<{ count: string | number }>(
-          `
+            [branchId ?? null, stageKeys],
+          )
+        : await this.database.query<{ count: string | number }>(
+            `
             select count(*) as count
             from app.students
             where deleted_at is null
               and ($1::uuid is null or branch_id = $1)
               and status = any($2::text[])
           `,
-          [branchId ?? null, stageKeys],
-        );
+            [branchId ?? null, stageKeys],
+          );
     return Number(result.rows[0]?.count ?? 0);
   }
 

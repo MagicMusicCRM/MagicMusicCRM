@@ -87,7 +87,7 @@ export class ClientConfigService {
       source = await this.database.transaction(async (client) => {
         const current = await client.query<LeadSourceRow>(
           `
-            select id, canonical_name, display_name, is_active, version,
+            select id, canonical_name, display_name, is_active, is_system, version,
               created_at, updated_at, deleted_at
             from app.lead_sources
             where id = $1
@@ -99,6 +99,21 @@ export class ClientConfigService {
         if (!before) throw new NotFoundException("Источник не найден.");
         if (Number(before.version) !== dto.expectedVersion) {
           throw new ConflictException("Источник уже изменён в другой вкладке.");
+        }
+        if (
+          before.is_system &&
+          ((dto.canonicalName !== undefined &&
+            dto.canonicalName.trim().toLowerCase() !== before.canonical_name) ||
+            (dto.displayName !== undefined &&
+              dto.displayName.trim() !== before.display_name) ||
+            dto.isActive === false)
+        ) {
+          throw new UnprocessableEntityException({
+            code: "SYSTEM_SOURCE_IMMUTABLE",
+            field: "sourceId",
+            message:
+              "Системный источник «Приложение» нельзя переименовать или архивировать.",
+          });
         }
         const updated = await this.repository.updateSource(client, sourceId, {
           expectedVersion: dto.expectedVersion,
@@ -330,6 +345,7 @@ export class ClientConfigService {
       canonicalName: row.canonical_name,
       displayName: row.display_name,
       isActive: row.is_active && row.deleted_at === null,
+      isSystem: row.is_system,
       version: Number(row.version),
       archivedAt: row.deleted_at,
     };

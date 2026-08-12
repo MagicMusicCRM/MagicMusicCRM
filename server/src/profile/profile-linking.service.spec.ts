@@ -30,6 +30,11 @@ describe("ProfileLinkingService", () => {
     phone: "+7 999 111-22-33",
   };
 
+  const clientProfileRow = {
+    ...profileRow,
+    role: "client" as const,
+  };
+
   it("404s when the profile does not exist", async () => {
     const { service } = createServiceWithQueryResults([{ rows: [] }]);
     await expect(
@@ -57,7 +62,7 @@ describe("ProfileLinkingService", () => {
     const { service, query, audit } = createServiceWithQueryResults([
       { rows: [profileRow] }, // findById
       { rows: [{ id: "student-1" }] }, // candidate check
-      { rows: [] }, // update students.profile_id
+      { rows: [{ id: "student-1" }] }, // merge + assign Student profile
       { rows: [] }, // insertCrmLink
       { rows: [{}] }, // linkSummary
     ]);
@@ -95,5 +100,61 @@ describe("ProfileLinkingService", () => {
     expect(result).toBeDefined();
     // Only findById + linkSummary ran — no candidate/link queries.
     expect(query).toHaveBeenCalledTimes(2);
+  });
+
+  it("autoLinkByPhone does not guess between multiple matching students for a client", async () => {
+    const { service, query, audit } = createServiceWithQueryResults([
+      { rows: [clientProfileRow] },
+      {
+        rows: [
+          { id: "student-a", entity_type: "student", created_at: "2026-06-02" },
+          { id: "student-b", entity_type: "student", created_at: "2026-06-01" },
+        ],
+      },
+      { rows: [{}] }, // link summary
+    ]);
+
+    await service.autoLinkByPhone(actor, "profile-a");
+
+    const decisionSql = query.mock.calls
+      .slice(0, -1)
+      .map((call: unknown[]) => String(call[0]))
+      .join("\n");
+    expect(decisionSql).not.toContain("update app.students");
+    expect(decisionSql).not.toContain("insert into app.user_crm_links");
+    expect(decisionSql).not.toContain("from app.leads l");
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it("autoLinkByPhone links the one matching student and stops before Lead/Staff lookup", async () => {
+    const { service, query, audit } = createServiceWithQueryResults([
+      { rows: [clientProfileRow] },
+      {
+        rows: [
+          { id: "student-a", entity_type: "student", created_at: "2026-06-02" },
+        ],
+      },
+      { rows: [{ id: "student-a" }] }, // candidate recheck
+      { rows: [{ id: "student-a" }] }, // merge + assign Student profile
+      { rows: [] }, // insert link
+      { rows: [{}] }, // link summary
+    ]);
+
+    await service.autoLinkByPhone(actor, "profile-a");
+
+    const decisionSql = query.mock.calls
+      .slice(0, -1)
+      .map((call: unknown[]) => String(call[0]))
+      .join("\n");
+    expect(decisionSql).toContain("update app.students");
+    expect(decisionSql).not.toContain("from app.leads l");
+    expect(decisionSql).not.toContain("from app.teachers t");
+    expect(decisionSql).not.toContain("from app.staff_members sm");
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "profile.crm_student_linked",
+        entityId: "profile-a",
+      }),
+    );
   });
 });

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/security/password_policy.dart';
 
 typedef ProvisionAccessSubmit =
     Future<void> Function(String? email, String? password);
@@ -136,7 +137,7 @@ class _ProvisionAccessDialogState extends State<_ProvisionAccessDialog> {
                   labelText: widget.accessExists ? 'Новый пароль' : 'Пароль *',
                   helperText: widget.accessExists
                       ? 'Оставьте пустым, чтобы не менять'
-                      : 'Не менее 10 символов',
+                      : passwordMinimumHint,
                   suffixIcon: IconButton(
                     tooltip: _showPassword
                         ? 'Скрыть пароль'
@@ -151,8 +152,8 @@ class _ProvisionAccessDialogState extends State<_ProvisionAccessDialog> {
                 validator: (value) {
                   final password = value ?? '';
                   if (widget.accessExists && password.isEmpty) return null;
-                  return password.length < 10
-                      ? 'Пароль должен содержать минимум 10 символов'
+                  return password.length < minPasswordLength
+                      ? passwordMinimumError
                       : null;
                 },
               ),

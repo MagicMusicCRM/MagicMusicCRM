@@ -17,7 +17,11 @@ import { StudentFunnelService } from "./student-funnel.service";
 const databaseUrl =
   process.env.V4_PLATFORM_TEST_DATABASE_URL ??
   "postgresql://magiccrm_owner:magiccrm_owner@127.0.0.1:54329/magiccrm";
-if (!new Set(["127.0.0.1", "localhost", "[::1]"]).has(new URL(databaseUrl).hostname)) {
+if (
+  !new Set(["127.0.0.1", "localhost", "[::1]"]).has(
+    new URL(databaseUrl).hostname,
+  )
+) {
   throw new Error("Student funnel tests require local PostgreSQL.");
 }
 
@@ -94,12 +98,7 @@ describe("Student funnel effective configuration (PostgreSQL)", () => {
       emitCrmChanged: jest.fn(),
     } as unknown as RealtimeBus;
     const policy = new CrmPolicy();
-    service = new StudentFunnelService(
-      database,
-      audit,
-      policy,
-      realtime,
-    );
+    service = new StudentFunnelService(database, audit, policy, realtime);
     crm = new CrmService(
       database,
       audit,
@@ -119,6 +118,49 @@ describe("Student funnel effective configuration (PostgreSQL)", () => {
     await client.query("rollback");
     client.release();
     await pool.end();
+  });
+
+  it("publishes the first school pipeline from an empty version zero", async () => {
+    await client.query("savepoint empty_school_pipeline");
+    try {
+      await client.query(
+        "drop trigger student_funnel_revision_immutable on app.student_funnel_revisions",
+      );
+      await client.query("delete from app.student_funnel_revisions");
+
+      await expect(service.getEffective(director)).resolves.toMatchObject({
+        source: "school",
+        schoolVersion: 0,
+        branchVersion: 0,
+        stages: [],
+      });
+      await expect(service.listRevisions(director)).resolves.toMatchObject({
+        items: [],
+      });
+
+      const published = await service.publish(director, {
+        expectedVersion: 0,
+        reason: "Первая стадия школы",
+        stages: [
+          {
+            key: "new_client",
+            label: "Новый клиент",
+            style: "cyan",
+            active: true,
+            terminal: false,
+            requiresReason: false,
+            allowedTransitions: [],
+          },
+        ],
+      });
+      expect(published).toMatchObject({ version: 1, branchId: null });
+      await expect(service.getEffective(director)).resolves.toMatchObject({
+        schoolVersion: 1,
+        stages: [expect.objectContaining({ key: "new_client" })],
+      });
+    } finally {
+      await client.query("rollback to savepoint empty_school_pipeline");
+    }
   });
 
   it("publishes school defaults and a sparse branch override", async () => {
@@ -147,13 +189,16 @@ describe("Student funnel effective configuration (PostgreSQL)", () => {
       order: expect.any(Array),
       stages: { paused: { label: "Пауза филиала" } },
     });
-    expect(Object.keys((branchRevision.patch as { stages: object }).stages)).toEqual([
-      "paused",
-    ]);
+    expect(
+      Object.keys((branchRevision.patch as { stages: object }).stages),
+    ).toEqual(["paused"]);
 
     const effective = await service.getEffective(director, branchId);
     const other = await service.getEffective(director, otherBranchId);
-    expect(effective).toMatchObject({ source: "branch_override", branchVersion: 1 });
+    expect(effective).toMatchObject({
+      source: "branch_override",
+      branchVersion: 1,
+    });
     expect(effective.stages[0]?.key).toBe("active");
     expect(stageLabel(effective.stages, "paused")).toBe("Пауза филиала");
     expect(stageLabel(other.stages, "paused")).toBe("На паузе");
@@ -283,7 +328,7 @@ describe("Student funnel effective configuration (PostgreSQL)", () => {
         ? { ...stage, allowedTransitions: ["paused"] }
         : stage.key === "paused"
           ? { ...stage, allowedTransitions: [] }
-        : stage,
+          : stage,
     );
     await service.publish(director, {
       branchId,
@@ -340,9 +385,10 @@ describe("Student funnel effective configuration (PostgreSQL)", () => {
       reason: "Вернули согласованный вариант",
     });
     expect(rollback).toMatchObject({ version: 3, rollbackFromVersion: 1 });
-    await client.query("update app.students set status = 'active' where id = $1", [
-      studentId,
-    ]);
+    await client.query(
+      "update app.students set status = 'active' where id = $1",
+      [studentId],
+    );
     await client.query(
       "delete from app.student_status_history where student_id = $1",
       [studentId],
@@ -371,9 +417,10 @@ describe("Student funnel effective configuration (PostgreSQL)", () => {
   });
 
   it("does not expose school remediation counts to a teacher", async () => {
-    await client.query("update app.students set status = 'legacy_unknown' where id = $1", [
-      studentId,
-    ]);
+    await client.query(
+      "update app.students set status = 'legacy_unknown' where id = $1",
+      [studentId],
+    );
     const staffView = await service.getEffective(director, branchId);
     expect(staffView.remediationStatuses).toContainEqual({
       key: "legacy_unknown",
@@ -384,9 +431,10 @@ describe("Student funnel effective configuration (PostgreSQL)", () => {
       branchId,
     );
     expect(teacherView.remediationStatuses).toEqual([]);
-    await client.query("update app.students set status = 'active' where id = $1", [
-      studentId,
-    ]);
+    await client.query(
+      "update app.students set status = 'active' where id = $1",
+      [studentId],
+    );
   });
 
   it("keeps school inheritance sparse and branch-created keys immutable", async () => {
@@ -452,9 +500,9 @@ describe("Student funnel effective configuration (PostgreSQL)", () => {
       reason: "Откат филиала",
     });
     const rolledBack = await service.getEffective(director, branchId);
-    expect(rolledBack.stages.some((stage) => stage.key === "waiting_list")).toBe(
-      true,
-    );
+    expect(
+      rolledBack.stages.some((stage) => stage.key === "waiting_list"),
+    ).toBe(true);
     expect(
       rolledBack.stages.find((stage) => stage.key === "branch_follow_up")
         ?.active,
@@ -467,7 +515,9 @@ function renameStage(
   key: string,
   label: string,
 ) {
-  return stages.map((stage) => (stage.key === key ? { ...stage, label } : stage));
+  return stages.map((stage) =>
+    stage.key === key ? { ...stage, label } : stage,
+  );
 }
 
 function moveFirst(stages: StudentFunnelStageDto[], key: string) {

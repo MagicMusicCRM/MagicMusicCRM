@@ -7,10 +7,11 @@ import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/student_funnel_editor.dart';
 
 class _FunnelApi extends MagicApiClient {
-  _FunnelApi({this.failPublish = false})
+  _FunnelApi({this.failPublish = false, this.empty = false})
     : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   final bool failPublish;
+  final bool empty;
   Map<String, dynamic>? published;
 
   @override
@@ -24,26 +25,30 @@ class _FunnelApi extends MagicApiClient {
             'clientType': queryParameters?['clientType'],
             'branchId': queryParameters?['branchId'],
             'source': 'school',
-            'schoolVersion': 1,
+            'schoolVersion': empty ? 0 : 1,
             'branchVersion': 0,
-            'stages': [
-              {
-                'key': 'active',
-                'label': 'Обучается',
-                'style': 'green',
-                'active': true,
-                'allowedTransitions': const <String>[],
-              },
-            ],
+            'stages': empty
+                ? const <Map<String, dynamic>>[]
+                : [
+                    {
+                      'key': 'active',
+                      'label': 'Обучается',
+                      'style': 'green',
+                      'active': true,
+                      'allowedTransitions': const <String>[],
+                    },
+                  ],
             'remediationStatuses': const <Map<String, dynamic>>[],
           }
           as T;
     }
     if (path == '/crm/client-pipelines/revisions') {
       return <String, dynamic>{
-            'items': [
-              {'version': 1, 'reason': 'Системная версия'},
-            ],
+            'items': empty
+                ? const <Map<String, dynamic>>[]
+                : [
+                    {'version': 1, 'reason': 'Системная версия'},
+                  ],
           }
           as T;
     }
@@ -108,6 +113,34 @@ Future<void> _open(
 }
 
 void main() {
+  testWidgets('director creates the first pipeline from version zero', (
+    tester,
+  ) async {
+    final api = _FunnelApi(empty: true);
+    await _open(tester, api);
+
+    expect(find.textContaining('Воронка ещё не настроена'), findsOneWidget);
+    expect(find.text('Версия 0'), findsOneWidget);
+    await tester.tap(find.text('Добавить этап'));
+    await tester.pumpAndSettle();
+    final stage = find.byType(TextFormField).first;
+    await tester.enterText(stage, 'Новый клиент');
+    await tester.enterText(
+      find.byKey(const ValueKey('client-pipeline-reason')),
+      'Первая настройка школы',
+    );
+    final publish = find.byKey(const ValueKey('client-pipeline-publish'));
+    await tester.ensureVisible(publish);
+    await tester.tap(publish);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.widgetWithText(FilledButton, 'Опубликовать').last);
+    await tester.pumpAndSettle();
+
+    expect(api.published?['expectedVersion'], 0);
+    expect((api.published?['stages'] as List).single['label'], 'Новый клиент');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('editor publishes configured labels through the mobile sheet', (
     tester,
   ) async {

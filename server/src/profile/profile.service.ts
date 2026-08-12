@@ -1,5 +1,14 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
+import {
+  LEAD_INTAKE_PORT,
+  LeadIntakePort,
+} from "../common/lead-intake.port";
 import { ActorContext, UserRole } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 import { ListProfilesQuery } from "./dto/list-profiles.query";
@@ -54,6 +63,7 @@ export class ProfileService {
     private readonly audit: AuditService,
     private readonly policy: ProfilePolicy,
     private readonly linking: ProfileLinkingService,
+    @Inject(LEAD_INTAKE_PORT) private readonly leadIntake: LeadIntakePort,
   ) {}
 
   async getMe(actor: ActorContext) {
@@ -142,7 +152,15 @@ export class ProfileService {
         `,
         [actor.userId],
       );
-      await this.linking.linkProfileByPhone(actor, profile, "auto_phone");
+      if (profile.role === "client") {
+        await this.leadIntake.autoCreateLeadFromChat(
+          actor,
+          actor.userId,
+          "onboarding",
+        );
+      } else {
+        await this.linking.linkProfileByPhone(actor, profile, "auto_phone");
+      }
     }
 
     await this.audit.record({
