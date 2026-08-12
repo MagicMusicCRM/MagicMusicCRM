@@ -1,16 +1,26 @@
 # V7 owner mega-UAT — актуальные доказательства
 
 Дата прогона: `2026-08-08` — `2026-08-12`
-Клиент: production API и update channels `1.5.1+181`; Windows/Android Release
-`+181` готовы к актуальному owner UI-retest
+Клиент: production API и update channels `1.5.2+182`; Windows/Android Release
+`+182` готовы к актуальному owner UI-retest
 Среда данных: production API/DB
 
-Production API развёрнут на client-compatible exact server image `b04f177`
-поверх неизменного client build `1.5.1+181`. Исторические UI-кадры
+Production API развёрнут на client-compatible exact server revision `52b272087`
+и client build `1.5.2+182`. Исторические UI-кадры
 предыдущих кандидатов сохраняют доказанную предметную операцию, но не повышают
 изменённые UI-сценарии до PASS без актуального owner-повтора.
 
-## Production rollout `1.5.1+181`
+## Production rollout `1.5.2+182`
+
+Полный release gate, encrypted off-host backup, isolated restore,
+`0119..0131`, exact production image, rollback gate, Windows ZIP/Setup,
+подписанные Android APK/AAB, public update manifests и post-deploy health
+зафиксированы в
+[`v7-production-rollout-182.md`](../v7-production-rollout-182.md).
+Технический `UAT-134` теперь PASS; актуальные credential-based five-role и
+предметные UI/API/DB-проходы остаются owner-UAT.
+
+## Предыдущий production rollout `1.5.1+181`
 
 Teacher compensation refinement, полные regression-gates, Windows/Android
 smoke, exact server image runtime/Trivy и release hashes зафиксированы в
@@ -146,20 +156,20 @@ production не изменялся.
 `11/11`, Flutter `786/786`, backend `175/175` suites и `1401/1401` tests,
 analyze/typecheck/build/diff-check PASS. Предыдущий bounded-read regression и
 его `41/41` proof также сохранены. Подробности:
-[`UAT-134-final-local-gate.md`](UAT-134-final-local-gate.md). Docker и
-production не изменялись.
+[`UAT-134-final-local-gate.md`](UAT-134-final-local-gate.md). На момент этого
+локального gate production не менялся; теперь кандидат развёрнут как `+182`.
 
-## G0/G13 — rollout `1.5.1+181`
+## G0/G13 — rollout `1.5.2+182`
 
 | Проверка | Результат | Доказательство |
 |---|---|---|
-| Актуальный server hotfix: teacher options и task performance | PASS | `../v7-production-rollout-server-hotfix-b04f177.md` |
-| Exact image, revision, migration ledger и release hashes | PASS | `../v7-production-rollout-181.md` |
-| Новый encrypted backup, off-host SHA и isolated restore | PASS | `../v7-production-rollout-181.md` |
-| Restore → candidate migration `0118` → reconcile zero | PASS | `../v7-production-rollout-181.md` |
-| Five-role login/profile после rollout | PASS | `../v7-production-rollout-181.md` |
-| Worker/outbox, two reconciliations, restart/log/5xx/latency | PASS | `../v7-production-rollout-181.md` |
-| Оба update-манифеста и четыре client artifacts build `181` | PASS | `../v7-production-rollout-181.md` |
+| Exact image, source/client revisions, migration ledger и release hashes | PASS | `../v7-production-rollout-182.md` |
+| Новый encrypted backup, off-host SHA и isolated restore | PASS | `../v7-production-rollout-182.md` |
+| Restore → candidate migrations `0119..0131` → reconcile zero | PASS | `../v7-production-rollout-182.md` |
+| Windows portable/Setup и Android APK/AAB build `182` | PASS | `../v7-production-rollout-182.md` |
+| Worker/outbox, two reconciliations, restart/log/5xx/latency | PASS | `../v7-production-rollout-182.md` |
+| Оба update-манифеста и четыре public client artifacts build `182` | PASS | `../v7-production-rollout-182.md` |
+| Credential-based five-role login/profile на новом build | PARTIAL | предыдущий `5/5` остаётся historical `+181`; нужен актуальный owner-проход |
 
 ## G3 — филиал, аудитории и преподаватель
 

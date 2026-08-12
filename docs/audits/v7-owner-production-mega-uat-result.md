@@ -2,10 +2,10 @@
 
 Run: `OWNER-20260808-01`
 Среда: production
-Production candidate: `1.5.1+181`, image `sha256:5fbd5a29…`
+Production candidate: `1.5.2+182`, image `sha256:698db9b4…`
 Статус: **IN PROGRESS**
 
-Текущий итог `100` уникальных утверждённых строк: `10 PASS`, `90 PARTIAL`,
+Текущий итог `100` уникальных утверждённых строк: `11 PASS`, `89 PARTIAL`,
 `0 PENDING`, `0 FAIL`, `0 BLOCKED`. Механическая сверка plan/result подтверждает
 одинаковый набор из `100` уникальных ID.
 
@@ -20,16 +20,16 @@ Production candidate: `1.5.1+181`, image `sha256:5fbd5a29…`
 
 | ID | Сценарий | Статус | Доказательство / остаток |
 |---|---|---|---|
-| UAT-000 | Зафиксировать commit, образы, миграции и hashes | PASS | production `+181`: client/server revision `17ce254`, exact image `5fbd5a29…`, schema `0118`, artifact/update/transport hashes: `v7-teacher-compensation-181.md`, `v7-production-rollout-181.md` |
-| UAT-001 | Backup, пробный restore, начальные counts | PASS | новый `+181` encrypted backup + off-host SHA, isolated restore, candidate migration `0118`, count/reconciliation и cleanup: `v7-production-rollout-181.md` |
-| UAT-002 | Release, production API, тёмная тема, реальные данные | PARTIAL | production API и update channels уже на `+181`; Windows/Android `+181` прошли post-rollout launch smoke, но нужен актуальный owner UI proof с production data |
+| UAT-000 | Зафиксировать commit, образы, миграции и hashes | PASS | production `+182`: server revision `52b272087`, client/release revision `e9514bb5`, exact image `698db9b4…`, schema `0131`, artifact/update hashes: `v7-production-rollout-182.md` |
+| UAT-001 | Backup, пробный restore, начальные counts | PASS | новый `+182` encrypted backup + off-host SHA, isolated restore, migrations `0119..0131`, stable counts/reconciliation и cleanup: `v7-production-rollout-182.md` |
+| UAT-002 | Release, production API, тёмная тема, реальные данные | PARTIAL | production API и update channels на `+182`; Windows/Android `+182` прошли post-rollout launch smoke и login screen dark-theme proof, но нужен актуальный owner UI proof с production data |
 | UAT-003 | ID-ledger и каталог evidence без секретов | PARTIAL | создан единый machine-readable ledger известных production UUID/version/counts с privacy policy и явным `missingRequiredClasses`; телефоны/email/секреты отсутствуют, бизнес-результаты сохранены; нужен owner-проход для заполнения всех оставшихся fact IDs: `UAT-003.md` |
 
 ## G1 — авторизация и навигация пяти ролей
 
 | ID | Сценарий | Статус | Доказательство / остаток |
 |---|---|---|---|
-| UAT-010 | Вход `magic1..5`, роли и навигация | PARTIAL | post-rollout production login/profile `5/5` PASS: `v7-production-rollout-181.md`; ожидаются актуальные UI-кадры навигации |
+| UAT-010 | Вход `magic1..5`, роли и навигация | PARTIAL | historical production login/profile `5/5` относится к `+181`; `+182` показал тёмный login screen и API health, но credential-based five-role повтор и актуальные UI-кадры ещё нужны: `v7-production-rollout-182.md` |
 | UAT-011 | Relogin Client↔Director и Teacher↔Admin | PARTIAL | automated secure-session regression есть; нужен текущий Release UI proof |
 | UAT-012 | 10 вкладок и связанные маршруты | PARTIAL | локальный Windows production-host tour `1/1`: кликами по ФИО/названиям открыты Student/Teacher/Lesson/Group/Room/Branch/Series/Task/Payment/User, проверены canonical breadcrumb, Back/Forward, сохранность исходной вкладки, обычный restart всех 10 вкладок и очистка logout; regressions `33/33`, analyze PASS; нужен production owner Release UI/API повтор: `UAT-012.md` |
 | UAT-013 | Android Back, клавиатура, safe areas | PARTIAL | локальный Android 15/API 35 PASS: реальные ADB Back `1/1`, expandable sheet/keyboard/SafeArea `1/1`, Teacher compact nav `1/1`; исправлены отсутствовавшая mobile workspace navigation и reduced-motion `Duration.zero` crash, widget regressions `8/8 + 12/12`; нужен production owner Android Release/predictive-gesture повтор: `UAT-013.md` |
@@ -176,8 +176,8 @@ Production candidate: `1.5.1+181`, image `sha256:5fbd5a29…`
 | UAT-131 | Обрыв сети, сохранение формы и Retry | PARTIAL | локально payment draft и stable identity сохраняются, issue/replace/cancel безопасно повторяются; 401 использует single/shared refresh, stale session не разлогинивает новый login; нужен Release network/expired-session owner-проход |
 | UAT-132 | Stale expectedVersion и recovery | PARTIAL | automated contracts есть; нужен production UI scenario |
 | UAT-133 | Полная actor matrix private routes | PARTIAL | текущий candidate run PASS: private route coverage `344/344`, scopes `344`, unexplained allows `0`; actor/payload leak `9/9`, route policy/evaluator/guard `132/132`; unknown capability/resource mismatch fail-closed, Client/Teacher PII/finance leak `0`; нужен production owner negative-request trace: `UAT-133.md` |
-| UAT-134 | Full tests/build/migrations/clean schema | PARTIAL | полный gate текущего checkout обнаружил и закрыл несовместимость responsible `name/displayName`; итог Flutter `786/786`, backend `175/175` suites и `1401/1401` tests, analyze/typecheck/build/diff-check PASS; нужны clean-schema/exact-image runtime/security, Windows/Android smoke и hashes; production `+181` остаётся историческим; evidence `UAT-134-final-local-gate.md` |
-| UAT-135 | Health, constraints, reconcile, workers, logs | PASS | `+181` internal/public ready, migration `0118`, worker/outbox, reconciliation twice, restart/log/5xx и latency: `v7-production-rollout-181.md` |
+| UAT-134 | Full tests/build/migrations/clean schema | PASS | Flutter `786/786`, backend `175/175` suites и `1401/1401` tests, analyze/typecheck/build/diff-check, clean migration `0001..0131`, exact-image runtime/Trivy, Windows Setup/ZIP, Android APK/AAB и hashes PASS: `UAT-134-final-local-gate.md`, `v7-production-rollout-182.md` |
+| UAT-135 | Health, constraints, reconcile, workers, logs | PASS | `+182` internal/public ready, migration `0131`, ожидаемые messenger constraints, worker/outbox, reconciliation twice, restart/log/clean-window 5xx и latency: `v7-production-rollout-182.md` |
 
 ## G14 — пять персон и итоговое доказательство
 

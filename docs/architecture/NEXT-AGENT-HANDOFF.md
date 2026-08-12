@@ -1,15 +1,17 @@
 # MagicMusicCRM — актуальная передача
 
 > Обновлено: 2026-08-12
-> Production: client `1.5.1+181`, server `b04f177`,
-> image `sha256:6e8fc887…`, migration `0118`
+> Production: client `1.5.2+182`, server `52b272087`,
+> image `sha256:698db9b4…`, migration `0131`
 > Рабочая ветка: `codex/v7-production-readiness`
 > Статус: production rollout PASS; owner mega-UAT не завершён
 
-Локальные рабочие волны (ещё не production): Branch lifecycle реализован в
-коде и миграции `0119`, Room lifecycle — в коде и миграции `0120`, Group
-lifecycle — в коде и миграции `0121`; release/deploy и owner-UAT для них не
-выполнялись.
+Release `1.5.2+182` доставил в production текущий checkout и миграции
+`0119..0131`, включая Branch/Room/Group lifecycle, optional linked accounts,
+schedule/finance/messenger/task/reporting волны. Технический rollout PASS;
+предметная owner-UAT для этих сценариев ещё не выполнена. Фразы ниже
+«Production не изменялся» относятся к моменту снятия конкретного локального
+evidence; теперь соответствующий код production-reachable в build `182`.
 
 `UAT-003` получил единый machine-readable ID-ledger известных production
 branch/ingestion/Lead/outbox/Lesson/Task фактов, privacy policy и явный список
@@ -512,17 +514,15 @@ RepoWise-указанный Windows configuration integration consumer такж�
 
 | Проверка | Результат |
 |---|---:|
-| Flutter | 667/667 |
-| Backend | 158/158 suites, 1259/1259 tests |
-| Backend build | PASS |
+| Release Flutter | 786/786, analyze PASS |
+| Release Backend | 175/175 suites, 1401/1401 tests |
+| Backend typecheck/build | PASS |
 | Exact image runtime/security gate | PASS, Trivy 0 High/Critical/secret |
-| Windows ZIP launch | PASS |
-| Android 15/API 35 install/launch | PASS |
-| Локальный кандидат: Flutter | 786/786 |
-| Локальный кандидат: Backend | 175/175 suites, 1401/1401 tests |
-| Локальный кандидат: analyze/typecheck/build | PASS |
-| UAT PASS | 10 |
-| UAT PARTIAL | 90 |
+| Windows ZIP + Setup install/launch/uninstall | PASS |
+| Android APK/AAB signature + API 35 install/launch | PASS |
+| Public manifests/artifacts build `182` | PASS |
+| UAT PASS | 11 |
+| UAT PARTIAL | 89 |
 | UAT PENDING | 0 |
 
 `PARTIAL` не равен `PASS`. Приложение нельзя объявлять окончательно принятым,
@@ -532,49 +532,52 @@ RepoWise-указанный Windows configuration integration consumer такж�
 Механическая сверка plan/result на 2026-08-12 показывает одинаковый набор из
 `100` уникальных UAT-ID.
 
-Production rollout build 181 прошёл encrypted off-host backup, isolated restore,
-worker pause/resume, reconciliation и automatic rollback gate. Первый кандидат
-server hotfix был отклонён runtime smoke и откатан; исправленный `b04f177`
-прошёл повторный gate.
+Production rollout build `182` прошёл encrypted off-host backup, isolated
+restore, миграции `0119..0131`, worker pause/resume, reconciliation и automatic
+rollback gate. Windows ZIP/Setup и Android APK/AAB опубликованы; оба update-
+манифеста переключены на `1.5.2+182`. Server image `sha256:698db9b4…` healthy,
+worker/outbox/reconcile drift `0`.
 
 Evidence:
 
+- `docs/audits/v7-production-rollout-182.md`;
 - `docs/audits/v7-production-rollout-181.md`;
 - `docs/audits/v7-production-rollout-server-hotfix-b04f177.md`;
 - `docs/audits/v7-teacher-compensation-181.md`.
 
 ## Главный незавершённый продуктовый блок
 
-Организационный контур create-centric:
+Организационный lifecycle-контур уже production-reachable, но ещё требует
+owner-UAT:
 
 | Сущность | Сейчас | Не хватает |
 |---|---|---|
-| Branch | list/create/update + локально preview/archive/history/restore | deploy migration `0119`, owner-UAT; future-dated closing пока не поддержан |
-| Room | локально list/create/update + preview/archive/history/restore и DB write guards | deploy migration `0120`, owner-UAT; future-dated archive пока не поддержан |
-| Group | локально list/create/update/members + preview/archive/history/restore и DB race guards | deploy migration `0121`, owner-UAT; future-dated archive пока не поддержан |
-| Teacher | локально create без обязательного login, credential management, preview/offboard/history/restore | deploy `0122`/`0123`, owner-UAT |
-| Staff | локально safe-admin create без обязательного login, credential management, preview/offboard/history/restore | deploy `0122`/`0123`, owner-UAT |
-| Branch discipline | локально add/reorder + preview/non-blocking impact/unassign/history/restore | deploy `0124`, owner-UAT |
-| Discipline/loss reason | локально list/create + rename/archive/history/restore; usage impact не блокирует Discipline | deploy `0124`, owner-UAT |
+| Branch | list/create/update + preview/archive/history/restore | owner-UAT; future-dated closing пока не поддержан |
+| Room | list/create/update + preview/archive/history/restore и DB write guards | owner-UAT; future-dated archive пока не поддержан |
+| Group | list/create/update/members + preview/archive/history/restore и DB race guards | owner-UAT; future-dated archive пока не поддержан |
+| Teacher | create без обязательного login, credential management, preview/offboard/history/restore | owner-UAT |
+| Staff | safe-admin create без обязательного login, credential management, preview/offboard/history/restore | owner-UAT |
+| Branch discipline | add/reorder + preview/non-blocking impact/unassign/history/restore | owner-UAT |
+| Discipline/loss reason | list/create + rename/archive/history/restore; usage impact не блокирует Discipline | owner-UAT |
 
 Физический cascade delete филиала недопустим: схема смешивает `CASCADE`,
 `SET NULL` и restrict/default references, а финансовая, учебная и audit-история
-должна оставаться неизменяемой. Локально добавлен canonical
+должна оставаться неизменяемой. В production `1.5.2` используется canonical
 `preview → remediation/blockers → commit(reason, effectiveDate)` с атомарным
 `active → archived`, восстановлением и tombstone-записью Branch. Отдельное
 состояние `closing` не вводилось без write guards и scheduler: будущая дата
 fail-closed отклоняется, чтобы «закрывающийся» филиал не продолжал принимать
-новые операции. Тот же контракт локально применён к Room и Group. Для Group
+новые операции. Тот же контракт применён к Room и Group. Для Group
 архивирование блокируют будущие занятия, активные серии и постоянные планы;
 состав группы, завершённые занятия и финансовые факты сохраняются. Новые
 schedule/membership writes по архивной группе блокируются на уровне БД.
 
-Последние owner-инварианты расписания локально доведены в checkout: дисциплины,
+Последние owner-инварианты расписания production-reachable: дисциплины,
 категории и уровни необязательны и не ограничивают занятия; Teacher выбирается
 только в назначенном Branch, его availability и рабочие часы Branch блокируют;
 Branch и Room обязательны. Новый Branch требует рабочие часы при создании.
 При выборе клиента Lesson подставляет его `branch_id`, а Room оператор выбирает
-отдельно. Эти изменения ещё не production-reachable и требуют полного gate/UAT.
+отдельно. Технический release gate PASS; остаётся production owner-UAT.
 
 Последняя локальная G10-волна перевела `UAT-101` из `PENDING` в `PARTIAL` и
 расширила `UAT-105`: hidden/share-with-teacher комментарии доказаны для Staff,
@@ -638,10 +641,9 @@ Windows/PostgreSQL тестами. Production не изменялся; `UAT-111`
 
 ## Следующая работа
 
-1. Выполнить owner-UAT Branch/Room/Group lifecycle и включить миграции
-   `0119`/`0120`/`0121` только в следующую явно разрешённую release-волну.
-2. Выполнить owner-UAT reference lifecycle и включить `0124` только в явно
-   разрешённую release-волну.
+1. Выполнить production owner-UAT Branch/Room/Group lifecycle, уже доступного
+   через миграции `0119`/`0120`/`0121`.
+2. Выполнить production owner-UAT reference lifecycle из migration `0124`.
 3. Пройти production owner-UAT `UAT-104` для файлов ДЗ с UI/API/DB-доказательствами.
 4. Пройти production owner-UAT `UAT-072` для группового Plan и изменения его
    participant subscriptions с UI/API/DB-доказательствами.
