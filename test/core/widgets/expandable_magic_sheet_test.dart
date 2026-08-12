@@ -121,6 +121,35 @@ void main() {
     expect(find.text('Короткое содержимое'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'reduced motion expands immediately without zero-duration crash',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      addTearDown(tester.view.reset);
+      await _pumpSheetHost(
+        tester,
+        media: const MediaQueryData(
+          size: Size(390, 844),
+          disableAnimations: true,
+        ),
+        longContent: true,
+      );
+
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('magic-sheet-toggle')));
+      await tester.pump();
+
+      expect(find.text('Свернуть'), findsOneWidget);
+      expect(
+        tester.getSize(find.byKey(const ValueKey('magic-sheet-frame'))).height,
+        closeTo(844, 2),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 Future<void> _pumpSheetHost(

@@ -315,7 +315,7 @@ void main() {
       }
       await tester.tap(find.text('Поступления и списания'));
       await tester.pumpAndSettle();
-      expect(find.text('Срок наступил — требуется проверка'), findsWidgets);
+      expect(find.text('Проведён, ожидает подтверждения'), findsWidgets);
 
       await tester.tap(
         find.byKey(
@@ -367,6 +367,141 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('Ошибочная запись'), findsOneWidget);
       expect(find.textContaining('Анна Администратор'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 4));
+    },
+  );
+
+  testWidgets(
+    'canonical paid record can be adjusted and its adjustment can be reversed',
+    (tester) async {
+      tester.view.physicalSize = const Size(800, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      const sourcePaymentId = '11111111-1111-4111-8111-111111111111';
+      const paymentRecordId = '22222222-2222-4222-8222-222222222222';
+      const adjustmentId = '33333333-3333-4333-8333-333333333333';
+      final api = FakeCardApiClient(
+        role: 'manager',
+        student: _student,
+        studentAccounts: const [
+          {
+            'currencyCode': 'RUB',
+            'actualPaymentsMinor': '300000',
+            'adjustmentsMinor': '-50000',
+            'obligationDebitsMinor': '0',
+            'obligationCreditsMinor': '0',
+            'writeOffsMinor': '0',
+            'balanceMinor': '250000',
+            'debtMinor': '0',
+          },
+        ],
+        studentMovements: const [
+          {
+            'id': adjustmentId,
+            'kind': 'refund',
+            'direction': 'debit',
+            'amountMinor': '50000',
+            'currencyCode': 'RUB',
+            'occurredAt': '2026-08-08T10:00:00.000Z',
+            'comment': 'Частичный возврат',
+            'sourcePaymentId': sourcePaymentId,
+            'adjustmentVersion': 1,
+          },
+          {
+            'id': paymentRecordId,
+            'kind': 'payment_record',
+            'direction': 'credit',
+            'amountMinor': '300000',
+            'currencyCode': 'RUB',
+            'occurredAt': '2026-08-07T10:00:00.000Z',
+            'status': 'paid',
+            'sourcePaymentId': sourcePaymentId,
+            'paymentRecordVersion': 1,
+          },
+        ],
+        adjustmentReversalPreview: const {
+          'adjustmentId': adjustmentId,
+          'kind': 'refund',
+          'amountMinor': '-50000',
+          'currencyCode': 'RUB',
+          'walletDeltaMinor': '50000',
+          'walletBalanceMinor': '250000',
+          'resultingBalanceMinor': '300000',
+          'negativeBalanceWarning': false,
+          'operation': 'adjustment_reversal',
+          'previewToken': 'adjustment-reversal-preview',
+        },
+      );
+      await pumpClientCard(
+        tester,
+        api: api,
+        seed: _student,
+        entityType: 'student',
+      );
+
+      await tester.tap(find.text('Оплаты'));
+      await tester.pumpAndSettle();
+      final scrollable = tester.state<ScrollableState>(
+        find.descendant(
+          of: find.byKey(const Key('client-payments-tab')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      scrollable.position.jumpTo(scrollable.position.maxScrollExtent);
+      await tester.pump();
+      await tester.tap(find.text('Поступления и списания'));
+      await tester.pumpAndSettle();
+
+      tester
+          .widget<IconButton>(
+            find.byKey(const ValueKey('adjust-payment-$paymentRecordId')),
+          )
+          .onPressed!();
+      await tester.pump();
+      await tester.enterText(find.byKey(const Key('adjustment-amount')), '100');
+      await tester.enterText(
+        find.byKey(const Key('adjustment-reason')),
+        'Коррекция подтверждённой оплаты',
+      );
+      await tester.tap(find.byKey(const Key('adjustment-submit')));
+      await tester.pumpAndSettle();
+      final adjustment = api.idempotentRequests.singleWhere(
+        (request) => request.path.endsWith('/adjustments'),
+      );
+      expect(adjustment.data['sourcePaymentId'], sourcePaymentId);
+
+      scrollable.position.jumpTo(scrollable.position.maxScrollExtent);
+      await tester.pump();
+      final expansion = find.text('Поступления и списания');
+      if (find
+          .byKey(ValueKey('reverse-adjustment-$adjustmentId'))
+          .evaluate()
+          .isEmpty) {
+        await tester.tap(expansion);
+        await tester.pumpAndSettle();
+      }
+      tester
+          .widget<IconButton>(
+            find.byKey(ValueKey('reverse-adjustment-$adjustmentId')),
+          )
+          .onPressed!();
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('adjustment-reversal-reason')),
+        'Возврат оформлен ошибочно',
+      );
+      await tester.tap(find.byKey(const Key('adjustment-reversal-submit')));
+      await tester.pumpAndSettle();
+      final reversal = api.idempotentRequests.singleWhere(
+        (request) =>
+            request.path.endsWith('/adjustments/$adjustmentId/reversal'),
+      );
+      expect(reversal.data, {
+        'previewToken': 'adjustment-reversal-preview',
+        'confirm': true,
+        'reason': 'Возврат оформлен ошибочно',
+      });
       await tester.pump(const Duration(seconds: 4));
     },
   );

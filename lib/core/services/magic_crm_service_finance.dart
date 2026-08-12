@@ -330,6 +330,44 @@ class PaymentReversalPreview {
   }
 }
 
+class AccountAdjustmentReversalPreview {
+  const AccountAdjustmentReversalPreview({
+    required this.adjustmentId,
+    required this.kind,
+    required this.amountMinor,
+    required this.currencyCode,
+    required this.walletDeltaMinor,
+    required this.walletBalanceMinor,
+    required this.resultingBalanceMinor,
+    required this.negativeBalanceWarning,
+    required this.previewToken,
+  });
+
+  final String adjustmentId;
+  final String kind;
+  final BigInt amountMinor;
+  final String currencyCode;
+  final BigInt walletDeltaMinor;
+  final BigInt walletBalanceMinor;
+  final BigInt resultingBalanceMinor;
+  final bool negativeBalanceWarning;
+  final String previewToken;
+
+  factory AccountAdjustmentReversalPreview.fromJson(
+    Map<String, dynamic> json,
+  ) => AccountAdjustmentReversalPreview(
+    adjustmentId: json['adjustmentId'].toString(),
+    kind: json['kind'].toString(),
+    amountMinor: _replacementMinor(json['amountMinor']),
+    currencyCode: json['currencyCode'].toString(),
+    walletDeltaMinor: _replacementMinor(json['walletDeltaMinor']),
+    walletBalanceMinor: _replacementMinor(json['walletBalanceMinor']),
+    resultingBalanceMinor: _replacementMinor(json['resultingBalanceMinor']),
+    negativeBalanceWarning: json['negativeBalanceWarning'] == true,
+    previewToken: json['previewToken'].toString(),
+  );
+}
+
 enum PaymentAdjustmentKind { refund, correction }
 
 class RecordPaymentAdjustmentInput {
@@ -1295,6 +1333,30 @@ extension MagicCrmFinance on MagicCrmService {
     return _api.post<Map<String, dynamic>>('/crm/expenses', data: data);
   }
 
+  Future<Map<String, dynamic>> updateExpense({
+    required String expenseId,
+    required num amount,
+    required String category,
+    String? description,
+    String? branchId,
+  }) {
+    final data = <String, dynamic>{
+      'amount': amount,
+      'category': category,
+      // An explicit empty string clears an existing optional description.
+      'description': description?.trim() ?? '',
+    };
+    if (branchId != null && branchId.isNotEmpty) data['branchId'] = branchId;
+    return _api.patch<Map<String, dynamic>>(
+      '/crm/expenses/$expenseId',
+      data: data,
+    );
+  }
+
+  Future<Map<String, dynamic>> deleteExpense(String expenseId) {
+    return _api.delete<Map<String, dynamic>>('/crm/expenses/$expenseId');
+  }
+
   // ── Subscription packages (P5b) ─────────────────────────────────────────
   Future<List<Map<String, dynamic>>> listSubscriptionPackages({
     String? q,
@@ -1469,6 +1531,36 @@ extension MagicCrmFinance on MagicCrmService {
       '/crm/students/$studentId/adjustments',
       identity: identity,
       data: input.toJson(),
+    );
+  }
+
+  Future<AccountAdjustmentReversalPreview> previewAccountAdjustmentReversal(
+    String studentId, {
+    required String adjustmentId,
+    required int expectedVersion,
+  }) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/crm/students/$studentId/adjustments/$adjustmentId/reversal/preview',
+      data: <String, dynamic>{'expectedVersion': expectedVersion},
+    );
+    return AccountAdjustmentReversalPreview.fromJson(response);
+  }
+
+  Future<Map<String, dynamic>> reverseAccountAdjustment(
+    String studentId, {
+    required String adjustmentId,
+    required AccountAdjustmentReversalPreview preview,
+    required String reason,
+    required MagicMutationIdentity identity,
+  }) {
+    return _api.postIdempotent<Map<String, dynamic>>(
+      '/crm/students/$studentId/adjustments/$adjustmentId/reversal',
+      identity: identity,
+      data: <String, dynamic>{
+        'previewToken': preview.previewToken,
+        'confirm': true,
+        'reason': reason.trim(),
+      },
     );
   }
 

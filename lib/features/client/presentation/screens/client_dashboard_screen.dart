@@ -8,6 +8,7 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/core/widgets/lazy_indexed_stack.dart';
+import 'package:magic_music_crm/core/widgets/v7/magic_page_state.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7_nav_shell.dart';
 import 'package:magic_music_crm/features/client/presentation/widgets/subscription_status_card.dart';
 import 'package:magic_music_crm/features/client/presentation/widgets/upcoming_lessons_list.dart';
@@ -254,11 +255,15 @@ class _ClientPaymentsView extends ConsumerWidget {
           padding: EdgeInsets.all(16),
           child: ListSkeleton(count: 6),
         ),
-        error: (err, _) => Center(
-          child: Text(
-            'Ошибка: $err',
-            style: const TextStyle(color: AppTheme.danger),
-          ),
+        error: (_, _) => MagicPageState(
+          kind: MagicPageStateKind.error,
+          title: 'Не удалось загрузить оплаты',
+          message: 'Проверьте подключение и повторите загрузку.',
+          actionLabel: 'Повторить',
+          onAction: () {
+            ref.invalidate(myCommerceProjectionProvider);
+            ref.invalidate(clientPaymentsProvider);
+          },
         ),
         data: (payments) {
           if (payments.isEmpty) {
@@ -283,7 +288,10 @@ class _ClientPaymentsView extends ConsumerWidget {
                   ),
                   const SizedBox(height: 8),
                   TextButton.icon(
-                    onPressed: () => ref.invalidate(clientPaymentsProvider),
+                    onPressed: () {
+                      ref.invalidate(myCommerceProjectionProvider);
+                      ref.invalidate(clientPaymentsProvider);
+                    },
                     icon: const Icon(Icons.refresh_rounded),
                     label: const Text('Обновить'),
                   ),

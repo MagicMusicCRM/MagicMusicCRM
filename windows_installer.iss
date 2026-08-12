@@ -1,11 +1,11 @@
 [Setup]
 AppName=MagicMusic CRM
-AppVersion=1.5.1.181
+AppVersion=1.5.2.182
 DefaultDirName={autopf}\MagicMusicCRM
 DefaultGroupName=MagicMusicCRM
 ; Изменили на простую папку в корне проекта
 OutputDir=installer_output
-OutputBaseFilename=MagicMusicCRM-1.5.1-181-Setup
+OutputBaseFilename=MagicMusicCRM-1.5.2-182-Setup
 Compression=lzma
 SolidCompression=yes
 ArchitecturesAllowed=x64

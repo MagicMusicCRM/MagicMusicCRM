@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/models/types.dart';
+import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
 
 import 'card_fake_api.dart';
 
@@ -69,6 +71,43 @@ void main() {
     expect(api.updateStudentBody, isNotNull);
     expect(api.updateStudentBody!['firstName'], 'Анна');
   });
+
+  testWidgets(
+    'Lead card opens client month in its default branch before trial creation',
+    (tester) async {
+      final api = FakeCardApiClient(
+        lead: {
+          'id': 'lead-1',
+          'firstName': 'Анна',
+          'lastName': 'Смирнова',
+          'phone': '+79990000000',
+          'branchId': 'branch-default',
+          'customData': <String, dynamic>{},
+        },
+      );
+      await pumpClientCard(
+        tester,
+        api: api,
+        seed: {'id': 'lead-1', 'name': 'Анна', 'custom_data': {}},
+        statuses: const [],
+      );
+
+      final action = find.text('Открыть в расписании');
+      final container = ProviderScope.containerOf(tester.element(action));
+      await tester.ensureVisible(action);
+      await tester.tap(action);
+      await tester.pump();
+
+      final focus = container.read(scheduleNavigationProvider);
+      expect(focus, isNotNull);
+      expect(focus!.openMonth, isTrue);
+      expect(focus.clientType, 'lead');
+      expect(focus.clientId, 'lead-1');
+      expect(focus.clientName, 'Анна Смирнова');
+      expect(focus.branchId, 'branch-default');
+      expect(focus.leadId, isNull);
+    },
+  );
 
   testWidgets('лид конвертируется только кнопкой выдачи абонемента', (
     tester,

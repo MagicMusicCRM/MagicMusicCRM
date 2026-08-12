@@ -46,6 +46,11 @@ export interface ValidatedStudentCreate {
   warnings: ClientValidationWarning[];
 }
 
+export interface ValidatedCustomFields {
+  values: TypedClientCustomValue[];
+  warnings: ClientValidationWarning[];
+}
+
 @Injectable()
 export class ClientWriteValidator {
   constructor(private readonly repository: ClientConfigRepository) {}
@@ -121,10 +126,7 @@ export class ClientWriteValidator {
   async validateCustomFields(
     entityType: ClientEntityType,
     inputs: ClientCustomFieldInputDto[],
-  ): Promise<{
-    values: TypedClientCustomValue[];
-    warnings: ClientValidationWarning[];
-  }> {
+  ): Promise<ValidatedCustomFields> {
     const ids = inputs.map((input) => input.definitionId);
     if (new Set(ids).size !== ids.length) {
       this.fail(

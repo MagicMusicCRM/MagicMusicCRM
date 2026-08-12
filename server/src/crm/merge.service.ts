@@ -143,7 +143,14 @@ export class MergeService {
       );
       repointed["lead_status_history.lead_id"] = ids(
         (await client.query<{ id: string }>(
-          `update app.lead_status_history set lead_id = $2 where lead_id = $1 returning id`,
+          `with mutation_scope as (
+             select set_config('app.allow_lead_status_history_repoint', 'on', true)
+           )
+           update app.lead_status_history history
+              set lead_id = $2
+             from mutation_scope
+            where history.lead_id = $1
+           returning history.id`,
           [loserId, winnerId],
         )).rows,
       );
@@ -207,7 +214,13 @@ export class MergeService {
   private static readonly UNDO_REPOINT: Record<string, string> = {
     "students.lead_id": "update app.students set lead_id = $1, updated_at = now() where id = any($2::uuid[])",
     "lessons.lead_id": "update app.lessons set lead_id = $1 where id = any($2::uuid[])",
-    "lead_status_history.lead_id": "update app.lead_status_history set lead_id = $1 where id = any($2::uuid[])",
+    "lead_status_history.lead_id": `with mutation_scope as (
+      select set_config('app.allow_lead_status_history_repoint', 'on', true)
+    )
+    update app.lead_status_history history
+       set lead_id = $1
+      from mutation_scope
+     where history.id = any($2::uuid[])`,
     "shared_tasks.linked_entity_id": "update app.shared_tasks set linked_entity_id = $1, version = version + 1, updated_at = now() where id = any($2::uuid[])",
     "tasks.entity_id": "update app.shared_tasks shared set linked_entity_id = $1, version = version + 1, updated_at = now() from app.shared_task_legacy_links link where link.shared_task_id = shared.id and link.legacy_task_id = any($2::uuid[])",
     "chats.lead_id": "update app.chats set lead_id = $1 where id = any($2::uuid[])",

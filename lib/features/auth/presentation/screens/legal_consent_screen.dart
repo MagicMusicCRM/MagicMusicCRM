@@ -36,8 +36,8 @@ class _LegalConsentScreenState extends ConsumerState<LegalConsentScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Не удалось сохранить согласие: $e'),
+          const SnackBar(
+            content: Text('Не удалось сохранить согласие. Повторите попытку.'),
             backgroundColor: AppTheme.danger,
           ),
         );
@@ -68,10 +68,10 @@ class _LegalConsentScreenState extends ConsumerState<LegalConsentScreen> {
           const SnackBar(content: Text('Не удалось открыть документ')),
         );
       }
-    } catch (error) {
+    } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Не удалось открыть документ: $error')),
+          const SnackBar(content: Text('Не удалось открыть документ')),
         );
       }
     }
@@ -103,7 +103,7 @@ class _LegalConsentScreenState extends ConsumerState<LegalConsentScreen> {
                 ),
                 child: docsAsync.when(
                   loading: _buildLoading,
-                  error: (error, _) => _buildError(error),
+                  error: (_, _) => _buildError(),
                   data: _buildContent,
                 ),
               ),
@@ -141,22 +141,24 @@ class _LegalConsentScreenState extends ConsumerState<LegalConsentScreen> {
     );
   }
 
-  Widget _buildError(Object error) {
+  Widget _buildError() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildBrand(),
         const SizedBox(height: AppSpace.xxl),
-        Text(
-          'Не удалось загрузить документы: $error',
+        const Text(
+          'Не удалось загрузить документы. Проверьте подключение и повторите попытку.',
           textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: AppColor.text2,
-            fontSize: 12.5,
-            height: 1.5,
-          ),
+          style: TextStyle(color: AppColor.text2, fontSize: 12.5, height: 1.5),
         ),
         const SizedBox(height: AppSpace.lg),
+        FilledButton.icon(
+          onPressed: () => ref.invalidate(currentLegalDocumentsProvider),
+          icon: const Icon(Icons.refresh_rounded),
+          label: const Text('Повторить'),
+        ),
+        const SizedBox(height: AppSpace.sm),
         TextButton(
           onPressed: () => context.go('/login'),
           style: TextButton.styleFrom(

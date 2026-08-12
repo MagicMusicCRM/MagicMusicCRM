@@ -1,15 +1,15 @@
-import 'dart:io';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:open_filex/open_filex.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_settings_service.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/teacher_rate_selector.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/reporting_v4_panel.dart';
 
 /// KVA-238: отчёт «Статистика преподавателей» — учебные единицы (группа /
 /// индивидуально с учеником / пробные), дни с часами, часы всего, ставка за
@@ -47,12 +47,18 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
 
   /// Units ticked for the month-end «в оклад» pass, keyed by the unit's first
   /// lesson id: a lesson belongs to exactly one unit, so that id identifies the
-  /// unit without the report having to grow a key field. Value = its lessonIds.
+  /// unit without the report having to grow a key field. Value = legacy lesson
+  /// ids that do not yet have an immutable compensation fact.
   final Map<String, List<String>> _selectedUnits = {};
   bool _applyingBulkRate = false;
 
   final _money = NumberFormat('#,##0', 'ru');
   final _dayFmt = DateFormat('dd.MM');
+
+  bool get _canCorrectSettledPayroll => const {
+    'director',
+    'system_admin',
+  }.contains(ref.read(capabilitySnapshotProvider).asData?.value.role);
 
   @override
   void initState() {
@@ -176,14 +182,31 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
 
   /// Sets the per-lesson rate on every lesson of an individual/trial unit.
   Future<void> _editUnitLessonRate(Map<String, dynamic> unit) async {
-    final lessonIds = [
+    final allLessonIds = [
       for (final id in (unit['lessonIds'] as List? ?? const []))
         if (id != null) id.toString(),
     ];
-    if (lessonIds.isEmpty) return;
+    final lessonIds = [
+      for (final id
+          in (_canCorrectSettledPayroll
+              ? allLessonIds
+              : (unit['editableLessonIds'] as List? ?? const [])))
+        if (id != null) id.toString(),
+    ];
+    if (lessonIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Расчёт занятия уже зафиксирован. Исправление выполняется через корректировку расчёта в карточке занятия.',
+          ),
+        ),
+      );
+      return;
+    }
 
     num? picked;
     var touched = false;
+    final reasonController = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -194,7 +217,11 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Ставка применится к ${lessonIds.length} занятиям этого периода.',
+                _canCorrectSettledPayroll
+                    ? 'Ставка применится к ${lessonIds.length} занятиям этого периода. '
+                          'Зафиксированные расчёты будут исправлены с сохранением прежних фактов в аудите.'
+                    : 'Ставка применится к ${lessonIds.length} незакрытым занятиям этого периода. '
+                          'Зафиксированные расчёты не изменяются.',
                 style: TextStyle(
                   color: Theme.of(ctx).colorScheme.onSurfaceVariant,
                   fontSize: 12.5,
@@ -209,6 +236,15 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
                   touched = true;
                 }),
               ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: reasonController,
+                maxLength: 500,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Причина изменения *',
+                ),
+              ),
             ],
           ),
           actions: [
@@ -217,13 +253,19 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
               child: const Text('Отмена'),
             ),
             FilledButton(
-              onPressed: touched ? () => Navigator.pop(ctx, true) : null,
+              onPressed: touched
+                  ? () {
+                      if (reasonController.text.trim().isEmpty) return;
+                      Navigator.pop(ctx, true);
+                    }
+                  : null,
               child: const Text('Применить'),
             ),
           ],
         ),
       ),
     );
+    final reasonText = reasonController.text.trim();
     if (confirmed != true || !mounted) return;
 
     try {
@@ -232,7 +274,11 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
       // way to tell which from the report.
       await ref
           .read(magicCrmServiceProvider)
-          .setLessonsTeacherRate(lessonIds: lessonIds, teacherRate: picked);
+          .setLessonsTeacherRate(
+            lessonIds: lessonIds,
+            teacherRate: picked,
+            reasonText: reasonText,
+          );
       if (!mounted) return;
       await _loadReport();
     } catch (e) {
@@ -251,6 +297,7 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
 
     num? picked;
     var touched = false;
+    final reasonController = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -276,6 +323,15 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
                   touched = true;
                 }),
               ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: reasonController,
+                maxLength: 500,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Причина изменения *',
+                ),
+              ),
             ],
           ),
           actions: [
@@ -284,20 +340,30 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
               child: const Text('Отмена'),
             ),
             FilledButton(
-              onPressed: touched ? () => Navigator.pop(ctx, true) : null,
+              onPressed: touched
+                  ? () {
+                      if (reasonController.text.trim().isEmpty) return;
+                      Navigator.pop(ctx, true);
+                    }
+                  : null,
               child: const Text('Применить'),
             ),
           ],
         ),
       ),
     );
+    final reasonText = reasonController.text.trim();
     if (confirmed != true || !mounted) return;
 
     setState(() => _applyingBulkRate = true);
     try {
       final updated = await ref
           .read(magicCrmServiceProvider)
-          .setLessonsTeacherRate(lessonIds: lessonIds, teacherRate: picked);
+          .setLessonsTeacherRate(
+            lessonIds: lessonIds,
+            teacherRate: picked,
+            reasonText: reasonText,
+          );
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -332,6 +398,10 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
 
   @override
   Widget build(BuildContext context) {
+    // The role is loaded asynchronously. Subscribe here so a report that
+    // arrives before /access/me is rebuilt with the Director-only controls as
+    // soon as the capability snapshot becomes available.
+    ref.watch(capabilitySnapshotProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -637,20 +707,18 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
             discipline: _discipline,
             category: _category,
           );
-      final dir = await getApplicationDocumentsDirectory();
       final stamp = DateFormat('yyyy-MM-dd').format(_from);
-      final file = File('${dir.path}/teacher-stats-$stamp.csv');
-      await file.writeAsString(csv);
+      final filename = 'teacher-stats-$stamp.csv';
+      final bytes = utf8.encode(csv);
+      validateReportExportBytes(bytes, 'csv');
+      final result = await ref.read(reportFileOpenerProvider)(bytes, filename);
       if (!mounted) return;
-      final opened = await OpenFilex.open(file.path);
-      if (!mounted) return;
-      if (opened.type != ResultType.done) {
-        // No CSV handler (common on a bare desktop): the file is still saved,
-        // so tell the user where instead of just failing.
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Сохранено: ${file.path}')));
-      }
+      final message = result.opened
+          ? 'Файл открыт: $filename'
+          : 'Файл сохранён: ${result.path}';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -672,7 +740,14 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Не удалось загрузить отчёт: $_error'),
+            const Text('Не удалось загрузить отчёт'),
+            const SizedBox(height: 4),
+            Text(
+              'Проверьте подключение и повторите загрузку.',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
             const SizedBox(height: 8),
             FilledButton(
               onPressed: _loadReport,
@@ -692,6 +767,30 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
       children: [
+        if (_branchId != null &&
+            _report['movementsScope'] == 'teacher_period_all_branches') ...[
+          Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.info_outline_rounded, size: 18),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Занятия отфильтрованы по филиалу. Выплаты, доплаты и '
+                    'вычеты показаны по преподавателю за период по всем филиалам.',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         ...items.map(_buildTeacherCard),
         const SizedBox(height: 8),
         _buildTotals(totals),
@@ -760,15 +859,24 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
     // перекрыла бы ставку группы — ровно то, от чего оберегает комментарий ниже.
     final isGroup =
         unit['unitType'] == 'group' || unit['unitType'] == 'group_trial';
-    final lessonIds = [
+    final editableLessonIds = [
+      for (final id in (unit['editableLessonIds'] as List? ?? const []))
+        if (id != null) id.toString(),
+    ];
+    final allLessonIds = [
       for (final id in (unit['lessonIds'] as List? ?? const []))
         if (id != null) id.toString(),
     ];
+    final settledLessons = _asInt(unit['settledLessons']);
     // Groups are excluded from the bulk pass on purpose: their rate knob is the
     // GROUP rate (a per-lesson override would silently shadow it). The customer
     // asked for the trials pass, and that is what this selects.
-    final selectable = !isGroup && lessonIds.isNotEmpty;
-    final unitKey = selectable ? lessonIds.first : null;
+    final selectedLessonIds = _canCorrectSettledPayroll
+        ? allLessonIds
+        : editableLessonIds;
+    final selectable =
+        selectedLessonIds.isNotEmpty && (_canCorrectSettledPayroll || !isGroup);
+    final unitKey = selectable ? selectedLessonIds.first : null;
     final days = (unit['days'] as List? ?? const [])
         .whereType<Map<String, dynamic>>()
         .map((day) {
@@ -808,7 +916,7 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
                       ? null
                       : (checked) => setState(() {
                           if (checked == true) {
-                            _selectedUnits[unitKey!] = lessonIds;
+                            _selectedUnits[unitKey!] = selectedLessonIds;
                           } else {
                             _selectedUnits.remove(unitKey);
                           }
@@ -845,6 +953,16 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
                         fontSize: 12,
                       ),
                     ),
+                  if (settledLessons > 0)
+                    Text(
+                      _canCorrectSettledPayroll
+                          ? 'Зафиксировано расчётов: $settledLessons · директор может исправить массово'
+                          : 'Зафиксировано расчётов: $settledLessons · исправление через карточку занятия',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 11.5,
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -862,7 +980,13 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
                 ),
               ],
             ),
-            if (isGroup) ...[
+            if (settledLessons > 0 && !_canCorrectSettledPayroll) ...[
+              const SizedBox(width: 4),
+              const Tooltip(
+                message: 'Расчёт зафиксирован и не меняется задним числом',
+                child: Icon(Icons.lock_outline_rounded, size: 14),
+              ),
+            ] else if (isGroup) ...[
               const SizedBox(width: 4),
               const Icon(Icons.edit_rounded, size: 14),
             ],

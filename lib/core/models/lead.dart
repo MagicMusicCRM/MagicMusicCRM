@@ -58,6 +58,11 @@ class Lead {
   int get openTasksCount => _intOf(_m['open_tasks_count']);
   int get commentsCount => _intOf(_m['comments_count']);
   int get trialLessonsCount => _intOf(_m['trial_lessons_count']);
+  List<Map<String, dynamic>> get tableCustomFields {
+    final raw = _m['table_custom_fields'];
+    if (raw is! List) return const [];
+    return raw.whereType<Map<String, dynamic>>().toList(growable: false);
+  }
 
   static int _intOf(Object? value) {
     if (value is int) return value;

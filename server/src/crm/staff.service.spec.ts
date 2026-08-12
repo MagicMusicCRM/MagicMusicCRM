@@ -1,7 +1,7 @@
 import { AuditService } from "../audit/audit.service";
-import { PasswordService } from "../auth/password.service";
 import { DatabaseService } from "../db/database.service";
 import { CrmPolicy } from "./crm.policy";
+import { PersonAccountService } from "./person-account.service";
 import { StaffService } from "./staff.service";
 
 describe("StaffService", () => {
@@ -16,17 +16,31 @@ describe("StaffService", () => {
       assertManagerOnly: jest.fn(),
       assertCanManageSystemSettings: jest.fn(),
     };
-    const passwords = { hash: jest.fn().mockResolvedValue("hashed-password") };
+    const accounts = {
+      prepareCreate: jest.fn().mockImplementation((email?: string) =>
+        Promise.resolve({
+          email: email?.trim().toLowerCase() ?? null,
+          passwordHash: email ? "hashed-password" : null,
+          isAppAccount: Boolean(email),
+        }),
+      ),
+      manageAccess: jest.fn().mockImplementation((_actor, _type, _id, dto) => {
+        if (dto.role !== undefined) {
+          throw new Error("Роль меняется только в разделе «Настройки → Доступы».");
+        }
+        return Promise.resolve({});
+      }),
+    };
     const service = new StaffService(
       database as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
-      passwords as unknown as PasswordService,
+      accounts as unknown as PersonAccountService,
     );
-    return { service, query, audit, policy, passwords };
+    return { service, query, audit, policy, accounts };
   };
 
-  it("enforces manager/admin role-creation limits", async () => {
+  it("prevents an admin from creating an equal-role staff account", async () => {
     const { service } = createService();
 
     // Администратор (ниже Управляющего) не управляет ролями вовсе.
@@ -38,27 +52,14 @@ describe("StaffService", () => {
           lastName: "Смирнова",
           email: "staff-admin@example.com",
           password: "password-123",
-          role: "manager",
           branchIds: ["branch-a"],
         },
       ),
     ).rejects.toThrow("Недостаточно прав");
 
-    // Управляющий не может создать manager или system_admin (роль >= своей).
-    await expect(
-      service.createStaff(actor, {
-        firstName: "Ольга",
-        lastName: "Смирнова",
-        email: "staff@example.com",
-        password: "password-123",
-        role: "system_admin",
-        branchIds: ["branch-a"],
-      }),
-    ).rejects.toThrow("Недостаточно прав");
-
   });
 
-  it("creates staff profiles for privileged roles (system_admin)", async () => {
+  it("creates only the safe admin role outside Settings -> Access", async () => {
     const adminActor = { userId: "sys-a", role: "system_admin" as const };
     const { service, query, audit } = createService([
       {
@@ -66,11 +67,11 @@ describe("StaffService", () => {
         profile_id: "profile-a",
         profile_user_id: "user-a",
         email: "staff@example.com",
-        role: "system_admin",
-        position: "Администратор системы",
+        role: "admin",
+        position: "Администратор",
         status: "working",
         custom_data: {},
-        app_role: "system_admin",
+        app_role: "admin",
         is_app_account: true,
         first_name: "Ольга",
         last_name: "Смирнова",
@@ -87,25 +88,25 @@ describe("StaffService", () => {
         email: "Staff@Example.com",
         password: "password-123",
         phone: "+79992222222",
-        role: "system_admin",
         branchIds: ["branch-a"],
       }),
     ).resolves.toMatchObject({
       id: "staff-a",
       email: "staff@example.com",
-      role: "system_admin",
+      role: "admin",
     });
 
     expect(query.mock.calls[0][1]).toEqual([
       "staff@example.com",
       "Ольга Смирнова",
       "+79992222222",
-      "system_admin",
+      "admin",
       "Ольга",
       "Смирнова",
       "hashed-password",
       ["branch-a"],
       "sys-a",
+      true,
     ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -154,7 +155,6 @@ describe("StaffService", () => {
         lastName: " Смирнова ",
         phone: "+79992222222",
         email: "Staff@Example.com",
-        role: "manager",
         position: " Операционный управляющий ",
         status: "working",
         customDataPatch: { telegram: "@staff" },
@@ -179,7 +179,6 @@ describe("StaffService", () => {
       "Ольга",
       "Смирнова",
       "+79992222222",
-      null,
       "Операционный управляющий",
       "working",
       JSON.stringify({ telegram: "@staff" }),
@@ -246,10 +245,11 @@ describe("StaffService", () => {
     ]);
 
     await expect(
-      service.updateStaff(adminActor, "staff-a", {
-        role: "Ответственный",
-        phone: "+79990000000",
-      }),
+      service.updateStaff(
+        adminActor,
+        "staff-a",
+        { role: "Ответственный", phone: "+79990000000" } as never,
+      ),
     ).resolves.toMatchObject({
       id: "staff-a",
       role: "Ответственный",
@@ -371,7 +371,7 @@ describe("StaffService", () => {
           { status },
         ),
       ).resolves.toMatchObject({ status });
-      expect(query.mock.calls[1][1][6]).toBe(status);
+      expect(query.mock.calls[1][1][5]).toBe(status);
     },
   );
 
@@ -382,9 +382,9 @@ describe("StaffService", () => {
       service.updateStaff(
         { userId: "sys-a", role: "system_admin" },
         "staff-a",
-        { role: "Главный ответственный" },
+        { role: "Главный ответственный" } as never,
       ),
-    ).rejects.toThrow("Недостаточно прав");
+    ).rejects.toThrow("Настройки → Доступы");
   });
 
   it("blocks an admin from changing a staff member's role (admin manages no roles)", async () => {
@@ -392,8 +392,12 @@ describe("StaffService", () => {
     const { service } = createService([{ role: "teacher" }]);
 
     await expect(
-      service.updateStaff(adminActor, "staff-a", { role: "manager" }),
-    ).rejects.toThrow("Недостаточно прав");
+      service.updateStaff(
+        adminActor,
+        "staff-a",
+        { role: "manager" } as never,
+      ),
+    ).rejects.toThrow("Настройки → Доступы");
   });
 
   it("limits the responsible picker to linked active admin/manager/director users", async () => {
@@ -455,7 +459,7 @@ describe("StaffService", () => {
         birthdayMonth: 6,
         limit: 15,
       }),
-    ).resolves.toEqual({
+    ).resolves.toMatchObject({
       items: [
         {
           id: "staff-a",
@@ -488,6 +492,7 @@ describe("StaffService", () => {
       6,
       15,
       "manager",
+      null,
     ]);
     expect(query.mock.calls[0][0]).toContain(
       "u.role <> 'system_admin'::app.user_role",
@@ -495,7 +500,7 @@ describe("StaffService", () => {
   });
 
   it("never provisions teacher access for a staff record", async () => {
-    const { service, query, passwords } = createService();
+    const { service, query, accounts } = createService();
 
     await expect(
       service.provisionAccess(
@@ -505,10 +510,10 @@ describe("StaffService", () => {
           email: "staff@example.com",
           password: "password-123",
           role: "teacher",
-        },
+        } as never,
       ),
-    ).rejects.toThrow("Недостаточно прав");
-    expect(passwords.hash).not.toHaveBeenCalled();
+    ).rejects.toThrow("Настройки → Доступы");
+    expect(accounts.manageAccess).toHaveBeenCalledTimes(1);
     expect(query).not.toHaveBeenCalled();
   });
 

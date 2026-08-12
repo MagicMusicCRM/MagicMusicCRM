@@ -164,7 +164,11 @@ class _CommentsListState extends ConsumerState<_CommentsList> {
       sharedWithTeacher: c['shared_with_teacher'] == true,
       allowed: _isStaff && id.isNotEmpty,
       onChanged: () {
-        if (mounted) setState(() => _future = _loadMerged());
+        if (!mounted) return;
+        final next = _loadMerged();
+        setState(() {
+          _future = next;
+        });
       },
     );
   }
@@ -629,6 +633,7 @@ class _HomeworkProgressList extends ConsumerStatefulWidget {
 
 class _HomeworkProgressListState extends ConsumerState<_HomeworkProgressList> {
   late Future<List<Map<String, dynamic>>> _future;
+  String? _attachingHomeworkId;
 
   @override
   void initState() {
@@ -665,6 +670,43 @@ class _HomeworkProgressListState extends ConsumerState<_HomeworkProgressList> {
     _ => s?.toString() ?? '',
   };
 
+  Future<void> _attachAssignment(Map<String, dynamic> homework) async {
+    final homeworkId = homework['id']?.toString();
+    if (homeworkId == null || homeworkId.isEmpty) return;
+    final file = await pickHomeworkAttachment(context);
+    if (file == null || !mounted) return;
+
+    setState(() => _attachingHomeworkId = homeworkId);
+    try {
+      await ref
+          .read(homeworkAttachmentServiceProvider)
+          .uploadAndAttach(
+            homeworkId: homeworkId,
+            bytes: file.bytes,
+            fileName: file.name,
+            kind: 'assignment',
+          );
+      if (!mounted) return;
+      setState(() => _future = _load());
+      MagicToast.show(
+        context,
+        'Файл прикреплён',
+        detail: file.name,
+        type: MagicToastType.success,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      MagicToast.show(
+        context,
+        'Не удалось прикрепить файл',
+        detail: '$error',
+        type: MagicToastType.danger,
+      );
+    } finally {
+      if (mounted) setState(() => _attachingHomeworkId = null);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -680,10 +722,21 @@ class _HomeworkProgressListState extends ConsumerState<_HomeworkProgressList> {
           return Center(
             child: Padding(
               padding: const EdgeInsets.all(AppSpace.xl),
-              child: Text(
-                'Не удалось загрузить ДЗ: ${snap.error}',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: cs.onSurfaceVariant),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Не удалось загрузить домашние задания',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: cs.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: AppSpace.sm),
+                  TextButton.icon(
+                    onPressed: () => setState(() => _future = _load()),
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Повторить'),
+                  ),
+                ],
               ),
             ),
           );
@@ -706,6 +759,7 @@ class _HomeworkProgressListState extends ConsumerState<_HomeworkProgressList> {
           itemCount: items.length,
           itemBuilder: (ctx, i) {
             final h = items[i];
+            final homeworkId = h['id']?.toString() ?? '';
             final title = (h['title'] ?? 'Домашнее задание').toString();
             final desc = (h['description'] ?? '').toString().trim();
             final due = DateTime.tryParse((h['dueAt'] ?? '').toString());
@@ -719,6 +773,7 @@ class _HomeworkProgressListState extends ConsumerState<_HomeworkProgressList> {
                 'Задано: ${DateFormat('d MMM', 'ru').format(created.toLocal())}',
             ].join('  •  ');
             final statusLabel = _statusLabel(h['status']);
+            final attachments = homeworkAttachments(h['attachments']);
             return Card(
               margin: const EdgeInsets.only(bottom: 10),
               child: Padding(
@@ -788,6 +843,29 @@ class _HomeworkProgressListState extends ConsumerState<_HomeworkProgressList> {
                         ),
                       ),
                     ],
+                    if (attachments.isNotEmpty) ...[
+                      const SizedBox(height: AppSpace.md),
+                      HomeworkAttachmentList(attachments: attachments),
+                    ],
+                    const SizedBox(height: AppSpace.sm),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        key: ValueKey('homework-attach-$homeworkId'),
+                        onPressed: _attachingHomeworkId == null
+                            ? () => _attachAssignment(h)
+                            : null,
+                        icon: _attachingHomeworkId == homeworkId
+                            ? const SizedBox.square(
+                                dimension: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.attach_file_rounded),
+                        label: const Text('Добавить файл'),
+                      ),
+                    ),
                   ],
                 ),
               ),

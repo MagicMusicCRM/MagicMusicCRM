@@ -45,6 +45,7 @@ class LessonConstraintViolation {
     'OUTSIDE_BRANCH_HOURS' => 'Филиал закрыт в это время',
     'TEACHER_UNAVAILABLE' => 'Преподаватель недоступен',
     'TEACHER_BRANCH_MISMATCH' => 'Преподаватель не назначен в филиал',
+    'ROOM_BRANCH_MISMATCH' => 'Аудитория относится к другому филиалу',
     'TEACHER_OVERLAP' => 'У преподавателя уже есть занятие',
     'CLIENT_OVERLAP' => 'У клиента уже есть занятие',
     'ROOM_OVERLAP' => 'Аудитория уже занята',

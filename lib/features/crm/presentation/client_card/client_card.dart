@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/providers/crm_navigation_provider.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/services/homework_attachment_service.dart';
 import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
@@ -21,6 +22,7 @@ import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_forms/client_forms_api.dart';
 import 'package:magic_music_crm/core/utils/status_color.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
+import 'package:magic_music_crm/core/widgets/homework_attachment_widgets.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
@@ -34,7 +36,6 @@ import 'package:magic_music_crm/core/models/payment.dart';
 import 'package:magic_music_crm/core/models/subscription.dart';
 import 'package:magic_music_crm/core/models/lesson.dart';
 import 'package:magic_music_crm/core/models/student_funnel.dart';
-import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
@@ -42,7 +43,6 @@ import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_text.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'client_card_aggregation.dart';
-import 'client_card_staff_api.dart';
 import 'client_archive_button.dart';
 import 'comment_share_button.dart';
 import 'client_card_dialogs.dart';
@@ -136,6 +136,12 @@ class _ClientCardState extends ConsumerState<ClientCard>
   // True while a family add/remove write is in flight — disables the family
   // action controls so a double-tap can't fire two mutations.
   bool _familyBusy = false;
+  bool _clientAccessAllowed = false;
+  bool _loadingClientAccess = false;
+  bool _clientAccessBusy = false;
+  String? _clientAccessError;
+  List<Map<String, dynamic>> _linkedUsers = const [];
+  List<Map<String, dynamic>> _clientUserCandidates = const [];
   // True while a task create is in flight — disables the add-task control.
   // True once the user has edited a field but not saved — used to warn before
   // discarding unsaved changes on close.
@@ -327,6 +333,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
   List<Map<String, dynamic>> _sources = [];
   bool _loadingMetadata = true;
   List<CrmCustomFieldDefinition> _customFieldSchema = const [];
+  bool _typedCustomFieldSchemaLoaded = false;
   // KVA-234: справочник дисциплин (GET /crm/disciplines) для мультивыбора.
   List<Map<String, dynamic>> _disciplineOptions = const [];
 
@@ -452,6 +459,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
       if (widget.allStatuses == null) _fetchStatuses();
       _fetchMetadata();
       _fetchFamily();
+      _fetchClientAccess();
       _fetchInternalContext();
       _fetchStudentData(then: _resolveLeadCounterpart);
       return;
@@ -467,6 +475,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
     _fetchDuplicateCandidates();
     _fetchStatusHistory();
     _fetchFamily();
+    _fetchClientAccess();
     _fetchInternalContext();
   }
 

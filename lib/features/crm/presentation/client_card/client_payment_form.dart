@@ -303,20 +303,16 @@ class _ClientPaymentFormState extends State<ClientPaymentForm> {
                         labelText: 'Статус',
                         prefixIcon: Icon(Icons.verified_outlined),
                       ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: ClientPaymentStatus.unpaid,
-                          child: Text('Не оплачен'),
-                        ),
-                        DropdownMenuItem(
-                          value: ClientPaymentStatus.postedPending,
-                          child: Text('Срок наступил — требуется проверка'),
-                        ),
-                        DropdownMenuItem(
-                          value: ClientPaymentStatus.paid,
-                          child: Text('Оплачен'),
-                        ),
-                      ],
+                      items: ClientPaymentStatus.values
+                          .map(
+                            (status) => DropdownMenuItem(
+                              value: status,
+                              child: Text(
+                                clientPaymentStatusLabel(status.apiValue),
+                              ),
+                            ),
+                          )
+                          .toList(growable: false),
                       onChanged: _busy
                           ? null
                           : (value) {
@@ -526,7 +522,7 @@ class _ReadonlyPaymentField extends StatelessWidget {
 
 String clientPaymentStatusLabel(Object? raw) => switch (raw?.toString()) {
   'unpaid' => 'Не оплачен',
-  'posted_pending' => 'Срок наступил — требуется проверка',
+  'posted_pending' => 'Проведён, ожидает подтверждения',
   'paid' => 'Оплачен',
   _ => 'Статус не указан',
 };
@@ -909,6 +905,146 @@ class _ClientPaymentReversalFormState
   }
 }
 
+Future<bool?> showClientAccountAdjustmentReversalSheet(
+  BuildContext context, {
+  required AccountAdjustmentReversalPreview preview,
+  required Future<void> Function(ClientPaymentReversalSubmission submission)
+  onSubmit,
+}) {
+  return showMagicSheet<bool>(
+    context,
+    title: 'Сторнировать возврат или корректировку',
+    subtitle:
+        'Обе неизменяемые записи останутся в технической истории и не попадут в обычную статистику',
+    icon: Icons.settings_backup_restore_rounded,
+    builder: (_) => _ClientAccountAdjustmentReversalForm(
+      preview: preview,
+      onSubmit: onSubmit,
+    ),
+  );
+}
+
+class _ClientAccountAdjustmentReversalForm extends StatefulWidget {
+  const _ClientAccountAdjustmentReversalForm({
+    required this.preview,
+    required this.onSubmit,
+  });
+
+  final AccountAdjustmentReversalPreview preview;
+  final Future<void> Function(ClientPaymentReversalSubmission submission)
+  onSubmit;
+
+  @override
+  State<_ClientAccountAdjustmentReversalForm> createState() =>
+      _ClientAccountAdjustmentReversalFormState();
+}
+
+class _ClientAccountAdjustmentReversalFormState
+    extends State<_ClientAccountAdjustmentReversalForm> {
+  final _formKey = GlobalKey<FormState>();
+  final _reason = TextEditingController();
+  final _identity = MagicMutationIdentity.create('adjustment-reversal');
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_busy || !_formKey.currentState!.validate()) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await widget.onSubmit(
+        ClientPaymentReversalSubmission(
+          reason: _reason.text,
+          identity: _identity,
+        ),
+      );
+      if (mounted) await _popPaymentSheet(context, true);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = '$error';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final preview = widget.preview;
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            '${preview.kind == 'refund' ? 'Возврат' : 'Корректировка'}: '
+            '${formatPaymentMinor(preview.amountMinor.abs())}',
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          Text(
+            'Личный счёт: ${formatPaymentMinor(preview.walletBalanceMinor)} '
+            '→ ${formatPaymentMinor(preview.resultingBalanceMinor)}',
+          ),
+          if (preview.negativeBalanceWarning)
+            Text(
+              'После сторно баланс станет отрицательным.',
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          const SizedBox(height: AppSpace.md),
+          TextFormField(
+            key: const Key('adjustment-reversal-reason'),
+            controller: _reason,
+            maxLength: 500,
+            minLines: 2,
+            maxLines: 4,
+            validator: (value) =>
+                (value ?? '').trim().isEmpty ? 'Укажите причину сторно' : null,
+            decoration: const InputDecoration(labelText: 'Причина *'),
+          ),
+          if (_error != null)
+            Text(
+              _error!,
+              key: const Key('adjustment-reversal-error'),
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          const SizedBox(height: AppSpace.lg),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _busy
+                      ? null
+                      : () async => _popPaymentSheet(context, false),
+                  child: const Text('Отмена'),
+                ),
+              ),
+              const SizedBox(width: AppSpace.sm),
+              Expanded(
+                child: FilledButton(
+                  key: const Key('adjustment-reversal-submit'),
+                  onPressed: _busy ? null : _submit,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.error,
+                  ),
+                  child: Text(_busy ? 'Сторнируем…' : 'Сторнировать'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class ClientPaymentAdjustmentForm extends StatefulWidget {
   const ClientPaymentAdjustmentForm({
     super.key,
@@ -965,7 +1101,7 @@ class _ClientPaymentAdjustmentFormState
     if (_busy || !_formKey.currentState!.validate()) return;
     final now = widget.now ?? DateTime.now();
     final input = RecordPaymentAdjustmentInput(
-      sourcePaymentId: widget.payment.id,
+      sourcePaymentId: widget.payment.sourcePaymentId ?? widget.payment.id,
       kind: _kind,
       amountMinor: parsePaymentMinor(_amountController.text)!,
       occurredAt: DateTime(now.year, now.month, now.day, 12).toUtc(),

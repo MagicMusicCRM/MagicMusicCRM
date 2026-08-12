@@ -16,6 +16,7 @@ import { MigrationRunner } from "../../db/migration-runner";
 import { PlatformIntegrityRepository } from "../../platform/platform-integrity.repository";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
 import { RealtimeBus } from "../../realtime/realtime-bus";
+import { NotificationsService } from "../../notifications/notifications.service";
 import { CrmPolicy } from "../crm.policy";
 import { ActualPaymentService } from "./actual-payment.service";
 import { CommerceProjectionRepository } from "./commerce-projection.repository";
@@ -132,7 +133,13 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       previewTokens,
       reservations,
     );
-    dueWorker = new InstallmentDueWorker(paymentRepository, reservations);
+    dueWorker = new InstallmentDueWorker(
+      paymentRepository,
+      reservations,
+      {
+        notifyUser: jest.fn().mockResolvedValue({ notificationId: "test" }),
+      } as unknown as NotificationsService,
+    );
     paymentService = new ActualPaymentService(
       issueRepository,
       policy,
@@ -597,6 +604,52 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
         balanceMinor: "0",
       }),
     ]);
+    const preview = await paymentReversal.preview(
+      actors.director,
+      payerStudentId,
+      created.paymentRecord.id,
+      { expectedVersion: 2 },
+    );
+    expect(preview).toMatchObject({
+      status: "unpaid",
+      operation: "technical_void",
+      walletDeltaMinor: "0",
+    });
+    const reversed = await paymentReversal.reverse(
+      actors.director,
+      payerStudentId,
+      created.paymentRecord.id,
+      {
+        previewToken: preview.previewToken,
+        confirm: true,
+        reason: "Долг создан по ошибке",
+      },
+      mutationMetadata("manual-unpaid-reversal"),
+    );
+    expect(reversed).toMatchObject({
+      operation: "technical_void",
+      replayed: false,
+      exclusion: { counterpartId: null },
+    });
+    const after = (await commerceRepository.loadProjection(
+      actors.director,
+      [scope],
+    ))[0]!;
+    const rubAccount = after.accounts.find(
+      (account) => account.currencyCode === "RUB",
+    );
+    expect(rubAccount?.pendingMinor ?? "0").toBe("0");
+    expect(rubAccount?.debtMinor ?? "0").toBe("0");
+    expect(after.technicalHistory).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          paymentRecordId: created.paymentRecord.id,
+          previousStatus: "unpaid",
+          eventType: "technical_void",
+          reason: "Долг создан по ошибке",
+        }),
+      ]),
+    );
   });
 
   it("reverses one paid fact exactly once and excludes it from ordinary reads", async () => {
@@ -918,6 +971,110 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
           reason_text: "Родитель оплачивает обучение ребёнка",
         },
       ],
+    });
+  });
+
+  it("purchases from the own wallet with none, percent and fixed immutable discounts", async () => {
+    await fundWallet(payerStudentId, "own-discount-purchases", "2140000");
+    const cases = [
+      {
+        suffix: "none",
+        discount: undefined,
+        finalPriceMinor: "800000",
+        expectedDiscount: { type: "none" },
+      },
+      {
+        suffix: "percent",
+        discount: {
+          type: "percent" as const,
+          percent: 20,
+          reason: "Скидка постоянного клиента",
+        },
+        finalPriceMinor: "640000",
+        expectedDiscount: {
+          type: "percent",
+          percentBasisPoints: 2000,
+          reason: "Скидка постоянного клиента",
+        },
+      },
+      {
+        suffix: "fixed",
+        discount: {
+          type: "fixed" as const,
+          fixedMinor: "100000",
+          reason: "Фиксированная семейная скидка",
+        },
+        finalPriceMinor: "700000",
+        expectedDiscount: {
+          type: "fixed",
+          fixedMinor: "100000",
+          reason: "Фиксированная семейная скидка",
+        },
+      },
+    ];
+    const subscriptionIds: string[] = [];
+    for (const item of cases) {
+      const input = {
+        packageId,
+        payerStudentId,
+        fundingMode: "personal_account" as const,
+        purchaseReason: `Покупка со своего счёта: ${item.suffix}`,
+        ...(item.discount === undefined ? {} : { discount: item.discount }),
+      };
+      const preview = await issueService.previewPurchase(
+        actors.director,
+        payerStudentId,
+        input,
+      );
+      expect(preview).toMatchObject({
+        recipientStudentId: payerStudentId,
+        payerStudentId,
+        finalPriceMinor: item.finalPriceMinor,
+        canCommit: true,
+      });
+      const purchased = await issueService.purchase(
+        actors.director,
+        payerStudentId,
+        { ...input, previewToken: preview.previewToken, confirm: true },
+        mutationMetadata(`own-discount-${item.suffix}`),
+      );
+      subscriptionIds.push(purchased.subscription.id);
+      expect(purchased.subscription).toMatchObject({
+        studentId: payerStudentId,
+        payerStudentId,
+        fundingMode: "personal_account",
+        commercialSnapshot: {
+          finalPriceMinor: item.finalPriceMinor,
+          discount: item.expectedDiscount,
+        },
+      });
+    }
+    const persisted = await pool.query<{
+      subscriptions: string;
+      obligations: string;
+      balance: string;
+    }>(
+      `
+        select
+          (select count(*)::text from app.subscriptions
+           where id = any($1::uuid[])) as subscriptions,
+          (select count(*)::text from app.subscription_obligation_facts
+           where issued_subscription_id = any($1::uuid[])
+             and source_type = 'subscription.purchase') as obligations,
+          ((select coalesce(sum(payment.amount_minor), 0)
+              from app.commerce_ordinary_payments payment
+             where payment.student_id = $2)
+           -
+           (select coalesce(sum(obligation.amount_minor), 0)
+              from app.subscription_obligation_facts obligation
+             where obligation.student_id = $2))::text as balance
+      `,
+      [subscriptionIds, payerStudentId],
+    );
+    expect(persisted.rows[0]).toMatchObject({
+      subscriptions: "3",
+      obligations: "3",
+      balance: "0",
     });
   });
 
@@ -1388,6 +1545,146 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       [issued.subscription.id],
     );
     expect(count.rows[0]!.count).toBe("2");
+  });
+
+  it("reverses an account refund append-only and replays without a duplicate", async () => {
+    const issued = await issueService.issue(
+      actors.manager,
+      studentId,
+      { packageId },
+      mutationMetadata("adjustment-reversal-subscription"),
+    );
+    const payment = await paymentService.record(
+      actors.manager,
+      studentId,
+      {
+        issuedSubscriptionId: issued.subscription.id,
+        amountMinor: "120000",
+        method: "cashless",
+        occurredAt: "2026-08-09T10:00:00.000Z",
+        invoiceIdentifier: `${marker}-adjustment-reversal-payment`,
+      },
+      mutationMetadata("adjustment-reversal-payment"),
+    );
+    const adjustment = await paymentService.recordAdjustment(
+      actors.manager,
+      studentId,
+      {
+        sourcePaymentId: payment.payment.id,
+        kind: "refund",
+        amountMinor: "30000",
+        occurredAt: "2026-08-10T10:00:00.000Z",
+        reason: "Возврат создан для проверки сторно",
+      },
+      mutationMetadata("adjustment-reversal-source"),
+    );
+    const scope = await commerceRepository.resolveStudentScope(
+      actors.manager,
+      studentId,
+    );
+    const before = (await commerceRepository.loadProjection(
+      actors.manager,
+      [scope],
+    ))[0]!;
+    const beforeBalance = BigInt(before.accounts[0]!.balanceMinor);
+    const preview = await paymentReversal.previewAdjustment(
+      actors.manager,
+      studentId,
+      adjustment.adjustment.id,
+      { expectedVersion: 1 },
+    );
+    expect(preview).toMatchObject({
+      adjustmentId: adjustment.adjustment.id,
+      kind: "refund",
+      amountMinor: "-30000",
+      walletDeltaMinor: "30000",
+      walletBalanceMinor: beforeBalance.toString(),
+      resultingBalanceMinor: (beforeBalance + 30000n).toString(),
+      operation: "adjustment_reversal",
+    });
+    const command = {
+      previewToken: preview.previewToken,
+      confirm: true,
+      reason: "Возврат был создан по ошибке",
+    };
+    const metadata = mutationMetadata("adjustment-reversal-commit");
+    const first = await paymentReversal.reverseAdjustment(
+      actors.manager,
+      studentId,
+      adjustment.adjustment.id,
+      command,
+      metadata,
+    );
+    const replay = await paymentReversal.reverseAdjustment(
+      actors.manager,
+      studentId,
+      adjustment.adjustment.id,
+      command,
+      metadata,
+    );
+    expect(replay).toEqual({ ...first, replayed: true });
+
+    const after = (await commerceRepository.loadProjection(
+      actors.manager,
+      [scope],
+    ))[0]!;
+    expect(BigInt(after.accounts[0]!.balanceMinor)).toBe(beforeBalance + 30000n);
+    expect(
+      after.movements.some((item) => item.id === adjustment.adjustment.id),
+    ).toBe(false);
+    expect(after.technicalHistory).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          eventType: "adjustment_reversal",
+          paymentRecordId: null,
+          sourceKind: "account_adjustment",
+          sourceId: adjustment.adjustment.id,
+          counterpartKind: "account_adjustment",
+          reason: "Возврат был создан по ошибке",
+        }),
+      ]),
+    );
+    const persisted = await pool.query<{
+      physical: string;
+      ordinary: string;
+      exclusions: string;
+      audits: string;
+      outbox: string;
+    }>(
+      `
+        select
+          (select count(*)::text from app.account_adjustments
+           where id = any($1::uuid[])) as physical,
+          (select count(*)::text from app.commerce_ordinary_account_adjustments
+           where id = any($1::uuid[])) as ordinary,
+          (select count(*)::text from app.commerce_reporting_exclusions
+           where source_kind = 'account_adjustment' and source_id = $2) as exclusions,
+          (select count(*)::text from app.audit_events
+           where action = 'crm.payment_adjustment_reversed' and entity_id = $2::text) as audits,
+          (select count(*)::text from app.platform_outbox_events
+           where aggregate_type = 'commerce:payment-adjustment'
+             and aggregate_id = $2::text
+             and event_type = 'commerce.payment.adjustment-reversed') as outbox
+      `,
+      [[adjustment.adjustment.id, first.exclusion.counterpartId], adjustment.adjustment.id],
+    );
+    expect(persisted.rows[0]).toEqual({
+      physical: "2",
+      ordinary: "0",
+      exclusions: "1",
+      audits: "1",
+      outbox: "1",
+    });
+    await expect(
+      paymentReversal.previewAdjustment(
+        actors.manager,
+        studentId,
+        adjustment.adjustment.id,
+        { expectedVersion: 2 },
+      ),
+    ).rejects.toMatchObject({
+      response: { code: "PAYMENT_ADJUSTMENT_ALREADY_REVERSED" },
+    });
   });
 
   it("allows Admin/Manager/Director/system_admin and denies Teacher/client", async () => {

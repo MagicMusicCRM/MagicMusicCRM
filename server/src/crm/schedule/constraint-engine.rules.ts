@@ -74,7 +74,9 @@ export function evaluateReferenceConstraints(
     const parsed = parseConstraintInterval(window.opensAt, window.closesAt);
     return parsed !== null && intervalCovers(parsed, interval);
   });
-  if ((reference.branchHoursConfigured ?? true) && !branchCovered) {
+  const branchHoursConfigured =
+    reference.branchHoursConfigured ?? reference.branchWindows.length > 0;
+  if (!branchHoursConfigured || !branchCovered) {
     violations.push(violation("OUTSIDE_BRANCH_HOURS", branchResource));
   }
 

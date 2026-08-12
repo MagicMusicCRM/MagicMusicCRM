@@ -3,7 +3,6 @@ import {
   ArrayUnique,
   IsArray,
   IsEmail,
-  IsIn,
   IsOptional,
   IsString,
   IsUUID,
@@ -20,23 +19,26 @@ export class CreateStaffDto {
   @MaxLength(100)
   lastName!: string;
 
+  @IsOptional()
   @IsEmail()
   @MaxLength(255)
-  email!: string;
+  email?: string;
 
+  @IsOptional()
   @IsString()
   @MinLength(10)
   @MaxLength(128)
-  password!: string;
+  password?: string;
 
   @IsOptional()
   @IsString()
   @MaxLength(50)
   phone?: string;
 
-  @IsIn(["manager", "admin", "system_admin"])
-  role!: "manager" | "admin" | "system_admin";
-
+  /**
+   * New staff cards always start with the least-privileged staff role.
+   * Elevation is intentionally available only through Settings -> Access.
+   */
   @IsArray()
   @ArrayMinSize(1)
   @ArrayUnique()

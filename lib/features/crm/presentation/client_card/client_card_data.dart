@@ -304,6 +304,10 @@ extension _ClientCardData on _ClientCardState {
       final student = card['student'] is Map<String, dynamic>
           ? card['student'] as Map<String, dynamic>
           : <String, dynamic>{};
+      student['custom_data'] = {
+        ...Map<String, dynamic>.from(student['custom_data'] as Map? ?? {}),
+        ...Map<String, dynamic>.from(card['custom_field_values'] as Map? ?? {}),
+      };
       StudentFunnelConfiguration? funnel;
       String? funnelError;
       try {
@@ -388,6 +392,14 @@ extension _ClientCardData on _ClientCardState {
         _leadCard = card;
         if (card['lead'] is Map<String, dynamic>) {
           _leadData = {..._leadData, ...(card['lead'] as Map<String, dynamic>)};
+          _leadData['custom_data'] = {
+            ...Map<String, dynamic>.from(
+              _leadData['custom_data'] as Map? ?? {},
+            ),
+            ...Map<String, dynamic>.from(
+              card['custom_field_values'] as Map? ?? {},
+            ),
+          };
           _editorEpoch++;
           // After merging the lead record, `_leadData['id']` is the lead id —
           // keep `_resolvedLeadId` in sync so lead-side ops target it.
@@ -466,13 +478,44 @@ extension _ClientCardData on _ClientCardState {
     }
   }
 
+  Future<void> _fetchClientAccess() async {
+    try {
+      final role = (await ref.read(releaseGateStatusProvider.future)).role;
+      if (!crmHasManagerAccess(role)) return;
+      if (mounted) {
+        _emitState(() {
+          _clientAccessAllowed = true;
+          _loadingClientAccess = true;
+          _clientAccessError = null;
+        });
+      }
+      final crm = ref.read(magicCrmServiceProvider);
+      final values = await Future.wait<List<Map<String, dynamic>>>([
+        crm.getClientLinkedUsers(widget.entityType, _entityId),
+        crm.listClientUserCandidates(widget.entityType, _entityId),
+      ]);
+      if (!mounted) return;
+      _emitState(() {
+        _linkedUsers = values[0];
+        _clientUserCandidates = values[1];
+        _loadingClientAccess = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      _emitState(() {
+        _clientAccessError = '$error';
+        _loadingClientAccess = false;
+      });
+    }
+  }
+
   Future<void> _fetchMetadata() async {
     final crm = ref.read(magicCrmServiceProvider);
-    final settings = ref.read(magicSettingsServiceProvider);
     final forms = ref.read(clientFormsApiProvider);
     final results = await Future.wait<dynamic>([
       crm.listBranches(limit: 100),
-      settings.getCrmCustomFields(),
+      forms.listFields(entityType: 'lead'),
+      forms.listFields(entityType: 'student'),
       // KVA-234: справочник дисциплин для мультивыбора; сбой не роняет форму.
       crm.listDisciplines().catchError((_) => const <Map<String, dynamic>>[]),
       forms.listSources(includeArchived: true),
@@ -481,11 +524,17 @@ extension _ClientCardData on _ClientCardState {
     if (mounted) {
       _emitState(() {
         _branches = List<Map<String, dynamic>>.from(results[0] as List);
-        _customFieldSchema = results[1] as List<CrmCustomFieldDefinition>;
+        _customFieldSchema = [
+          for (final row in results[1] as List<Map<String, dynamic>>)
+            CrmCustomFieldDefinition.fromClientConfig(row),
+          for (final row in results[2] as List<Map<String, dynamic>>)
+            CrmCustomFieldDefinition.fromClientConfig(row),
+        ];
+        _typedCustomFieldSchemaLoaded = true;
         _disciplineOptions = List<Map<String, dynamic>>.from(
-          results[2] as List,
+          results[3] as List,
         );
-        _sources = List<Map<String, dynamic>>.from(results[3] as List);
+        _sources = List<Map<String, dynamic>>.from(results[4] as List);
         _loadingMetadata = false;
       });
     }
@@ -523,6 +572,7 @@ extension _ClientCardData on _ClientCardState {
           _fetchStudentData();
         }
         _fetchFamily();
+        _fetchClientAccess();
         _fetchInternalContext();
         break;
     }
@@ -531,6 +581,25 @@ extension _ClientCardData on _ClientCardState {
   Future<void> _save() async {
     await _persistEdits(closeOnSuccess: true);
   }
+
+  List<Map<String, dynamic>>? _serializedTypedCustomFields(
+    String entity,
+    Map<String, dynamic> customData,
+  ) {
+    if (!_typedCustomFieldSchemaLoaded) return null;
+    return [
+      for (final field in _customFieldSchema)
+        if (field.entity == entity &&
+            field.id != null &&
+            !_emptyTypedCustomValue(customData[field.key]))
+          {'definitionId': field.id, 'value': customData[field.key]},
+    ];
+  }
+
+  bool _emptyTypedCustomValue(Object? value) =>
+      value == null ||
+      (value is String && value.trim().isEmpty) ||
+      (value is Iterable && value.isEmpty);
 
   /// Persists the current card draft without necessarily closing the card.
   /// Subscription conversion uses the non-closing form so the server receives
@@ -571,6 +640,7 @@ extension _ClientCardData on _ClientCardState {
               _leadResponsibleChanged &&
               (_leadData['assigned_to']?.toString().trim().isEmpty ?? true),
           customDataPatch: customData,
+          customFields: _serializedTypedCustomFields('leads', customData),
         );
       }
 
@@ -594,6 +664,7 @@ extension _ClientCardData on _ClientCardState {
               _studentResponsibleChanged &&
               !_hasResponsibleInCustomData(customData),
           customDataPatch: customData,
+          customFields: _serializedTypedCustomFields('students', customData),
         );
       }
       // Routed desktop cards live in a separate workspace tab, so their caller

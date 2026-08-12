@@ -183,6 +183,17 @@ export class CrmPolicy {
     );
   }
 
+  /**
+   * Existing payroll history changes already-published staff calculations, so
+   * creation stays operational while correction/voiding is an owner action.
+   */
+  assertCanManagePayrollHistory(actor: ActorContext): void {
+    if (actor.role === "director" || actor.role === "system_admin") return;
+    throw new ForbiddenException(
+      "Исправлять и удалять историю ставок и выплат может только директор.",
+    );
+  }
+
   assertCanReadFinance(actor: ActorContext, ownerUserId: string | null): void {
     // Staff finance: admin/manager/system_admin. Client sees only own rows.
     if (isManagerOrAdminRole(actor.role)) return;

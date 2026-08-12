@@ -25,6 +25,7 @@ class _LeadBoardApi extends MagicApiClient {
     String name,
     String? statusId, {
     String? linkedUserId,
+    List<Map<String, dynamic>> tableFields = const [],
   }) => {
     'id': id,
     'statusId': statusId,
@@ -40,6 +41,7 @@ class _LeadBoardApi extends MagicApiClient {
     'createdAt': '2026-07-18T10:00:00.000Z',
     'updatedAt': '2026-07-18T10:00:00.000Z',
     'linkedUserId': linkedUserId,
+    'tableFields': tableFields,
   };
 
   Map<String, dynamic> _column({
@@ -76,7 +78,20 @@ class _LeadBoardApi extends MagicApiClient {
                   label: 'A',
                   nextCursor: 'cursor-a',
                   items: [
-                    _lead('a-1', 'A one', statusA, linkedUserId: 'client-a'),
+                    _lead(
+                      'a-1',
+                      'A one',
+                      statusA,
+                      linkedUserId: 'client-a',
+                      tableFields: const [
+                        {
+                          'key': 'campaign',
+                          'label': 'Кампания',
+                          'valueType': 'text',
+                          'value': 'Август',
+                        },
+                      ],
+                    ),
                   ],
                 ),
                 _column(
@@ -147,6 +162,45 @@ class _LeadBoardApi extends MagicApiClient {
     }
 
     return switch (path) {
+          '/crm/branches' => <String, dynamic>{
+            'items': [
+              {
+                'id': 'branch-a',
+                'name': 'Центр',
+                'address': null,
+                'phone': null,
+                'email': null,
+                'workingHours': <String, dynamic>{},
+                'createdAt': '2026-07-18T10:00:00.000Z',
+                'updatedAt': '2026-07-18T10:00:00.000Z',
+              },
+            ],
+          },
+          '/crm/lead-sources' => <String, dynamic>{
+            'items': [
+              {
+                'id': 'source-a',
+                'canonicalName': 'site',
+                'displayName': 'Сайт',
+              },
+            ],
+          },
+          '/admin/staff' => <dynamic>[
+            {
+              'id': 'manager-a',
+              'displayName': 'Мария Менеджер',
+              'role': 'manager',
+            },
+          ],
+          '/crm/hollihop/disciplines' => <String, dynamic>{
+            'items': <String>['Вокал'],
+          },
+          '/crm/hollihop/levels' => <String, dynamic>{
+            'items': <String>['Начальный'],
+          },
+          '/crm/hollihop/categories' => <String, dynamic>{
+            'items': <String>['Взрослый'],
+          },
           '/crm/lead-statuses' => <String, dynamic>{
             'items': [
               {'id': statusA, 'name': 'A', 'color': '#8B5CF6'},
@@ -214,6 +268,88 @@ void main() {
       expect(find.text('A two'), findsOneWidget);
       expect(find.text('B two'), findsOneWidget);
       expect(find.text('U two'), findsOneWidget);
+      expect(find.text('Кампания: Август'), findsOneWidget);
+
+      await tester.tap(find.byType(PopupMenuButton<String>).first);
+      await tester.pumpAndSettle();
+      expect(find.text('Добавить комментарий'), findsOneWidget);
+      expect(find.text('Удалить'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'production lead board combines source, responsible, text and sort filters',
+    (tester) async {
+      await initializeDateFormatting('ru');
+      tester.view.physicalSize = const Size(1500, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final api = _LeadBoardApi();
+      final realtime = StreamController<CrmChangedEvent>.broadcast();
+      addTearDown(realtime.close);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            magicApiClientProvider.overrideWithValue(api),
+            crmRealtimeProvider.overrideWith((ref) => realtime.stream),
+            releaseGateStatusProvider.overrideWith(
+              (ref) async => const ReleaseGateStatus(
+                role: 'manager',
+                profileComplete: true,
+                legalAccepted: true,
+                deletionPending: false,
+              ),
+            ),
+          ],
+          child: const MaterialApp(home: LeadsWidget()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Фильтры'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('Источник:')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Сайт').last);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 2));
+
+      await tester.tap(find.byKey(const ValueKey('Ответственный:')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(find.text('Мария Менеджер').last);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 2));
+
+      final requestType = find.byKey(
+        const ValueKey('lead-filter-Тип обращения:'),
+      );
+      await tester.ensureVisible(requestType);
+      await tester.enterText(requestType, 'Пробное занятие');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 2));
+
+      await tester.tap(find.byKey(const ValueKey('Сортировка:newest')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(find.text('Сначала старые').last);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 2));
+
+      expect(
+        api.boardQueries.any(
+          (query) =>
+              query['source'] == 'Сайт' &&
+              query['assignedTo'] == 'manager-a' &&
+              query['requestType'] == 'Пробное занятие' &&
+              query['sort'] == 'oldest',
+        ),
+        isTrue,
+      );
     },
   );
 }

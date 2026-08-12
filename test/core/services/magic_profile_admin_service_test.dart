@@ -46,33 +46,6 @@ void main() {
       expect(adapter.requests.single.queryParameters['limit'], 10);
     });
 
-    test('updates role through admin endpoint', () async {
-      final adapter = _FakeAdapter([
-        _FakeResponse(
-          path: '/admin/profiles/profile-a/role',
-          statusCode: 200,
-          body: {
-            'id': 'profile-a',
-            'userId': 'user-a',
-            'email': 'anna@example.com',
-            'role': 'teacher',
-            'firstName': 'Анна',
-            'lastName': 'Иванова',
-            'phone': null,
-          },
-        ),
-      ]);
-      final service = MagicProfileAdminService(_client(adapter));
-
-      final profile = await service.updateRole(
-        profileId: 'profile-a',
-        role: 'teacher',
-      );
-
-      expect(profile['role'], 'teacher');
-      expect(adapter.requests.single.body['role'], 'teacher');
-    });
-
     test('lists profile notes with legacy keys', () async {
       final adapter = _FakeAdapter([
         _FakeResponse(

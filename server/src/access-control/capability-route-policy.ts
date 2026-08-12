@@ -53,6 +53,8 @@ export const BASELINE_CAPABILITY_ROLES: Readonly<
   "commerce.client_finance.read": ["client", ...staffRoles],
   "commerce.client_finance.write": staffRoles,
   "commerce.school_finance.read": rootBusinessRoles,
+  "commerce.teacher_payroll.read": staffRoles,
+  "commerce.teacher_payroll.write": staffRoles,
   "commerce.package.read": staffRoles,
   "commerce.package.manage": rootBusinessRoles,
   "commerce.subscription.issue": staffRoles,
@@ -118,6 +120,19 @@ export function resolveCapabilityRoutePolicy(
     );
   }
 
+  if (
+    /^\/crm\/(?:teachers|staff)\/[^/]+\/(?:access|offboard|restore|lifecycle-preview|lifecycle-history)$/.test(
+      path,
+    )
+  ) {
+    return policy(
+      "system.settings.manage",
+      "global",
+      rootBusinessRoles,
+      "PersonAccountService/PersonLifecycleService director-only settings boundary",
+    );
+  }
+
   if (read && path === "/crm/configuration/lesson-decisions") {
     return policy(
       "schedule.lesson.write",
@@ -169,6 +184,57 @@ export function resolveCapabilityRoutePolicy(
   }
 
   if (
+    /^\/crm\/(?:disciplines|loss-reasons|branch-disciplines)(?:\/|$)/.test(
+      path,
+    ) &&
+    (!read || path.endsWith("/history"))
+  ) {
+    return policy(
+      "config.crm.edit",
+      "global",
+      rootBusinessRoles,
+      "ReferenceCatalogLifecycleService director-only versioned catalog mutations",
+    );
+  }
+
+  if (
+    /^\/crm\/teachers\/[^/]+\/payroll$/.test(path) ||
+    path === "/crm/reports/teacher-stats"
+  ) {
+    return policy(
+      "commerce.teacher_payroll.read",
+      "resource",
+      staffRoles,
+      "CrmPolicy.assertCanReadPayroll with teacher resource scope",
+    );
+  }
+
+  if (
+    /^\/crm\/teachers\/[^/]+\/(?:payouts|rates)\/[^/]+$/.test(path)
+  ) {
+    return policy(
+      "commerce.teacher_payroll.write",
+      "resource",
+      rootBusinessRoles,
+      "CrmPolicy.assertCanManagePayrollHistory director-only correction/void",
+    );
+  }
+
+  if (
+    /^\/crm\/teachers\/[^/]+\/(?:payouts|rates)$/.test(path) ||
+    path === "/crm/reports/teacher-stats/export"
+  ) {
+    return policy(
+      path.endsWith("/export")
+        ? "commerce.teacher_payroll.read"
+        : "commerce.teacher_payroll.write",
+      "resource",
+      staffRoles,
+      "Teacher payroll capability with versioned create/correct/void integrity",
+    );
+  }
+
+  if (
     path.includes("/export") ||
     path.endsWith(".xlsx") ||
     path.endsWith(".csv")
@@ -207,7 +273,11 @@ export function resolveCapabilityRoutePolicy(
     );
   }
 
-  if (/^\/crm\/clients\/[^/]+\/[^/]+\/(?:internal-note|operational-history)$/.test(path)) {
+  if (
+    /^\/crm\/clients\/[^/]+\/[^/]+\/(?:internal-note|operational-history)$/.test(
+      path,
+    )
+  ) {
     return policy(
       "crm.client.write",
       "resource",
@@ -247,9 +317,7 @@ export function resolveCapabilityRoutePolicy(
   const legacySubscriptionIssue =
     !read &&
     (path === "/crm/subscriptions" ||
-      /^\/crm\/(?:students|leads)\/[^/]+\/subscriptions\/issue$/.test(
-        path,
-      ));
+      /^\/crm\/(?:students|leads)\/[^/]+\/subscriptions\/issue$/.test(path));
   if (legacySubscriptionIssue) {
     return policy(
       "commerce.subscription.issue",
@@ -269,9 +337,7 @@ export function resolveCapabilityRoutePolicy(
     path.includes("/expected-payments")
   ) {
     return policy(
-      read
-        ? "commerce.client_finance.read"
-        : "commerce.client_finance.write",
+      read ? "commerce.client_finance.read" : "commerce.client_finance.write",
       "self_or_assigned",
       read ? ["client", ...staffRoles] : staffRoles,
       "CrmPolicy student-finance/resource scope",
@@ -313,6 +379,19 @@ export function resolveCapabilityRoutePolicy(
       read ? "self_or_assigned" : "resource",
       read ? teacherAndStaffRoles : rootBusinessRoles,
       "AvailabilityService teacher-self read and delegated settings write policy",
+    );
+  }
+
+  if (
+    read &&
+    ((path.startsWith("/crm/branches/") && path.endsWith("/history")) ||
+      (path.startsWith("/crm/rooms/") && path.endsWith("/history")))
+  ) {
+    return policy(
+      "config.crm.edit",
+      "branch",
+      rootBusinessRoles,
+      "Organization lifecycle director-only immutable history",
     );
   }
 

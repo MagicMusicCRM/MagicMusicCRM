@@ -133,6 +133,7 @@ describe("MergeService", () => {
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
     const sql = query.mock.calls.map((c) => String(c[0])).join("\n");
     expect(sql).toContain("update app.students set lead_id");
+    expect(sql).toContain("app.allow_lead_status_history_repoint");
     expect(sql).toContain("update app.chats set lead_id");
     expect(sql).toContain("update app.leads set deleted_at = now()");
     expect(sql).toContain("insert into app.merge_log");
@@ -168,6 +169,25 @@ describe("MergeService", () => {
     const studCall = query.mock.calls.find((c) => String(c[0]).includes("update app.students set lead_id"));
     expect((studCall?.[1] as unknown[])[0]).toBe("l-lo");
     expect((studCall?.[1] as unknown[])[1]).toEqual(["s1"]);
+  });
+
+  it("undoMerge uses the controlled history-repoint scope", async () => {
+    const repointed = { "lead_status_history.lead_id": ["h1"] };
+    const { service, query } = createMergeService([
+      { rows: [{ loser_id: "l-lo", repointed }] },
+      { rows: [] },
+      { rows: [] },
+      { rows: [] },
+    ]);
+
+    await service.undoMerge(actor, "ml1");
+
+    const historyUpdate = query.mock.calls.find((call) =>
+      String(call[0]).includes("update app.lead_status_history"),
+    );
+    expect(String(historyUpdate?.[0])).toContain(
+      "app.allow_lead_status_history_repoint",
+    );
   });
 
   it("undoMerge 404s when the merge is missing or already undone", async () => {

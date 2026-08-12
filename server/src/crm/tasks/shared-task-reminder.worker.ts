@@ -4,7 +4,7 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from "@nestjs/common";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { NotificationsService } from "../../notifications/notifications.service";
 import { NotificationChannel } from "../../notifications/notifications.types";
 import { SharedTaskRepository } from "./shared-task.repository";
@@ -25,7 +25,9 @@ export class SharedTaskReminderWorker implements OnModuleInit, OnModuleDestroy {
     if (process.env.TASK_REMINDERS_ENABLED !== "true") return;
     this.timer = setInterval(() => {
       void this.dispatchDue(this.workerId).catch((error: unknown) => {
-        this.logger.error(`Shared task reminder tick failed: ${this.errorName(error)}`);
+        this.logger.error(
+          `Shared task reminder tick failed: ${this.errorName(error)}`,
+        );
       });
     }, 30_000);
     this.timer.unref?.();
@@ -100,8 +102,9 @@ export class SharedTaskReminderWorker implements OnModuleInit, OnModuleDestroy {
         userId,
         title: "Напоминание о задаче",
         body: "Открытая общая задача ожидает действия.",
-        data: { taskId: reminder.task_id },
+        data: { entityType: "task", entityId: reminder.task_id },
         channels: [channel],
+        notificationId: this.notificationId(reminder, userId),
       });
     } catch (error) {
       if (channel === "in_app") throw error;
@@ -109,10 +112,24 @@ export class SharedTaskReminderWorker implements OnModuleInit, OnModuleDestroy {
         userId,
         title: "Напоминание о задаче",
         body: "Открытая общая задача ожидает действия.",
-        data: { taskId: reminder.task_id },
+        data: { entityType: "task", entityId: reminder.task_id },
         channels: ["in_app"],
+        notificationId: this.notificationId(reminder, userId),
       });
     }
+  }
+
+  private notificationId(
+    reminder: SharedTaskReminderRow,
+    userId: string,
+  ): string {
+    const digest = createHash("sha256")
+      .update(`shared-task-reminder\0${reminder.id}\0${userId}`)
+      .digest("hex");
+    const variant = ((Number.parseInt(digest[16]!, 16) & 0x3) | 0x8).toString(
+      16,
+    );
+    return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-5${digest.slice(13, 16)}-${variant}${digest.slice(17, 20)}-${digest.slice(20, 32)}`;
   }
 
   private errorName(error: unknown): string {

@@ -31,6 +31,7 @@ jest.setTimeout(120_000);
 describe("SharedTask API domain (PostgreSQL)", () => {
   let pool: Pool;
   let database: DatabaseService;
+  let repository: SharedTaskRepository;
   let tasks: SharedTaskService;
   let fixture: Awaited<ReturnType<typeof createFixture>>;
 
@@ -40,8 +41,9 @@ describe("SharedTask API domain (PostgreSQL)", () => {
     database = new DatabaseService({
       getOrThrow: () => databaseUrl,
     } as unknown as ConfigService);
+    repository = new SharedTaskRepository(database);
     tasks = new SharedTaskService(
-      new SharedTaskRepository(database),
+      repository,
       new CrmPolicy(),
       new PlatformIntegrityService(database, new PlatformIntegrityRepository()),
       new RealtimeBus(),
@@ -193,6 +195,110 @@ describe("SharedTask API domain (PostgreSQL)", () => {
     ).rejects.toBeInstanceOf(UnprocessableEntityException);
   });
 
+  it("lets a manager create all-day and interval reminders for person, branch and school with exact recipients", async () => {
+    const scenarios: Array<{
+      label: string;
+      allDay: boolean;
+      startAt: string;
+      endAt?: string;
+      audiences: Array<{
+        type: "user" | "branch" | "allBranches";
+        targetId?: string;
+      }>;
+    }> = [
+      {
+        label: "person all-day",
+        allDay: true,
+        startAt: "2027-01-11T21:00:00.000Z",
+        audiences: [{ type: "user", targetId: fixture.admin.userId }],
+      },
+      {
+        label: "branch interval",
+        allDay: false,
+        startAt: "2027-01-12T07:00:00.000Z",
+        endAt: "2027-01-12T08:00:00.000Z",
+        audiences: [{ type: "branch", targetId: fixture.branchId }],
+      },
+      {
+        label: "school interval",
+        allDay: false,
+        startAt: "2027-01-13T07:00:00.000Z",
+        endAt: "2027-01-13T09:00:00.000Z",
+        audiences: [{ type: "allBranches" }],
+      },
+    ];
+
+    for (const scenario of scenarios) {
+      const preview = await tasks.previewAudience(
+        fixture.manager,
+        scenario.audiences,
+      );
+      const reminderAt = new Date(
+        new Date(scenario.startAt).getTime() - 60 * 60 * 1000,
+      ).toISOString();
+      const created = await tasks.create(
+        fixture.manager,
+        {
+          title: `UAT-102 ${scenario.label}`,
+          allDay: scenario.allDay,
+          startAt: scenario.startAt,
+          ...(scenario.endAt ? { endAt: scenario.endAt } : {}),
+          audiences: scenario.audiences,
+          reminders: [{ dueAt: reminderAt, channel: "in_app" }],
+        },
+        {
+          idempotencyKey: `uat-102-${randomUUID()}`,
+          requestId: `uat-102-request-${randomUUID()}`,
+        },
+      );
+      const actualRecipients = await repository.reminderRecipients(created.id);
+      const persisted = await pool.query<{
+        all_day: boolean;
+        start_at: string;
+        end_at: string | null;
+        reminder_due_at: string;
+        reminder_channel: string;
+        reminder_status: string;
+      }>(
+        `
+          select task.all_day, task.start_at, task.end_at,
+            reminder.due_at as reminder_due_at,
+            reminder.channel as reminder_channel,
+            reminder.status as reminder_status
+          from app.shared_tasks task
+          join app.shared_task_reminders reminder on reminder.task_id = task.id
+          where task.id = $1
+        `,
+        [created.id],
+      );
+
+      expect(created.recipientSummary.totalRecipients).toBe(
+        preview.totalRecipients,
+      );
+      expect(actualRecipients.rows).toHaveLength(preview.totalRecipients);
+      expect(
+        new Set(actualRecipients.rows.map((row) => row.user_id)).size,
+      ).toBe(preview.totalRecipients);
+      expect(created.allDay).toBe(scenario.allDay);
+      expect(created.endAt == null).toBe(scenario.allDay);
+      expect(created.reminders).toEqual([
+        expect.objectContaining({
+          dueAt: expect.anything(),
+          channel: "in_app",
+          status: "pending",
+        }),
+      ]);
+      expect(persisted.rows[0]).toMatchObject({
+        all_day: scenario.allDay,
+        reminder_channel: "in_app",
+        reminder_status: "pending",
+      });
+      expect(new Date(persisted.rows[0]!.reminder_due_at).toISOString()).toBe(
+        reminderAt,
+      );
+    }
+  });
+
   it("does not mark an all-day task overdue until the next Moscow day", async () => {
     const offset = 3 * 60 * 60 * 1_000;
     const moscowNow = new Date(Date.now() + offset);
@@ -225,6 +331,14 @@ describe("SharedTask API domain (PostgreSQL)", () => {
   });
 
   it("filters, groups by day and lets another manager reassign an open task", async () => {
+    const start = new Date();
+    start.setUTCDate(start.getUTCDate() + 30);
+    start.setUTCHours(0, 0, 0, 0);
+    const updatedStart = new Date(start);
+    updatedStart.setUTCDate(updatedStart.getUTCDate() + 1);
+    const rangeEnd = new Date(updatedStart);
+    rangeEnd.setUTCDate(rangeEnd.getUTCDate() + 1);
+    const calendarDay = start.toISOString().slice(0, 10);
     const created = await tasks.create(
       fixture.manager,
       {
@@ -232,7 +346,7 @@ describe("SharedTask API domain (PostgreSQL)", () => {
         body: "Call the client",
         allDay: true,
         priority: "high",
-        startAt: "2026-08-12T00:00:00.000Z",
+        startAt: start.toISOString(),
         audiences: [{ type: "allBranches" }],
       },
       {
@@ -244,15 +358,15 @@ describe("SharedTask API domain (PostgreSQL)", () => {
     const filtered = await tasks.list(fixture.director, {
       q: "rehearsal",
       priority: "high",
-      from: "2026-08-01T00:00:00.000Z",
-      to: "2026-09-01T00:00:00.000Z",
+      from: start.toISOString(),
+      to: rangeEnd.toISOString(),
     });
     expect(filtered.items.map((item) => item.id)).toEqual([created.id]);
     const calendar = await tasks.calendar(fixture.director, {
-      from: "2026-08-01T00:00:00.000Z",
-      to: "2026-09-01T00:00:00.000Z",
+      from: start.toISOString(),
+      to: rangeEnd.toISOString(),
     });
-    expect(calendar.items).toContainEqual({ day: "2026-08-12", count: 1 });
+    expect(calendar.items).toContainEqual({ day: calendarDay, count: 1 });
 
     const updated = await tasks.update(
       fixture.director,
@@ -263,7 +377,7 @@ describe("SharedTask API domain (PostgreSQL)", () => {
         body: created.body ?? undefined,
         allDay: true,
         priority: "low",
-        startAt: "2026-08-13T00:00:00.000Z",
+        startAt: updatedStart.toISOString(),
         audiences: [{ type: "user", targetId: fixture.manager.userId }],
       },
       {
@@ -273,7 +387,7 @@ describe("SharedTask API domain (PostgreSQL)", () => {
     );
     expect(updated.priority).toBe("low");
     expect(new Date(updated.startAt!).toISOString()).toBe(
-      "2026-08-13T00:00:00.000Z",
+      updatedStart.toISOString(),
     );
     expect(updated.audiences).toEqual([
       expect.objectContaining({

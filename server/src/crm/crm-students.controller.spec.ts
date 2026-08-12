@@ -57,4 +57,41 @@ describe("CrmStudentsController", () => {
       expect.objectContaining({ branchId: "branch-a" }),
     );
   });
+
+  it("validates typed fields before an existing Student update", async () => {
+    const crm = {
+      updateStudent: jest.fn().mockResolvedValue({ id: "student-a" }),
+    };
+    const validated = { values: [{ definitionId: "field-a" }], warnings: [] };
+    const clientWrites = {
+      validateCustomFields: jest.fn().mockResolvedValue(validated),
+    };
+    const controller = new CrmStudentsController(
+      crm as unknown as CrmService,
+      {} as FinanceService,
+      {} as SubscriptionsService,
+      {} as BlacklistService,
+      {} as ClientCardReadService,
+      clientWrites as unknown as ClientWriteValidator,
+      {} as ActualPaymentService,
+    );
+    const actor = { userId: "admin-a", role: "admin" as const };
+    const dto = {
+      firstName: "Анна",
+      customFields: [{ definitionId: "field-a", value: 12 }],
+    };
+
+    await controller.updateStudent(actor, "student-a", dto);
+
+    expect(clientWrites.validateCustomFields).toHaveBeenCalledWith(
+      "student",
+      dto.customFields,
+    );
+    expect(crm.updateStudent).toHaveBeenCalledWith(
+      actor,
+      "student-a",
+      dto,
+      validated,
+    );
+  });
 });

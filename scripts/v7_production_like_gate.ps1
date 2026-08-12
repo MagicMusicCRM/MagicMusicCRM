@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
   [string]$DatabaseName = "magiccrm_v7_prodlike_gate",
-  [int]$Port = 3107
+  [int]$Port = 3107,
+  [string]$ExpectedMigrationId = "0131_installment_payment_reminders"
 )
 
 $ErrorActionPreference = "Stop"
@@ -123,7 +124,7 @@ try {
   }
   if (
     $ready.status -ne "ok" -or
-    $ready.latestMigrationId -ne "0118_lesson_participant_exclusions"
+    $ready.latestMigrationId -ne $ExpectedMigrationId
   ) {
     throw "Production-like readiness returned an unexpected status or migration."
   }

@@ -329,6 +329,25 @@ void main() {
       expect(removedId, 'c9');
     });
 
+    test('receives channel lifecycle events through the shared socket', () {
+      final transport = _FakeTransport();
+      final connection = MagicRealtimeConnection(transport);
+      final events = <String>[];
+
+      connection.onChannelCreated((p) => events.add('created:${p['id']}'));
+      connection.onChannelUpdated((p) => events.add('updated:${p['id']}'));
+      connection.onChannelRemoved((p) => events.add('removed:${p['id']}'));
+      transport.fire('channel.created', {'id': 'channel-a'});
+      transport.fire('channel.updated', {'id': 'channel-a'});
+      transport.fire('channel.removed', {'id': 'channel-a'});
+
+      expect(events, [
+        'created:channel-a',
+        'updated:channel-a',
+        'removed:channel-a',
+      ]);
+    });
+
     test('rejects connect without an authenticated session', () async {
       final service = MagicRealtimeService(
         api: _client(MemoryMagicTokenStore()),

@@ -14,6 +14,36 @@ export function branchIdExpr(alias: string): string {
 }
 
 /**
+ * SQL predicate that keeps delegated Managers inside their assigned branches.
+ * Other operational roles remain governed by their capability checks. Keeping
+ * this expression shared prevents collection searches and direct mutations
+ * from drifting into different branch-scope rules.
+ */
+export function managerBranchScopeSql(input: {
+  roleExpression: string;
+  userIdExpression: string;
+  branchExpression: string;
+}): string {
+  return `(
+    ${input.roleExpression}::text <> 'manager'
+    or exists (
+      select 1
+      from app.user_crm_links scope_link
+      join app.staff_members scope_staff
+        on scope_staff.id = scope_link.entity_id
+       and scope_link.entity_type = 'staff'
+       and scope_link.deleted_at is null
+       and scope_staff.deleted_at is null
+      join app.staff_branch_assignments scope_assignment
+        on scope_assignment.staff_member_id = scope_staff.id
+       and scope_assignment.deleted_at is null
+      where scope_link.user_id = ${input.userIdExpression}::uuid
+        and scope_assignment.branch_id::text = ${input.branchExpression}
+    )
+  )`;
+}
+
+/**
  * Pull a valid branch UUID out of a customDataPatch (`branchId` or `branch_id`),
  * for dual-writing the real column alongside the legacy json.
  */

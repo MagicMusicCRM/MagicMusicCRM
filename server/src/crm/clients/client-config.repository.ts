@@ -92,6 +92,115 @@ export async function saveTypedClientValues(
   }
 }
 
+export async function replaceTypedClientValues(
+  client: PoolClient,
+  entityType: ClientEntityType,
+  entityId: string,
+  values: TypedClientCustomValue[],
+): Promise<void> {
+  const definitionIds = values.map((value) => value.definitionId);
+  await client.query(
+    `delete from app.client_custom_field_values value
+     using app.client_custom_field_definitions definition
+     where value.definition_id = definition.id
+       and value.entity_type = definition.entity_type
+       and value.entity_type = $1 and value.entity_id = $2
+       and not definition.is_system
+       and definition.is_active and definition.deleted_at is null
+       and not (value.definition_id = any($3::uuid[]))`,
+    [entityType, entityId, definitionIds],
+  );
+  await saveTypedClientValues(client, entityType, entityId, values);
+}
+
+export async function readTypedClientValueMap(
+  database: DatabaseService,
+  entityType: ClientEntityType,
+  entityId: string,
+): Promise<Record<string, unknown>> {
+  const result = await database.query<{
+    value_map: Record<string, unknown>;
+  }>(
+    `select ${typedClientValueMapSql("$1", "$2")} as value_map`,
+    [entityType, entityId],
+  );
+  return result.rows[0]?.value_map ?? {};
+}
+
+export function typedClientValueMapSql(
+  entityTypeExpression: string,
+  entityIdExpression: string,
+): string {
+  for (const expression of [entityTypeExpression, entityIdExpression]) {
+    if (
+      !/^(?:\$[1-9][0-9]*|[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*)$/i.test(
+        expression,
+      )
+    ) {
+      throw new Error("Unsafe typed client value expression.");
+    }
+  }
+  return `(
+    select coalesce(
+      jsonb_object_agg(
+        definition.field_key,
+        coalesce(
+          to_jsonb(value.value_text),
+          to_jsonb(value.value_number),
+          to_jsonb(value.value_boolean),
+          to_jsonb(value.value_date),
+          value.value_json
+        ) order by definition.sort_order, definition.field_key
+      ),
+      '{}'::jsonb
+    )
+    from app.client_custom_field_values value
+    join app.client_custom_field_definitions definition
+      on definition.id = value.definition_id
+     and definition.entity_type = value.entity_type
+    where value.entity_type = ${entityTypeExpression}
+      and value.entity_id = ${entityIdExpression}
+      and definition.is_active and definition.deleted_at is null
+  )`;
+}
+
+export function typedClientTableFieldsSql(
+  entityType: ClientEntityType,
+  entityIdExpression: string,
+): string {
+  if (!/^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$/i.test(entityIdExpression)) {
+    throw new Error("Unsafe typed client field identifier.");
+  }
+  return `(
+    select coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'id', definition.id,
+          'key', definition.field_key,
+          'label', definition.label,
+          'valueType', definition.value_type,
+          'value', coalesce(
+            to_jsonb(value.value_text),
+            to_jsonb(value.value_number),
+            to_jsonb(value.value_boolean),
+            to_jsonb(value.value_date),
+            value.value_json
+          )
+        ) order by definition.sort_order, definition.field_key
+      ),
+      '[]'::jsonb
+    )
+    from app.client_custom_field_values value
+    join app.client_custom_field_definitions definition
+      on definition.id = value.definition_id
+     and definition.entity_type = value.entity_type
+    where value.entity_type = '${entityType}'
+      and value.entity_id = ${entityIdExpression}
+      and definition.is_active and definition.deleted_at is null
+      and definition.placements ? 'table'
+  )`;
+}
+
 @Injectable()
 export class ClientConfigRepository {
   constructor(private readonly database: DatabaseService) {}

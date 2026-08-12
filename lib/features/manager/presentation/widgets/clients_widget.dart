@@ -1,11 +1,8 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/notification_bell_widget.dart';
-import 'package:magic_music_crm/features/manager/presentation/providers/students_board_providers.dart';
 import 'package:magic_music_crm/features/manager/presentation/transfer/lead_transfer_controller.dart';
 import 'package:magic_music_crm/features/manager/presentation/transfer/lead_transfer_widgets.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/leads_widget.dart';
@@ -29,18 +26,8 @@ class ClientsWidget extends ConsumerStatefulWidget {
   ConsumerState<ClientsWidget> createState() => _ClientsWidgetState();
 }
 
-class _SuccessInfo {
-  final String leadId;
-  final String? studentId;
-  final String message;
-  const _SuccessInfo(this.leadId, this.studentId, this.message);
-}
-
 class _ClientsWidgetState extends ConsumerState<ClientsWidget> {
   int _segment = 0;
-  bool _converting = false;
-  _SuccessInfo? _success;
-  Timer? _successTimer;
   // Captured in initState so dispose can unhook without touching ref.
   LeadTransferController? _transferController;
 
@@ -65,7 +52,6 @@ class _ClientsWidgetState extends ConsumerState<ClientsWidget> {
 
   @override
   void dispose() {
-    _successTimer?.cancel();
     // Unhook this State's closures from the app-scoped controller — otherwise
     // it retains a disposed State and a late onCommit would setState on it.
     _transferController?.configure();
@@ -102,69 +88,9 @@ class _ClientsWidgetState extends ConsumerState<ClientsWidget> {
     );
   }
 
-  /// Real undo: soft-delete the created student (DELETE /crm/students/:id) and
-  /// restore the lead card in the funnel.
-  Future<void> _undoTransfer() async {
-    final info = _success;
-    if (info == null) return;
-    _successTimer?.cancel();
-    final controller = ref.read(leadTransferControllerProvider);
-    final crm = ref.read(magicCrmServiceProvider);
-    setState(() => _success = null);
-    controller.removeHiddenLead(info.leadId); // bring the lead card back
-
-    final studentId = info.studentId;
-    if (studentId == null || studentId.isEmpty) {
-      _toast('Карточка лида возвращена.');
-      return;
-    }
-    try {
-      await crm.deleteStudent(studentId);
-      ref.invalidate(studentBoardProvider); // drop the student card
-      _toast('Перенос отменён: ученик удалён, лид возвращён.');
-    } catch (e) {
-      _toast('Лид возвращён, но удалить ученика не удалось: $e');
-    }
-  }
-
-  Future<void> _returnStudentToLead(Map<String, dynamic> student) async {
-    if (_converting) return;
-    final studentId = student['id']?.toString() ?? '';
-    if (studentId.isEmpty) return;
-    setState(() => _converting = true);
-    try {
-      final result = await ref
-          .read(magicCrmServiceProvider)
-          .returnStudentToLead(studentId);
-      ref.invalidate(studentBoardProvider);
-      if (!mounted) return;
-      final leadId = result['leadId']?.toString() ?? '';
-      setState(() {
-        _segment = 0;
-        _success = null;
-      });
-      _toast(
-        leadId.isEmpty
-            ? 'Ученик возвращён в лиды.'
-            : 'Ученик возвращён в лиды: $leadId',
-      );
-    } catch (e) {
-      _showError('Не удалось вернуть ученика в лиды: $e');
-    } finally {
-      if (mounted) setState(() => _converting = false);
-    }
-  }
-
   void _toast(String text) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
-  }
-
-  void _showError(String text) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(text), backgroundColor: AppColor.danger),
-    );
   }
 
   void _selectSegment(int value) {
@@ -180,14 +106,7 @@ class _ClientsWidgetState extends ConsumerState<ClientsWidget> {
         _Header(
           segment: _segment,
           controller: controller,
-          success: _success,
           onSelectSegment: _selectSegment,
-          onReturnStudentToLead: _returnStudentToLead,
-          onUndo: _undoTransfer,
-          onDismissSuccess: () {
-            _successTimer?.cancel();
-            setState(() => _success = null);
-          },
         ),
         Expanded(
           child: IndexedStack(
@@ -201,24 +120,16 @@ class _ClientsWidgetState extends ConsumerState<ClientsWidget> {
 }
 
 /// The animated header: compact pills when idle, expanded drop fields + branch
-/// strip while a transfer is in flight, plus the post-drop success strip.
+/// strip while a transfer is in flight.
 class _Header extends StatelessWidget {
   final int segment;
   final LeadTransferController controller;
-  final _SuccessInfo? success;
   final ValueChanged<int> onSelectSegment;
-  final ValueChanged<Map<String, dynamic>> onReturnStudentToLead;
-  final VoidCallback onUndo;
-  final VoidCallback onDismissSuccess;
 
   const _Header({
     required this.segment,
     required this.controller,
-    required this.success,
     required this.onSelectSegment,
-    required this.onReturnStudentToLead,
-    required this.onUndo,
-    required this.onDismissSuccess,
   });
 
   @override
@@ -233,14 +144,6 @@ class _Header extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (success != null) ...[
-              _SuccessStrip(
-                message: success!.message,
-                onUndo: onUndo,
-                onDismiss: onDismissSuccess,
-              ),
-              const SizedBox(height: AppSpace.sm),
-            ],
             if (!active)
               Row(
                 children: [
@@ -248,7 +151,6 @@ class _Header extends StatelessWidget {
                     child: _CompactTabs(
                       segment: segment,
                       onSelect: onSelectSegment,
-                      onReturnStudentToLead: onReturnStudentToLead,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -273,13 +175,8 @@ class _Header extends StatelessWidget {
 class _CompactTabs extends StatelessWidget {
   final int segment;
   final ValueChanged<int> onSelect;
-  final ValueChanged<Map<String, dynamic>> onReturnStudentToLead;
 
-  const _CompactTabs({
-    required this.segment,
-    required this.onSelect,
-    required this.onReturnStudentToLead,
-  });
+  const _CompactTabs({required this.segment, required this.onSelect});
 
   @override
   Widget build(BuildContext context) {
@@ -294,33 +191,12 @@ class _CompactTabs extends StatelessWidget {
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
-          children: [_leadPill(), _pill('Ученики', Icons.school_outlined, 1)],
+          children: [
+            _pill('Лиды', Icons.people_outline_rounded, 0),
+            _pill('Ученики', Icons.school_outlined, 1),
+          ],
         ),
       ),
-    );
-  }
-
-  Widget _leadPill() {
-    final pill = _pill('Лиды', Icons.people_outline_rounded, 0);
-    if (segment != 1) return pill;
-    return DragTarget<Map<String, dynamic>>(
-      onWillAcceptWithDetails: (details) =>
-          (details.data['id']?.toString() ?? '').isNotEmpty,
-      onAcceptWithDetails: (details) => onReturnStudentToLead(details.data),
-      builder: (context, candidateData, rejectedData) {
-        final hovering = candidateData.isNotEmpty;
-        return AnimatedContainer(
-          duration: AppMotion.fast,
-          curve: AppMotion.ease,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppRadius.pill),
-            border: hovering
-                ? Border.all(color: AppColor.transferCyan, width: 1.5)
-                : null,
-          ),
-          child: pill,
-        );
-      },
     );
   }
 
@@ -579,62 +455,6 @@ class _BranchStrip extends StatelessWidget {
           }
           return field;
         },
-      ),
-    );
-  }
-}
-
-class _SuccessStrip extends StatelessWidget {
-  final String message;
-  final VoidCallback onUndo;
-  final VoidCallback onDismiss;
-
-  const _SuccessStrip({
-    required this.message,
-    required this.onUndo,
-    required this.onDismiss,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
-      decoration: BoxDecoration(
-        color: AppColor.success.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(AppRadius.control),
-        border: Border.all(color: AppColor.success.withValues(alpha: 0.5)),
-      ),
-      child: Row(
-        children: [
-          const Icon(
-            Icons.check_circle_rounded,
-            color: AppColor.success,
-            size: 18,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              message,
-              style: const TextStyle(
-                color: AppColor.text,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: onUndo,
-            style: TextButton.styleFrom(foregroundColor: AppColor.success),
-            child: const Text('Отменить'),
-          ),
-          IconButton(
-            tooltip: 'Скрыть',
-            visualDensity: VisualDensity.compact,
-            icon: const Icon(Icons.close_rounded, size: 18),
-            color: AppColor.text2,
-            onPressed: onDismiss,
-          ),
-        ],
       ),
     );
   }

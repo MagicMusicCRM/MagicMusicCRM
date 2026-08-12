@@ -7,7 +7,6 @@ class _KanbanColumn extends StatefulWidget {
   final List<Map<String, dynamic>> leads;
   final int totalCount;
   final Function(String, String) onMove;
-  final Function(String) onDelete;
   final Function(Map<String, dynamic>) onTap;
   final List<StatusRecord> allStatuses;
   final VoidCallback onRefresh;
@@ -26,7 +25,6 @@ class _KanbanColumn extends StatefulWidget {
     required this.leads,
     required this.totalCount,
     required this.onMove,
-    required this.onDelete,
     required this.onTap,
     required this.allStatuses,
     required this.onRefresh,
@@ -205,7 +203,6 @@ class _KanbanColumnState extends State<_KanbanColumn> {
                               statusColor: widget.status.$3,
                               allStatuses: widget.allStatuses,
                               onMove: widget.onMove,
-                              onDelete: widget.onDelete,
                               onTap: () => widget.onTap(lead),
                               onRefresh: widget.onRefresh,
                               isPending: widget.pendingLeadIds.contains(leadId),

@@ -15,11 +15,26 @@ import 'package:magic_music_crm/features/manager/presentation/widgets/reports_wi
 import 'package:magic_music_crm/features/manager/presentation/widgets/students_board_widget.dart';
 
 class _CountingApiClient extends MagicApiClient {
-  _CountingApiClient({this.studentItems = const []})
-    : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
+  _CountingApiClient({
+    List<Map<String, dynamic>> studentItems = const [],
+    this.studentStages = const [
+      {
+        'key': 'learning',
+        'label': 'Обучаются',
+        'style': 'green',
+        'active': true,
+        'allowedTransitions': <dynamic>[],
+      },
+    ],
+  }) : studentItems = studentItems
+           .map((item) => Map<String, dynamic>.from(item))
+           .toList(),
+       super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   final counts = <String, int>{};
   final List<Map<String, dynamic>> studentItems;
+  final List<Map<String, dynamic>> studentStages;
+  final patches = <({String path, Map<String, dynamic> data})>[];
 
   int count(String path) => counts[path] ?? 0;
 
@@ -81,20 +96,27 @@ class _CountingApiClient extends MagicApiClient {
             'source': 'school',
             'schoolVersion': 1,
             'branchVersion': 0,
-            'stages': <dynamic>[
-              <String, dynamic>{
-                'key': 'learning',
-                'label': 'Обучаются',
-                'style': 'green',
-                'active': true,
-                'allowedTransitions': <dynamic>[],
-              },
-            ],
+            'stages': studentStages,
             'remediationStatuses': <dynamic>[],
           },
           _ => <String, dynamic>{'items': <dynamic>[]},
         }
         as T;
+  }
+
+  @override
+  Future<T> patch<T>(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) async {
+    final body = Map<String, dynamic>.from(data! as Map);
+    patches.add((path: path, data: body));
+    final id = path.split('/').last;
+    final student = studentItems.singleWhere((item) => item['id'] == id);
+    student['status'] = body['status'];
+    return Map<String, dynamic>.from(student) as T;
   }
 }
 
@@ -297,6 +319,99 @@ void main() {
 
     expect(find.byTooltip('Написать в чат'), findsOneWidget);
   });
+
+  testWidgets(
+    'Student board enforces configured transitions and refreshes stage counts',
+    (tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final api = _CountingApiClient(
+        studentItems: const [
+          {
+            'id': 'student-a',
+            'status': 'learning',
+            'branch_id': 'branch-a',
+            'first_name': 'Анна',
+            'last_name': 'Иванова',
+          },
+        ],
+        studentStages: const [
+          {
+            'key': 'learning',
+            'label': 'Обучаются',
+            'style': 'green',
+            'active': true,
+            'allowedTransitions': <dynamic>['paused'],
+          },
+          {
+            'key': 'paused',
+            'label': 'Пауза',
+            'style': 'amber',
+            'active': true,
+            'allowedTransitions': <dynamic>[],
+          },
+          {
+            'key': 'inactive',
+            'label': 'Завершили',
+            'style': 'gray',
+            'active': true,
+            'allowedTransitions': <dynamic>[],
+          },
+        ],
+      );
+      final realtime = StreamController<CrmChangedEvent>.broadcast();
+      addTearDown(realtime.close);
+      await tester.pumpWidget(
+        _host(
+          api: api,
+          realtime: realtime.stream,
+          snapshot: const CapabilitySnapshot(
+            accountId: 'manager-test',
+            role: 'manager',
+            accessVersion: 1,
+            capabilities: <String>{'crm.client.write'},
+            scopes: <String, String>{'client': 'branch'},
+          ),
+          child: const StudentsBoardWidget(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      Finder target(String label) => find.ancestor(
+        of: find.text(label),
+        matching: find.byType(DragTarget<Map<String, dynamic>>),
+      );
+      Finder countIn(String label, String count) =>
+          find.descendant(of: target(label), matching: find.text(count));
+      final details = DragTargetDetails<Map<String, dynamic>>(
+        data: api.studentItems.single,
+        offset: Offset.zero,
+      );
+      final paused = tester.widget<DragTarget<Map<String, dynamic>>>(
+        target('Пауза'),
+      );
+      final inactive = tester.widget<DragTarget<Map<String, dynamic>>>(
+        target('Завершили'),
+      );
+
+      expect(countIn('Обучаются', '1'), findsOneWidget);
+      expect(countIn('Пауза', '0'), findsOneWidget);
+      expect(inactive.onWillAcceptWithDetails!(details), isFalse);
+      expect(paused.onWillAcceptWithDetails!(details), isTrue);
+
+      paused.onAcceptWithDetails!(details);
+      await tester.pumpAndSettle();
+
+      expect(api.patches, hasLength(1));
+      expect(api.patches.single.path, '/crm/students/student-a');
+      expect(api.patches.single.data['status'], 'paused');
+      expect(countIn('Обучаются', '0'), findsOneWidget);
+      expect(countIn('Пауза', '1'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('student search is local and keeps focus while typing', (
     tester,

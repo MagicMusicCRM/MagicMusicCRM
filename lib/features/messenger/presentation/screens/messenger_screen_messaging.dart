@@ -226,24 +226,31 @@ extension _MessengerMessaging on _MessengerScreenState {
     String ext,
   ) async {
     if (_selectedChatId == null) return;
-    final fileId = await ref
-        .read(chatAttachmentServiceProvider)
-        .uploadVoice(
-          bytes: bytes,
-          senderId: _userId,
-          extension: ext,
-          chatId: _selectedChatId!,
-        );
-
-    final message = await ref
-        .read(magicMessengerServiceProvider)
-        .sendMessage(
-          _selectedChatId!,
-          content: '🎤 Голосовое сообщение',
-          messageType: 'voice',
-          attachmentFileId: fileId,
-        );
-    _applySentMessage({...message, 'voice_duration_ms': durationMs});
+    final attachments = ref.read(chatAttachmentServiceProvider);
+    String? fileId;
+    try {
+      fileId = await attachments.uploadVoice(
+        bytes: bytes,
+        senderId: _userId,
+        extension: ext,
+        chatId: _selectedChatId!,
+      );
+      final message = await ref
+          .read(magicMessengerServiceProvider)
+          .sendMessage(
+            _selectedChatId!,
+            content: '🎤 Голосовое сообщение',
+            messageType: 'voice',
+            attachmentFileId: fileId,
+            voiceDurationMs: durationMs,
+          );
+      _applySentMessage(message);
+    } catch (_) {
+      try {
+        await attachments.deleteUploadedFile(fileId);
+      } catch (_) {}
+      rethrow;
+    }
   }
 
   Future<void> _sendFileMessage(
@@ -257,32 +264,31 @@ extension _MessengerMessaging on _MessengerScreenState {
     final messageType = mimeType?.startsWith('image/') == true
         ? 'image'
         : 'file';
-    final fileId = await ref
-        .read(chatAttachmentServiceProvider)
-        .uploadFile(
-          bytes: bytes,
-          originalFileName: fileName,
-          senderId: _userId,
-          chatId: _selectedChatId!,
-        );
-
-    final content = caption?.isNotEmpty == true ? caption!.trim() : fileName;
-    final message = await ref
-        .read(magicMessengerServiceProvider)
-        .sendMessage(
-          _selectedChatId!,
-          content: content,
-          messageType: messageType,
-          attachmentFileId: fileId,
-        );
-    _applySentMessage({
-      ...message,
-      'message_type': messageType,
-      'attachment_file_id': fileId,
-      'attachment_name': fileName,
-      'attachment_size': fileSize,
-      'attachment_mime_type': mimeType,
-    });
+    final attachments = ref.read(chatAttachmentServiceProvider);
+    String? fileId;
+    try {
+      fileId = await attachments.uploadFile(
+        bytes: bytes,
+        originalFileName: fileName,
+        senderId: _userId,
+        chatId: _selectedChatId!,
+      );
+      final content = caption?.isNotEmpty == true ? caption!.trim() : fileName;
+      final message = await ref
+          .read(magicMessengerServiceProvider)
+          .sendMessage(
+            _selectedChatId!,
+            content: content,
+            messageType: messageType,
+            attachmentFileId: fileId,
+          );
+      _applySentMessage(message);
+    } catch (_) {
+      try {
+        await attachments.deleteUploadedFile(fileId);
+      } catch (_) {}
+      rethrow;
+    }
   }
 
   void _showSendFileDialog(Uint8List bytes, String fileName, int fileSize) {
@@ -336,6 +342,7 @@ extension _MessengerMessaging on _MessengerScreenState {
       _selectedChatType = type;
       _selectedChatRawType = rawType;
       _selectedChatSlug = item['slug']?.toString() ?? item['_slug']?.toString();
+      _selectedChannelCanWrite = type == 'channel' && _isManagerOrAdminRole;
       _selectedChatName = name;
       _selectedChatAvatarUrl = avatarUrl;
       _selectedPartnerId = partnerId;
@@ -358,6 +365,7 @@ extension _MessengerMessaging on _MessengerScreenState {
       // apply. Keep it subscribed (don't leave) so posts keep arriving live.
       _realtimeConnection?.joinChannel(id);
       _joinedChannelIds.add(id);
+      unawaited(_loadSelectedChannelAccess(id));
     } else {
       _joinTypingChannel(id);
       _joinPresenceChannel(id);
@@ -382,6 +390,7 @@ extension _MessengerMessaging on _MessengerScreenState {
       _selectedChatType = null;
       _selectedChatRawType = null;
       _selectedChatSlug = null;
+      _selectedChannelCanWrite = false;
       _selectedChatName = null;
       _selectedChatAvatarUrl = null;
       _selectedPartnerId = null;
@@ -474,8 +483,25 @@ extension _MessengerMessaging on _MessengerScreenState {
 
   // ── Check channel post permission ──────────────────────────────────────────
 
+  Future<void> _loadSelectedChannelAccess(String channelId) async {
+    try {
+      final access = await ref
+          .read(magicMessengerServiceProvider)
+          .getChannelAccess(channelId);
+      if (!mounted ||
+          _selectedChatId != channelId ||
+          _selectedChatType != 'channel') {
+        return;
+      }
+      _emitState(() => _selectedChannelCanWrite = access['can_write'] == true);
+    } catch (_) {
+      if (!mounted || _selectedChatId != channelId) return;
+      _emitState(() => _selectedChannelCanWrite = false);
+    }
+  }
+
   bool _canPostToChannel() {
-    return _isManagerOrAdminRole;
+    return _selectedChannelCanWrite;
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────

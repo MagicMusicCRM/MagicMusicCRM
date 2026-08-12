@@ -92,6 +92,7 @@ describe("HomeworkService", () => {
       dueAt: "2026-06-30T00:00:00.000Z",
       createdAt: "2026-06-22T00:00:00.000Z",
       updatedAt: "2026-06-22T00:00:00.000Z",
+      attachments: [],
     });
 
     expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
@@ -131,6 +132,17 @@ describe("HomeworkService", () => {
             due_at: null,
             created_at: "2026-06-22T00:00:00.000Z",
             updated_at: "2026-06-22T00:00:00.000Z",
+            attachments: [
+              {
+                id: "attachment-a",
+                fileId: "file-a",
+                fileName: "гаммы.pdf",
+                mimeType: "application/pdf",
+                sizeBytes: 2048,
+                kind: "assignment",
+                createdAt: "2026-06-22T00:01:00.000Z",
+              },
+            ],
           },
         ],
       },
@@ -145,12 +157,24 @@ describe("HomeworkService", () => {
     expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
     expect(result.items).toHaveLength(1);
     expect(result.items[0]).toEqual(
-      expect.objectContaining({ id: "hw-a", studentId: "student-a" }),
+      expect.objectContaining({
+        id: "hw-a",
+        studentId: "student-a",
+        attachments: [
+          expect.objectContaining({
+            fileId: "file-a",
+            fileName: "гаммы.pdf",
+            kind: "assignment",
+          }),
+        ],
+      }),
     );
     // student filter, status filter, then the limit param last.
     expect(query.mock.calls[0][1]).toEqual(["student-a", "assigned", 50]);
     const sql = String(query.mock.calls[0][0]);
     expect(sql).not.toContain("p.user_id");
+    expect(sql).toContain("from app.homework_attachments attachment");
+    expect(sql).toContain("file.deleted_at is null");
   });
 
   it("submits a homework as the owning client (P5c)", async () => {

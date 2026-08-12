@@ -76,7 +76,8 @@ export class ConstraintEngineRepository {
             $4::uuid as client_id,
             $5::timestamptz as starts_at,
             $6::timestamptz as ends_at,
-            $7::uuid as exclude_lesson_id
+            $7::uuid as exclude_lesson_id,
+            $8::uuid[] as exclude_schedule_series_ids
         ),
         teacher_conflicts as (
           select
@@ -97,6 +98,14 @@ export class ConstraintEngineRepository {
            and (
              candidate.exclude_lesson_id is null
              or lesson.id <> candidate.exclude_lesson_id
+           )
+           and (
+             candidate.exclude_schedule_series_ids is null
+             or lesson.series_id is null
+             or not (
+               lesson.series_id = any(candidate.exclude_schedule_series_ids)
+               and lesson.original_scheduled_at is null
+             )
            )
         ),
         room_conflicts as (
@@ -119,6 +128,14 @@ export class ConstraintEngineRepository {
              candidate.exclude_lesson_id is null
              or lesson.id <> candidate.exclude_lesson_id
            )
+           and (
+             candidate.exclude_schedule_series_ids is null
+             or lesson.series_id is null
+             or not (
+               lesson.series_id = any(candidate.exclude_schedule_series_ids)
+               and lesson.original_scheduled_at is null
+             )
+           )
         ),
         client_conflicts as (
           select
@@ -135,11 +152,18 @@ export class ConstraintEngineRepository {
               )
               or (
                 candidate.client_type = 'student'
-                and exists (
-                  select 1 from app.group_students membership
-                  where membership.group_id = lesson.group_id
-                    and membership.student_id = candidate.client_id
-                    and membership.left_at is null
+                and (
+                  exists (
+                    select 1 from app.lesson_snapshot_participants participant
+                    where participant.lesson_id = lesson.id
+                      and participant.student_id = candidate.client_id
+                  )
+                  or exists (
+                    select 1 from app.group_students membership
+                    where membership.group_id = lesson.group_id
+                      and membership.student_id = candidate.client_id
+                      and membership.left_at is null
+                  )
                 )
               )
               or (
@@ -156,6 +180,14 @@ export class ConstraintEngineRepository {
            and (
              candidate.exclude_lesson_id is null
              or lesson.id <> candidate.exclude_lesson_id
+           )
+           and (
+             candidate.exclude_schedule_series_ids is null
+             or lesson.series_id is null
+             or not (
+               lesson.series_id = any(candidate.exclude_schedule_series_ids)
+               and lesson.original_scheduled_at is null
+             )
            )
         )
         select code, resource_type, resource_id, lesson_id
@@ -176,6 +208,9 @@ export class ConstraintEngineRepository {
         startAt,
         endAt,
         draft.excludeLessonId ?? null,
+        draft.excludeScheduleSeriesIds?.length
+          ? draft.excludeScheduleSeriesIds
+          : null,
       ],
     );
     return result.rows.map((row) => ({

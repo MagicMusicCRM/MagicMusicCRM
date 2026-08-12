@@ -19,6 +19,7 @@ import { LessonSettlementRepository } from "../commerce/lesson-settlement.reposi
 import { LessonSettlementService } from "../commerce/lesson-settlement.service";
 import { RealtimeBus } from "../../realtime/realtime-bus";
 import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
+import { UpsertLessonDto } from "../dto/upsert-lesson.dto";
 
 const defaultTestDatabaseUrl =
   "postgresql://magiccrm_owner:magiccrm_owner@127.0.0.1:54329/magiccrm";
@@ -102,7 +103,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       teacherCompensationType: "fixed" as const,
       teacherCompensationValue: 700,
       financialDecision: {
-        settlementTypeKey: "lesson",
+        settlementTypeKey: "free_lesson",
         teacherCompensationRuleKey: "none",
       },
     };
@@ -226,6 +227,292 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
     }
   });
 
+  it("requires independent settlement, pay rule and funding source before atomic create", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const lessonIds: string[] = [];
+    const metadata = (name: string) => ({
+      idempotencyKey: `lesson-required-financial-${name}-${randomUUID()}`,
+      requestId: `lesson-required-financial-request-${name}-${randomUUID()}`,
+    });
+    const complete: UpsertLessonDto = {
+      clientRef: { type: "student", id: fixture.studentId },
+      teacherId: fixture.teacherId,
+      branchId: fixture.branchId,
+      roomId: fixture.roomId,
+      scheduledAt: nextMondayAtTenMoscow(),
+      durationMinutes: 60,
+      isTrial: false,
+      completionType: "standard.success",
+      clientChargeType: "personal_account",
+      clientChargeValue: 1500,
+      teacherCompensationType: "none",
+      teacherCompensationValue: 0,
+      financialDecision: {
+        settlementTypeKey: "lesson",
+        teacherCompensationRuleKey: "none",
+      },
+    };
+    try {
+      await expectCommandError(
+        () => commands.create(
+          actor,
+          { ...complete, clientChargeType: undefined },
+          metadata("missing-source"),
+        ),
+        {
+          code: "LESSON_REQUIRED_FIELDS",
+          fields: ["clientChargeType"],
+        },
+      );
+      await expectCommandError(
+        () => commands.create(
+          actor,
+          { ...complete, financialDecision: undefined },
+          metadata("missing-decision"),
+        ),
+        {
+          code: "LESSON_SETTLEMENT_PLAN_REQUIRED",
+          fields: ["financialDecision"],
+        },
+      );
+      await expectCommandError(
+        () => commands.create(
+          actor,
+          {
+            ...complete,
+            financialDecision: {
+              teacherCompensationRuleKey: "none",
+            },
+          } as UpsertLessonDto,
+          metadata("missing-settlement"),
+        ),
+        {
+          code: "SETTLEMENT_TYPE_NOT_ALLOWED",
+          field: "settlementTypeKey",
+        },
+      );
+      await expectCommandError(
+        () => commands.create(
+          actor,
+          {
+            ...complete,
+            financialDecision: { settlementTypeKey: "lesson" },
+          } as UpsertLessonDto,
+          metadata("missing-pay-rule"),
+        ),
+        {
+          code: "TEACHER_COMPENSATION_RULE_NOT_FOUND",
+          field: "teacherCompensationRuleKey",
+        },
+      );
+      await expectCommandError(
+        () => commands.create(
+          actor,
+          {
+            ...complete,
+            clientChargeType: "subscription",
+            subscriptionId: undefined,
+          },
+          metadata("subscription-without-id"),
+        ),
+        {
+          code: "INVALID_FINANCIAL_SNAPSHOT",
+          fields: ["clientChargeType", "subscriptionId"],
+        },
+      );
+      await expectCommandError(
+        () => commands.create(
+          actor,
+          {
+            ...complete,
+            clientChargeType: "none",
+            clientChargeValue: 0,
+          },
+          metadata("paid-without-source"),
+        ),
+        { code: "CLIENT_FUNDING_SOURCE_REQUIRED" },
+      );
+
+      const before = await pool.query<{ lessons: string; plans: string }>(
+        `select
+           (select count(*)::text from app.lessons where created_by = $1)
+             as lessons,
+           (select count(*)::text from app.lesson_settlement_plans plan
+              join app.lessons lesson on lesson.id = plan.lesson_id
+              where lesson.created_by = $1) as plans`,
+        [fixture.managerId],
+      );
+      expect(before.rows[0]).toEqual({ lessons: "0", plans: "0" });
+
+      const created = await commands.create(
+        actor,
+        complete,
+        metadata("valid-personal-account"),
+      );
+      lessonIds.push(created.id);
+      const persisted = await pool.query<{
+        charge_type: string;
+        charge_value: string;
+        subscription_id: string | null;
+        settlement_key: string;
+        pay_rule_key: string;
+        plan_revisions: string;
+        reservations: string;
+      }>(
+        `select snapshot.client_charge_type as charge_type,
+           snapshot.client_charge_value::text as charge_value,
+           snapshot.subscription_id,
+           plan.decision ->> 'settlementTypeKey' as settlement_key,
+           plan.decision ->> 'teacherCompensationRuleKey' as pay_rule_key,
+           (select count(*)::text
+              from app.lesson_settlement_plan_revisions revision
+              where revision.lesson_id = lesson.id) as plan_revisions,
+           (select count(*)::text from app.lesson_reservations reservation
+              where reservation.lesson_id = lesson.id) as reservations
+         from app.lessons lesson
+         join app.lesson_snapshots snapshot on snapshot.lesson_id = lesson.id
+         join app.lesson_settlement_plans plan on plan.lesson_id = lesson.id
+         where lesson.id = $1`,
+        [created.id],
+      );
+      expect(persisted.rows[0]).toEqual({
+        charge_type: "personal_account",
+        charge_value: "1500.00",
+        subscription_id: null,
+        settlement_key: "lesson",
+        pay_rule_key: "none",
+        plan_revisions: "1",
+        reservations: "0",
+      });
+    } finally {
+      await cleanupFixture(pool, {
+        ...fixture,
+        actorKey: `user:${fixture.managerId}`,
+        lessonIds,
+      });
+    }
+  });
+
+  it("creates a Lead trial with required resources and an immutable calculation snapshot", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const lessonIds: string[] = [];
+    const scheduledAt = nextMondayAtTenMoscow();
+    const metadata = {
+      idempotencyKey: `lead-trial-create-${randomUUID()}`,
+      requestId: `lead-trial-request-${randomUUID()}`,
+    };
+    const draft: UpsertLessonDto = {
+      clientRef: { type: "lead", id: fixture.leadId },
+      teacherId: fixture.teacherId,
+      branchId: fixture.branchId,
+      roomId: fixture.roomId,
+      scheduledAt,
+      durationMinutes: 60,
+      isTrial: true,
+      completionType: "standard.success",
+      clientChargeType: "none",
+      clientChargeValue: 0,
+      teacherCompensationType: "hourly",
+      teacherCompensationValue: 1250,
+      financialDecision: {
+        settlementTypeKey: "free_lesson",
+        teacherCompensationRuleKey: "standard",
+      },
+    };
+    try {
+      await expect(
+        commands.previewConstraints(actor, {
+          clientRef: draft.clientRef!,
+          teacherId: draft.teacherId!,
+          branchId: draft.branchId!,
+          roomId: draft.roomId!,
+          scheduledAt,
+          durationMinutes: draft.durationMinutes!,
+        }),
+      ).resolves.toMatchObject({ valid: true, violations: [] });
+
+      const created = await commands.create(actor, draft, metadata);
+      lessonIds.push(created.id);
+      expect(created).toMatchObject({
+        clientRef: { type: "lead", id: fixture.leadId },
+        leadId: fixture.leadId,
+        teacherId: fixture.teacherId,
+        branchId: fixture.branchId,
+        roomId: fixture.roomId,
+        isTrial: true,
+      });
+
+      const persisted = await pool.query<{
+        lead_id: string;
+        student_id: string | null;
+        teacher_id: string;
+        branch_id: string;
+        room_id: string;
+        is_trial: boolean;
+        client_type: string;
+        client_id: string;
+        snapshot_trial: boolean;
+        completion_type: string;
+        charge_type: string;
+        charge_value: string;
+        compensation_type: string;
+        compensation_value: string;
+        validation_state: string;
+        settlement_key: string;
+        pay_rule_key: string;
+        plan_revisions: string;
+      }>(
+        `select lesson.lead_id, lesson.student_id, lesson.teacher_id,
+           lesson.branch_id, lesson.room_id, lesson.is_trial,
+           snapshot.client_type, snapshot.client_id,
+           snapshot.trial as snapshot_trial, snapshot.completion_type,
+           snapshot.client_charge_type as charge_type,
+           snapshot.client_charge_value::text as charge_value,
+           snapshot.teacher_compensation_type as compensation_type,
+           snapshot.teacher_compensation_value::text as compensation_value,
+           snapshot.validation_state,
+           plan.decision ->> 'settlementTypeKey' as settlement_key,
+           plan.decision ->> 'teacherCompensationRuleKey' as pay_rule_key,
+           (select count(*)::text
+              from app.lesson_settlement_plan_revisions revision
+              where revision.lesson_id = lesson.id) as plan_revisions
+         from app.lessons lesson
+         join app.lesson_snapshots snapshot on snapshot.lesson_id = lesson.id
+         join app.lesson_settlement_plans plan on plan.lesson_id = lesson.id
+         where lesson.id = $1`,
+        [created.id],
+      );
+      expect(persisted.rows[0]).toEqual({
+        lead_id: fixture.leadId,
+        student_id: null,
+        teacher_id: fixture.teacherId,
+        branch_id: fixture.branchId,
+        room_id: fixture.roomId,
+        is_trial: true,
+        client_type: "lead",
+        client_id: fixture.leadId,
+        snapshot_trial: true,
+        completion_type: "standard.success",
+        charge_type: "none",
+        charge_value: "0.00",
+        compensation_type: "hourly",
+        compensation_value: "1250.00",
+        validation_state: "valid",
+        settlement_key: "free_lesson",
+        pay_rule_key: "standard",
+        plan_revisions: "1",
+      });
+    } finally {
+      await cleanupFixture(pool, {
+        ...fixture,
+        actorKey: `user:${fixture.managerId}`,
+        lessonIds,
+      });
+    }
+  });
+
   it("returns 403 and preserves the Lesson on a direct Teacher mutation", async () => {
     const fixture = await createFixture(pool);
     const manager = { userId: fixture.managerId, role: "manager" as const };
@@ -255,7 +542,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
           teacherCompensationType: "fixed",
           teacherCompensationValue: 700,
           financialDecision: {
-            settlementTypeKey: "lesson",
+            settlementTypeKey: "free_lesson",
             teacherCompensationRuleKey: "none",
           },
         },
@@ -300,9 +587,19 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
     }
   });
 
-  it("serializes parallel creates and rejects both direct drag bypasses", async () => {
+  it("allows one independent Manager winner and rejects direct drag bypasses", async () => {
     const fixture = await createFixture(pool);
-    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const secondManager = await pool.query<{ id: string }>(
+      `
+        insert into app.users (email, role, email_verified_at)
+        values ($1, 'manager', now())
+        returning id
+      `,
+      [`parity-manager-race-${randomUUID()}@example.test`],
+    );
+    const secondManagerId = secondManager.rows[0]!.id;
+    const leftActor = { userId: fixture.managerId, role: "manager" as const };
+    const rightActor = { userId: secondManagerId, role: "manager" as const };
     const lessonIds: string[] = [];
     const metadata = (name: string) => ({
       idempotencyKey: `schedule-race-${name}-${randomUUID()}`,
@@ -321,21 +618,23 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       teacherCompensationType: "fixed" as const,
       teacherCompensationValue: 700,
       financialDecision: {
-        settlementTypeKey: "lesson",
+        settlementTypeKey: "free_lesson",
         teacherCompensationRuleKey: "none",
       },
     };
+    const leftMetadata = metadata("create-left");
+    const rightMetadata = metadata("create-right");
     try {
       const concurrentCreates = await Promise.allSettled([
         commands.create(
-          actor,
+          leftActor,
           { ...base, scheduledAt: "2026-07-27T07:00:00.000Z" },
-          metadata("create-left"),
+          leftMetadata,
         ),
         commands.create(
-          actor,
+          rightActor,
           { ...base, scheduledAt: "2026-07-27T07:00:00.000Z" },
-          metadata("create-right"),
+          rightMetadata,
         ),
       ]);
       const acceptedCreate = concurrentCreates.filter(
@@ -351,16 +650,89 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       );
       expect(acceptedCreate).toHaveLength(1);
       expect(rejectedCreate).toHaveLength(1);
-      expect(rejectedCreate[0]!.reason).toMatchObject({ status: 422 });
       lessonIds.push(acceptedCreate[0]!.value.id);
+      expect(rejectedCreate[0]!.reason).toMatchObject({ status: 422 });
+      expect(rejectedCreate[0]!.reason).toBeInstanceOf(HttpException);
+      const rejectedResponse = (
+        rejectedCreate[0]!.reason as HttpException
+      ).getResponse() as {
+        code?: string;
+        violations?: Array<{ code?: string }>;
+      };
+      expect(rejectedResponse.code).toBe("LESSON_CONSTRAINT_VIOLATIONS");
+      expect(rejectedResponse.violations).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ code: "TEACHER_OVERLAP" }),
+          expect.objectContaining({ code: "CLIENT_OVERLAP" }),
+          expect.objectContaining({ code: "ROOM_OVERLAP" }),
+        ]),
+      );
+      const atomicFacts = await pool.query<{
+        lessons: string;
+        snapshots: string;
+        plans: string;
+        revisions: string;
+        versions: string;
+        audits: string;
+        outbox: string;
+        idempotency: string;
+      }>(
+        `
+          with winner as (
+            select id
+            from app.lessons
+            where teacher_id = $1
+              and room_id = $2
+              and scheduled_at = '2026-07-27T07:00:00.000Z'
+              and deleted_at is null
+          )
+          select
+            (select count(*)::text from winner) as lessons,
+            (select count(*)::text from app.lesson_snapshots
+              where lesson_id in (select id from winner)) as snapshots,
+            (select count(*)::text from app.lesson_settlement_plans
+              where lesson_id in (select id from winner)) as plans,
+            (select count(*)::text from app.lesson_settlement_plan_revisions
+              where lesson_id in (select id from winner)) as revisions,
+            (select count(*)::text from app.aggregate_versions
+              where aggregate_type = 'schedule:lesson'
+                and aggregate_id in (select id::text from winner)) as versions,
+            (select count(*)::text from app.audit_events
+              where action = 'crm.lesson_created'
+                and entity_id in (select id::text from winner)) as audits,
+            (select count(*)::text from app.platform_outbox_events
+              where aggregate_type = 'schedule:lesson'
+                and aggregate_id in (select id::text from winner)) as outbox,
+            (select count(*)::text from app.idempotency_records
+              where actor_key = any($3::text[])
+                and operation = 'schedule.lesson.create'
+                and idempotency_key = any($4::text[])) as idempotency
+        `,
+        [
+          fixture.teacherId,
+          fixture.roomId,
+          [`user:${fixture.managerId}`, `user:${secondManagerId}`],
+          [leftMetadata.idempotencyKey, rightMetadata.idempotencyKey],
+        ],
+      );
+      expect(atomicFacts.rows[0]).toEqual({
+        lessons: "1",
+        snapshots: "1",
+        plans: "1",
+        revisions: "1",
+        versions: "1",
+        audits: "1",
+        outbox: "1",
+        idempotency: "1",
+      });
 
       const left = await commands.create(
-        actor,
+        leftActor,
         { ...base, scheduledAt: "2026-07-27T09:00:00.000Z" },
         metadata("drag-source-left"),
       );
       const right = await commands.create(
-        actor,
+        leftActor,
         { ...base, scheduledAt: "2026-07-27T11:00:00.000Z" },
         metadata("drag-source-right"),
       );
@@ -368,7 +740,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
 
       const concurrentDrags = await Promise.allSettled([
         commands.update(
-          actor,
+          leftActor,
           left.id,
           {
             expectedVersion: left.version,
@@ -377,7 +749,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
           metadata("drag-left"),
         ),
         commands.update(
-          actor,
+          leftActor,
           right.id,
           {
             expectedVersion: right.version,
@@ -425,6 +797,9 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       await cleanupFixture(pool, {
         ...fixture,
         actorKey: `user:${fixture.managerId}`,
+        extraActorKeys: [`user:${secondManagerId}`],
+        extraActorUserIds: [secondManagerId],
+        extraUserIds: [secondManagerId],
         lessonIds,
       });
     }
@@ -576,6 +951,28 @@ async function violationResponse(work: () => Promise<unknown>) {
   }
 }
 
+async function expectCommandError(
+  work: () => Promise<unknown>,
+  expected: { code: string; fields?: string[]; field?: string },
+) {
+  try {
+    await work();
+    throw new Error(`Expected command error ${expected.code}.`);
+  } catch (error) {
+    if (!(error instanceof HttpException)) throw error;
+    const response = error.getResponse() as {
+      code?: string;
+      fields?: string[];
+      field?: string;
+    };
+    expect({
+      code: response.code,
+      ...(response.fields ? { fields: response.fields } : {}),
+      ...(response.field ? { field: response.field } : {}),
+    }).toEqual(expected);
+  }
+}
+
 async function createFixture(pool: Pool) {
   const branch = await pool.query<{ id: string }>(
     `
@@ -670,11 +1067,22 @@ async function createFixture(pool: Pool) {
     `,
     [studentProfileId, branchId],
   );
+  const lead = await pool.query<{ id: string }>(
+    `
+      insert into app.leads (branch_id, first_name, last_name, phone)
+      values ($1, 'Parity', 'Lead', $2)
+      returning id
+    `,
+    [branchId, `+7999${Math.floor(Math.random() * 10_000_000)
+      .toString()
+      .padStart(7, "0")}`],
+  );
   return {
     branchId,
     roomId: room.rows[0]!.id,
     teacherId,
     studentId: student.rows[0]!.id,
+    leadId: lead.rows[0]!.id,
     managerId,
     teacherUserId,
     clientUserId,
@@ -689,11 +1097,15 @@ async function cleanupFixture(
     roomId: string;
     teacherId: string;
     studentId: string;
+    leadId: string;
     managerId: string;
     teacherUserId: string;
     clientUserId: string;
     profileIds: string[];
     actorKey: string;
+    extraActorKeys?: string[];
+    extraActorUserIds?: string[];
+    extraUserIds?: string[];
     lessonIds: string[];
   },
 ) {
@@ -702,8 +1114,8 @@ async function cleanupFixture(
     await client.query("begin");
     await client.query("set local session_replication_role = replica");
     await client.query(
-      "delete from app.idempotency_records where actor_key = $1",
-      [fixture.actorKey],
+      "delete from app.idempotency_records where actor_key = any($1::text[])",
+      [[fixture.actorKey, ...(fixture.extraActorKeys ?? [])]],
     );
     await client.query(
       `
@@ -714,8 +1126,8 @@ async function cleanupFixture(
       [fixture.lessonIds],
     );
     await client.query(
-      "delete from app.audit_events where actor_user_id = $1",
-      [fixture.managerId],
+      "delete from app.audit_events where actor_user_id = any($1::uuid[])",
+      [[fixture.managerId, ...(fixture.extraActorUserIds ?? [])]],
     );
     await client.query(
       "delete from app.aggregate_versions where aggregate_type = 'schedule:lesson' and aggregate_id = any($1::text[])",
@@ -746,6 +1158,7 @@ async function cleanupFixture(
     await client.query("delete from app.students where id = $1", [
       fixture.studentId,
     ]);
+    await client.query("delete from app.leads where id = $1", [fixture.leadId]);
     await client.query(
       "delete from app.teacher_availability_rules where teacher_id = $1",
       [fixture.teacherId],
@@ -762,7 +1175,12 @@ async function cleanupFixture(
       fixture.profileIds,
     ]);
     await client.query("delete from app.users where id = any($1::uuid[])", [
-      [fixture.managerId, fixture.teacherUserId, fixture.clientUserId],
+      [
+        fixture.managerId,
+        fixture.teacherUserId,
+        fixture.clientUserId,
+        ...(fixture.extraUserIds ?? []),
+      ],
     ]);
     await client.query("delete from app.branch_hours where branch_id = $1", [
       fixture.branchId,

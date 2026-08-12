@@ -565,9 +565,9 @@ extension _ScheduleActions on _ScheduleWidgetState {
       initialDate: date,
       initialRoomId: roomId,
       initialBranchId: _selectedBranchId,
-      clientType: widget.clientType,
-      clientId: widget.clientId,
-      clientName: widget.clientName,
+      clientType: _contextClientType,
+      clientId: _contextClientId,
+      clientName: _contextClientName,
     );
     if (created == true) _fetchAll();
   }

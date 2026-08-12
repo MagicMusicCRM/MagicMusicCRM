@@ -381,19 +381,33 @@ extension _MessengerActions on _MessengerScreenState {
 
   // ── Load chat list ─────────────────────────────────────────────────────────
 
-  Future<void> _loadChatList() async {
+  Future<void> _loadChatList({bool showLoading = true}) async {
+    if (mounted) {
+      _emitState(() {
+        _loadingChats = showLoading;
+        _chatListError = null;
+      });
+    }
     try {
-      // Set a global timeout for the entire loading process
-      await _loadChatListInternal().timeout(
-        const Duration(seconds: 30),
-        onTimeout: () {
-          _logMessenger('Chat list loading timed out');
-          if (mounted) _emitState(() => _loadingChats = false);
-        },
-      );
+      await _loadChatListInternal().timeout(const Duration(seconds: 30));
+    } on TimeoutException {
+      _logMessenger('Chat list loading timed out');
+      if (mounted && (showLoading || _chatItems.isEmpty)) {
+        _emitState(() {
+          _loadingChats = false;
+          _chatListError =
+              'Сервер отвечает слишком долго. Проверьте подключение и повторите загрузку.';
+        });
+      }
     } catch (e) {
       _logMessenger('Error loading chat list: $e');
-      if (mounted) _emitState(() => _loadingChats = false);
+      if (mounted && (showLoading || _chatItems.isEmpty)) {
+        _emitState(() {
+          _loadingChats = false;
+          _chatListError =
+              'Не удалось получить список чатов. Проверьте подключение и повторите загрузку.';
+        });
+      }
     }
   }
 
@@ -559,6 +573,7 @@ extension _MessengerActions on _MessengerScreenState {
         _mutedChatIds = mutedIds;
         _pinnedChatIds = pinnedIds;
         _loadingChats = false;
+        _chatListError = null;
 
         if (selectedFilteredOut) {
           _selectedChatId = null;

@@ -101,6 +101,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   // Guards the one-shot "auto-pick a branch with data" re-fetch so it can never
   // loop when every branch is genuinely empty (KVA-166).
   bool _autoBranchRetried = false;
+  bool _restoredPendingClientFocus = false;
 
   // Data
   List<Map<String, dynamic>> _branches = [];
@@ -172,6 +173,7 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
   void initState() {
     super.initState();
     _restoreNavigationState();
+    _restorePendingClientFocus();
     // A filter deep-linked from the overview («Пробные занятия» / «Конфликты
     // расписания») — consumed once before the first fetch so the grid opens
     // filtered. Day view is what actually renders these filters, so switch to it.
@@ -189,9 +191,33 @@ class _ScheduleWidgetState extends ConsumerState<ScheduleWidget> {
     // *changes*, so pick up an already-set focus once on first frame.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      if (_restoredPendingClientFocus) {
+        ref.read(scheduleNavigationProvider.notifier).clear();
+        return;
+      }
       final focus = ref.read(scheduleNavigationProvider);
       if (focus != null) _applyScheduleFocus(focus);
     });
+  }
+
+  void _restorePendingClientFocus() {
+    final focus = ref.read(scheduleNavigationProvider);
+    if (focus == null ||
+        !focus.openMonth ||
+        focus.clientId?.isNotEmpty != true) {
+      return;
+    }
+    final date = focus.focusDate;
+    _selectedDate = DateTime(date.year, date.month, date.day);
+    _displayedMonth = DateTime(date.year, date.month);
+    _currentView = ScheduleView.month;
+    _highlightLessonId = null;
+    _filterClientType = focus.clientType;
+    _filterClientId = focus.clientId;
+    _filterClientName = focus.clientName;
+    _selectedBranchId = focus.branchId ?? _selectedBranchId;
+    _hideOtherClientLessons = false;
+    _restoredPendingClientFocus = true;
   }
 
   @override

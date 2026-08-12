@@ -7,7 +7,9 @@ import * as ExcelJS from "exceljs";
 import { AuditService } from "../audit/audit.service";
 import { ActorContext } from "../common/security/actor-context";
 import { CrmPolicy } from "../crm/crm.policy";
+import { FinanceService } from "../crm/finance.service";
 import { DatabaseService } from "../db/database.service";
+import { RealtimeBus } from "../realtime/realtime-bus";
 import { ClientStatusReadService } from "./client-status-read.service";
 import { OoxmlWorkbookBuilder } from "./ooxml-workbook.builder";
 import { ReportExportService } from "./report-export.service";
@@ -157,6 +159,113 @@ describe("ReportingReadService hard scopes (PostgreSQL)", () => {
     });
     expect(root.revenueMinor).toBe("400000");
     expect(root.revenueMinor).not.toBe("11100000");
+  });
+
+  it("keeps Director expense CRUD, Manager deny and Analytics in one projection", async () => {
+    const audit = { record: jest.fn().mockResolvedValue(undefined) };
+    const realtime = { emitCrmChanged: jest.fn() };
+    const finance = new FinanceService(
+      database,
+      audit as unknown as AuditService,
+      new CrmPolicy(),
+      realtime as unknown as RealtimeBus,
+    );
+
+    await expect(
+      finance.listExpenses(fixture.manager, {
+        branchId: fixture.assignedBranchId,
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      finance.createExpense(fixture.manager, {
+        amount: 1250,
+        category: "rent",
+        branchId: fixture.assignedBranchId,
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    const created = await finance.createExpense(fixture.director, {
+      amount: 1250,
+      category: "rent",
+      description: "UAT-114 initial expense",
+      branchId: fixture.assignedBranchId,
+    });
+    await database.query(
+      "update app.expenses set created_at = '2026-07-15T12:00:00Z' where id = $1",
+      [created.id],
+    );
+
+    await expect(
+      finance.updateExpense(fixture.manager, created.id, { amount: 9999 }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      finance.deleteExpense(fixture.manager, created.id),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    const updated = await finance.updateExpense(fixture.director, created.id, {
+      amount: 1750,
+      category: "utilities",
+      description: "UAT-114 corrected expense",
+    });
+    expect(updated).toMatchObject({
+      id: created.id,
+      amount: 1750,
+      category: "utilities",
+      description: "UAT-114 corrected expense",
+      branchId: fixture.assignedBranchId,
+    });
+
+    const listed = await finance.listExpenses(fixture.director, {
+      branchId: fixture.assignedBranchId,
+      from: range.from,
+      to: range.to,
+    });
+    expect(listed).toMatchObject({
+      total: 1750,
+      items: [expect.objectContaining({ id: created.id, amount: 1750 })],
+    });
+    const withExpense = await service.schoolFinance(fixture.director, {
+      ...range,
+      branchId: fixture.assignedBranchId,
+    });
+    expect(withExpense.expensesMinor).toBe("175000");
+    expect(withExpense.rows[0]).toMatchObject({ expensesMinor: "175000" });
+
+    await expect(
+      finance.deleteExpense(fixture.director, created.id),
+    ).resolves.toEqual({ success: true });
+    const afterDelete = await finance.listExpenses(fixture.director, {
+      branchId: fixture.assignedBranchId,
+      from: range.from,
+      to: range.to,
+    });
+    expect(afterDelete).toEqual({ items: [], total: 0 });
+    const analyticsAfterDelete = await service.schoolFinance(
+      fixture.director,
+      { ...range, branchId: fixture.assignedBranchId },
+    );
+    expect(analyticsAfterDelete.expensesMinor).toBe("0");
+
+    const persisted = await database.query<{
+      deleted_at: Date | null;
+      amount: string;
+    }>("select deleted_at, amount::text from app.expenses where id = $1", [
+      created.id,
+    ]);
+    expect(persisted.rows[0]).toEqual({
+      deleted_at: expect.any(Date),
+      amount: "1750.00",
+    });
+    expect(audit.record.mock.calls.map(([entry]) => entry.action)).toEqual([
+      "crm.expense_created",
+      "crm.expense_updated",
+      "crm.expense_deleted",
+    ]);
+    expect(realtime.emitCrmChanged.mock.calls.map(([event]) => event.action)).toEqual([
+      "created",
+      "updated",
+      "deleted",
+    ]);
   });
 });
 
@@ -349,6 +458,12 @@ async function cleanupStaleFixtures(database: DatabaseService) {
       [staffIds],
     );
     await client.query(
+      `delete from app.expenses
+       where branch_id in (
+         select id from app.branches where name like 'v4-report-scope-%'
+       )`,
+    );
+    await client.query(
       "delete from app.profiles where id = any($1::uuid[])",
       [profileIds],
     );
@@ -386,6 +501,10 @@ async function cleanupFixture(
     await client.query("delete from app.staff_members where id = $1", [
       fixture.staffId,
     ]);
+    await client.query(
+      "delete from app.expenses where branch_id = any($1::uuid[])",
+      [fixture.branchIds],
+    );
     await client.query("delete from app.profiles where id = any($1::uuid[])", [
       fixture.profileIds,
     ]);

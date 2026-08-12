@@ -4,7 +4,8 @@ param(
   [string]$DatabaseName = "magiccrm_v7_prodlike_image",
   [int]$HealthyPort = 3108,
   [int]$DegradedPort = 3109,
-  [Parameter(Mandatory)][string]$ExpectedRevision
+  [Parameter(Mandatory)][string]$ExpectedRevision,
+  [string]$ExpectedMigrationId = "0131_installment_payment_reminders"
 )
 
 $ErrorActionPreference = "Stop"
@@ -193,7 +194,7 @@ try {
   $ready = Invoke-RestMethod `
     -Uri "http://127.0.0.1:$HealthyPort/api/health/ready" `
     -TimeoutSec 2
-  if ($ready.status -ne "ok" -or $ready.latestMigrationId -ne "0118_lesson_participant_exclusions") {
+  if ($ready.status -ne "ok" -or $ready.latestMigrationId -ne $ExpectedMigrationId) {
     throw "Healthy image returned unexpected readiness state."
   }
   foreach ($check in $ready.checks.PSObject.Properties) {

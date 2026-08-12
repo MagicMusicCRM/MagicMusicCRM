@@ -219,30 +219,13 @@ class TeacherEmploymentFieldsState
 
   Future<void> _loadDisciplines() async {
     final generation = ++_disciplineLoadGeneration;
-    if (_branchIds.isEmpty) {
-      if (mounted) {
-        setState(() {
-          _disciplines = const [];
-          _disciplineIds.clear();
-          _loadingDisciplines = false;
-        });
-      }
-      return;
-    }
     setState(() => _loadingDisciplines = true);
     try {
       final crm = ref.read(magicCrmServiceProvider);
-      final rows = await Future.wait(_branchIds.map(crm.listBranchDisciplines));
+      final rows = await crm.listDisciplines();
       if (!mounted || generation != _disciplineLoadGeneration) return;
-      final normalized = <Map<String, dynamic>>[];
-      for (final row in rows.expand((items) => items)) {
-        final id = row['discipline_id']?.toString();
-        if (id != null && id.isNotEmpty) {
-          normalized.add({'id': id, 'name': row['name']});
-        }
-      }
       setState(() {
-        _disciplines = _mergeOptions(normalized, const []);
+        _disciplines = _mergeOptions(rows, widget.initial.disciplines);
         final available = _idsOf(_disciplines);
         _disciplineIds.removeWhere((id) => !available.contains(id));
         _loadingDisciplines = false;
@@ -262,8 +245,6 @@ class TeacherEmploymentFieldsState
       error = 'Не удалось загрузить филиалы.';
     } else if (_branchIds.isEmpty) {
       error = 'Выберите хотя бы один филиал.';
-    } else if (_disciplineIds.isEmpty) {
-      error = 'Выберите хотя бы одну дисциплину.';
     } else if (widget.requireRate && _rate == null) {
       error = 'Выберите ставку преподавателя.';
     }
@@ -372,12 +353,7 @@ class TeacherEmploymentFieldsState
             },
           ),
           const SizedBox(height: 16),
-          _chips(
-            title: 'Филиалы *',
-            options: _branches,
-            selected: _branchIds,
-            onChanged: _loadDisciplines,
-          ),
+          _chips(title: 'Филиалы *', options: _branches, selected: _branchIds),
           const SizedBox(height: 14),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -399,12 +375,11 @@ class TeacherEmploymentFieldsState
             _loadingDisciplines
                 ? const Center(child: CircularProgressIndicator())
                 : _chips(
-                    title: 'Дисциплины преподавателя *',
+                    title: 'Дисциплины преподавателя (необязательно)',
                     options: _disciplines,
                     selected: _disciplineIds,
-                    emptyText: _branchIds.isEmpty
-                        ? 'Сначала выберите филиал.'
-                        : 'В выбранных филиалах нет доступных дисциплин.',
+                    lockArchived: true,
+                    emptyText: 'Добавьте дисциплины в общем справочнике.',
                   )
           else if (_settingsSection == 1)
             _stringChips(
@@ -480,6 +455,7 @@ class TeacherEmploymentFieldsState
     required Set<String> selected,
     String? emptyText,
     VoidCallback? onChanged,
+    bool lockArchived = false,
   }) {
     if (options.isEmpty) return Text(emptyText ?? 'Нет доступных вариантов.');
     return Column(
@@ -493,9 +469,17 @@ class TeacherEmploymentFieldsState
           children: [
             for (final option in options)
               FilterChip(
-                label: Text(option['name']?.toString() ?? '—'),
+                label: Text(
+                  '${option['name']?.toString() ?? '—'}'
+                  '${lockArchived && (option['lifecycleState'] == 'archived' || option['lifecycle_state'] == 'archived') ? ' (в архиве)' : ''}',
+                ),
                 selected: selected.contains(option['id']?.toString()),
-                onSelected: !widget.enabled
+                onSelected:
+                    !widget.enabled ||
+                        (lockArchived &&
+                            (option['lifecycleState'] == 'archived' ||
+                                option['lifecycle_state'] == 'archived') &&
+                            !selected.contains(option['id']?.toString()))
                     ? null
                     : (value) {
                         final id = option['id']?.toString();

@@ -10,8 +10,8 @@ part 'data_quality_cards.dart';
 /// «Качество данных» (data quality) admin panel — P5-7 / KVA-198.
 ///
 /// Closes the phone-review + lead-dedup orphan with two v7 sections:
-///   1. «Очередь телефонов» — read-only phone review queue (flagged for manual
-///      review) with a live count badge.
+///   1. «Очередь телефонов» — accountable manual review: correct the canonical
+///      source phone or accept the current value with a required reason.
 ///   2. «Дубликаты лидов» — lead merge candidates with a confirm-then-merge
 ///      flow (winner picker + undo affordance via the returned merge-log id).
 ///
@@ -31,6 +31,7 @@ class _DataQualityWidgetState extends ConsumerState<DataQualityWidget> {
   Object? _phoneError;
   List<Map<String, dynamic>> _phoneItems = const [];
   int _phoneCount = 0;
+  String? _resolvingPhoneId;
 
   // Merge candidates state.
   bool _mergeLoading = true;
@@ -139,8 +140,66 @@ class _DataQualityWidgetState extends ConsumerState<DataQualityWidget> {
       );
     }
     return Column(
-      children: [for (final item in _phoneItems) _PhoneReviewCard(item: item)],
+      children: [
+        for (final item in _phoneItems)
+          _PhoneReviewCard(
+            item: item,
+            busy: _resolvingPhoneId == _readString(item, ['id']),
+            onResolve: _resolvePhoneReview,
+          ),
+      ],
     );
+  }
+
+  Future<void> _resolvePhoneReview(Map<String, dynamic> item) async {
+    final id = _readString(item, ['id']);
+    if (id.isEmpty) {
+      MagicToast.show(
+        context,
+        'Не удалось определить запись очереди',
+        type: MagicToastType.danger,
+      );
+      return;
+    }
+
+    final decision = await showDialog<_PhoneReviewDecision>(
+      context: context,
+      builder: (_) => _PhoneReviewResolutionDialog(
+        rawPhone: _readString(item, ['rawPhone', 'raw_phone']),
+      ),
+    );
+    if (decision == null || !mounted) return;
+
+    setState(() => _resolvingPhoneId = id);
+    try {
+      await ref
+          .read(magicCrmServiceProvider)
+          .resolvePhoneReview(
+            id: id,
+            action: decision.action,
+            phone: decision.phone,
+            resolutionNote: decision.resolutionNote,
+          );
+      await _loadPhones();
+      if (!mounted) return;
+      setState(() => _resolvingPhoneId = null);
+      MagicToast.show(
+        context,
+        decision.action == 'corrected'
+            ? 'Номер исправлен'
+            : 'Номер отмечен как проверенный',
+        type: MagicToastType.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _resolvingPhoneId = null);
+      MagicToast.show(
+        context,
+        'Не удалось разобрать номер',
+        detail: '$e',
+        type: MagicToastType.danger,
+      );
+    }
   }
 
   // ── Merge candidates ───────────────────────────────────────────────────────

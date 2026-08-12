@@ -94,4 +94,39 @@ describe("CrmLeadsController", () => {
       { packageId: "package-a" },
     );
   });
+
+  it("validates typed fields before an existing Lead update", async () => {
+    const leads = { updateLead: jest.fn().mockResolvedValue({ id: "lead-a" }) };
+    const validated = { values: [{ definitionId: "field-a" }], warnings: [] };
+    const clientWrites = {
+      validateCustomFields: jest.fn().mockResolvedValue(validated),
+    };
+    const controller = new CrmLeadsController(
+      {} as BlacklistService,
+      {} as DuplicatesService,
+      leads as unknown as LeadsService,
+      {} as MergeService,
+      {} as PhoneReviewService,
+      {} as SubscriptionsService,
+      clientWrites as unknown as ClientWriteValidator,
+    );
+    const actor = { userId: "admin-a", role: "admin" as const };
+    const dto = {
+      firstName: "Анна",
+      customFields: [{ definitionId: "field-a", value: "Вокал" }],
+    };
+
+    await controller.updateLead(actor, "lead-a", dto);
+
+    expect(clientWrites.validateCustomFields).toHaveBeenCalledWith(
+      "lead",
+      dto.customFields,
+    );
+    expect(leads.updateLead).toHaveBeenCalledWith(
+      actor,
+      "lead-a",
+      dto,
+      validated,
+    );
+  });
 });

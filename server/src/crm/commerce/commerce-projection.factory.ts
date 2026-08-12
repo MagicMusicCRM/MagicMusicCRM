@@ -114,6 +114,7 @@ export class CommerceProjectionFactory {
         issuedSubscriptionId: movement.issuedSubscriptionId ?? null,
         subscriptionName: movement.subscriptionName ?? null,
         sourcePaymentId: movement.sourcePaymentId ?? null,
+        adjustmentVersion: movement.adjustmentVersion ?? null,
         paymentRecordVersion: movement.paymentRecordVersion ?? null,
         installmentId: movement.installmentId ?? null,
         dueAt: movement.dueAt ?? null,

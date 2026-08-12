@@ -73,14 +73,30 @@ export class AuthService {
     const existing = await this.database.query<{
       id: string;
       is_app_account: boolean;
+      protected_person: boolean;
     }>(
-      "select id, is_app_account from app.users where lower(email) = lower($1) and deleted_at is null limit 1",
+      `select account.id, account.is_app_account,
+         exists (
+           select 1 from app.user_crm_links link
+           where link.user_id = account.id
+             and link.entity_type in ('teacher', 'staff')
+             and link.deleted_at is null
+         ) as protected_person
+       from app.users account
+       where lower(account.email) = lower($1)
+         and account.deleted_at is null
+       limit 1`,
       [email],
     );
 
-    if (existing.rows[0]?.is_app_account) {
+    if (
+      existing.rows[0]?.is_app_account ||
+      existing.rows[0]?.protected_person
+    ) {
       throw new ConflictException(
-        "Пользователь с такой почтой уже существует.",
+        existing.rows[0]?.protected_person
+          ? "Доступ к карточке сотрудника выдаёт директор."
+          : "Пользователь с такой почтой уже существует.",
       );
     }
 
@@ -90,6 +106,7 @@ export class AuthService {
           `
             update app.users
             set password_hash = $2,
+                password_changed_at = now(),
                 full_name = $3,
                 role = 'client'::app.user_role,
                 is_app_account = true,
@@ -103,8 +120,11 @@ export class AuthService {
         )
       : await this.database.query<UserRecord>(
           `
-            insert into app.users (email, password_hash, full_name, role, is_app_account)
-            values ($1, $2, $3, 'client', true)
+            insert into app.users (
+              email, password_hash, full_name, role, is_app_account,
+              password_changed_at
+            )
+            values ($1, $2, $3, 'client', true, now())
             returning id, email, password_hash, role, email_verified_at, is_app_account
           `,
           [email, passwordHash, dto.fullName.trim()],
@@ -167,6 +187,7 @@ export class AuthService {
         left join app.profiles p on p.user_id = u.id
         where lower(u.email) = lower($1)
           and u.deleted_at is null
+          and u.is_app_account = true
         limit 1
       `,
       [email],
@@ -204,18 +225,6 @@ export class AuthService {
       entityId: user.id,
       metadata: { emailHash },
     });
-    await this.database.query(
-      `
-        update app.users
-        set is_app_account = true,
-            updated_at = now()
-        where id = $1
-          and deleted_at is null
-          and is_app_account = false
-      `,
-      [user.id],
-    );
-
     // MFA обязательна для привилегированных ролей (Администратор/Управляющий/
     // Администратор системы) независимо от пользовательского флага (KVA-218):
     // компрометация одного пароля не должна давать полный доступ.
@@ -348,6 +357,7 @@ export class AuthService {
           where app.users.id = challenge.user_id
             and lower(app.users.email) = lower($3)
             and app.users.deleted_at is null
+            and app.users.is_app_account = true
           returning app.users.id,
                     app.users.email,
                     app.users.password_hash,
@@ -476,11 +486,12 @@ export class AuthService {
         )
         update app.users
         set password_hash = $2,
-            is_app_account = true,
+            password_changed_at = now(),
             updated_at = now()
         from reset_token
         where app.users.id = reset_token.user_id
           and app.users.deleted_at is null
+          and app.users.is_app_account = true
         returning app.users.id,
                   app.users.email,
                   app.users.password_hash,
@@ -523,10 +534,11 @@ export class AuthService {
       `
         update app.users
         set password_hash = $2,
-            is_app_account = true,
+            password_changed_at = now(),
             updated_at = now()
         where id = $1
           and deleted_at is null
+          and is_app_account = true
         returning id, email, password_hash, role, email_verified_at
       `,
       [actor.userId, passwordHash],
@@ -550,6 +562,68 @@ export class AuthService {
     return { user: this.toResponse(user) };
   }
 
+  async changeEmail(
+    actor: ActorContext,
+    emailInput: string,
+    currentPassword: string,
+  ): Promise<{ user: AuthUserResponse }> {
+    const email = this.normalizeEmail(emailInput);
+    const current = await this.database.query<UserRecord>(
+      `select id, email, password_hash, role, email_verified_at
+       from app.users
+       where id = $1 and deleted_at is null and is_app_account = true
+       limit 1`,
+      [actor.userId],
+    );
+    const user = current.rows[0];
+    const passwordValid =
+      user?.password_hash &&
+      (await this.passwordService.verify(currentPassword, user.password_hash));
+    if (!user || !passwordValid) {
+      throw new UnauthorizedException("Текущий пароль указан неверно.");
+    }
+    if (user.email.toLowerCase() === email) {
+      throw new BadRequestException("Новая почта совпадает с текущей.");
+    }
+
+    let changed;
+    try {
+      changed = await this.database.query<UserRecord>(
+        `update app.users
+         set email = $2,
+             email_verified_at = now(),
+             email_changed_at = now(),
+             updated_at = now()
+         where id = $1 and deleted_at is null and is_app_account = true
+         returning id, email, password_hash, role, email_verified_at`,
+        [actor.userId, email],
+      );
+    } catch (error) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        (error as { code?: string }).code === "23505"
+      ) {
+        throw new ConflictException(
+          "Пользователь с такой почтой уже существует.",
+        );
+      }
+      throw error;
+    }
+    const updated = changed.rows[0];
+    if (!updated) throw new UnauthorizedException("Пользователь не найден.");
+    await this.sessions.revokeAll(actor);
+    await this.audit.record({
+      actor,
+      action: "auth.email_changed",
+      entityType: "user",
+      entityId: actor.userId,
+      metadata: { emailHash: this.emailHash(email) },
+    });
+    return { user: this.toResponse(updated) };
+  }
+
   async listIdentities(
     actor: ActorContext,
   ): Promise<{ items: Array<{ provider: string }> }> {
@@ -562,6 +636,7 @@ export class AuthService {
           where id = $1
             and password_hash is not null
             and deleted_at is null
+            and is_app_account = true
           union
           select ui.provider
           from app.user_identities ui
@@ -590,10 +665,10 @@ export class AuthService {
         )
         update app.users
         set email_verified_at = coalesce(email_verified_at, now()),
-            is_app_account = true,
             updated_at = now()
         from token_row
         where app.users.id = token_row.user_id
+          and app.users.is_app_account = true
         returning app.users.id,
                   app.users.email,
                   app.users.password_hash,
@@ -711,6 +786,7 @@ export class AuthService {
         from app.users
         where lower(email) = lower($1)
           and deleted_at is null
+          and is_app_account = true
         limit 1
       `,
       [email],

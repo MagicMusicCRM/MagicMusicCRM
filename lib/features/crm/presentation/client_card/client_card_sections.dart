@@ -68,6 +68,8 @@ Widget _familySection(
   required Map<String, dynamic>? family,
   required bool busy,
   required void Function(FamilyMember member) onRemove,
+  required void Function(FamilyMember member) onSetPrimaryPayer,
+  required void Function(BuildContext context, FamilyMember member) onOpen,
 }) {
   if (loading) {
     return const Padding(
@@ -125,21 +127,47 @@ Widget _familySection(
                 size: 18,
                 color: AppColor.gold,
               ),
-              title: Text(
-                m.name.trim().isNotEmpty ? m.name : 'Без имени',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+              title:
+                  (m.entityType == 'lead' || m.entityType == 'student') &&
+                      (m.entityId?.isNotEmpty ?? false)
+                  ? Builder(
+                      builder: (context) => EntityLinkText(
+                        text: m.name.trim().isNotEmpty ? m.name : 'Без имени',
+                        onPressed: () => onOpen(context, m),
+                      ),
+                    )
+                  : Text(
+                      m.name.trim().isNotEmpty ? m.name : 'Без имени',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
               subtitle: subtitle.isEmpty ? null : Text(subtitle),
-              trailing: IconButton(
-                tooltip: 'Удалить участника',
-                visualDensity: VisualDensity.compact,
-                onPressed: busy ? null : () => onRemove(m),
-                icon: Icon(
-                  Icons.delete_outline_rounded,
-                  size: 18,
-                  color: AppTheme.danger,
-                ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!isPayer)
+                    IconButton(
+                      key: Key('family-primary-payer-${m.id}'),
+                      tooltip: 'Назначить основным плательщиком',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: busy ? null : () => onSetPrimaryPayer(m),
+                      icon: const Icon(
+                        Icons.account_balance_wallet_outlined,
+                        size: 18,
+                        color: AppColor.gold,
+                      ),
+                    ),
+                  IconButton(
+                    tooltip: 'Удалить участника',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: busy ? null : () => onRemove(m),
+                    icon: Icon(
+                      Icons.delete_outline_rounded,
+                      size: 18,
+                      color: AppTheme.danger,
+                    ),
+                  ),
+                ],
               ),
             ),
           );

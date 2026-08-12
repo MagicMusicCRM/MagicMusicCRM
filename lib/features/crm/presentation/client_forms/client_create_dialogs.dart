@@ -115,11 +115,12 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
         }
         _loading = false;
       });
-    } catch (error) {
+    } catch (_) {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _loadError = 'Не удалось загрузить справочники: $error';
+        _loadError =
+            'Не удалось загрузить справочники. Проверьте подключение и повторите попытку.';
       });
     }
   }
@@ -181,7 +182,7 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
         } else {
           _submitError = error is MagicApiException && error.statusCode == 403
               ? 'Недостаточно прав для создания заявки.'
-              : 'Не удалось создать заявку: $error';
+              : 'Не удалось создать заявку. Проверьте данные и повторите попытку.';
         }
       });
       if (fieldError?.$1 == 'sourceId') {
@@ -210,11 +211,12 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
         }
         _saving = false;
       });
-    } catch (error) {
+    } catch (_) {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _submitError = 'Не удалось загрузить воронку филиала: $error';
+        _submitError =
+            'Не удалось загрузить воронку филиала. Проверьте подключение и повторите попытку.';
       });
     }
   }
@@ -416,7 +418,7 @@ class _StudentCreateDialogV4State extends ConsumerState<StudentCreateDialogV4> {
     super.dispose();
   }
 
-  Future<void> _loadMetadata() async {
+  Future<void> _loadMetadata({bool inactiveSourceRefresh = false}) async {
     setState(() {
       _loading = true;
       _loadError = null;
@@ -446,22 +448,34 @@ class _StudentCreateDialogV4State extends ConsumerState<StudentCreateDialogV4> {
           .getClientPipeline(clientType: 'student', branchId: selectedBranch);
       if (!mounted) return;
       final statuses = funnel.activeStages;
+      final sources = results[2];
       setState(() {
         _branches = branches;
         _fields = _createPlacementFields(results[1]);
-        _sources = results[2];
+        _sources = sources;
         _branchId = selectedBranch;
         _statuses = statuses;
         if (!statuses.any((stage) => stage.key == _status)) {
           _status = statuses.firstOrNull?.key;
         }
+        if (_sourceId != null &&
+            !sources.any((source) => source['id']?.toString() == _sourceId)) {
+          _sourceId = null;
+          if (inactiveSourceRefresh) {
+            _fieldErrors = {
+              ..._fieldErrors,
+              'sourceId': 'Источник был архивирован. Выберите другой.',
+            };
+          }
+        }
         _loading = false;
       });
-    } catch (error) {
+    } catch (_) {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _loadError = 'Не удалось загрузить справочники: $error';
+        _loadError =
+            'Не удалось загрузить справочники. Проверьте подключение и повторите попытку.';
       });
     }
   }
@@ -523,9 +537,12 @@ class _StudentCreateDialogV4State extends ConsumerState<StudentCreateDialogV4> {
         } else {
           _submitError = error is MagicApiException && error.statusCode == 403
               ? 'Недостаточно прав для создания ученика.'
-              : 'Не удалось создать ученика: $error';
+              : 'Не удалось создать ученика. Проверьте данные и повторите попытку.';
         }
       });
+      if (fieldError?.$1 == 'sourceId') {
+        await _loadMetadata(inactiveSourceRefresh: true);
+      }
     }
   }
 
@@ -549,11 +566,12 @@ class _StudentCreateDialogV4State extends ConsumerState<StudentCreateDialogV4> {
         }
         _saving = false;
       });
-    } catch (error) {
+    } catch (_) {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _submitError = 'Не удалось загрузить воронку филиала: $error';
+        _submitError =
+            'Не удалось загрузить воронку филиала. Проверьте подключение и повторите попытку.';
       });
     }
   }

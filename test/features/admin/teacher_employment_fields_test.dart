@@ -64,6 +64,44 @@ void main() {
       expect(value.customDataPatch['category'], 'Дети');
     },
   );
+
+  testWidgets('disciplines categories and levels are optional metadata', (
+    tester,
+  ) async {
+    final api = _TeacherFieldsApi();
+    final key = GlobalKey<TeacherEmploymentFieldsState>();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          magicCrmServiceProvider.overrideWithValue(MagicCrmService(api)),
+          magicSettingsServiceProvider.overrideWithValue(
+            MagicSettingsService(api),
+          ),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: TeacherEmploymentFields(key: key, requireRate: true),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Центральный'));
+    await tester.tap(find.text('Выберите ставку'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('750 ₽').last);
+    await tester.pumpAndSettle();
+
+    final value = key.currentState!.validateAndRead();
+
+    expect(value, isNotNull);
+    expect(value!.branchIds, ['branch-a']);
+    expect(value.disciplineIds, isEmpty);
+    expect(value.levels, isEmpty);
+    expect(value.categories, isEmpty);
+  });
 }
 
 class _TeacherFieldsApi extends MagicApiClient {
@@ -82,13 +120,13 @@ class _TeacherFieldsApi extends MagicApiClient {
           {'id': 'branch-a', 'name': 'Центральный'},
         ],
       },
-      '/crm/branches/branch-a/disciplines' => {
+      '/crm/disciplines' => {
         'items': [
           {
-            'id': 'assignment-a',
-            'disciplineId': 'discipline-a',
+            'id': 'discipline-a',
             'name': 'Вокал',
-            'sortOrder': 0,
+            'lifecycleState': 'active',
+            'version': 1,
           },
         ],
       },

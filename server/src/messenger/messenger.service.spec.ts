@@ -306,6 +306,39 @@ describe("MessengerService", () => {
     expect(database.transaction).not.toHaveBeenCalled();
   });
 
+  it("does not let group management remove the acting user or submit contradictory changes", async () => {
+    const groupChat = {
+      id: "chat-a",
+      type: "group",
+      memberUserId: "manager-a",
+      memberRole: "admin",
+    };
+    const makeService = () =>
+      createService({
+        policy: { getChatAccess: jest.fn().mockResolvedValue(groupChat) },
+      });
+
+    const selfRemoval = makeService();
+    await expect(
+      selfRemoval.service.updateGroupMembers(
+        { userId: "manager-a", role: "manager" },
+        "chat-a",
+        { removeUserIds: ["manager-a"] },
+      ),
+    ).rejects.toThrow(/Выйти из группы/i);
+    expect(selfRemoval.database.transaction).not.toHaveBeenCalled();
+
+    const contradictory = makeService();
+    await expect(
+      contradictory.service.updateGroupMembers(
+        { userId: "manager-a", role: "manager" },
+        "chat-a",
+        { addUserIds: ["user-b"], removeUserIds: ["user-b"] },
+      ),
+    ).rejects.toThrow(/одновременно добавить и удалить/i);
+    expect(contradictory.database.transaction).not.toHaveBeenCalled();
+  });
+
   it("lists active chat members for a readable chat", async () => {
     const { service, database, policy } = createService({
       database: {
@@ -375,8 +408,161 @@ describe("MessengerService", () => {
 
     expect(database.query).toHaveBeenCalledWith(
       expect.stringContaining("from app.file_objects"),
-      ["file-other", "chat-a"],
+      ["file-other", "chat-a", "user-a"],
     );
+    expect(database.transaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects a voice message when the uploaded file is not a chat voice recording", async () => {
+    const { service, database } = createService({
+      database: {
+        query: jest.fn().mockResolvedValueOnce({
+          rows: [
+            {
+              id: "file-a",
+              purpose: "chat_attachment",
+              mime_type: "audio/webm",
+            },
+          ],
+        }),
+        transaction: jest.fn(),
+      },
+    });
+
+    await expect(
+      service.sendMessage(actor, "chat-a", {
+        messageType: "voice",
+        attachmentFileId: "file-a",
+        voiceDurationMs: 1_500,
+      }),
+    ).rejects.toThrow("Для голосового сообщения требуется аудиозапись.");
+    expect(database.transaction).not.toHaveBeenCalled();
+  });
+
+  it("requires and persists the duration of a valid voice message", async () => {
+    const createdAt = new Date("2026-08-12T10:00:00Z");
+    const query = jest
+      .fn()
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "voice-file-a",
+            purpose: "chat_voice",
+            mime_type: "audio/webm",
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "message-voice-a",
+            chat_id: "chat-a",
+            sender_id: "user-a",
+            content: null,
+            message_type: "voice",
+            attachment_file_id: "voice-file-a",
+            voice_duration_ms: 1_500,
+            reply_to_id: null,
+            forwarded_from_id: null,
+            pinned_by: null,
+            pinned_at: null,
+            created_at: createdAt,
+            updated_at: createdAt,
+            deleted_at: null,
+            sender_email: "client@example.test",
+            sender_first_name: "Иван",
+            sender_last_name: "Иванов",
+            sender_role: "client",
+            sender_avatar_file_id: null,
+            attachment_original_name: "voice.webm",
+            attachment_mime_type: "audio/webm",
+            attachment_size_bytes: 512,
+            is_read: false,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] });
+    const { service } = createService({ database: { query } });
+
+    const message = await service.sendMessage(actor, "chat-a", {
+      messageType: "voice",
+      attachmentFileId: "voice-file-a",
+      voiceDurationMs: 1_500,
+    });
+
+    expect(query.mock.calls[0][1]).toEqual([
+      "voice-file-a",
+      "chat-a",
+      "user-a",
+    ]);
+    expect(query.mock.calls[1][1]).toEqual([
+      "chat-a",
+      "user-a",
+      null,
+      "voice",
+      "voice-file-a",
+      1_500,
+      null,
+      null,
+    ]);
+    expect(message).toMatchObject({
+      id: "message-voice-a",
+      messageType: "voice",
+      attachmentFileId: "voice-file-a",
+      voiceDurationMs: 1_500,
+    });
+  });
+
+  it("rejects a reply to a message outside the current chat", async () => {
+    const { service, database } = createService({
+      database: {
+        query: jest.fn().mockResolvedValueOnce({ rows: [] }),
+        transaction: jest.fn(),
+      },
+    });
+
+    await expect(
+      service.sendMessage(actor, "chat-a", {
+        content: "Ответ",
+        replyToId: "message-in-another-chat",
+      }),
+    ).rejects.toThrow("Исходное сообщение для ответа не найдено.");
+    expect(database.query).toHaveBeenCalledWith(
+      expect.stringContaining("where id = $1 and chat_id = $2"),
+      ["message-in-another-chat", "chat-a"],
+    );
+    expect(database.transaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects forwarding a message from a chat the actor cannot read", async () => {
+    const getChatAccess = jest.fn(async (_actor, chatId: string) =>
+      chatId === "chat-a"
+        ? {
+            id: "chat-a",
+            type: "direct",
+            memberUserId: "user-a",
+            memberRole: "member",
+          }
+        : undefined,
+    );
+    const { service, database } = createService({
+      database: {
+        query: jest.fn().mockResolvedValueOnce({
+          rows: [{ chat_id: "private-chat" }],
+        }),
+        transaction: jest.fn(),
+      },
+      policy: { getChatAccess },
+    });
+
+    await expect(
+      service.sendMessage(actor, "chat-a", {
+        content: "Переслано",
+        forwardedFromId: "private-message",
+      }),
+    ).rejects.toThrow("Чат не найден.");
+    expect(getChatAccess).toHaveBeenNthCalledWith(2, actor, "private-chat");
     expect(database.transaction).not.toHaveBeenCalled();
   });
 
@@ -906,7 +1092,7 @@ describe("MessengerService", () => {
     expect(sql).toContain("c.updated_at = $7::timestamptz and c.id < $8::uuid");
     expect(sql).toContain("c.type = 'administration'");
     expect(sql).toContain("inbox_folder.entity_folder = $9::text");
-    expect(sql).toContain("SS.US\"Z\"");
+    expect(sql).toContain('SS.US"Z"');
     expect(sql).toContain("as cursor_updated_at");
     expect(sql).toContain("s2.deleted_at is null");
     expect(sql).toContain("ucs2.deleted_at is null");
@@ -1859,7 +2045,11 @@ describe("MessengerService", () => {
     it("emits chat.created to added members and chat.removed to removed members", async () => {
       type MockClient = { query: jest.Mock };
       const client = {
-        query: jest.fn().mockResolvedValue({ rows: [] }),
+        query: jest.fn().mockImplementation(async (sql: string) => ({
+          rows: sql.includes("set left_at = now()")
+            ? [{ user_id: "user-old" }]
+            : [],
+        })),
       };
 
       // getChat query result for the return value + fan-out summary

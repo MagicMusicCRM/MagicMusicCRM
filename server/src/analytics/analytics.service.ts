@@ -149,7 +149,9 @@ export class AnalyticsService {
       kind: string;
       leads: string;
     }>(
-      `select lr.id as reason_id, lr.name, lr.kind,
+      `select lr.id as reason_id,
+              coalesce(lsh.reason_name_snapshot, lr.name) as name,
+              coalesce(lsh.reason_kind_snapshot, lr.kind) as kind,
               count(distinct lsh.lead_id) as leads
          from app.lead_status_history lsh
          join app.lead_statuses ls on ls.id = lsh.new_status_id and ls.is_terminal = true
@@ -160,7 +162,9 @@ export class AnalyticsService {
           and lsh.changed_at >= $1::timestamptz
           and lsh.changed_at < $2::timestamptz
           and ($3::uuid is null or lsh.branch_id = $3::uuid)
-        group by lr.id, lr.name, lr.kind
+        group by lr.id,
+          coalesce(lsh.reason_name_snapshot, lr.name),
+          coalesce(lsh.reason_kind_snapshot, lr.kind)
         order by leads desc`,
       [from, to, query.branchId ?? null],
     );

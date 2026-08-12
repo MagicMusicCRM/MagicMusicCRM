@@ -16,11 +16,15 @@ class AuthMethodsScreen extends ConsumerStatefulWidget {
 
 class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _emailFormKey = GlobalKey<FormState>();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _newEmailController = TextEditingController();
+  final _currentPasswordController = TextEditingController();
 
   late Future<_AuthMethodsData> _authMethodsFuture;
   bool _isSavingPassword = false;
+  bool _isChangingEmail = false;
   bool _isSavingMfa = false;
   bool _obscurePassword = true;
 
@@ -34,6 +38,8 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
   void dispose() {
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _newEmailController.dispose();
+    _currentPasswordController.dispose();
     super.dispose();
   }
 
@@ -78,6 +84,25 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
       if (mounted) _showError('Не удалось сохранить пароль.');
     } finally {
       if (mounted) setState(() => _isSavingPassword = false);
+    }
+  }
+
+  Future<void> _changeEmail() async {
+    if (!_emailFormKey.currentState!.validate()) return;
+    setState(() => _isChangingEmail = true);
+    try {
+      await ref
+          .read(magicAuthServiceProvider)
+          .changeEmail(
+            email: _newEmailController.text,
+            currentPassword: _currentPasswordController.text,
+          );
+    } on MagicApiException catch (error) {
+      if (mounted) _showError(_mapAuthError(error.message));
+    } catch (_) {
+      if (mounted) _showError('Не удалось изменить email.');
+    } finally {
+      if (mounted) setState(() => _isChangingEmail = false);
     }
   }
 
@@ -246,6 +271,68 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
                 const SizedBox(height: AppSpace.xxl),
                 _Section(
                   child: Form(
+                    key: _emailFormKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'Изменить email для входа',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: AppSpace.sm),
+                        Text(
+                          'После изменения все устройства выйдут из аккаунта. Войдите заново с новой почтой.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: AppSpace.lg),
+                        TextFormField(
+                          controller: _newEmailController,
+                          keyboardType: TextInputType.emailAddress,
+                          decoration: _v7FieldDecoration(
+                            context,
+                            labelText: 'Новый email',
+                            prefixIcon: const Icon(Icons.alternate_email),
+                          ),
+                          validator: (value) {
+                            final email = value?.trim() ?? '';
+                            if (email.isEmpty) return 'Укажите новый email';
+                            if (!email.contains('@')) {
+                              return 'Некорректный email';
+                            }
+                            if (email.toLowerCase() ==
+                                userEmail.toLowerCase()) {
+                              return 'Новая почта совпадает с текущей';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: AppSpace.md),
+                        TextFormField(
+                          controller: _currentPasswordController,
+                          obscureText: true,
+                          decoration: _v7FieldDecoration(
+                            context,
+                            labelText: 'Текущий пароль',
+                            prefixIcon: const Icon(Icons.lock_outline),
+                          ),
+                          validator: (value) => (value?.length ?? 0) < 10
+                              ? 'Введите текущий пароль'
+                              : null,
+                        ),
+                        const SizedBox(height: AppSpace.lg),
+                        _GoldButton(
+                          loading: _isChangingEmail,
+                          onPressed: _isChangingEmail ? null : _changeEmail,
+                          icon: Icons.mark_email_read_outlined,
+                          label: 'Изменить email и выйти',
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpace.xxl),
+                _Section(
+                  child: Form(
                     key: _formKey,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -342,10 +429,7 @@ class _Section extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.card),
         border: Border.all(color: Theme.of(context).dividerColor),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpace.lg),
-        child: child,
-      ),
+      child: Padding(padding: const EdgeInsets.all(AppSpace.lg), child: child),
     );
   }
 }

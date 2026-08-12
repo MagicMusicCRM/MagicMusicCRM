@@ -70,17 +70,6 @@ class MagicProfileAdminService {
     }).toList();
   }
 
-  Future<Map<String, dynamic>> updateRole({
-    required String profileId,
-    required String role,
-  }) async {
-    final response = await _api.patch<Map<String, dynamic>>(
-      '/admin/profiles/$profileId/role',
-      data: {'role': role},
-    );
-    return _legacyProfile(response);
-  }
-
   // ── Account deletion requests (P5-7 orphan) ──────────────────────────────
   Future<List<Map<String, dynamic>>> listDeletionRequests({
     String? status,

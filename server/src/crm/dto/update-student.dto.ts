@@ -1,4 +1,6 @@
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
   IsEmail,
   IsObject,
@@ -6,7 +8,10 @@ import {
   IsString,
   IsUUID,
   MaxLength,
+  ValidateNested,
 } from "class-validator";
+import { Type } from "class-transformer";
+import { ClientCustomFieldInputDto } from "./client-config.dto";
 
 export class UpdateStudentDto {
   @IsOptional()
@@ -41,6 +46,13 @@ export class UpdateStudentDto {
   @IsOptional()
   @IsObject()
   customDataPatch?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => ClientCustomFieldInputDto)
+  customFields?: ClientCustomFieldInputDto[];
 
   // Students retain their legacy custom_data ownership surface. Clearing must
   // be explicit because customDataPatch is a merge-patch for compatibility.

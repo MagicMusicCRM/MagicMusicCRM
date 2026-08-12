@@ -33,11 +33,6 @@ export class UpdateStaffDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(80)
-  role?: string;
-
-  @IsOptional()
-  @IsString()
   @MaxLength(160)
   position?: string;
 

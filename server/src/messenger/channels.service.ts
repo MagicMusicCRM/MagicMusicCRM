@@ -5,10 +5,7 @@ import {
 } from "@nestjs/common";
 import { PoolClient } from "pg";
 import { AuditService } from "../audit/audit.service";
-import {
-  ActorContext,
-  isManagerOrAdminRole,
-} from "../common/security/actor-context";
+import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 import { ChannelPermissionDto, UpsertChannelDto } from "./dto/channel.dto";
 import { CreateChannelPostDto } from "./dto/create-channel-post.dto";
@@ -75,9 +72,9 @@ export class ChannelsService {
   }
 
   async createChannel(actor: ActorContext, dto: UpsertChannelDto) {
-    if (!isManagerOrAdminRole(actor.role)) {
-      throw new NotFoundException("Канал не найден.");
-    }
+    this.policy.assertCanManageChannel(actor);
+    const title = dto.title.trim();
+    if (!title) throw new BadRequestException("Укажите название канала.");
     const channel = await this.database.transaction(async (client) => {
       const inserted = await client.query<ChannelRow>(
         `
@@ -85,7 +82,7 @@ export class ChannelsService {
           values ($1, $2, $3)
           returning id, title, description, created_by, created_at, updated_at
         `,
-        [dto.title.trim(), dto.description?.trim() || null, actor.userId],
+        [title, dto.description?.trim() || null, actor.userId],
       );
       const row = inserted.rows[0];
       await this.replaceChannelPermissions(
@@ -101,7 +98,12 @@ export class ChannelsService {
       entityType: "channel",
       entityId: channel.id,
     });
-    return this.toChannelDto(channel);
+    const channelDto = this.toChannelDto(channel);
+    const recipients = await this.listChannelRecipientUserIds(channel.id);
+    for (const userId of recipients) {
+      this.realtime.publishUserEvent(userId, "channel.created", channelDto);
+    }
+    return channelDto;
   }
 
   async updateChannel(
@@ -111,7 +113,12 @@ export class ChannelsService {
   ) {
     const access = await this.policy.getChannelAccess(actor, channelId);
     if (!access) throw new NotFoundException("Канал не найден.");
-    this.policy.assertCanWriteChannel(actor, access);
+    this.policy.assertCanManageChannel(actor);
+    const title = dto.title.trim();
+    if (!title) throw new BadRequestException("Укажите название канала.");
+    const previousRecipients = new Set(
+      await this.listChannelRecipientUserIds(channelId),
+    );
 
     const channel = await this.database.transaction(async (client) => {
       const result = await client.query<ChannelRow>(
@@ -121,14 +128,18 @@ export class ChannelsService {
           where id = $1 and deleted_at is null
           returning id, title, description, created_by, created_at, updated_at
         `,
-        [channelId, dto.title.trim(), dto.description?.trim() || null],
+        [channelId, title, dto.description?.trim() || null],
       );
-      await this.replaceChannelPermissions(
-        client,
-        channelId,
-        dto.permissions ?? [],
-      );
-      return result.rows[0];
+      const row = result.rows[0];
+      if (!row) throw new NotFoundException("Канал не найден.");
+      if (dto.permissions != null) {
+        await this.replaceChannelPermissions(
+          client,
+          channelId,
+          dto.permissions,
+        );
+      }
+      return row;
     });
 
     await this.audit.record({
@@ -137,7 +148,25 @@ export class ChannelsService {
       entityType: "channel",
       entityId: channelId,
     });
-    return this.toChannelDto(channel);
+    const channelDto = this.toChannelDto(channel);
+    const nextRecipients = new Set(
+      await this.listChannelRecipientUserIds(channelId),
+    );
+    for (const userId of nextRecipients) {
+      this.realtime.publishUserEvent(
+        userId,
+        previousRecipients.has(userId) ? "channel.updated" : "channel.created",
+        channelDto,
+      );
+    }
+    for (const userId of previousRecipients) {
+      if (!nextRecipients.has(userId)) {
+        this.realtime.publishUserEvent(userId, "channel.removed", {
+          id: channelId,
+        });
+      }
+    }
+    return channelDto;
   }
 
   async getChannelAccess(actor: ActorContext, channelId: string) {
@@ -154,7 +183,7 @@ export class ChannelsService {
   async listChannelPermissions(actor: ActorContext, channelId: string) {
     const access = await this.policy.getChannelAccess(actor, channelId);
     if (!access) throw new NotFoundException("Канал не найден.");
-    this.policy.assertCanWriteChannel(actor, access);
+    this.policy.assertCanManageChannel(actor);
 
     const result = await this.database.query<ChannelPermissionRow>(
       `
@@ -246,17 +275,58 @@ export class ChannelsService {
     channelId: string,
     permissions: ChannelPermissionDto[],
   ) {
+    const seenTargets = new Set<string>();
+    const userIds: string[] = [];
+    for (const permission of permissions) {
+      const hasUser = Boolean(permission.userId);
+      const hasRole = Boolean(permission.role);
+      if (hasUser === hasRole) {
+        throw new BadRequestException(
+          "Для правила доступа укажите ровно одного пользователя или одну роль.",
+        );
+      }
+      const canRead = permission.canRead ?? true;
+      const canWrite = permission.canWrite ?? false;
+      if (canWrite && !canRead) {
+        throw new BadRequestException(
+          "Право публикации требует права чтения канала.",
+        );
+      }
+      const target = hasUser
+        ? `user:${permission.userId}`
+        : `role:${permission.role}`;
+      if (seenTargets.has(target)) {
+        throw new BadRequestException(
+          "Правила доступа к каналу не должны повторяться.",
+        );
+      }
+      seenTargets.add(target);
+      if (permission.userId) userIds.push(permission.userId);
+    }
+
+    if (userIds.length > 0) {
+      const activeUsers = await client.query<{ id: string }>(
+        `
+          select id
+          from app.users
+          where id = any($1::uuid[]) and deleted_at is null
+        `,
+        [userIds],
+      );
+      const activeIds = new Set(activeUsers.rows.map((row) => row.id));
+      if (userIds.some((userId) => !activeIds.has(userId))) {
+        throw new BadRequestException(
+          "Один или несколько пользователей канала не найдены или отключены.",
+        );
+      }
+    }
+
     await client.query(
       "delete from app.channel_permissions where channel_id = $1",
       [channelId],
     );
 
     for (const permission of permissions) {
-      if (!permission.userId && !permission.role) {
-        throw new BadRequestException(
-          "Укажите пользователя или роль для доступа к каналу.",
-        );
-      }
       await client.query(
         `
           insert into app.channel_permissions (
@@ -273,6 +343,26 @@ export class ChannelsService {
         ],
       );
     }
+  }
+
+  private async listChannelRecipientUserIds(channelId: string) {
+    const result = await this.database.query<{ id: string }>(
+      `
+        select distinct u.id
+        from app.users u
+        left join app.channel_permissions cp
+          on cp.channel_id = $1
+          and cp.can_read = true
+          and (cp.user_id = u.id or cp.role = u.role)
+        where u.deleted_at is null
+          and (
+            u.role in ('manager', 'director', 'admin', 'system_admin')
+            or cp.id is not null
+          )
+      `,
+      [channelId],
+    );
+    return result.rows.map((row) => row.id);
   }
 
   private toChannelDto(row: ChannelRow) {

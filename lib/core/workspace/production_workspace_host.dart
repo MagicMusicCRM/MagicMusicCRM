@@ -191,10 +191,10 @@ class _ProductionWorkspaceHostState
     }
   }
 
-  void _syncActiveSection(WorkspaceTabState tab) {
+  void _syncActiveSection(WorkspaceTabState tab, {required bool isDesktop}) {
     final visible = crmVisibleTabsForCapabilities(
       widget.snapshot,
-      isDesktop: true,
+      isDesktop: isDesktop,
     );
     final requested =
         crmTabForEntityLink(tab.currentRoute.link, widget.snapshot.role) ??
@@ -222,6 +222,45 @@ class _ProductionWorkspaceHostState
             .catchError((_) {}),
       );
     });
+  }
+
+  void _selectSection(int tab) {
+    final link = EntityRouteRegistry.sectionRootLink(
+      crmSectionForTab(widget.snapshot.role, tab),
+    );
+    _controller.replaceCurrentLink(_controller.state.activeTabId, link);
+  }
+
+  Widget _mobileContent(BuildContext context, WorkspaceTabState tab) {
+    final visible = crmVisibleTabsForCapabilities(
+      widget.snapshot,
+      isDesktop: false,
+    );
+    final requested =
+        crmTabForEntityLink(tab.currentRoute.link, widget.snapshot.role) ??
+        visible.first;
+    final selected = crmResolveVisibleTab(
+      visibleTabs: visible,
+      requestedTab: requested,
+      currentTab: visible.first,
+    );
+    final unseen = ref.watch(sectionUnseenProvider).asData?.value ?? const {};
+    return Scaffold(
+      body: widget.tabBuilder(context, tab),
+      bottomNavigationBar: V7NavShell(
+        isDesktop: false,
+        destinations: [
+          for (final tab in visible)
+            crmV7DestinationForTab(
+              widget.snapshot.role,
+              tab,
+              badgeCount: unseen[sectionKeyForTab(tab)] ?? 0,
+            ),
+        ],
+        selectedIndex: visible.indexOf(selected),
+        onSelected: (index) => _selectSection(visible[index]),
+      ),
+    );
   }
 
   Widget _desktopContent(BuildContext context, WorkspaceTabState tab) {
@@ -253,15 +292,7 @@ class _ProductionWorkspaceHostState
                 ),
             ],
             selectedIndex: visible.indexOf(selected),
-            onSelected: (index) {
-              final link = EntityRouteRegistry.sectionRootLink(
-                crmSectionForTab(widget.snapshot.role, visible[index]),
-              );
-              _controller.replaceCurrentLink(
-                _controller.state.activeTabId,
-                link,
-              );
-            },
+            onSelected: (index) => _selectSection(visible[index]),
           ),
         ),
         Expanded(child: widget.tabBuilder(context, tab)),
@@ -312,8 +343,8 @@ class _ProductionWorkspaceHostState
                   return const SizedBox.shrink();
                 }
                 final tab = _controller.state.activeTab;
-                _syncActiveSection(tab);
-                return widget.tabBuilder(context, tab);
+                _syncActiveSection(tab, isDesktop: false);
+                return _mobileContent(context, tab);
               },
             ),
           );
@@ -324,7 +355,7 @@ class _ProductionWorkspaceHostState
           child: DesktopWorkspaceShell(
             controller: _controller,
             tabBuilder: (context, tab) {
-              _syncActiveSection(tab);
+              _syncActiveSection(tab, isDesktop: true);
               final location = EntityRouteRegistry()
                   .resolve(tab.currentRoute.link, widget.snapshot)
                   .canonicalLocation;

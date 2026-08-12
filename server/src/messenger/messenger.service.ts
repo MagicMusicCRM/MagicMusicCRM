@@ -36,6 +36,12 @@ import { MessengerFanoutService } from "./messenger-fanout.service";
 import { MessengerPolicy } from "./messenger.policy";
 import { RealtimeGateway } from "./realtime.gateway";
 
+interface ChatAttachmentRow {
+  id: string;
+  purpose: "chat_attachment" | "chat_voice";
+  mime_type: string;
+}
+
 @Injectable()
 export class MessengerService implements OnModuleInit {
   private readonly logger = new Logger(MessengerService.name);
@@ -343,7 +349,9 @@ export class MessengerService implements OnModuleInit {
         ) ||
         !this.isValidChatCursorCalendarDate(updatedAt) ||
         typeof id !== "string" ||
-        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          id,
+        )
       ) {
         throw new Error();
       }
@@ -362,10 +370,9 @@ export class MessengerService implements OnModuleInit {
     if (!updatedAt) {
       throw new Error("Missing exact chat cursor timestamp");
     }
-    return Buffer.from(
-      JSON.stringify([updatedAt, row.id]),
-      "utf8",
-    ).toString("base64url");
+    return Buffer.from(JSON.stringify([updatedAt, row.id]), "utf8").toString(
+      "base64url",
+    );
   }
 
   private isValidChatCursorCalendarDate(value: string): boolean {
@@ -404,7 +411,8 @@ export class MessengerService implements OnModuleInit {
     const result = await this.database.query<MessageRow>(
       `
         select m.id, m.chat_id, m.sender_id, m.content, m.message_type,
-          m.attachment_file_id, m.reply_to_id, m.forwarded_from_id,
+          m.attachment_file_id, m.voice_duration_ms, m.reply_to_id,
+          m.forwarded_from_id,
           m.pinned_by, m.pinned_at, m.created_at, m.updated_at,
           m.deleted_at, u.email as sender_email, p.first_name as sender_first_name,
           p.last_name as sender_last_name,
@@ -479,7 +487,8 @@ export class MessengerService implements OnModuleInit {
 
     const result = await this.database.query<ChatMemberRow>(
       `
-        select p.id as profile_id, cm.user_id, u.email, cm.role, p.first_name, p.last_name,
+        select p.id as profile_id, cm.user_id, u.email, cm.role, u.role as user_role,
+          p.first_name, p.last_name,
           p.phone, p.avatar_file_id, cm.joined_at
         from app.chat_members cm
         join app.users u on u.id = cm.user_id and u.deleted_at is null
@@ -509,9 +518,23 @@ export class MessengerService implements OnModuleInit {
     if (!content && !dto.attachmentFileId) {
       throw new BadRequestException("Сообщение не может быть пустым.");
     }
+    let attachment: ChatAttachmentRow | null = null;
     if (dto.attachmentFileId) {
-      await this.assertValidChatAttachment(chatId, dto.attachmentFileId);
+      attachment = await this.assertValidChatAttachment(
+        actor.userId,
+        chatId,
+        dto.attachmentFileId,
+      );
     }
+    const messageType =
+      dto.messageType ?? (dto.attachmentFileId ? "file" : "text");
+    this.assertMessagePayload(messageType, attachment, dto.voiceDurationMs);
+    await this.assertValidMessageReferences(
+      actor,
+      chatId,
+      dto.replyToId,
+      dto.forwardedFromId,
+    );
     const shouldResurface =
       chat.type === "administration" && actor.role === "client";
 
@@ -520,11 +543,12 @@ export class MessengerService implements OnModuleInit {
         `
           insert into app.messages (
             chat_id, sender_id, content, message_type, attachment_file_id,
-            reply_to_id, forwarded_from_id
+            voice_duration_ms, reply_to_id, forwarded_from_id
           )
-          values ($1, $2, $3, coalesce($4, 'text'), $5, $6, $7)
+          values ($1, $2, $3, $4, $5, $6, $7, $8)
           returning id, chat_id, sender_id, content, message_type,
-            attachment_file_id, reply_to_id, forwarded_from_id,
+            attachment_file_id, voice_duration_ms, reply_to_id,
+            forwarded_from_id,
             pinned_by, pinned_at, created_at, updated_at, deleted_at,
             (select email from app.users where id = app.messages.sender_id) as sender_email,
             (
@@ -558,8 +582,9 @@ export class MessengerService implements OnModuleInit {
           chatId,
           actor.userId,
           content,
-          dto.messageType ?? null,
+          messageType,
           dto.attachmentFileId ?? null,
+          dto.voiceDurationMs ?? null,
           dto.replyToId ?? null,
           dto.forwardedFromId ?? null,
         ],
@@ -677,6 +702,13 @@ export class MessengerService implements OnModuleInit {
 
   async createGroup(actor: ActorContext, dto: CreateGroupChatDto) {
     this.policy.assertCanCreateGroup(actor);
+    const name = dto.name.trim();
+    if (!name) throw new BadRequestException("Укажите название группы.");
+    if (dto.memberUserIds.length === 0) {
+      throw new BadRequestException(
+        "Добавьте хотя бы одного участника группы.",
+      );
+    }
     const uniqueMembers = Array.from(
       new Set([actor.userId, ...dto.memberUserIds]),
     );
@@ -690,7 +722,7 @@ export class MessengerService implements OnModuleInit {
             null::text as last_message_content, null::timestamptz as last_message_created_at,
             '0'::text as unread_count, created_at, updated_at
         `,
-        [dto.name.trim(), actor.userId],
+        [name, actor.userId],
       );
       const row = inserted.rows[0];
       await this.insertMembers(
@@ -733,25 +765,65 @@ export class MessengerService implements OnModuleInit {
         "Состав участников системного чата «Объявления» изменять нельзя.",
       );
     }
-    await this.assertActiveUsers(dto.addUserIds ?? []);
+    const addUserIds = Array.from(new Set(dto.addUserIds ?? []));
+    const removeUserIds = Array.from(new Set(dto.removeUserIds ?? []));
+    if (addUserIds.length === 0 && removeUserIds.length === 0) {
+      throw new BadRequestException("Не указаны изменения состава группы.");
+    }
+    if (
+      chat.memberUserId === actor.userId &&
+      removeUserIds.includes(actor.userId)
+    ) {
+      throw new BadRequestException(
+        "Для выхода из группы используйте действие «Выйти из группы».",
+      );
+    }
+    if (addUserIds.some((userId) => removeUserIds.includes(userId))) {
+      throw new BadRequestException(
+        "Нельзя одновременно добавить и удалить одного участника.",
+      );
+    }
+    await this.assertActiveUsers(addUserIds);
 
     await this.database.transaction(async (client) => {
-      if (dto.addUserIds?.length) {
+      if (addUserIds.length) {
         await this.insertMembers(
           client,
           chatId,
-          dto.addUserIds.map((userId) => ({ userId, role: "member" })),
+          addUserIds.map((userId) => ({ userId, role: "member" })),
         );
       }
-      if (dto.removeUserIds?.length) {
-        await client.query(
+      if (removeUserIds.length) {
+        const removed = await client.query<{ user_id: string }>(
           `
             update app.chat_members
             set left_at = now()
             where chat_id = $1 and user_id = any($2::uuid[])
+              and left_at is null
+            returning user_id
           `,
-          [chatId, dto.removeUserIds],
+          [chatId, removeUserIds],
         );
+        if (removed.rows.length !== removeUserIds.length) {
+          throw new BadRequestException(
+            "Один или несколько пользователей уже не состоят в группе.",
+          );
+        }
+      }
+      if (chat.memberUserId !== actor.userId) {
+        const remaining = await client.query<{ count: string }>(
+          `
+            select count(*)::text as count
+            from app.chat_members
+            where chat_id = $1 and left_at is null
+          `,
+          [chatId],
+        );
+        if (Number(remaining.rows[0]?.count ?? 0) === 0) {
+          throw new BadRequestException(
+            "В группе должен остаться хотя бы один участник.",
+          );
+        }
       }
       await client.query(
         "update app.chats set updated_at = now() where id = $1",
@@ -772,14 +844,14 @@ export class MessengerService implements OnModuleInit {
     // unreadCount). Freshly-added members have no prior membership state, so send
     // a neutral copy with isMuted: false and unreadCount: 0.
     const addedMemberSummary = { ...result, isMuted: false, unreadCount: 0 };
-    for (const userId of dto.addUserIds ?? []) {
+    for (const userId of addUserIds) {
       this.realtime.publishUserEvent(
         userId,
         "chat.created",
         addedMemberSummary,
       );
     }
-    for (const userId of dto.removeUserIds ?? []) {
+    for (const userId of removeUserIds) {
       this.realtime.publishUserEvent(userId, "chat.removed", { id: chatId });
     }
     return result;
@@ -955,24 +1027,124 @@ export class MessengerService implements OnModuleInit {
   }
 
   private async assertValidChatAttachment(
+    actorUserId: string,
     chatId: string,
     attachmentFileId: string,
-  ): Promise<void> {
-    const result = await this.database.query<{ id: string }>(
+  ): Promise<ChatAttachmentRow> {
+    const result = await this.database.query<ChatAttachmentRow>(
       `
-        select id
+        select id, purpose, mime_type
         from app.file_objects
         where id = $1
           and owner_type = 'chat'
           and owner_id = $2
+          and owner_user_id = $3
           and purpose in ('chat_attachment', 'chat_voice')
           and deleted_at is null
         limit 1
       `,
-      [attachmentFileId, chatId],
+      [attachmentFileId, chatId, actorUserId],
     );
-    if (!result.rows[0]) {
+    const attachment = result.rows[0];
+    if (!attachment) {
       throw new NotFoundException("Файл не найден.");
+    }
+    return attachment;
+  }
+
+  private assertMessagePayload(
+    messageType: string,
+    attachment: ChatAttachmentRow | null,
+    voiceDurationMs?: number,
+  ): void {
+    if (messageType === "text") {
+      if (attachment || voiceDurationMs != null) {
+        throw new BadRequestException(
+          "Текстовое сообщение не может содержать медиа-вложение.",
+        );
+      }
+      return;
+    }
+
+    if (!attachment) {
+      throw new BadRequestException("Для медиа-сообщения требуется файл.");
+    }
+    if (messageType === "voice") {
+      if (
+        attachment.purpose !== "chat_voice" ||
+        !attachment.mime_type.toLowerCase().startsWith("audio/")
+      ) {
+        throw new BadRequestException(
+          "Для голосового сообщения требуется аудиозапись.",
+        );
+      }
+      if (
+        voiceDurationMs == null ||
+        !Number.isInteger(voiceDurationMs) ||
+        voiceDurationMs < 1 ||
+        voiceDurationMs > 3_600_000
+      ) {
+        throw new BadRequestException(
+          "Для голосового сообщения требуется корректная длительность.",
+        );
+      }
+      return;
+    }
+
+    if (voiceDurationMs != null || attachment.purpose !== "chat_attachment") {
+      throw new BadRequestException("Тип сообщения не соответствует вложению.");
+    }
+    if (
+      messageType === "image" &&
+      !attachment.mime_type.toLowerCase().startsWith("image/")
+    ) {
+      throw new BadRequestException(
+        "Для изображения требуется файл изображения.",
+      );
+    }
+  }
+
+  private async assertValidMessageReferences(
+    actor: ActorContext,
+    chatId: string,
+    replyToId?: string,
+    forwardedFromId?: string,
+  ): Promise<void> {
+    if (replyToId) {
+      const reply = await this.database.query<{ id: string }>(
+        `
+          select id
+          from app.messages
+          where id = $1 and chat_id = $2 and deleted_at is null
+          limit 1
+        `,
+        [replyToId, chatId],
+      );
+      if (!reply.rows[0]) {
+        throw new NotFoundException(
+          "Исходное сообщение для ответа не найдено.",
+        );
+      }
+    }
+
+    if (forwardedFromId) {
+      const source = await this.database.query<{ chat_id: string }>(
+        `
+          select chat_id
+          from app.messages
+          where id = $1 and deleted_at is null
+          limit 1
+        `,
+        [forwardedFromId],
+      );
+      const sourceChatId = source.rows[0]?.chat_id;
+      if (!sourceChatId) {
+        throw new NotFoundException(
+          "Исходное сообщение для пересылки не найдено.",
+        );
+      }
+      const sourceChat = await this.requireChat(actor, sourceChatId);
+      this.policy.assertCanReadChat(actor, sourceChat);
     }
   }
 }

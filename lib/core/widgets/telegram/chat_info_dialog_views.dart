@@ -208,7 +208,7 @@ extension _ChatInfoViews on _ChatInfoDialogState {
                     : TelegramColors.lightTextSecondary,
               ),
             ),
-            if (_isManagerOrAdminRole)
+            if (_canManageGroup)
               GestureDetector(
                 onTap: _addMembers,
                 child: Row(
@@ -237,7 +237,7 @@ extension _ChatInfoViews on _ChatInfoDialogState {
           final name = member['_display_name']?.toString() ?? 'Участник';
           final role = member['role']?.toString() == 'admin'
               ? 'Администратор группы'
-              : _roleLabel(member['role']?.toString() ?? 'client');
+              : _roleLabel(member['user_role']?.toString() ?? 'client');
           final memberUserId = member['user_id']?.toString();
           // Admins and up can tap a member to open a 1:1 chat with them —
           // teachers and clients just see the roster. (Owner rule: «переход с
@@ -246,6 +246,8 @@ extension _ChatInfoViews on _ChatInfoDialogState {
               _isManagerOrAdminRole &&
               memberUserId != null &&
               memberUserId.isNotEmpty;
+          final canRemove =
+              _canManageGroup && member['is_current_user'] != true;
           final row = Row(
             children: [
               TelegramAvatar(
@@ -283,28 +285,33 @@ extension _ChatInfoViews on _ChatInfoDialogState {
                 ),
               ),
               if (canOpen)
-                Icon(
-                  Icons.chat_bubble_outline_rounded,
-                  size: 18,
-                  color: TelegramColors.accent,
+                IconButton(
+                  tooltip: 'Открыть чат',
+                  onPressed: () => _startChatWithMember(memberUserId),
+                  icon: Icon(
+                    Icons.chat_bubble_outline_rounded,
+                    size: 18,
+                    color: TelegramColors.accent,
+                  ),
+                ),
+              if (canRemove)
+                IconButton(
+                  tooltip: 'Удалить из группы',
+                  onPressed: () => _removeMember(member),
+                  icon: const Icon(
+                    Icons.person_remove_outlined,
+                    size: 18,
+                    color: Colors.redAccent,
+                  ),
                 ),
             ],
           );
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: canOpen
-                ? InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: () => _startChatWithMember(memberUserId),
-                    child: row,
-                  )
-                : row,
-          );
+          return Padding(padding: const EdgeInsets.only(bottom: 8), child: row);
         }),
         if (_members.length > previewMembers.length)
-          Text(
-            'Ещё ${_members.length - previewMembers.length}',
-            style: TextStyle(fontSize: 12, color: TelegramColors.accent),
+          TextButton(
+            onPressed: _showAllMembers,
+            child: Text('Показать всех (${_members.length})'),
           ),
       ],
     );

@@ -24,6 +24,12 @@ describe("CrmScheduleController rollout boundary", () => {
     const lessonTransitions = {
       previewCancel: jest.fn(),
     };
+    const schedulePlans = {
+      previewUpdateConstraints: jest.fn().mockResolvedValue({
+        valid: true,
+        rows: [],
+      }),
+    };
     const flags = {
       get: jest.fn(() => ({ effectivePath })),
       assertEnabled: jest.fn(() => {
@@ -37,11 +43,12 @@ describe("CrmScheduleController rollout boundary", () => {
         lessonSeriesCommands as never,
         lessonTransitions as never,
         flags,
-        {} as never,
+        schedulePlans as never,
         {} as never,
       ),
       schedule,
       lessonCommands,
+      schedulePlans,
     };
   }
 
@@ -95,5 +102,19 @@ describe("CrmScheduleController rollout boundary", () => {
       },
     );
     expect(lessonCommands.previewConstraints).toHaveBeenCalledWith(actor, dto);
+  });
+
+  it("routes Plan update preview through the authoritative Plan service", async () => {
+    const { controller: subject, schedulePlans } = controller("v4");
+    const dto = { expectedVersion: 2, effectiveFrom: "2026-08-20" } as never;
+
+    await expect(
+      subject.previewSchedulePlanUpdateConstraints(actor, "plan-a", dto),
+    ).resolves.toEqual({ valid: true, rows: [] });
+    expect(schedulePlans.previewUpdateConstraints).toHaveBeenCalledWith(
+      actor,
+      "plan-a",
+      dto,
+    );
   });
 });

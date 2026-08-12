@@ -22,6 +22,7 @@ import { SetPasswordDto } from "./dto/set-password.dto";
 import { SignupDto } from "./dto/signup.dto";
 import { VerifyOtpDto } from "./dto/verify-otp.dto";
 import { VerifyEmailDto } from "./dto/verify-email.dto";
+import { ChangeEmailDto } from "./dto/change-email.dto";
 
 @Controller("auth")
 export class AuthController {
@@ -76,6 +77,20 @@ export class AuthController {
     @Body() dto: SetPasswordDto,
   ) {
     return this.authService.setPassword(actor, dto.password);
+  }
+
+  @Post("email")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  async changeEmail(
+    @CurrentActor() actor: ActorContext,
+    @Body() dto: ChangeEmailDto,
+  ) {
+    return this.authService.changeEmail(
+      actor,
+      dto.email,
+      dto.currentPassword,
+    );
   }
 
   @Post("google/start")

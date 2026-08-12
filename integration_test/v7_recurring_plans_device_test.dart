@@ -6,6 +6,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/recurring_schedule_plan_section.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_card/student_schedule_section.dart';
 
 import '../test/features/crm/client_card/card_fake_api.dart';
 import 'evidence_screenshot.dart';
@@ -53,8 +54,88 @@ const _endedPlan = {
   'activeUntil': '2026-07-31',
   'status': 'ended',
   'version': 2,
+  'endedAt': '2026-07-31T15:00:00.000Z',
+  'endedByName': 'Мария Управляющая',
+  'endReason': 'Клиент завершил обучение',
   'rows': <Map<String, dynamic>>[],
 };
+
+class _PagingPlanApi extends FakeCardApiClient {
+  _PagingPlanApi()
+    : super(role: 'manager', schedulePlans: const [_activePlan, _endedPlan]);
+
+  static const _first = <String, dynamic>{
+    'planId': 'plan-active',
+    'items': [
+      {
+        'id': 'lesson-device-first',
+        'scheduledAt': '2026-08-07T13:00:00.000Z',
+        'localDate': '2026-08-07',
+        'localTime': '16:00',
+        'state': 'rescheduled',
+        'settlementMarkers': [
+          {
+            'key': 'paid_absence',
+            'label': 'Оплачиваемый пропуск',
+            'colorToken': 'blue',
+          },
+        ],
+        'relationMarker': 'source',
+        'successorId': 'lesson-device-next',
+        'teacher': {'id': 'teacher-1', 'name': 'Мария Иванова'},
+        'room': {'id': 'room-1', 'name': 'Класс 1'},
+      },
+    ],
+    'hasPrevious': false,
+    'hasNext': true,
+    'previousCursor': null,
+    'nextCursor': 'device-next',
+  };
+
+  static const _next = <String, dynamic>{
+    'planId': 'plan-active',
+    'items': [
+      {
+        'id': 'lesson-device-next',
+        'scheduledAt': '2026-08-14T13:00:00.000Z',
+        'localDate': '2026-08-14',
+        'localTime': '16:00',
+        'state': 'scheduled',
+        'settlementMarkers': <Map<String, dynamic>>[],
+        'relationMarker': 'successor',
+        'predecessorId': 'lesson-device-first',
+        'teacher': {'id': 'teacher-1', 'name': 'Мария Иванова'},
+        'room': {'id': 'room-1', 'name': 'Класс 1'},
+      },
+    ],
+    'hasPrevious': true,
+    'hasNext': false,
+    'previousCursor': 'device-previous',
+    'nextCursor': null,
+  };
+
+  @override
+  Future<T> get<T>(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) async {
+    if (path == '/crm/schedule-plans/plan-active/tray') {
+      final query = {...?queryParameters};
+      getRequests.add(path);
+      getCalls.add((path: path, query: query));
+      return Map<String, dynamic>.from(
+            query['cursor'] == 'device-next' ? _next : _first,
+          )
+          as T;
+    }
+    return super.get<T>(
+      path,
+      queryParameters: queryParameters,
+      authenticated: authenticated,
+    );
+  }
+}
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -69,14 +150,31 @@ void main() {
         {'id': 'branch-1', 'name': 'Сокол'},
       ],
       teachers: const [
-        {'id': 'teacher-1', 'firstName': 'Мария', 'lastName': 'Иванова'},
-        {'id': 'teacher-2', 'firstName': 'Пётр', 'lastName': 'Сидоров'},
+        {
+          'id': 'teacher-1',
+          'firstName': 'Мария',
+          'lastName': 'Иванова',
+          'status': 'active',
+          'assignedBranches': [
+            {'id': 'branch-1', 'name': 'Сокол'},
+          ],
+        },
+        {
+          'id': 'teacher-2',
+          'firstName': 'Пётр',
+          'lastName': 'Сидоров',
+          'status': 'active',
+          'assignedBranches': [
+            {'id': 'branch-1', 'name': 'Сокол'},
+          ],
+        },
       ],
       rooms: const [
         {'id': 'room-1', 'branchId': 'branch-1', 'name': 'Класс 1'},
         {'id': 'room-2', 'branchId': 'branch-1', 'name': 'Класс 2'},
       ],
       schedulePlans: const [_activePlan, _endedPlan],
+      mutateSchedulePlanOnEnd: true,
       schedulePlanTrays: const {
         'plan-active': {
           'planId': 'plan-active',
@@ -176,14 +274,16 @@ void main() {
     await tester.tap(
       find.byKey(ValueKey('preferred-schedule-weekday-$otherDay')),
     );
-    await tester.tap(find.text('Мария Иванова').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Пётр Сидоров').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Класс 1').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Класс 2').last);
-    await tester.pumpAndSettle();
+    await _chooseSearchable(
+      tester,
+      const ValueKey('preferred-schedule-teacher'),
+      'Пётр Сидоров',
+    );
+    await _chooseSearchable(
+      tester,
+      const ValueKey('preferred-schedule-room'),
+      'Класс 2',
+    );
     await _saveEditor(tester);
     await tester.tap(find.byKey(const Key('schedule-plan-preview-and-create')));
     await tester.pumpAndSettle();
@@ -198,6 +298,16 @@ void main() {
     await tester.tap(edit);
     await tester.pumpAndSettle();
     await _saveEditor(tester);
+    await tester.tap(find.byKey(const Key('schedule-plan-preview-and-create')));
+    await tester.pumpAndSettle();
+    expect(
+      api.postRequests.where(
+        (request) =>
+            request.path ==
+            '/crm/schedule-plans/plan-active/constraints/preview',
+      ),
+      hasLength(1),
+    );
     expect(
       api.idempotentRequests.where(
         (request) => request.path == '/crm/schedule-plans/plan-active',
@@ -228,24 +338,363 @@ void main() {
       ),
       hasLength(1),
     );
+    expect(
+      find.byKey(const ValueKey('schedule-plan-end-plan-active')),
+      findsNothing,
+    );
+    expect(find.text('Завершённые (2)'), findsOneWidget);
+    if (find.text('Индивидуальный вокал').evaluate().isEmpty) {
+      await tester.ensureVisible(find.text('Завершённые (2)'));
+      await tester.tap(find.text('Завершённые (2)'));
+      await tester.pumpAndSettle();
+    }
+    if (find
+        .byKey(const ValueKey('schedule-plan-end-history-plan-active'))
+        .evaluate()
+        .isEmpty) {
+      await tester.ensureVisible(find.text('Индивидуальный вокал'));
+      await tester.tap(find.text('Индивидуальный вокал'));
+      await tester.pumpAndSettle();
+    }
+    expect(
+      find.byKey(const ValueKey('schedule-plan-end-history-plan-active')),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Причина: Клиент завершил занятия'),
+      findsOneWidget,
+    );
+    await captureEvidence(tester, 'recurring-plan-ended-history');
     expect(tester.takeException(), isNull);
     debugPrint('V7_RECURRING_PLANS_DEVICE_PASS');
+  });
+
+  testWidgets('recurring tray pages with authoritative markers on device', (
+    tester,
+  ) async {
+    await initializeDateFormatting('ru');
+    final api = _PagingPlanApi();
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: evidenceRootKey,
+        child: ProviderScope(
+          overrides: [magicApiClientProvider.overrideWithValue(api)],
+          child: MaterialApp(
+            theme: AppTheme.dark,
+            home: Scaffold(
+              body: SafeArea(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: RecurringSchedulePlanSection(
+                    studentId: 'student-1',
+                    fallbackLessons: const [],
+                    branches: const [],
+                    defaultBranchId: 'branch-1',
+                    subscriptions: const [
+                      {'id': 'subscription-1', 'label': '12 занятий'},
+                    ],
+                    canWrite: false,
+                    onChanged: () {},
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Завершённое фортепиано'), findsNothing);
+    expect(find.text('7.08 · 16:00'), findsOneWidget);
+    expect(find.byIcon(Icons.sell_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.call_split_rounded), findsOneWidget);
+    await captureEvidence(tester, 'recurring-plan-tray-page-1');
+
+    await tester.tap(
+      find.byKey(const ValueKey('schedule-plan-tray-next-plan-active')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('14.08 · 16:00'), findsOneWidget);
+    expect(find.byIcon(Icons.call_merge_rounded), findsOneWidget);
+    expect(api.getCalls.last.query, {
+      'cursor': 'device-next',
+      'direction': 'next',
+      'limit': 24,
+    });
+    await captureEvidence(tester, 'recurring-plan-tray-page-2');
+
+    await tester.tap(
+      find.byKey(const ValueKey('schedule-plan-tray-previous-plan-active')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('7.08 · 16:00'), findsOneWidget);
+    expect(api.getCalls.last.query, {
+      'cursor': 'device-previous',
+      'direction': 'previous',
+      'limit': 24,
+    });
+    expect(tester.takeException(), isNull);
+    debugPrint('V7_RECURRING_PLAN_TRAY_DEVICE_PASS');
+  });
+
+  testWidgets('individual plan reads back mixed rows on device', (
+    tester,
+  ) async {
+    await initializeDateFormatting('ru');
+    final api = FakeCardApiClient(
+      role: 'manager',
+      branches: const [
+        {'id': 'branch-1', 'name': 'Сокол'},
+      ],
+      teachers: const [
+        {
+          'id': 'teacher-1',
+          'firstName': 'Мария',
+          'lastName': 'Иванова',
+          'status': 'active',
+          'assignedBranches': [
+            {'id': 'branch-1', 'name': 'Сокол'},
+          ],
+        },
+        {
+          'id': 'teacher-2',
+          'firstName': 'Пётр',
+          'lastName': 'Сидоров',
+          'status': 'active',
+          'assignedBranches': [
+            {'id': 'branch-1', 'name': 'Сокол'},
+          ],
+        },
+      ],
+      rooms: const [
+        {'id': 'room-1', 'branchId': 'branch-1', 'name': 'Класс 1'},
+        {'id': 'room-2', 'branchId': 'branch-1', 'name': 'Класс 2'},
+      ],
+      mutateSchedulePlanOnCreate: true,
+    );
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: evidenceRootKey,
+        child: ProviderScope(
+          overrides: [magicApiClientProvider.overrideWithValue(api)],
+          child: MaterialApp(
+            theme: AppTheme.dark,
+            home: Scaffold(
+              body: SafeArea(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: RecurringSchedulePlanSection(
+                    studentId: 'student-1',
+                    fallbackLessons: const [],
+                    branches: api.branches,
+                    defaultBranchId: 'branch-1',
+                    subscriptions: const [
+                      {'id': 'subscription-1', 'label': '12 занятий'},
+                    ],
+                    canWrite: true,
+                    onChanged: () {},
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('schedule-plan-add')));
+    await tester.pumpAndSettle();
+    final firstDay = DateTime.now().weekday;
+    final secondDay = firstDay == 7 ? 1 : firstDay + 1;
+    final thirdDay = secondDay == 7 ? 1 : secondDay + 1;
+    await tester.tap(
+      find.byKey(ValueKey('preferred-schedule-weekday-$secondDay')),
+    );
+    await _chooseReferences(tester);
+    await _saveEditor(tester);
+
+    await tester.tap(find.byKey(const Key('schedule-plan-add-row-group')));
+    await tester.pumpAndSettle();
+    for (final weekday in [firstDay, secondDay, thirdDay]) {
+      await tester.tap(
+        find.byKey(ValueKey('preferred-schedule-weekday-$weekday')),
+      );
+    }
+    await _chooseSearchable(
+      tester,
+      const ValueKey('preferred-schedule-teacher'),
+      'Пётр Сидоров',
+    );
+    await _chooseSearchable(
+      tester,
+      const ValueKey('preferred-schedule-room'),
+      'Класс 2',
+    );
+    await _saveEditor(tester);
+    expect(
+      find.byKey(const ValueKey('schedule-plan-row-group-0')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('schedule-plan-row-group-1')),
+      findsOneWidget,
+    );
+    await captureEvidence(tester, 'individual-plan-mixed-row-review');
+
+    await tester.tap(find.byKey(const Key('schedule-plan-preview-and-create')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('schedule-plan-created-plan-1')),
+      findsOneWidget,
+    );
+    for (var index = 1; index <= 3; index++) {
+      expect(
+        find.byKey(ValueKey('schedule-plan-row-edit-created-series-$index')),
+        findsOneWidget,
+      );
+    }
+    expect(find.text('Мария Иванова'), findsNWidgets(2));
+    expect(find.text('Класс 1'), findsNWidgets(2));
+    expect(find.text('Пётр Сидоров'), findsOneWidget);
+    expect(find.text('Класс 2'), findsOneWidget);
+    expect(
+      api.getCalls
+          .where((request) => request.path == '/crm/schedule-plans')
+          .length,
+      greaterThanOrEqualTo(2),
+    );
+    await captureEvidence(tester, 'individual-plan-mixed-row-readback');
+    await tester.pump(const Duration(seconds: 4));
+    expect(tester.takeException(), isNull);
+    debugPrint('V7_INDIVIDUAL_PLAN_MIXED_ROWS_DEVICE_PASS');
+  });
+
+  testWidgets('preferred schedule readback keeps actual lessons on device', (
+    tester,
+  ) async {
+    await initializeDateFormatting('ru');
+    final api = FakeCardApiClient(
+      role: 'manager',
+      branches: const [
+        {'id': 'branch-1', 'name': 'Сокол'},
+      ],
+      teachers: const [
+        {
+          'id': 'teacher-1',
+          'firstName': 'Мария',
+          'lastName': 'Иванова',
+          'status': 'active',
+          'assignedBranches': [
+            {'id': 'branch-1', 'name': 'Сокол'},
+          ],
+        },
+      ],
+      rooms: const [
+        {'id': 'room-1', 'branchId': 'branch-1', 'name': 'Класс 1'},
+      ],
+      mutateScheduleSeriesOnCreate: true,
+    );
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: evidenceRootKey,
+        child: ProviderScope(
+          overrides: [magicApiClientProvider.overrideWithValue(api)],
+          child: MaterialApp(
+            theme: AppTheme.dark,
+            home: Scaffold(
+              body: SafeArea(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: StudentScheduleSection(
+                    clientType: 'student',
+                    clientId: 'student-1',
+                    lessons: const [
+                      {
+                        'id': 'lesson-without-preference',
+                        'scheduledAt': '2026-08-20T15:00:00.000Z',
+                        'lifecycleState': 'scheduled',
+                        'teacherName': 'Ирина Орлова',
+                        'roomName': 'Класс 2',
+                      },
+                    ],
+                    branches: api.branches,
+                    defaultBranchId: 'branch-1',
+                    subscriptions: const [],
+                    canWrite: true,
+                    onChanged: () {},
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Постоянное расписание не задано'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('client-lesson-lesson-without-preference')),
+      findsOneWidget,
+    );
+    await captureEvidence(tester, 'preferred-schedule-empty-actual-lesson');
+
+    await tester.tap(find.text('Добавить предпочтение'));
+    await tester.pumpAndSettle();
+    await _chooseSearchable(
+      tester,
+      const ValueKey('preferred-schedule-teacher'),
+      'Мария Иванова',
+    );
+    await _chooseSearchable(
+      tester,
+      const ValueKey('preferred-schedule-room'),
+      'Класс 1',
+    );
+    await _saveEditor(tester);
+
+    expect(
+      api.postRequests.where(
+        (request) => request.path == '/crm/schedule-series',
+      ),
+      hasLength(1),
+    );
+    expect(
+      api.getCalls
+          .where((request) => request.path == '/crm/schedule-series')
+          .length,
+      greaterThanOrEqualTo(2),
+    );
+    expect(
+      find.textContaining('60 мин · Мария Иванова · Класс 1'),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('client-lesson-lesson-without-preference')),
+      findsOneWidget,
+    );
+    await captureEvidence(
+      tester,
+      'preferred-schedule-saved-with-actual-lesson',
+    );
+    expect(tester.takeException(), isNull);
+    debugPrint('V7_PREFERRED_SCHEDULE_DEVICE_PASS');
   });
 }
 
 Future<void> _chooseReferences(WidgetTester tester) async {
-  final teacher = find.text('Выберите педагога');
-  await tester.ensureVisible(teacher);
-  await tester.tap(teacher);
-  await tester.pumpAndSettle();
-  await tester.tap(find.text('Мария Иванова').last);
-  await tester.pumpAndSettle();
-  final room = find.text('Выберите аудиторию');
-  await tester.ensureVisible(room);
-  await tester.tap(room);
-  await tester.pumpAndSettle();
-  await tester.tap(find.text('Класс 1').last);
-  await tester.pumpAndSettle();
+  await _chooseSearchable(
+    tester,
+    const ValueKey('preferred-schedule-teacher'),
+    'Мария Иванова',
+  );
+  await _chooseSearchable(
+    tester,
+    const ValueKey('preferred-schedule-room'),
+    'Класс 1',
+  );
   await tester.ensureVisible(
     find.byKey(const ValueKey('schedule-plan-settlement-type')),
   );
@@ -258,6 +707,23 @@ Future<void> _chooseReferences(WidgetTester tester) async {
   );
   await tester.pumpAndSettle();
   await tester.tap(find.text('Не оплачивать').last);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _chooseSearchable(
+  WidgetTester tester,
+  Key field,
+  String option,
+) async {
+  await tester.ensureVisible(find.byKey(field));
+  await tester.tap(find.byKey(field));
+  await tester.pumpAndSettle();
+  final menuItem = find.ancestor(
+    of: find.text(option).last,
+    matching: find.byType(MenuItemButton),
+  );
+  expect(menuItem, findsOneWidget);
+  tester.widget<MenuItemButton>(menuItem).onPressed?.call();
   await tester.pumpAndSettle();
 }
 

@@ -12,7 +12,7 @@ import 'package:magic_music_crm/features/manager/presentation/widgets/clients_wi
 /// transfer-aware orchestrator builds and shows its compact tab control.
 class _FakeApiClient extends MagicApiClient {
   _FakeApiClient()
-      : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
+    : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   @override
   Future<T> get<T>(
@@ -21,18 +21,17 @@ class _FakeApiClient extends MagicApiClient {
     bool authenticated = true,
   }) async {
     return <String, dynamic>{
-      'items': <dynamic>[],
-      'columns': <dynamic>[],
-      'total_count': 0,
-    } as T;
+          'items': <dynamic>[],
+          'columns': <dynamic>[],
+          'total_count': 0,
+        }
+        as T;
   }
 }
 
 Widget _host() {
   return ProviderScope(
-    overrides: [
-      magicApiClientProvider.overrideWithValue(_FakeApiClient()),
-    ],
+    overrides: [magicApiClientProvider.overrideWithValue(_FakeApiClient())],
     child: const MaterialApp(home: Scaffold(body: ClientsWidget())),
   );
 }
@@ -68,5 +67,22 @@ void main() {
     controller.cancel();
     await tester.pump();
     expect(controller.isActive, isFalse);
+  });
+
+  testWidgets('students cannot be dragged back onto the leads tab', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_host());
+    await tester.pump();
+
+    await tester.tap(find.text('Ученики').first);
+    await tester.pump();
+
+    final leadsTab = find.text('Лиды').first;
+    final reverseDropTarget = find.ancestor(
+      of: leadsTab,
+      matching: find.byType(DragTarget<Map<String, dynamic>>),
+    );
+    expect(reverseDropTarget, findsNothing);
   });
 }

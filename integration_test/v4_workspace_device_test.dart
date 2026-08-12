@@ -1,11 +1,17 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
+import 'package:magic_music_crm/core/navigation/entity_link_text.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
+import 'package:magic_music_crm/core/workspace/desktop_workspace_shell.dart';
+import 'package:magic_music_crm/core/workspace/production_workspace_host.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 import 'package:magic_music_crm/core/workspace/workspace_store.dart';
 
@@ -92,6 +98,246 @@ void main() {
       expect(
         find.text('workspace-device-pass:${Platform.operatingSystem}'),
         findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'Windows linked entities keep ten tabs history restart and logout safe',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(1600, 900);
+      addTearDown(tester.view.reset);
+
+      const snapshot = CapabilitySnapshot(
+        accountId: 'uat-012-director',
+        role: 'director',
+        accessVersion: 1,
+        capabilities: {
+          'crm.client.read.basic',
+          'schedule.lesson.write',
+          'workflow.task.read',
+          'commerce.client_finance.read',
+          'system.settings.manage',
+        },
+        scopes: {},
+      );
+      final entities = <EntityLink>[
+        EntityLink.typed(
+          entityType: EntityLinkType.client,
+          entityId: 'student-1',
+          variant: 'student',
+          presentation: const EntityPresentationReference(
+            primary: 'Иванов Иван',
+          ),
+        ),
+        EntityLink.typed(
+          entityType: EntityLinkType.teacher,
+          entityId: 'teacher-1',
+          presentation: const EntityPresentationReference(
+            primary: 'Петрова Анна',
+          ),
+        ),
+        EntityLink.typed(
+          entityType: EntityLinkType.lesson,
+          entityId: 'lesson-1',
+          presentation: const EntityPresentationReference(
+            primary: 'Вокал 12 августа',
+          ),
+        ),
+        EntityLink.typed(
+          entityType: EntityLinkType.group,
+          entityId: 'group-1',
+          presentation: const EntityPresentationReference(
+            primary: 'Младший ансамбль',
+          ),
+        ),
+        EntityLink.typed(
+          entityType: EntityLinkType.room,
+          entityId: 'room-1',
+          presentation: const EntityPresentationReference(
+            primary: 'Аудитория Рояль',
+          ),
+        ),
+        EntityLink.typed(
+          entityType: EntityLinkType.branch,
+          entityId: 'branch-1',
+          presentation: const EntityPresentationReference(
+            primary: 'Филиал Центр',
+          ),
+        ),
+        EntityLink.typed(
+          entityType: EntityLinkType.scheduleSeries,
+          entityId: 'series-1',
+          presentation: const EntityPresentationReference(
+            primary: 'Постоянный план Иванова',
+          ),
+        ),
+        EntityLink.typed(
+          entityType: EntityLinkType.task,
+          entityId: 'task-1',
+          presentation: const EntityPresentationReference(
+            primary: 'Позвонить родителю',
+          ),
+        ),
+        EntityLink.typed(
+          entityType: EntityLinkType.payment,
+          entityId: 'payment-1',
+          presentation: const EntityPresentationReference(
+            primary: 'Оплата 4 500 ₽',
+          ),
+        ),
+        EntityLink.typed(
+          entityType: EntityLinkType.user,
+          entityId: 'user-1',
+          presentation: const EntityPresentationReference(
+            primary: 'Сидоров Алексей',
+          ),
+        ),
+      ];
+      final backend = InMemoryWorkspaceKeyValueStore();
+      final store = AccountWorkspaceStore(backend);
+
+      Widget app(Key key, {EntityLink? initialLink}) => ProviderScope(
+        overrides: [accountWorkspaceStoreProvider.overrideWithValue(store)],
+        child: MaterialApp(
+          theme: ThemeData.dark(),
+          home: Scaffold(
+            body: ProductionWorkspaceHost(
+              key: key,
+              snapshot: snapshot,
+              initialLink: initialLink,
+              tabBuilder: (context, tab) {
+                final currentIndex = entities.indexWhere(
+                  (entity) =>
+                      entity.rawEntityType ==
+                          tab.currentRoute.link.rawEntityType &&
+                      entity.entityId == tab.currentRoute.link.entityId,
+                );
+                return Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Открыта: ${tab.currentRoute.link.entityId}',
+                        key: const ValueKey('uat-012-current-entity'),
+                      ),
+                      if (currentIndex >= 0 &&
+                          currentIndex + 1 < entities.length)
+                        EntityLinkText(
+                          key: ValueKey(
+                            'uat-012-open-${entities[currentIndex + 1].entityId}',
+                          ),
+                          text:
+                              entities[currentIndex + 1].presentation!.primary,
+                          onPressed: () => navigateEntityLink(
+                            context,
+                            snapshot,
+                            entities[currentIndex + 1],
+                            target: EntityOpenTarget.newTab,
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(
+        app(const ValueKey('uat-012-first-run'), initialLink: entities.first),
+      );
+      await tester.pumpAndSettle();
+
+      for (var index = 1; index < entities.length; index++) {
+        await tester.tap(
+          find.byKey(ValueKey('uat-012-open-${entities[index].entityId}')),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      var shell = tester.widget<DesktopWorkspaceShell>(
+        find.byType(DesktopWorkspaceShell),
+      );
+      expect(shell.controller.state.tabs, hasLength(10));
+      expect(
+        shell.controller.state.tabs.first.currentRoute.link.entityId,
+        'student-1',
+      );
+      expect(
+        shell.controller.state.activeTab.currentRoute.link.entityId,
+        'user-1',
+      );
+      expect(
+        find.byKey(const ValueKey('context-ancestor-section:configuration')),
+        findsOneWidget,
+      );
+      expect(find.text('Пользователь · Сидоров Алексей'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(const ValueKey('context-ancestor-section:configuration')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        shell.controller.state.activeTab.currentRoute.link.entityId,
+        '__section__',
+      );
+
+      await tester.tap(find.byKey(const ValueKey('context-back')));
+      await tester.pumpAndSettle();
+      expect(
+        shell.controller.state.activeTab.currentRoute.link.entityId,
+        'user-1',
+      );
+      expect(shell.controller.state.activeTab.forwardStack, hasLength(1));
+
+      await tester.tap(find.byKey(const ValueKey('context-forward')));
+      await tester.pumpAndSettle();
+      expect(
+        shell.controller.state.activeTab.currentRoute.link.entityId,
+        '__section__',
+      );
+
+      shell.controller.selectTab(shell.controller.state.tabs.first.tabId);
+      await tester.pumpAndSettle();
+      expect(find.text('Открыта: student-1'), findsOneWidget);
+      expect(shell.controller.state.tabs, hasLength(10));
+
+      shell.controller.selectTab(shell.controller.state.tabs.last.tabId);
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(app(const ValueKey('uat-012-restart')));
+      await tester.pumpAndSettle();
+
+      shell = tester.widget<DesktopWorkspaceShell>(
+        find.byType(DesktopWorkspaceShell),
+      );
+      expect(shell.controller.state.tabs, hasLength(10));
+      expect(
+        shell.controller.state.tabs.first.currentRoute.link.entityId,
+        'student-1',
+      );
+      expect(
+        shell.controller.state.activeTab.currentRoute.link.entityId,
+        '__section__',
+      );
+      expect(shell.controller.state.activeTab.routeStack, hasLength(2));
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ProductionWorkspaceHost)),
+      );
+      await container
+          .read(workspaceLogoutCoordinatorProvider)
+          .logout(snapshot.accountId);
+      await tester.pumpAndSettle();
+
+      expect(backend.values, isEmpty);
+      expect(find.byType(DesktopWorkspaceShell), findsOneWidget);
+      expect(shell.controller.state.loggedOut, isTrue);
+      expect(
+        find.byKey(const ValueKey('uat-012-current-entity')),
+        findsNothing,
       );
     },
   );

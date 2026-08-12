@@ -174,9 +174,14 @@ class _MobileMagicSheetState extends State<_MobileMagicSheet> {
 
   void _animateTo(double target) async {
     if (!_controller.isAttached) return;
+    final duration = AppMotion.effective(context, AppMotion.medium);
+    if (duration == Duration.zero) {
+      _controller.jumpTo(target);
+      return;
+    }
     await _controller.animateTo(
       target,
-      duration: AppMotion.effective(context, AppMotion.medium),
+      duration: duration,
       curve: AppMotion.ease,
     );
   }

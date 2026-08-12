@@ -70,7 +70,7 @@ void main() {
     },
   );
 
-  testWidgets('compact host keeps one mobile route stack without tab strip', (
+  testWidgets('compact host keeps one mobile route stack with navigation', (
     tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -99,7 +99,63 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(DesktopWorkspaceShell), findsNothing);
+    expect(find.byType(V7NavShell), findsOneWidget);
+    expect(find.text('Чат'), findsOneWidget);
+    expect(find.text('Клиенты'), findsOneWidget);
     expect(find.text('home'), findsOneWidget);
+
+    await tester.tap(find.text('Клиенты'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('__section__'), findsOneWidget);
+    expect(find.byType(V7NavShell), findsOneWidget);
+  });
+
+  testWidgets('compact teacher can switch between all assigned surfaces', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(412, 915);
+    addTearDown(tester.view.reset);
+    const teacher = CapabilitySnapshot(
+      accountId: 'teacher-1',
+      role: 'teacher',
+      accessVersion: 1,
+      capabilities: {'schedule.lesson.read.assigned', 'crm.client.read.basic'},
+      scopes: {'schedule': 'assigned', 'client': 'assigned'},
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          accountWorkspaceStoreProvider.overrideWithValue(
+            AccountWorkspaceStore(InMemoryWorkspaceKeyValueStore()),
+          ),
+        ],
+        child: MaterialApp(
+          home: ProductionWorkspaceHost(
+            snapshot: teacher,
+            tabBuilder: (_, tab) => Text(
+              '${tab.currentRoute.link.rawEntityType}:'
+              '${tab.currentRoute.link.entityId}',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    for (final label in const ['Чат', 'Расписание', 'Ученики']) {
+      expect(find.text(label), findsOneWidget, reason: label);
+    }
+
+    await tester.tap(find.text('Расписание'));
+    await tester.pumpAndSettle();
+    expect(find.text('lesson_list:__section__'), findsOneWidget);
+
+    await tester.tap(find.text('Ученики'));
+    await tester.pumpAndSettle();
+    expect(find.text('client_status:__section__'), findsOneWidget);
   });
 
   testWidgets('compact direct link wins over a restored clients board', (

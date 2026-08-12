@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -17,7 +18,45 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 
 typedef ReportFileOpener =
-    Future<void> Function(List<int> bytes, String filename);
+    Future<ReportFileOpenResult> Function(List<int> bytes, String filename);
+
+@immutable
+class ReportFileOpenResult {
+  const ReportFileOpenResult({required this.path, required this.opened});
+
+  final String path;
+  final bool opened;
+}
+
+void validateReportExportBytes(List<int> bytes, String format) {
+  if (format == 'xlsx') {
+    final isZip =
+        bytes.length >= 4 &&
+        bytes[0] == 0x50 &&
+        bytes[1] == 0x4b &&
+        bytes[2] == 0x03 &&
+        bytes[3] == 0x04;
+    if (!isZip) {
+      throw const FormatException('Сервер вернул повреждённый XLSX-файл.');
+    }
+    return;
+  }
+  if (format == 'csv') {
+    final hasUtf8Bom =
+        bytes.length >= 3 &&
+        bytes[0] == 0xef &&
+        bytes[1] == 0xbb &&
+        bytes[2] == 0xbf;
+    if (!hasUtf8Bom) {
+      throw const FormatException(
+        'CSV должен быть в UTF-8 с BOM для корректного открытия в Excel.',
+      );
+    }
+    utf8.decode(bytes.sublist(3));
+    return;
+  }
+  throw FormatException('Неподдерживаемый формат экспорта: $format');
+}
 
 final reportFileOpenerProvider = Provider<ReportFileOpener>((ref) {
   return (bytes, filename) async {
@@ -34,7 +73,11 @@ final reportFileOpenerProvider = Provider<ReportFileOpener>((ref) {
     await directory.create(recursive: true);
     final path = '${directory.path}${Platform.pathSeparator}$filename';
     await File(path).writeAsBytes(bytes, flush: true);
-    await OpenFilex.open(path);
+    final opened = await OpenFilex.open(path);
+    return ReportFileOpenResult(
+      path: path,
+      opened: opened.type == ResultType.done,
+    );
   };
 });
 
@@ -370,12 +413,7 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
         filter: filter,
       );
       if (!requested.isAsync) {
-        await ref.read(reportFileOpenerProvider)(
-          requested.bytes!,
-          requested.filename!,
-        );
-        if (!mounted) return;
-        setState(() => _exportStatus = 'Файл готов');
+        await _saveAndOpenExport(requested.bytes!, requested.filename!, format);
         return;
       }
 
@@ -397,11 +435,11 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
         }
         if (job.downloadReady) {
           final bytes = await service.downloadV4ReportExport(jobId);
-          await ref.read(reportFileOpenerProvider)(
+          await _saveAndOpenExport(
             bytes,
             job.filename ?? 'report.$format',
+            format,
           );
-          if (mounted) setState(() => _exportStatus = 'Файл готов');
           return;
         }
       }
@@ -415,6 +453,21 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
     } finally {
       if (mounted) setState(() => _exporting = false);
     }
+  }
+
+  Future<void> _saveAndOpenExport(
+    List<int> bytes,
+    String filename,
+    String format,
+  ) async {
+    validateReportExportBytes(bytes, format);
+    final result = await ref.read(reportFileOpenerProvider)(bytes, filename);
+    if (!mounted) return;
+    setState(() {
+      _exportStatus = result.opened
+          ? 'Файл открыт: $filename'
+          : 'Файл сохранён: ${result.path}';
+    });
   }
 
   CapabilitySnapshot get _snapshot {

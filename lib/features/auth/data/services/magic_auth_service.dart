@@ -267,6 +267,19 @@ class MagicAuthService {
     return _api.post<void>('/auth/password', data: {'password': password});
   }
 
+  Future<void> changeEmail({
+    required String email,
+    required String currentPassword,
+  }) async {
+    await _api.post<void>(
+      '/auth/email',
+      data: {'email': email.trim(), 'currentPassword': currentPassword},
+    );
+    // The server revokes every session after changing the login identifier.
+    // Clear local tokens immediately and require a fresh login with new email.
+    await signOut();
+  }
+
   Future<List<MagicAuthIdentity>> getUserIdentities() async {
     final response = await _api.get<Map<String, dynamic>>('/auth/identities');
     final items = response['items'];

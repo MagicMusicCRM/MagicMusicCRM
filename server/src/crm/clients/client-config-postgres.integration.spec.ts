@@ -10,7 +10,12 @@ import { ActorContext } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
 import { MigrationRunner } from "../../db/migration-runner";
 import { CrmPolicy } from "../crm.policy";
-import { ClientConfigRepository } from "./client-config.repository";
+import {
+  ClientConfigRepository,
+  readTypedClientValueMap,
+  replaceTypedClientValues,
+  typedClientTableFieldsSql,
+} from "./client-config.repository";
 import { ClientConfigService } from "./client-config.service";
 import { ClientWriteValidator } from "./client-write.validator";
 
@@ -320,7 +325,11 @@ describe("Client configuration and strict validators (PostgreSQL)", () => {
       }),
     ).rejects.toMatchObject({
       status: 422,
-      response: { code: "REQUIRED_CUSTOM_FIELD" },
+      response: {
+        field: `customFields.${select.key}`,
+        code: "REQUIRED_CUSTOM_FIELD",
+        message: "Поле «Проверочное поле» обязательно.",
+      },
     });
     await expect(
       validator.validateLeadCreate({
@@ -356,8 +365,50 @@ describe("Client configuration and strict validators (PostgreSQL)", () => {
         },
       ],
     });
+
+    const studentRequired = await createField({
+      entityType: "student",
+      required: true,
+    });
+    const studentMinimum = {
+      firstName: "Пётр",
+      lastName: "Смирнов",
+      phone: "+79990000001",
+      branchId,
+      sourceId: source.id,
+      status: "active",
+    };
+    await expect(
+      validator.validateStudentCreate(studentMinimum),
+    ).rejects.toMatchObject({
+      status: 422,
+      response: {
+        field: `customFields.${studentRequired.key}`,
+        code: "REQUIRED_CUSTOM_FIELD",
+        message: "Поле «Проверочное поле» обязательно.",
+      },
+    });
+    await expect(
+      validator.validateStudentCreate({
+        ...studentMinimum,
+        customFields: [
+          { definitionId: studentRequired.id, value: "Фортепиано" },
+        ],
+      }),
+    ).resolves.toMatchObject({
+      customFields: [
+        {
+          definitionId: studentRequired.id,
+          valueText: "Фортепиано",
+        },
+      ],
+    });
     await config.updateField(director, select.id, {
       expectedVersion: select.version,
+      required: false,
+    });
+    await config.updateField(director, studentRequired.id, {
+      expectedVersion: studentRequired.version,
       required: false,
     });
   });
@@ -387,6 +438,9 @@ describe("Client configuration and strict validators (PostgreSQL)", () => {
     await database.transaction((client) =>
       repository.saveValues(client, "lead", leadId, validated.values),
     );
+    await expect(
+      readTypedClientValueMap(database, "lead", leadId),
+    ).resolves.toEqual({ [field.key]: "Историческое значение" });
 
     await expect(
       config.updateField(director, field.id, {
@@ -423,6 +477,9 @@ describe("Client configuration and strict validators (PostgreSQL)", () => {
       value_text: "Историческое значение",
       validation_state: "valid",
     });
+    await expect(
+      readTypedClientValueMap(database, "lead", leadId),
+    ).resolves.toEqual({});
     const activeList = await config.listFields(director, {
       entityType: "lead",
     });
@@ -432,6 +489,98 @@ describe("Client configuration and strict validators (PostgreSQL)", () => {
       includeArchived: true,
     });
     expect(allList.items.some((item) => item.id === field.id)).toBe(true);
+
+    await database.transaction((client) =>
+      replaceTypedClientValues(client, "lead", leadId, []),
+    );
+    const preserved = await database.query<{ value_text: string }>(
+      `select value_text
+       from app.client_custom_field_values
+       where definition_id = $1 and entity_id = $2`,
+      [field.id, leadId],
+    );
+    expect(preserved.rows[0]?.value_text).toBe("Историческое значение");
+  });
+
+  it("replaces typed card values atomically and clears omitted optionals", async () => {
+    const source = await createSource();
+    const first = await createField({ valueType: "text" });
+    const second = await createField({ valueType: "number" });
+    const lead = await database.query<{ id: string }>(
+      `insert into app.leads (
+         first_name, last_name, phone, source, source_id
+       ) values ('Ирина', 'Петрова', '+79990000001', $1, $2)
+       returning id`,
+      [source.canonicalName, source.id],
+    );
+    const leadId = lead.rows[0]!.id;
+    entityIds.push(leadId);
+    const initial = await validator.validateCustomFields("lead", [
+      { definitionId: first.id, value: "Первое" },
+      { definitionId: second.id, value: 12.5 },
+    ]);
+    await database.transaction((client) =>
+      replaceTypedClientValues(client, "lead", leadId, initial.values),
+    );
+    await expect(
+      readTypedClientValueMap(database, "lead", leadId),
+    ).resolves.toEqual({ [first.key]: "Первое", [second.key]: 12.5 });
+
+    const replacement = await validator.validateCustomFields("lead", [
+      { definitionId: second.id, value: 30 },
+    ]);
+    await database.transaction((client) =>
+      replaceTypedClientValues(client, "lead", leadId, replacement.values),
+    );
+    await expect(
+      readTypedClientValueMap(database, "lead", leadId),
+    ).resolves.toEqual({ [second.key]: 30 });
+  });
+
+  it("projects only active values configured for table placement", async () => {
+    const source = await createSource();
+    const field = await createField({ valueType: "text" });
+    const hidden = await createField({ valueType: "text" });
+    await database.query(
+      `update app.client_custom_field_definitions
+       set placements = '["table"]'::jsonb
+       where id = $1`,
+      [field.id],
+    );
+    const lead = await database.query<{ id: string }>(
+      `insert into app.leads (
+         first_name, last_name, phone, source, source_id
+       ) values ('Мария', 'Орлова', '+79990000002', $1, $2)
+       returning id`,
+      [source.canonicalName, source.id],
+    );
+    const leadId = lead.rows[0]!.id;
+    entityIds.push(leadId);
+    const validated = await validator.validateCustomFields("lead", [
+      { definitionId: field.id, value: "На доске" },
+      { definitionId: hidden.id, value: "Скрыто" },
+    ]);
+    await database.transaction((client) =>
+      replaceTypedClientValues(client, "lead", leadId, validated.values),
+    );
+
+    const projected = await database.query<{
+      table_fields: Record<string, unknown>[];
+    }>(
+      `select ${typedClientTableFieldsSql("lead", "l.id")} as table_fields
+       from app.leads l
+       where l.id = $1`,
+      [leadId],
+    );
+    expect(projected.rows[0]?.table_fields).toEqual([
+      expect.objectContaining({
+        id: field.id,
+        key: field.key,
+        label: field.label,
+        valueType: "text",
+        value: "На доске",
+      }),
+    ]);
   });
 
   it("keeps system required fields locked", async () => {

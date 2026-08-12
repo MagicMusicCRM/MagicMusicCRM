@@ -110,6 +110,10 @@ export class LeadBoardQuery {
   to?: string;
 
   @IsOptional()
+  @IsIn(["newest", "oldest"])
+  sort?: "newest" | "oldest";
+
+  @IsOptional()
   @IsIn(["all", "active", "processed", "deferred", "new"])
   quick?: "all" | "active" | "processed" | "deferred" | "new";
 

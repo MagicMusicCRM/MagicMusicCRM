@@ -500,6 +500,7 @@ export class CommerceProjectionRepository {
               'issuedSubscriptionId', movement.issued_subscription_id,
               'subscriptionName', movement.subscription_name,
               'sourcePaymentId', movement.source_payment_id,
+              'adjustmentVersion', movement.adjustment_version,
               'paymentRecordVersion', movement.payment_record_version,
               'installmentId', movement.installment_id,
               'dueAt', movement.due_at
@@ -532,6 +533,7 @@ export class CommerceProjectionRepository {
                 subscription.commercial_snapshot ->> 'displayName'
                   as subscription_name,
                 null::uuid as source_payment_id,
+                null::integer as adjustment_version,
                 null::integer as payment_record_version,
                 null::uuid as installment_id,
                 null::timestamptz as due_at
@@ -567,7 +569,8 @@ export class CommerceProjectionRepository {
                 ), ''),
                 record.issued_subscription_id,
                 subscription.commercial_snapshot ->> 'displayName',
-                null::uuid,
+                actual.id,
+                null::integer,
                 record.version,
                 record.installment_id,
                 record.due_at
@@ -601,6 +604,7 @@ export class CommerceProjectionRepository {
                 subscription.commercial_snapshot ->> 'displayName',
                 null::uuid,
                 null::integer,
+                null::integer,
                 null::uuid,
                 null::timestamptz
               from app.subscription_obligation_facts obligation
@@ -627,6 +631,7 @@ export class CommerceProjectionRepository {
                 charge.subscription_id,
                 subscription.commercial_snapshot ->> 'displayName',
                 null::uuid,
+                null::integer,
                 null::integer,
                 null::uuid,
                 null::timestamptz
@@ -660,6 +665,7 @@ export class CommerceProjectionRepository {
                 source_payment.issued_subscription_id,
                 subscription.commercial_snapshot ->> 'displayName',
                 adjustment.source_payment_id,
+                coalesce(aggregate.version, 1)::integer,
                 null::integer,
                 null::uuid,
                 null::timestamptz
@@ -671,6 +677,9 @@ export class CommerceProjectionRepository {
               left join app.branches branch on branch.id = adjustment.branch_id
               left join app.users creator on creator.id = adjustment.created_by
               left join app.profiles author on author.user_id = creator.id
+              left join app.aggregate_versions aggregate
+                on aggregate.aggregate_type = 'commerce:payment-adjustment'
+               and aggregate.aggregate_id = adjustment.id::text
               where adjustment.student_id = selected.student_id
                 and adjustment.deleted_at is null
             ) all_movements
@@ -700,13 +709,19 @@ export class CommerceProjectionRepository {
           from (
             select
               exclusion.id,
-              case when exclusion.counterpart_id is null
-                then 'technical_void'::text
-                else 'monetary_reversal'::text end as event_type,
+              case
+                when exclusion.source_kind = 'account_adjustment'
+                  then 'adjustment_reversal'::text
+                when exclusion.counterpart_id is null
+                  then 'technical_void'::text
+                else 'monetary_reversal'::text
+              end as event_type,
               record.id as payment_record_id,
               record.status as previous_status,
-              record.amount_minor::text,
-              record.currency_code,
+              coalesce(record.amount_minor, abs(adjustment.amount_minor))::text
+                as amount_minor,
+              coalesce(record.currency_code, adjustment.currency_code)
+                as currency_code,
               exclusion.source_kind,
               exclusion.source_id,
               exclusion.counterpart_kind,
@@ -719,18 +734,21 @@ export class CommerceProjectionRepository {
               ), '') as actor_name,
               exclusion.occurred_at
             from app.commerce_reporting_exclusions exclusion
-            join app.client_payment_records record
+            left join app.client_payment_records record
               on (exclusion.source_kind = 'payment_record'
                 and exclusion.source_id = record.id)
               or (record.actual_payment_id is not null
                 and exclusion.source_kind = 'payment'
                 and exclusion.source_id = record.actual_payment_id)
+            left join app.account_adjustments adjustment
+              on exclusion.source_kind = 'account_adjustment'
+             and exclusion.source_id = adjustment.id
             left join app.users actor on actor.id = exclusion.actor_user_id
             left join app.profiles actor_profile
               on actor_profile.user_id = actor.id
              and actor_profile.deleted_at is null
             where $2::boolean
-              and record.student_id = selected.student_id
+              and coalesce(record.student_id, adjustment.student_id) = selected.student_id
             order by exclusion.occurred_at desc, exclusion.id desc
             limit 200
           ) event

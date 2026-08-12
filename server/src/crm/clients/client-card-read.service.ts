@@ -9,6 +9,7 @@ import {
   ClientReferenceService,
   ResolvedClientReference,
 } from "./client-reference.service";
+import { typedClientValueMapSql } from "./client-config.repository";
 
 interface ClientCardCompositionRow {
   header: Record<string, unknown> | null;
@@ -22,6 +23,7 @@ interface ClientCardCompositionRow {
   task_counts: Record<string, number>;
   homework_counts: Record<string, number>;
   next_lesson: Record<string, unknown> | null;
+  custom_field_values: Record<string, unknown>;
 }
 
 type ClientCardProjection = "full" | "teacher" | "client";
@@ -365,6 +367,7 @@ export class ClientCardReadService {
               from homework_rows group by status
             ) counts
           ) as homework_counts,
+          ${typedClientValueMapSql("$1", "$2")} as custom_field_values,
           (
             select item from lesson_rows
             where occurred_at >= now() and state = 'scheduled'
@@ -391,7 +394,6 @@ export class ClientCardReadService {
     if (!row?.header) {
       throw new NotFoundException("Клиент не найден.");
     }
-
     const sections: Record<string, unknown> = {
       lessons: this.section(row.lessons),
       homework: this.section(row.homework),
@@ -459,6 +461,7 @@ export class ClientCardReadService {
       comments: row.comments,
       homework: row.homework,
       timeline,
+      customFieldValues: row.custom_field_values,
     };
   }
 

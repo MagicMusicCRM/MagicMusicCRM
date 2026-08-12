@@ -10,13 +10,18 @@ import 'package:magic_music_crm/features/crm/presentation/client_forms/client_fo
 class _ClientFormsFakeApi extends MagicApiClient {
   _ClientFormsFakeApi({
     this.failFirstLeadWithInactiveSource = false,
+    this.failFirstStudentWithInactiveSource = false,
     this.failStudentCreate = false,
+    this.studentRequiredField = false,
   }) : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   final bool failFirstLeadWithInactiveSource;
+  final bool failFirstStudentWithInactiveSource;
   final bool failStudentCreate;
+  final bool studentRequiredField;
   int sourceLoads = 0;
   int leadCreates = 0;
+  int studentCreates = 0;
   final posts = <({String path, Map<String, dynamic> data})>[];
 
   @override
@@ -27,7 +32,10 @@ class _ClientFormsFakeApi extends MagicApiClient {
   }) async {
     if (path == '/crm/client-config/sources') {
       sourceLoads++;
-      final sourceId = failFirstLeadWithInactiveSource && sourceLoads > 1
+      final sourceId =
+          (failFirstLeadWithInactiveSource ||
+                  failFirstStudentWithInactiveSource) &&
+              sourceLoads > 1
           ? '20000000-0000-4000-8000-000000000002'
           : '20000000-0000-4000-8000-000000000001';
       return <String, dynamic>{
@@ -53,6 +61,21 @@ class _ClientFormsFakeApi extends MagicApiClient {
                       'entityType': 'lead',
                       'key': 'goal',
                       'label': 'Цель',
+                      'valueType': 'text',
+                      'required': true,
+                      'isActive': true,
+                      'isSystem': false,
+                      'options': const <String>[],
+                      'version': 1,
+                    },
+                  ]
+                : entityType == 'student' && studentRequiredField
+                ? [
+                    {
+                      'id': '30000000-0000-4000-8000-000000000002',
+                      'entityType': 'student',
+                      'key': 'instrument',
+                      'label': 'Инструмент',
                       'valueType': 'text',
                       'required': true,
                       'isActive': true,
@@ -121,6 +144,18 @@ class _ClientFormsFakeApi extends MagicApiClient {
       return <String, dynamic>{'id': 'lead-a'} as T;
     }
     if (path == '/crm/students') {
+      studentCreates++;
+      if (failFirstStudentWithInactiveSource && studentCreates == 1) {
+        throw const MagicApiException(
+          message: 'Выберите активный источник.',
+          statusCode: 422,
+          details: {
+            'field': 'sourceId',
+            'code': 'SOURCE_INACTIVE',
+            'message': 'Выберите активный источник.',
+          },
+        );
+      }
       if (failStudentCreate) throw StateError('offline');
       return <String, dynamic>{'id': 'student-a'} as T;
     }
@@ -285,6 +320,60 @@ void main() {
       'customFields': const <Map<String, dynamic>>[],
     });
   });
+
+  testWidgets('Student validates source and a configured required field', (
+    tester,
+  ) async {
+    final api = _ClientFormsFakeApi(studentRequiredField: true);
+    await _pump(tester, const StudentCreateDialogV4(), api);
+
+    await tester.tap(find.byKey(const ValueKey('student-submit')));
+    await tester.pump();
+    expect(find.text('Укажите имя.'), findsOneWidget);
+    expect(find.text('Укажите фамилию.'), findsOneWidget);
+    expect(find.text('Укажите корректный телефон.'), findsOneWidget);
+    expect(find.text('Выберите источник.'), findsOneWidget);
+    expect(find.text('Обязательное поле.'), findsOneWidget);
+    expect(find.widgetWithText(TextFormField, 'Инструмент *'), findsOneWidget);
+
+    await _enterStudentMinimum(tester);
+    await tester.enterText(
+      find.byKey(const ValueKey('custom-field-instrument')),
+      'Фортепиано',
+    );
+    await tester.tap(find.byKey(const ValueKey('student-submit')));
+    await tester.pumpAndSettle();
+
+    expect(api.posts.single.data['customFields'], [
+      {
+        'definitionId': '30000000-0000-4000-8000-000000000002',
+        'value': 'Фортепиано',
+      },
+    ]);
+  });
+
+  testWidgets(
+    'inactive Student source refresh keeps draft and requires a fresh choice',
+    (tester) async {
+      final api = _ClientFormsFakeApi(failFirstStudentWithInactiveSource: true);
+      await _pump(tester, const StudentCreateDialogV4(), api);
+      await _enterStudentMinimum(tester);
+
+      await tester.tap(find.byKey(const ValueKey('student-submit')));
+      await tester.pumpAndSettle();
+
+      expect(api.sourceLoads, 2);
+      expect(find.text('Пётр'), findsOneWidget);
+      expect(find.text('Смирнов'), findsOneWidget);
+      expect(
+        find.text('Источник был архивирован. Выберите другой.'),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('student-source')));
+      await tester.pumpAndSettle();
+      expect(find.text('Новый источник'), findsAtLeastNWidgets(1));
+    },
+  );
 
   testWidgets('student network error keeps the entered draft', (tester) async {
     final api = _ClientFormsFakeApi(failStudentCreate: true);

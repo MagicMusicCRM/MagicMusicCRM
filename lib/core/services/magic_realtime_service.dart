@@ -294,6 +294,18 @@ class MagicRealtimeConnection {
     _onMap('channel.post_created', handler);
   }
 
+  void onChannelCreated(MagicRealtimeHandler handler) {
+    _onMap('channel.created', handler);
+  }
+
+  void onChannelUpdated(MagicRealtimeHandler handler) {
+    _onMap('channel.updated', handler);
+  }
+
+  void onChannelRemoved(MagicRealtimeHandler handler) {
+    _onMap('channel.removed', handler);
+  }
+
   void onTypingStart(MagicRealtimeHandler handler) {
     _onMap('typing.start', handler);
   }
@@ -365,6 +377,9 @@ const _magicRealtimeEvents = <String>[
   'chat.created',
   'chat.removed',
   'chat.updated',
+  'channel.created',
+  'channel.updated',
+  'channel.removed',
   'channel.post_created',
   'typing.start',
   'typing.stop',

@@ -43,6 +43,34 @@ export interface PaymentReversalResultRow {
   occurred_at: Date | string;
 }
 
+export interface AccountAdjustmentReversalTargetRow {
+  adjustment_id: string;
+  student_id: string;
+  source_payment_id: string;
+  kind: "refund" | "adjustment";
+  amount_minor: string;
+  currency_code: string;
+  occurred_at: Date | string;
+  description: string | null;
+  branch_id: string | null;
+  method: string | null;
+  invoice_number: string | null;
+  issued_subscription_id: string | null;
+  aggregate_version: number | string;
+  exclusion_id: string | null;
+}
+
+export interface AccountAdjustmentReversalResultRow {
+  exclusion_id: string;
+  source_id: string;
+  counterpart_id: string;
+  reason: string;
+  actor_user_id: string;
+  actor_name: string | null;
+  audit_event_id: string | null;
+  occurred_at: Date | string;
+}
+
 @Injectable()
 export class PaymentReversalRepository {
   constructor(private readonly database: DatabaseService) {}
@@ -72,10 +100,37 @@ export class PaymentReversalRepository {
     return target;
   }
 
+  async findAdjustmentTarget(
+    adjustmentId: string,
+  ): Promise<AccountAdjustmentReversalTargetRow | null> {
+    const result = await this.database.query<AccountAdjustmentReversalTargetRow>(
+      adjustmentTargetSql,
+      [adjustmentId],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async lockAdjustmentTarget(
+    client: PoolClient,
+    adjustmentId: string,
+  ): Promise<AccountAdjustmentReversalTargetRow | null> {
+    const result = await client.query<AccountAdjustmentReversalTargetRow>(
+      `${adjustmentTargetSql} for update of adjustment`,
+      [adjustmentId],
+    );
+    const target = result.rows[0] ?? null;
+    if (target) {
+      await client.query("select id from app.payments where id = $1 for update", [
+        target.source_payment_id,
+      ]);
+    }
+    return target;
+  }
+
   async createExclusion(
     client: PoolClient,
     input: {
-      sourceKind: "payment" | "payment_record";
+      sourceKind: "payment" | "payment_record" | "account_adjustment";
       sourceId: string;
       counterpartId: string | null;
       reason: string;
@@ -147,6 +202,36 @@ export class PaymentReversalRepository {
     );
     return result.rows[0] ?? null;
   }
+
+  async findAdjustmentResult(
+    adjustmentId: string,
+  ): Promise<AccountAdjustmentReversalResultRow | null> {
+    const result =
+      await this.database.query<AccountAdjustmentReversalResultRow>(
+        `
+          select
+            exclusion.id as exclusion_id,
+            exclusion.source_id,
+            exclusion.counterpart_id,
+            exclusion.reason,
+            exclusion.actor_user_id,
+            nullif(btrim(
+              coalesce(profile.first_name, '') || ' ' ||
+              coalesce(profile.last_name, '')
+            ), '') as actor_name,
+            exclusion.audit_event_id,
+            exclusion.occurred_at
+          from app.commerce_reporting_exclusions exclusion
+          left join app.users actor on actor.id = exclusion.actor_user_id
+          left join app.profiles profile on profile.user_id = actor.id
+            and profile.deleted_at is null
+          where exclusion.source_kind = 'account_adjustment'
+            and exclusion.source_id = $1
+        `,
+        [adjustmentId],
+      );
+    return result.rows[0] ?? null;
+  }
 }
 
 const targetSql = `
@@ -187,4 +272,37 @@ const targetSql = `
       and exclusion.source_kind = 'payment'
       and exclusion.source_id = record.actual_payment_id)
   where record.id = $1
+`;
+
+const adjustmentTargetSql = `
+  select
+    adjustment.id as adjustment_id,
+    adjustment.student_id,
+    adjustment.source_payment_id,
+    adjustment.kind,
+    adjustment.amount_minor::text,
+    adjustment.currency_code,
+    adjustment.occurred_at,
+    adjustment.description,
+    adjustment.branch_id,
+    adjustment.method,
+    adjustment.invoice_number,
+    source_payment.issued_subscription_id,
+    coalesce(aggregate.version, 1) as aggregate_version,
+    exclusion.id as exclusion_id
+  from app.account_adjustments adjustment
+  join app.payments source_payment
+    on source_payment.id = adjustment.source_payment_id
+  left join app.aggregate_versions aggregate
+    on aggregate.aggregate_type = 'commerce:payment-adjustment'
+   and aggregate.aggregate_id = adjustment.id::text
+  left join app.commerce_reporting_exclusions exclusion
+    on (exclusion.source_kind = 'account_adjustment'
+      and exclusion.source_id = adjustment.id)
+    or (exclusion.counterpart_kind = 'account_adjustment'
+      and exclusion.counterpart_id = adjustment.id)
+  where adjustment.id = $1
+    and adjustment.source_payment_id is not null
+    and adjustment.deleted_at is null
+    and adjustment.status = 'paid'
 `;

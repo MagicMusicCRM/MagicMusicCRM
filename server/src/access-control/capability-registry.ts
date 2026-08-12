@@ -113,6 +113,20 @@ export const CAPABILITY_DEFINITIONS = [
     overrideMode: "locked",
   },
   {
+    key: "commerce.teacher_payroll.read",
+    version: 1,
+    domain: "commerce",
+    riskLevel: "high",
+    overrideMode: "deny_only",
+  },
+  {
+    key: "commerce.teacher_payroll.write",
+    version: 1,
+    domain: "commerce",
+    riskLevel: "critical",
+    overrideMode: "deny_only",
+  },
+  {
     key: "commerce.package.read",
     version: 1,
     domain: "commerce",

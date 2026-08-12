@@ -474,7 +474,7 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
 
   String _dateNavigationLabel() {
     if (_currentView == ScheduleView.month) {
-      return '${monthNamesGenitive[_displayedMonth.month].toLowerCase()} '
+      return '${monthNamesNominative[_displayedMonth.month]} '
           '${_displayedMonth.year}';
     }
     if (_currentView == ScheduleView.week) {
@@ -698,10 +698,10 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
       return _selectedBranchId == null ||
           item['branch_id']?.toString() == _selectedBranchId;
     }).toList();
-    final availableCount = availability
+    final emptyRoomCount = availability
         .where((item) => item['is_available'] == true)
         .length;
-    final busyCount = availability
+    final scheduledRoomCount = availability
         .where((item) => item['is_available'] == false)
         .length;
     final conflicts = _conflictsForSelectedDay();
@@ -728,14 +728,14 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
                   ? Icons.sync_rounded
                   : Icons.meeting_room_outlined,
               label: _availabilityLoading
-                  ? 'Проверяем аудитории'
-                  : 'Свободно: $availableCount',
+                  ? 'Проверяем занятость аудиторий'
+                  : 'Без занятий: $emptyRoomCount',
               color: AppColor.success,
             ),
             _ScheduleBadge(
               icon: Icons.event_busy_rounded,
-              label: 'Занято: $busyCount',
-              color: busyCount > 0
+              label: 'С занятиями: $scheduledRoomCount',
+              color: scheduledRoomCount > 0
                   ? AppTheme.warning
                   : Theme.of(context).colorScheme.onSurfaceVariant,
             ),
@@ -748,7 +748,7 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
             ),
             if (availability.isEmpty && !_availabilityLoading)
               Text(
-                'Доступность аудиторий появится после расчета backend.',
+                'Занятость аудиторий появится после расчета backend.',
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                   fontSize: 12,

@@ -10,6 +10,43 @@ extension MagicCrmLeads on MagicCrmService {
     return _items(response).map(_legacyLeadStatus).toList();
   }
 
+  Future<List<Map<String, dynamic>>> listLeadSources() async {
+    final response = await _api.get<Map<String, dynamic>>('/crm/lead-sources');
+    return _items(response)
+        .map(
+          (item) => <String, dynamic>{
+            'id': item['id'],
+            'name': item['displayName'] ?? item['canonicalName'] ?? '',
+          },
+        )
+        .toList();
+  }
+
+  /// The canonical responsible picker. IDs are app.users.id — the same ID
+  /// stored in leads.assigned_to and accepted by the board filter.
+  Future<List<Map<String, dynamic>>> listResponsibleStaff({
+    String? search,
+    String roles = 'admin,manager,director',
+  }) async {
+    final response = await _api.get<List<dynamic>>(
+      '/admin/staff',
+      queryParameters: {
+        if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+        'roles': roles,
+      },
+    );
+    return response
+        .whereType<Map<String, dynamic>>()
+        .map(
+          (item) => <String, dynamic>{
+            'id': item['id'],
+            'name': item['displayName'] ?? '',
+            'role': item['role'],
+          },
+        )
+        .toList();
+  }
+
   Future<List<Map<String, dynamic>>> listLeads({
     int limit = 100,
     String? q,
@@ -39,6 +76,7 @@ extension MagicCrmLeads on MagicCrmService {
     String? goal,
     String? gender,
     String? preferredSchedule,
+    String sort = 'newest',
     String quick = 'all',
     bool? openTasks,
     bool? hideConverted,
@@ -47,7 +85,11 @@ extension MagicCrmLeads on MagicCrmService {
     String? cursor,
     int limit = 25,
   }) async {
-    final queryParameters = <String, dynamic>{'limit': limit, 'quick': quick};
+    final queryParameters = <String, dynamic>{
+      'limit': limit,
+      'quick': quick,
+      'sort': sort,
+    };
     void addString(String key, String? value) {
       final trimmed = value?.trim();
       if (trimmed != null && trimmed.isNotEmpty) {
@@ -99,6 +141,9 @@ extension MagicCrmLeads on MagicCrmService {
       'tasks': _mapList(response['tasks'], _legacyTask),
       'trials': _mapList(response['trials'], _legacyLesson),
       'timeline': _mapList(response['timeline'], _legacyTimelineItem),
+      'custom_field_values': response['customFieldValues'] is Map
+          ? Map<String, dynamic>.from(response['customFieldValues'] as Map)
+          : <String, dynamic>{},
     };
   }
 
@@ -215,6 +260,12 @@ extension MagicCrmLeads on MagicCrmService {
     await _api.delete<Map<String, dynamic>>('/crm/family-members/$memberId');
   }
 
+  Future<void> setFamilyPrimaryPayer(String familyId, String memberId) async {
+    await _api.post<Map<String, dynamic>>(
+      '/crm/families/$familyId/primary-payer/$memberId',
+    );
+  }
+
   // ── Data quality: phone review + lead merge (P5-7) ───────────────────────
   Future<int> countPhoneReviewQueue() async {
     final res = await _api.get<Map<String, dynamic>>(
@@ -231,6 +282,22 @@ extension MagicCrmLeads on MagicCrmService {
       queryParameters: q,
     );
     return _items(res).whereType<Map<String, dynamic>>().toList();
+  }
+
+  Future<Map<String, dynamic>> resolvePhoneReview({
+    required String id,
+    required String action,
+    String? phone,
+    required String resolutionNote,
+  }) async {
+    return _api.patch<Map<String, dynamic>>(
+      '/crm/phone-review-queue/$id',
+      data: {
+        'action': action,
+        if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
+        'resolutionNote': resolutionNote.trim(),
+      },
+    );
   }
 
   Future<List<Map<String, dynamic>>> listMergeCandidates({int? limit}) async {
@@ -312,6 +379,7 @@ extension MagicCrmLeads on MagicCrmService {
     String? assignedTo,
     bool clearAssignedTo = false,
     Map<String, dynamic>? customDataPatch,
+    List<Map<String, dynamic>>? customFields,
     // P3-7: when moving to a requires_reason (terminal) status, capture why.
     String? reasonId,
     String? statusComment,
@@ -333,6 +401,7 @@ extension MagicCrmLeads on MagicCrmService {
     }
     if (clearAssignedTo) data['clearAssignedTo'] = true;
     if (customDataPatch != null) data['customDataPatch'] = customDataPatch;
+    if (customFields != null) data['customFields'] = customFields;
     if (reasonId != null) data['reasonId'] = reasonId;
     if (statusComment != null && statusComment.trim().isNotEmpty) {
       data['statusComment'] = statusComment.trim();
@@ -346,13 +415,24 @@ extension MagicCrmLeads on MagicCrmService {
   }
 
   /// P3-7: lead loss/pause reasons dictionary (for the terminal-status picker).
-  Future<List<Map<String, dynamic>>> listLossReasons() async {
-    final response = await _api.get<Map<String, dynamic>>('/crm/loss-reasons');
+  Future<List<Map<String, dynamic>>> listLossReasons({
+    bool includeArchived = false,
+  }) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/loss-reasons',
+      queryParameters: {if (includeArchived) 'includeArchived': true},
+    );
     return _items(response).whereType<Map<String, dynamic>>().toList();
   }
 
-  Future<void> deleteLead(String id) async {
-    await _api.delete<Map<String, dynamic>>('/crm/leads/$id');
+  Future<Map<String, dynamic>> createLossReason({
+    required String name,
+    String kind = 'lost',
+  }) {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/loss-reasons',
+      data: {'name': name.trim(), 'kind': kind},
+    );
   }
 
   /// Resolve the messenger user behind a lead (via crm-link or phone match)

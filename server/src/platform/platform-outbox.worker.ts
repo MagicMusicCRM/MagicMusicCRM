@@ -7,6 +7,8 @@ import {
 import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import { NotificationsService } from "../notifications/notifications.service";
+import { clientFinanceAudienceForStudent } from "../crm/audience";
+import { DatabaseService } from "../db/database.service";
 import {
   CrmChangedPayload,
   CrmEntity,
@@ -33,6 +35,7 @@ export class PlatformOutboxWorker implements OnModuleInit, OnModuleDestroy {
     private readonly integrity: PlatformIntegrityService,
     private readonly realtime: RealtimeBus,
     private readonly notifications: NotificationsService,
+    private readonly database: DatabaseService,
   ) {}
 
   onModuleInit(): void {
@@ -132,10 +135,19 @@ export class PlatformOutboxWorker implements OnModuleInit, OnModuleDestroy {
         event.eventId,
       );
     }
+    const lessonChange = lessonChangeFor(event);
+    if (lessonChange) {
+      await this.notifications.notifyLessonChanged({
+        eventId: event.eventId,
+        lessonId: eventId(event),
+        action: lessonChange,
+        successorId: optionalString(event.payload.successorId),
+      });
+    }
 
     const entity = entityFor(event);
     if (event.type.startsWith("commerce.")) {
-      this.realtime.emitFinanceChanged(stringList(event.payload.affectedUserIds));
+      this.realtime.emitFinanceChanged(await this.financeUserIds(event));
     }
     this.realtime.emitCrmChanged({
       entity,
@@ -144,6 +156,80 @@ export class PlatformOutboxWorker implements OnModuleInit, OnModuleDestroy {
       branchId: optionalString(event.payload.branchId),
       affectedUserIds: stringList(event.payload.affectedUserIds),
     } satisfies CrmChangedPayload);
+  }
+
+  private async financeUserIds(event: ClaimedOutboxEvent): Promise<string[]> {
+    const recipients = new Set(stringList(event.payload.affectedUserIds));
+    const studentIds = new Set([
+      ...stringList(event.payload.studentIds),
+      ...[
+        optionalString(event.payload.studentId),
+        optionalString(event.payload.recipientStudentId),
+        optionalString(event.payload.payerStudentId),
+      ].filter((value): value is string => value !== null),
+    ]);
+
+    const linkedStudents = await this.financeStudentsFor(event);
+    for (const studentId of linkedStudents) studentIds.add(studentId);
+    for (const studentId of studentIds) {
+      const userIds = await clientFinanceAudienceForStudent(
+        this.database,
+        studentId,
+      );
+      for (const userId of userIds) recipients.add(userId);
+    }
+    return [...recipients];
+  }
+
+  private async financeStudentsFor(
+    event: ClaimedOutboxEvent,
+  ): Promise<string[]> {
+    let source: string | null = null;
+    if (event.aggregateType === "commerce:issued-subscription") {
+      source = `
+        select subscription.student_id
+        from app.subscriptions subscription
+        where subscription.id = $1
+        union
+        select subscription.payer_student_id
+        from app.subscriptions subscription
+        where subscription.id = $1
+          and subscription.payer_student_id is not null
+      `;
+    } else if (
+      event.aggregateType === "commerce:client-payment" ||
+      event.aggregateType === "commerce:payment-reversal"
+    ) {
+      source = `
+        select payment.student_id
+        from app.client_payment_records payment
+        where payment.id = $1
+        union
+        select subscription.student_id
+        from app.client_payment_records payment
+        join app.subscriptions subscription
+          on subscription.id = payment.issued_subscription_id
+        where payment.id = $1
+        union
+        select subscription.payer_student_id
+        from app.client_payment_records payment
+        join app.subscriptions subscription
+          on subscription.id = payment.issued_subscription_id
+        where payment.id = $1
+          and subscription.payer_student_id is not null
+      `;
+    } else if (event.aggregateType === "commerce:payment-adjustment") {
+      source = `
+        select adjustment.student_id
+        from app.account_adjustments adjustment
+        where adjustment.id = $1
+      `;
+    }
+    if (source === null) return [];
+    const result = await this.database.query<{ student_id: string }>(source, [
+      event.aggregateId,
+    ]);
+    return result.rows.map((row) => row.student_id).filter(Boolean);
   }
 
   private async tick(): Promise<void> {
@@ -186,7 +272,12 @@ function entityFor(event: ClaimedOutboxEvent): CrmEntity {
 
 function actionFor(event: ClaimedOutboxEvent): CrmChangedPayload["action"] {
   const action = optionalString(event.payload.action);
-  if (action === "created" || action === "updated" || action === "deleted" || action === "moved") {
+  if (
+    action === "created" ||
+    action === "updated" ||
+    action === "deleted" ||
+    action === "moved"
+  ) {
     return action;
   }
   if (event.type.endsWith(".created")) return "created";
@@ -202,9 +293,21 @@ function eventId(event: ClaimedOutboxEvent): string {
   );
 }
 
+function lessonChangeFor(
+  event: ClaimedOutboxEvent,
+): "created" | "rescheduled" | "cancelled" | null {
+  if (event.type !== "schedule.lesson.changed") return null;
+  const action = optionalString(event.payload.action);
+  if (action === "created") return "created";
+  if (action === "rescheduled") return "rescheduled";
+  if (action === "cancelled") return "cancelled";
+  return null;
+}
+
 function requiredString(value: unknown, eventType: string): string {
   const result = optionalString(value);
-  if (!result) throw new Error(`InvalidPlatformEvent:${eventType.slice(0, 80)}`);
+  if (!result)
+    throw new Error(`InvalidPlatformEvent:${eventType.slice(0, 80)}`);
   return result;
 }
 

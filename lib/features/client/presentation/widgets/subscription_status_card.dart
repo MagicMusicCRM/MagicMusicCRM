@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
+import 'package:magic_music_crm/core/widgets/v7/magic_page_state.dart';
 
 final subscriptionProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
   // magicCurrentStudentIdProvider derives from the portal switcher selection
@@ -71,8 +72,11 @@ class SubscriptionStatusCard extends ConsumerWidget {
           );
         }
 
-        final courseName = (subscription['type']?.toString() ?? 'Абонемент')
-            .toUpperCase();
+        final courseName =
+            (subscription['package_name']?.toString() ??
+                    subscription['type']?.toString() ??
+                    'Абонемент')
+                .toUpperCase();
         // Subscriptions are tracked in HOURS (may be fractional).
         final hoursTotal = (subscription['lessons_total'] as num?) ?? 0;
         final hoursUsed = (subscription['lessons_used'] as num?) ?? 0;
@@ -88,6 +92,11 @@ class SubscriptionStatusCard extends ConsumerWidget {
         final validityText = endDate == null
             ? 'Действует: бессрочно'
             : 'Действует до: ${DateFormat('d MMMM yyyy', 'ru').format(endDate)}';
+        final nextPaymentRaw = subscription['next_payment_at']?.toString();
+        final nextPaymentAt = nextPaymentRaw == null || nextPaymentRaw.isEmpty
+            ? null
+            : DateTime.tryParse(nextPaymentRaw)?.toLocal();
+        final hasFinance = subscription.containsKey('actual_paid_minor');
 
         bool isExpiringSoon =
             (daysLeft != null && daysLeft <= 7) || remainingClasses <= 2;
@@ -152,6 +161,61 @@ class SubscriptionStatusCard extends ConsumerWidget {
                     ),
                   ],
                 ),
+                if (hasFinance) ...[
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      _SubscriptionMetric(
+                        key: const Key('subscription-hours'),
+                        label: 'Часы',
+                        value:
+                            '${_formatHours(hoursUsed)} из ${_formatHours(hoursTotal)}',
+                      ),
+                      _SubscriptionMetric(
+                        key: const Key('subscription-paid'),
+                        label: 'Оплачено',
+                        value: _formatMinor(subscription['actual_paid_minor']),
+                        color: AppTheme.success,
+                      ),
+                      _SubscriptionMetric(
+                        key: const Key('subscription-debt'),
+                        label: 'Долг',
+                        value: _formatMinor(subscription['debt_minor']),
+                        color: _minorPositive(subscription['debt_minor'])
+                            ? AppTheme.danger
+                            : null,
+                      ),
+                      _SubscriptionMetric(
+                        key: const Key('subscription-pending'),
+                        label: 'Ожидает подтверждения',
+                        value: _formatMinor(subscription['pending_minor']),
+                        color: _minorPositive(subscription['pending_minor'])
+                            ? AppTheme.warning
+                            : null,
+                      ),
+                      _SubscriptionMetric(
+                        key: const Key('subscription-overpayment'),
+                        label: 'Переплата',
+                        value: _formatMinor(subscription['overpayment_minor']),
+                        color: _minorPositive(subscription['overpayment_minor'])
+                            ? AppTheme.success
+                            : null,
+                      ),
+                      _SubscriptionMetric(
+                        key: const Key('subscription-next-payment'),
+                        label: 'Следующий платёж',
+                        value: nextPaymentAt == null
+                            ? 'Не запланирован'
+                            : DateFormat(
+                                'd MMMM yyyy',
+                                'ru',
+                              ).format(nextPaymentAt),
+                      ),
+                    ],
+                  ),
+                ],
                 if (isExpiringSoon) ...[
                   const SizedBox(height: 16),
                   Container(
@@ -190,16 +254,89 @@ class SubscriptionStatusCard extends ConsumerWidget {
         );
       },
       loading: () => const _SubscriptionSkeleton(),
-      error: (err, _) => Center(
-        child: Text(
-          'Ошибка: $err',
-          style: const TextStyle(color: AppTheme.danger),
-        ),
+      error: (_, _) => MagicPageState(
+        kind: MagicPageStateKind.error,
+        title: 'Не удалось загрузить абонемент',
+        message: 'Проверьте подключение и повторите загрузку.',
+        actionLabel: 'Повторить',
+        onAction: () {
+          ref.invalidate(myCommerceProjectionProvider);
+          ref.invalidate(subscriptionProvider);
+        },
       ),
       skipLoadingOnRefresh: true,
       skipLoadingOnReload: true,
     );
   }
+}
+
+class _SubscriptionMetric extends StatelessWidget {
+  const _SubscriptionMetric({
+    super.key,
+    required this.label,
+    required this.value,
+    this.color,
+  });
+
+  final String label;
+  final String value;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      width: 154,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: cs.onSurfaceVariant, fontSize: 11),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: color ?? cs.onSurface,
+              fontWeight: FontWeight.w800,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _formatHours(num value) => value == value.truncate()
+    ? value.toInt().toString()
+    : value.toStringAsFixed(1);
+
+bool _minorPositive(Object? raw) =>
+    (BigInt.tryParse(raw?.toString() ?? '') ?? BigInt.zero) > BigInt.zero;
+
+String _formatMinor(Object? raw) {
+  final minor = BigInt.tryParse(raw?.toString() ?? '') ?? BigInt.zero;
+  final negative = minor.isNegative;
+  final absolute = minor.abs();
+  final rubles = absolute ~/ BigInt.from(100);
+  final kopecks = (absolute % BigInt.from(100)).toInt();
+  final grouped = rubles.toString().replaceAllMapped(
+    RegExp(r'(?<=\d)(?=(\d{3})+$)'),
+    (_) => '\u00a0',
+  );
+  final fraction = kopecks == 0 ? '' : ',${kopecks.toString().padLeft(2, '0')}';
+  return '${negative ? '−' : ''}$grouped$fraction ₽';
 }
 
 class _SubscriptionSkeleton extends StatelessWidget {

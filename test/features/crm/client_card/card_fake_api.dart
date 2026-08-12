@@ -34,17 +34,25 @@ class FakeCardApiClient extends MagicApiClient {
     this.studentAccounts = const [],
     this.studentMovements = const [],
     this.studentTechnicalHistory = const [],
+    this.homeworks = const [],
     this.internalNote,
     this.operationalHistory = const [],
+    Map<String, dynamic>? family,
+    List<Map<String, dynamic>> linkedUsers = const [],
+    List<Map<String, dynamic>> clientUserCandidates = const [],
     this.studentLessons = const [],
     this.customFields = const [],
     this.sources = const [],
     this.branches = const [],
     this.teachers = const [],
     this.rooms = const [],
-    this.scheduleSeries = const [],
-    this.schedulePlans = const [],
+    List<Map<String, dynamic>> scheduleSeries = const [],
+    List<Map<String, dynamic>> schedulePlans = const [],
     this.schedulePlanTrays = const {},
+    this.mutateScheduleSeriesOnCreate = false,
+    this.mutateSchedulePlanOnCreate = false,
+    this.mutateSchedulePlanOnEnd = false,
+    List<Map<String, dynamic>> schedulePlanConstraintPreviews = const [],
     this.scheduleMatrix = const [],
     this.replacementPreview,
     this.replacementResult,
@@ -53,7 +61,26 @@ class FakeCardApiClient extends MagicApiClient {
     this.cancellationResult,
     this.cancellationFailures = 0,
     this.paymentReversalPreview,
-  }) : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
+    this.adjustmentReversalPreview,
+  }) : family = family == null ? null : Map<String, dynamic>.from(family),
+       linkedUsers = [
+         for (final item in linkedUsers) Map<String, dynamic>.from(item),
+       ],
+       clientUserCandidates = [
+         for (final item in clientUserCandidates)
+           Map<String, dynamic>.from(item),
+       ],
+       scheduleSeries = [
+         for (final series in scheduleSeries) Map<String, dynamic>.from(series),
+       ],
+       schedulePlans = [
+         for (final plan in schedulePlans) Map<String, dynamic>.from(plan),
+       ],
+       schedulePlanConstraintPreviews = [
+         for (final preview in schedulePlanConstraintPreviews)
+           Map<String, dynamic>.from(preview),
+       ],
+       super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   final String role;
 
@@ -73,8 +100,12 @@ class FakeCardApiClient extends MagicApiClient {
   final List<Map<String, dynamic>> studentAccounts;
   final List<Map<String, dynamic>> studentMovements;
   final List<Map<String, dynamic>> studentTechnicalHistory;
+  final List<Map<String, dynamic>> homeworks;
   Map<String, dynamic>? internalNote;
   final List<Map<String, dynamic>> operationalHistory;
+  Map<String, dynamic>? family;
+  final List<Map<String, dynamic>> linkedUsers;
+  final List<Map<String, dynamic>> clientUserCandidates;
   final List<Map<String, dynamic>> studentLessons;
   final List<Map<String, dynamic>> customFields;
   final List<Map<String, dynamic>> sources;
@@ -84,6 +115,10 @@ class FakeCardApiClient extends MagicApiClient {
   final List<Map<String, dynamic>> scheduleSeries;
   final List<Map<String, dynamic>> schedulePlans;
   final Map<String, Map<String, dynamic>> schedulePlanTrays;
+  final bool mutateScheduleSeriesOnCreate;
+  final bool mutateSchedulePlanOnCreate;
+  final bool mutateSchedulePlanOnEnd;
+  final List<Map<String, dynamic>> schedulePlanConstraintPreviews;
   final List<Map<String, dynamic>> scheduleMatrix;
   final Map<String, dynamic>? replacementPreview;
   final Map<String, dynamic>? replacementResult;
@@ -92,6 +127,7 @@ class FakeCardApiClient extends MagicApiClient {
   final Map<String, dynamic>? cancellationResult;
   int cancellationFailures;
   final Map<String, dynamic>? paymentReversalPreview;
+  final Map<String, dynamic>? adjustmentReversalPreview;
 
   Map<String, dynamic>? updateLeadBody;
   Map<String, dynamic>? updateStudentBody;
@@ -101,6 +137,7 @@ class FakeCardApiClient extends MagicApiClient {
   final List<CardGetCall> getCalls = [];
   final List<CardPostCall> postRequests = [];
   final List<IdempotentCardCall> idempotentRequests = [];
+  final Map<String, String> _schedulePlanCreateIds = {};
   int studentCardLoadCount = 0;
   int leadBoardLoadCount = 0;
   final List<String> leadBoardQueries = [];
@@ -122,8 +159,32 @@ class FakeCardApiClient extends MagicApiClient {
           }
           as T;
     }
-    if (path == '/settings/crm-custom-fields') {
-      return <String, dynamic>{'fields': customFields} as T;
+    if (path == '/crm/client-config/fields') {
+      final entityType = queryParameters?['entityType']?.toString();
+      final items = <Map<String, dynamic>>[];
+      for (var index = 0; index < customFields.length; index++) {
+        final field = customFields[index];
+        final rawEntity =
+            field['entityType']?.toString() ?? field['entity']?.toString();
+        final canonicalEntity = const {'lead', 'leads'}.contains(rawEntity)
+            ? 'lead'
+            : 'student';
+        if (canonicalEntity != entityType) continue;
+        items.add({
+          'id':
+              field['id'] ??
+              '30000000-0000-4000-8000-${index.toString().padLeft(12, '0')}',
+          'entityType': canonicalEntity,
+          'key': field['key'],
+          'label': field['label'],
+          'valueType': field['valueType'] ?? field['type'] ?? 'text',
+          'required': field['required'] == true,
+          'options': field['options'] ?? const [],
+          'width': field['width'] ?? 'full',
+          'placements': field['placements'] ?? const ['edit', 'card'],
+        });
+      }
+      return <String, dynamic>{'items': items} as T;
     }
     if (path == '/crm/client-config/sources') {
       return <String, dynamic>{'items': sources} as T;
@@ -246,7 +307,7 @@ class FakeCardApiClient extends MagicApiClient {
     }
     if (path == '/admin/staff') {
       return <dynamic>[
-            {
+            <String, dynamic>{
               'id': '55555555-5555-4555-8555-555555555555',
               'displayName': 'Мария Управляющая',
               'role': 'manager',
@@ -274,6 +335,9 @@ class FakeCardApiClient extends MagicApiClient {
             'counters': {'open': items.length, 'overdue': 0},
           }
           as T;
+    }
+    if (path == '/crm/homeworks') {
+      return <String, dynamic>{'items': homeworks} as T;
     }
     if (path.startsWith('/crm/shared-tasks/') && path.endsWith('/history')) {
       return <String, dynamic>{'items': sharedTaskHistory} as T;
@@ -312,6 +376,24 @@ class FakeCardApiClient extends MagicApiClient {
       return <String, dynamic>{'items': operationalHistory, 'nextCursor': null}
           as T;
     }
+    if (RegExp(
+      r'^/crm/families/by-entity/(lead|student)/[^/]+$',
+    ).hasMatch(path)) {
+      return Map<String, dynamic>.from(
+            family ?? const {'family': null, 'members': <dynamic>[]},
+          )
+          as T;
+    }
+    if (RegExp(
+      r'^/crm/clients/(lead|student)/[^/]+/linked-users$',
+    ).hasMatch(path)) {
+      return <String, dynamic>{'items': linkedUsers} as T;
+    }
+    if (RegExp(
+      r'^/crm/clients/(lead|student)/[^/]+/user-candidates$',
+    ).hasMatch(path)) {
+      return <String, dynamic>{'items': clientUserCandidates} as T;
+    }
     if (lead != null && path == '/crm/leads/${lead!['id']}/card') {
       return <String, dynamic>{
             'lead': lead,
@@ -321,6 +403,7 @@ class FakeCardApiClient extends MagicApiClient {
             'tasks': leadTasks,
             'trials': <dynamic>[],
             'timeline': <dynamic>[],
+            'customFieldValues': <String, dynamic>{},
           }
           as T;
     }
@@ -338,6 +421,7 @@ class FakeCardApiClient extends MagicApiClient {
             'subscriptions': studentSubscriptions,
             'links': <dynamic>[],
             'timeline': <dynamic>[],
+            'customFieldValues': <String, dynamic>{},
           }
           as T;
     }
@@ -517,11 +601,57 @@ class FakeCardApiClient extends MagicApiClient {
       path: path,
       data: data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{},
     ));
+    if (path == '/crm/schedule-series') {
+      final body = data is Map
+          ? Map<String, dynamic>.from(data)
+          : <String, dynamic>{};
+      Map<String, dynamic>? byId(List<Map<String, dynamic>> rows, Object? id) {
+        for (final row in rows) {
+          if (row['id']?.toString() == id?.toString()) return row;
+        }
+        return null;
+      }
+
+      final clientRef = body['clientRef'];
+      final teacher = byId(teachers, body['teacherId']);
+      final room = byId(rooms, body['roomId']);
+      final branch = byId(branches, body['branchId']);
+      final teacherName = [
+        teacher?['firstName'],
+        teacher?['lastName'],
+      ].where((part) => part != null && '$part'.trim().isNotEmpty).join(' ');
+      final created = <String, dynamic>{
+        'id': 'series-${scheduleSeries.length + 1}',
+        'clientType': clientRef is Map ? clientRef['type'] : null,
+        'clientId': clientRef is Map ? clientRef['id'] : null,
+        'studentId': body['studentId'],
+        'groupId': body['groupId'],
+        'teacherId': body['teacherId'],
+        'teacherName': teacherName,
+        'roomId': body['roomId'],
+        'roomName': room?['name'],
+        'branchId': body['branchId'],
+        'branchName': branch?['name'],
+        'weekday': body['weekday'],
+        'beginTime': body['beginTime'],
+        'durationMinutes': body['durationMinutes'] ?? 60,
+        'validFrom': body['validFrom'],
+        'validUntil': body['validUntil'],
+        'notes': body['notes'],
+      };
+      if (mutateScheduleSeriesOnCreate) scheduleSeries.add(created);
+      return created as T;
+    }
     if (replacementPreview != null && path.endsWith('/replace/preview')) {
       return Map<String, dynamic>.from(replacementPreview!) as T;
     }
     if (cancellationPreview != null && path.endsWith('/cancel/preview')) {
       return Map<String, dynamic>.from(cancellationPreview!) as T;
+    }
+    if (adjustmentReversalPreview != null &&
+        path.contains('/adjustments/') &&
+        path.endsWith('/reversal/preview')) {
+      return Map<String, dynamic>.from(adjustmentReversalPreview!) as T;
     }
     if (paymentReversalPreview != null && path.endsWith('/reversal/preview')) {
       return Map<String, dynamic>.from(paymentReversalPreview!) as T;
@@ -539,7 +669,13 @@ class FakeCardApiClient extends MagicApiClient {
           }
           as T;
     }
-    if (path == '/crm/schedule-plans/constraints/preview') {
+    if (path == '/crm/schedule-plans/constraints/preview' ||
+        RegExp(
+          r'^/crm/schedule-plans/[^/]+/constraints/preview$',
+        ).hasMatch(path)) {
+      if (schedulePlanConstraintPreviews.isNotEmpty) {
+        return schedulePlanConstraintPreviews.removeAt(0) as T;
+      }
       final rows = data is Map ? data['rows'] as List? ?? const [] : const [];
       return <String, dynamic>{
             'valid': true,
@@ -562,6 +698,38 @@ class FakeCardApiClient extends MagicApiClient {
         path == '/crm/leads/${lead!['id']}/subscriptions/issue') {
       return <String, dynamic>{
             'student': {'id': 'student-from-${lead!['id']}'},
+          }
+          as T;
+    }
+    if (RegExp(r'^/crm/families/[^/]+/primary-payer/[^/]+$').hasMatch(path)) {
+      final memberId = path.split('/').last;
+      final familyRecord = family?['family'];
+      if (familyRecord is Map<String, dynamic>) {
+        familyRecord['primaryPayerMemberId'] = memberId;
+      }
+      return <String, dynamic>{'success': true} as T;
+    }
+    if (RegExp(
+      r'^/crm/clients/(lead|student)/[^/]+/link-user$',
+    ).hasMatch(path)) {
+      final userId = (data as Map?)?['userId']?.toString();
+      final candidate = clientUserCandidates
+          .cast<Map<String, dynamic>?>()
+          .firstWhere(
+            (item) => item?['userId']?.toString() == userId,
+            orElse: () => null,
+          );
+      if (candidate != null &&
+          !linkedUsers.any((item) => item['userId']?.toString() == userId)) {
+        linkedUsers.add({...candidate, 'linkSource': 'manual_phone'});
+      }
+      return <String, dynamic>{'items': linkedUsers} as T;
+    }
+    if (RegExp(r'^/crm/students/[^/]+/invite$').hasMatch(path)) {
+      return <String, dynamic>{
+            'studentId': student?['id'],
+            'email': student?['email'] ?? 'student@example.com',
+            'status': 'queued',
           }
           as T;
     }
@@ -604,7 +772,97 @@ class FakeCardApiClient extends MagicApiClient {
           as T;
     }
     if (path.endsWith('/end')) {
+      if (mutateSchedulePlanOnEnd) {
+        final match = RegExp(
+          r'^/crm/schedule-plans/([^/]+)/end$',
+        ).firstMatch(path);
+        final planId = match?.group(1);
+        for (final plan in schedulePlans) {
+          if (plan['id']?.toString() != planId) continue;
+          plan
+            ..['status'] = 'ended'
+            ..['version'] = (body['expectedVersion'] as num).toInt() + 1
+            ..['activeUntil'] = body['lastDate']
+            ..['endedAt'] = '2026-08-12T12:00:00.000Z'
+            ..['endedBy'] = '55555555-5555-4555-8555-555555555555'
+            ..['endedByName'] = 'Мария Управляющая'
+            ..['endReason'] = body['reasonText']
+            ..['rows'] = [
+              for (final rawRow in plan['rows'] as List? ?? const [])
+                if (rawRow is Map)
+                  {
+                    ...Map<String, dynamic>.from(rawRow),
+                    'validUntil': body['lastDate'],
+                    'active':
+                        (rawRow['validFrom']?.toString() ?? '').compareTo(
+                          body['lastDate'].toString(),
+                        ) <=
+                        0,
+                  },
+            ];
+        }
+      }
       return <String, dynamic>{'status': 'ended', 'version': 2} as T;
+    }
+    if (path == '/crm/schedule-plans') {
+      final planId = _schedulePlanCreateIds.putIfAbsent(
+        identity.idempotencyKey,
+        () => 'created-plan-${_schedulePlanCreateIds.length + 1}',
+      );
+      if (mutateSchedulePlanOnCreate &&
+          !schedulePlans.any((plan) => plan['id']?.toString() == planId)) {
+        Map<String, dynamic>? byId(
+          List<Map<String, dynamic>> rows,
+          Object? id,
+        ) {
+          for (final row in rows) {
+            if (row['id']?.toString() == id?.toString()) return row;
+          }
+          return null;
+        }
+
+        final rawRows = body['rows'] as List? ?? const [];
+        schedulePlans.add({
+          'id': planId,
+          'kind': body['kind'],
+          'title': body['title'],
+          'studentId': body['studentId'],
+          'groupId': body['groupId'],
+          'subscriptionId': body['subscriptionId'],
+          'activeFrom': body['activeFrom'],
+          'activeUntil': body['activeUntil'],
+          'status': 'active',
+          'version': 1,
+          'participants': body['participants'] ?? const [],
+          'rows': [
+            for (var index = 0; index < rawRows.length; index++)
+              if (rawRows[index] is Map)
+                () {
+                  final row = Map<String, dynamic>.from(rawRows[index] as Map);
+                  final teacher = byId(teachers, row['teacherId']);
+                  final room = byId(rooms, row['roomId']);
+                  final branch = byId(branches, row['branchId']);
+                  final teacherName =
+                      [teacher?['firstName'], teacher?['lastName']]
+                          .where(
+                            (part) => part != null && '$part'.trim().isNotEmpty,
+                          )
+                          .join(' ');
+                  return {
+                    ...row,
+                    'id': 'created-series-${index + 1}',
+                    'teacherName': teacherName,
+                    'roomName': room?['name'],
+                    'branchName': branch?['name'],
+                    'validFrom': body['activeFrom'],
+                    'validUntil': body['activeUntil'],
+                    'active': true,
+                  };
+                }(),
+          ],
+        });
+      }
+      return <String, dynamic>{'id': planId, 'version': 1} as T;
     }
     return <String, dynamic>{} as T;
   }

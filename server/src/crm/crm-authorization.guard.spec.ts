@@ -30,6 +30,7 @@ const AUTH_MARKERS: RegExp[] = [
   /\bisManagerOrAdminRole\(/,
   /\bisSystemAdminRole\(/,
   /actor\.userId/, // ownership / self-scope reads
+  /actor\.role/, // explicit role/hierarchy authorization helper
   /\$1::text in \(/, // row-level role SQL predicate (e.g. listLessons)
   /role(Filter|Clause|Predicate|Scope)/i,
 ];

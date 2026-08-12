@@ -7,10 +7,7 @@ import { ConfigService } from "@nestjs/config";
 import { randomUUID } from "crypto";
 import { Pool } from "pg";
 import { AuditService } from "../../audit/audit.service";
-import {
-  ActorContext,
-  UserRole,
-} from "../../common/security/actor-context";
+import { ActorContext, UserRole } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
 import { MigrationRunner } from "../../db/migration-runner";
 import { PlatformIntegrityRepository } from "../../platform/platform-integrity.repository";
@@ -25,7 +22,9 @@ const defaultTestDatabaseUrl =
 const testDatabaseUrl =
   process.env.V4_PLATFORM_TEST_DATABASE_URL ?? defaultTestDatabaseUrl;
 const parsedDatabaseUrl = new URL(testDatabaseUrl);
-if (!new Set(["127.0.0.1", "localhost", "[::1]"]).has(parsedDatabaseUrl.hostname)) {
+if (
+  !new Set(["127.0.0.1", "localhost", "[::1]"]).has(parsedDatabaseUrl.hostname)
+) {
   throw new Error("Comment sharing tests require local PostgreSQL.");
 }
 
@@ -243,10 +242,7 @@ describe("Comment sharing (PostgreSQL)", () => {
     realtime = { emitCrmChanged: jest.fn() };
     sharing = new CommentSharingService(
       database,
-      new PlatformIntegrityService(
-        database,
-        new PlatformIntegrityRepository(),
-      ),
+      new PlatformIntegrityService(database, new PlatformIntegrityRepository()),
       realtime as unknown as RealtimeBus,
     );
     timeline = new TimelineService(
@@ -299,10 +295,9 @@ describe("Comment sharing (PostgreSQL)", () => {
       `,
       [fixtureUserIds],
     );
-    await database.query(
-      "delete from app.users where id = any($1::uuid[])",
-      [fixtureUserIds],
-    );
+    await database.query("delete from app.users where id = any($1::uuid[])", [
+      fixtureUserIds,
+    ]);
     await database.onModuleDestroy();
   });
 
@@ -324,6 +319,13 @@ describe("Comment sharing (PostgreSQL)", () => {
       version: 1,
     });
     expect(JSON.stringify(result)).not.toContain("HIDDEN-COMMENT-BODY");
+    const clientResult = await timeline.listComments(actors.client, {
+      entityType: "student",
+      entityId: studentId,
+      limit: 20,
+    });
+    expect(clientResult.items).toEqual([]);
+    expect(JSON.stringify(clientResult)).not.toContain("COMMENT-BODY");
     await expect(
       timeline.listComments(actors.unrelatedTeacher, {
         entityType: "student",
@@ -349,10 +351,7 @@ describe("Comment sharing (PostgreSQL)", () => {
         idempotencyKey: mutationIdempotencyKey,
       };
 
-      const first = await sharing.setTeacherSharing(
-        actors[actorKey]!,
-        command,
-      );
+      const first = await sharing.setTeacherSharing(actors[actorKey]!, command);
       const replay = await sharing.setTeacherSharing(
         actors[actorKey]!,
         command,
@@ -377,6 +376,7 @@ describe("Comment sharing (PostgreSQL)", () => {
 
       const evidence = await database.query<{
         audit_count: number | string;
+        audit_reason_text: string | null;
         outbox_count: number | string;
         event_payload: Record<string, unknown>;
         shared_with_teacher: boolean;
@@ -390,6 +390,13 @@ describe("Comment sharing (PostgreSQL)", () => {
               where request_id = $1
                 and action = 'crm.comment_teacher_sharing_changed'
             ) as audit_count,
+            (
+              select reason_text
+              from app.audit_events
+              where request_id = $1
+                and action = 'crm.comment_teacher_sharing_changed'
+              limit 1
+            ) as audit_reason_text,
             (
               select count(*)
               from app.platform_outbox_events
@@ -410,6 +417,7 @@ describe("Comment sharing (PostgreSQL)", () => {
       );
       expect(evidence.rows[0]).toMatchObject({
         audit_count: "1",
+        audit_reason_text: "Комментарий опубликован преподавателю",
         outbox_count: "1",
         event_payload: {
           entityId: comment.id,

@@ -188,6 +188,231 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
     }
   });
 
+  it("waits for due time and lets the polling worker settle exactly once", async () => {
+    const fixture = await createFixture(
+      pool,
+      database,
+      settlement,
+      "valid",
+      {
+        chargeType: "subscription",
+        scheduledEndOffsetSeconds: 2.5,
+      },
+    );
+    const previousEnabled = process.env.LESSON_COMPLETION_WORKER_ENABLED;
+    const previousPollMs = process.env.LESSON_COMPLETION_WORKER_POLL_MS;
+    const worker = new LessonCompletionWorker(repository, completion);
+    try {
+      await expect(repository.metrics()).resolves.toMatchObject({ due: 0 });
+      expect((await loadEvidence(pool, fixture.lessonId)).counts).toEqual({
+        transitions: 0,
+        client_facts: 0,
+        teacher_facts: 0,
+        audits: 0,
+        outbox: 0,
+        idempotency: 0,
+      });
+
+      process.env.LESSON_COMPLETION_WORKER_ENABLED = "true";
+      process.env.LESSON_COMPLETION_WORKER_POLL_MS = "1000";
+      const startedAt = Date.now();
+      worker.onModuleInit();
+
+      await waitForLessonCompletion(pool, fixture.lessonId, 10_000);
+      expect(Date.now() - startedAt).toBeGreaterThanOrEqual(1_500);
+
+      const evidence = await loadEvidence(pool, fixture.lessonId);
+      expect(evidence.lesson).toMatchObject({
+        lifecycle_state: "successfully_completed",
+        status: "completed",
+      });
+      expect(Number(evidence.lesson.version)).toBe(2);
+      expect(evidence.counts).toEqual({
+        transitions: 1,
+        client_facts: 1,
+        teacher_facts: 1,
+        audits: 1,
+        outbox: 1,
+        idempotency: 1,
+      });
+      expect(evidence.work).toMatchObject({
+        state: "completed",
+        attempts: 1,
+        claimed_by: null,
+        terminal_state: "successfully_completed",
+      });
+
+      const settlementEvidence = await pool.query<{
+        client_fact_id: string;
+        teacher_fact_id: string;
+        charge_type: string;
+        units: string;
+        teacher_amount_minor: string;
+        reservation_state: string;
+        plan_state: string;
+        plan_revisions: number;
+      }>(
+        `select client.id as client_fact_id,
+           teacher.id as teacher_fact_id,
+           client.charge_type,
+           client.units::text,
+           teacher.amount_minor::text as teacher_amount_minor,
+           reservation.state as reservation_state,
+           plan.state as plan_state,
+           (select count(*)::int
+              from app.lesson_settlement_plan_revisions revision
+             where revision.lesson_id = lesson.id) as plan_revisions
+         from app.lessons lesson
+         join app.lesson_completion_work work on work.lesson_id = lesson.id
+         join app.lesson_client_charge_facts client
+           on client.id = work.client_financial_fact_id
+         join app.lesson_teacher_compensation_facts teacher
+           on teacher.id = work.teacher_financial_fact_id
+         join app.lesson_reservations reservation
+           on reservation.lesson_id = lesson.id
+         join app.lesson_settlement_plans plan on plan.lesson_id = lesson.id
+         where lesson.id = $1`,
+        [fixture.lessonId],
+      );
+      expect(settlementEvidence.rows[0]).toEqual({
+        client_fact_id: evidence.work.client_financial_fact_id,
+        teacher_fact_id: evidence.work.teacher_financial_fact_id,
+        charge_type: "subscription",
+        units: "1.00",
+        teacher_amount_minor: "90000",
+        reservation_state: "consumed",
+        plan_state: "settled",
+        plan_revisions: 1,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 1_250));
+      expect((await loadEvidence(pool, fixture.lessonId)).counts).toEqual(
+        evidence.counts,
+      );
+    } finally {
+      worker.onModuleDestroy();
+      restoreEnvironment(
+        "LESSON_COMPLETION_WORKER_ENABLED",
+        previousEnabled,
+      );
+      restoreEnvironment("LESSON_COMPLETION_WORKER_POLL_MS", previousPollMs);
+      await cleanupFixture(pool, fixture);
+    }
+  });
+
+  it.each([
+    {
+      name: "trial paid from personal account",
+      trial: true,
+      chargeType: "personal_account" as const,
+      settlementTypeKey: "lesson" as const,
+      amountMinor: "80000",
+      units: "1.00",
+      reservationState: null,
+      settledSubscriptionUnits: "0",
+    },
+    {
+      name: "trial free",
+      trial: true,
+      chargeType: "none" as const,
+      settlementTypeKey: "free_lesson" as const,
+      amountMinor: "0",
+      units: "0.00",
+      reservationState: null,
+      settledSubscriptionUnits: "0",
+    },
+    {
+      name: "non-trial paid from subscription",
+      trial: false,
+      chargeType: "subscription" as const,
+      settlementTypeKey: "lesson" as const,
+      amountMinor: "0",
+      units: "1.00",
+      reservationState: "consumed",
+      settledSubscriptionUnits: "1.00",
+    },
+    {
+      name: "non-trial free",
+      trial: false,
+      chargeType: "none" as const,
+      settlementTypeKey: "free_lesson" as const,
+      amountMinor: "0",
+      units: "0.00",
+      reservationState: null,
+      settledSubscriptionUnits: "0",
+    },
+  ])("keeps trial and free independent: $name", async (scenario) => {
+    const fixture = await createFixture(
+      pool,
+      database,
+      settlement,
+      "valid",
+      scenario,
+    );
+    try {
+      const worker = new LessonCompletionWorker(repository, completion);
+      await expect(worker.runOnce({
+        workerId: `trial-free-${scenario.chargeType}-${scenario.trial}`,
+      })).resolves.toMatchObject({ claimed: 1, completed: 1 });
+
+      const persisted = await pool.query<{
+        lesson_trial: boolean;
+        snapshot_trial: boolean;
+        settlement_type: string;
+        charge_type: string;
+        amount_minor: string;
+        units: string;
+        teacher_amount_minor: string;
+        reservation_state: string | null;
+        settled_subscription_units: string;
+        legacy_lessons_used: string;
+      }>(
+        `select lesson.is_trial as lesson_trial,
+           snapshot.trial as snapshot_trial,
+           plan.decision ->> 'settlementTypeKey' as settlement_type,
+           client.charge_type,
+           client.amount_minor::text,
+           client.units::text,
+           teacher.amount_minor::text as teacher_amount_minor,
+           (select reservation.state
+              from app.lesson_reservations reservation
+             where reservation.lesson_id = lesson.id
+             order by reservation.created_at desc, reservation.id desc
+             limit 1) as reservation_state,
+           coalesce((select sum(fact.units)
+              from app.lesson_client_charge_facts_effective fact
+             where fact.subscription_id = subscription.id
+               and fact.charge_type = 'subscription'), 0)::text
+             as settled_subscription_units,
+           subscription.lessons_used::text as legacy_lessons_used
+         from app.lessons lesson
+         join app.lesson_snapshots snapshot on snapshot.lesson_id = lesson.id
+         join app.lesson_settlement_plans plan on plan.lesson_id = lesson.id
+         join app.lesson_client_charge_facts_effective client
+           on client.lesson_id = lesson.id
+         join app.lesson_teacher_compensation_facts_effective teacher
+           on teacher.lesson_id = lesson.id
+         join app.subscriptions subscription on subscription.id = $2
+         where lesson.id = $1`,
+        [fixture.lessonId, fixture.subscriptionId],
+      );
+      expect(persisted.rows[0]).toEqual({
+        lesson_trial: scenario.trial,
+        snapshot_trial: scenario.trial,
+        settlement_type: scenario.settlementTypeKey,
+        charge_type: scenario.chargeType,
+        amount_minor: scenario.amountMinor,
+        units: scenario.units,
+        teacher_amount_minor: "90000",
+        reservation_state: scenario.reservationState,
+        settled_subscription_units: scenario.settledSubscriptionUnits,
+        legacy_lessons_used: "0.00",
+      });
+    } finally {
+      await cleanupFixture(pool, fixture);
+    }
+  });
+
   it("survives kill-after-commit without losing or duplicating committed work", async () => {
     const fixture = await createFixture(pool, database, settlement, "valid");
     try {
@@ -353,6 +578,16 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
 
       const counts = await loadEvidence(pool, fixture.lessonId);
       expect(counts.lesson.lifecycle_state).toBe("settlement_pending");
+      const plan = await pool.query<{ state: string; failure_code: string }>(
+        `select state, failure_code
+         from app.lesson_settlement_plans
+         where lesson_id = $1`,
+        [fixture.lessonId],
+      );
+      expect(plan.rows[0]).toEqual({
+        state: "review_required",
+        failure_code: "ConflictException",
+      });
       expect(counts.counts).toEqual({
         transitions: 0,
         client_facts: 0,
@@ -578,7 +813,18 @@ async function createFixture(
   database: DatabaseService,
   settlement: LessonSettlementService,
   snapshotState: "valid" | "legacy-incomplete",
+  options: {
+    trial?: boolean;
+    chargeType?: "subscription" | "personal_account" | "none";
+    settlementTypeKey?: "lesson" | "free_lesson";
+    scheduledEndOffsetSeconds?: number;
+  } = {},
 ) {
+  const trial = options.trial ?? false;
+  const chargeType = options.chargeType ?? "personal_account";
+  const settlementTypeKey = options.settlementTypeKey ?? "lesson";
+  const scheduledEndOffsetSeconds =
+    options.scheduledEndOffsetSeconds ?? -5;
   const branch = await pool.query<{ id: string }>(
     `
       insert into app.branches (name, timezone_name)
@@ -638,6 +884,14 @@ async function createFixture(
     [studentProfileId, branchId],
   );
   const studentId = student.rows[0]!.id;
+  const subscription = await pool.query<{ id: string }>(
+    `insert into app.subscriptions (
+       student_id, lessons_total, lessons_used, starts_at, expires_at, status
+     ) values ($1, 12, 0, current_date, current_date + 30, 'active')
+     returning id`,
+    [studentId],
+  );
+  const subscriptionId = subscription.rows[0]!.id;
   const lesson = await pool.query<{ id: string }>(
     `
       insert into app.lessons (
@@ -647,43 +901,66 @@ async function createFixture(
         scheduled_at,
         duration_minutes,
         status,
+        is_trial,
         created_by
       )
       values (
         $1,
         $2,
         $3,
-        now() - interval '60 minutes 5 seconds',
+        now()
+          + make_interval(secs => $4::double precision)
+          - interval '60 minutes',
         60,
         'scheduled',
-        $4
+        $5,
+        $6
       )
       returning id
     `,
-    [studentId, teacherId, branchId, managerId],
+    [
+      studentId,
+      teacherId,
+      branchId,
+      scheduledEndOffsetSeconds,
+      trial,
+      managerId,
+    ],
   );
   const lessonId = lesson.rows[0]!.id;
   const lifecycle = new LessonLifecycleRepository(database);
   if (snapshotState === "valid") {
-    await database.transaction((client) =>
-      lifecycle.createSnapshot(client, {
+    await database.transaction(async (client) => {
+      await lifecycle.createSnapshot(client, {
         lessonId,
         clientType: "student",
         clientId: studentId,
         completionType: "standard.success",
-        clientChargeType: "personal_account",
-        clientChargeValue: 800,
+        clientChargeType: chargeType,
+        clientChargeValue: chargeType === "subscription"
+          ? 1
+          : chargeType === "personal_account" ? 800 : 0,
         teacherCompensationType: "hourly",
         teacherCompensationValue: 900,
-        trial: false,
-      }),
-    );
+        subscriptionId: chargeType === "subscription"
+          ? subscriptionId
+          : undefined,
+        trial,
+      });
+      if (chargeType === "subscription") {
+        await lifecycle.createReservation(client, {
+          lessonId,
+          subscriptionId,
+          units: 1,
+        });
+      }
+    });
     await database.transaction((client) =>
       settlement.assignPlan(client, {
         lessonId,
         branchId,
         decision: {
-          settlementTypeKey: "lesson",
+          settlementTypeKey,
           teacherCompensationRuleKey: "standard",
         },
         selectedBy: managerId,
@@ -731,9 +1008,35 @@ async function createFixture(
     branchId,
     teacherId,
     studentId,
+    subscriptionId,
     userIds: [managerId, teacherUserId, clientUserId],
     profileIds: profiles.rows.map((row) => row.id),
   };
+}
+
+async function waitForLessonCompletion(
+  pool: Pool,
+  lessonId: string,
+  timeoutMs: number,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const state = await pool.query<{ lifecycle_state: string }>(
+      "select lifecycle_state from app.lessons where id = $1",
+      [lessonId],
+    );
+    if (state.rows[0]?.lifecycle_state === "successfully_completed") return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Lesson ${lessonId} was not completed before timeout`);
+}
+
+function restoreEnvironment(key: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[key];
+    return;
+  }
+  process.env[key] = value;
 }
 
 async function loadEvidence(pool: Pool, lessonId: string) {
@@ -950,6 +1253,9 @@ async function cleanupFixture(
     );
     await client.query("delete from app.lessons where id = $1", [
       fixture.lessonId,
+    ]);
+    await client.query("delete from app.subscriptions where student_id = $1", [
+      fixture.studentId,
     ]);
     await client.query("delete from app.students where id = $1", [
       fixture.studentId,

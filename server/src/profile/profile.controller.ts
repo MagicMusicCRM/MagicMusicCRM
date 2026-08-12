@@ -8,7 +8,6 @@ import { CreateProfileNoteDto } from './dto/create-profile-note.dto';
 import { LinkProfileCrmDto } from './dto/link-profile-crm.dto';
 import { ListProfilesQuery } from './dto/list-profiles.query';
 import { UpdateProfileDto } from './dto/update-profile.dto';
-import { UpdateRoleDto } from './dto/update-role.dto';
 import { ProfileLinkingService } from './profile-linking.service';
 import { ProfileService } from './profile.service';
 
@@ -104,13 +103,4 @@ export class AdminProfilesController {
     return this.linking.linkCrmEntity(actor, id, dto);
   }
 
-  @Patch(':id/role')
-  @Roles('manager', 'director', 'system_admin')
-  updateRole(
-    @CurrentActor() actor: ActorContext,
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: UpdateRoleDto
-  ) {
-    return this.profiles.updateRole(actor, id, dto.role);
-  }
 }

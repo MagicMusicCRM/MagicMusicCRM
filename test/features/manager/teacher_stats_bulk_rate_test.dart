@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/teacher_stats_widget.dart';
 
 /// Faked at the API-client seam, NOT by implementing MagicCrmService: its
@@ -11,8 +12,10 @@ import 'package:magic_music_crm/features/manager/presentation/widgets/teacher_st
 /// type — a `implements MagicCrmService` fake would be bypassed entirely and
 /// the real code would run against a null client.
 class _FakeApiClient extends MagicApiClient {
-  _FakeApiClient()
+  _FakeApiClient({this.locked = false})
     : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
+
+  final bool locked;
 
   Map<String, dynamic>? lastPatchBody;
   int bulkRateCalls = 0;
@@ -40,6 +43,10 @@ class _FakeApiClient extends MagicApiClient {
                     'rate': 700,
                     'days': <dynamic>[],
                     'lessonIds': ['lesson-1', 'lesson-2'],
+                    'editableLessonIds': locked
+                        ? <String>[]
+                        : ['lesson-1', 'lesson-2'],
+                    'settledLessons': locked ? 2 : 0,
                     'hoursTotal': 2,
                     'accruedTotal': 1400,
                   },
@@ -81,9 +88,20 @@ class _FakeApiClient extends MagicApiClient {
   }
 }
 
-Widget _host(_FakeApiClient api) {
+Widget _host(_FakeApiClient api, {String role = 'manager'}) {
   return ProviderScope(
-    overrides: [magicApiClientProvider.overrideWithValue(api)],
+    overrides: [
+      magicApiClientProvider.overrideWithValue(api),
+      capabilitySnapshotProvider.overrideWith(
+        (ref) async => CapabilitySnapshot(
+          accountId: '$role-1',
+          role: role,
+          accessVersion: 1,
+          capabilities: const {'commerce.teacher_payroll.write'},
+          scopes: const {'schedule': 'allBranches'},
+        ),
+      ),
+    ],
     child: const MaterialApp(home: Scaffold(body: TeacherStatsWidget())),
   );
 }
@@ -148,6 +166,11 @@ void main() {
     await tester.tap(salaried);
     await tester.pumpAndSettle();
 
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Причина изменения *'),
+      'Исправление ставки',
+    );
+
     await tester.tap(find.text('Применить'));
     await tester.pumpAndSettle();
 
@@ -157,5 +180,35 @@ void main() {
     expect(api.lastPatchBody?['lessonIds'], ['lesson-1', 'lesson-2']);
     // 0 must arrive as 0 — «входит в оклад», not "no rate given".
     expect(api.lastPatchBody?['teacherRate'], 0);
+    expect(api.lastPatchBody?['reasonText'], 'Исправление ставки');
+  });
+
+  testWidgets('locks settled compensation instead of offering a fake reprice', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_host(_FakeApiClient(locked: true)));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Зафиксировано расчётов: 2'), findsOneWidget);
+    expect(find.byIcon(Icons.lock_outline_rounded), findsOneWidget);
+    expect(find.byType(Checkbox), findsNothing);
+  });
+
+  testWidgets('director can select settled units for a mass correction', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _host(_FakeApiClient(locked: true), role: 'director'),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('директор может исправить массово'),
+      findsOneWidget,
+    );
+    // Both the individual and group rows are intentionally available to the
+    // Director: this action is an explicit per-lesson correction.
+    expect(find.byType(Checkbox), findsNWidgets(2));
+    expect(find.byIcon(Icons.lock_outline_rounded), findsNothing);
   });
 }

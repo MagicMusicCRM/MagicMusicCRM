@@ -1,6 +1,6 @@
 # MagicMusicCRM — Current-State Inventory
 
-**Source digest:** `47270233d0c5308a053f14fc023eec7b4bb684fe480d3cceb2b4a6fa5db518b8`
+**Source digest:** `6fa2287b57463234acf747600b7f7e86621197ae81d9389201ee96b4e9550e22`
 **Validation:** PASS
 
 > Имя generator-файла и legacy JSON field names сохранены для artifact compatibility. Фактические counts/paths актуальны; code ownership и dependency graph проверяются через RepoWise по текущему checkout.
@@ -9,12 +9,12 @@
 
 | Slice | Count |
 |---|---:|
-| backend routes | 321 |
-| role guards | 22 |
-| policy calls | 246 |
-| dto fields | 808 |
-| flutter role checks | 143 |
-| flutter navigation sources | 334 |
+| backend routes | 356 |
+| role guards | 21 |
+| policy calls | 255 |
+| dto fields | 829 |
+| flutter role checks | 144 |
+| flutter navigation sources | 343 |
 | schedule entry points | 48 |
 | attendance mutations | 0 |
 | finance writes | 48 |
@@ -46,7 +46,7 @@ Every row in the JSON artifact has one subsystem owner and an explicit implement
 | `app.subscriptions` | SYS-COMMERCE | 28 | 5 |
 | `app.payments` | SYS-COMMERCE | 19 | 6 |
 | `app.tasks` | SYS-WORKFLOW | 15 | 5 |
-| `app.users` | SYS-PLATFORM | 14 | 3 |
+| `app.users` | SYS-PLATFORM | 16 | 3 |
 
 ### `app.lessons`
 
@@ -74,7 +74,7 @@ Indexes: `tasks_assignee_status_due_idx`, `tasks_branch_id_idx`, `tasks_entity_s
 
 ### `app.users`
 
-Columns: `created_at`, `deleted_at`, `email`, `email_verified_at`, `full_name`, `id`, `is_app_account`, `password_hash`, `phone`, `phone_normalized`, `phone_verified_at`, `profile_completed`, `role`, `updated_at`
+Columns: `created_at`, `deleted_at`, `email`, `email_changed_at`, `email_verified_at`, `full_name`, `id`, `is_app_account`, `password_changed_at`, `password_hash`, `phone`, `phone_normalized`, `phone_verified_at`, `profile_completed`, `role`, `updated_at`
 
 Indexes: `users_app_accounts_role_created_idx`, `users_email_lower_unique`, `users_phone_normalized_idx`
 
@@ -97,8 +97,8 @@ Indexes: `users_app_accounts_role_created_idx`, `users_email_lower_unique`, `use
 | backend-route | DELETE /crm/subscription-packages/:id | `server/src/crm/crm-finance.controller.ts:142` | commerce-migration-pending |
 | backend-route | POST /crm/subscription-packages/:id/restore | `server/src/crm/crm-finance.controller.ts:156` | commerce-migration-pending |
 | backend-route | POST /crm/leads/:leadId/subscriptions/issue | `server/src/crm/crm-leads.controller.ts:123` | commerce-migration-pending |
-| backend-route | POST /crm/teachers/:id/payouts | `server/src/crm/crm-people.controller.ts:91` | commerce-migration-pending |
-| backend-route | POST /crm/teachers/:id/rates | `server/src/crm/crm-people.controller.ts:100` | commerce-migration-pending |
+| backend-route | POST /crm/teachers/:id/payouts | `server/src/crm/crm-people.controller.ts:139` | commerce-migration-pending |
+| backend-route | POST /crm/teachers/:id/rates | `server/src/crm/crm-people.controller.ts:148` | commerce-migration-pending |
 | backend-route | PATCH /crm/lessons/teacher-rate | `server/src/crm/crm-schedule.controller.ts:264` | commerce-migration-pending |
 | backend-route | POST /crm/students/:id/adjustments | `server/src/crm/crm-students.controller.ts:126` | commerce-migration-pending |
 | backend-route | POST /crm/students/:id/transfer | `server/src/crm/crm-students.controller.ts:140` | commerce-migration-pending |
@@ -125,8 +125,8 @@ Indexes: `users_app_accounts_role_created_idx`, `users_email_lower_unique`, `use
 | sql-mutation | insert into app.subscriptions | `server/src/crm/subscriptions.service.ts:294` | commerce-migration-pending |
 | sql-mutation | insert into app.payments | `server/src/crm/subscriptions.service.ts:669` | commerce-migration-pending |
 | sql-mutation | insert into app.subscriptions | `server/src/crm/subscriptions.service.ts:687` | commerce-migration-pending |
-| sql-mutation | insert into app.teacher_rates | `server/src/crm/teachers.service.ts:488` | commerce-migration-pending |
-| sql-mutation | insert into app.teacher_rates | `server/src/crm/teachers.service.ts:835` | commerce-migration-pending |
+| sql-mutation | insert into app.teacher_rates | `server/src/crm/teachers.service.ts:514` | commerce-migration-pending |
+| sql-mutation | insert into app.teacher_rates | `server/src/crm/teachers.service.ts:748` | commerce-migration-pending |
 | sql-mutation | insert into app.subscriptions | `server/src/crm/commerce/commerce-schema.repository.ts:185` | commerce-migration-pending |
 | sql-mutation | insert into app.payments | `server/src/crm/commerce/commerce-schema.repository.ts:333` | commerce-migration-pending |
 | sql-mutation | update app.payments | `server/src/crm/commerce/payment-lifecycle.repository.ts:340` | commerce-migration-pending |

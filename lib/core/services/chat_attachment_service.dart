@@ -83,6 +83,12 @@ class ChatAttachmentService {
     }
   }
 
+  /// Roll back a chat upload whose message was not committed.
+  Future<void> deleteUploadedFile(String? value) async {
+    if (!_looksLikeBackendFileId(value)) return;
+    await _api.delete<Map<String, dynamic>>('/files/$value');
+  }
+
   static bool isPrivateStorageReference(String? value) {
     return value != null &&
         value.startsWith('$_storageReferencePrefix$_chatBucketName/');

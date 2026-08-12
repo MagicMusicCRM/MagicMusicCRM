@@ -264,6 +264,135 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('director renames reorders and archives an unused category', (
+    tester,
+  ) async {
+    final api = ConfigurationTestApi(
+      role: 'director',
+      capabilities: const [
+        'config.crm.read',
+        'config.crm.edit',
+        'config.crm.publish',
+      ],
+      snapshot: {
+        ...ConfigurationTestApi._defaultSnapshot,
+        'categories': const [
+          {'key': 'general', 'label': 'Основное', 'order': 0, 'active': true},
+          {
+            'key': 'marketing',
+            'label': 'Маркетинг',
+            'order': 1,
+            'active': true,
+          },
+        ],
+      },
+    );
+    await _pump(tester, api);
+
+    await tester.tap(find.byTooltip('Изменить категорию').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Название *'),
+      'Маркетинг и реклама',
+    );
+    await tester.tap(find.byKey(const ValueKey('category-active')));
+    await tester.tap(find.text('Сохранить'));
+    await tester.pumpAndSettle();
+    expect(find.text('Маркетинг и реклама'), findsOneWidget);
+    expect(find.text('marketing · в архиве'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Выше').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('configuration-publish')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Причина публикации *'),
+      'Упорядочили категории',
+    );
+    await tester.tap(find.text('Опубликовать'));
+    await tester.pumpAndSettle();
+
+    final categories = (api.submittedSnapshot!['categories'] as List)
+        .cast<Map>();
+    expect(categories.first['key'], 'marketing');
+    expect(categories.first['label'], 'Маркетинг и реклама');
+    expect(categories.first['active'], isFalse);
+    expect(categories.first['order'], 0);
+  });
+
+  testWidgets('field editor exposes all types widths and placements', (
+    tester,
+  ) async {
+    final api = ConfigurationTestApi(
+      role: 'director',
+      capabilities: const [
+        'config.crm.read',
+        'config.crm.edit',
+        'config.crm.publish',
+      ],
+    );
+    await _pump(tester, api);
+
+    await tester.tap(find.text('Цель обучения'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Изменить'));
+    await tester.pumpAndSettle();
+    for (final entry in const {
+      'text': 'Текст',
+      'textarea': 'Многострочный текст',
+      'number': 'Число',
+      'money': 'Деньги',
+      'duration': 'Длительность',
+      'boolean': 'Флажок',
+      'toggle': 'Переключатель',
+      'date': 'Дата',
+      'datetime': 'Дата и время',
+      'select': 'Один вариант',
+      'radio': 'Радиокнопки',
+      'multi_select': 'Несколько вариантов',
+      'checkbox_group': 'Группа флажков',
+      'email': 'Email',
+      'phone': 'Телефон',
+      'url': 'Ссылка',
+    }.entries) {
+      final dropdown = tester.widget<DropdownButtonFormField<String>>(
+        find.byKey(const ValueKey('field-type')),
+      );
+      dropdown.onChanged!(entry.key);
+      await tester.pumpAndSettle();
+      expect(find.text(entry.value), findsWidgets, reason: entry.key);
+    }
+    tester
+        .widget<DropdownButtonFormField<String>>(
+          find.byKey(const ValueKey('field-type')),
+        )
+        .onChanged!('textarea');
+    await tester.pumpAndSettle();
+    tester
+        .widget<DropdownButtonFormField<String>>(
+          find.byKey(const ValueKey('field-width')),
+        )
+        .onChanged!('half');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('field-placement-create')));
+    await tester.tap(find.byKey(const ValueKey('field-placement-table')));
+    await tester.tap(find.text('Сохранить'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('configuration-publish')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Причина публикации *'),
+      'Настроили размещение поля',
+    );
+    await tester.tap(find.text('Опубликовать'));
+    await tester.pumpAndSettle();
+
+    final field = (api.submittedSnapshot!['fields'] as List).single as Map;
+    expect(field['valueType'], 'textarea');
+    expect(field['width'], 'half');
+    expect(field['placements'], ['edit', 'card', 'table']);
+  });
+
   testWidgets(
     'director configures independent lesson and teacher catalogs and publishes impact',
     (tester) async {
@@ -539,8 +668,14 @@ void main() {
       'directions',
     );
     await tester.enterText(
-      find.widgetWithText(TextField, 'Варианты через запятую *'),
-      'Вокал, Гитара',
+      find.widgetWithText(TextField, 'Вариант 1 *'),
+      'Вокал',
+    );
+    await tester.tap(find.byKey(const ValueKey('option-set-add-option')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Вариант 2 *'),
+      'Гитара',
     );
     await tester.tap(find.text('Сохранить').last);
     await tester.pumpAndSettle();
@@ -564,6 +699,73 @@ void main() {
     expect(field['optionSetKey'], 'directions');
     expect(field['options'], ['Вокал', 'Гитара']);
     expect(sets, hasLength(2));
+  });
+
+  testWidgets('option editor preserves keys while reordering and archiving', (
+    tester,
+  ) async {
+    final api = ConfigurationTestApi(
+      role: 'director',
+      capabilities: const [
+        'config.crm.read',
+        'config.crm.edit',
+        'config.crm.publish',
+      ],
+      snapshot: {
+        ...ConfigurationTestApi._defaultSnapshot,
+        'optionSets': const [
+          {
+            'key': 'directions',
+            'label': 'Направления',
+            'multiple': false,
+            'options': [
+              {'key': 'vocal', 'label': 'Вокал', 'order': 0, 'active': true},
+              {'key': 'guitar', 'label': 'Гитара', 'order': 1, 'active': true},
+            ],
+          },
+        ],
+      },
+    );
+    await _pump(tester, api);
+
+    await tester.tap(find.text('Варианты для полей'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Направления'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Изменить'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Вариант 1 *'),
+      'Эстрадный вокал',
+    );
+    await tester.tap(find.byTooltip('Ниже').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Архивировать вариант').first);
+    await tester.tap(find.text('Сохранить'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('configuration-publish')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Причина публикации *'),
+      'Актуализировали направления',
+    );
+    await tester.tap(find.text('Опубликовать'));
+    await tester.pumpAndSettle();
+
+    final set = (api.submittedSnapshot!['optionSets'] as List).single as Map;
+    final options = (set['options'] as List).cast<Map>();
+    expect(options[0], {
+      'key': 'guitar',
+      'label': 'Гитара',
+      'order': 0,
+      'active': false,
+    });
+    expect(options[1], {
+      'key': 'vocal',
+      'label': 'Эстрадный вокал',
+      'order': 1,
+      'active': true,
+    });
   });
 }
 

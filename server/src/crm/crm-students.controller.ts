@@ -167,12 +167,18 @@ export class CrmStudentsController {
   }
 
   @Patch("students/:id")
-  updateStudent(
+  async updateStudent(
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateStudentDto,
   ) {
-    return this.crm.updateStudent(actor, id, dto);
+    const customFields = dto.customFields
+      ? await this.clientWrites.validateCustomFields(
+          "student",
+          dto.customFields,
+        )
+      : undefined;
+    return this.crm.updateStudent(actor, id, dto, customFields);
   }
 
   @Delete("students/:id")

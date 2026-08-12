@@ -113,6 +113,7 @@ export interface CommerceMovementDto {
   issuedSubscriptionId?: string | null;
   subscriptionName?: string | null;
   sourcePaymentId?: string | null;
+  adjustmentVersion?: number | null;
   paymentRecordVersion?: number | null;
   installmentId?: string | null;
   dueAt?: string | null;
@@ -120,9 +121,9 @@ export interface CommerceMovementDto {
 
 export interface CommerceTechnicalFinanceEventDto {
   id: string;
-  eventType: "monetary_reversal" | "technical_void";
-  paymentRecordId: string;
-  previousStatus: "unpaid" | "posted_pending" | "paid";
+  eventType: "monetary_reversal" | "technical_void" | "adjustment_reversal";
+  paymentRecordId: string | null;
+  previousStatus: "unpaid" | "posted_pending" | "paid" | null;
   amountMinor: string;
   currencyCode: string;
   sourceKind: "payment" | "payment_record" | "account_adjustment";

@@ -30,6 +30,7 @@ export interface SubscriptionPackageDto extends Record<string, unknown> {
   name: string;
   disciplineId: string | null;
   branchId: string | null;
+  branchName: string | null;
   unitCount: number;
   lessonsTotal: number;
   basePriceMinor: string;
@@ -656,6 +657,7 @@ export class PackageCatalogService {
       name: row.name,
       disciplineId: row.discipline_id,
       branchId: row.branch_id,
+      branchName: row.branch_name ?? null,
       unitCount: Number(row.lessons_total),
       lessonsTotal: Number(row.lessons_total),
       basePriceMinor: row.base_price_minor,

@@ -205,6 +205,109 @@ class _CommerceApiClient extends MagicApiClient {
   }
 }
 
+class _ExpenseApiClient extends _CommerceApiClient {
+  _ExpenseApiClient({List<Map<String, dynamic>>? seed})
+    : expenses = [...?seed?.map((item) => Map<String, dynamic>.from(item))];
+
+  final List<Map<String, dynamic>> expenses;
+  final List<({String method, String path, Map<String, dynamic>? data})>
+  mutations = [];
+
+  @override
+  Future<T> get<T>(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) async {
+    if (path == '/crm/expenses') {
+      getRequests.add(path);
+      return <String, dynamic>{
+            'items': expenses.map(Map<String, dynamic>.from).toList(),
+            'total': expenses.fold<num>(
+              0,
+              (sum, item) => sum + (item['amount'] as num? ?? 0),
+            ),
+          }
+          as T;
+    }
+    return super.get<T>(
+      path,
+      queryParameters: queryParameters,
+      authenticated: authenticated,
+    );
+  }
+
+  @override
+  Future<T> post<T>(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) async {
+    if (path == '/crm/expenses') {
+      final body = Map<String, dynamic>.from(data! as Map);
+      mutations.add((method: 'POST', path: path, data: body));
+      final created = <String, dynamic>{
+        'id': 'expense-created',
+        ...body,
+        'createdAt': DateTime(2026, 8, 12).toIso8601String(),
+      };
+      expenses.insert(0, created);
+      return created as T;
+    }
+    return super.post<T>(
+      path,
+      data: data,
+      queryParameters: queryParameters,
+      authenticated: authenticated,
+    );
+  }
+
+  @override
+  Future<T> patch<T>(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) async {
+    if (path.startsWith('/crm/expenses/')) {
+      final body = Map<String, dynamic>.from(data! as Map);
+      mutations.add((method: 'PATCH', path: path, data: body));
+      final id = path.split('/').last;
+      final index = expenses.indexWhere((item) => item['id'] == id);
+      expenses[index] = {...expenses[index], ...body};
+      return expenses[index] as T;
+    }
+    return super.patch<T>(
+      path,
+      data: data,
+      queryParameters: queryParameters,
+      authenticated: authenticated,
+    );
+  }
+
+  @override
+  Future<T> delete<T>(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) async {
+    if (path.startsWith('/crm/expenses/')) {
+      mutations.add((method: 'DELETE', path: path, data: null));
+      final id = path.split('/').last;
+      expenses.removeWhere((item) => item['id'] == id);
+      return <String, dynamic>{'success': true} as T;
+    }
+    return super.delete<T>(
+      path,
+      data: data,
+      queryParameters: queryParameters,
+      authenticated: authenticated,
+    );
+  }
+}
+
 void main() {
   setUpAll(() => initializeDateFormatting('ru'));
 
@@ -513,4 +616,139 @@ void main() {
       );
     },
   );
+
+  testWidgets('director completes expense create edit delete with readback', (
+    tester,
+  ) async {
+    const branchId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    final api = _ExpenseApiClient(
+      seed: const [
+        {
+          'id': 'expense-a',
+          'amount': 1200,
+          'category': 'rent',
+          'description': 'Старая аренда',
+          'branchId': branchId,
+          'createdAt': '2026-08-12T08:00:00.000Z',
+        },
+      ],
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [magicApiClientProvider.overrideWithValue(api)],
+        child: const MaterialApp(
+          home: Scaffold(body: FinanceWidget(branchId: branchId)),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Аренда'), findsOneWidget);
+    expect(find.textContaining('Старая аренда'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('expense-actions-expense-a')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Изменить').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Изменить расход'), findsOneWidget);
+    final editFields = find.byType(TextField);
+    await tester.enterText(editFields.at(0), '1750');
+    await tester.enterText(editFields.at(1), 'Аренда исправлена');
+    final saveEdit = find.text('Сохранить изменения');
+    await tester.ensureVisible(saveEdit);
+    await tester.pumpAndSettle();
+    await tester.tap(saveEdit);
+    await tester.pumpAndSettle();
+    final patch = api.mutations.singleWhere((item) => item.method == 'PATCH');
+    expect(patch.path, '/crm/expenses/expense-a');
+    expect(patch.data, containsPair('amount', 1750.0));
+    expect(patch.data, containsPair('description', 'Аренда исправлена'));
+    expect(patch.data, containsPair('branchId', branchId));
+    expect(find.textContaining('Аренда исправлена'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('expense-actions-expense-a')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Удалить').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Удалить расход?'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('confirm-delete-expense')));
+    await tester.pumpAndSettle();
+    expect(
+      api.mutations.where((item) => item.method == 'DELETE').single.path,
+      '/crm/expenses/expense-a',
+    );
+    expect(find.text('Нет расходов за период'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Расход'));
+    await tester.pumpAndSettle();
+    final createFields = find.byType(TextField);
+    await tester.enterText(createFields.at(0), '900');
+    await tester.enterText(createFields.at(1), 'Новый расход');
+    final saveCreate = find.text('Сохранить');
+    await tester.ensureVisible(saveCreate);
+    await tester.pumpAndSettle();
+    await tester.tap(saveCreate);
+    await tester.pumpAndSettle();
+    final post = api.mutations.singleWhere((item) => item.method == 'POST');
+    expect(post.path, '/crm/expenses');
+    expect(post.data, containsPair('branchId', branchId));
+    expect(find.textContaining('Новый расход'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 4));
+  });
+
+  testWidgets('director can reach the full loaded expense history', (
+    tester,
+  ) async {
+    final expenses = List.generate(
+      10,
+      (index) => <String, dynamic>{
+        'id': 'expense-$index',
+        'amount': 100 + index,
+        'category': 'other',
+        'description': 'Расход $index',
+        'createdAt': '2026-08-${12 - index}T08:00:00.000Z',
+      },
+    );
+    final api = _ExpenseApiClient(seed: expenses);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [magicApiClientProvider.overrideWithValue(api)],
+        child: const MaterialApp(home: Scaffold(body: FinanceWidget())),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final history = find.byKey(const ValueKey('expense-history-list'));
+    expect(history, findsOneWidget);
+    await tester.drag(history, const Offset(0, -420));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('expense-actions-expense-9')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('expense-actions-expense-9')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Изменить').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Изменить расход'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Расход 9'), findsOneWidget);
+  });
+
+  testWidgets('manager never requests or renders school expenses', (
+    tester,
+  ) async {
+    final api = _ExpenseApiClient();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [magicApiClientProvider.overrideWithValue(api)],
+        child: const MaterialApp(
+          home: Scaffold(body: ReportsWidget(role: 'manager')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(api.getRequests, isNot(contains('/crm/expenses')));
+    expect(find.text('Расходы за период'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Расход'), findsNothing);
+  });
 }

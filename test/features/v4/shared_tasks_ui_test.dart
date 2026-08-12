@@ -539,6 +539,110 @@ void main() {
     expect(find.text('Напомнить в приложении'), findsOneWidget);
   });
 
+  testWidgets('creates explicit all-day and interval reminder payloads', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1100, 1100);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final source = FakeSharedTasksDataSource();
+    await tester.pumpWidget(_host(source, size: const Size(1100, 1100)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Новая задача'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('shared-task-title')),
+      'Задача на весь день',
+    );
+    await tester.tap(find.text('Напомнить в приложении'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('shared-task-reminder-at')), findsOneWidget);
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Создать'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Создать'));
+    await tester.pumpAndSettle();
+
+    final allDay = Map<String, dynamic>.from(source.lastCreateData!);
+    final allDayStart = DateTime.parse(allDay['startAt'].toString()).toLocal();
+    final allDayReminder = DateTime.parse(
+      ((allDay['reminders'] as List).single as Map)['dueAt'].toString(),
+    ).toLocal();
+    expect(allDay['allDay'], isTrue);
+    expect(allDay.containsKey('endAt'), isFalse);
+    expect(allDayStart.hour, 0);
+    expect(allDayReminder.hour, 9);
+    expect(
+      (allDayReminder.year, allDayReminder.month, allDayReminder.day),
+      (allDayStart.year, allDayStart.month, allDayStart.day),
+    );
+
+    await tester.tap(find.text('Новая задача'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('shared-task-title')),
+      'Задача с интервалом',
+    );
+    await tester.tap(find.text('На весь день'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Напомнить в приложении'));
+    await tester.pumpAndSettle();
+    expect(find.text('Окончание'), findsOneWidget);
+    expect(find.byKey(const Key('shared-task-reminder-at')), findsOneWidget);
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Создать'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Создать'));
+    await tester.pumpAndSettle();
+
+    final interval = Map<String, dynamic>.from(source.lastCreateData!);
+    final intervalStart = DateTime.parse(
+      interval['startAt'].toString(),
+    ).toLocal();
+    final intervalEnd = DateTime.parse(interval['endAt'].toString()).toLocal();
+    final intervalReminder = DateTime.parse(
+      ((interval['reminders'] as List).single as Map)['dueAt'].toString(),
+    ).toLocal();
+    expect(interval['allDay'], isFalse);
+    expect(intervalEnd.difference(intervalStart), const Duration(hours: 1));
+    expect(
+      intervalStart.difference(intervalReminder),
+      const Duration(hours: 1),
+    );
+  });
+
+  testWidgets('invalid interval is visible and cannot be submitted', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SharedTaskEditor(
+            task: {
+              'id': '11111111-1111-4111-8111-111111111111',
+              'title': 'Некорректный интервал',
+              'allDay': false,
+              'startAt': '2026-08-14T11:00:00.000Z',
+              'endAt': '2026-08-14T10:00:00.000Z',
+              'priority': 'medium',
+              'version': 1,
+              'audiences': [
+                {'type': 'allBranches'},
+              ],
+            },
+            audienceOptions: [],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('shared-task-interval-error')), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Сохранить'))
+          .onPressed,
+      isNull,
+    );
+  });
+
   testWidgets('recipient preview distinguishes people, branch and school', (
     tester,
   ) async {

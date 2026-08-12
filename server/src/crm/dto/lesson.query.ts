@@ -12,6 +12,10 @@ import {
 
 export class LessonQuery {
   @IsOptional()
+  @IsUUID()
+  lessonId?: string;
+
+  @IsOptional()
   @IsDateString()
   from?: string;
 

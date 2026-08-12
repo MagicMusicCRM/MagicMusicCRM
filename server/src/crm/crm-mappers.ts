@@ -53,6 +53,7 @@ export interface LessonRow {
   snapshot_trial?: boolean | null;
   snapshot_validation_state?: string | null;
   reservation_state?: string | null;
+  settlement_failure_code?: string | null;
 }
 
 export interface TaskRow {
@@ -321,6 +322,7 @@ export function toLessonDto(row: LessonRow) {
     snapshotTrial: row.snapshot_trial ?? null,
     snapshotValidationState: row.snapshot_validation_state ?? null,
     reservationState: row.reservation_state ?? null,
+    settlementFailureCode: row.settlement_failure_code ?? null,
   };
 }
 

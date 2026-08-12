@@ -12,7 +12,7 @@ Future<bool?> showCreateTeacherSurface(BuildContext context) {
     context,
     kind: AppSurfaceKind.selection,
     title: 'Новый преподаватель',
-    subtitle: 'Аккаунт, условия работы и направления обучения',
+    subtitle: 'Карточка, условия работы и необязательный доступ',
     icon: Icons.school_outlined,
     builder: (_) => const CreateTeacherDialog(),
   );
@@ -61,8 +61,8 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
             firstName: _firstName.text,
             lastName: _lastName.text,
             phone: _phone,
-            email: _email.text,
-            password: _password.text,
+            email: _email.text.trim().isEmpty ? null : _email.text,
+            password: _password.text.isEmpty ? null : _password.text,
             branchIds: employment.branchIds,
             disciplineIds: employment.disciplineIds,
             customDataPatch: employment.customDataPatch,
@@ -97,7 +97,7 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Text(
-          'Преподаватель сразу получит аккаунт. Все настройки ниже сохраняются вместе с карточкой одной операцией.',
+          'Карточку можно создать без аккаунта. Если указать email и пароль, рабочий доступ будет создан и связан с преподавателем одной операцией.',
         ),
         const SizedBox(height: 16),
         Form(
@@ -122,12 +122,16 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
                 controller: _email,
                 keyboardType: TextInputType.emailAddress,
                 decoration: const InputDecoration(
-                  labelText: 'Email для входа *',
+                  labelText: 'Email для входа (необязательно)',
                 ),
                 validator: (value) {
-                  final error = _required(value);
-                  if (error != null) return error;
-                  return value!.trim().contains('@')
+                  final email = value?.trim() ?? '';
+                  if (email.isEmpty) {
+                    return _password.text.isEmpty
+                        ? null
+                        : 'Укажите email вместе с паролем';
+                  }
+                  return email.contains('@')
                       ? null
                       : 'Введите корректный email';
                 },
@@ -137,8 +141,8 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
                 controller: _password,
                 obscureText: !_showPassword,
                 decoration: InputDecoration(
-                  labelText: 'Пароль *',
-                  helperText: 'Не менее 10 символов',
+                  labelText: 'Пароль (необязательно)',
+                  helperText: 'Для доступа — не менее 10 символов',
                   suffixIcon: IconButton(
                     tooltip: _showPassword
                         ? 'Скрыть пароль'
@@ -150,19 +154,31 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
                     ),
                   ),
                 ),
-                validator: (value) => (value?.length ?? 0) < 10
-                    ? 'Пароль должен содержать минимум 10 символов'
-                    : null,
+                validator: (value) {
+                  final password = value ?? '';
+                  if (password.isEmpty) {
+                    return _email.text.trim().isEmpty
+                        ? null
+                        : 'Укажите пароль вместе с email';
+                  }
+                  return password.length < 10
+                      ? 'Пароль должен содержать минимум 10 символов'
+                      : null;
+                },
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _passwordAgain,
                 obscureText: !_showPassword,
                 decoration: const InputDecoration(
-                  labelText: 'Повторите пароль *',
+                  labelText: 'Повторите пароль',
                 ),
-                validator: (value) =>
-                    value != _password.text ? 'Пароли не совпадают' : null,
+                validator: (value) {
+                  if (_password.text.isEmpty && (value?.isEmpty ?? true)) {
+                    return null;
+                  }
+                  return value != _password.text ? 'Пароли не совпадают' : null;
+                },
               ),
             ],
           ),

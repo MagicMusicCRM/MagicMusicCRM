@@ -31,6 +31,17 @@ interface HomeworkRow {
   due_at: Date | string | null;
   created_at: Date | string;
   updated_at: Date | string;
+  attachments?: HomeworkAttachmentDto[] | null;
+}
+
+export interface HomeworkAttachmentDto {
+  id: string;
+  fileId: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  kind: "assignment" | "submission";
+  createdAt: Date | string;
 }
 
 interface HomeworkScopeRow {
@@ -86,6 +97,7 @@ export class HomeworkService {
       dueAt: row.due_at,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      attachments: row.attachments ?? [],
     };
   }
 
@@ -141,7 +153,26 @@ export class HomeworkService {
       `
         select lh.id, lh.lesson_id, lh.student_id, lh.lead_id,
           lh.assigned_by, lh.title, lh.description, lh.status, lh.due_at,
-          lh.created_at, lh.updated_at
+          lh.created_at, lh.updated_at,
+          coalesce((
+            select jsonb_agg(
+              jsonb_build_object(
+                'id', attachment.id,
+                'fileId', file.id,
+                'fileName', file.original_name,
+                'mimeType', file.mime_type,
+                'sizeBytes', file.size_bytes::integer,
+                'kind', attachment.kind,
+                'createdAt', attachment.created_at
+              )
+              order by attachment.created_at, attachment.id
+            )
+            from app.homework_attachments attachment
+            join app.file_objects file
+              on file.id = attachment.file_id
+             and file.deleted_at is null
+            where attachment.homework_id = lh.id
+          ), '[]'::jsonb) as attachments
         from app.lesson_homeworks lh
         where ${conditions.join(" and ")}
         order by lh.created_at desc

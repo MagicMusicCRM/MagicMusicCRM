@@ -103,8 +103,9 @@ class _TeachersList extends ConsumerWidget {
     return async.when(
       loading: () =>
           Padding(padding: EdgeInsets.all(12), child: ListSkeleton()),
-      error: (e, _) => Center(
-        child: Text('Ошибка: $e', style: TextStyle(color: AppTheme.danger)),
+      error: (_, _) => _EntityLoadError(
+        title: 'Не удалось загрузить преподавателей',
+        onRetry: () => ref.invalidate(teacherSearchProvider(query)),
       ),
       data: (items) {
         if (items.isEmpty) {

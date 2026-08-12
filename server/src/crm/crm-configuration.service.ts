@@ -217,8 +217,13 @@ export class CrmConfigurationService {
       await this.assertBranch(this.database, branchId);
     }
     const effective = await this.resolveEffective(this.database, branchId);
+    const defaultLessonDurationMinutes =
+      effective.snapshot.businessSettings.find(
+        (setting) => setting.key === "default_lesson_duration_minutes",
+      )?.value ?? 60;
     return {
       branchId: branchId ?? null,
+      defaultLessonDurationMinutes,
       settlementTypes: effective.snapshot.lessonSettlementTypes.filter(
         (type) => type.active,
       ),

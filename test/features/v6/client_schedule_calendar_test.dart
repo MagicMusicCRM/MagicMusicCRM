@@ -11,6 +11,7 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_day_canvas.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_teacher_timeline.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
 
 import '../crm/client_card/card_fake_api.dart';
@@ -216,8 +217,51 @@ void main() {
         find.byKey(const ValueKey('schedule-lesson-lesson-other')),
         findsOneWidget,
       );
+      expect(
+        _lessonMarker('lesson-selected', Icons.person_pin_circle_outlined),
+        findsOneWidget,
+      );
+      expect(
+        _lessonMarker('lesson-other', Icons.people_outline_rounded),
+        findsOneWidget,
+      );
       expect(_lessonBorder(tester, 'lesson-selected'), AppColor.danger);
       expect(_lessonBorder(tester, 'lesson-other'), AppColor.success);
+
+      await tester.tap(find.text('По преподавателям'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ScheduleTeacherTimeline), findsOneWidget);
+      expect(
+        _lessonMarker('lesson-selected', Icons.person_pin_circle_outlined),
+        findsOneWidget,
+      );
+      expect(
+        _lessonMarker('lesson-other', Icons.people_outline_rounded),
+        findsOneWidget,
+      );
+      expect(_timelineLessonBorder(tester, 'lesson-selected'), AppColor.danger);
+      expect(_timelineLessonBorder(tester, 'lesson-other'), AppColor.success);
+
+      await tester.tap(find.text('Неделя'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('schedule-week-view')), findsOneWidget);
+      expect(
+        _lessonMarker('lesson-selected', Icons.person_pin_circle_outlined),
+        findsOneWidget,
+      );
+      expect(
+        _lessonMarker('lesson-other', Icons.people_outline_rounded),
+        findsOneWidget,
+      );
+      expect(_lessonBorder(tester, 'lesson-selected'), AppColor.danger);
+      expect(_lessonBorder(tester, 'lesson-other'), AppColor.success);
+
+      await tester.tap(find.text('Месяц'));
+      await tester.pumpAndSettle();
+      expect(find.text('Август 2026'), findsWidgets);
+      expect(find.text('августа 2026'), findsNothing);
+      expect(_monthDayBorder(tester, '2026-08-04'), AppColor.success);
+      expect(_monthDayBorder(tester, '2026-08-05'), isNot(AppColor.success));
       expect(tester.takeException(), isNull);
     },
   );
@@ -364,6 +408,109 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'schedule search resolves lead student teacher room and lesson date '
+    'without losing input focus or scroll',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(1200, 900);
+      addTearDown(tester.view.reset);
+      final states = <ContextViewState>[];
+      final api = FakeCardApiClient(
+        branches: _branches,
+        rooms: _rooms,
+        scheduleMatrix: _lessons,
+      );
+      await tester.pumpWidget(
+        _calendarApp(
+          api,
+          initial: ContextViewState(
+            filters: _dayState().filters,
+            date: _dayState().date,
+            scrollOffset: 180,
+          ),
+          clientContext: false,
+          onChanged: states.add,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final preservedScroll = states.last.scrollOffset;
+      expect(preservedScroll, greaterThan(0));
+
+      String? activeQuery;
+      Future<void> search(String value) async {
+        await tester.tap(
+          find.byTooltip(
+            activeQuery == null ? 'Найти занятие' : 'Поиск: $activeQuery',
+          ),
+        );
+        await tester.pumpAndSettle();
+        final field = find.byType(EditableText).last;
+        for (var index = 1; index <= value.length; index++) {
+          await tester.enterText(field, value.substring(0, index));
+          await tester.pump();
+          final editable = tester.widget<EditableText>(field);
+          expect(editable.focusNode.hasFocus, isTrue);
+          expect(editable.controller.text, value.substring(0, index));
+        }
+        await tester.tap(find.widgetWithText(FilledButton, 'Найти'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
+        activeQuery = value.toLowerCase();
+        expect(states.last.scrollOffset, closeTo(preservedScroll, 0.1));
+      }
+
+      await search('ы');
+      expect(
+        api.getCalls.any(
+          (call) =>
+              call.path == '/crm/schedule/matrix' &&
+              call.query['leadId'] == 'lead-1',
+        ),
+        isTrue,
+      );
+
+      await search('Ан');
+      expect(
+        api.getCalls.any(
+          (call) =>
+              call.path == '/crm/schedule/matrix' &&
+              call.query['studentId'] == 'student-1',
+        ),
+        isTrue,
+      );
+
+      await search('я');
+      expect(
+        api.getCalls.any(
+          (call) =>
+              call.path == '/crm/schedule/matrix' &&
+              call.query['teacherId'] == 'teacher-1',
+        ),
+        isTrue,
+      );
+
+      await search('1');
+      expect(
+        api.getCalls.any(
+          (call) =>
+              call.path == '/crm/schedule/matrix' &&
+              call.query['roomId'] == 'room-a',
+        ),
+        isTrue,
+      );
+
+      await search('05.08.2026');
+      await tester.pumpAndSettle();
+      activeQuery = null;
+      expect(states.last.date, DateTime(2026, 8, 5));
+      expect(states.last.scrollOffset, closeTo(preservedScroll, 0.1));
+      expect(find.textContaining('Поиск:'), findsNothing);
+      expect(find.byType(ScheduleDayCanvas), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('mode and branch publish one restorable schedule state', (
     tester,
   ) async {
@@ -486,6 +633,20 @@ Color _lessonBorder(WidgetTester tester, String id) {
     find.byKey(ValueKey('schedule-lesson-$id')),
   );
   return ((container.decoration as BoxDecoration).border! as Border).top.color;
+}
+
+Finder _lessonMarker(String id, IconData icon) => find.descendant(
+  of: find.byKey(ValueKey('schedule-lesson-$id')),
+  matching: find.byIcon(icon),
+);
+
+Color _timelineLessonBorder(WidgetTester tester, String id) {
+  final card = find.ancestor(
+    of: find.byKey(ValueKey('schedule-lesson-$id')),
+    matching: find.byType(AnimatedContainer),
+  );
+  final animated = tester.widget<AnimatedContainer>(card.first);
+  return ((animated.decoration as BoxDecoration).border! as Border).top.color;
 }
 
 Color _monthDayBorder(WidgetTester tester, String day) {

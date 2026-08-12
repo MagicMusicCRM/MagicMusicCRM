@@ -12,12 +12,27 @@ class SettingsTestApi extends MagicApiClient {
     required this.capabilities,
     this.groups = const [],
     this.staff = const [],
+    this.teachers = const [
+      {
+        'id': '30000000-0000-4000-8000-000000000001',
+        'status': 'active',
+        'firstName': 'Мария',
+        'lastName': 'Петрова',
+        'assignedBranches': [
+          {
+            'id': '20000000-0000-4000-8000-000000000001',
+            'name': 'Сокол',
+          },
+        ],
+      },
+    ],
   }) : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   final String role;
   final List<String> capabilities;
   final List<Map<String, dynamic>> groups;
   final List<Map<String, dynamic>> staff;
+  final List<Map<String, dynamic>> teachers;
   final mutations = <String, Object?>{};
 
   @override
@@ -49,23 +64,7 @@ class SettingsTestApi extends MagicApiClient {
           as T;
     }
     if (path == '/crm/teachers') {
-      return <String, dynamic>{
-            'items': const [
-              {
-                'id': '30000000-0000-4000-8000-000000000001',
-                'status': 'active',
-                'firstName': 'Мария',
-                'lastName': 'Петрова',
-                'assignedBranches': [
-                  {
-                    'id': '20000000-0000-4000-8000-000000000001',
-                    'name': 'Сокол',
-                  },
-                ],
-              },
-            ],
-          }
-          as T;
+      return <String, dynamic>{'items': teachers} as T;
     }
     if (path ==
         '/crm/branches/20000000-0000-4000-8000-000000000001/disciplines') {
@@ -76,6 +75,40 @@ class SettingsTestApi extends MagicApiClient {
                 'disciplineId': '40000000-0000-4000-8000-000000000001',
                 'name': 'Вокал',
                 'sortOrder': 0,
+              },
+            ],
+          }
+          as T;
+    }
+    if (path == '/crm/disciplines') {
+      return <String, dynamic>{
+            'items': const [
+              {
+                'id': '40000000-0000-4000-8000-000000000001',
+                'name': 'Вокал',
+                'lifecycleState': 'active',
+                'version': 1,
+                'activeUsage': {
+                  'branchAssignments': 1,
+                  'teachers': 1,
+                  'students': 2,
+                  'packages': 0,
+                },
+              },
+            ],
+          }
+          as T;
+    }
+    if (path == '/crm/loss-reasons') {
+      return <String, dynamic>{
+            'items': const [
+              {
+                'id': '60000000-0000-4000-8000-000000000001',
+                'name': 'Высокая цена',
+                'kind': 'lost',
+                'lifecycleState': 'active',
+                'version': 1,
+                'historicalUses': 3,
               },
             ],
           }
@@ -109,7 +142,7 @@ class SettingsTestApi extends MagicApiClient {
               'exceptions': const <Map<String, dynamic>>[],
             },
             'teacher': {
-              'id': '30000000-0000-4000-8000-000000000001',
+              'id': queryParameters?['teacherId'],
               'version': 3,
               'assignments': const [
                 {
@@ -183,6 +216,24 @@ class SettingsTestApi extends MagicApiClient {
           as T;
     }
     throw StateError('Unexpected POST $path');
+  }
+
+  @override
+  Future<T> put<T>(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) async {
+    if (path.contains('/crm/schedule-reference/teachers/')) {
+      mutations[path] = data;
+      final body = Map<String, dynamic>.from(data! as Map);
+      return <String, dynamic>{
+            'version': (body['expectedVersion'] as num).toInt() + 1,
+          }
+          as T;
+    }
+    throw StateError('Unexpected PUT $path');
   }
 }
 
@@ -276,6 +327,40 @@ void main() {
     expect(find.byIcon(Icons.edit_rounded), findsOneWidget);
   });
 
+  testWidgets('director can manage organization reference catalogs', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      SettingsTestApi(
+        role: 'director',
+        capabilities: const [
+          'system.settings.manage',
+          'config.crm.read',
+          'config.crm.edit',
+        ],
+      ),
+    );
+
+    await tester.tap(find.text('Справочники'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Организационные справочники'), findsOneWidget);
+    expect(find.text('Дисциплины'), findsOneWidget);
+    expect(find.text('Причины отказа'), findsOneWidget);
+    expect(find.text('Вокал'), findsOneWidget);
+    expect(find.text('Активных связей: 4'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('create-reference-button')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Причины отказа'));
+    await tester.pumpAndSettle();
+    expect(find.text('Высокая цена'), findsOneWidget);
+    expect(find.text('отказ • использовано: 3'), findsOneWidget);
+  });
+
   testWidgets(
     'branch hours and teacher schedules are separate read-only views',
     (tester) async {
@@ -363,6 +448,109 @@ void main() {
     expect(find.text('UAT: преподаватель занят'), findsOneWidget);
   });
 
+  testWidgets(
+    'director saves branch assignments and working hours for all three teachers',
+    (tester) async {
+      const teachers = <Map<String, dynamic>>[
+        {
+          'id': '30000000-0000-4000-8000-000000000001',
+          'status': 'active',
+          'firstName': 'Мария',
+          'lastName': 'Петрова',
+        },
+        {
+          'id': '30000000-0000-4000-8000-000000000002',
+          'status': 'active',
+          'firstName': 'Анна',
+          'lastName': 'Соколова',
+        },
+        {
+          'id': '30000000-0000-4000-8000-000000000003',
+          'status': 'active',
+          'firstName': 'Ирина',
+          'lastName': 'Орлова',
+        },
+      ];
+      final api = SettingsTestApi(
+        role: 'director',
+        capabilities: const [
+          'system.settings.manage',
+          'schedule.lesson.read.assigned',
+          'config.crm.edit',
+        ],
+        teachers: teachers,
+      );
+      await _pump(tester, api, initialArea: 'schedule');
+      await tester.tap(find.text('Графики преподавателей'));
+      await tester.pumpAndSettle();
+
+      for (var index = 0; index < teachers.length; index += 1) {
+        final teacher = teachers[index];
+        final id = teacher['id']!;
+        if (index > 0) {
+          final previousId = teachers[index - 1]['id']!;
+          await _chooseSearchable(
+            tester,
+            ValueKey('settings-teacher-$previousId'),
+            '${teacher['lastName']} ${teacher['firstName']}',
+          );
+        }
+
+        final assignmentsCard = find
+            .ancestor(
+              of: find.text('Филиалы преподавателя'),
+              matching: find.byType(Card),
+            )
+            .first;
+        await tester.tap(
+          find.descendant(
+            of: assignmentsCard,
+            matching: find.widgetWithText(FilledButton, 'Сохранить'),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final availabilityCard = find
+            .ancestor(
+              of: find.text('Доступность преподавателя'),
+              matching: find.byType(Card),
+            )
+            .first;
+        await tester.tap(
+          find.descendant(
+            of: availabilityCard,
+            matching: find.widgetWithText(FilledButton, 'Сохранить'),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final branchesPath =
+            '/crm/schedule-reference/teachers/$id/branches';
+        final availabilityPath =
+            '/crm/schedule-reference/teachers/$id/availability';
+        expect(api.mutations[branchesPath], {
+          'expectedVersion': 3,
+          'assignments': [
+            {
+              'branchId': '20000000-0000-4000-8000-000000000001',
+              'activeFrom': '1970-01-01',
+            },
+          ],
+        });
+        final availability =
+            api.mutations[availabilityPath]! as Map<String, dynamic>;
+        expect(availability['expectedVersion'], 4);
+        expect(
+          availability['rules'],
+          contains(
+            containsPair('weekday', 1),
+          ),
+        );
+      }
+      await tester.pump(const Duration(seconds: 4));
+    },
+  );
+
   testWidgets('manager creates staff from the mounted users workspace', (
     tester,
   ) async {
@@ -384,17 +572,13 @@ void main() {
       'Иванов',
     );
     await tester.enterText(find.widgetWithText(TextFormField, 'Имя *'), 'Иван');
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'Электронная почта *'),
-      'ivan@example.test',
+    expect(
+      find.widgetWithText(TextFormField, 'Электронная почта (необязательно)'),
+      findsOneWidget,
     );
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'Пароль *'),
-      'password-123',
-    );
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'Повторите пароль *'),
-      'password-123',
+    expect(
+      find.widgetWithText(TextFormField, 'Пароль (необязательно)'),
+      findsOneWidget,
     );
     await tester.tap(find.byType(DropdownButtonFormField<String>).first);
     await tester.pumpAndSettle();
@@ -405,6 +589,49 @@ void main() {
 
     expect(api.mutations, contains('/crm/staff'));
   });
+
+  for (final actorRole in const ['manager', 'director']) {
+    testWidgets(
+      '$actorRole sees staff role read-only outside the Access section',
+      (tester) async {
+        final api = SettingsTestApi(
+          role: actorRole,
+          capabilities: const ['system.settings.manage', 'crm.client.write'],
+          staff: const [
+            {
+              'id': 'staff-read-only-role',
+              'role': 'admin',
+              'status': 'working',
+              'firstName': 'Ольга',
+              'lastName': 'Смирнова',
+              'email': 'staff@example.test',
+              'isAppAccount': true,
+              'appRole': 'admin',
+              'passwordConfigured': true,
+              'branches': [
+                {
+                  'id': '20000000-0000-4000-8000-000000000001',
+                  'name': 'Сокол',
+                },
+              ],
+            },
+          ],
+        );
+        await _pump(tester, api, initialArea: 'users');
+        await tester.tap(find.text('Сотрудники').first);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Смирнова Ольга'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Роль доступа'), findsOneWidget);
+        expect(
+          find.text('Изменяется только в «Настройки → Доступы»'),
+          findsOneWidget,
+        );
+        expect(find.byKey(const Key('access-role-selector')), findsNothing);
+      },
+    );
+  }
 
   testWidgets('director creates teacher from the mounted users workspace', (
     tester,
@@ -424,17 +651,13 @@ void main() {
       find.widgetWithText(TextFormField, 'Имя *'),
       'Мария',
     );
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'Email для входа *'),
-      'maria@example.test',
+    expect(
+      find.widgetWithText(TextFormField, 'Email для входа (необязательно)'),
+      findsOneWidget,
     );
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'Пароль *'),
-      'password-123',
-    );
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'Повторите пароль *'),
-      'password-123',
+    expect(
+      find.widgetWithText(TextFormField, 'Пароль (необязательно)'),
+      findsOneWidget,
     );
     final branchChip = find.widgetWithText(FilterChip, 'Сокол');
     await tester.ensureVisible(branchChip);
@@ -579,17 +802,11 @@ void main() {
       AlertDialog,
       'Создать доступ: Смирнова Ольга',
     );
-    final accessRole = tester.widget<DropdownButtonFormField<String>>(
-      find
-          .descendant(
-            of: accessDialog,
-            matching: find.byType(DropdownButtonFormField<String>),
-          )
-          .first,
-    );
-    expect(accessRole.initialValue, 'admin');
     expect(
-      find.descendant(of: accessDialog, matching: find.text('Преподаватель')),
+      find.descendant(
+        of: accessDialog,
+        matching: find.byType(DropdownButtonFormField<String>),
+      ),
       findsNothing,
     );
     await tester.enterText(
@@ -601,7 +818,7 @@ void main() {
       'password-123',
     );
     await tester.enterText(
-      find.widgetWithText(TextFormField, 'Повторите пароль *'),
+      find.widgetWithText(TextFormField, 'Повторите новый пароль'),
       'password-123',
     );
     await tester.tap(find.widgetWithText(FilledButton, 'Создать доступ').last);

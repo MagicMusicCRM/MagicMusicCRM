@@ -5,6 +5,7 @@ class LeadBoardFilters {
   final String q;
   final String branchId;
   final String statusId;
+  final String assignedTo;
   final String source;
   final String discipline;
   final String level;
@@ -13,6 +14,9 @@ class LeadBoardFilters {
   final String goal;
   final String gender;
   final String preferredSchedule;
+  final String from;
+  final String to;
+  final String sort;
   final String quick;
   final bool openTasks;
 
@@ -27,6 +31,7 @@ class LeadBoardFilters {
     this.q = '',
     this.branchId = '',
     this.statusId = '',
+    this.assignedTo = '',
     this.source = '',
     this.discipline = '',
     this.level = '',
@@ -35,6 +40,9 @@ class LeadBoardFilters {
     this.goal = '',
     this.gender = '',
     this.preferredSchedule = '',
+    this.from = '',
+    this.to = '',
+    this.sort = 'newest',
     this.quick = 'all',
     this.openTasks = false,
     this.hideConverted = false,
@@ -44,6 +52,7 @@ class LeadBoardFilters {
     String? q,
     String? branchId,
     String? statusId,
+    String? assignedTo,
     String? source,
     String? discipline,
     String? level,
@@ -52,6 +61,9 @@ class LeadBoardFilters {
     String? goal,
     String? gender,
     String? preferredSchedule,
+    String? from,
+    String? to,
+    String? sort,
     String? quick,
     bool? openTasks,
     bool? hideConverted,
@@ -60,6 +72,7 @@ class LeadBoardFilters {
       q: q ?? this.q,
       branchId: branchId ?? this.branchId,
       statusId: statusId ?? this.statusId,
+      assignedTo: assignedTo ?? this.assignedTo,
       source: source ?? this.source,
       discipline: discipline ?? this.discipline,
       level: level ?? this.level,
@@ -68,6 +81,9 @@ class LeadBoardFilters {
       goal: goal ?? this.goal,
       gender: gender ?? this.gender,
       preferredSchedule: preferredSchedule ?? this.preferredSchedule,
+      from: from ?? this.from,
+      to: to ?? this.to,
+      sort: sort ?? this.sort,
       quick: quick ?? this.quick,
       openTasks: openTasks ?? this.openTasks,
       hideConverted: hideConverted ?? this.hideConverted,
@@ -81,6 +97,7 @@ class LeadBoardFilters {
           q == other.q &&
           branchId == other.branchId &&
           statusId == other.statusId &&
+          assignedTo == other.assignedTo &&
           source == other.source &&
           discipline == other.discipline &&
           level == other.level &&
@@ -89,6 +106,9 @@ class LeadBoardFilters {
           goal == other.goal &&
           gender == other.gender &&
           preferredSchedule == other.preferredSchedule &&
+          from == other.from &&
+          to == other.to &&
+          sort == other.sort &&
           quick == other.quick &&
           openTasks == other.openTasks &&
           hideConverted == other.hideConverted;
@@ -98,6 +118,7 @@ class LeadBoardFilters {
     q,
     branchId,
     statusId,
+    assignedTo,
     source,
     discipline,
     level,
@@ -106,6 +127,9 @@ class LeadBoardFilters {
     goal,
     gender,
     preferredSchedule,
+    from,
+    to,
+    sort,
     quick,
     openTasks,
     hideConverted,
@@ -116,6 +140,7 @@ class LeadBoardFilters {
       'q': q,
       'branchId': branchId,
       'statusId': statusId,
+      'assignedTo': assignedTo,
       'source': source,
       'discipline': discipline,
       'level': level,
@@ -124,6 +149,9 @@ class LeadBoardFilters {
       'goal': goal,
       'gender': gender,
       'preferredSchedule': preferredSchedule,
+      'from': from,
+      'to': to,
+      'sort': sort,
       'quick': quick,
       'openTasks': openTasks,
       'hideConverted': hideConverted,
@@ -135,6 +163,7 @@ class LeadBoardFilters {
       q: json['q']?.toString() ?? '',
       branchId: json['branchId']?.toString() ?? '',
       statusId: json['statusId']?.toString() ?? '',
+      assignedTo: json['assignedTo']?.toString() ?? '',
       source: json['source']?.toString() ?? '',
       discipline: json['discipline']?.toString() ?? '',
       level: json['level']?.toString() ?? '',
@@ -143,6 +172,9 @@ class LeadBoardFilters {
       goal: json['goal']?.toString() ?? '',
       gender: json['gender']?.toString() ?? '',
       preferredSchedule: json['preferredSchedule']?.toString() ?? '',
+      from: json['from']?.toString() ?? '',
+      to: json['to']?.toString() ?? '',
+      sort: json['sort']?.toString() ?? 'newest',
       quick: json['quick']?.toString() ?? 'all',
       openTasks: json['openTasks'] == true,
       hideConverted: json['hideConverted'] == true,
@@ -162,6 +194,7 @@ class LeadBoardFilters {
     return service.listLeadBoard(
       q: q,
       branchId: branchId,
+      assignedTo: assignedTo,
       statusId: pageStatusId,
       unassigned: pageUnassigned ? true : null,
       source: source,
@@ -172,6 +205,9 @@ class LeadBoardFilters {
       goal: goal,
       gender: gender,
       preferredSchedule: preferredSchedule,
+      from: from,
+      to: to,
+      sort: sort,
       quick: quick,
       openTasks: openTasks ? true : null,
       hideConverted: hideConverted ? true : null,

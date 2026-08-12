@@ -379,4 +379,104 @@ void main() {
       expect(find.text('Старый рекламный источник'), findsNothing);
     },
   );
+
+  testWidgets('card writes canonical typed values with definition ids', (
+    tester,
+  ) async {
+    const definitionId = '30000000-0000-4000-8000-000000000777';
+    final api = FakeCardApiClient(
+      lead: rawLead(customData: const {'favoriteColor': 'Синий'}),
+      customFields: const [
+        {
+          'id': definitionId,
+          'entityType': 'lead',
+          'key': 'favoriteColor',
+          'label': 'Любимый цвет',
+          'valueType': 'text',
+          'placements': ['edit', 'card'],
+        },
+      ],
+    );
+    await pumpClientCard(
+      tester,
+      api: api,
+      seed: const {'id': 'lead-1'},
+      statuses: statuses,
+    );
+
+    await tester.ensureVisible(
+      find.byKey(const Key('client-custom-fields-expansion')),
+    );
+    await tester.tap(find.text('Дополнительные поля'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextFormField &&
+            widget.key.toString().contains('leads-favoriteColor-'),
+      ),
+      'Зелёный',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Сохранить'));
+    await tester.pumpAndSettle();
+
+    expect(api.updateLeadBody?['customFields'], [
+      {'definitionId': definitionId, 'value': 'Зелёный'},
+    ]);
+  });
+
+  testWidgets('card placement is read-only and configured widths are honored', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1400, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final api = FakeCardApiClient(
+      lead: rawLead(
+        customData: const {'favoriteColor': 'Синий', 'campaignCode': 'A-17'},
+      ),
+      customFields: const [
+        {
+          'entityType': 'lead',
+          'key': 'favoriteColor',
+          'label': 'Любимый цвет',
+          'valueType': 'text',
+          'width': 'half',
+          'placements': ['card'],
+        },
+        {
+          'entityType': 'lead',
+          'key': 'campaignCode',
+          'label': 'Код кампании',
+          'valueType': 'text',
+          'width': 'third',
+          'placements': ['edit', 'card'],
+        },
+      ],
+    );
+    await pumpClientCard(
+      tester,
+      api: api,
+      seed: const {'id': 'lead-1'},
+      statuses: statuses,
+    );
+
+    await tester.ensureVisible(
+      find.byKey(const Key('client-custom-fields-expansion')),
+    );
+    await tester.tap(find.text('Дополнительные поля'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('custom-field-readonly-favoriteColor')),
+      findsOneWidget,
+    );
+    expect(find.text('Синий'), findsOneWidget);
+    final half = tester.getSize(
+      find.byKey(const ValueKey('custom-field-layout-favoriteColor')),
+    );
+    final third = tester.getSize(
+      find.byKey(const ValueKey('custom-field-layout-campaignCode')),
+    );
+    expect(half.width, closeTo(third.width * 1.5, 5));
+  });
 }

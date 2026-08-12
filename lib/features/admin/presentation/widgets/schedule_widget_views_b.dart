@@ -17,7 +17,8 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
         _filterClientType = focus.clientType;
         _filterClientId = focus.clientId;
         _filterClientName = focus.clientName;
-        _hideOtherClientLessons = true;
+        _selectedBranchId = focus.branchId ?? _selectedBranchId;
+        _hideOtherClientLessons = false;
       });
       ref.read(scheduleNavigationProvider.notifier).clear();
       unawaited(_fetchAll());
@@ -98,9 +99,9 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
       initialRoomId: roomId,
       initialBranchId: _selectedBranchId,
       initialDurationMinutes: durationMinutes,
-      clientType: widget.clientType,
-      clientId: widget.clientId,
-      clientName: widget.clientName,
+      clientType: _contextClientType,
+      clientId: _contextClientId,
+      clientName: _contextClientName,
     );
     if (created == true && mounted) {
       _fetchDayLessons(_selectedDate);
@@ -114,9 +115,9 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
       initialDate: startLocal,
       initialBranchId: _selectedBranchId,
       initialDurationMinutes: durationMinutes,
-      clientType: widget.clientType,
-      clientId: widget.clientId,
-      clientName: widget.clientName,
+      clientType: _contextClientType,
+      clientId: _contextClientId,
+      clientName: _contextClientName,
     );
     if (created == true && mounted) await _fetchAll();
   }
@@ -249,6 +250,11 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
         lesson['lifecycle_state']?.toString() ??
         lesson['lifecycleState']?.toString() ??
         currentStatus;
+    final settlementIssue = lifecycleState == 'settlement_pending'
+        ? lessonSettlementIssueLabel(
+            lesson['settlement_failure_code']?.toString(),
+          )
+        : null;
     var settlementHistory = <Map<String, dynamic>>[];
     if (widget.canWrite && lessonId?.isNotEmpty == true) {
       try {
@@ -439,8 +445,9 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
         });
       },
       timeRange: timeRange,
-      currentStatus: currentStatus,
+      currentStatus: lifecycleState,
       conflicts: conflicts,
+      settlementIssue: settlementIssue,
       settlementHistory: settlementHistory,
       lessonId: widget.canWrite ? lessonId : null,
       onEdit: () => _editLesson(lesson),
@@ -474,7 +481,7 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
   Future<void> _editLesson(Map<String, dynamic> lesson) async {
     if (!widget.canWrite) return;
     final changed = await CreateLessonDialog.show(context, lesson: lesson);
-    if (changed == true) _fetchAll();
+    if (changed == true && mounted) await _fetchAll();
   }
 
   Future<void> _cancelLesson(Map<String, dynamic> lesson) async {

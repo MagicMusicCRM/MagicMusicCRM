@@ -143,7 +143,8 @@ export class ReadReceiptService {
           limit 1
         )
         select m.id, m.chat_id, m.sender_id, m.content, m.message_type,
-          m.attachment_file_id, m.reply_to_id, m.forwarded_from_id,
+          m.attachment_file_id, m.voice_duration_ms, m.reply_to_id,
+          m.forwarded_from_id,
           m.pinned_by, m.pinned_at, m.created_at, m.updated_at,
           m.deleted_at, u.email as sender_email, p.first_name as sender_first_name,
           p.last_name as sender_last_name, u.role as sender_role,

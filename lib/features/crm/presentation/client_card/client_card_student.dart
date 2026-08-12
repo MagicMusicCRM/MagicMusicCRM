@@ -23,7 +23,7 @@ extension _ClientCardStudent on _ClientCardState {
               ),
               const SizedBox(height: AppSpace.md),
               Text(
-                'Ошибка: $_studentError',
+                'Не удалось загрузить карточку ученика. Проверьте подключение и повторите попытку.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
               ),
@@ -176,6 +176,7 @@ extension _ClientCardStudent on _ClientCardState {
         onAdjust: (payment) => _emitState(() => _adjustingPayment = payment),
         onTransition: _showPaymentTransitionFlow,
         onReverse: _showPaymentReversalFlow,
+        onReverseAdjustment: _showAdjustmentReversalFlow,
         onCancelAdjustment: () => _emitState(() => _adjustingPayment = null),
         onSubmitAdjustment: _recordPaymentAdjustment,
         scrollController: _paymentScrollController,
@@ -303,6 +304,47 @@ extension _ClientCardStudent on _ClientCardState {
       MagicToast.show(
         context,
         'Не удалось подготовить удаление оплаты',
+        detail: '$error',
+        type: MagicToastType.danger,
+      );
+    }
+  }
+
+  Future<void> _showAdjustmentReversalFlow(CommerceMovement adjustment) async {
+    final version = adjustment.adjustmentVersion;
+    if (version == null) return;
+    final crm = ref.read(magicCrmServiceProvider);
+    try {
+      final preview = await crm.previewAccountAdjustmentReversal(
+        _studentId,
+        adjustmentId: adjustment.id,
+        expectedVersion: version,
+      );
+      if (!mounted) return;
+      final changed = await showClientAccountAdjustmentReversalSheet(
+        context,
+        preview: preview,
+        onSubmit: (submission) => crm.reverseAccountAdjustment(
+          _studentId,
+          adjustmentId: adjustment.id,
+          preview: preview,
+          reason: submission.reason,
+          identity: submission.identity,
+        ),
+      );
+      if (changed != true || !mounted) return;
+      MagicToast.show(
+        context,
+        'Корректировка сторнирована',
+        detail: 'Исходный факт и сторно сохранены в технической истории',
+        type: MagicToastType.success,
+      );
+      _refreshLedger();
+    } catch (error) {
+      if (!mounted) return;
+      MagicToast.show(
+        context,
+        'Не удалось подготовить сторно корректировки',
         detail: '$error',
         type: MagicToastType.danger,
       );
@@ -790,6 +832,30 @@ extension _ClientCardStudent on _ClientCardState {
     final crm = ref.read(magicCrmServiceProvider);
     final studentId = _isStudent ? _studentId : null;
     final leadId = _isStudent ? null : _leadId;
+    String? actorRole;
+    try {
+      actorRole = (await ref.read(releaseGateStatusProvider.future)).role;
+    } catch (_) {
+      actorRole = ref.read(releaseGateStatusProvider).asData?.value.role;
+    }
+    if (!mounted) return;
+    final lessons = _isStudent
+        ? _lessons.map((lesson) => lesson.raw).toList(growable: false)
+        : _list(_leadCard?['trials']);
+    final requireLesson = !_isStudent || actorRole == 'teacher';
+
+    if (requireLesson && lessons.isEmpty) {
+      MagicToast.show(
+        context,
+        _isStudent
+            ? 'Сначала проведите или запланируйте занятие с учеником'
+            : 'Сначала создайте пробное занятие для лида',
+        detail:
+            'Домашнее задание преподавателя должно быть связано с занятием.',
+        type: MagicToastType.info,
+      );
+      return;
+    }
 
     List<Map<String, dynamic>> homeworks = const [];
     try {
@@ -806,17 +872,45 @@ extension _ClientCardStudent on _ClientCardState {
     final input = await showAssignHomeworkSheet(
       context,
       recentHomeworks: homeworks,
+      lessons: lessons,
+      requireLesson: requireLesson,
     );
     if (input == null || !mounted) return;
 
     try {
-      await crm.createHomework(
+      final homework = await crm.createHomework(
         studentId: studentId,
         leadId: leadId,
+        lessonId: input.lessonId,
         title: input.title,
         description: input.description,
         dueAt: input.dueAt?.toIso8601String(),
       );
+      final homeworkId = homework['id']?.toString();
+      final attachment = input.attachment;
+      if (attachment != null && homeworkId != null && homeworkId.isNotEmpty) {
+        try {
+          await ref
+              .read(homeworkAttachmentServiceProvider)
+              .uploadAndAttach(
+                homeworkId: homeworkId,
+                bytes: attachment.bytes,
+                fileName: attachment.name,
+                kind: 'assignment',
+              );
+        } catch (error) {
+          if (!mounted) return;
+          _dirty = true;
+          _emitState(() => _homeworkRefreshKey++);
+          MagicToast.show(
+            context,
+            'ДЗ создано, но файл не прикреплён',
+            detail: '$error. Файл можно добавить из карточки задания.',
+            type: MagicToastType.info,
+          );
+          return;
+        }
+      }
       if (!mounted) return;
       _dirty = true;
       // Refresh the «Прогресс» tab so the just-assigned homework shows up.

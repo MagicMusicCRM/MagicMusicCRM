@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/widgets/v7/magic_page_state.dart';
 
 final statsProvider = FutureProvider<Map<String, dynamic>>((ref) {
   return ref.watch(magicCrmServiceProvider).getOverviewStats();
@@ -108,32 +109,13 @@ class AdminOverviewWidget extends ConsumerWidget {
           ),
         ),
       ),
-      loading: () => const Center(
-        child: CircularProgressIndicator(color: AppTheme.primaryGold),
-      ),
-      error: (err, _) => Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.error_outline_rounded,
-              color: AppTheme.danger,
-              size: 48,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Ошибка загрузки: $err',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 12),
-            FilledButton(
-              onPressed: () => ref.invalidate(statsProvider),
-              child: const Text('Повторить'),
-            ),
-          ],
-        ),
+      loading: () => const MagicPageState.loading(),
+      error: (_, _) => MagicPageState(
+        kind: MagicPageStateKind.error,
+        title: 'Не удалось загрузить обзор',
+        message: 'Проверьте подключение и повторите загрузку.',
+        actionLabel: 'Повторить',
+        onAction: () => ref.invalidate(statsProvider),
       ),
     );
   }
@@ -158,7 +140,7 @@ class _StatCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: 240,
-      height: 120,
+      height: 124,
       child: Card(
         child: InkWell(
           onTap: onTap,
@@ -237,9 +219,12 @@ class _UpcomingTasksSection extends ConsumerWidget {
             padding: EdgeInsets.symmetric(vertical: 12),
             child: LinearProgressIndicator(),
           ),
-          error: (error, _) => Text(
-            'Не удалось загрузить задачи: $error',
-            style: TextStyle(color: cs.error, fontSize: 13),
+          error: (_, _) => MagicPageState(
+            kind: MagicPageStateKind.error,
+            title: 'Не удалось загрузить задачи',
+            message: 'Обновите список, чтобы продолжить работу.',
+            actionLabel: 'Повторить',
+            onAction: () => ref.invalidate(upcomingTasksProvider),
           ),
           data: (tasks) => tasks.isEmpty
               ? Padding(

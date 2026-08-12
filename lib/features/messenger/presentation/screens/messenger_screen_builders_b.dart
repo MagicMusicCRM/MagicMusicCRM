@@ -284,6 +284,14 @@ extension _MessengerBuildersB on _MessengerScreenState {
                   ? const Center(
                       child: CircularProgressIndicator(color: AppColor.gold),
                     )
+                  : _messagesLoadError != null
+                  ? MagicPageState(
+                      kind: MagicPageStateKind.error,
+                      title: 'Не удалось загрузить сообщения',
+                      message: _messagesLoadError,
+                      actionLabel: 'Повторить',
+                      onAction: _loadMessages,
+                    )
                   : _messages.isEmpty
                   ? Center(
                       child: Column(

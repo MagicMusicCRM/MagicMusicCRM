@@ -269,6 +269,11 @@ class CommerceSubscription {
     'package_name': terms.displayName,
     'package_price': _commerceMajor(terms.finalPriceMinor),
     'paid_amount': _commerceMajor(financial.actualPaidMinor),
+    'actual_paid_minor': financial.actualPaidMinor.toString(),
+    'debt_minor': financial.debtMinor.toString(),
+    'pending_minor': financial.pendingMinor.toString(),
+    'overpayment_minor': financial.overpaymentMinor.toString(),
+    'next_payment_at': financial.nextPaymentAt?.toIso8601String(),
     'base_price': _commerceMajor(terms.basePriceMinor),
     'currency_code': terms.currencyCode,
   };
@@ -537,6 +542,7 @@ class CommerceMovement {
     required this.issuedSubscriptionId,
     required this.subscriptionName,
     required this.sourcePaymentId,
+    this.adjustmentVersion,
     required this.paymentRecordVersion,
     required this.installmentId,
     required this.dueAt,
@@ -560,6 +566,7 @@ class CommerceMovement {
   final String? issuedSubscriptionId;
   final String? subscriptionName;
   final String? sourcePaymentId;
+  final int? adjustmentVersion;
   final int? paymentRecordVersion;
   final String? installmentId;
   final DateTime? dueAt;
@@ -584,6 +591,9 @@ class CommerceMovement {
       issuedSubscriptionId: json['issuedSubscriptionId']?.toString(),
       subscriptionName: json['subscriptionName']?.toString(),
       sourcePaymentId: json['sourcePaymentId']?.toString(),
+      adjustmentVersion: json['adjustmentVersion'] == null
+          ? null
+          : _commerceInt(json['adjustmentVersion'], 'adjustmentVersion'),
       paymentRecordVersion: json['paymentRecordVersion'] == null
           ? null
           : _commerceInt(json['paymentRecordVersion'], 'paymentRecordVersion'),
@@ -628,8 +638,8 @@ class CommerceTechnicalFinanceEvent {
 
   final String id;
   final String eventType;
-  final String paymentRecordId;
-  final String previousStatus;
+  final String? paymentRecordId;
+  final String? previousStatus;
   final BigInt amountMinor;
   final String currencyCode;
   final String reason;
@@ -640,8 +650,8 @@ class CommerceTechnicalFinanceEvent {
     return CommerceTechnicalFinanceEvent(
       id: _commerceRequiredString(json, 'id'),
       eventType: _commerceRequiredString(json, 'eventType'),
-      paymentRecordId: _commerceRequiredString(json, 'paymentRecordId'),
-      previousStatus: _commerceRequiredString(json, 'previousStatus'),
+      paymentRecordId: json['paymentRecordId']?.toString(),
+      previousStatus: json['previousStatus']?.toString(),
       amountMinor: _commerceMinor(json['amountMinor'], 'amountMinor'),
       currencyCode: _commerceRequiredString(json, 'currencyCode'),
       reason: _commerceRequiredString(json, 'reason'),

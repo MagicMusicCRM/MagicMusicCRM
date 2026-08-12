@@ -32,6 +32,8 @@ extension _ClientCardEditors on _ClientCardState {
         .where(
           (field) =>
               field.entity == entity &&
+              (field.placements.contains('edit') ||
+                  field.placements.contains('card')) &&
               !_isSystemOnlyCustomField(field.key) &&
               (includeKeys == null || includeKeys.contains(field.key)) &&
               !excludedKeys.contains(field.key),
@@ -45,7 +47,37 @@ extension _ClientCardEditors on _ClientCardState {
         ),
       ];
     }
-    return fields.map((field) => _buildCustomFieldControl(cs, field)).toList();
+    return [
+      LayoutBuilder(
+        builder: (context, constraints) {
+          final available = constraints.maxWidth.isFinite
+              ? constraints.maxWidth
+              : MediaQuery.sizeOf(context).width;
+          final useSingleColumn = available < 520;
+          double fieldWidth(CrmCustomFieldDefinition field) {
+            if (useSingleColumn) return available;
+            return switch (field.width) {
+              'third' => (available - AppSpace.sm * 2) / 3,
+              'half' => (available - AppSpace.sm) / 2,
+              _ => available,
+            };
+          }
+
+          return Wrap(
+            spacing: AppSpace.sm,
+            runSpacing: 0,
+            children: [
+              for (final field in fields)
+                SizedBox(
+                  key: ValueKey('custom-field-layout-${field.key}'),
+                  width: fieldWidth(field),
+                  child: _buildCustomFieldControl(cs, field),
+                ),
+            ],
+          );
+        },
+      ),
+    ];
   }
 
   /// #9: чтение-алиасы для полей, чьи настоящие данные выгрузка HolliHop
@@ -60,15 +92,46 @@ extension _ClientCardEditors on _ClientCardState {
     ColorScheme cs,
     CrmCustomFieldDefinition field,
   ) {
+    if (!field.placements.contains('edit')) {
+      return _buildReadOnlyCustomField(cs, field);
+    }
     final customData = _customDataForEntity(field.entity);
     final alias = _customFieldReadAliases[field.key];
     final rawValue =
         customData[field.key] ?? (alias == null ? null : customData[alias]);
     final label = field.required ? '${field.label} *' : field.label;
 
-    if (field.type == 'select') {
+    if (field.type == 'select' || field.type == 'radio') {
       final current = rawValue?.toString() ?? '';
       final selectedId = field.options.contains(current) ? current : null;
+      if (field.type == 'radio') {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: AppSpace.md),
+          child: InputDecorator(
+            decoration: _inputDecoration(cs, label: label, isDense: true),
+            child: Wrap(
+              spacing: AppSpace.xs,
+              runSpacing: AppSpace.xs,
+              children: [
+                for (final option in field.options)
+                  ChoiceChip(
+                    label: Text(option),
+                    selected: selectedId == option,
+                    onSelected: (selected) {
+                      if (selected) {
+                        _updateCustomDataForEntity(
+                          field.entity,
+                          field.key,
+                          option,
+                        );
+                      }
+                    },
+                  ),
+              ],
+            ),
+          ),
+        );
+      }
       return Padding(
         padding: const EdgeInsets.only(bottom: AppSpace.md),
         child: SearchablePickerField(
@@ -86,12 +149,21 @@ extension _ClientCardEditors on _ClientCardState {
       );
     }
 
-    if (field.type == 'boolean') {
-      return SwitchListTile(
+    if (field.type == 'boolean' || field.type == 'toggle') {
+      final control = SwitchListTile(
         value: rawValue == true || rawValue?.toString() == 'true',
         activeThumbColor: AppColor.gold,
         onChanged: (value) =>
             _updateCustomDataForEntity(field.entity, field.key, value),
+        title: Text(label),
+        subtitle: field.hint == null ? null : Text(field.hint!),
+        contentPadding: EdgeInsets.zero,
+      );
+      if (field.type == 'toggle') return control;
+      return CheckboxListTile(
+        value: rawValue == true || rawValue?.toString() == 'true',
+        onChanged: (value) =>
+            _updateCustomDataForEntity(field.entity, field.key, value == true),
         title: Text(label),
         subtitle: field.hint == null ? null : Text(field.hint!),
         contentPadding: EdgeInsets.zero,
@@ -102,6 +174,42 @@ extension _ClientCardEditors on _ClientCardState {
       return _buildDateCustomField(cs, field, rawValue?.toString());
     }
 
+    if (field.type == 'datetime') {
+      return _buildDateTimeCustomField(cs, field, rawValue?.toString());
+    }
+
+    if (field.type == 'multi_select' || field.type == 'checkbox_group') {
+      final selected = (rawValue as List? ?? const [])
+          .map((value) => value.toString())
+          .toSet();
+      return Padding(
+        padding: const EdgeInsets.only(bottom: AppSpace.md),
+        child: InputDecorator(
+          decoration: _inputDecoration(cs, label: label, isDense: true),
+          child: Wrap(
+            spacing: AppSpace.xs,
+            runSpacing: AppSpace.xs,
+            children: [
+              for (final option in field.options)
+                FilterChip(
+                  label: Text(option),
+                  selected: selected.contains(option),
+                  onSelected: (checked) {
+                    final next = {...selected};
+                    checked ? next.add(option) : next.remove(option);
+                    _updateCustomDataForEntity(
+                      field.entity,
+                      field.key,
+                      next.toList(growable: false),
+                    );
+                  },
+                ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return _buildCustomTextField(
       cs,
       label,
@@ -109,6 +217,47 @@ extension _ClientCardEditors on _ClientCardState {
       rawValue?.toString(),
       keyboard: _keyboardForCustomField(field.type),
     );
+  }
+
+  Widget _buildReadOnlyCustomField(
+    ColorScheme cs,
+    CrmCustomFieldDefinition field,
+  ) {
+    final customData = _customDataForEntity(field.entity);
+    final alias = _customFieldReadAliases[field.key];
+    final rawValue =
+        customData[field.key] ?? (alias == null ? null : customData[alias]);
+    final value = switch (field.type) {
+      'boolean' || 'toggle' => rawValue == true ? 'Да' : 'Нет',
+      'multi_select' || 'checkbox_group' when rawValue is Iterable =>
+        rawValue.map((item) => item.toString()).join(', '),
+      'date' => _formatCustomDate(rawValue, withTime: false),
+      'datetime' => _formatCustomDate(rawValue, withTime: true),
+      'money' when rawValue != null => '$rawValue ₽',
+      'duration' when rawValue != null => '$rawValue мин.',
+      _ => rawValue?.toString() ?? '',
+    };
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpace.md),
+      child: InputDecorator(
+        key: ValueKey('custom-field-readonly-${field.key}'),
+        decoration: _inputDecoration(cs, label: field.label, isDense: true),
+        child: Text(
+          value.trim().isEmpty ? '—' : value,
+          style: TextStyle(
+            color: value.trim().isEmpty ? cs.onSurfaceVariant : cs.onSurface,
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatCustomDate(Object? rawValue, {required bool withTime}) {
+    final parsed = DateTime.tryParse(rawValue?.toString() ?? '')?.toLocal();
+    if (parsed == null) return rawValue?.toString() ?? '';
+    return DateFormat(
+      withTime ? 'dd.MM.yyyy HH:mm' : 'dd.MM.yyyy',
+    ).format(parsed);
   }
 
   bool _isSystemOnlyCustomField(String key) => _ClientCardState
@@ -138,6 +287,7 @@ extension _ClientCardEditors on _ClientCardState {
         // Epoch key, not value key — see _buildClientTextField.
         key: ValueKey('${field.entity}-${field.key}-$_editorEpoch'),
         initialValue: value ?? '',
+        maxLines: field.type == 'textarea' ? 4 : 1,
         decoration: _inputDecoration(
           cs,
           label: label,
@@ -145,11 +295,23 @@ extension _ClientCardEditors on _ClientCardState {
           isDense: true,
         ),
         keyboardType: keyboard,
-        onChanged: (v) => _updateCustomDataForEntity(
-          field.entity,
-          field.key,
-          v.trim().isEmpty ? null : v,
-        ),
+        onChanged: (v) {
+          final trimmed = v.trim();
+          final numeric = const {
+            'number',
+            'money',
+            'duration',
+          }.contains(field.type);
+          _updateCustomDataForEntity(
+            field.entity,
+            field.key,
+            trimmed.isEmpty
+                ? null
+                : numeric
+                ? num.tryParse(trimmed.replaceAll(',', '.'))
+                : v,
+          );
+        },
       ),
     );
   }
@@ -181,7 +343,7 @@ extension _ClientCardEditors on _ClientCardState {
             _updateCustomDataForEntity(
               field.entity,
               field.key,
-              picked.toIso8601String(),
+              DateFormat('yyyy-MM-dd').format(picked),
             );
           }
         },
@@ -201,6 +363,69 @@ extension _ClientCardEditors on _ClientCardState {
                 size: 16,
                 color: AppColor.gold,
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDateTimeCustomField(
+    ColorScheme cs,
+    CrmCustomFieldDefinition field,
+    String? value,
+  ) {
+    final current = value == null ? null : DateTime.tryParse(value)?.toLocal();
+    final label = field.required ? '${field.label} *' : field.label;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpace.md),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        onTap: () async {
+          final pickerContext = context;
+          final date = await showDatePicker(
+            context: pickerContext,
+            initialDate: current ?? DateTime.now(),
+            firstDate: DateTime(1950),
+            lastDate: DateTime(2100),
+            initialEntryMode: DatePickerEntryMode.input,
+          );
+          if (date == null || !pickerContext.mounted) return;
+          final time = await showTimePicker(
+            context: pickerContext,
+            initialTime: current == null
+                ? TimeOfDay.now()
+                : TimeOfDay.fromDateTime(current),
+          );
+          if (time == null) return;
+          _updateCustomDataForEntity(
+            field.entity,
+            field.key,
+            DateTime(
+              date.year,
+              date.month,
+              date.day,
+              time.hour,
+              time.minute,
+            ).toIso8601String(),
+          );
+        },
+        child: InputDecorator(
+          decoration: _inputDecoration(
+            cs,
+            label: label,
+            helperText: field.hint,
+            isDense: true,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                current == null
+                    ? 'Не выбрано'
+                    : DateFormat('dd.MM.yyyy HH:mm', 'ru').format(current),
+              ),
+              const Icon(Icons.event_rounded, size: 16, color: AppColor.gold),
             ],
           ),
         ),
@@ -399,7 +624,9 @@ extension _ClientCardEditors on _ClientCardState {
 
   TextInputType? _keyboardForCustomField(String type) {
     return switch (type) {
-      'number' => TextInputType.number,
+      'number' ||
+      'money' ||
+      'duration' => const TextInputType.numberWithOptions(decimal: true),
       'phone' => TextInputType.phone,
       'email' => TextInputType.emailAddress,
       'url' => TextInputType.url,
@@ -783,14 +1010,14 @@ extension _ClientCardEditors on _ClientCardState {
   }
 
   Future<void> _pickResponsible(String entity) async {
-    final api = ref.read(magicApiClientProvider);
+    final crm = ref.read(magicCrmServiceProvider);
 
     Future<List<SearchableSelectItem>> search(String query) async {
-      final rows = await api.listResponsibleStaff(search: query);
+      final rows = await crm.listResponsibleStaff(search: query);
       return rows.map((row) {
         return SearchableSelectItem(
           id: row['id'].toString(),
-          label: row['displayName']?.toString() ?? 'Без имени',
+          label: row['name']?.toString() ?? 'Без имени',
           subtitle: _staffRoleLabel(row['role']),
         );
       }).toList();
@@ -1084,6 +1311,117 @@ extension _ClientCardEditors on _ClientCardState {
       }
     } finally {
       if (mounted) _emitState(() => _familyBusy = false);
+    }
+  }
+
+  Future<void> _setFamilyPrimaryPayer(FamilyMember member) async {
+    final familyRecord = _family?['family'];
+    final familyId = familyRecord is Map
+        ? familyRecord['id']?.toString()
+        : null;
+    if (familyId == null || familyId.isEmpty || member.id.isEmpty) return;
+    _emitState(() => _familyBusy = true);
+    try {
+      await ref
+          .read(magicCrmServiceProvider)
+          .setFamilyPrimaryPayer(familyId, member.id);
+      await _fetchFamily();
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'Основной плательщик назначен',
+          type: MagicToastType.success,
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'Не удалось назначить плательщика',
+          detail: '$error',
+          type: MagicToastType.danger,
+        );
+      }
+    } finally {
+      if (mounted) _emitState(() => _familyBusy = false);
+    }
+  }
+
+  void _openFamilyMember(BuildContext sourceContext, FamilyMember member) {
+    final entityType = member.entityType;
+    final entityId = member.entityId;
+    if (entityId == null || entityId.isEmpty) return;
+    if (entityType != 'lead' && entityType != 'student') return;
+    _openLinkedRecord(
+      sourceContext,
+      EntityLink.typed(
+        entityType: EntityLinkType.client,
+        entityId: entityId,
+        variant: entityType,
+        presentation: EntityPresentationReference(primary: member.name),
+      ),
+      EntityOpenTarget.current,
+    );
+  }
+
+  Future<void> _linkClientUser(Map<String, dynamic> candidate) async {
+    final userId =
+        candidate['userId']?.toString() ?? candidate['user_id']?.toString();
+    if (userId == null || userId.isEmpty) return;
+    _emitState(() => _clientAccessBusy = true);
+    try {
+      await ref
+          .read(magicCrmServiceProvider)
+          .linkUserToClient(widget.entityType, _entityId, userId);
+      await _fetchClientAccess();
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'Аккаунт связан с карточкой',
+          type: MagicToastType.success,
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'Не удалось связать аккаунт',
+          detail: '$error',
+          type: MagicToastType.danger,
+        );
+      }
+    } finally {
+      if (mounted) _emitState(() => _clientAccessBusy = false);
+    }
+  }
+
+  Future<void> _inviteClientToApp() async {
+    final studentId = _studentId;
+    if (studentId.isEmpty) return;
+    _emitState(() => _clientAccessBusy = true);
+    try {
+      final result = await ref
+          .read(magicCrmServiceProvider)
+          .inviteStudent(studentId);
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'Приглашение отправлено',
+          detail: result['email']?.toString(),
+          type: MagicToastType.success,
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'Не удалось отправить приглашение',
+          detail: '$error',
+          type: MagicToastType.danger,
+        );
+      }
+    } finally {
+      if (mounted) _emitState(() => _clientAccessBusy = false);
     }
   }
 

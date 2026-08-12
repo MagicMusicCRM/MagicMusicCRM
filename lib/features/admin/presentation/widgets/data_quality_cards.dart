@@ -78,11 +78,18 @@ class _SectionHeader extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Phone review queue card (read-only).
+// Phone review queue card.
 // ─────────────────────────────────────────────────────────────────────────────
 class _PhoneReviewCard extends StatelessWidget {
   final Map<String, dynamic> item;
-  const _PhoneReviewCard({required this.item});
+  final bool busy;
+  final ValueChanged<Map<String, dynamic>> onResolve;
+
+  const _PhoneReviewCard({
+    required this.item,
+    required this.busy,
+    required this.onResolve,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -186,12 +193,169 @@ class _PhoneReviewCard extends StatelessWidget {
                         ),
                     ],
                   ),
+                  const SizedBox(height: AppSpace.sm),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: OutlinedButton.icon(
+                      key: ValueKey('resolve-phone-review-${item['id']}'),
+                      onPressed: busy ? null : () => onResolve(item),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColor.gold,
+                        side: const BorderSide(color: AppColor.goldLine),
+                      ),
+                      icon: busy
+                          ? const SizedBox.square(
+                              dimension: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.fact_check_outlined, size: 18),
+                      label: Text(busy ? 'Сохраняем…' : 'Разобрать'),
+                    ),
+                  ),
                 ],
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _PhoneReviewDecision {
+  final String action;
+  final String? phone;
+  final String resolutionNote;
+
+  const _PhoneReviewDecision({
+    required this.action,
+    required this.phone,
+    required this.resolutionNote,
+  });
+}
+
+class _PhoneReviewResolutionDialog extends StatefulWidget {
+  final String rawPhone;
+
+  const _PhoneReviewResolutionDialog({required this.rawPhone});
+
+  @override
+  State<_PhoneReviewResolutionDialog> createState() =>
+      _PhoneReviewResolutionDialogState();
+}
+
+class _PhoneReviewResolutionDialogState
+    extends State<_PhoneReviewResolutionDialog> {
+  late final TextEditingController _phone;
+  final TextEditingController _note = TextEditingController();
+  String _action = 'corrected';
+
+  @override
+  void initState() {
+    super.initState();
+    _phone = TextEditingController(text: widget.rawPhone);
+    _phone.addListener(_rebuild);
+    _note.addListener(_rebuild);
+  }
+
+  @override
+  void dispose() {
+    _phone.removeListener(_rebuild);
+    _note.removeListener(_rebuild);
+    _phone.dispose();
+    _note.dispose();
+    super.dispose();
+  }
+
+  void _rebuild() => setState(() {});
+
+  bool get _canSubmit =>
+      _note.text.trim().isNotEmpty &&
+      (_action != 'corrected' || _phone.text.trim().isNotEmpty);
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Разобрать номер'),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 460),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                widget.rawPhone.isEmpty
+                    ? 'В карточке номер не указан.'
+                    : 'Текущее значение: ${widget.rawPhone}',
+              ),
+              const SizedBox(height: AppSpace.md),
+              SegmentedButton<String>(
+                key: const ValueKey('phone-review-action'),
+                segments: const [
+                  ButtonSegment(
+                    value: 'corrected',
+                    icon: Icon(Icons.edit_outlined),
+                    label: Text('Исправить'),
+                  ),
+                  ButtonSegment(
+                    value: 'accepted_as_is',
+                    icon: Icon(Icons.check_rounded),
+                    label: Text('Оставить как есть'),
+                  ),
+                ],
+                selected: {_action},
+                onSelectionChanged: (selected) {
+                  setState(() => _action = selected.single);
+                },
+              ),
+              if (_action == 'corrected') ...[
+                const SizedBox(height: AppSpace.md),
+                TextField(
+                  key: const ValueKey('phone-review-phone'),
+                  controller: _phone,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'Исправленный номер',
+                    hintText: '+7 999 123-45-67',
+                    helperText: 'Будет сохранён в карточке в едином формате.',
+                  ),
+                ),
+              ],
+              const SizedBox(height: AppSpace.md),
+              TextField(
+                key: const ValueKey('phone-review-note'),
+                controller: _note,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'Причина решения *',
+                  hintText: 'Например: подтверждено по карточке клиента',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Отмена'),
+        ),
+        FilledButton(
+          key: const ValueKey('submit-phone-review-resolution'),
+          onPressed: !_canSubmit
+              ? null
+              : () => Navigator.pop(
+                  context,
+                  _PhoneReviewDecision(
+                    action: _action,
+                    phone: _action == 'corrected' ? _phone.text.trim() : null,
+                    resolutionNote: _note.text.trim(),
+                  ),
+                ),
+          child: const Text('Сохранить решение'),
+        ),
+      ],
     );
   }
 }

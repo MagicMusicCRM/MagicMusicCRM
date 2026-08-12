@@ -27,8 +27,9 @@ describe("CrmService", () => {
     const query = jest.fn().mockResolvedValue({ rows });
     const database = {
       query,
-      transaction: jest.fn(async (fn: (client: { query: typeof query }) => unknown) =>
-        fn({ query }),
+      transaction: jest.fn(
+        async (fn: (client: { query: typeof query }) => unknown) =>
+          fn({ query }),
       ),
     };
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
@@ -93,8 +94,9 @@ describe("CrmService", () => {
     }
     const database = {
       query,
-      transaction: jest.fn(async (fn: (client: { query: typeof query }) => unknown) =>
-        fn({ query }),
+      transaction: jest.fn(
+        async (fn: (client: { query: typeof query }) => unknown) =>
+          fn({ query }),
       ),
     };
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
@@ -330,9 +332,7 @@ describe("CrmService", () => {
     expect(conversionSql).toContain("inserted_student_link as");
     expect(conversionSql).toContain("insert into app.user_crm_links");
     expect(conversionSql).toContain("on conflict do nothing");
-    expect(String(query.mock.calls[2][0])).toContain(
-      "pg_advisory_xact_lock",
-    );
+    expect(String(query.mock.calls[2][0])).toContain("pg_advisory_xact_lock");
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "crm.student_created",
@@ -379,9 +379,7 @@ describe("CrmService", () => {
       }),
     ).rejects.toBeInstanceOf(ConflictException);
 
-    expect(String(query.mock.calls[2][0])).toContain(
-      "pg_advisory_xact_lock",
-    );
+    expect(String(query.mock.calls[2][0])).toContain("pg_advisory_xact_lock");
     expect(
       query.mock.calls.some((call) =>
         String(call[0]).includes("insert into app.users"),
@@ -390,20 +388,26 @@ describe("CrmService", () => {
   });
 
   it("lists group students through v3 contract", async () => {
-    const { service, query, policy } = createService([
+    const { service, query, policy } = createServiceWithQueryResults([
+      { rows: [{ branch_id: "branch-a" }] },
+      { rows: [{ branch_id: "branch-a" }] },
       {
-        id: "student-a",
-        status: "active",
-        profile_id: "profile-a",
-        profile_user_id: "user-a",
-        lead_id: null,
-        custom_data: {},
-        first_name: "Анна",
-        last_name: "Иванова",
-        email: "anna@example.com",
-        phone: null,
-        teacher_user_ids: [],
-        created_at: "2026-06-13T00:00:00.000Z",
+        rows: [
+          {
+            id: "student-a",
+            status: "active",
+            profile_id: "profile-a",
+            profile_user_id: "user-a",
+            lead_id: null,
+            custom_data: {},
+            first_name: "Анна",
+            last_name: "Иванова",
+            email: "anna@example.com",
+            phone: null,
+            teacher_user_ids: [],
+            created_at: "2026-06-13T00:00:00.000Z",
+          },
+        ],
       },
     ]);
 
@@ -419,28 +423,44 @@ describe("CrmService", () => {
     });
 
     expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
-    expect(query.mock.calls[0][1]).toEqual([
+    expect(query.mock.calls[2][1]).toEqual([
       "group-a",
       "manager",
       "manager-a",
       10,
     ]);
-    expect(query.mock.calls[0][0]).toContain(
+    expect(query.mock.calls[2][0]).toContain(
       "group_teacher_profile.user_id = $3",
     );
   });
 
   const stubCardSections = (service: CrmService) => {
-    jest.spyOn(service as unknown as { toStudentDto: () => unknown }, "toStudentDto").mockReturnValue({ id: "student-a" });
-    jest.spyOn(service, "listStudentGroups").mockResolvedValue({ items: [] } as never);
-    jest.spyOn(service as unknown as { listUserCrmLinks: () => Promise<unknown> }, "listUserCrmLinks").mockResolvedValue([]);
+    jest
+      .spyOn(
+        service as unknown as { toStudentDto: () => unknown },
+        "toStudentDto",
+      )
+      .mockReturnValue({ id: "student-a" });
+    jest
+      .spyOn(service, "listStudentGroups")
+      .mockResolvedValue({ items: [] } as never);
+    jest
+      .spyOn(
+        service as unknown as { listUserCrmLinks: () => Promise<unknown> },
+        "listUserCrmLinks",
+      )
+      .mockResolvedValue([]);
   };
 
   it("keeps the teacher student card free of embedded commerce sections", async () => {
     // findStudent is now a shared db read (student-read.ts) — seed its row via
     // the query mock instead of spying a method.
     const { service } = createService([
-      { id: "student-a", profile_user_id: "user-a", teacher_user_ids: ["teacher-a"] },
+      {
+        id: "student-a",
+        profile_user_id: "user-a",
+        teacher_user_ids: ["teacher-a"],
+      },
     ]);
     stubCardSections(service);
 
@@ -632,7 +652,9 @@ describe("CrmService", () => {
         },
       });
 
-      expect(String(query.mock.calls[0][0])).toContain("join app.staff_members");
+      expect(String(query.mock.calls[0][0])).toContain(
+        "join app.staff_members",
+      );
       expect(query.mock.calls[0][1]).toEqual([
         responsibleId,
         [...RESPONSIBLE_AUTH_ROLES],
@@ -771,6 +793,9 @@ describe("CrmService", () => {
     });
 
     expect(policy.assertCanListStudents).toHaveBeenCalledWith(actor);
+    expect(query.mock.calls[0][0]).toContain(
+      "scope_assignment.branch_id::text",
+    );
     expect(query.mock.calls[0][1]).toContain("анна");
     expect(query.mock.calls[0][1]).toContain("Вокал");
     expect(query.mock.calls[0][1]).toContain(21);
@@ -798,144 +823,47 @@ describe("CrmService", () => {
       }, // updateStudent CTE
       { rows: [] }, // history insert
     ]);
-    await service.updateStudent(actor, "student-1", { status: "paused" } as never);
-    const insert = query.mock.calls.map((c) => String(c[0])).find((s) => s.includes("insert into app.student_status_history"));
+    await service.updateStudent(actor, "student-1", {
+      status: "paused",
+    } as never);
+    const insert = query.mock.calls
+      .map((c) => String(c[0]))
+      .find((s) => s.includes("insert into app.student_status_history"));
     expect(insert).toBeDefined();
-    const params = query.mock.calls.find((c) => String(c[0]).includes("insert into app.student_status_history"))?.[1] as unknown[];
+    const params = query.mock.calls.find((c) =>
+      String(c[0]).includes("insert into app.student_status_history"),
+    )?.[1] as unknown[];
     expect(params).toEqual(["student-1", "paused", "b1"]);
   });
 
-  it("soft deletes students through CRM write policy (real undo)", async () => {
-    const { service, query, audit, policy } = createService([
+  it("blocks direct student deletion without mutating CRM data", async () => {
+    const { service, query, audit, policy, database } = createService([
       { id: "student-a" },
     ]);
 
-    await expect(service.deleteStudent(actor, "student-a")).resolves.toEqual({
-      success: true,
-    });
+    await expect(service.deleteStudent(actor, "student-a")).rejects.toThrow(
+      ConflictException,
+    );
 
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
-    expect(query.mock.calls[0][1]).toEqual(["student-a"]);
-    expect(String(query.mock.calls[0][0])).toContain("update app.students");
-    expect(
-      query.mock.calls.some((call) =>
-        String(call[0]).includes("update app.user_crm_links"),
-      ),
-    ).toBe(true);
-    expect(audit.record).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: "crm.student_deleted",
-        entityType: "student",
-        entityId: "student-a",
-      }),
-    );
+    expect(database.transaction).not.toHaveBeenCalled();
+    expect(query).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
   });
 
-  it("deleteStudent throws when the student does not exist", async () => {
-    const { service } = createService([]);
-    await expect(service.deleteStudent(actor, "missing")).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
-  });
-
-  it("returns a linked student back to its existing lead", async () => {
-    const { service, query, audit, policy, database } =
-      createServiceWithQueryResults([
-        {
-          rows: [
-            {
-              id: "student-a",
-              lead_id: "lead-a",
-              branch_id: "branch-a",
-              custom_data: { sourceLeadId: "lead-a" },
-              first_name: "Анна",
-              last_name: "Иванова",
-              email: "anna@example.com",
-              phone: "+79990000000",
-              profile_user_id: "client-a",
-            },
-          ],
-        },
-        { rows: [{ id: "lead-a" }] },
-        { rows: [] }, // soft-delete student
-        {
-          rows: [{ user_id: "client-a", matched_phone: "+79990000000" }],
-        }, // resolve linked chat user
-        { rows: [] }, // soft-delete student link
-        { rows: [] }, // preserve/repoint the lead link
-      ]);
-
-    await expect(
-      service.returnStudentToLead(actor, "student-a"),
-    ).resolves.toEqual({
-      success: true,
-      studentId: "student-a",
-      leadId: "lead-a",
-      createdLead: false,
-    });
-
-    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
-    expect(database.transaction).toHaveBeenCalledTimes(1);
-    expect(String(query.mock.calls[2][0])).toContain("update app.students");
-    expect(
-      query.mock.calls.some((call) =>
-        String(call[0]).includes("insert into app.user_crm_links"),
-      ),
-    ).toBe(true);
-    expect(audit.record).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: "crm.student_returned_to_lead",
-        entityType: "student",
-        entityId: "student-a",
-        metadata: { leadId: "lead-a", createdLead: false },
-      }),
-    );
-  });
-
-  it("creates a lead when returning an unlinked student", async () => {
-    const { service, query } = createServiceWithQueryResults([
-      {
-        rows: [
-          {
-            id: "student-a",
-            lead_id: null,
-            branch_id: "branch-a",
-            custom_data: { discipline: "Вокал" },
-            first_name: "Анна",
-            last_name: "Иванова",
-              email: "anna@example.com",
-              phone: "+79990000000",
-              profile_user_id: "client-a",
-          },
-        ],
-      },
-      { rows: [{ id: "status-new" }] },
-      { rows: [{ id: "lead-new" }] },
-      { rows: [] }, // soft-delete student
-      { rows: [] }, // resolve linked chat user
-      { rows: [] }, // soft-delete student link
+  it("blocks returning a student to leads without mutating CRM data", async () => {
+    const { service, query, audit, policy, database } = createService([
+      { id: "student-a" },
     ]);
 
     await expect(
       service.returnStudentToLead(actor, "student-a"),
-    ).resolves.toEqual({
-      success: true,
-      studentId: "student-a",
-      leadId: "lead-new",
-      createdLead: true,
-    });
+    ).rejects.toThrow(ConflictException);
 
-    expect(String(query.mock.calls[2][0])).toContain("insert into app.leads");
-    expect(query.mock.calls[2][1]).toEqual([
-      "status-new",
-      "Анна",
-      "Иванова",
-      "+79990000000",
-      "anna@example.com",
-      JSON.stringify({ discipline: "Вокал", sourceStudentId: "student-a" }),
-      "manager-a",
-      "branch-a",
-    ]);
+    expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
+    expect(database.transaction).not.toHaveBeenCalled();
+    expect(query).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
   });
 
   it("searchStudents filters branchless students when noBranch is set", async () => {
@@ -1024,9 +952,9 @@ describe("CrmService", () => {
       "student-child",
     ]);
     expect(result.students).toHaveLength(2);
-    expect(result.students.find((s) => s.id === "student-child")?.firstName).toBe(
-      "Петя",
-    );
+    expect(
+      result.students.find((s) => s.id === "student-child")?.firstName,
+    ).toBe("Петя");
 
     // The family-discovery query gates on active families/members/students and
     // the parent/payer role of the account profile.
@@ -1111,5 +1039,4 @@ describe("CrmService", () => {
     );
     expect(summary).not.toHaveProperty("recentPayments");
   });
-
 });

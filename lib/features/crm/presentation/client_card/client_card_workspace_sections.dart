@@ -12,43 +12,58 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
   }) {
     return ColoredBox(
       color: cs.surfaceContainerLowest,
-      child: MagicDesktopScrollbar(
-        axis: Axis.vertical,
-        controller: _desktopScrollController,
-        builder: (context, controller) => SingleChildScrollView(
-          key: const Key('client-desktop-canvas'),
-          controller: controller,
-          padding: const EdgeInsets.fromLTRB(
-            AppSpace.xl,
-            AppSpace.xl,
-            AppSpace.xl + AppSpace.sm,
-            AppSpace.xxl,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpace.xl,
+              AppSpace.xl,
+              AppSpace.md,
+              AppSpace.xl,
+            ),
+            child: SizedBox(
+              key: const Key('client-desktop-section-rail'),
+              width: 224,
+              child: _buildDesktopSectionJumps(cs, tabs),
+            ),
           ),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1440),
-              child: LayoutBuilder(
-                builder: (context, constraints) => Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildDesktopSectionJumps(cs, tabs),
-                    const SizedBox(height: AppSpace.lg),
-                    _buildDesktopCardLayout(
-                      cs,
-                      currentStatus,
-                      tabs,
-                      wide: constraints.maxWidth >= 1120,
-                      canReadClientFinance: canReadClientFinance,
-                      canReadSchedule: canReadSchedule,
-                      canWriteSchedule: canWriteSchedule,
-                      canReadTasks: canReadTasks,
+          VerticalDivider(width: 1, color: cs.outlineVariant),
+          Expanded(
+            child: MagicDesktopScrollbar(
+              axis: Axis.vertical,
+              controller: _desktopScrollController,
+              builder: (context, controller) => SingleChildScrollView(
+                key: const Key('client-desktop-canvas'),
+                controller: controller,
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpace.xl,
+                  AppSpace.xl,
+                  AppSpace.xl + AppSpace.sm,
+                  AppSpace.xxl,
+                ),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1440),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) =>
+                          _buildDesktopCardLayout(
+                            cs,
+                            currentStatus,
+                            tabs,
+                            wide: constraints.maxWidth >= 840,
+                            canReadClientFinance: canReadClientFinance,
+                            canReadSchedule: canReadSchedule,
+                            canWriteSchedule: canWriteSchedule,
+                            canReadTasks: canReadTasks,
+                          ),
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -68,26 +83,32 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
           borderRadius: BorderRadius.circular(AppRadius.card),
           border: Border.all(color: cs.outlineVariant),
         ),
-        child: Wrap(
-          spacing: AppSpace.sm,
-          runSpacing: AppSpace.sm,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            for (final tab in tabs)
+            for (var index = 0; index < tabs.length; index++) ...[
               Semantics(
                 button: true,
-                selected: _selectedSection == tab.$3,
+                selected: _selectedSection == tabs[index].$3,
                 child: OutlinedButton.icon(
-                  key: Key('client-section-jump-${tab.$3}'),
-                  onPressed: () => _selectSection(tab.$3),
+                  key: Key('client-section-jump-${tabs[index].$3}'),
+                  onPressed: () => _selectSection(tabs[index].$3),
                   style: OutlinedButton.styleFrom(
-                    backgroundColor: _selectedSection == tab.$3
+                    alignment: Alignment.centerLeft,
+                    backgroundColor: _selectedSection == tabs[index].$3
                         ? AppColor.goldSoft
                         : null,
                   ),
-                  icon: Icon(tab.$1, size: 16),
-                  label: Text('→ ${tab.$2}'),
+                  icon: Icon(tabs[index].$1, size: 16),
+                  label: Text(
+                    '→ ${tabs[index].$2}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
+              if (index < tabs.length - 1) const SizedBox(height: AppSpace.sm),
+            ],
           ],
         ),
       ),

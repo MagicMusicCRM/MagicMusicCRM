@@ -5,6 +5,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_day_canvas.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_teacher_timeline.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
@@ -22,8 +23,11 @@ DateTime _today() {
 }
 
 class _FakeClient extends MagicApiClient {
-  _FakeClient()
+  _FakeClient({this.reviewRequired = false})
     : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
+
+  final bool reviewRequired;
+  final previews = <Map<String, dynamic>>[];
 
   @override
   Future<T> get<T>(
@@ -48,11 +52,35 @@ class _FakeClient extends MagicApiClient {
           }
           as T;
     }
+    if (path == '/crm/rooms/availability') {
+      return <String, dynamic>{
+            'items': [
+              {
+                'roomId': _roomId,
+                'branchId': _branchId,
+                'roomName': 'Аудитория 1',
+                'isAvailable': false,
+                'lessons': const [],
+                'conflictTypes': const [],
+              },
+              {
+                'roomId': 'room-without-lessons',
+                'branchId': _branchId,
+                'roomName': 'Аудитория 2',
+                'isAvailable': true,
+                'lessons': const [],
+                'conflictTypes': const [],
+              },
+            ],
+          }
+          as T;
+    }
     if (path == '/crm/schedule/matrix') {
       return <String, dynamic>{
             'items': [
               {
                 'id': 'lesson-1',
+                'version': reviewRequired ? 2 : 1,
                 'studentId': 'student-a',
                 'studentName': 'Ольга Ученик',
                 'teacherId': 'teacher-a',
@@ -63,6 +91,11 @@ class _FakeClient extends MagicApiClient {
                 'scheduledAt': iso,
                 'durationMinutes': 120,
                 'status': 'scheduled',
+                'lifecycleState': reviewRequired
+                    ? 'settlement_pending'
+                    : 'scheduled',
+                if (reviewRequired)
+                  'settlementFailureCode': 'ConflictException',
               },
             ],
             'groups': const [],
@@ -70,13 +103,86 @@ class _FakeClient extends MagicApiClient {
           }
           as T;
     }
+    if (reviewRequired && path == '/crm/configuration/lesson-decisions') {
+      return <String, dynamic>{
+            'settlementTypes': const [
+              {
+                'stableKey': 'lesson',
+                'label': 'Занятие',
+                'colorToken': 'success',
+                'allowedContexts': ['settle'],
+                'active': true,
+                'order': 0,
+              },
+            ],
+            'teacherCompensationRules': const [
+              {
+                'stableKey': 'standard',
+                'label': 'Полная стандартная ставка',
+                'mode': 'standard',
+                'value': '0',
+                'active': true,
+                'order': 0,
+              },
+            ],
+          }
+          as T;
+    }
     return <String, dynamic>{'items': const []} as T;
+  }
+
+  @override
+  Future<T> post<T>(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) async {
+    if (path == '/crm/lessons/lesson-1/settle/preview') {
+      previews.add(Map<String, dynamic>.from(data as Map));
+      return <String, dynamic>{
+            'operation': 'settle',
+            'source': const {
+              'id': 'lesson-1',
+              'version': 2,
+              'state': 'settlement_pending',
+            },
+            'successor': null,
+            'financialDecision': previews.last['financialDecision'],
+            'financialPreview': const {
+              'clientFacts': [],
+              'teacherFact': {
+                'compensationRuleKey': 'standard',
+                'compensationRuleLabel': 'Полная стандартная ставка',
+                'amountMinor': '0',
+              },
+            },
+            'violations': const [],
+            'warnings': const [],
+            'canConfirm': true,
+            'confirmRequired': true,
+            'previewToken': 'signed-review-preview',
+          }
+          as T;
+    }
+    throw StateError('Unexpected POST $path');
   }
 }
 
-Widget _host(Widget child) {
+Widget _host(Widget child, {MagicApiClient? client}) {
   return ProviderScope(
-    overrides: [magicApiClientProvider.overrideWithValue(_FakeClient())],
+    overrides: [
+      magicApiClientProvider.overrideWithValue(client ?? _FakeClient()),
+      capabilitySnapshotProvider.overrideWith(
+        (ref) async => const CapabilitySnapshot(
+          accountId: 'manager-1',
+          role: 'manager',
+          accessVersion: 1,
+          capabilities: {'schedule.lesson.read.branch'},
+          scopes: {'schedule': 'assigned'},
+        ),
+      ),
+    ],
     child: MaterialApp(home: child),
   );
 }
@@ -152,6 +258,20 @@ void main() {
       expect(find.textContaining('Нажмите'), findsNothing);
     });
 
+    testWidgets('day summary describes whole-day occupancy, not free slots', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_host(const ScheduleWidget()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('День'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Без занятий: 1'), findsOneWidget);
+      expect(find.text('С занятиями: 1'), findsOneWidget);
+      expect(find.textContaining('Свободно:'), findsNothing);
+      expect(find.textContaining('Занято:'), findsNothing);
+    });
+
     testWidgets('teacher mode uses horizontal time bands and teacher rows', (
       tester,
     ) async {
@@ -174,6 +294,74 @@ void main() {
       expect(find.text('Ольга Ученик'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
+
+    testWidgets(
+      'review-required lesson exposes safe repair flow with current version',
+      (tester) async {
+        tester.view.physicalSize = const Size(1400, 1100);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final api = _FakeClient(reviewRequired: true);
+
+        await tester.pumpWidget(_host(const ScheduleWidget(), client: api));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('День'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('По преподавателям'));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('schedule-lesson-lesson-1')),
+        );
+        await tester.pumpAndSettle();
+
+        // Keep this assertion close to the interaction so a regression cannot
+        // accidentally tap the empty grid and open the create dialog instead.
+        expect(find.text('Новое занятие'), findsNothing);
+        expect(find.text('Ольга Ученик'), findsNWidgets(2));
+
+        expect(find.text('Конфликт'), findsWidgets);
+        expect(
+          find.byKey(const ValueKey('lesson-repair-settlement')),
+          findsOneWidget,
+        );
+        expect(find.textContaining('Причина конфликта'), findsOneWidget);
+        expect(find.textContaining('ConflictException'), findsNothing);
+        expect(find.textContaining('Провести занятие'), findsNothing);
+
+        await tester.tap(
+          find.byKey(const ValueKey('lesson-repair-settlement')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Исправление расчёта'), findsOneWidget);
+        await tester.enterText(
+          find.byKey(const Key('lesson-decision-reason')),
+          'Проверка расчёта сотрудником',
+        );
+        await tester.tap(find.byKey(const Key('lesson-decision-settlement')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Занятие').last);
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('lesson-decision-compensation')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Полная стандартная ставка').last);
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(
+          find.byKey(const Key('lesson-decision-submit')),
+        );
+        await tester.pump();
+        await tester.tap(find.byKey(const Key('lesson-decision-submit')));
+        await tester.pumpAndSettle();
+
+        expect(api.previews, hasLength(1));
+        expect(api.previews.single['expectedVersion'], 2);
+        expect(api.previews.single['financialDecision'], {
+          'settlementTypeKey': 'lesson',
+          'teacherCompensationRuleKey': 'standard',
+        });
+        expect(find.text('Изменение готово к подтверждению'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
 
     testWidgets('tapping an empty hour opens the (single) create dialog', (
       tester,

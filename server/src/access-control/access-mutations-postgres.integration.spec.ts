@@ -115,6 +115,17 @@ describe("AccessMutationsService (PostgreSQL)", () => {
     );
     if (fixtureUserIds.length > 0) {
       await database.query(
+        `delete from app.staff_members
+         where profile_id in (
+           select id from app.profiles where user_id = any($1::uuid[])
+         )`,
+        [fixtureUserIds],
+      );
+      await database.query(
+        "delete from app.profiles where user_id = any($1::uuid[])",
+        [fixtureUserIds],
+      );
+      await database.query(
         `
           delete from app.user_capability_overrides
           where user_id = any($1::uuid[])
@@ -266,6 +277,16 @@ describe("AccessMutationsService (PostgreSQL)", () => {
   it("atomically assigns a lower role, resets confirmed overrides, audits and emits", async () => {
     const director = await createUser("director");
     const subject = await createUser("client");
+    const profile = await database.query<{ id: string }>(
+      `insert into app.profiles (user_id, first_name)
+       values ($1, 'Тестовый') returning id`,
+      [subject.userId],
+    );
+    await database.query(
+      `insert into app.staff_members (profile_id, role, position, status)
+       values ($1, 'client', 'Тестовая карточка', 'working')`,
+      [profile.rows[0]!.id],
+    );
     await database.query(
       `
         insert into app.user_capability_overrides (
@@ -318,6 +339,7 @@ describe("AccessMutationsService (PostgreSQL)", () => {
       role: AccessRole;
       version: number | string;
       active_overrides: number | string;
+      staff_role: string;
       audit_before: Record<string, unknown>;
       audit_after: Record<string, unknown>;
       audit_reason: string;
@@ -331,6 +353,12 @@ describe("AccessMutationsService (PostgreSQL)", () => {
             select count(*) from app.user_capability_overrides
              where user_id = user_row.id and active
           ) as active_overrides,
+          (
+            select staff.role from app.staff_members staff
+            join app.profiles profile on profile.id = staff.profile_id
+            where profile.user_id = user_row.id and staff.deleted_at is null
+            limit 1
+          ) as staff_role,
           audit.before_ref as audit_before,
           audit.after_ref as audit_after,
           audit.reason as audit_reason,
@@ -348,6 +376,7 @@ describe("AccessMutationsService (PostgreSQL)", () => {
       role: "manager",
       version: "2",
       active_overrides: "0",
+      staff_role: "manager",
       audit_before: {
         role: "client",
         accessVersion: 1,

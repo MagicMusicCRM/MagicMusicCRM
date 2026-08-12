@@ -113,6 +113,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   final _scrollController = ScrollController(keepScrollOffset: false);
   bool _loading = false;
   bool _saving = false;
+  String? _validationMessage;
 
   List<Map<String, dynamic>> _teachers = [];
   List<Map<String, dynamic>> _clients = [];
@@ -138,8 +139,27 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   String? _compensationRuleKey;
 
   bool get _isEdit => widget.lesson != null;
+  String? get _groupId {
+    final value = widget.lesson?['group_id'] ?? widget.lesson?['groupId'];
+    final id = value?.toString();
+    return id == null || id.isEmpty ? null : id;
+  }
+
+  bool get _isGroupEdit => _isEdit && _groupId != null;
+  String get _groupName {
+    final value =
+        widget.lesson?['group_name'] ?? widget.lesson?['groupName'] ?? 'Группа';
+    final name = value.toString().trim();
+    return name.isEmpty ? 'Группа' : name;
+  }
+
   bool get _snapshotLocked => _isEdit;
   MagicCrmService get _crm => ref.read(magicCrmServiceProvider);
+  List<int> get _durationOptions {
+    final values = <int>{30, 45, 60, 90, 120, _durationMinutes}.toList()
+      ..sort();
+    return values;
+  }
 
   String? get _clientType {
     final ref = _selectedClient?['ref'];
@@ -157,6 +177,16 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     return type == null || id == null ? '' : '$type:$id';
   }
 
+  String? _clientBranchId(Map<String, dynamic>? client) {
+    final value = client?['branchId'] ?? client?['branch_id'];
+    final branchId = value?.toString();
+    return branchId == null || branchId.isEmpty ? null : branchId;
+  }
+
+  bool _hasBranch(String? branchId) =>
+      branchId != null &&
+      _branches.any((branch) => branch['id']?.toString() == branchId);
+
   List<Map<String, dynamic>> get _eligibleTeachers {
     final branchId = _selectedBranchId;
     if (branchId == null) return const [];
@@ -169,6 +199,18 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                 (branch) => branch['id']?.toString() == branchId,
               );
         })
+        .toList(growable: false);
+  }
+
+  List<Map<String, dynamic>> get _eligibleRooms {
+    final branchId = _selectedBranchId;
+    if (branchId == null) return const [];
+    return _rooms
+        .where(
+          (room) =>
+              (room['branch_id'] ?? room['branchId'])?.toString() == branchId &&
+              room['lifecycle_state']?.toString() != 'archived',
+        )
         .toList(growable: false);
   }
 
@@ -248,16 +290,28 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   }
 
   String get _dialogTitle => _isEdit
-      ? 'Редактировать занятие'
+      ? 'Перенести или изменить занятие'
       : widget.leadId != null
       ? 'Пробное занятие'
       : 'Новое занятие';
 
-  String get _savedMessage => _isEdit ? 'Занятие обновлено' : 'Занятие создано';
+  String get _savedMessage =>
+      _isEdit ? 'Изменения занятия применены' : 'Занятие создано';
 
   Future<void> _loadData() async {
     setState(() => _loading = true);
     try {
+      Map<String, dynamic>? resolvedClient;
+      if (!_isEdit && _selectedClient != null) {
+        try {
+          resolvedClient = await _crm.resolveClientRef(
+            type: _clientType!,
+            id: _clientId!,
+          );
+        } catch (error) {
+          debugPrint('Error resolving selected client: $error');
+        }
+      }
       final results = await Future.wait([
         _crm.listTeachers(limit: 100),
         _crm.listBranches(limit: 100),
@@ -268,6 +322,9 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         _teachers = results[0];
         _branches = results[1];
         _clients = results[2];
+        if (resolvedClient != null) {
+          _selectedClient = resolvedClient;
+        }
         if (_selectedClient case final selected?
             when !_clients.any(
               (row) => _clientKeyFor(row) == _clientKeyFor(selected),
@@ -276,12 +333,22 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         }
         _loading = false;
       });
-      final branchId =
-          _selectedBranchId ?? _branches.firstOrNull?['id']?.toString();
+      final clientBranchId = _clientBranchId(_selectedClient);
+      final previousBranchId = _selectedBranchId;
+      final branchId = !_isEdit && _hasBranch(clientBranchId)
+          ? clientBranchId
+          : _hasBranch(_selectedBranchId)
+          ? _selectedBranchId
+          : _branches.firstOrNull?['id']?.toString();
       if (branchId != null) {
         if (mounted) {
           setState(() {
-            _selectedBranchId ??= branchId;
+            _selectedBranchId = branchId;
+            if (!_isEdit &&
+                clientBranchId == branchId &&
+                previousBranchId != branchId) {
+              _selectedRoomId = null;
+            }
             if (!_eligibleTeachers.any(
               (teacher) => teacher['id']?.toString() == _selectedTeacherId,
             )) {
@@ -304,6 +371,30 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     }
   }
 
+  Future<void> _selectClient(Map<String, dynamic> row) async {
+    final branchId = _clientBranchId(row);
+    final switchBranch = _hasBranch(branchId) && branchId != _selectedBranchId;
+    setState(() {
+      _selectedClient = row;
+      if (switchBranch) {
+        _selectedBranchId = branchId;
+        _selectedTeacherId = null;
+        _selectedRoomId = null;
+        _rooms = [];
+        _decisionCatalog = null;
+        _settlementTypeKey = null;
+        _compensationRuleKey = null;
+      }
+    });
+    if (switchBranch) {
+      await Future.wait([
+        _loadRooms(branchId!),
+        _loadDecisionCatalog(branchId),
+      ]);
+    }
+    await _loadSubscriptions();
+  }
+
   Future<void> _loadRooms(String branchId) async {
     try {
       final rooms = await _crm.listRooms(branchId: branchId, limit: 100);
@@ -311,7 +402,9 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
       setState(() {
         _rooms = rooms;
         if (_selectedRoomId != null &&
-            !_rooms.any((room) => room['id'].toString() == _selectedRoomId)) {
+            !_eligibleRooms.any(
+              (room) => room['id'].toString() == _selectedRoomId,
+            )) {
           _selectedRoomId = null;
         }
       });
@@ -332,8 +425,19 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
       response,
       LessonDecisionOperation.settle,
     );
+    final configuredDuration =
+        (response['defaultLessonDurationMinutes'] as num?)?.toInt();
+    final hasExplicitDuration =
+        widget.initialDurationMinutes != null &&
+        widget.initialDurationMinutes! > 0;
     setState(() {
       _decisionCatalog = catalog;
+      if (!_isEdit &&
+          !hasExplicitDuration &&
+          configuredDuration != null &&
+          configuredDuration > 0) {
+        _durationMinutes = configuredDuration;
+      }
       if (!catalog.settlementTypes.any(
         (item) => item.key == _settlementTypeKey,
       )) {
@@ -344,7 +448,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
       )) {
         _compensationRuleKey = catalog.compensationRules.firstOrNull?.key;
       }
-      _applyFundingDefault();
+      if (!_isEdit) _applyFundingDefault();
     });
   }
 
@@ -355,7 +459,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         setState(() {
           _subscriptions = [];
           _selectedSubscriptionId = null;
-          _clientChargeType = 'none';
+          if (!_isEdit) _applyFundingDefault();
         });
       }
       return;
@@ -398,52 +502,76 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     if (_clientType == 'student' && _subscriptions.isNotEmpty) {
       _clientChargeType = 'subscription';
       _selectedSubscriptionId ??= _subscriptions.first['id']?.toString();
-    } else if (_clientType == 'student') {
+    } else {
       _clientChargeType = 'personal_account';
+      _selectedSubscriptionId = null;
     }
+  }
+
+  bool get _selectedSettlementIsNoCharge {
+    final settlement = _decisionCatalog?.settlementTypes
+        .where((item) => item.key == _settlementTypeKey)
+        .firstOrNull;
+    return settlement?.hourShareBasisPoints == 0 &&
+        settlement?.fixedPenaltyMinor == '0';
   }
 
   Future<void> _save() async {
     if (_saving) return;
+    if (_validationMessage != null) {
+      setState(() => _validationMessage = null);
+    }
     final clientId = _clientId;
     final clientType = _clientType;
     final missingSubscription =
         !_isEdit &&
         _clientChargeType == 'subscription' &&
         _selectedSubscriptionId == null;
+    final invalidNoFunding =
+        !_isEdit &&
+        _clientChargeType == 'none' &&
+        !_selectedSettlementIsNoCharge;
     final version = (widget.lesson?['version'] as num?)?.toInt();
 
-    if (clientId == null ||
-        clientType == null ||
+    final missingClient =
+        !_isGroupEdit && (clientId == null || clientType == null);
+    if (missingClient ||
         _selectedTeacherId == null ||
         _selectedBranchId == null ||
         _selectedRoomId == null ||
         missingSubscription ||
+        invalidNoFunding ||
         (!_isEdit && _settlementTypeKey == null) ||
         (!_isEdit && _compensationRuleKey == null) ||
         (_isEdit && version == null)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            _isEdit && version == null
-                ? 'Обновите расписание: версия занятия не получена'
-                : 'Заполните обязательные поля корректно',
-          ),
-        ),
-      );
+      setState(() {
+        _validationMessage = _isEdit && version == null
+            ? 'Обновите расписание: версия занятия не получена'
+            : invalidNoFunding
+            ? 'Для платного списания выберите абонемент или личный счёт'
+            : 'Заполните обязательные поля корректно';
+      });
+      return;
+    }
+
+    final startsAt = DateTime.utc(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      _selectedTime.hour - 3,
+      _selectedTime.minute,
+    );
+    final payload = _lessonPayload(scheduledAt: startsAt.toIso8601String());
+    if (_isEdit && !_hasSuccessorChanges(payload)) {
+      setState(() {
+        _validationMessage =
+            'Измените дату, время, длительность, филиал, аудиторию или преподавателя';
+      });
       return;
     }
 
     setState(() => _saving = true);
     try {
-      final startsAt = DateTime.utc(
-        _selectedDate.year,
-        _selectedDate.month,
-        _selectedDate.day,
-        _selectedTime.hour - 3,
-        _selectedTime.minute,
-      );
-      final payload = _lessonPayload(scheduledAt: startsAt.toIso8601String());
       final api = ref.read(magicApiClientProvider);
       if (_isEdit) {
         final changed = await showLessonDecisionFlow(
@@ -463,8 +591,8 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
 
       final canSave = await _previewConstraintsBeforeSave(
         startsAt,
-        clientType,
-        clientId,
+        clientType!,
+        clientId!,
       );
       if (!canSave || !mounted) return;
       try {
@@ -523,6 +651,43 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     };
   }
 
+  bool _hasSuccessorChanges(Map<String, dynamic> successor) {
+    final lesson = widget.lesson;
+    if (lesson == null) return true;
+    String? value(String snake, String camel) {
+      final raw = lesson[snake] ?? lesson[camel];
+      final text = raw?.toString();
+      return text == null || text.isEmpty ? null : text;
+    }
+
+    final currentStartsAt = DateTime.tryParse(
+      value('scheduled_at', 'scheduledAt') ?? '',
+    )?.toUtc();
+    final nextStartsAt = DateTime.tryParse(
+      successor['scheduledAt']?.toString() ?? '',
+    )?.toUtc();
+    final currentDuration =
+        (lesson['duration_minutes'] ?? lesson['durationMinutes']) as num?;
+    final teacherChanged =
+        successor['teacherId']?.toString() != value('teacher_id', 'teacherId');
+    final branchChanged =
+        successor['branchId']?.toString() != value('branch_id', 'branchId');
+    final roomChanged =
+        successor['roomId']?.toString() != value('room_id', 'roomId');
+    final scheduledChanged =
+        currentStartsAt == null ||
+        nextStartsAt == null ||
+        !currentStartsAt.isAtSameMomentAs(nextStartsAt);
+    final durationChanged =
+        (successor['durationMinutes'] as num?)?.toInt() !=
+        currentDuration?.toInt();
+    return teacherChanged ||
+        branchChanged ||
+        roomChanged ||
+        scheduledChanged ||
+        durationChanged;
+  }
+
   num get _derivedClientChargeValue {
     if (_clientChargeType == 'subscription') {
       return _durationMinutes / 60;
@@ -545,6 +710,30 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     );
     final rate = teacher['current_rate'];
     return rate is num && rate > 0 ? ('hourly', rate) : ('none', 0);
+  }
+
+  LessonDecisionCatalogItem? get _selectedSettlementType => _decisionCatalog
+      ?.settlementTypes
+      .where((item) => item.key == _settlementTypeKey)
+      .firstOrNull;
+
+  LessonDecisionCatalogItem? get _selectedCompensationRule => _decisionCatalog
+      ?.compensationRules
+      .where((item) => item.key == _compensationRuleKey)
+      .firstOrNull;
+
+  String _snapshotNumber(num value) =>
+      NumberFormat('#,##0.##', 'ru').format(value);
+
+  String get _clientSnapshotValue => switch (_clientChargeType) {
+    'subscription' => '${_snapshotNumber(_derivedClientChargeValue)} ч',
+    'personal_account' => '${_snapshotNumber(_derivedClientChargeValue)} ₽',
+    _ => '0 ₽',
+  };
+
+  String get _teacherSnapshotValue {
+    final rate = _derivedTeacherRate;
+    return rate.$1 == 'none' ? '0 ₽' : '${_snapshotNumber(rate.$2)} ₽/ч';
   }
 
   Future<bool> _previewConstraintsBeforeSave(
@@ -712,36 +901,51 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SearchablePickerField(
-                key: const ValueKey('lesson-client-field'),
-                label: 'Клиент *',
-                placeholder: 'Не выбран',
-                hintText: 'Введите имя или ФИО клиента',
-                selectedId: _clientKey,
-                selectedLabel: _selectedClient == null
-                    ? null
-                    : '${_selectedClient!['label']} · ${_clientType == 'lead' ? 'Lead' : 'Student'}',
-                items: [for (final row in _clients) _clientItem(row)],
-                onSearch: (query) async {
-                  final rows = await _crm.searchClientRefs(q: query, limit: 50);
-                  return [for (final row in rows) _clientItem(row)];
-                },
-                isNullable: false,
-                enabled:
-                    !_snapshotLocked &&
-                    widget.leadId == null &&
-                    widget.clientId == null,
-                onSelected: (item) {
-                  final row = item?.data;
-                  if (row == null) return;
-                  setState(() => _selectedClient = row);
-                  _loadSubscriptions();
-                },
-              ),
+              if (_isGroupEdit)
+                InputDecorator(
+                  key: const ValueKey('lesson-group-field'),
+                  decoration: const InputDecoration(
+                    labelText: 'Группа *',
+                    enabled: false,
+                    helperText:
+                        'Группа и замороженный состав сохраняются при переносе',
+                  ),
+                  child: Text(_groupName),
+                )
+              else
+                SearchablePickerField(
+                  key: const ValueKey('lesson-client-field'),
+                  label: 'Клиент *',
+                  placeholder: 'Не выбран',
+                  hintText: 'Введите имя или ФИО клиента',
+                  selectedId: _clientKey,
+                  selectedLabel: _selectedClient == null
+                      ? null
+                      : '${_selectedClient!['label']} · ${_clientType == 'lead' ? 'Lead' : 'Student'}',
+                  items: [for (final row in _clients) _clientItem(row)],
+                  onSearch: (query) async {
+                    final rows = await _crm.searchClientRefs(
+                      q: query,
+                      limit: 50,
+                    );
+                    return [for (final row in rows) _clientItem(row)];
+                  },
+                  isNullable: false,
+                  enabled:
+                      !_snapshotLocked &&
+                      widget.leadId == null &&
+                      widget.clientId == null,
+                  onSelected: (item) {
+                    final row = item?.data;
+                    if (row == null) return;
+                    _selectClient(row);
+                  },
+                ),
               const SizedBox(height: 16),
               _responsivePair(
                 DropdownButtonFormField<String>(
                   menuMaxHeight: 256,
+                  key: ValueKey('lesson-branch-field:$_selectedBranchId'),
                   initialValue: _selectedBranchId,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Филиал *'),
@@ -776,16 +980,17 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                 SearchablePickerField(
                   key: const ValueKey('lesson-room-field'),
                   label: 'Аудитория *',
-                  placeholder: _rooms.isEmpty
-                      ? 'Нет доступных'
+                  placeholder: _eligibleRooms.isEmpty
+                      ? 'Нет аудиторий в филиале'
                       : 'Выберите аудиторию',
-                  enabled: _rooms.isNotEmpty,
+                  enabled: _eligibleRooms.isNotEmpty,
                   selectedId: _selectedRoomId,
                   items: [
-                    for (final room in _rooms)
+                    for (final room in _eligibleRooms)
                       SearchableSelectItem(
                         id: room['id'].toString(),
                         label: room['name']?.toString() ?? '—',
+                        subtitle: 'Аудитория выбранного филиала',
                       ),
                   ],
                   onSelected: (item) =>
@@ -807,6 +1012,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                     SearchableSelectItem(
                       id: teacher['id'].toString(),
                       label: _getTeacherNameFromData(teacher),
+                      subtitle: 'Назначен в выбранный филиал',
                     ),
                 ],
                 isNullable: false,
@@ -825,23 +1031,41 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                     ),
                   ),
                 ),
+              if (_selectedBranchId != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  key: const ValueKey('lesson-replacement-availability-hint'),
+                  'Показаны только активные преподаватели и аудитории '
+                  'выбранного филиала. Занятость на выбранное время '
+                  'проверяется перед сохранением; конфликт будет показан '
+                  'с причиной.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
               const SizedBox(height: 16),
               _responsivePair(_dateButton(), _timeButton()),
               const SizedBox(height: 16),
-              DropdownButtonFormField<int>(
-                menuMaxHeight: 256,
-                key: const ValueKey('lesson-duration-field'),
-                initialValue: _durationMinutes,
-                decoration: const InputDecoration(labelText: 'Длительность *'),
-                items: [
-                  for (final minutes in const [30, 45, 60, 90, 120])
-                    DropdownMenuItem(
-                      value: minutes,
-                      child: Text('$minutes мин'),
-                    ),
-                ],
-                onChanged: (value) =>
-                    setState(() => _durationMinutes = value ?? 60),
+              KeyedSubtree(
+                key: ValueKey('lesson-duration-selection-$_durationMinutes'),
+                child: DropdownButtonFormField<int>(
+                  menuMaxHeight: 256,
+                  key: const ValueKey('lesson-duration-field'),
+                  initialValue: _durationMinutes,
+                  decoration: const InputDecoration(
+                    labelText: 'Длительность *',
+                  ),
+                  items: [
+                    for (final minutes in _durationOptions)
+                      DropdownMenuItem(
+                        value: minutes,
+                        child: Text('$minutes мин'),
+                      ),
+                  ],
+                  onChanged: (value) =>
+                      setState(() => _durationMinutes = value ?? 60),
+                ),
               ),
               const SizedBox(height: 8),
               SwitchListTile(
@@ -966,10 +1190,12 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                     value: 'personal_account',
                     child: Text('С личного счёта'),
                   ),
-                  const DropdownMenuItem(
-                    value: 'none',
-                    child: Text('Без списания'),
-                  ),
+                  if (_selectedSettlementIsNoCharge ||
+                      (_snapshotLocked && _clientChargeType == 'none'))
+                    const DropdownMenuItem(
+                      value: 'none',
+                      child: Text('Без списания'),
+                    ),
                 ],
                 onChanged: _snapshotLocked
                     ? null
@@ -1002,12 +1228,37 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                       setState(() => _selectedSubscriptionId = item?.id),
                 ),
               ],
+              if (!_snapshotLocked) ...[
+                const SizedBox(height: 16),
+                _buildSnapshotPreview(),
+              ],
               if (_snapshotLocked) ...[
                 const SizedBox(height: 10),
                 Text(
-                  'Клиент, пробный маркер и расчётный snapshot неизменяемы. '
+                  '${_isGroupEdit ? 'Группа, состав участников' : 'Клиент'}, '
+                  'пробный маркер и расчётный snapshot неизменяемы. '
                   'Для переноса меняются только ресурсы и время.',
                   style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+              if (_validationMessage case final message?) ...[
+                const SizedBox(height: AppSpace.md),
+                Container(
+                  key: const ValueKey('lesson-form-validation-error'),
+                  padding: const EdgeInsets.all(AppSpace.md),
+                  decoration: BoxDecoration(
+                    color: AppColor.dangerSoft,
+                    borderRadius: BorderRadius.circular(AppRadius.control),
+                    border: Border.all(
+                      color: AppColor.danger.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: Text(
+                    message,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
                 ),
               ],
             ],
@@ -1027,11 +1278,95 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : Text(_isEdit ? 'Сохранить' : 'Создать'),
+              : Text(_isEdit ? 'Перейти к расчёту' : 'Создать'),
         ),
       ],
     );
     return widget.pageMode ? SafeArea(child: dialog) : dialog;
+  }
+
+  Widget _buildSnapshotPreview() {
+    final cs = Theme.of(context).colorScheme;
+    final clientLabel = _selectedSettlementType?.label ?? 'Не выбран';
+    final compensationLabel = _selectedCompensationRule?.label ?? 'Не выбрано';
+    return Container(
+      key: const ValueKey('lesson-snapshot-preview'),
+      padding: const EdgeInsets.all(AppSpace.md),
+      decoration: BoxDecoration(
+        color: AppColor.gold.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        border: Border.all(color: AppColor.gold.withValues(alpha: 0.28)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Расчётный snapshot перед созданием',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: AppSpace.sm),
+          Text(
+            'Проверьте значения: после создания они сохранятся вместе с '
+            'занятием и не изменятся при переносе.',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+          ),
+          const SizedBox(height: AppSpace.md),
+          _snapshotPreviewRow(
+            key: const ValueKey('lesson-snapshot-trial'),
+            label: 'Тип занятия',
+            value: _isTrial ? 'Пробное' : 'Обычное',
+          ),
+          _snapshotPreviewRow(
+            key: const ValueKey('lesson-snapshot-client-charge'),
+            label: 'Списание клиента',
+            value: '$clientLabel · $_clientSnapshotValue',
+          ),
+          _snapshotPreviewRow(
+            key: const ValueKey('lesson-snapshot-teacher-compensation'),
+            label: 'Оплата преподавателю',
+            value: '$compensationLabel · $_teacherSnapshotValue',
+            isLast: true,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _snapshotPreviewRow({
+    required Key key,
+    required String label,
+    required String value,
+    bool isLast = false,
+  }) {
+    final textTheme = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      key: key,
+      padding: EdgeInsets.only(bottom: isLast ? 0 : AppSpace.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+            ),
+          ),
+          const SizedBox(width: AppSpace.md),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _responsivePair(Widget first, Widget second) {
@@ -1054,6 +1389,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
 
   Widget _dateButton() {
     return OutlinedButton.icon(
+      key: const ValueKey('lesson-date-field'),
       onPressed: () async {
         final date = await showDatePicker(
           context: context,
@@ -1070,6 +1406,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
 
   Widget _timeButton() {
     return OutlinedButton.icon(
+      key: const ValueKey('lesson-time-field'),
       onPressed: () async {
         final time = await showTimePicker(
           context: context,

@@ -300,6 +300,19 @@ export class AccessMutationsRepository {
         message: "Access subject is not active.",
       });
     }
+    // Staff card role is a projection of the canonical app role. Keeping it in
+    // the same transaction prevents a settings-only role change from leaving
+    // a misleading role in the employee card.
+    await client.query(
+      `update app.staff_members staff
+       set role = $2, updated_at = now()
+       from app.profiles profile
+       where profile.user_id = $1
+         and profile.id = staff.profile_id
+         and profile.deleted_at is null
+         and staff.deleted_at is null`,
+      [input.userId, input.role],
+    );
     const revoked = await client.query(
       `
         update app.user_capability_overrides

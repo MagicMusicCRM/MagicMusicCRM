@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
+import 'package:magic_music_crm/core/widgets/homework_attachment_widgets.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 
 import 'client_card_ui.dart';
@@ -318,17 +319,29 @@ Future<TaskInput?> showAddTaskSheet(
 }
 
 /// Collected values from [showAssignHomeworkSheet].
-typedef HomeworkInput = ({String title, String? description, DateTime? dueAt});
+typedef HomeworkInput = ({
+  String title,
+  String? description,
+  DateTime? dueAt,
+  String? lessonId,
+  HomeworkPickedFile? attachment,
+});
 
 /// «Задать ДЗ» sheet. [recentHomeworks] is a best-effort preview list shown
 /// under the form. Returns the new homework's fields, or `null` if cancelled.
 Future<HomeworkInput?> showAssignHomeworkSheet(
   BuildContext context, {
   required List<Map<String, dynamic>> recentHomeworks,
+  List<Map<String, dynamic>> lessons = const [],
+  bool requireLesson = false,
+  Future<HomeworkPickedFile?> Function(BuildContext context) pickAttachment =
+      pickHomeworkAttachment,
 }) async {
   final titleCtrl = TextEditingController();
   final descCtrl = TextEditingController();
   DateTime? dueAt;
+  String? lessonId = lessons.firstOrNull?['id']?.toString();
+  HomeworkPickedFile? attachment;
 
   final created = await showMagicSheet<bool>(
     context,
@@ -353,6 +366,32 @@ Future<HomeworkInput?> showAssignHomeworkSheet(
                   hintText: 'Что нужно выучить?',
                 ),
               ),
+              if (lessons.isNotEmpty) ...[
+                const SizedBox(height: AppSpace.md),
+                DropdownButtonFormField<String>(
+                  menuMaxHeight: 256,
+                  key: const ValueKey('homework-lesson'),
+                  initialValue: lessonId,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: requireLesson ? 'Занятие *' : 'Занятие',
+                    helperText: 'Привязка определяет преподавателя и контекст',
+                  ),
+                  items: [
+                    if (!requireLesson)
+                      const DropdownMenuItem<String>(
+                        value: null,
+                        child: Text('Без привязки к занятию'),
+                      ),
+                    for (final lesson in lessons)
+                      DropdownMenuItem<String>(
+                        value: lesson['id']?.toString(),
+                        child: Text(_homeworkLessonLabel(lesson)),
+                      ),
+                  ],
+                  onChanged: (value) => setSheetState(() => lessonId = value),
+                ),
+              ],
               const SizedBox(height: AppSpace.md),
               TextField(
                 controller: descCtrl,
@@ -428,6 +467,56 @@ Future<HomeworkInput?> showAssignHomeworkSheet(
                   ),
                 ),
               ),
+              const SizedBox(height: AppSpace.md),
+              OutlinedButton.icon(
+                key: const ValueKey('homework-pick-attachment'),
+                onPressed: () async {
+                  final picked = await pickAttachment(sheetContext);
+                  if (picked != null && sheetContext.mounted) {
+                    setSheetState(() => attachment = picked);
+                  }
+                },
+                icon: const Icon(Icons.attach_file_rounded),
+                label: Text(
+                  attachment == null ? 'Прикрепить файл' : 'Заменить файл',
+                ),
+              ),
+              if (attachment case final file?) ...[
+                const SizedBox(height: AppSpace.sm),
+                Container(
+                  key: const ValueKey('homework-selected-attachment'),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpace.md,
+                    vertical: AppSpace.sm,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColor.input,
+                    borderRadius: BorderRadius.circular(AppRadius.control),
+                    border: Border.all(color: AppColor.divider),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.insert_drive_file_outlined,
+                        color: AppColor.gold,
+                      ),
+                      const SizedBox(width: AppSpace.sm),
+                      Expanded(
+                        child: Text(
+                          file.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Убрать файл',
+                        onPressed: () => setSheetState(() => attachment = null),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               if (recentHomeworks.isNotEmpty) ...[
                 const SizedBox(height: AppSpace.lg),
                 const Divider(height: 1, color: AppColor.divider),
@@ -459,6 +548,14 @@ Future<HomeworkInput?> showAssignHomeworkSheet(
           );
           return;
         }
+        if (requireLesson && (lessonId == null || lessonId!.isEmpty)) {
+          MagicToast.show(
+            context,
+            'Выберите занятие',
+            type: MagicToastType.danger,
+          );
+          return;
+        }
         Navigator.pop(context, true);
       }),
     ],
@@ -473,7 +570,22 @@ Future<HomeworkInput?> showAssignHomeworkSheet(
     title: title,
     description: description.isEmpty ? null : description,
     dueAt: dueAt,
+    lessonId: lessonId,
+    attachment: attachment,
   );
+}
+
+String _homeworkLessonLabel(Map<String, dynamic> lesson) {
+  final scheduled = DateTime.tryParse(
+    (lesson['scheduled_at'] ?? lesson['scheduledAt'] ?? '').toString(),
+  );
+  final date = scheduled == null
+      ? 'Дата не указана'
+      : DateFormat('d MMM yyyy, HH:mm', 'ru').format(scheduled.toLocal());
+  final teacher =
+      (lesson['teacher_name'] ?? lesson['teacherName'])?.toString().trim() ??
+      '';
+  return teacher.isEmpty ? date : '$date · $teacher';
 }
 
 /// Compact read-only homework row for the «Последние ДЗ» section in the «Задать

@@ -19,6 +19,7 @@ extension _MessengerRealtime on _MessengerScreenState {
 
     _emitState(() {
       _loadingMessages = true;
+      _messagesLoadError = null;
       _messages = [];
     });
 
@@ -56,12 +57,11 @@ extension _MessengerRealtime on _MessengerScreenState {
     } on Exception catch (e) {
       _logMessenger('MessengerScreen error [LoadId: $loadId]: $e');
       if (mounted && loadId == _currentLoadId) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка загрузки сообщений: ${e.toString()}'),
-            backgroundColor: AppColor.danger,
-          ),
-        );
+        _emitState(() {
+          _messagesLoadError = e is TimeoutException
+              ? 'Сервер отвечает слишком долго. Проверьте подключение и повторите загрузку.'
+              : 'Проверьте подключение и повторите загрузку сообщений.';
+        });
       }
     } finally {
       if (mounted && loadId == _currentLoadId) {
@@ -104,6 +104,9 @@ extension _MessengerRealtime on _MessengerScreenState {
       connection.onMessageCreated(_handleRealtimeMessageCreated);
       connection.onMessageUpdated(_handleRealtimeMessageUpdated);
       connection.onChannelPostCreated(_handleRealtimeChannelPostCreated);
+      connection.onChannelCreated(_handleRealtimeChannelCreated);
+      connection.onChannelUpdated(_handleRealtimeChannelUpdated);
+      connection.onChannelRemoved(_handleRealtimeChannelRemoved);
       connection.onChatCreated(_handleRealtimeChatCreated);
       connection.onChatRemoved(_handleRealtimeChatRemoved);
       connection.onChatUpdated(_handleRealtimeChatUpdated);
@@ -150,7 +153,7 @@ extension _MessengerRealtime on _MessengerScreenState {
           const Duration(minutes: 2);
       if (shouldRefreshList) {
         _lastFallbackChatListAt = DateTime.now();
-        unawaited(_loadChatList());
+        unawaited(_loadChatList(showLoading: false));
       }
     });
   }
@@ -209,7 +212,7 @@ extension _MessengerRealtime on _MessengerScreenState {
   void _scheduleChatListReload() {
     _chatListReloadTimer?.cancel();
     _chatListReloadTimer = Timer(const Duration(milliseconds: 600), () {
-      if (mounted) _loadChatList();
+      if (mounted) _loadChatList(showLoading: false);
     });
   }
 
@@ -325,6 +328,36 @@ extension _MessengerRealtime on _MessengerScreenState {
       });
     }
     _updateChatItemLastMessage({...post, '_is_channel_post': true});
+  }
+
+  void _handleRealtimeChannelCreated(Map<String, dynamic> payload) {
+    _markRealtimeEvent();
+    if (!mounted) return;
+    final mapped = ref
+        .read(magicMessengerServiceProvider)
+        .legacyChannelFromSummary(payload);
+    final id = mapped['id']?.toString();
+    if (id == null || id.isEmpty) return;
+    _emitState(() => _chatItems = upsertChat(_chatItems, mapped));
+    _realtimeConnection?.joinChannel(id);
+    _joinedChannelIds.add(id);
+  }
+
+  void _handleRealtimeChannelUpdated(Map<String, dynamic> payload) {
+    _handleRealtimeChannelCreated(payload);
+  }
+
+  void _handleRealtimeChannelRemoved(Map<String, dynamic> payload) {
+    _markRealtimeEvent();
+    if (!mounted) return;
+    final id = payload['id']?.toString();
+    if (id == null || id.isEmpty) return;
+    _realtimeConnection?.leaveRoom('channel:$id');
+    _joinedChannelIds.remove(id);
+    _emitState(() => _chatItems = removeChat(_chatItems, id));
+    if (_selectedChatId == id && _selectedChatType == 'channel') {
+      _deselectChat();
+    }
   }
 
   void _handleRealtimeChatCreated(Map<String, dynamic> payload) {

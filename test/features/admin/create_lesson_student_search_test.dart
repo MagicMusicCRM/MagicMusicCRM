@@ -5,6 +5,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
+import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/create_lesson_dialog.dart';
 
 /// Finding a student when creating a lesson.
@@ -14,6 +15,7 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/create_lesso
 /// `/crm/clients/search` endpoint.
 
 const _branchId = '11111111-1111-1111-1111-111111111111';
+const _clientBranchId = '22222222-2222-2222-2222-222222222222';
 
 /// «Зинаида Заречная» is deliberately absent from the initial response, so a
 /// test that finds her can only have issued a server query.
@@ -29,6 +31,19 @@ class _FakeApiClient extends MagicApiClient {
     Map<String, dynamic>? queryParameters,
     bool authenticated = true,
   }) async {
+    if (path == '/crm/clients/resolve') {
+      return <String, dynamic>{
+            'ref': {
+              'type': queryParameters?['type'],
+              'id': queryParameters?['id'],
+            },
+            'label': 'Клиент из карточки',
+            'branchId': _clientBranchId,
+            'lifecycleState': 'active',
+            'tombstone': false,
+          }
+          as T;
+    }
     if (path == '/crm/clients/search') {
       final query = queryParameters?['q']?.toString() ?? '';
       if (query.isNotEmpty) searchedQueries.add(query);
@@ -52,6 +67,7 @@ class _FakeApiClient extends MagicApiClient {
                         'id': '55555555-5555-5555-5555-555555555555',
                       },
                       'label': 'Зинаида Заречная',
+                      'branchId': _clientBranchId,
                       'lifecycleState': 'active',
                       'tombstone': false,
                     },
@@ -67,6 +83,11 @@ class _FakeApiClient extends MagicApiClient {
                 'name': 'Главный филиал',
                 'utcOffsetMinutes': 0,
               },
+              {
+                'id': _clientBranchId,
+                'name': 'Филиал клиента',
+                'utcOffsetMinutes': 0,
+              },
             ],
           }
           as T;
@@ -75,10 +96,12 @@ class _FakeApiClient extends MagicApiClient {
   }
 }
 
-Widget _host(_FakeApiClient client) {
+Widget _host(_FakeApiClient client, {Widget? child}) {
   return ProviderScope(
     overrides: [magicApiClientProvider.overrideWithValue(client)],
-    child: const MaterialApp(home: Scaffold(body: CreateLessonDialog())),
+    child: MaterialApp(
+      home: Scaffold(body: child ?? const CreateLessonDialog()),
+    ),
   );
 }
 
@@ -141,5 +164,45 @@ void main() {
       'Зинаида Заречная',
       reason: 'the selected typed client must retain the server label',
     );
+    expect(
+      find.byKey(const ValueKey('lesson-branch-field:$_clientBranchId')),
+      findsOneWidget,
+      reason: 'the client card branch must become the lesson default',
+    );
+    expect(
+      find.byKey(const ValueKey('lesson-room-field')),
+      findsOneWidget,
+      reason: 'the room remains a separate explicit administrator choice',
+    );
+  });
+
+  testWidgets('a client card lesson starts from the client branch', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 1800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final client = _FakeApiClient();
+    await tester.pumpWidget(
+      _host(
+        client,
+        child: const CreateLessonDialog(
+          clientType: 'student',
+          clientId: '77777777-7777-7777-7777-777777777777',
+          clientName: 'Клиент из карточки',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('lesson-branch-field:$_clientBranchId')),
+      findsOneWidget,
+    );
+    final room = tester.widget<SearchablePickerField>(
+      find.byKey(const ValueKey('lesson-room-field')),
+    );
+    expect(room.selectedId, isNull);
   });
 }

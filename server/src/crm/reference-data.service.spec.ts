@@ -35,6 +35,7 @@ describe("ReferenceDataService", () => {
       assertCanReadOperationalData: jest.fn(),
       assertCanWriteCrm: jest.fn(),
       assertCanManageSystemSettings: jest.fn(),
+      assertCanManageClientConfiguration: jest.fn(),
     };
     const hollihop = {
       listDisciplines: jest
@@ -109,10 +110,34 @@ describe("ReferenceDataService", () => {
 
   it("lists active loss reasons ordered by sort_order", async () => {
     const { service, query, policy } = createServiceWithQueryResults([
-      { rows: [{ id: "r1", name: "Дорого", kind: "lost", sort_order: 1, color: null }] },
+      {
+        rows: [{
+          id: "r1",
+          name: "Дорого",
+          kind: "lost",
+          sort_order: 1,
+          color: null,
+          lifecycle_state: "active",
+          version: 1,
+          archived_at: null,
+          archive_reason: null,
+          historical_uses: 3,
+        }],
+      },
     ]);
     const result = await service.listLossReasons(actor);
-    expect(result.items[0]).toEqual({ id: "r1", name: "Дорого", kind: "lost", sortOrder: 1, color: null });
+    expect(result.items[0]).toEqual({
+      id: "r1",
+      name: "Дорого",
+      kind: "lost",
+      sortOrder: 1,
+      color: null,
+      lifecycleState: "active",
+      version: 1,
+      archivedAt: null,
+      archiveReason: null,
+      historicalUses: 3,
+    });
     expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][0]).toContain("app.lead_loss_reasons");
     expect(query.mock.calls[0][0]).toContain("is_active");
@@ -120,13 +145,33 @@ describe("ReferenceDataService", () => {
 
   it("lists branch disciplines ordered for a branch", async () => {
     const { service, query, policy } = createServiceWithQueryResults([
-      { rows: [{ id: "bd1", discipline_id: "d1", name: "Вокал", sort_order: 0 }] },
+      {
+        rows: [{
+          id: "bd1",
+          discipline_id: "d1",
+          name: "Вокал",
+          sort_order: 0,
+          lifecycle_state: "active",
+          version: 1,
+          archived_at: null,
+          archive_reason: null,
+        }],
+      },
     ]);
     const result = await service.listBranchDisciplines(actor, "branch-1");
-    expect(result.items[0]).toEqual({ id: "bd1", disciplineId: "d1", name: "Вокал", sortOrder: 0 });
+    expect(result.items[0]).toEqual({
+      id: "bd1",
+      disciplineId: "d1",
+      name: "Вокал",
+      sortOrder: 0,
+      lifecycleState: "active",
+      version: 1,
+      archivedAt: null,
+      archiveReason: null,
+    });
     expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][0]).toContain("app.branch_disciplines");
-    expect(query.mock.calls[0][1]).toEqual(["branch-1"]);
+    expect(query.mock.calls[0][1]).toEqual(["branch-1", false]);
     expect(query.mock.calls[0][0]).toContain("d.is_active");
   });
 
@@ -171,11 +216,16 @@ describe("ReferenceDataService", () => {
 
   it("creates a discipline", async () => {
     const { service, query, policy } = createServiceWithQueryResults([
-      { rows: [{ id: "d9", name: "Скрипка" }] },
+      { rows: [{ id: "d9", name: "Скрипка", lifecycle_state: "active", version: 1 }] },
     ]);
     const result = await service.createDiscipline(actor, { name: "Скрипка" });
-    expect(result).toEqual({ id: "d9", name: "Скрипка" });
-    expect(policy.assertCanManageSystemSettings).toHaveBeenCalledWith(actor);
+    expect(result).toEqual({
+      id: "d9",
+      name: "Скрипка",
+      lifecycleState: "active",
+      version: 1,
+    });
+    expect(policy.assertCanManageClientConfiguration).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][0]).toContain("insert into app.disciplines");
     expect(query.mock.calls[0][1]).toEqual(["Скрипка"]);
   });
@@ -189,33 +239,80 @@ describe("ReferenceDataService", () => {
       disciplineIds: ["d2", "d1"],
     });
     expect(result).toEqual({ updated: 2 });
-    expect(policy.assertCanManageSystemSettings).toHaveBeenCalledWith(director);
+    expect(policy.assertCanManageClientConfiguration).toHaveBeenCalledWith(director);
     expect(query.mock.calls[0][0]).toContain("with ordinality");
     expect(query.mock.calls[0][1]).toEqual(["branch-1", ["d2", "d1"]]);
   });
 
-  it("assignBranchDiscipline upserts with conflict preservation and returns DTO", async () => {
+  it("assignBranchDiscipline preserves archived identity and returns versioned DTO", async () => {
     const { service, query, policy } = createServiceWithQueryResults([
-      { rows: [{ id: "bd1", discipline_id: "d1", sort_order: 3 }] },
+      {
+        rows: [{
+          id: "bd1",
+          discipline_id: "d1",
+          sort_order: 3,
+          lifecycle_state: "active",
+          version: 1,
+        }],
+      },
     ]);
     const director = { userId: "director-a", role: "director" as const };
     const result = await service.assignBranchDiscipline(director, "branch-1", {
       disciplineId: "d1",
     });
-    expect(result).toEqual({ id: "bd1", disciplineId: "d1", sortOrder: 3 });
-    expect(policy.assertCanManageSystemSettings).toHaveBeenCalledWith(director);
+    expect(result).toEqual({
+      id: "bd1",
+      disciplineId: "d1",
+      sortOrder: 3,
+      lifecycleState: "active",
+      version: 1,
+    });
+    expect(policy.assertCanManageClientConfiguration).toHaveBeenCalledWith(director);
     expect(query.mock.calls[0][0]).toContain("on conflict (branch_id, discipline_id)");
-    expect(query.mock.calls[0][0]).toContain("deleted_at = null");
+    expect(query.mock.calls[0][0]).toContain("lifecycle_state = 'active'");
     expect(query.mock.calls[0][1]).toEqual(["branch-1", "d1", null]);
+  });
+
+  it("requires explicit restore instead of silently reactivating a branch link", async () => {
+    const { service } = createServiceWithQueryResults([
+      { rows: [] },
+      { rows: [{ lifecycle_state: "archived" }] },
+    ]);
+    const director = { userId: "director-a", role: "director" as const };
+    await expect(
+      service.assignBranchDiscipline(director, "branch-1", {
+        disciplineId: "d1",
+      }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "BRANCH_DISCIPLINE_RESTORE_REQUIRED",
+      }),
+    });
   });
 
   it("createLossReason inserts with default kind and sortOrder", async () => {
     const { service, query, policy } = createServiceWithQueryResults([
-      { rows: [{ id: "lr1", name: "Тест", kind: "lost", sort_order: 0 }] },
+      {
+        rows: [{
+          id: "lr1",
+          name: "Тест",
+          kind: "lost",
+          sort_order: 0,
+          lifecycle_state: "active",
+          version: 1,
+        }],
+      },
     ]);
     const result = await service.createLossReason(actor, { name: "Тест" });
-    expect(result).toEqual({ id: "lr1", name: "Тест", kind: "lost", sortOrder: 0 });
-    expect(policy.assertCanManageSystemSettings).toHaveBeenCalledWith(actor);
+    expect(result).toEqual({
+      id: "lr1",
+      name: "Тест",
+      kind: "lost",
+      sortOrder: 0,
+      lifecycleState: "active",
+      version: 1,
+    });
+    expect(policy.assertCanManageClientConfiguration).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][0]).toContain("insert into app.lead_loss_reasons");
     expect(query.mock.calls[0][1]).toEqual(["Тест", "lost", 0]);
   });

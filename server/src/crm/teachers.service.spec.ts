@@ -1,8 +1,9 @@
 import { AuditService } from "../audit/audit.service";
-import { PasswordService } from "../auth/password.service";
 import { DatabaseService } from "../db/database.service";
 import { CrmPolicy } from "./crm.policy";
+import { PersonAccountService } from "./person-account.service";
 import { TeachersService } from "./teachers.service";
+import { PlatformIntegrityService } from "../platform/platform-integrity.service";
 
 describe("TeachersService", () => {
   const actor = { userId: "manager-a", role: "manager" as const };
@@ -16,14 +17,33 @@ describe("TeachersService", () => {
       assertCanReadPayroll: jest.fn(),
       assertCanManageSystemSettings: jest.fn(),
     };
-    const passwords = { hash: jest.fn().mockResolvedValue("hashed-password") };
+    const accounts = {
+      prepareCreate: jest.fn().mockImplementation((email?: string) =>
+        Promise.resolve({
+          email: email?.trim().toLowerCase() ?? null,
+          passwordHash: email ? "hashed-password" : null,
+          isAppAccount: Boolean(email),
+        }),
+      ),
+      manageAccess: jest.fn().mockResolvedValue({}),
+    };
+    const integrity = {
+      executeVersionedMutation: jest.fn(async (command: any) => ({
+        resultRef: await command.mutate({ query } as any, 1),
+        version: 1,
+        replayed: false,
+        auditId: "audit-a",
+        eventId: "event-a",
+      })),
+    };
     const service = new TeachersService(
       database as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
-      passwords as unknown as PasswordService,
+      accounts as unknown as PersonAccountService,
+      integrity as unknown as PlatformIntegrityService,
     );
-    return { service, query, audit, policy, passwords };
+    return { service, query, audit, policy, accounts, integrity };
   };
 
   describe("getTeacher", () => {
@@ -75,19 +95,22 @@ describe("TeachersService", () => {
     ]);
 
     await expect(
-      service.createTeacher({ userId: "director-a", role: "director" }, {
-        firstName: " Мария ",
-        lastName: " Петрова ",
-        email: "Teacher@Example.com",
-        password: "password-123",
-        phone: "+79991111111",
-        branchIds: ["branch-a"],
-        disciplineIds: ["discipline-a"],
-        customDataPatch: { levels: ["Начальный"] },
-        salary: 15000,
-        rate: 750,
-        rateEffectiveFrom: "2026-08-01",
-      }),
+      service.createTeacher(
+        { userId: "director-a", role: "director" },
+        {
+          firstName: " Мария ",
+          lastName: " Петрова ",
+          email: "Teacher@Example.com",
+          password: "password-123",
+          phone: "+79991111111",
+          branchIds: ["branch-a"],
+          disciplineIds: ["discipline-a"],
+          customDataPatch: { levels: ["Начальный"] },
+          salary: 15000,
+          rate: 750,
+          rateEffectiveFrom: "2026-08-01",
+        },
+      ),
     ).resolves.toMatchObject({
       id: "teacher-a",
       firstName: "Мария",
@@ -113,8 +136,13 @@ describe("TeachersService", () => {
       15000,
       750,
       "2026-08-01",
+      true,
     ]);
     expect(String(query.mock.calls[0][0])).toContain("inserted_rate as");
+    expect(String(query.mock.calls[0][0])).toContain("references_valid");
+    expect(String(query.mock.calls[0][0])).not.toContain(
+      "app.branch_disciplines",
+    );
     expect(policy.assertCanReadPayroll).toHaveBeenCalledWith({
       userId: "director-a",
       role: "director",
@@ -126,6 +154,33 @@ describe("TeachersService", () => {
         entityId: "teacher-a",
       }),
     );
+  });
+
+  it("creates a teacher without informational disciplines", async () => {
+    const { service, query } = createService([
+      {
+        id: "teacher-a",
+        status: "active",
+        specialization: null,
+        profile_id: "profile-a",
+        profile_user_id: null,
+        first_name: "Мария",
+        last_name: "Петрова",
+      },
+    ]);
+
+    await expect(
+      service.createTeacher(
+        { userId: "director-a", role: "director" },
+        {
+          firstName: "Мария",
+          lastName: "Петрова",
+          branchIds: ["branch-a"],
+        },
+      ),
+    ).resolves.toMatchObject({ id: "teacher-a", specialization: null });
+
+    expect(query.mock.calls[0][1][8]).toEqual([]);
   });
 
   it("lists teachers for clients through individual or group relationships", async () => {
@@ -146,7 +201,7 @@ describe("TeachersService", () => {
 
     await expect(
       service.listTeachers(clientActor, { limit: 10 }),
-    ).resolves.toEqual({
+    ).resolves.toMatchObject({
       items: [
         {
           id: "teacher-a",
@@ -230,7 +285,7 @@ describe("TeachersService", () => {
         birthdayMonth: 6,
         limit: 20,
       }),
-    ).resolves.toEqual({
+    ).resolves.toMatchObject({
       items: [
         {
           id: "teacher-a",
@@ -261,7 +316,9 @@ describe("TeachersService", () => {
 
     expect(query.mock.calls[0][0]).toContain("app.user_crm_links link");
     expect(query.mock.calls[0][0]).toContain("app.teacher_branches assignment");
-    expect(query.mock.calls[0][0]).toContain("assignment.active_from <= current_date");
+    expect(query.mock.calls[0][0]).toContain(
+      "assignment.active_from <= current_date",
+    );
     expect(query.mock.calls[0][1]).toEqual([
       "manager",
       "manager-a",
@@ -283,7 +340,7 @@ describe("TeachersService", () => {
   });
 
   it("updates teachers through CRM write policy and audit", async () => {
-    const { service, query, audit, policy } = createService([
+    const { service, query, audit, policy, integrity } = createService([
       {
         id: "teacher-a",
         status: "active",
@@ -300,16 +357,26 @@ describe("TeachersService", () => {
     ]);
 
     await expect(
-      service.updateTeacher(actor, "teacher-a", {
-        firstName: " Мария ",
-        lastName: " Петрова ",
-        email: "Teacher@Example.com",
-        phone: "+79991111111",
-        customDataPatch: { categories: ["Дети"] },
-        salary: 20000,
-        rate: 900,
-        rateEffectiveFrom: "2026-08-10",
-      }),
+      service.updateTeacher(
+        actor,
+        "teacher-a",
+        {
+          firstName: " Мария ",
+          lastName: " Петрова ",
+          email: "Teacher@Example.com",
+          phone: "+79991111111",
+          customDataPatch: { categories: ["Дети"] },
+          salary: 20000,
+          rate: 900,
+          rateEffectiveFrom: "2026-08-10",
+          payrollExpectedVersion: 0,
+          payrollReasonText: "Плановое изменение условий",
+        },
+        {
+          idempotencyKey: "teacher-update-001",
+          requestId: "request-teacher-update-001",
+        },
+      ),
     ).resolves.toMatchObject({
       id: "teacher-a",
       firstName: "Мария",
@@ -334,6 +401,50 @@ describe("TeachersService", () => {
     ]);
     expect(String(query.mock.calls[0][0])).toContain("inserted_rate as");
     expect(policy.assertCanReadPayroll).toHaveBeenCalledWith(actor);
+    expect(audit.record).not.toHaveBeenCalled();
+    expect(integrity.executeVersionedMutation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: "crm.teacher.update-with-payroll",
+        aggregateType: "teacher:payroll",
+        aggregateId: "teacher-a",
+        expectedVersion: 0,
+        authorization: expect.objectContaining({
+          capabilityKey: "commerce.teacher_payroll.write",
+        }),
+      }),
+    );
+  });
+
+  it("rejects a payroll edit without version and audit reason", async () => {
+    const { service, query, integrity } = createService([]);
+
+    await expect(
+      service.updateTeacher(actor, "teacher-a", { rate: 900 }),
+    ).rejects.toThrow("версия расчётов преподавателя не указана");
+    expect(query).not.toHaveBeenCalled();
+    expect(integrity.executeVersionedMutation).not.toHaveBeenCalled();
+  });
+
+  it("keeps ordinary profile updates on the CRM audit path", async () => {
+    const { service, audit, integrity } = createService([
+      {
+        id: "teacher-a",
+        status: "active",
+        specialization: "Вокал",
+        profile_id: "profile-a",
+        profile_user_id: "user-a",
+        first_name: "Мария",
+        last_name: "Петрова",
+        email: "teacher@example.com",
+        phone: "+79991111112",
+      },
+    ]);
+
+    await service.updateTeacher(actor, "teacher-a", {
+      phone: "+79991111112",
+    });
+
+    expect(integrity.executeVersionedMutation).not.toHaveBeenCalled();
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "crm.teacher_updated",

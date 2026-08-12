@@ -122,6 +122,7 @@ Widget _paymentsView(
   required ValueChanged<CommerceMovement> onAdjust,
   required void Function(CommerceMovement, ClientPaymentStatus) onTransition,
   required ValueChanged<CommerceMovement> onReverse,
+  required ValueChanged<CommerceMovement> onReverseAdjustment,
   required VoidCallback onCancelAdjustment,
   required ClientPaymentAdjustmentSubmit onSubmitAdjustment,
   required void Function(
@@ -298,7 +299,11 @@ Widget _paymentsView(
                   _movementPresentation(movement),
                   target,
                 ),
-                onAdjust: movement.kind == CommerceMovementKind.payment
+                onAdjust:
+                    movement.kind == CommerceMovementKind.payment ||
+                        (movement.kind == CommerceMovementKind.paymentRecord &&
+                            movement.status == 'paid' &&
+                            movement.sourcePaymentId != null)
                     ? () => onAdjust(movement)
                     : null,
                 onTransition:
@@ -309,6 +314,12 @@ Widget _paymentsView(
                     movement.kind == CommerceMovementKind.paymentRecord &&
                         movement.paymentRecordVersion != null
                     ? () => onReverse(movement)
+                    : null,
+                onReverseAdjustment:
+                    (movement.kind == CommerceMovementKind.refund ||
+                            movement.kind == CommerceMovementKind.adjustment) &&
+                        movement.adjustmentVersion != null
+                    ? () => onReverseAdjustment(movement)
                     : null,
               ),
             )
@@ -364,11 +375,12 @@ Widget _paymentsView(
             for (final event in technicalHistory)
               ListTile(
                 leading: const Icon(Icons.history_rounded),
-                title: Text(
-                  event.eventType == 'monetary_reversal'
-                      ? 'Оплата удалена с возвратом'
-                      : 'Запись оплаты удалена',
-                ),
+                title: Text(switch (event.eventType) {
+                  'monetary_reversal' => 'Оплата удалена с возвратом',
+                  'adjustment_reversal' =>
+                    'Возврат или корректировка сторнированы',
+                  _ => 'Запись оплаты удалена',
+                }),
                 subtitle: Text(
                   [
                     event.reason,
@@ -526,6 +538,7 @@ class _PaymentMovementRow extends StatelessWidget {
     this.onAdjust,
     this.onTransition,
     this.onReverse,
+    this.onReverseAdjustment,
     this.highlighted = false,
   });
 
@@ -535,6 +548,7 @@ class _PaymentMovementRow extends StatelessWidget {
   final VoidCallback? onAdjust;
   final ValueChanged<ClientPaymentStatus>? onTransition;
   final VoidCallback? onReverse;
+  final VoidCallback? onReverseAdjustment;
 
   @override
   Widget build(BuildContext context) {
@@ -633,6 +647,13 @@ class _PaymentMovementRow extends StatelessWidget {
           tooltip: 'Удалить оплату с причиной',
           onPressed: onReverse,
           icon: Icon(Icons.delete_outline_rounded, color: cs.error),
+        ),
+      if (onReverseAdjustment != null)
+        IconButton(
+          key: ValueKey('reverse-adjustment-${movement.id}'),
+          tooltip: 'Сторнировать возврат или корректировку',
+          onPressed: onReverseAdjustment,
+          icon: Icon(Icons.settings_backup_restore_rounded, color: cs.error),
         ),
     ];
     return Semantics(

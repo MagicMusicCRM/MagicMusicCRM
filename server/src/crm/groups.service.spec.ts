@@ -8,7 +8,13 @@ describe("GroupsService", () => {
   const actor = { userId: "manager-a", role: "manager" as const };
 
   const build = (query: jest.Mock) => {
-    const database = { query };
+    const database = {
+      query,
+      transaction: jest.fn(
+        (work: (client: { query: jest.Mock }) => Promise<unknown>) =>
+          work({ query }),
+      ),
+    };
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
     const policy = {
       assertCanReadOperationalData: jest.fn(),
@@ -85,6 +91,11 @@ describe("GroupsService", () => {
         branch_name: "Центр",
         room_name: "101",
         students_count: "7",
+        lifecycle_state: "active",
+        version: "3",
+        archived_at: null,
+        archive_reason: null,
+        archive_effective_date: null,
         created_at: "2026-06-12T00:00:00.000Z",
       },
     ]);
@@ -103,10 +114,62 @@ describe("GroupsService", () => {
           branchName: "Центр",
           roomName: "101",
           studentsCount: 7,
+          lifecycleState: "active",
+          version: 3,
+          archivedAt: null,
+          archiveReason: null,
+          archiveEffectiveDate: null,
           createdAt: "2026-06-12T00:00:00.000Z",
         },
       ],
     });
+  });
+
+  it("includes archived groups only when explicitly requested", async () => {
+    const { service, query } = createService([]);
+    await service.listGroups(actor, { limit: 100, includeArchived: true });
+    expect(query.mock.calls[0][0]).toContain("$6::boolean");
+    expect(query.mock.calls[0][1]).toEqual([
+      null,
+      null,
+      100,
+      "manager",
+      "manager-a",
+      true,
+    ]);
+  });
+
+  it("blocks assignment changes until the group's live schedule is resolved", async () => {
+    const { service, query } = createService([
+      {
+        teacher_id: "teacher-a",
+        branch_id: "branch-a",
+        room_id: "room-a",
+        future_lessons: 2,
+        active_series: 1,
+        active_plans: 1,
+      },
+    ]);
+    await expect(
+      service.updateGroup(
+        { userId: "director-a", role: "director" },
+        "group-a",
+        { roomId: "room-b" },
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "GROUP_ASSIGNMENT_CHANGE_BLOCKED",
+        blockers: expect.arrayContaining([
+          expect.objectContaining({ code: "FUTURE_LESSONS", count: 2 }),
+          expect.objectContaining({
+            code: "ACTIVE_RECURRING_SERIES",
+            count: 1,
+          }),
+          expect.objectContaining({ code: "ACTIVE_SCHEDULE_PLANS", count: 1 }),
+        ]),
+      }),
+    });
+    expect(query).toHaveBeenCalledTimes(1);
   });
 
   it("creates groups through CRM write policy and audit", async () => {
@@ -126,13 +189,16 @@ describe("GroupsService", () => {
     ]);
 
     await expect(
-      service.createGroup({ userId: "director-a", role: "director" }, {
-        name: " Фортепиано ",
-        teacherId: "teacher-a",
-        branchId: "branch-a",
-        roomId: "room-a",
-        pricePerLesson: 3000,
-      }),
+      service.createGroup(
+        { userId: "director-a", role: "director" },
+        {
+          name: " Фортепиано ",
+          teacherId: "teacher-a",
+          branchId: "branch-a",
+          roomId: "room-a",
+          pricePerLesson: 3000,
+        },
+      ),
     ).resolves.toMatchObject({
       id: "group-b",
       name: "Фортепиано",
@@ -177,9 +243,13 @@ describe("GroupsService", () => {
       },
     ]);
 
-    await service.updateGroup(actor, "legacy-group", { teacherRate: 1200 });
+    await service.updateGroup(
+      { userId: "director-a", role: "director" },
+      "legacy-group",
+      { teacherRate: 1200 },
+    );
 
-    expect(query.mock.calls[0][1]).toEqual([
+    expect(query.mock.calls[1][1]).toEqual([
       "legacy-group",
       null,
       null,
@@ -190,16 +260,40 @@ describe("GroupsService", () => {
       1200,
       false,
     ]);
-    expect(query.mock.calls[0][0]).toContain("where not $9::boolean");
+    expect(query.mock.calls[1][0]).toContain("where not $9::boolean");
+  });
+
+  it("rejects manager updates for imported groups without a branch", async () => {
+    const { service, query } = createService([
+      {
+        teacher_id: null,
+        branch_id: null,
+        room_id: null,
+        future_lessons: 0,
+        active_series: 0,
+        active_plans: 0,
+      },
+    ]);
+
+    await expect(
+      service.updateGroup(actor, "legacy-group", { name: "Чужая группа" }),
+    ).rejects.toThrow("Группа не относится к доступному филиалу.");
+    expect(query).toHaveBeenCalledTimes(1);
   });
 
   it("adds and removes group students through v3 contract", async () => {
     const { service, query, audit, policy } = createServiceWithQueryResults([
-      // addGroupStudent: insert + affectedUserIdsForGroup + affectedUserIdsForStudent
+      // addGroupStudent: group branch + actor branches + insert + audiences
+      { rows: [{ branch_id: "branch-a" }] },
+      { rows: [{ branch_id: "branch-a" }] },
       { rows: [{ id: "group-student-a", student_id: "student-a" }] },
       { rows: [] },
       { rows: [] },
-      // removeGroupStudent: update + affectedUserIdsForGroup + affectedUserIdsForStudent
+      // removeGroupStudent: scope + group lock + blocker check + update + audiences
+      { rows: [{ branch_id: "branch-a" }] },
+      { rows: [{ branch_id: "branch-a" }] },
+      { rows: [] },
+      { rows: [] },
       { rows: [{ id: "group-student-a" }] },
       { rows: [] },
       { rows: [] },
@@ -213,8 +307,18 @@ describe("GroupsService", () => {
     ).resolves.toEqual({ success: true });
 
     expect(policy.assertCanWriteCrm).toHaveBeenCalledTimes(2);
-    expect(query.mock.calls[0][1]).toEqual(["group-a", "student-a"]);
-    expect(query.mock.calls[3][1]).toEqual(["group-a", "student-a"]);
+    expect(query.mock.calls[2][1]).toEqual([
+      "group-a",
+      "student-a",
+      "manager",
+      "manager-a",
+    ]);
+    expect(query.mock.calls[2][0]).toContain(
+      "scope_assignment.branch_id::text",
+    );
+    expect(query.mock.calls[7][1]).toEqual(["group:group-a"]);
+    expect(query.mock.calls[8][1]).toEqual(["group-a", "student-a"]);
+    expect(query.mock.calls[9][1]).toEqual(["group-a", "student-a"]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "crm.group_student_added",
@@ -231,5 +335,39 @@ describe("GroupsService", () => {
         metadata: { studentId: "student-a" },
       }),
     );
+  });
+
+  it("blocks removing a student who remains in an active group plan", async () => {
+    const { service, query, audit } = createServiceWithQueryResults([
+      { rows: [{ branch_id: "branch-a" }] },
+      { rows: [{ branch_id: "branch-a" }] },
+      { rows: [] },
+      { rows: [{ id: "plan-a", title: "Вокальная группа" }] },
+    ]);
+
+    await expect(
+      service.removeGroupStudent(actor, "group-a", "student-a"),
+    ).rejects.toMatchObject({
+      response: {
+        code: "GROUP_STUDENT_ACTIVE_SCHEDULE_PLAN",
+        plans: [{ id: "plan-a", title: "Вокальная группа" }],
+      },
+    });
+
+    expect(query).toHaveBeenCalledTimes(4);
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it("denies direct membership mutation outside manager branch scope", async () => {
+    const { service, query, audit } = createServiceWithQueryResults([
+      { rows: [{ branch_id: "branch-b" }] },
+      { rows: [{ branch_id: "branch-a" }] },
+    ]);
+
+    await expect(
+      service.addGroupStudent(actor, "group-b", "student-a"),
+    ).rejects.toThrow("Группа не входит в область доступа.");
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(audit.record).not.toHaveBeenCalled();
   });
 });

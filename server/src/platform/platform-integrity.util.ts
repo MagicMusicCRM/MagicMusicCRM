@@ -8,6 +8,7 @@ const secretReferenceKeyPattern =
 
 const safeOutboxKeys = new Set([
   "accessVersion",
+  "action",
   "aggregateId",
   "changedFields",
   "entityId",
@@ -16,6 +17,7 @@ const safeOutboxKeys = new Set([
   "scope",
   "state",
   "status",
+  "successorId",
   "version",
 ]);
 

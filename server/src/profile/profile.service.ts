@@ -548,54 +548,6 @@ export class ProfileService {
     return this.toProfileNoteDto(note);
   }
 
-  async updateRole(actor: ActorContext, profileId: string, role: UserRole) {
-    const profile = await this.findById(profileId);
-    if (!profile) throw new NotFoundException("Профиль не найден.");
-    this.policy.assertCanUpdateRole(actor, profile.role, role);
-
-    // Не допускаем потерю последнего активного администратора системы: если
-    // снимаем роль system_admin с пользователя, должен остаться хотя бы один
-    // другой активный system_admin. Иначе система останется без владельца.
-    if (profile.role === "system_admin" && role !== "system_admin") {
-      const remaining = await this.database.query<{ count: string }>(
-        `
-          select count(*)::text as count
-          from app.users
-          where role = 'system_admin'
-            and deleted_at is null
-            and id <> $1
-        `,
-        [profile.user_id],
-      );
-      if (Number(remaining.rows[0]?.count ?? "0") === 0) {
-        throw new BadRequestException(
-          "Нельзя снять роль с последнего администратора системы.",
-        );
-      }
-    }
-
-    await this.database.query(
-      `
-        update app.users
-        set role = $2, updated_at = now()
-        where id = $1 and deleted_at is null
-      `,
-      [profile.user_id, role],
-    );
-
-    await this.audit.record({
-      actor,
-      action: "profile.role_updated",
-      entityType: "profile",
-      entityId: profileId,
-      metadata: { role },
-    });
-
-    const updated = await this.findById(profileId);
-    if (!updated) throw new NotFoundException("Профиль не найден.");
-    return this.toProfileDto(updated);
-  }
-
   private async ensureProfile(userId: string): Promise<void> {
     await this.database.query(
       `

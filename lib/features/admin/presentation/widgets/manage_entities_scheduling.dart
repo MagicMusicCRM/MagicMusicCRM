@@ -2,16 +2,25 @@ part of 'manage_entities_widget.dart';
 
 class _GroupsList extends ConsumerWidget {
   final String searchQuery;
-  const _GroupsList({required this.searchQuery});
+  final bool includeArchived;
+  final bool canManageLifecycle;
+  const _GroupsList({
+    required this.searchQuery,
+    required this.includeArchived,
+    required this.canManageLifecycle,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(entitiesProvider('groups'));
+    final async = ref.watch(
+      entitiesProvider(includeArchived ? 'groups:all' : 'groups'),
+    );
     return async.when(
       loading: () =>
           Padding(padding: EdgeInsets.all(12), child: ListSkeleton()),
-      error: (e, _) => Center(
-        child: Text('Ошибка: $e', style: TextStyle(color: AppTheme.danger)),
+      error: (_, _) => _EntityLoadError(
+        title: 'Не удалось загрузить группы',
+        onRetry: () => invalidateGroupCatalog(ref),
       ),
       data: (items) {
         var filtered = items;
@@ -35,7 +44,7 @@ class _GroupsList extends ConsumerWidget {
 
         return RefreshIndicator(
           color: AppTheme.primaryGold,
-          onRefresh: () async => ref.invalidate(entitiesProvider('groups')),
+          onRefresh: () async => invalidateGroupCatalog(ref),
           child: ListView.builder(
             padding: const EdgeInsets.all(12),
             itemCount: filtered.length,
@@ -46,6 +55,7 @@ class _GroupsList extends ConsumerWidget {
                   item['branches']?['name'] as String? ?? 'Без филиала';
               final teacher = item['teachers'];
               final students = _asInt(item['students_count']);
+              final archived = item['lifecycle_state'] == 'archived';
 
               var teacherName = 'Без преподавателя';
               if (teacher != null) {
@@ -68,19 +78,48 @@ class _GroupsList extends ConsumerWidget {
                 margin: const EdgeInsets.only(bottom: 8),
                 child: ListTile(
                   onTap: () async {
-                    final updated = await GroupDetailDialog.show(context, item);
+                    final Future<bool?> dialog;
+                    if (archived) {
+                      dialog = showDialog<bool>(
+                        context: context,
+                        builder: (_) => GroupLifecycleDialog(group: item),
+                      );
+                    } else {
+                      dialog = GroupDetailDialog.show(
+                        context,
+                        item,
+                        canWrite: canManageLifecycle,
+                      );
+                    }
+                    final updated = await dialog;
                     if (updated == true) {
-                      ref.invalidate(entitiesProvider('groups'));
+                      invalidateGroupCatalog(ref);
                     }
                   },
                   leading: CircleAvatar(
-                    backgroundColor: AppTheme.primaryGold.withAlpha(30),
+                    backgroundColor: archived
+                        ? Theme.of(context).colorScheme.surfaceContainerHighest
+                        : AppTheme.primaryGold.withAlpha(30),
                     child: Icon(
-                      Icons.group_rounded,
-                      color: AppTheme.primaryGold,
+                      archived ? Icons.archive_outlined : Icons.group_rounded,
+                      color: archived
+                          ? Theme.of(context).colorScheme.onSurfaceVariant
+                          : AppTheme.primaryGold,
                     ),
                   ),
-                  title: Text(name),
+                  title: Row(
+                    children: [
+                      Expanded(child: Text(name)),
+                      if (archived)
+                        const Padding(
+                          padding: EdgeInsets.only(left: 8),
+                          child: Chip(
+                            visualDensity: VisualDensity.compact,
+                            label: Text('Завершена'),
+                          ),
+                        ),
+                    ],
+                  ),
                   subtitle: Text(
                     'Учеников: $students • Преп.: $teacherName • Фил.: $branchName',
                     style: TextStyle(
@@ -88,6 +127,25 @@ class _GroupsList extends ConsumerWidget {
                       fontSize: 12,
                     ),
                   ),
+                  trailing: canManageLifecycle
+                      ? IconButton(
+                          tooltip: archived
+                              ? 'Восстановить группу'
+                              : 'Завершить группу',
+                          icon: Icon(
+                            archived
+                                ? Icons.restore_rounded
+                                : Icons.archive_outlined,
+                          ),
+                          onPressed: () async {
+                            final updated = await showDialog<bool>(
+                              context: context,
+                              builder: (_) => GroupLifecycleDialog(group: item),
+                            );
+                            if (updated == true) invalidateGroupCatalog(ref);
+                          },
+                        )
+                      : null,
                 ),
               );
             },
@@ -113,7 +171,10 @@ class _EmployeesList extends ConsumerWidget {
     return all.when(
       loading: () =>
           const Padding(padding: EdgeInsets.all(12), child: ListSkeleton()),
-      error: (e, _) => Center(child: Text('Ошибка: $e')),
+      error: (_, _) => _EntityLoadError(
+        title: 'Не удалось загрузить сотрудников',
+        onRetry: () => ref.invalidate(staffSearchProvider(query)),
+      ),
       data: (items) {
         if (items.isEmpty) {
           return Center(

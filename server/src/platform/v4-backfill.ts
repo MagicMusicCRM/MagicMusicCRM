@@ -234,6 +234,7 @@ async function planLessonSnapshots(client: PoolClient): Promise<{
                  select rate.rate
                  from app.teacher_rates rate
                  where rate.teacher_id = lesson.teacher_id
+                   and rate.deleted_at is null
                    and rate.effective_from <= lesson.scheduled_at::date
                  order by rate.effective_from desc, rate.created_at desc
                  limit 1

@@ -29,6 +29,7 @@ import { IssueSubscriptionDto } from "./dto/issue-subscription.dto";
 import { SetBlacklistDto } from "./dto/set-blacklist.dto";
 import { UpsertLeadDto } from "./dto/upsert-lead.dto";
 import { StrictCreateLeadDto } from "./dto/client-config.dto";
+import { ResolvePhoneReviewDto } from "./dto/resolve-phone-review.dto";
 import { ClientWriteValidator } from "./clients/client-write.validator";
 
 @UseGuards(JwtAuthGuard)
@@ -152,12 +153,15 @@ export class CrmLeadsController {
   }
 
   @Patch("leads/:id")
-  updateLead(
+  async updateLead(
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpsertLeadDto,
   ) {
-    return this.leads.updateLead(actor, id, dto);
+    const customFields = dto.customFields
+      ? await this.clientWrites.validateCustomFields("lead", dto.customFields)
+      : undefined;
+    return this.leads.updateLead(actor, id, dto, customFields);
   }
 
   @Delete("leads/:id")
@@ -179,6 +183,15 @@ export class CrmLeadsController {
     @Query() query: QueueLimitQuery,
   ) {
     return this.phoneReview.listPhoneReviewQueue(actor, query.limit);
+  }
+
+  @Patch("phone-review-queue/:id")
+  resolvePhoneReview(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: ResolvePhoneReviewDto,
+  ) {
+    return this.phoneReview.resolvePhoneReview(actor, id, dto);
   }
 
   @Get("merge-candidates")

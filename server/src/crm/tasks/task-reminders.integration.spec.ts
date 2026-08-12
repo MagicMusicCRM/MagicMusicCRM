@@ -5,6 +5,7 @@ import { ActorContext } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
 import { MigrationRunner } from "../../db/migration-runner";
 import { NotificationsService } from "../../notifications/notifications.service";
+import { NotificationsPolicy } from "../../notifications/notifications.policy";
 import { PlatformIntegrityRepository } from "../../platform/platform-integrity.repository";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
 import { RealtimeBus } from "../../realtime/realtime-bus";
@@ -49,16 +50,12 @@ describe("Shared task reminders and realtime close (PostgreSQL)", () => {
     tasks = new SharedTaskService(
       repository,
       new CrmPolicy(),
-      new PlatformIntegrityService(
-        database,
-        new PlatformIntegrityRepository(),
-      ),
+      new PlatformIntegrityService(database, new PlatformIntegrityRepository()),
       { emitCrmChanged } as unknown as RealtimeBus,
     );
-    worker = new SharedTaskReminderWorker(
-      repository,
-      { notifyUser } as unknown as NotificationsService,
-    );
+    worker = new SharedTaskReminderWorker(repository, {
+      notifyUser,
+    } as unknown as NotificationsService);
   });
 
   afterAll(async () => {
@@ -107,11 +104,10 @@ describe("Shared task reminders and realtime close (PostgreSQL)", () => {
     );
     expect(pending.rows[0]).toMatchObject({ status: "pending", attempts: 1 });
 
-    notifyUser.mockImplementation(
-      (input: { channels?: string[] }) =>
-        input.channels?.[0] === "email"
-          ? Promise.reject(new Error("email provider unavailable"))
-          : Promise.resolve({ notificationId: randomUUID() }),
+    notifyUser.mockImplementation((input: { channels?: string[] }) =>
+      input.channels?.[0] === "email"
+        ? Promise.reject(new Error("email provider unavailable"))
+        : Promise.resolve({ notificationId: randomUUID() }),
     );
     const [winner, overlapping] = await Promise.all([
       worker.dispatchDue("worker-b"),
@@ -155,6 +151,117 @@ describe("Shared task reminders and realtime close (PostgreSQL)", () => {
       { status: "cancelled", count: 1 },
       { status: "delivered", count: 1 },
     ]);
+  });
+
+  it("deduplicates a partially retried reminder, opens its task and persists read state", async () => {
+    const createNotifications = () =>
+      new NotificationsService(
+        database,
+        { record: jest.fn().mockResolvedValue(undefined) } as never,
+        new NotificationsPolicy(),
+        {
+          dispatchPendingEmails: jest
+            .fn()
+            .mockResolvedValue({ processed: 0, failed: 0 }),
+          dispatchPendingPush: jest
+            .fn()
+            .mockResolvedValue({ processed: 0, failed: 0 }),
+        } as never,
+        {} as never,
+        { emitCrmChanged: jest.fn() } as never,
+      );
+    const notifications = createNotifications();
+    let deliveryCall = 0;
+    const retryingWorker = new SharedTaskReminderWorker(repository, {
+      notifyUser: async (
+        input: Parameters<NotificationsService["notifyUser"]>[0],
+      ) => {
+        deliveryCall += 1;
+        if (deliveryCall === 2) throw new Error("recipient provider outage");
+        return notifications.notifyUser(input);
+      },
+    } as unknown as NotificationsService);
+    const task = await tasks.create(
+      fixture.manager,
+      {
+        title: "UAT-102 exact reminder recipients",
+        allDay: false,
+        startAt: "2026-08-13T10:00:00.000Z",
+        endAt: "2026-08-13T11:00:00.000Z",
+        audiences: [
+          { type: "user", targetId: fixture.admin.userId },
+          { type: "user", targetId: fixture.manager.userId },
+        ],
+        reminders: [{ dueAt: "2020-01-01T00:00:00.000Z", channel: "in_app" }],
+      },
+      {
+        idempotencyKey: `create-${randomUUID()}`,
+        requestId: `request-${randomUUID()}`,
+      },
+    );
+
+    await expect(
+      retryingWorker.dispatchDue("partial-worker", {
+        backoffBaseSeconds: 1,
+        backoffCapSeconds: 1,
+      }),
+    ).resolves.toMatchObject({ claimed: 1, delivered: 0, retried: 1 });
+    await pool.query(
+      `
+        update app.shared_task_reminders
+        set next_attempt_at = now() - interval '1 second'
+        where task_id = $1
+      `,
+      [task.id],
+    );
+    await expect(
+      retryingWorker.dispatchDue("retry-worker"),
+    ).resolves.toMatchObject({ claimed: 1, delivered: 1, retried: 0 });
+
+    const facts = await pool.query<{
+      notifications: number;
+      recipients: number;
+      distinct_recipients: number;
+      routed_notifications: number;
+    }>(
+      `
+        select
+          count(distinct notification.id)::int as notifications,
+          count(recipient.id)::int as recipients,
+          count(distinct recipient.user_id)::int as distinct_recipients,
+          count(distinct notification.id) filter (
+            where notification.data->>'entityType' = 'task'
+              and notification.data->>'entityId' = $1::text
+          )::int as routed_notifications
+        from app.notifications notification
+        join app.notification_recipients recipient
+          on recipient.notification_id = notification.id
+        where notification.data->>'entityId' = $1::text
+      `,
+      [task.id],
+    );
+    expect(facts.rows[0]).toEqual({
+      notifications: 2,
+      recipients: 2,
+      distinct_recipients: 2,
+      routed_notifications: 2,
+    });
+
+    const adminList = await notifications.list(fixture.admin, { limit: 50 });
+    const adminNotification = adminList.items.find(
+      (item) => item.data?.entityId === task.id,
+    );
+    expect(adminNotification).toMatchObject({
+      isRead: false,
+      data: { entityType: "task", entityId: task.id },
+    });
+    await notifications.markRead(fixture.admin, adminNotification!.id);
+    const afterRestart = await createNotifications().list(fixture.admin, {
+      limit: 50,
+    });
+    expect(
+      afterRestart.items.find((item) => item.id === adminNotification!.id),
+    ).toMatchObject({ isRead: true });
   });
 });
 
@@ -211,6 +318,14 @@ async function cleanupFixture(
     );
     await client.query(
       "delete from app.shared_task_reminders where task_id = any($1::uuid[])",
+      [taskIds],
+    );
+    await client.query(
+      `
+        delete from app.notifications
+        where data->>'entityType' = 'task'
+          and data->>'entityId' = any($1::text[])
+      `,
       [taskIds],
     );
     await client.query(

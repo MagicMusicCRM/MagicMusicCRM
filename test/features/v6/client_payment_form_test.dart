@@ -65,6 +65,15 @@ Future<void> _pumpForm(
 }
 
 void main() {
+  test('payment status labels stay canonical', () {
+    expect(clientPaymentStatusLabel('unpaid'), 'Не оплачен');
+    expect(
+      clientPaymentStatusLabel('posted_pending'),
+      'Проведён, ожидает подтверждения',
+    );
+    expect(clientPaymentStatusLabel('paid'), 'Оплачен');
+  });
+
   test(
     'money parser preserves kopecks and rejects negative/ambiguous input',
     () {
@@ -94,6 +103,7 @@ void main() {
         }
       },
     );
+    expect(find.text('Проведён, ожидает подтверждения'), findsOneWidget);
 
     await tester.enterText(find.byKey(const Key('payment-amount')), '2500,75');
     await tester.enterText(
@@ -166,4 +176,55 @@ void main() {
     );
     expect(calls, 0);
   });
+
+  for (final method in const [
+    ('Безналичная оплата', 'cashless', 'БАНК-7788'),
+    ('Наличные', 'cash', 'ЧЕК-42'),
+  ]) {
+    testWidgets('paid ${method.$1} keeps date, identifier and note', (
+      tester,
+    ) async {
+      final submissions = <ClientPaymentSubmission>[];
+      await _pumpForm(
+        tester,
+        onSubmit: (value) async => submissions.add(value),
+      );
+
+      await tester.enterText(find.byKey(const Key('payment-amount')), '30000');
+      await tester.tap(find.byKey(const Key('payment-status')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Оплачен').last);
+      await tester.pumpAndSettle();
+      if (method.$2 == 'cash') {
+        await tester.tap(find.byKey(const Key('payment-method')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Наличные').last);
+        await tester.pumpAndSettle();
+      }
+      await tester.enterText(
+        find.byKey(const Key('payment-invoice')),
+        method.$3,
+      );
+      await tester.enterText(
+        find.byKey(const Key('payment-comment')),
+        'Первый взнос по договору',
+      );
+      await tester.tap(find.byKey(const Key('payment-submit')));
+      await tester.pump();
+
+      expect(submissions, hasLength(1));
+      expect(submissions.single.input.toJson(), {
+        'issuedSubscriptionId': '22222222-2222-4222-8222-222222222222',
+        'amountMinor': '3000000',
+        'currencyCode': 'RUB',
+        'status': 'paid',
+        'method': method.$2,
+        'occurredAt': '2026-08-04T09:00:00.000Z',
+        'branchId': '11111111-1111-4111-8111-111111111111',
+        'verificationNote': 'Первый взнос по договору',
+        'externalIdentifier': method.$3,
+        'reason': 'Оплата по абонементу',
+      });
+    });
+  }
 }

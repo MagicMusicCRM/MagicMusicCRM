@@ -235,20 +235,30 @@ export class LessonSettlementRepository {
     return charges.rows.flatMap((charge) => {
       const selected = decisions.get(charge.client_id);
       const subscriptionId = selected?.subscriptionId ?? charge.subscription_id;
-      if (!subscriptionId) return [];
       const settlement = settlementTypes.get(
         selected?.settlementTypeKey ?? plan.decision.settlementTypeKey,
       );
       if (!settlement) {
         this.invalidDecision("SETTLEMENT_TYPE_NOT_ALLOWED", "settlementTypeKey");
       }
-      const calculated = calculateClientSettlement({
-        durationMinutes: duration.rows[0]!.duration_minutes,
-        hourShareBasisPoints: settlement.hourShareBasisPoints,
-        fixedPenaltyMinor: settlement.fixedPenaltyMinor ?? "0",
-        chargeType: "subscription",
-        baseChargeMinor: 0n,
-      });
+      const chargeType: ClientChargeFactType = subscriptionId
+        ? "subscription"
+        : charge.charge_type;
+      let calculated;
+      try {
+        calculated = calculateClientSettlement({
+          durationMinutes: duration.rows[0]!.duration_minutes,
+          hourShareBasisPoints: settlement.hourShareBasisPoints,
+          fixedPenaltyMinor: settlement.fixedPenaltyMinor ?? "0",
+          chargeType,
+          baseChargeMinor: chargeType === "personal_account"
+            ? rublesToMinor(charge.charge_value)
+            : 0n,
+        });
+      } catch (error) {
+        this.rethrowCalculation(error);
+      }
+      if (chargeType !== "subscription" || !subscriptionId) return [];
       const units = Number(calculated.units);
       return units > 0
         ? [{

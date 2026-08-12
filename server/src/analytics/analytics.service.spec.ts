@@ -250,6 +250,8 @@ describe("AnalyticsService", () => {
     const sql = String(query.mock.calls[0][0]);
     expect(sql).toContain("app.lead_status_history");
     expect(sql).toContain("is_terminal");
+    expect(sql).toContain("lsh.reason_name_snapshot");
+    expect(sql).toContain("lsh.reason_kind_snapshot");
     expect(result.from).toBe("2026-01-01");
     expect(result.to).toBe("2026-04-01");
     expect(result.reasons).toEqual([

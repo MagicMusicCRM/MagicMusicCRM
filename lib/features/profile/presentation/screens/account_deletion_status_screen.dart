@@ -5,11 +5,61 @@ import 'package:magic_music_crm/core/widgets/v7/magic_page_state.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 
-class AccountDeletionStatusScreen extends ConsumerWidget {
+class AccountDeletionStatusScreen extends ConsumerStatefulWidget {
   const AccountDeletionStatusScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AccountDeletionStatusScreen> createState() =>
+      _AccountDeletionStatusScreenState();
+}
+
+class _AccountDeletionStatusScreenState
+    extends ConsumerState<AccountDeletionStatusScreen> {
+  bool _cancelling = false;
+
+  Future<void> _cancelRequest() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Отозвать запрос?'),
+        content: const Text(
+          'Запрос вернётся в историю со статусом «Отменён», '
+          'а доступ к приложению будет восстановлен.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Оставить запрос'),
+          ),
+          FilledButton(
+            key: const ValueKey('confirm-cancel-deletion-request'),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Отозвать'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _cancelling = true);
+    try {
+      await ref.read(releaseGateServiceProvider).cancelAccountDeletion();
+      ref.invalidate(pendingDeletionRequestProvider);
+      ref.invalidate(releaseGateStatusProvider);
+      if (mounted) context.go('/');
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Не удалось отозвать запрос: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _cancelling = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final requestAsync = ref.watch(pendingDeletionRequestProvider);
 
     return Scaffold(
@@ -67,6 +117,23 @@ class AccountDeletionStatusScreen extends ConsumerWidget {
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                     const SizedBox(height: 24),
+                    if (request.status == 'pending') ...[
+                      OutlinedButton.icon(
+                        key: const ValueKey('cancel-deletion-request'),
+                        onPressed: _cancelling ? null : _cancelRequest,
+                        icon: _cancelling
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.undo_rounded),
+                        label: const Text('Отозвать запрос'),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     FilledButton.icon(
                       onPressed: () async {
                         await ref.read(magicAuthServiceProvider).signOut();

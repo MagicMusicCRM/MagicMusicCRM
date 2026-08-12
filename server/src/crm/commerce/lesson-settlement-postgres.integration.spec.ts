@@ -184,21 +184,32 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
       );
       for (const result of parallel) expect(result).toEqual(parallel[0]);
       expect(parallel[0]!.clientFacts).toHaveLength(2);
-      expect(parallel[0]!.clientFacts.map((fact) => fact.clientId).sort())
-        .toEqual([fixture.studentId, fixture.secondStudentId].sort());
-      expect(parallel[0]!.clientFacts.every(
-        (fact) => fact.chargeType === "personal_account" && fact.amountMinor === "80000",
-      )).toBe(true);
+      expect(
+        parallel[0]!.clientFacts.map((fact) => fact.clientId).sort(),
+      ).toEqual([fixture.studentId, fixture.secondStudentId].sort());
+      expect(
+        parallel[0]!.clientFacts.every(
+          (fact) =>
+            fact.chargeType === "personal_account" &&
+            fact.amountMinor === "80000",
+        ),
+      ).toBe(true);
       expect(parallel[0]!.teacherFact).toMatchObject({
         teacherId: fixture.teacherId,
         compensationType: "fixed",
         amountMinor: "90000",
       });
-      const counts = await pool.query<{ client_count: number; teacher_count: number }>(`
+      const counts = await pool.query<{
+        client_count: number;
+        teacher_count: number;
+      }>(
+        `
         select
           (select count(*)::int from app.lesson_client_charge_facts where lesson_id = $1) as client_count,
           (select count(*)::int from app.lesson_teacher_compensation_facts where lesson_id = $1) as teacher_count
-      `, [fixture.groupLessonId]);
+      `,
+        [fixture.groupLessonId],
+      );
       expect(counts.rows[0]).toEqual({ client_count: 2, teacher_count: 1 });
     } finally {
       await cleanupFixture(pool, fixture);
@@ -232,12 +243,16 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
         },
       };
 
-      const settled = await service.settleStandalone(fixture.groupLessonId, input);
+      const settled = await service.settleStandalone(
+        fixture.groupLessonId,
+        input,
+      );
       expect(settled.clientFacts).toHaveLength(1);
       expect(settled.clientFacts[0]?.clientId).toBe(fixture.secondStudentId);
       expect(settled.clientFacts[0]?.settlementTypeKey).toBe("lesson");
-      await expect(service.settleStandalone(fixture.groupLessonId, input))
-        .resolves.toEqual(settled);
+      await expect(
+        service.settleStandalone(fixture.groupLessonId, input),
+      ).resolves.toEqual(settled);
     } finally {
       await cleanupFixture(pool, fixture);
     }
@@ -257,7 +272,8 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
                 hourShareBasisPoints: 20_000,
                 fixedPenaltyMinor: "250",
               }
-            : type),
+            : type,
+        ),
       }));
 
       await pool.query(
@@ -265,16 +281,15 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
          values ($1, $2, 18.5)`,
         [fixture.groupLessonId, fixture.subscriptionId],
       );
-      await expect(service.settleStandalone(
-        fixture.subscriptionLessonId,
-        {
+      await expect(
+        service.settleStandalone(fixture.subscriptionLessonId, {
           context: "settle",
           decision: {
             settlementTypeKey: "penalty_lesson",
             teacherCompensationRuleKey: "percent",
           },
-        },
-      )).rejects.toMatchObject({
+        }),
+      ).rejects.toMatchObject({
         response: { code: "SUBSCRIPTION_CAPACITY" },
       });
       const rolledBack = await pool.query<{ count: number; units: string }>(
@@ -293,16 +308,15 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
       );
 
       const penaltyRuns = await Promise.all(
-        Array.from({ length: 8 }, () => service.settleStandalone(
-          fixture.subscriptionLessonId,
-          {
+        Array.from({ length: 8 }, () =>
+          service.settleStandalone(fixture.subscriptionLessonId, {
             context: "settle",
             decision: {
               settlementTypeKey: "penalty_lesson",
               teacherCompensationRuleKey: "percent",
             },
-          },
-        )),
+          }),
+        ),
       );
       const penalty = penaltyRuns[0]!;
       for (const result of penaltyRuns) expect(result).toEqual(penalty);
@@ -331,40 +345,135 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
       );
       expect(reservation.rows[0]?.units).toBe("2.00");
 
-      const group = await service.settleStandalone(fixture.groupLessonId, {
-        context: "settle",
+      const groupDecision = {
+        context: "settle" as const,
         reasonText: "Согласованная ставка за групповое занятие",
         decision: {
           settlementTypeKey: "partially_paid_lesson",
-          clientDecisions: [{
-            clientId: fixture.studentId,
-            settlementTypeKey: "lesson",
-          }],
+          clientDecisions: [
+            {
+              clientId: fixture.studentId,
+              settlementTypeKey: "lesson",
+            },
+          ],
           teacherCompensationRuleKey: "fixed",
           teacherCompensationValueMinor: "60000",
         },
+      };
+      const groupTransition = await database.transaction(async (client) => {
+        const before = await reservations.lockSettlementCoverage(
+          client,
+          fixture.groupFundingLessonId,
+        );
+        const settled = await service.settle(
+          client,
+          fixture.groupFundingLessonId,
+          groupDecision,
+        );
+        await reservations.terminalize(client, settled);
+        const after = await reservations.lockSettlementCoverage(
+          client,
+          fixture.groupFundingLessonId,
+        );
+        return { before, settled, after };
       });
-      expect(group.clientFacts).toHaveLength(2);
-      expect(group.clientFacts.find((fact) =>
-        fact.clientId === fixture.studentId)).toMatchObject({
-          settlementTypeKey: "lesson",
-          hourShareBasisPoints: 10_000,
+      const group = groupTransition.settled;
+      expect(groupTransition.before.reservations).toEqual([
+        expect.objectContaining({
+          subscriptionId: fixture.groupSubscriptionId,
+          state: "reserved",
           units: "1.00",
-          amountMinor: "80000",
-        });
-      expect(group.clientFacts.find((fact) =>
-        fact.clientId === fixture.secondStudentId)).toMatchObject({
-          settlementTypeKey: "partially_paid_lesson",
-          hourShareBasisPoints: 5_000,
-          units: "0.50",
-          amountMinor: "40000",
-        });
+        }),
+      ]);
+      expect(groupTransition.before.subscriptions).toEqual([
+        expect.objectContaining({
+          id: fixture.groupSubscriptionId,
+          settledUnits: "0",
+          reservedUnits: "1.00",
+        }),
+      ]);
+      expect(groupTransition.after.reservations).toEqual([
+        expect.objectContaining({
+          subscriptionId: fixture.groupSubscriptionId,
+          state: "consumed",
+          units: "1.00",
+        }),
+      ]);
+      expect(groupTransition.after.subscriptions).toEqual([
+        expect.objectContaining({
+          id: fixture.groupSubscriptionId,
+          settledUnits: "1.00",
+          reservedUnits: "0",
+        }),
+      ]);
+      const groupRuns = await Promise.all(
+        Array.from({ length: 8 }, () =>
+          service.settleStandalone(fixture.groupFundingLessonId, groupDecision),
+        ),
+      );
+      for (const result of groupRuns) expect(result).toEqual(group);
+      expect(group.clientFacts).toHaveLength(2);
+      expect(
+        group.clientFacts.find((fact) => fact.clientId === fixture.studentId),
+      ).toMatchObject({
+        settlementTypeKey: "lesson",
+        settlementLabel: "Занятие",
+        settlementColorToken: "success",
+        hourShareBasisPoints: 10_000,
+        units: "1.00",
+        amountMinor: "0",
+        chargeType: "subscription",
+        subscriptionId: fixture.groupSubscriptionId,
+        configurationRevisionId: expect.any(String),
+      });
+      expect(
+        group.clientFacts.find(
+          (fact) => fact.clientId === fixture.secondStudentId,
+        ),
+      ).toMatchObject({
+        settlementTypeKey: "partially_paid_lesson",
+        settlementLabel: "Частично оплачиваемое занятие",
+        settlementColorToken: "info",
+        hourShareBasisPoints: 5_000,
+        units: "0.50",
+        amountMinor: "40000",
+        configurationRevisionId: expect.any(String),
+      });
       expect(group.teacherFact).toMatchObject({
         compensationRuleKey: "fixed",
+        compensationRuleLabel: "Фиксированная сумма",
+        compensationMode: "fixed",
         compensationActualValue: "60000",
-        compensationOverrideReason:
-          "Согласованная ставка за групповое занятие",
+        compensationOverrideReason: "Согласованная ставка за групповое занятие",
         amountMinor: "60000",
+        configurationRevisionId: expect.any(String),
+      });
+      const persistedGroup = await pool.query<{
+        client_count: number;
+        teacher_count: number;
+        settlements: string[];
+        consumed_reservations: number;
+      }>(
+        `select
+           (select count(*)::int from app.lesson_client_charge_facts_effective
+              where lesson_id = $1) as client_count,
+           (select count(*)::int from app.lesson_teacher_compensation_facts_effective
+              where lesson_id = $1) as teacher_count,
+           (select array_agg(settlement_type_key order by client_id)
+              from app.lesson_client_charge_facts_effective
+              where lesson_id = $1) as settlements,
+           (select count(*)::int from app.lesson_reservations
+              where lesson_id = $1 and state = 'consumed') as consumed_reservations`,
+        [fixture.groupFundingLessonId],
+      );
+      expect(persistedGroup.rows[0]).toEqual({
+        client_count: 2,
+        teacher_count: 1,
+        settlements: expect.arrayContaining([
+          "lesson",
+          "partially_paid_lesson",
+        ]),
+        consumed_reservations: 1,
       });
 
       const free = await service.settleStandalone(fixture.hourlyLessonId, {
@@ -398,10 +507,12 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
           context: "settle",
           decision: {
             settlementTypeKey: "free_lesson",
-            clientDecisions: [{
-              clientId: fixture.studentId,
-              subscriptionId: fixture.subscriptionId,
-            }],
+            clientDecisions: [
+              {
+                clientId: fixture.studentId,
+                subscriptionId: fixture.subscriptionId,
+              },
+            ],
             teacherCompensationRuleKey: "none",
           },
         },
@@ -412,7 +523,8 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
         amountMinor: "0",
       });
       await database.transaction((client) =>
-        reservations.terminalize(client, zeroSubscription));
+        reservations.terminalize(client, zeroSubscription),
+      );
       const released = await pool.query<{ state: string }>(
         `select state from app.lesson_reservations
          where lesson_id = $1 and subscription_id = $2`,
@@ -425,11 +537,14 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
         lessonSettlementTypes: snapshot.lessonSettlementTypes.map((type) =>
           type.stableKey === "penalty_lesson"
             ? { ...type, label: "Новое название", colorToken: "danger" }
-            : type),
-        teacherCompensationRules: snapshot.teacherCompensationRules.map((rule) =>
-          rule.stableKey === "percent"
-            ? { ...rule, label: "Новый процент", value: "5000" }
-            : rule),
+            : type,
+        ),
+        teacherCompensationRules: snapshot.teacherCompensationRules.map(
+          (rule) =>
+            rule.stableKey === "percent"
+              ? { ...rule, label: "Новый процент", value: "5000" }
+              : rule,
+        ),
       }));
       const replay = await service.settleStandalone(
         fixture.subscriptionLessonId,
@@ -442,10 +557,220 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
         },
       );
       expect(replay).toEqual(penalty);
-      expect(replay.clientFact.settlementLabel)
-        .toBe("Двойное занятие со штрафом");
-      expect(replay.teacherFact.compensationRuleLabel)
-        .toBe("Процент ставки");
+      expect(replay.clientFact.settlementLabel).toBe(
+        "Двойное занятие со штрафом",
+      );
+      expect(replay.teacherFact.compensationRuleLabel).toBe("Процент ставки");
+    } finally {
+      await cleanupFixture(pool, fixture);
+    }
+  });
+
+  it("persists all five teacher pay rules and requires a reason for manual override", async () => {
+    const fixture = await createFixture(pool, database);
+    try {
+      await publishBranchCatalog(pool, fixture, 1, (snapshot) => ({
+        ...snapshot,
+        teacherCompensationRules: snapshot.teacherCompensationRules.map(
+          (rule) => {
+            if (rule.stableKey === "percent") {
+              return { ...rule, value: "6250" };
+            }
+            if (rule.stableKey === "fixed") {
+              return { ...rule, value: "85000" };
+            }
+            if (rule.stableKey === "hourly") {
+              return { ...rule, value: "120000" };
+            }
+            return rule;
+          },
+        ),
+      }));
+
+      await expect(
+        service.settleStandalone(fixture.fixedLessonId, {
+          context: "settle",
+          decision: {
+            settlementTypeKey: "lesson",
+            teacherCompensationRuleKey: "fixed",
+            teacherCompensationValueMinor: "95000",
+          },
+        }),
+      ).rejects.toMatchObject({
+        response: { code: "TEACHER_OVERRIDE_REASON_REQUIRED" },
+      });
+      const rejectedCounts = await pool.query<{
+        client_count: number;
+        teacher_count: number;
+      }>(
+        `select
+           (select count(*)::int from app.lesson_client_charge_facts
+              where lesson_id = $1) as client_count,
+           (select count(*)::int from app.lesson_teacher_compensation_facts
+              where lesson_id = $1) as teacher_count`,
+        [fixture.fixedLessonId],
+      );
+      expect(rejectedCounts.rows[0]).toEqual({
+        client_count: 0,
+        teacher_count: 0,
+      });
+
+      const results = await Promise.all([
+        service.settleStandalone(fixture.noneLessonId, {
+          context: "settle",
+          decision: {
+            settlementTypeKey: "free_lesson",
+            teacherCompensationRuleKey: "none",
+          },
+        }),
+        service.settleStandalone(fixture.hourlyLessonId, {
+          context: "settle",
+          decision: {
+            settlementTypeKey: "free_lesson",
+            teacherCompensationRuleKey: "standard",
+          },
+        }),
+        service.settleStandalone(fixture.subscriptionLessonId, {
+          context: "settle",
+          decision: {
+            settlementTypeKey: "lesson",
+            teacherCompensationRuleKey: "percent",
+          },
+        }),
+        service.settleStandalone(fixture.fixedLessonId, {
+          context: "settle",
+          reasonText: "Индивидуальная ставка согласована директором",
+          decision: {
+            settlementTypeKey: "lesson",
+            teacherCompensationRuleKey: "fixed",
+            teacherCompensationValueMinor: "95000",
+          },
+        }),
+        service.settleStandalone(fixture.groupLessonId, {
+          context: "settle",
+          decision: {
+            settlementTypeKey: "lesson",
+            teacherCompensationRuleKey: "hourly",
+          },
+        }),
+      ]);
+
+      expect(results.map((result) => result.teacherFact)).toEqual([
+        expect.objectContaining({
+          compensationRuleKey: "none",
+          compensationMode: "none",
+          compensationDefaultValue: "0",
+          compensationActualValue: "0",
+          amountMinor: "0",
+          compensationOverrideReason: null,
+        }),
+        expect.objectContaining({
+          compensationRuleKey: "standard",
+          compensationMode: "standard",
+          compensationDefaultValue: "75001",
+          compensationActualValue: "75001",
+          amountMinor: "75001",
+          compensationOverrideReason: null,
+        }),
+        expect.objectContaining({
+          compensationRuleKey: "percent",
+          compensationMode: "percent",
+          compensationDefaultValue: "70000",
+          compensationActualValue: "6250",
+          amountMinor: "43750",
+          compensationOverrideReason: null,
+        }),
+        expect.objectContaining({
+          compensationRuleKey: "fixed",
+          compensationMode: "fixed",
+          compensationDefaultValue: "85000",
+          compensationActualValue: "95000",
+          amountMinor: "95000",
+          compensationOverrideReason:
+            "Индивидуальная ставка согласована директором",
+        }),
+        expect.objectContaining({
+          compensationRuleKey: "hourly",
+          compensationMode: "hourly",
+          compensationDefaultValue: "120000",
+          compensationActualValue: "120000",
+          amountMinor: "120000",
+          compensationOverrideReason: null,
+        }),
+      ]);
+
+      const persisted = await pool.query<{
+        lesson_id: string;
+        compensation_rule_key: string;
+        compensation_rule_label: string;
+        compensation_mode: string;
+        compensation_default_value: string;
+        compensation_actual_value: string;
+        compensation_override_reason: string | null;
+        amount_minor: string;
+      }>(
+        `select lesson_id, compensation_rule_key, compensation_rule_label,
+           compensation_mode, compensation_default_value::text,
+           compensation_actual_value::text, compensation_override_reason,
+           amount_minor::text
+         from app.lesson_teacher_compensation_facts_effective
+         where lesson_id = any($1::uuid[])
+         order by compensation_rule_key`,
+        [fixture.lessonIds],
+      );
+      expect(persisted.rows).toEqual([
+        {
+          lesson_id: fixture.fixedLessonId,
+          compensation_rule_key: "fixed",
+          compensation_rule_label: "Фиксированная сумма",
+          compensation_mode: "fixed",
+          compensation_default_value: "85000",
+          compensation_actual_value: "95000",
+          compensation_override_reason:
+            "Индивидуальная ставка согласована директором",
+          amount_minor: "95000",
+        },
+        {
+          lesson_id: fixture.groupLessonId,
+          compensation_rule_key: "hourly",
+          compensation_rule_label: "Почасовая сумма",
+          compensation_mode: "hourly",
+          compensation_default_value: "120000",
+          compensation_actual_value: "120000",
+          compensation_override_reason: null,
+          amount_minor: "120000",
+        },
+        {
+          lesson_id: fixture.noneLessonId,
+          compensation_rule_key: "none",
+          compensation_rule_label: "Не оплачивать",
+          compensation_mode: "none",
+          compensation_default_value: "0",
+          compensation_actual_value: "0",
+          compensation_override_reason: null,
+          amount_minor: "0",
+        },
+        {
+          lesson_id: fixture.subscriptionLessonId,
+          compensation_rule_key: "percent",
+          compensation_rule_label: "Процент ставки",
+          compensation_mode: "percent",
+          compensation_default_value: "70000",
+          compensation_actual_value: "6250",
+          compensation_override_reason: null,
+          amount_minor: "43750",
+        },
+        {
+          lesson_id: fixture.hourlyLessonId,
+          compensation_rule_key: "standard",
+          compensation_rule_label: "Полная стандартная ставка",
+          compensation_mode: "standard",
+          compensation_default_value: "75001",
+          compensation_actual_value: "75001",
+          compensation_override_reason: null,
+          amount_minor: "75001",
+        },
+      ]);
     } finally {
       await cleanupFixture(pool, fixture);
     }
@@ -516,7 +841,9 @@ async function createFixture(
   const managerId = users.rows.find((row) => row.role === "manager")!.id;
   const teacherUserId = users.rows.find((row) => row.role === "teacher")!.id;
   const clientUserId = users.rows.find((row) => row.role === "client")!.id;
-  const clientUserIds = users.rows.filter((row) => row.role === "client").map((row) => row.id);
+  const clientUserIds = users.rows
+    .filter((row) => row.role === "client")
+    .map((row) => row.id);
   const profiles = await pool.query<{ id: string; user_id: string }>(
     `
       insert into app.profiles (user_id, first_name, last_name)
@@ -590,6 +917,25 @@ async function createFixture(
     ],
   );
   const subscriptionId = subscription.rows[0]!.id;
+  const groupSubscription = await pool.query<{ id: string }>(
+    `insert into app.subscriptions (
+       student_id, lessons_total, lessons_used, starts_at, expires_at, status,
+       package_id, commercial_snapshot, snapshot_version, package_version,
+       base_price_minor, currency_code, final_price_minor, version
+     ) values (
+       $1, 20, 0, current_date, current_date + 90, 'active', $2,
+       $3::jsonb, 1, 1, 800000, 'RUB', 800000, 1
+     ) returning id`,
+    [
+      studentId,
+      packageRow.rows[0]!.id,
+      JSON.stringify({
+        snapshotVersion: 1,
+        displayName: "Group settlement package",
+      }),
+    ],
+  );
+  const groupSubscriptionId = groupSubscription.rows[0]!.id;
   const lessons = await pool.query<{ id: string; duration_minutes: number }>(
     `
       insert into app.lessons (
@@ -624,6 +970,15 @@ async function createFixture(
     [groupId, teacherId, branchId, managerId],
   );
   const groupLessonId = groupLesson.rows[0]!.id;
+  const groupFundingLesson = await pool.query<{ id: string }>(
+    `insert into app.lessons (
+       group_id, teacher_id, branch_id, scheduled_at, duration_minutes,
+       status, created_by
+     ) values ($1, $2, $3, '2026-07-29T14:00:00Z', 60, 'completed', $4)
+     returning id`,
+    [groupId, teacherId, branchId, managerId],
+  );
+  const groupFundingLessonId = groupFundingLesson.rows[0]!.id;
   const lifecycle = new LessonLifecycleRepository(database);
   await database.transaction(async (client) => {
     await lifecycle.createSnapshot(client, {
@@ -667,6 +1022,32 @@ async function createFixture(
         chargeValue: 800,
       })),
     });
+    await lifecycle.createGroupSnapshot(client, {
+      lessonId: groupFundingLessonId,
+      groupId,
+      completionType: "standard.success",
+      teacherCompensationType: "fixed",
+      teacherCompensationValue: 900,
+      trial: false,
+      participants: [
+        {
+          studentId,
+          chargeType: "subscription",
+          chargeValue: 1,
+          subscriptionId: groupSubscriptionId,
+        },
+        {
+          studentId: secondStudentId,
+          chargeType: "personal_account",
+          chargeValue: 800,
+        },
+      ],
+    });
+    await lifecycle.createReservation(client, {
+      lessonId: groupFundingLessonId,
+      subscriptionId: groupSubscriptionId,
+      units: 1,
+    });
     await lifecycle.createSnapshot(client, {
       lessonId: hourlyLessonId,
       clientType: "student",
@@ -707,13 +1088,19 @@ async function createFixture(
     managerId,
     userIds: [managerId, teacherUserId, ...clientUserIds],
     profileIds: profiles.rows.map((row) => row.id),
-    lessonIds: [...lessons.rows.map((row) => row.id), groupLessonId],
+    lessonIds: [
+      ...lessons.rows.map((row) => row.id),
+      groupLessonId,
+      groupFundingLessonId,
+    ],
     fixedLessonId,
     hourlyLessonId,
     noneLessonId,
     groupLessonId,
+    groupFundingLessonId,
     subscriptionLessonId,
     subscriptionId,
+    groupSubscriptionId,
     packageId: packageRow.rows[0]!.id,
   };
 }
@@ -757,11 +1144,16 @@ async function cleanupFixture(
     await client.query("delete from app.lessons where id = any($1::uuid[])", [
       fixture.lessonIds,
     ]);
-    await client.query("delete from app.group_students where group_id = $1", [fixture.groupId]);
-    await client.query("delete from app.groups where id = $1", [fixture.groupId]);
-    await client.query("delete from app.subscriptions where id = $1", [
-      fixture.subscriptionId,
+    await client.query("delete from app.group_students where group_id = $1", [
+      fixture.groupId,
     ]);
+    await client.query("delete from app.groups where id = $1", [
+      fixture.groupId,
+    ]);
+    await client.query(
+      "delete from app.subscriptions where id = any($1::uuid[])",
+      [[fixture.subscriptionId, fixture.groupSubscriptionId]],
+    );
     await client.query("delete from app.subscription_packages where id = $1", [
       fixture.packageId,
     ]);

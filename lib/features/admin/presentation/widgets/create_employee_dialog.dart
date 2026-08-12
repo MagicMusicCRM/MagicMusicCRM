@@ -5,24 +5,19 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/widgets/v7/adaptive_surface.dart';
 
-Future<bool?> showCreateEmployeeSurface(
-  BuildContext context, {
-  required String currentRole,
-}) {
+Future<bool?> showCreateEmployeeSurface(BuildContext context) {
   return showMagicAdaptiveSurface<bool>(
     context,
     kind: AppSurfaceKind.selection,
     title: 'Новый сотрудник',
-    subtitle: 'Контакты и роль в приложении',
+    subtitle: 'Карточка сотрудника и необязательный доступ',
     icon: Icons.person_add_alt_1_rounded,
-    builder: (_) => CreateEmployeeDialog(currentRole: currentRole),
+    builder: (_) => const CreateEmployeeDialog(),
   );
 }
 
 class CreateEmployeeDialog extends ConsumerStatefulWidget {
-  const CreateEmployeeDialog({super.key, required this.currentRole});
-
-  final String currentRole;
+  const CreateEmployeeDialog({super.key});
 
   @override
   ConsumerState<CreateEmployeeDialog> createState() =>
@@ -30,9 +25,6 @@ class CreateEmployeeDialog extends ConsumerStatefulWidget {
 }
 
 class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
-  static const _adminRole = (value: 'admin', label: 'Администратор');
-  static const _managerRole = (value: 'manager', label: 'Управляющий');
-
   final _formKey = GlobalKey<FormState>();
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
@@ -40,18 +32,12 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
   final _passwordController = TextEditingController();
   final _passwordAgainController = TextEditingController();
   String _canonicalPhone = '';
-  String _selectedRole = 'admin';
   String? _branchId;
   List<Map<String, dynamic>> _branches = const [];
   bool _loading = true;
   String? _loadError;
   bool _saving = false;
   bool _showPassword = false;
-
-  List<({String value, String label})> get _roles =>
-      widget.currentRole == 'manager'
-      ? const [_adminRole]
-      : const [_adminRole, _managerRole];
 
   @override
   void initState() {
@@ -103,9 +89,12 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
             firstName: firstName,
             lastName: lastName,
             phone: _canonicalPhone,
-            email: _emailController.text.trim(),
-            password: _passwordController.text,
-            role: _selectedRole,
+            email: _emailController.text.trim().isEmpty
+                ? null
+                : _emailController.text.trim(),
+            password: _passwordController.text.isEmpty
+                ? null
+                : _passwordController.text,
             branchIds: [_branchId!],
           );
       if (mounted) {
@@ -162,7 +151,7 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Аккаунт создаётся сразу и появится в разделе «Пользователи».',
+            'Карточку можно создать без аккаунта. Email и пароль можно добавить сейчас или позже в карточке; повышение роли выполняется только в «Доступах».',
             style: TextStyle(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
@@ -192,15 +181,17 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
             controller: _emailController,
             keyboardType: TextInputType.emailAddress,
             decoration: const InputDecoration(
-              labelText: 'Электронная почта *',
+              labelText: 'Электронная почта (необязательно)',
               prefixIcon: Icon(Icons.email_outlined),
             ),
             validator: (value) {
-              final requiredError = _required(value);
-              if (requiredError != null) return requiredError;
-              return value!.trim().contains('@')
-                  ? null
-                  : 'Введите корректный email';
+              final email = value?.trim() ?? '';
+              if (email.isEmpty) {
+                return _passwordController.text.isEmpty
+                    ? null
+                    : 'Укажите email вместе с паролем';
+              }
+              return email.contains('@') ? null : 'Введите корректный email';
             },
           ),
           const SizedBox(height: 12),
@@ -208,8 +199,8 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
             controller: _passwordController,
             obscureText: !_showPassword,
             decoration: InputDecoration(
-              labelText: 'Пароль *',
-              helperText: 'Не менее 10 символов',
+              labelText: 'Пароль (необязательно)',
+              helperText: 'Для доступа — не менее 10 символов',
               prefixIcon: const Icon(Icons.lock_outline_rounded),
               suffixIcon: IconButton(
                 tooltip: _showPassword ? 'Скрыть пароль' : 'Показать пароль',
@@ -219,21 +210,35 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
                 ),
               ),
             ),
-            validator: (value) => (value?.length ?? 0) < 10
-                ? 'Пароль должен содержать минимум 10 символов'
-                : null,
+            validator: (value) {
+              final password = value ?? '';
+              if (password.isEmpty) {
+                return _emailController.text.trim().isEmpty
+                    ? null
+                    : 'Укажите пароль вместе с email';
+              }
+              return password.length < 10
+                  ? 'Пароль должен содержать минимум 10 символов'
+                  : null;
+            },
           ),
           const SizedBox(height: 12),
           TextFormField(
             controller: _passwordAgainController,
             obscureText: !_showPassword,
             decoration: const InputDecoration(
-              labelText: 'Повторите пароль *',
+              labelText: 'Повторите пароль',
               prefixIcon: Icon(Icons.lock_reset_rounded),
             ),
-            validator: (value) => value != _passwordController.text
-                ? 'Пароли не совпадают'
-                : null,
+            validator: (value) {
+              if (_passwordController.text.isEmpty &&
+                  (value?.isEmpty ?? true)) {
+                return null;
+              }
+              return value != _passwordController.text
+                  ? 'Пароли не совпадают'
+                  : null;
+            },
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
@@ -252,22 +257,6 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
                 ? null
                 : (value) => setState(() => _branchId = value),
             validator: (value) => value == null ? 'Выберите филиал' : null,
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            menuMaxHeight: 256,
-            initialValue: _selectedRole,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Роль доступа *'),
-            items: [
-              for (final role in _roles)
-                DropdownMenuItem(value: role.value, child: Text(role.label)),
-            ],
-            onChanged: _saving
-                ? null
-                : (value) {
-                    if (value != null) setState(() => _selectedRole = value);
-                  },
           ),
           const SizedBox(height: 20),
           Row(

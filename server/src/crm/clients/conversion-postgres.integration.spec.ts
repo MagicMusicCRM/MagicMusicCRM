@@ -46,6 +46,8 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
   let sourceId: string;
   let studentId: string;
   let noteId: string;
+  let historyCommentId: string;
+  let historyTaskId: string;
 
   beforeAll(async () => {
     const pool = new Pool({ connectionString: testDatabaseUrl });
@@ -63,15 +65,14 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
       repository,
       new ClientWriteValidator(repository),
       new CrmPolicy(),
-      { record: jest.fn().mockResolvedValue(undefined) } as unknown as AuditService,
+      {
+        record: jest.fn().mockResolvedValue(undefined),
+      } as unknown as AuditService,
       { emitCrmChanged: jest.fn() } as unknown as RealtimeBus,
     );
     archives = new ClientArchiveService(
       database,
-      new PlatformIntegrityService(
-        database,
-        new PlatformIntegrityRepository(),
-      ),
+      new PlatformIntegrityService(database, new PlatformIntegrityRepository()),
       new CrmPolicy(),
       { emitCrmChanged: jest.fn() } as unknown as RealtimeBus,
     );
@@ -114,10 +115,7 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
         values ($1, $2, true)
         returning id
       `,
-      [
-        `conversion_${randomUUID().replace(/-/g, "")}`,
-        "Conversion source",
-      ],
+      [`conversion_${randomUUID().replace(/-/g, "")}`, "Conversion source"],
     );
     sourceId = source.rows[0]!.id;
     const lead = await database.query<{ id: string }>(
@@ -194,9 +192,28 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
       "delete from app.audit_events where action = 'crm.client_internal_note_changed' and entity_id = $1",
       [noteId],
     );
-    await database.query("delete from app.client_internal_notes where id = $1", [
-      noteId,
-    ]);
+    if (historyCommentId) {
+      await database.query(
+        "delete from app.audit_events where entity_type = 'crm:comment' and entity_id = $1",
+        [historyCommentId],
+      );
+      await database.query("delete from app.entity_comments where id = $1", [
+        historyCommentId,
+      ]);
+    }
+    if (historyTaskId) {
+      await database.query(
+        "delete from app.audit_events where entity_type = 'shared_task' and entity_id = $1",
+        [historyTaskId],
+      );
+      await database.query("delete from app.shared_tasks where id = $1", [
+        historyTaskId,
+      ]);
+    }
+    await database.query(
+      "delete from app.client_internal_notes where id = $1",
+      [noteId],
+    );
     await database.query(
       `
         delete from app.idempotency_records
@@ -251,7 +268,9 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
         "delete from app.user_crm_links where entity_id = any($1::uuid[])",
         [[leadId, studentId]],
       );
-      await database.query("delete from app.students where id = $1", [studentId]);
+      await database.query("delete from app.students where id = $1", [
+        studentId,
+      ]);
       if (identity.rows[0]) {
         await database.query("delete from app.profiles where id = $1", [
           identity.rows[0].profile_id,
@@ -262,16 +281,17 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
       }
     }
     await database.query("delete from app.leads where id = $1", [leadId]);
-    await database.query("delete from app.lead_sources where id = $1", [sourceId]);
+    await database.query("delete from app.lead_sources where id = $1", [
+      sourceId,
+    ]);
     await database.query(
       "delete from app.client_custom_field_definitions where id = any($1::uuid[])",
       [[leadDefinitionId, studentDefinitionId]],
     );
     await database.query("delete from app.branches where id = $1", [branchId]);
-    await database.query(
-      "delete from app.users where id = any($1::uuid[])",
-      [[managerId, directorId, linkedUserId, adminId]],
-    );
+    await database.query("delete from app.users where id = any($1::uuid[])", [
+      [managerId, directorId, linkedUserId, adminId],
+    ]);
     await database.onModuleDestroy();
   });
 
@@ -353,8 +373,12 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
         { expectedVersion: 1, body: "Конкурирующая правка" },
       ),
     ]);
-    expect(concurrent.filter((item) => item.status === "fulfilled")).toHaveLength(1);
-    expect(concurrent.filter((item) => item.status === "rejected")).toHaveLength(1);
+    expect(
+      concurrent.filter((item) => item.status === "fulfilled"),
+    ).toHaveLength(1);
+    expect(
+      concurrent.filter((item) => item.status === "rejected"),
+    ).toHaveLength(1);
     await expect(
       internalContext.getNote(
         { userId: linkedUserId, role: "client" },
@@ -386,6 +410,56 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
       entityId: leadId,
       metadata: { reason: null },
     });
+    const historyComment = await database.query<{ id: string }>(
+      `insert into app.entity_comments (
+         entity_type, entity_id, author_id, body, kind, shared_with_teacher
+       ) values ('student', $1, $2, 'PRIVATE-HISTORY-COMMENT', 'teacher_note', true)
+       returning id`,
+      [studentId, adminId],
+    );
+    historyCommentId = historyComment.rows[0]!.id;
+    await new AuditService(database).record({
+      actor: { userId: adminId, role: "admin" },
+      action: "crm.comment_created",
+      entityType: "student",
+      entityId: studentId,
+      metadata: { commentId: historyCommentId },
+    });
+    await database.query(
+      `insert into app.audit_events (
+         actor_user_id, action, entity_type, entity_id, reason,
+         before_ref, after_ref
+       ) values (
+         $1, 'crm.comment_teacher_sharing_changed', 'crm:comment', $2,
+         'crm.comment.teacher-sharing',
+         '{"sharedWithTeacher":false,"version":1}'::jsonb,
+         '{"sharedWithTeacher":true,"version":2}'::jsonb
+       )`,
+      [adminId, historyCommentId],
+    );
+    const historyTask = await database.query<{ id: string }>(
+      `insert into app.shared_tasks (
+         title, body, all_day, start_at, linked_entity_type,
+         linked_entity_id, created_by
+       ) values (
+         'Проверить карточку', null, true, now(), 'student', $1, $2
+       ) returning id`,
+      [studentId, adminId],
+    );
+    historyTaskId = historyTask.rows[0]!.id;
+    await new AuditService(database).record({
+      actor: { userId: adminId, role: "admin" },
+      action: "workflow.shared_task_created",
+      entityType: "shared_task",
+      entityId: historyTaskId,
+    });
+    await new AuditService(database).record({
+      actor: { userId: adminId, role: "admin" },
+      action: "crm.lead_converted",
+      entityType: "lead",
+      entityId: leadId,
+      metadata: { studentId },
+    });
     const history = await internalContext.listOperationalHistory(
       { userId: directorId, role: "director" },
       { type: "student", id: studentId },
@@ -414,8 +488,34 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
           actorName: "Анна Администратор",
           occurredAt: expect.anything(),
         }),
+        expect.objectContaining({
+          actionKey: "crm.lead_converted",
+          action: "Лид конвертирован в ученика",
+          reason: "Конвертация лида завершена",
+          actorName: "Анна Администратор",
+        }),
+        expect.objectContaining({
+          actionKey: "crm.comment_created",
+          action: "Комментарий добавлен",
+          reason: "Комментарий добавлен",
+          actorName: "Анна Администратор",
+        }),
+        expect.objectContaining({
+          actionKey: "crm.comment_teacher_sharing_changed",
+          action: "Видимость комментария изменена",
+          reason: "Комментарий опубликован преподавателю",
+          summary: "Опубликован преподавателю",
+          actorName: "Анна Администратор",
+        }),
+        expect.objectContaining({
+          actionKey: "workflow.shared_task_created",
+          action: "Задача создана",
+          reason: "Задача создана",
+          actorName: "Анна Администратор",
+        }),
       ]),
     );
+    expect(JSON.stringify(history)).not.toContain("PRIVATE-HISTORY-COMMENT");
 
     await expect(
       archives.archiveConvertedLead(

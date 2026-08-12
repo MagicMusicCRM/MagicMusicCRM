@@ -1,9 +1,19 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
-import { AuditService } from "../audit/audit.service";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
+import { PlatformIntegrityService } from "../platform/platform-integrity.service";
+import { assertVersionedMutationMetadata } from "../platform/versioned-mutation-metadata";
 import { CreateTeacherPayoutDto } from "./dto/create-teacher-payout.dto";
 import { SetTeacherRateDto } from "./dto/set-teacher-rate.dto";
+import {
+  DeleteTeacherPayrollEntryDto,
+  UpdateTeacherPayoutEntryDto,
+  UpdateTeacherRateEntryDto,
+} from "./dto/manage-teacher-payroll-entry.dto";
 import { TeacherStatsQuery } from "./dto/teacher-stats.query";
 import { CrmPolicy } from "./crm.policy";
 import { trimOptional } from "./crm-util";
@@ -18,10 +28,7 @@ import { trimOptional } from "./crm-util";
  * был `student_id`, а у пробного его нет.
  */
 export type TeacherStatsUnitType =
-  | "group"
-  | "individual"
-  | "group_trial"
-  | "individual_trial";
+  "group" | "individual" | "group_trial" | "individual_trial";
 
 /** Проведённое занятие для расчёта начисления (проекция, не материализуется). */
 interface PayrollLessonRow {
@@ -50,6 +57,17 @@ interface TeacherRateRow {
   teacher_id: string;
   rate: string | number;
   effective_from: Date | string;
+  created_at?: Date | string;
+  author_first_name?: string | null;
+  author_last_name?: string | null;
+}
+
+export interface TeacherRateEntry {
+  id: string | null;
+  rate: number;
+  effectiveFrom: string;
+  createdAt: Date | string | null;
+  authorName: string | null;
 }
 
 interface TeacherPayoutRow {
@@ -75,8 +93,8 @@ interface TeacherPayoutRow {
 export class PayrollService {
   constructor(
     private readonly database: DatabaseService,
-    private readonly audit: AuditService,
     private readonly policy: CrmPolicy,
+    private readonly integrity: PlatformIntegrityService,
   ) {}
 
   /** Дата в формате yyyy-mm-dd без сдвига часового пояса для date-колонок PG. */
@@ -105,7 +123,7 @@ export class PayrollService {
    */
   private computeLessonAccrual(
     lesson: PayrollLessonRow,
-    ratesByTeacher: Map<string, Array<{ rate: number; effectiveFrom: string }>>,
+    ratesByTeacher: Map<string, TeacherRateEntry[]>,
   ): { hours: number; rate: number; coefficient: number; amount: number } {
     const hours = Number(lesson.duration_minutes ?? 0) / 60;
     if (
@@ -249,23 +267,35 @@ export class PayrollService {
   /** История ставок педагогов, отсортированная по effective_from. */
   private async loadTeacherRates(
     teacherIds: string[],
-  ): Promise<Map<string, Array<{ rate: number; effectiveFrom: string }>>> {
-    const map = new Map<string, Array<{ rate: number; effectiveFrom: string }>>();
+  ): Promise<Map<string, TeacherRateEntry[]>> {
+    const map = new Map<string, TeacherRateEntry[]>();
     if (!teacherIds.length) return map;
     const result = await this.database.query<TeacherRateRow>(
       `
-        select teacher_id, rate, effective_from
-        from app.teacher_rates
-        where teacher_id = any($1::uuid[])
-        order by teacher_id, effective_from asc, created_at asc, id asc
+        select tr.id, tr.teacher_id, tr.rate, tr.effective_from, tr.created_at,
+          author.first_name as author_first_name,
+          author.last_name as author_last_name
+        from app.teacher_rates tr
+        left join app.users u on u.id = tr.created_by and u.deleted_at is null
+        left join app.profiles author
+          on author.user_id = u.id and author.deleted_at is null
+        where tr.teacher_id = any($1::uuid[])
+          and tr.deleted_at is null
+        order by tr.teacher_id, tr.effective_from asc, tr.created_at asc, tr.id asc
       `,
       [teacherIds],
     );
     for (const row of result.rows) {
       const list = map.get(row.teacher_id) ?? [];
       list.push({
+        id: row.id ?? null,
         rate: Number(row.rate),
         effectiveFrom: this.toDateOnly(row.effective_from),
+        createdAt: row.created_at ?? null,
+        authorName:
+          [row.author_first_name, row.author_last_name]
+            .filter(Boolean)
+            .join(" ") || null,
       });
       map.set(row.teacher_id, list);
     }
@@ -279,6 +309,23 @@ export class PayrollService {
    */
   async getTeacherPayroll(actor: ActorContext, teacherId: string) {
     this.policy.assertCanReadPayroll(actor);
+    const header = await this.database.query<{
+      id: string;
+      version: string | number;
+    }>(
+      `
+        select t.id, coalesce(aggregate.version, 0) as version
+        from app.teachers t
+        left join app.aggregate_versions aggregate
+          on aggregate.aggregate_type = 'teacher:payroll'
+          and aggregate.aggregate_id = t.id::text
+        where t.id = $1 and t.deleted_at is null
+      `,
+      [teacherId],
+    );
+    if (!header.rows[0]) {
+      throw new NotFoundException("Преподаватель не найден.");
+    }
     const lessons = await this.loadPayrollLessons({ teacherId });
     const rates = await this.loadTeacherRates([teacherId]);
     let accruedTotal = 0;
@@ -321,6 +368,7 @@ export class PayrollService {
     }
     return {
       teacherId,
+      version: Number(header.rows[0].version),
       hoursTotal: this.round2(hoursTotal),
       completedLessons: lessons.length,
       payableLessons,
@@ -351,39 +399,86 @@ export class PayrollService {
     actor: ActorContext,
     teacherId: string,
     dto: CreateTeacherPayoutDto,
+    metadata: { idempotencyKey: string; requestId: string },
   ) {
     this.policy.assertCanReadPayroll(actor);
-    const teacher = await this.database.query<{ id: string }>(
-      `select id from app.teachers where id = $1 and deleted_at is null`,
-      [teacherId],
-    );
-    if (!teacher.rows[0]) {
-      throw new NotFoundException("Преподаватель не найден.");
+    assertVersionedMutationMetadata(metadata);
+    const reasonText = dto.reasonText.trim();
+    if (!reasonText) {
+      throw new BadRequestException("Укажите причину операции.");
     }
-    const result = await this.database.query<TeacherPayoutRow>(
-      `
-        insert into app.teacher_payouts
-          (teacher_id, amount, kind, comment, paid_at, created_by)
-        values ($1, $2, $3, $4, coalesce($5::timestamptz, now()), $6)
-        returning id, teacher_id, amount, kind, comment, paid_at
-      `,
-      [
+    const result = await this.integrity.executeVersionedMutation({
+      actorKey: actor.userId,
+      actorUserId: actor.userId,
+      operation: "crm.teacher-payout.create",
+      idempotencyKey: metadata.idempotencyKey,
+      payload: {
         teacherId,
-        dto.amount,
-        dto.kind,
-        trimOptional(dto.comment),
-        dto.paidAt ?? null,
-        actor.userId,
-      ],
-    );
-    const payout = result.rows[0];
-    await this.audit.record({
-      actor,
-      action: "crm.teacher_payout_created",
-      entityType: "teacher",
-      entityId: teacherId,
-      metadata: { kind: dto.kind, amount: dto.amount },
+        kind: dto.kind,
+        amount: dto.amount,
+        comment: trimOptional(dto.comment),
+        paidAt: dto.paidAt ?? null,
+        reasonText,
+      },
+      aggregateType: "teacher:payroll",
+      aggregateId: teacherId,
+      expectedVersion: dto.expectedVersion,
+      requestId: metadata.requestId,
+      authorization: {
+        actor,
+        capabilityKey: "commerce.teacher_payroll.write",
+      },
+      audit: {
+        action: "crm.teacher_payout_created",
+        entityType: "teacher",
+        entityId: teacherId,
+        reason: "TEACHER_PAYOUT",
+        reasonText,
+        metadata: { kind: dto.kind },
+      },
+      outbox: {
+        type: "crm.teacher_payroll.changed",
+        payload: { action: dto.kind, entityId: teacherId },
+      },
+      mutate: async (client) => {
+        const teacher = await client.query<{ id: string }>(
+          `select id from app.teachers where id = $1 and deleted_at is null`,
+          [teacherId],
+        );
+        if (!teacher.rows[0]) {
+          throw new NotFoundException("Преподаватель не найден.");
+        }
+        const inserted = await client.query<{ id: string }>(
+          `
+            insert into app.teacher_payouts
+              (teacher_id, amount, kind, comment, paid_at, created_by)
+            values ($1, $2, $3, $4, coalesce($5::timestamptz, now()), $6)
+            returning id
+          `,
+          [
+            teacherId,
+            dto.amount,
+            dto.kind,
+            trimOptional(dto.comment),
+            dto.paidAt ?? null,
+            actor.userId,
+          ],
+        );
+        return { payoutId: inserted.rows[0].id };
+      },
     });
+    const payoutResult = await this.database.query<TeacherPayoutRow>(
+      `
+        select id, teacher_id, amount, kind, comment, paid_at
+        from app.teacher_payouts
+        where id = $1 and deleted_at is null
+      `,
+      [String(result.resultRef.payoutId)],
+    );
+    const payout = payoutResult.rows[0];
+    if (!payout) {
+      throw new NotFoundException("Выплата преподавателю не найдена.");
+    }
     return {
       id: payout.id,
       teacherId: payout.teacher_id,
@@ -391,6 +486,8 @@ export class PayrollService {
       amount: Number(payout.amount),
       comment: payout.comment,
       paidAt: payout.paid_at,
+      version: result.version,
+      replayed: result.replayed,
     };
   }
 
@@ -399,40 +496,343 @@ export class PayrollService {
     actor: ActorContext,
     teacherId: string,
     dto: SetTeacherRateDto,
+    metadata: { idempotencyKey: string; requestId: string },
   ) {
     this.policy.assertCanReadPayroll(actor);
-    const teacher = await this.database.query<{ id: string }>(
-      `select id from app.teachers where id = $1 and deleted_at is null`,
-      [teacherId],
-    );
-    if (!teacher.rows[0]) {
-      throw new NotFoundException("Преподаватель не найден.");
+    assertVersionedMutationMetadata(metadata);
+    const reasonText = dto.reasonText.trim();
+    if (!reasonText) {
+      throw new BadRequestException("Укажите причину изменения ставки.");
     }
-    const result = await this.database.query<TeacherRateRow>(
-      `
-        insert into app.teacher_rates (
-          teacher_id, rate, effective_from, created_by, created_at
-        )
-        values (
-          $1, $2, coalesce($3::date, current_date), $4, clock_timestamp()
-        )
-        returning id, teacher_id, rate, effective_from
-      `,
-      [teacherId, dto.rate, dto.effectiveFrom ?? null, actor.userId],
-    );
-    const rate = result.rows[0];
-    await this.audit.record({
-      actor,
-      action: "crm.teacher_rate_set",
-      entityType: "teacher",
-      entityId: teacherId,
-      metadata: { rate: dto.rate, effectiveFrom: dto.effectiveFrom ?? null },
+    const result = await this.integrity.executeVersionedMutation({
+      actorKey: actor.userId,
+      actorUserId: actor.userId,
+      operation: "crm.teacher-rate.create",
+      idempotencyKey: metadata.idempotencyKey,
+      payload: {
+        teacherId,
+        rate: dto.rate,
+        effectiveFrom: dto.effectiveFrom ?? null,
+        reasonText,
+      },
+      aggregateType: "teacher:payroll",
+      aggregateId: teacherId,
+      expectedVersion: dto.expectedVersion,
+      requestId: metadata.requestId,
+      authorization: {
+        actor,
+        capabilityKey: "commerce.teacher_payroll.write",
+      },
+      audit: {
+        action: "crm.teacher_rate_set",
+        entityType: "teacher",
+        entityId: teacherId,
+        reason: "TEACHER_RATE_CHANGE",
+        reasonText,
+      },
+      outbox: {
+        type: "crm.teacher_payroll.changed",
+        payload: { action: "rate_changed", entityId: teacherId },
+      },
+      mutate: async (client) => {
+        const teacher = await client.query<{ id: string }>(
+          `select id from app.teachers where id = $1 and deleted_at is null`,
+          [teacherId],
+        );
+        if (!teacher.rows[0]) {
+          throw new NotFoundException("Преподаватель не найден.");
+        }
+        const inserted = await client.query<{ id: string }>(
+          `
+            insert into app.teacher_rates (
+              teacher_id, rate, effective_from, created_by, created_at
+            )
+            values (
+              $1, $2, coalesce($3::date, current_date), $4, clock_timestamp()
+            )
+            returning id
+          `,
+          [teacherId, dto.rate, dto.effectiveFrom ?? null, actor.userId],
+        );
+        return { entryId: inserted.rows[0].id };
+      },
     });
+    const rateResult = await this.database.query<TeacherRateRow>(
+      `
+        select id, teacher_id, rate, effective_from, created_at
+        from app.teacher_rates
+        where id = $1
+      `,
+      [String(result.resultRef.entryId)],
+    );
+    const rate = rateResult.rows[0];
+    if (!rate) {
+      throw new NotFoundException("Запись ставки преподавателя не найдена.");
+    }
     return {
       id: rate.id,
       teacherId: rate.teacher_id,
       rate: Number(rate.rate),
       effectiveFrom: this.toDateOnly(rate.effective_from),
+      version: result.version,
+      replayed: result.replayed,
+    };
+  }
+
+  async updateTeacherRate(
+    actor: ActorContext,
+    teacherId: string,
+    entryId: string,
+    dto: UpdateTeacherRateEntryDto,
+    metadata: { idempotencyKey: string; requestId: string },
+  ) {
+    this.policy.assertCanManagePayrollHistory(actor);
+    assertVersionedMutationMetadata(metadata);
+    const reasonText = dto.reasonText.trim();
+    if (!reasonText) {
+      throw new BadRequestException("Укажите причину исправления ставки.");
+    }
+    const result = await this.integrity.executeVersionedMutation({
+      actorKey: actor.userId,
+      actorUserId: actor.userId,
+      operation: "crm.teacher-rate.update",
+      idempotencyKey: metadata.idempotencyKey,
+      payload: {
+        teacherId,
+        entryId,
+        rate: dto.rate,
+        effectiveFrom: dto.effectiveFrom,
+        reasonText,
+      },
+      aggregateType: "teacher:payroll",
+      aggregateId: teacherId,
+      expectedVersion: dto.expectedVersion,
+      requestId: metadata.requestId,
+      authorization: {
+        actor,
+        capabilityKey: "commerce.teacher_payroll.write",
+      },
+      audit: {
+        action: "crm.teacher_rate_updated",
+        entityType: "teacher",
+        entityId: teacherId,
+        reason: "TEACHER_RATE_CORRECTION",
+        reasonText,
+        beforeRef: { entryId },
+      },
+      outbox: {
+        type: "crm.teacher_payroll.changed",
+        payload: { action: "rate_updated", entityId: teacherId, entryId },
+      },
+      mutate: async (client) => {
+        const updated = await client.query<{ id: string }>(
+          `update app.teacher_rates
+           set rate = $3, effective_from = $4::date,
+             updated_at = clock_timestamp(), updated_by = $5
+           where id = $1 and teacher_id = $2 and deleted_at is null
+           returning id`,
+          [entryId, teacherId, dto.rate, dto.effectiveFrom, actor.userId],
+        );
+        if (!updated.rows[0]) {
+          throw new NotFoundException("Запись ставки преподавателя не найдена.");
+        }
+        return { entryId };
+      },
+    });
+    return {
+      id: entryId,
+      teacherId,
+      rate: dto.rate,
+      effectiveFrom: dto.effectiveFrom,
+      version: result.version,
+      replayed: result.replayed,
+    };
+  }
+
+  async deleteTeacherRate(
+    actor: ActorContext,
+    teacherId: string,
+    entryId: string,
+    dto: DeleteTeacherPayrollEntryDto,
+    metadata: { idempotencyKey: string; requestId: string },
+  ) {
+    this.policy.assertCanManagePayrollHistory(actor);
+    return this.voidPayrollEntry(
+      actor,
+      teacherId,
+      entryId,
+      dto,
+      metadata,
+      "rate",
+    );
+  }
+
+  async updateTeacherPayout(
+    actor: ActorContext,
+    teacherId: string,
+    entryId: string,
+    dto: UpdateTeacherPayoutEntryDto,
+    metadata: { idempotencyKey: string; requestId: string },
+  ) {
+    this.policy.assertCanManagePayrollHistory(actor);
+    assertVersionedMutationMetadata(metadata);
+    const reasonText = dto.reasonText.trim();
+    if (!reasonText) {
+      throw new BadRequestException("Укажите причину исправления выплаты.");
+    }
+    const result = await this.integrity.executeVersionedMutation({
+      actorKey: actor.userId,
+      actorUserId: actor.userId,
+      operation: "crm.teacher-payout.update",
+      idempotencyKey: metadata.idempotencyKey,
+      payload: {
+        teacherId,
+        entryId,
+        kind: dto.kind,
+        amount: dto.amount,
+        comment: trimOptional(dto.comment),
+        paidAt: dto.paidAt,
+        reasonText,
+      },
+      aggregateType: "teacher:payroll",
+      aggregateId: teacherId,
+      expectedVersion: dto.expectedVersion,
+      requestId: metadata.requestId,
+      authorization: {
+        actor,
+        capabilityKey: "commerce.teacher_payroll.write",
+      },
+      audit: {
+        action: "crm.teacher_payout_updated",
+        entityType: "teacher",
+        entityId: teacherId,
+        reason: "TEACHER_PAYOUT_CORRECTION",
+        reasonText,
+        beforeRef: { entryId },
+      },
+      outbox: {
+        type: "crm.teacher_payroll.changed",
+        payload: { action: "payout_updated", entityId: teacherId, entryId },
+      },
+      mutate: async (client) => {
+        const updated = await client.query<{ id: string }>(
+          `update app.teacher_payouts
+           set kind = $3, amount = $4, comment = $5,
+             paid_at = $6::timestamptz, updated_at = clock_timestamp(),
+             updated_by = $7
+           where id = $1 and teacher_id = $2 and deleted_at is null
+           returning id`,
+          [
+            entryId,
+            teacherId,
+            dto.kind,
+            dto.amount,
+            trimOptional(dto.comment),
+            dto.paidAt,
+            actor.userId,
+          ],
+        );
+        if (!updated.rows[0]) {
+          throw new NotFoundException("Выплата преподавателю не найдена.");
+        }
+        return { entryId };
+      },
+    });
+    return {
+      id: entryId,
+      teacherId,
+      kind: dto.kind,
+      amount: dto.amount,
+      comment: trimOptional(dto.comment),
+      paidAt: dto.paidAt,
+      version: result.version,
+      replayed: result.replayed,
+    };
+  }
+
+  async deleteTeacherPayout(
+    actor: ActorContext,
+    teacherId: string,
+    entryId: string,
+    dto: DeleteTeacherPayrollEntryDto,
+    metadata: { idempotencyKey: string; requestId: string },
+  ) {
+    this.policy.assertCanManagePayrollHistory(actor);
+    return this.voidPayrollEntry(
+      actor,
+      teacherId,
+      entryId,
+      dto,
+      metadata,
+      "payout",
+    );
+  }
+
+  private async voidPayrollEntry(
+    actor: ActorContext,
+    teacherId: string,
+    entryId: string,
+    dto: DeleteTeacherPayrollEntryDto,
+    metadata: { idempotencyKey: string; requestId: string },
+    kind: "rate" | "payout",
+  ) {
+    assertVersionedMutationMetadata(metadata);
+    const reasonText = dto.reasonText.trim();
+    if (!reasonText) {
+      throw new BadRequestException("Укажите причину удаления записи.");
+    }
+    const table = kind === "rate" ? "teacher_rates" : "teacher_payouts";
+    const result = await this.integrity.executeVersionedMutation({
+      actorKey: actor.userId,
+      actorUserId: actor.userId,
+      operation: `crm.teacher-${kind}.delete`,
+      idempotencyKey: metadata.idempotencyKey,
+      payload: { teacherId, entryId, reasonText },
+      aggregateType: "teacher:payroll",
+      aggregateId: teacherId,
+      expectedVersion: dto.expectedVersion,
+      requestId: metadata.requestId,
+      authorization: {
+        actor,
+        capabilityKey: "commerce.teacher_payroll.write",
+      },
+      audit: {
+        action: `crm.teacher_${kind}_deleted`,
+        entityType: "teacher",
+        entityId: teacherId,
+        reason: kind === "rate" ? "TEACHER_RATE_DELETE" : "TEACHER_PAYOUT_DELETE",
+        reasonText,
+        beforeRef: { entryId },
+      },
+      outbox: {
+        type: "crm.teacher_payroll.changed",
+        payload: { action: `${kind}_deleted`, entityId: teacherId, entryId },
+      },
+      mutate: async (client) => {
+        const deleted = await client.query<{ id: string }>(
+          `update app.${table}
+           set deleted_at = clock_timestamp(), deleted_by = $3,
+             updated_at = clock_timestamp(), updated_by = $3
+           where id = $1 and teacher_id = $2 and deleted_at is null
+           returning id`,
+          [entryId, teacherId, actor.userId],
+        );
+        if (!deleted.rows[0]) {
+          throw new NotFoundException(
+            kind === "rate"
+              ? "Запись ставки преподавателя не найдена."
+              : "Выплата преподавателю не найдена.",
+          );
+        }
+        return { entryId };
+      },
+    });
+    return {
+      id: entryId,
+      teacherId,
+      deleted: true,
+      version: result.version,
+      replayed: result.replayed,
     };
   }
 
@@ -448,8 +848,20 @@ export class PayrollService {
     const now = new Date();
     const from =
       query.from ??
-      new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
-    const to = query.to ?? null;
+      new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+      ).toISOString();
+    const fromDate = new Date(from);
+    const to =
+      query.to ??
+      new Date(
+        Date.UTC(fromDate.getUTCFullYear(), fromDate.getUTCMonth() + 1, 1),
+      ).toISOString();
+    if (new Date(from).getTime() >= new Date(to).getTime()) {
+      throw new BadRequestException(
+        "Начало периода должно быть раньше окончания.",
+      );
+    }
     const lessons = (
       await this.loadPayrollLessons({
         teacherId: query.teacherId,
@@ -465,11 +877,76 @@ export class PayrollService {
       if (query.unitType === "trial") return lesson.is_trial;
       return this.unitTypeFor(lesson) === query.unitType;
     });
-    const teacherIds = [...new Set(lessons.map((l) => l.teacher_id))];
+    const lessonTeacherIds = [...new Set(lessons.map((l) => l.teacher_id))];
+    const rates = await this.loadTeacherRates(lessonTeacherIds);
+    // The report must not lose a teacher who only has a payout/bonus/deduction
+    // in the period. For a branch or unit slice such a movement cannot be
+    // attributed safely, so movement-only rows are included only school-wide.
+    const namesResult = await this.database.query<{
+      id: string;
+      name: string;
+      salary: string | number | null;
+    }>(
+      `
+        select t.id, t.salary,
+          trim(coalesce(p.first_name, '') || ' ' || coalesce(p.last_name, '')) as name
+        from app.teachers t
+        left join app.profiles p on p.id = t.profile_id and p.deleted_at is null
+        where t.deleted_at is null
+          and ($1::uuid is null or t.id = $1)
+          and (
+            t.id = any($2::uuid[])
+            or (
+              $3::boolean
+              and exists (
+                select 1
+                from app.teacher_payouts movement
+                where movement.teacher_id = t.id
+                  and movement.deleted_at is null
+                  and movement.paid_at >= $4::timestamptz
+                  and movement.paid_at < $5::timestamptz
+              )
+            )
+          )
+          and ($6::text is null or t.status = $6)
+          and (
+            $7::text is null
+            or exists (
+              select 1
+              from app.teacher_disciplines td
+              join app.disciplines d
+                on d.id = td.discipline_id and d.deleted_at is null
+              where td.teacher_id = t.id and lower(d.name) = lower($7)
+            )
+            -- Legacy rows carry the discipline as free text instead of the m2m.
+            or lower(coalesce(t.specialization, '')) like '%' || lower($7) || '%'
+          )
+          and (
+            $8::text is null
+            or lower(
+              coalesce(t.custom_data->>'categories', t.custom_data->>'category', '')
+            ) like '%' || lower($8) || '%'
+          )
+      `,
+      [
+        query.teacherId ?? null,
+        lessonTeacherIds,
+        !query.branchId && !query.unitType,
+        from,
+        to,
+        query.status ?? null,
+        query.discipline ?? null,
+        query.category ?? null,
+      ],
+    );
+    const teacherIds = namesResult.rows.map((row) => row.id);
     if (!teacherIds.length) {
       return {
         from,
         to,
+        movementsScope: query.branchId
+          ? "teacher_period_all_branches"
+          : "teacher_period",
         items: [],
         totals: {
           completedLessons: 0,
@@ -484,48 +961,16 @@ export class PayrollService {
         },
       };
     }
-    const rates = await this.loadTeacherRates(teacherIds);
-    // Doubles as the teacher-attribute filter: a teacher missing from this
-    // result is dropped from the report below, so status/discipline/category
-    // need no second pass over the lessons.
-    const namesResult = await this.database.query<{
-      id: string;
-      name: string;
-      salary: string | number | null;
-    }>(
-      `
-        select t.id, t.salary,
-          trim(coalesce(p.first_name, '') || ' ' || coalesce(p.last_name, '')) as name
-        from app.teachers t
-        left join app.profiles p on p.id = t.profile_id and p.deleted_at is null
-        where t.id = any($1::uuid[])
-          and ($2::text is null or t.status = $2)
-          and (
-            $3::text is null
-            or exists (
-              select 1
-              from app.teacher_disciplines td
-              join app.disciplines d
-                on d.id = td.discipline_id and d.deleted_at is null
-              where td.teacher_id = t.id and lower(d.name) = lower($3)
-            )
-            -- Legacy rows carry the discipline as free text instead of the m2m.
-            or lower(coalesce(t.specialization, '')) like '%' || lower($3) || '%'
-          )
-          and (
-            $4::text is null
-            or lower(
-              coalesce(t.custom_data->>'categories', t.custom_data->>'category', '')
-            ) like '%' || lower($4) || '%'
-          )
-      `,
-      [
-        teacherIds,
-        query.status ?? null,
-        query.discipline ?? null,
-        query.category ?? null,
-      ],
+    const lessonTeacherIdSet = new Set(lessonTeacherIds);
+    const movementOnlyTeacherIds = teacherIds.filter(
+      (teacherId) => !lessonTeacherIdSet.has(teacherId),
     );
+    const movementOnlyRates = await this.loadTeacherRates(
+      movementOnlyTeacherIds,
+    );
+    for (const [teacherId, entries] of movementOnlyRates) {
+      rates.set(teacherId, entries);
+    }
     const teacherNames = new Map(
       namesResult.rows.map((row) => [row.id, row.name || "Без имени"]),
     );
@@ -578,6 +1023,8 @@ export class PayrollService {
       // Lesson ids behind this unit: the report's drill-down sets the
       // per-lesson rate, and only an id can address a lesson.
       lessonIds: string[];
+      editableLessonIds: string[];
+      settledLessons: number;
       completedLessons: number;
       payableLessons: number;
       hoursTotal: number;
@@ -593,6 +1040,15 @@ export class PayrollService {
         units: Map<string, UnitAcc>;
       }
     >();
+    for (const teacherId of teacherIds) {
+      teachers.set(teacherId, {
+        completedLessons: 0,
+        payableLessons: 0,
+        hoursTotal: 0,
+        accruedTotal: 0,
+        units: new Map<string, UnitAcc>(),
+      });
+    }
     for (const lesson of lessons) {
       // teacherNames holds exactly the teachers that passed the status/
       // discipline/category filter above.
@@ -612,13 +1068,16 @@ export class PayrollService {
         groupId: lesson.group_id,
         studentId: lesson.group_id ? null : lesson.student_id,
         unitName: this.unitNameFor(lesson),
-        teacherRate: lesson.settlement_fact_id != null
-          ? rate
-          : lesson.group_rate === null || lesson.group_rate === undefined
-            ? null
-            : Number(lesson.group_rate),
+        teacherRate:
+          lesson.settlement_fact_id != null
+            ? rate
+            : lesson.group_rate === null || lesson.group_rate === undefined
+              ? null
+              : Number(lesson.group_rate),
         days: new Map<string, number>(),
         lessonIds: [],
+        editableLessonIds: [],
+        settledLessons: 0,
         completedLessons: 0,
         payableLessons: 0,
         hoursTotal: 0,
@@ -626,6 +1085,11 @@ export class PayrollService {
       };
       teacher.units.set(unitKey, unit);
       unit.lessonIds.push(lesson.id);
+      if (lesson.settlement_fact_id == null) {
+        unit.editableLessonIds.push(lesson.id);
+      } else {
+        unit.settledLessons += 1;
+      }
       unit.completedLessons += 1;
       teacher.completedLessons += 1;
       if (amount > 0) {
@@ -701,6 +1165,9 @@ export class PayrollService {
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([date, hours]) => ({ date, hours: this.round2(hours) })),
           lessonIds: unit.lessonIds,
+          editableLessonIds: unit.editableLessonIds,
+          settledLessons: unit.settledLessons,
+          compensationLocked: unit.settledLessons > 0,
           completedLessons: unit.completedLessons,
           payableLessons: unit.payableLessons,
           noAccrualLessons: unit.completedLessons - unit.payableLessons,
@@ -713,6 +1180,9 @@ export class PayrollService {
     return {
       from,
       to,
+      movementsScope: query.branchId
+        ? "teacher_period_all_branches"
+        : "teacher_period",
       items,
       totals: {
         hoursTotal: this.round2(totals.hoursTotal),
@@ -745,6 +1215,8 @@ export class PayrollService {
         group_trial: "Групповой пробный",
         individual_trial: "Индивидуальный пробный",
       })[unitType] ?? "Индивидуально";
+    const excelText = (value: string) =>
+      /^[=+\-@]/.test(value) ? `'${value}` : value;
     const rows: string[][] = [
       [
         "Преподаватель",
@@ -765,10 +1237,12 @@ export class PayrollService {
     for (const item of report.items) {
       for (const unit of item.units) {
         rows.push([
-          item.teacherName,
-          unit.unitName,
-          unitTypeLabel(unit.unitType),
-          unit.days.map((day) => day.date).join(" "),
+          excelText(item.teacherName),
+          excelText(unit.unitName),
+          excelText(unitTypeLabel(unit.unitType)),
+          unit.days
+            .map((day) => `${day.date} (${day.hours} астр.ч.)`)
+            .join(" "),
           String(unit.completedLessons),
           String(unit.payableLessons),
           String(unit.hoursTotal),
@@ -782,7 +1256,7 @@ export class PayrollService {
         ]);
       }
       rows.push([
-        item.teacherName,
+        excelText(item.teacherName),
         "ИТОГО по преподавателю",
         "",
         "",
@@ -817,8 +1291,6 @@ export class PayrollService {
       /[";\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
     // ';' separator + BOM: Excel with RU locale splits on ';', and without the
     // BOM it renders UTF-8 Cyrillic as mojibake.
-    return (
-      "﻿" + rows.map((row) => row.map(escape).join(";")).join("\r\n")
-    );
+    return "﻿" + rows.map((row) => row.map(escape).join(";")).join("\r\n");
   }
 }

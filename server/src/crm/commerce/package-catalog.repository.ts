@@ -7,6 +7,7 @@ export interface SubscriptionPackageRow {
   name: string;
   discipline_id: string | null;
   branch_id: string | null;
+  branch_name?: string | null;
   lessons_total: string | number;
   price: string | number;
   base_price_minor: string;
@@ -58,7 +59,13 @@ export class PackageCatalogRepository {
   ): Promise<SubscriptionPackageRow | null> {
     const result = await this.database.query<SubscriptionPackageRow>(
       `
-        select ${packageProjection}
+        select
+          ${packageProjection},
+          (
+            select branch.name
+            from app.branches branch
+            where branch.id = app.subscription_packages.branch_id
+          ) as branch_name
         from app.subscription_packages
         where id = $1
       `,
@@ -106,7 +113,13 @@ export class PackageCatalogRepository {
   ): Promise<SubscriptionPackageRow[]> {
     const result = await this.database.query<SubscriptionPackageRow>(
       `
-        select ${packageProjection}
+        select
+          ${packageProjection},
+          (
+            select branch.name
+            from app.branches branch
+            where branch.id = app.subscription_packages.branch_id
+          ) as branch_name
         from app.subscription_packages
         where (
           $1::boolean

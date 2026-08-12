@@ -146,6 +146,7 @@ describe("AuthService", () => {
     expect(result.user.id).toBe("user-a");
     expect(result.user.emailVerified).toBe(true);
     expect(result.session?.refreshToken).toBe("refresh-token");
+    expect(query.mock.calls[1][0]).toContain("u.is_app_account = true");
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({ action: "auth.login_password" }),
     );
@@ -196,7 +197,6 @@ describe("AuthService", () => {
           },
         ],
       })
-      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] });
 
     const result = await service.login({
@@ -207,7 +207,7 @@ describe("AuthService", () => {
     expect(result.emailOtpRequired).toBe(true);
     expect(result.session).toBeUndefined();
     expect(sessions.issueForUser).not.toHaveBeenCalled();
-    expect(query.mock.calls[3][0]).toContain("insert into app.otp_challenges");
+    expect(query.mock.calls[2][0]).toContain("insert into app.otp_challenges");
     expect(notifications.sendEmail).toHaveBeenCalledWith(
       expect.objectContaining({ template: "auth_otp" }),
     );
@@ -659,6 +659,75 @@ describe("AuthService", () => {
         action: "auth.password_changed",
         actor: { userId: "user-a", role: "client" },
       }),
+    );
+  });
+
+  it("never lets public signup claim a linked staff or teacher identity", async () => {
+    query
+      .mockResolvedValueOnce({ rows: [{ count: "0" }] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "technical-teacher-a",
+            is_app_account: false,
+            protected_person: true,
+          },
+        ],
+      });
+
+    await expect(
+      service.signup({
+        email: "teacher@example.com",
+        password: "strong-password-123",
+        fullName: "Teacher Account",
+      }),
+    ).rejects.toThrow("выдаёт директор");
+    expect(query).toHaveBeenCalledTimes(2);
+  });
+
+  it("changes the current email, timestamps it and revokes all sessions", async () => {
+    const passwordHash = await passwordService.hash("current-password-123");
+    query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "teacher-user-a",
+            email: "old@example.com",
+            password_hash: passwordHash,
+            role: "teacher",
+            email_verified_at: new Date(),
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "teacher-user-a",
+            email: "new@example.com",
+            password_hash: passwordHash,
+            role: "teacher",
+            email_verified_at: new Date(),
+          },
+        ],
+      });
+    const actor = { userId: "teacher-user-a", role: "teacher" as const };
+
+    await expect(
+      service.changeEmail(
+        actor,
+        " NEW@EXAMPLE.COM ",
+        "current-password-123",
+      ),
+    ).resolves.toMatchObject({ user: { email: "new@example.com" } });
+
+    expect(query.mock.calls[1][0]).toContain("email_changed_at = now()");
+    expect(query.mock.calls[1][1]).toEqual([
+      "teacher-user-a",
+      "new@example.com",
+    ]);
+    expect(sessions.revokeAll).toHaveBeenCalledWith(actor);
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "auth.email_changed" }),
     );
   });
 

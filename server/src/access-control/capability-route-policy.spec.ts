@@ -13,11 +13,7 @@ describe("capability route policy", () => {
     ["PATCH", "/crm/students/id", "crm.client.write"],
     ["GET", "/crm/clients/student/id/internal-note", "crm.client.write"],
     ["PUT", "/crm/clients/lead/id/internal-note", "crm.client.write"],
-    [
-      "GET",
-      "/crm/clients/student/id/operational-history",
-      "crm.client.write",
-    ],
+    ["GET", "/crm/clients/student/id/operational-history", "crm.client.write"],
     ["GET", "/crm/client-pipelines", "crm.client.read.basic"],
     ["GET", "/crm/client-pipelines/revisions", "system.settings.manage"],
     ["POST", "/crm/client-pipelines/preview", "system.settings.manage"],
@@ -27,26 +23,35 @@ describe("capability route policy", () => {
     ["GET", "/crm/lessons", "schedule.lesson.read.assigned"],
     ["GET", "/crm/schedule-plans", "schedule.lesson.read.assigned"],
     ["POST", "/crm/schedule-plans", "schedule.lesson.write"],
-    ["POST", "/crm/schedule-plans/constraints/preview", "schedule.lesson.write"],
-    ["GET", "/crm/schedule-plans/id/tray", "schedule.lesson.read.assigned"],
-    ["POST", "/crm/schedule-plans/id/end/preview", "schedule.lesson.write"],
-    ["POST", "/crm/schedule-plans/id/end", "schedule.lesson.write"],
-    ["PATCH", "/crm/schedule-plans/id", "schedule.lesson.write"],
     [
-      "GET",
-      "/crm/configuration/lesson-decisions",
+      "POST",
+      "/crm/schedule-plans/constraints/preview",
       "schedule.lesson.write",
     ],
     [
       "POST",
-      "/crm/lessons/constraints/preview",
+      "/crm/schedule-plans/id/constraints/preview",
       "schedule.lesson.write",
     ],
+    ["GET", "/crm/schedule-plans/id/tray", "schedule.lesson.read.assigned"],
+    ["POST", "/crm/schedule-plans/id/end/preview", "schedule.lesson.write"],
+    ["POST", "/crm/schedule-plans/id/end", "schedule.lesson.write"],
+    ["PATCH", "/crm/schedule-plans/id", "schedule.lesson.write"],
+    ["GET", "/crm/configuration/lesson-decisions", "schedule.lesson.write"],
+    ["POST", "/crm/lessons/constraints/preview", "schedule.lesson.write"],
     ["PATCH", "/crm/lessons/id", "schedule.lesson.write"],
     ["GET", "/crm/lessons/id/settlement-history", "schedule.lesson.write"],
-    ["POST", "/crm/lessons/id/planned-settlement/preview", "schedule.lesson.write"],
+    [
+      "POST",
+      "/crm/lessons/id/planned-settlement/preview",
+      "schedule.lesson.write",
+    ],
     ["PUT", "/crm/lessons/id/planned-settlement", "schedule.lesson.write"],
-    ["POST", "/crm/lessons/id/settlement-correction/preview", "schedule.lesson.write"],
+    [
+      "POST",
+      "/crm/lessons/id/settlement-correction/preview",
+      "schedule.lesson.write",
+    ],
     ["POST", "/crm/lessons/id/settlement-correction", "schedule.lesson.write"],
     ["GET", "/crm/schedule-reference", "schedule.lesson.read.assigned"],
     [
@@ -56,8 +61,22 @@ describe("capability route policy", () => {
     ],
     ["PUT", "/crm/schedule-reference/branches/id/hours", "config.crm.edit"],
     ["POST", "/crm/branches", "config.crm.edit"],
+    ["POST", "/crm/disciplines", "config.crm.edit"],
+    ["PATCH", "/crm/disciplines/id", "config.crm.edit"],
+    ["POST", "/crm/disciplines/id/archive", "config.crm.edit"],
+    ["GET", "/crm/disciplines/id/history", "config.crm.edit"],
+    ["POST", "/crm/loss-reasons/id/restore", "config.crm.edit"],
+    ["POST", "/crm/branch-disciplines/id/unassign", "config.crm.edit"],
     ["PATCH", "/crm/branches/id", "config.crm.edit"],
+    ["POST", "/crm/branches/id/close-preview", "config.crm.edit"],
+    ["POST", "/crm/branches/id/close", "config.crm.edit"],
+    ["POST", "/crm/branches/id/restore", "config.crm.edit"],
+    ["GET", "/crm/branches/id/history", "config.crm.edit"],
     ["POST", "/crm/rooms", "config.crm.edit"],
+    ["POST", "/crm/rooms/id/archive-preview", "config.crm.edit"],
+    ["POST", "/crm/rooms/id/archive", "config.crm.edit"],
+    ["POST", "/crm/rooms/id/restore", "config.crm.edit"],
+    ["GET", "/crm/rooms/id/history", "config.crm.edit"],
     ["DELETE", "/crm/rooms/id", "config.crm.edit"],
     ["POST", "/crm/lessons/id/attendance", "schedule.attendance.write"],
     ["POST", "/crm/lessons/id/complete", "schedule.lesson.complete"],
@@ -118,9 +137,15 @@ describe("capability route policy", () => {
       "/crm/students/id/payment-records/id/reversal",
       "commerce.client_finance.write",
     ],
+    ["POST", "/crm/students/id/adjustments", "commerce.client_finance.write"],
     [
       "POST",
-      "/crm/students/id/adjustments",
+      "/crm/students/id/adjustments/id/reversal/preview",
+      "commerce.client_finance.write",
+    ],
+    [
+      "POST",
+      "/crm/students/id/adjustments/id/reversal",
       "commerce.client_finance.write",
     ],
     ["GET", "/crm/subscription-packages", "commerce.package.read"],
@@ -133,12 +158,46 @@ describe("capability route policy", () => {
       "commerce.package.manage",
     ],
     ["GET", "/crm/reports/finance", "commerce.school_finance.read"],
+    ["GET", "/crm/teachers/id/payroll", "commerce.teacher_payroll.read"],
+    ["POST", "/crm/teachers/id/payouts", "commerce.teacher_payroll.write"],
+    ["POST", "/crm/teachers/id/rates", "commerce.teacher_payroll.write"],
+    ["PATCH", "/crm/teachers/id/payouts/entry", "commerce.teacher_payroll.write"],
+    ["DELETE", "/crm/teachers/id/payouts/entry", "commerce.teacher_payroll.write"],
+    ["PATCH", "/crm/teachers/id/rates/entry", "commerce.teacher_payroll.write"],
+    ["DELETE", "/crm/teachers/id/rates/entry", "commerce.teacher_payroll.write"],
+    ["GET", "/crm/reports/teacher-stats", "commerce.teacher_payroll.read"],
+    [
+      "GET",
+      "/crm/reports/teacher-stats/export",
+      "commerce.teacher_payroll.read",
+    ],
     ["GET", "/analytics/status", "report.status.read"],
     ["GET", "/analytics/export", "report.export.xlsx"],
     ["PATCH", "/settings/admin-chat-avatar", "system.settings.manage"],
   ])("maps %s %s to %s", (method, path, expected) => {
     expect(resolveCapabilityRoutePolicy(method, path)).toMatchObject({
       capabilityKey: expected,
+    });
+  });
+
+  it("keeps payroll history correction and void director-only", () => {
+    expect(
+      resolveCapabilityRoutePolicy(
+        "PATCH",
+        "/crm/teachers/id/rates/entry",
+      ),
+    ).toMatchObject({
+      capabilityKey: "commerce.teacher_payroll.write",
+      legacyAllowedRoles: ["director", "system_admin"],
+    });
+    expect(
+      resolveCapabilityRoutePolicy(
+        "DELETE",
+        "/crm/teachers/id/payouts/entry",
+      ),
+    ).toMatchObject({
+      capabilityKey: "commerce.teacher_payroll.write",
+      legacyAllowedRoles: ["director", "system_admin"],
     });
   });
 
@@ -215,6 +274,18 @@ describe("capability route policy", () => {
     }
     expect(Object.keys(BASELINE_CAPABILITY_ROLES)).toHaveLength(
       CAPABILITY_DEFINITIONS.length,
+    );
+  });
+
+  it("keeps teacher payroll staff-scoped without exposing it to teacher or client", () => {
+    expect(BASELINE_CAPABILITY_ROLES["commerce.teacher_payroll.read"]).toEqual([
+      "admin",
+      "manager",
+      "director",
+      "system_admin",
+    ]);
+    expect(BASELINE_CAPABILITY_ROLES["commerce.teacher_payroll.write"]).toEqual(
+      BASELINE_CAPABILITY_ROLES["commerce.teacher_payroll.read"],
     );
   });
 });

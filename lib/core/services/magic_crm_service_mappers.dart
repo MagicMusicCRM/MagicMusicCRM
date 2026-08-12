@@ -114,6 +114,7 @@ Map<String, dynamic> _legacyStudentSearchItem(Map<String, dynamic> item) {
     'linked_user_email': item['linkedUserEmail'],
     'is_app_account': item['isAppAccount'] ?? false,
     'disciplines': item['disciplines'] ?? const <dynamic>[],
+    'table_custom_fields': item['tableFields'] ?? const <dynamic>[],
   };
 }
 
@@ -229,6 +230,13 @@ Map<String, dynamic> _legacyTeacher(Map<String, dynamic> item) {
     'profile_user_id': item['profileUserId'],
     'app_role': item['appRole'],
     'is_app_account': item['isAppAccount'],
+    'password_configured': item['passwordConfigured'] ?? false,
+    'password_changed_at': item['passwordChangedAt'],
+    'email_changed_at': item['emailChangedAt'],
+    'lifecycle_state': item['lifecycleState'] ?? 'active',
+    'version': item['version'] ?? 1,
+    'offboarded_at': item['offboardedAt'],
+    'offboard_reason': item['offboardReason'],
     'first_name': firstName,
     'last_name': lastName,
     'email': item['email'],
@@ -263,6 +271,13 @@ Map<String, dynamic> _legacyStaff(Map<String, dynamic> item) {
     'profile_user_id': item['profileUserId'],
     'app_role': item['appRole'],
     'is_app_account': item['isAppAccount'],
+    'password_configured': item['passwordConfigured'] ?? false,
+    'password_changed_at': item['passwordChangedAt'],
+    'email_changed_at': item['emailChangedAt'],
+    'lifecycle_state': item['lifecycleState'] ?? 'active',
+    'version': item['version'] ?? 1,
+    'offboarded_at': item['offboardedAt'],
+    'offboard_reason': item['offboardReason'],
     'first_name': item['firstName'],
     'last_name': item['lastName'],
     'email': item['email'],
@@ -306,6 +321,11 @@ Map<String, dynamic> _legacyBranch(Map<String, dynamic> item) {
     'utc_offset_minutes': item['utcOffsetMinutes'] ?? 180,
     'timezone': item['timezone'] ?? 'Europe/Moscow',
     'schedule_reference_version': item['scheduleReferenceVersion'] ?? 1,
+    'lifecycle_state': item['lifecycleState'] ?? 'active',
+    'version': (item['version'] as num?)?.toInt() ?? 1,
+    'archived_at': item['archivedAt'],
+    'archive_reason': item['archiveReason'],
+    'archive_effective_date': item['archiveEffectiveDate'],
     'created_at': item['createdAt'],
   };
 }
@@ -316,6 +336,11 @@ Map<String, dynamic> _legacyRoom(Map<String, dynamic> item) {
     'branch_id': item['branchId'],
     'name': item['name'],
     'capacity': item['capacity'],
+    'lifecycle_state': item['lifecycleState'] ?? 'active',
+    'version': (item['version'] as num?)?.toInt() ?? 1,
+    'archived_at': item['archivedAt'],
+    'archive_reason': item['archiveReason'],
+    'archive_effective_date': item['archiveEffectiveDate'],
     'created_at': item['createdAt'],
     'branches': {'id': item['branchId'], 'name': item['branchName']},
   };
@@ -337,6 +362,7 @@ Map<String, dynamic> _legacyRoomAvailability(Map<String, dynamic> item) {
 Map<String, dynamic> _legacyScheduleLesson(Map<String, dynamic> item) {
   return {
     ..._legacyLesson(item),
+    'group_participants': item['groupParticipants'] ?? const [],
     'conflict_types': item['conflictTypes'] ?? const [],
   };
 }
@@ -380,6 +406,11 @@ Map<String, dynamic> _legacyGroup(Map<String, dynamic> item) {
     'branches': {'id': item['branchId'], 'name': item['branchName']},
     'rooms': {'id': item['roomId'], 'name': item['roomName']},
     'students_count': item['studentsCount'] ?? 0,
+    'lifecycle_state': item['lifecycleState'] ?? 'active',
+    'version': item['version'] ?? 1,
+    'archived_at': item['archivedAt'],
+    'archive_reason': item['archiveReason'],
+    'archive_effective_date': item['archiveEffectiveDate'],
   };
 }
 
@@ -457,6 +488,7 @@ Map<String, dynamic> _legacyLeadBoardItem(Map<String, dynamic> item) {
     'open_tasks_count': item['openTasksCount'] ?? 0,
     'comments_count': item['commentsCount'] ?? 0,
     'trial_lessons_count': item['trialLessonsCount'] ?? 0,
+    'table_custom_fields': item['tableFields'] ?? const <dynamic>[],
   };
 }
 
@@ -502,6 +534,7 @@ Map<String, dynamic> _legacyLesson(Map<String, dynamic> item) {
     'snapshot_validation_state': item['snapshotValidationState'],
     'lifecycle_state': item['lifecycleState'],
     'reservation_state': item['reservationState'],
+    'settlement_failure_code': item['settlementFailureCode'],
     'student_first_name': studentParts.$1,
     'student_last_name': studentParts.$2,
     'teacher_first_name': teacherParts.$1,

@@ -1,4 +1,17 @@
-import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
+import { Type } from "class-transformer";
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  ValidateNested,
+} from "class-validator";
+import { BranchWeeklyHoursDto } from "../schedule/availability.dto";
 
 export class CreateBranchDto {
   @IsString()
@@ -23,4 +36,11 @@ export class CreateBranchDto {
   @IsString()
   @MaxLength(80)
   timezone?: string;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(7)
+  @ValidateNested({ each: true })
+  @Type(() => BranchWeeklyHoursDto)
+  weeklyHours!: BranchWeeklyHoursDto[];
 }

@@ -9,6 +9,7 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { CrmPolicy } from "./crm.policy";
 import { ScheduleService } from "./schedule.service";
+import { ScheduleConstraintEngine } from "./schedule/constraint-engine.service";
 
 describe("ScheduleService", () => {
   const actor = { userId: "manager-a", role: "manager" as const };
@@ -33,7 +34,10 @@ describe("ScheduleService", () => {
       // говорит «нет», чтобы утечку пришлось включить тестом осознанно.
       canReadStudentFinance: jest.fn().mockReturnValue(false),
     };
-    return { audit, notifications, policy };
+    const constraints = {
+      validate: jest.fn().mockResolvedValue({ valid: true, violations: [] }),
+    };
+    return { audit, constraints, notifications, policy };
   };
 
   const construct = (query: jest.Mock, deps: ReturnType<typeof buildDeps>) =>
@@ -50,6 +54,7 @@ describe("ScheduleService", () => {
       deps.policy as unknown as CrmPolicy,
       deps.notifications as unknown as NotificationsService,
       { emitCrmChanged: () => undefined } as unknown as RealtimeBus,
+      deps.constraints as unknown as ScheduleConstraintEngine,
     );
 
   const createService = (rows: Record<string, unknown>[] = []) => {
@@ -111,6 +116,25 @@ describe("ScheduleService", () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  it("selects live series using each branch timezone", async () => {
+    const { service, query } = createService([]);
+
+    await expect(service.extendAllSeriesHorizon()).resolves.toEqual({
+      series: 0,
+      created: 0,
+      failed: 0,
+    });
+
+    const sql = String(query.mock.calls[0]?.[0]);
+    expect(sql).toContain(
+      "join app.branches branch on branch.id = s.branch_id",
+    );
+    expect(sql).toContain(
+      "coalesce(s.timezone_name, branch.timezone_name, 'Europe/Moscow')",
+    );
+    expect(sql).not.toContain("now() at time zone 'Europe/Moscow'");
   });
 
   it("canonicalizes mixed-case advisory resource keys", async () => {
@@ -236,6 +260,23 @@ describe("ScheduleService", () => {
     });
   });
 
+  it("projects settlement failure only to staff who can repair it", async () => {
+    const client = createService([]);
+    await client.service.listLessons(
+      { userId: "client-1", role: "client" },
+      { limit: 10 },
+    );
+    const clientSql = String(client.query.mock.calls[0][0]);
+    expect(clientSql).toContain("null::text as settlement_failure_code");
+    expect(clientSql).toContain("app.lesson_settlement_plans plan");
+
+    const manager = createService([]);
+    await manager.service.listLessons(actor, { limit: 10 });
+    expect(String(manager.query.mock.calls[0][0])).toContain(
+      "plan.failure_code as settlement_failure_code",
+    );
+  });
+
   it("lists trial lessons with actor-scoped query", async () => {
     const { service, query } = createService([
       {
@@ -286,9 +327,52 @@ describe("ScheduleService", () => {
       null,
       null,
       null,
+      null,
       true,
       10,
     ]);
+  });
+
+  it("loads one exact terminal lesson without weakening actor scope", async () => {
+    const { service, query } = createService([]);
+    const lessonId = "11111111-1111-4111-8111-111111111111";
+
+    await service.listLessons(
+      { userId: "teacher-1", role: "teacher" },
+      { lessonId, limit: 1 },
+    );
+
+    const sql = String(query.mock.calls[0][0]);
+    expect(sql).toContain("$3::uuid is not null");
+    expect(sql).toContain("$3::uuid is null or l.id = $3");
+    expect(sql).toContain("$1::text = 'teacher' and tp.user_id = $2");
+    expect(query.mock.calls[0][1]).toEqual([
+      "teacher",
+      "teacher-1",
+      lessonId,
+      null,
+      null,
+      null,
+      null,
+      null,
+      1,
+    ]);
+  });
+
+  it("locks Plan series with the same deterministic keys as materialization", async () => {
+    const { service, query } = createService([]);
+
+    await service.lockSchedulePlanSeries({ query } as never, [
+      "series-b",
+      "series-a",
+      "series-a",
+    ]);
+
+    expect(
+      query.mock.calls
+        .filter((call) => String(call[0]).includes("pg_advisory_xact_lock"))
+        .map((call) => call[1][0]),
+    ).toEqual(["series:series-a", "series:series-b"]);
   });
 
   it("keeps terminal cancellation and reschedule sources out of month totals", async () => {
@@ -327,6 +411,7 @@ describe("ScheduleService", () => {
     expect(query.mock.calls[0][1]).toEqual([
       "client",
       "client-parent",
+      null,
       "student-a",
       null,
       null,
@@ -340,7 +425,9 @@ describe("ScheduleService", () => {
     const { service, query, policy } = createService([
       {
         id: "lesson-a",
-        lifecycle_state: "scheduled",
+        version: 2,
+        lifecycle_state: "settlement_pending",
+        settlement_failure_code: "ConflictException",
         student_id: "student-a",
         group_id: null,
         lead_id: null,
@@ -360,6 +447,9 @@ describe("ScheduleService", () => {
         room_name: "101",
         group_name: null,
         group_price_per_lesson: null,
+        group_participants: [
+          { clientId: "student-a", clientName: "Анна Иванова" },
+        ],
         conflict_types: ["room_overlap"],
       },
     ]);
@@ -400,7 +490,12 @@ describe("ScheduleService", () => {
     });
     expect(matrix.items[0]).toMatchObject({
       id: "lesson-a",
-      lifecycleState: "scheduled",
+      version: 2,
+      lifecycleState: "settlement_pending",
+      settlementFailureCode: "ConflictException",
+      groupParticipants: [
+        { clientId: "student-a", clientName: "Анна Иванова" },
+      ],
       conflictTypes: ["room_overlap"],
     });
     const sql = String(query.mock.calls[0][0]);
@@ -410,6 +505,11 @@ describe("ScheduleService", () => {
     expect(sql).toContain(
       "other_room.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')",
     );
+    expect(sql).toContain("select l.id, l.version, l.lifecycle_state");
+    expect(sql).toContain("app.lesson_settlement_plans plan");
+    expect(sql).toContain("app.lesson_snapshot_participants participant");
+    expect(sql).toContain("app.lesson_participant_exclusions exclusion");
+    expect(sql).toContain("then plan.failure_code else null end");
 
     expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][1]).toEqual([
@@ -497,13 +597,45 @@ describe("ScheduleService", () => {
   it("creates a schedule series and materializes lessons up to the horizon (KVA-236)", async () => {
     const { service, query, audit } = createServiceWithQueryResults([
       { rows: [{ id: "series-a" }] }, // insert series
-      { rows: [] }, // recurring conflict pre-flight
+      {
+        rows: [
+          {
+            series_date: "2026-07-21",
+            plan_id: null,
+            group_id: null,
+            teacher_id: "teacher-a",
+            branch_id: "branch-a",
+            room_id: "room-a",
+            starts_at: "2026-07-21T12:00:00.000Z",
+            ends_at: "2026-07-21T13:00:00.000Z",
+            client_refs: [{ type: "student", id: "student-a" }],
+          },
+        ],
+      }, // candidates before locks
+      {
+        rows: [
+          {
+            series_date: "2026-07-21",
+            plan_id: null,
+            group_id: null,
+            teacher_id: "teacher-a",
+            branch_id: "branch-a",
+            room_id: "room-a",
+            starts_at: "2026-07-21T12:00:00.000Z",
+            ends_at: "2026-07-21T13:00:00.000Z",
+            client_refs: [{ type: "student", id: "student-a" }],
+          },
+        ],
+      }, // candidates after locks
       { rows: [] }, // materialize insert..select
     ]);
 
     await expect(
       service.createScheduleSeries(actor, {
         studentId: "student-a",
+        teacherId: "teacher-a",
+        branchId: "branch-a",
+        roomId: "room-a",
         weekday: 2,
         beginTime: "15:00",
         durationMinutes: 60,
@@ -598,7 +730,8 @@ describe("ScheduleService", () => {
       { rows: [] }, // move future exceptions to the continuation
       { rows: [] }, // remove future untouched lessons
       { rows: [] }, // mark the old series as superseded
-      { rows: [] }, // recurring conflict pre-flight
+      { rows: [] }, // recurring candidates before locks
+      { rows: [] }, // recurring candidates after locks
       { rows: [] }, // materialize continuation
     ]);
 
@@ -802,9 +935,11 @@ describe("ScheduleService", () => {
       { rows: [] }, // reschedule notification lookup (best-effort)
     ]);
 
-    await expect(service.updateLesson(actor, "lesson-a", {
-      scheduledAt: "2026-07-16T15:00:00Z",
-    })).rejects.toMatchObject({
+    await expect(
+      service.updateLesson(actor, "lesson-a", {
+        scheduledAt: "2026-07-16T15:00:00Z",
+      }),
+    ).rejects.toMatchObject({
       response: expect.objectContaining({ code: "LESSON_TRANSITION_REQUIRED" }),
     });
     expect(query).not.toHaveBeenCalled();
@@ -1024,9 +1159,11 @@ describe("ScheduleService", () => {
       { rows: [] }, // delete from app.lesson_reminders
     ]);
 
-    await expect(service.updateLesson(actor, "lesson-a", {
-      scheduledAt: "2026-06-20T15:00:00.000Z",
-    })).rejects.toMatchObject({
+    await expect(
+      service.updateLesson(actor, "lesson-a", {
+        scheduledAt: "2026-06-20T15:00:00.000Z",
+      }),
+    ).rejects.toMatchObject({
       response: expect.objectContaining({ code: "LESSON_TRANSITION_REQUIRED" }),
     });
     expect(query).not.toHaveBeenCalled();
@@ -1076,9 +1213,11 @@ describe("ScheduleService", () => {
       { rows: [] }, // delete from app.lesson_reminders
     ]);
 
-    await expect(service.updateLesson(actor, "lesson-a", {
-      scheduledAt: "2026-06-21T18:30:00.000Z",
-    })).rejects.toMatchObject({
+    await expect(
+      service.updateLesson(actor, "lesson-a", {
+        scheduledAt: "2026-06-21T18:30:00.000Z",
+      }),
+    ).rejects.toMatchObject({
       response: expect.objectContaining({ code: "LESSON_TRANSITION_REQUIRED" }),
     });
     expect(query).not.toHaveBeenCalled();
@@ -1178,9 +1317,11 @@ describe("ScheduleService", () => {
       { rows: [{ user_id: "teacher-user-b" }] }, // resolveTeacherUserId(new)
     ]);
 
-    await expect(service.updateLesson(actor, "lesson-a", {
-      teacherId: "teacher-b",
-    })).rejects.toMatchObject({
+    await expect(
+      service.updateLesson(actor, "lesson-a", {
+        teacherId: "teacher-b",
+      }),
+    ).rejects.toMatchObject({
       response: expect.objectContaining({ code: "LESSON_TRANSITION_REQUIRED" }),
     });
     expect(query).not.toHaveBeenCalled();
@@ -1269,8 +1410,9 @@ describe("ScheduleService", () => {
       title: "Пробное занятие назначено",
       body: expect.stringContaining("по Москве"),
       data: {
-        type: "trial_lesson_booked",
-        lessonId: "lesson-lead-a",
+        entityType: "lesson",
+        entityId: "lesson-lead-a",
+        eventType: "trial_lesson_booked",
       },
       channels: ["in_app", "push"],
     });
@@ -1392,6 +1534,12 @@ describe("ScheduleService", () => {
   describe("bulk teacher rate", () => {
     it("reprices every lesson in one statement and reports the count", async () => {
       const { service, query, audit } = createServiceWithQueryResults([
+        {
+          rows: [
+            { id: "lesson-a", locked: false },
+            { id: "lesson-b", locked: false },
+          ],
+        },
         { rows: [{ id: "lesson-a" }, { id: "lesson-b" }] },
       ]);
 
@@ -1399,16 +1547,17 @@ describe("ScheduleService", () => {
         service.setLessonsTeacherRate(actor, {
           lessonIds: ["lesson-a", "lesson-b"],
           teacherRate: 0,
+          reasonText: "Исправление ставки",
         }),
       ).resolves.toEqual({
         updated: 2,
+        correctedSettled: 0,
         lessonIds: ["lesson-a", "lesson-b"],
       });
 
-      // One statement, not one per lesson: the client used to PATCH in a loop,
-      // so a failure halfway left some lessons repriced and some not.
-      expect(query).toHaveBeenCalledTimes(1);
-      expect(query.mock.calls[0][1]).toEqual([["lesson-a", "lesson-b"], 0]);
+      // One locked validation plus one atomic update, not one PATCH per lesson.
+      expect(query).toHaveBeenCalledTimes(2);
+      expect(query.mock.calls[1][1]).toEqual([["lesson-a", "lesson-b"], 0]);
       expect(audit.record).toHaveBeenCalledWith(
         expect.objectContaining({
           action: "crm.lessons_teacher_rate_bulk_set",
@@ -1419,40 +1568,110 @@ describe("ScheduleService", () => {
 
     it("keeps a rate of 0 rather than treating it as 'no rate given'", async () => {
       const { service, query } = createServiceWithQueryResults([
+        { rows: [{ id: "lesson-a", locked: false }] },
         { rows: [{ id: "lesson-a" }] },
       ]);
 
       await service.setLessonsTeacherRate(actor, {
         lessonIds: ["lesson-a"],
         teacherRate: 0,
+        reasonText: "Исправление ставки",
       });
 
       // 0 is «входит в оклад» — the whole point of the bulk pass. A `|| null`
       // anywhere in this path would silently turn it into "clear the override".
-      expect(query.mock.calls[0][1][1]).toBe(0);
+      expect(query.mock.calls[1][1][1]).toBe(0);
     });
 
     it("clears the override when no rate is given", async () => {
       const { service, query } = createServiceWithQueryResults([
+        { rows: [{ id: "lesson-a", locked: false }] },
         { rows: [{ id: "lesson-a" }] },
       ]);
 
-      await service.setLessonsTeacherRate(actor, { lessonIds: ["lesson-a"] });
+      await service.setLessonsTeacherRate(actor, {
+        lessonIds: ["lesson-a"],
+        reasonText: "Вернуть наследуемую ставку",
+      });
 
       // Sets, not coalesces: falling back to the group/history rate has to be
       // expressible, and coalesce cannot express it.
-      expect(String(query.mock.calls[0][0])).toContain(
+      expect(String(query.mock.calls[1][0])).toContain(
         "teacher_rate = $2::numeric",
       );
-      expect(query.mock.calls[0][1][1]).toBeNull();
+      expect(query.mock.calls[1][1][1]).toBeNull();
     });
 
     it("is manager-only — it writes payroll inputs across the schedule", async () => {
-      const { service, policy } = createServiceWithQueryResults([{ rows: [] }]);
+      const { service, policy } = createServiceWithQueryResults([
+        { rows: [{ id: "lesson-a", locked: false }] },
+        { rows: [{ id: "lesson-a" }] },
+      ]);
 
-      await service.setLessonsTeacherRate(actor, { lessonIds: ["lesson-a"] });
+      await service.setLessonsTeacherRate(actor, {
+        lessonIds: ["lesson-a"],
+        reasonText: "Исправление ставки",
+      });
 
       expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
+    });
+
+    it("rejects immutable settled lessons before changing any rate", async () => {
+      const { service, query, audit } = createServiceWithQueryResults([
+        { rows: [{ id: "lesson-a", locked: true }] },
+      ]);
+
+      await expect(
+        service.setLessonsTeacherRate(actor, {
+          lessonIds: ["lesson-a"],
+          teacherRate: 0,
+          reasonText: "Исправление ставки",
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: "SETTLED_TEACHER_RATE_IMMUTABLE",
+          canonicalAction: "lesson_settlement_correction",
+        }),
+      });
+
+      expect(query).toHaveBeenCalledTimes(1);
+      expect(String(query.mock.calls[0][0])).not.toContain(
+        "update app.lessons",
+      );
+      expect(audit.record).not.toHaveBeenCalled();
+    });
+
+    it("lets a director correct settled rates with a superseding fact", async () => {
+      const director = { userId: "director-a", role: "director" as const };
+      const { service, query, audit } = createServiceWithQueryResults([
+        { rows: [{ id: "lesson-a", locked: true }] },
+        { rows: [{ id: "lesson-a" }] },
+        { rows: [] },
+      ]);
+
+      await expect(
+        service.setLessonsTeacherRate(director, {
+          lessonIds: ["lesson-a"],
+          teacherRate: 900,
+          reasonText: "Исправление ошибочной ставки администратора",
+        }),
+      ).resolves.toEqual({
+        updated: 1,
+        correctedSettled: 1,
+        lessonIds: ["lesson-a"],
+      });
+
+      expect(String(query.mock.calls[2][0])).toContain(
+        "supersedes_fact_id",
+      );
+      expect(audit.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            correctedSettled: 1,
+            reason: "Исправление ошибочной ставки администратора",
+          }),
+        }),
+      );
     });
   });
 
@@ -1556,12 +1775,14 @@ describe("ScheduleService", () => {
     it("rejects force:true for every role before touching storage", async () => {
       const { service, query } = createServiceWithQueryResults([]);
 
-      await expect(service.createLesson(actor, {
-        studentId: "student-a",
-        teacherId: "teacher-a",
-        scheduledAt: "2026-07-20T10:30:00.000Z",
-        force: true,
-      })).rejects.toMatchObject({
+      await expect(
+        service.createLesson(actor, {
+          studentId: "student-a",
+          teacherId: "teacher-a",
+          scheduledAt: "2026-07-20T10:30:00.000Z",
+          force: true,
+        }),
+      ).rejects.toMatchObject({
         response: expect.objectContaining({
           message: "Обход конфликтов расписания запрещён для всех ролей.",
         }),
@@ -1604,7 +1825,9 @@ describe("ScheduleService", () => {
           scheduledAt: "2026-07-20T12:00:00.000Z",
         }),
       ).rejects.toMatchObject({
-        response: expect.objectContaining({ code: "LESSON_TRANSITION_REQUIRED" }),
+        response: expect.objectContaining({
+          code: "LESSON_TRANSITION_REQUIRED",
+        }),
       });
       expect(query).not.toHaveBeenCalled();
     });
@@ -1754,11 +1977,15 @@ describe("ScheduleService", () => {
         { rows: [] },
       ]);
 
-      await expect(service.updateLesson(actor, "lesson-a", {
-        clientRef: { type: "lead", id: "lead-b" },
-        isTrial: true,
-      })).rejects.toMatchObject({
-        response: expect.objectContaining({ code: "LESSON_TRANSITION_REQUIRED" }),
+      await expect(
+        service.updateLesson(actor, "lesson-a", {
+          clientRef: { type: "lead", id: "lead-b" },
+          isTrial: true,
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: "LESSON_TRANSITION_REQUIRED",
+        }),
       });
       expect(query).not.toHaveBeenCalled();
     });
@@ -1778,37 +2005,69 @@ describe("ScheduleService", () => {
     });
 
     it("runs the recurring conflict guard before materializing a series", async () => {
-      const { service, query } = createServiceWithQueryResults([
+      const { service, query, constraints } = createServiceWithQueryResults([
         { rows: [{ id: "series-a" }] },
-        { rows: [{ teacher_id: "teacher-a", room_id: null }] },
         {
           rows: [
             {
-              lesson_id: "busy-a",
-              title: "Занятие",
+              series_date: "2026-07-21",
+              plan_id: null,
+              group_id: null,
+              teacher_id: "teacher-a",
+              branch_id: "branch-a",
+              room_id: "room-a",
               starts_at: "2026-07-21T10:00:00.000Z",
               ends_at: "2026-07-21T11:00:00.000Z",
-              room_name: null,
-              teacher_name: "Иван",
-              teacher_hit: true,
-              room_hit: false,
+              client_refs: [{ type: "student", id: "student-a" }],
+            },
+          ],
+        },
+        {
+          rows: [
+            {
+              series_date: "2026-07-21",
+              plan_id: null,
+              group_id: null,
+              teacher_id: "teacher-a",
+              branch_id: "branch-a",
+              room_id: "room-a",
+              starts_at: "2026-07-21T10:00:00.000Z",
+              ends_at: "2026-07-21T11:00:00.000Z",
+              client_refs: [{ type: "student", id: "student-a" }],
             },
           ],
         },
       ]);
+      constraints.validate.mockResolvedValue({
+        valid: false,
+        violations: [
+          {
+            code: "TEACHER_OVERLAP",
+            resource: { type: "teacher", id: "teacher-a" },
+            conflictingLessonIds: ["busy-a"],
+            ruleIds: [],
+          },
+        ],
+      });
 
       await expect(
         service.createScheduleSeries(actor, {
           studentId: "student-a",
           teacherId: "teacher-a",
+          branchId: "branch-a",
+          roomId: "room-a",
           weekday: 1,
           beginTime: "10:00",
           validFrom: "2026-07-21",
         }),
-      ).rejects.toBeInstanceOf(ConflictException);
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: "LESSON_SERIES_CONSTRAINT_VIOLATIONS",
+        }),
+      });
 
       const conflictCall = query.mock.calls.find((call) =>
-        String(call[0]).includes("with candidates as"),
+        String(call[0]).includes("with target as"),
       );
       expect(conflictCall).toBeDefined();
       expect(

@@ -1,5 +1,6 @@
-import { AuditService } from "../audit/audit.service";
+import { BadRequestException } from "@nestjs/common";
 import { DatabaseService } from "../db/database.service";
+import { PlatformIntegrityService } from "../platform/platform-integrity.service";
 import { CrmPolicy } from "./crm.policy";
 import { PayrollService } from "./payroll.service";
 
@@ -9,17 +10,32 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
   const createServiceWithQueryResults = (
     results: { rows: Record<string, unknown>[] }[],
   ) => {
-    const query = jest.fn();
-    for (const result of results) query.mockResolvedValueOnce(result);
+    const queued = [...results];
+    const query = jest.fn().mockImplementation((sql: unknown) => {
+      if (
+        String(sql).includes("aggregate.aggregate_type = 'teacher:payroll'")
+      ) {
+        return Promise.resolve({ rows: [{ id: "t-1", version: 0 }] });
+      }
+      return Promise.resolve(queued.shift());
+    });
     const database = { query };
-    const audit = { record: jest.fn().mockResolvedValue(undefined) };
     const policy = { assertCanReadPayroll: jest.fn() };
+    const integrity = {
+      executeVersionedMutation: jest.fn(async (command: any) => ({
+        resultRef: await command.mutate({ query }, command.expectedVersion + 1),
+        version: command.expectedVersion + 1,
+        replayed: false,
+        auditId: "audit-1",
+        eventId: "event-1",
+      })),
+    };
     const service = new PayrollService(
       database as unknown as DatabaseService,
-      audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
+      integrity as unknown as PlatformIntegrityService,
     );
-    return { service, query, audit, policy };
+    return { service, query, integrity, policy };
   };
 
   const lessonRow = (over: Record<string, unknown> = {}) => ({
@@ -80,12 +96,14 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
   it("uses the effective immutable settlement fact instead of recalculating payroll", async () => {
     const { service, query } = createServiceWithQueryResults([
       {
-        rows: [lessonRow({
-          student_id: "s-1",
-          teacher_rate: "9999",
-          settlement_fact_id: "fact-effective",
-          settled_amount_minor: "12345",
-        })],
+        rows: [
+          lessonRow({
+            student_id: "s-1",
+            teacher_rate: "9999",
+            settlement_fact_id: "fact-effective",
+            settled_amount_minor: "12345",
+          }),
+        ],
       },
       {
         rows: [
@@ -99,7 +117,7 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
 
     expect(payroll.accruedTotal).toBe(123.45);
     expect(payroll.debt).toBe(123.45);
-    expect(String(query.mock.calls[0][0])).toContain(
+    expect(String(query.mock.calls[1][0])).toContain(
       "app.lesson_teacher_compensation_facts_effective",
     );
   });
@@ -109,7 +127,11 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
       {
         rows: [
           // Неоплачиваемый пропуск → 0.
-          lessonRow({ id: "l-1", student_id: "s-1", attendance_kind: "unpaid_miss" }),
+          lessonRow({
+            id: "l-1",
+            student_id: "s-1",
+            attendance_kind: "unpaid_miss",
+          }),
           // Частично оплачиваемый → доля charge_share (0.5 × 600 = 300).
           lessonRow({
             id: "l-2",
@@ -118,7 +140,11 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
             charge_share: "0.5",
           }),
           // Обычное посещение → 1 (600).
-          lessonRow({ id: "l-3", student_id: "s-1", attendance_kind: "attended" }),
+          lessonRow({
+            id: "l-3",
+            student_id: "s-1",
+            attendance_kind: "attended",
+          }),
           // Групповое занятие без participation → 1, ставка группы 750.
           lessonRow({ id: "l-4", group_id: "g-1", group_rate: "750" }),
           // Индивидуальное 90 минут без participation → 1.5 астр.ч. × 600.
@@ -326,7 +352,11 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
             }),
           ],
         },
-        { rows: [{ teacher_id: "t-1", rate: "600", effective_from: "2026-01-01" }] },
+        {
+          rows: [
+            { teacher_id: "t-1", rate: "600", effective_from: "2026-01-01" },
+          ],
+        },
         { rows: [{ id: "t-1", name: "Иван Петров" }] },
         { rows: [] },
       ]);
@@ -364,7 +394,11 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
             }),
           ],
         },
-        { rows: [{ teacher_id: "t-1", rate: "600", effective_from: "2026-01-01" }] },
+        {
+          rows: [
+            { teacher_id: "t-1", rate: "600", effective_from: "2026-01-01" },
+          ],
+        },
         { rows: [{ id: "t-1", name: "Иван Петров" }] },
         { rows: [] },
       ]);
@@ -394,7 +428,11 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
             }),
           ],
         },
-        { rows: [{ teacher_id: "t-1", rate: "600", effective_from: "2026-01-01" }] },
+        {
+          rows: [
+            { teacher_id: "t-1", rate: "600", effective_from: "2026-01-01" },
+          ],
+        },
         { rows: [{ id: "t-1", name: "Иван Петров" }] },
         { rows: [] },
       ]);
@@ -422,7 +460,11 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
             lessonRow({ id: "l-3", student_id: "s-9", is_trial: false }),
           ],
         },
-        { rows: [{ teacher_id: "t-1", rate: "600", effective_from: "2026-01-01" }] },
+        {
+          rows: [
+            { teacher_id: "t-1", rate: "600", effective_from: "2026-01-01" },
+          ],
+        },
         { rows: [{ id: "t-1", name: "Иван Петров" }] },
         { rows: [] },
       ]);
@@ -439,6 +481,7 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
     it("reads the lead behind a trial, since a trial has no student", async () => {
       // Строки замоканы, SQL не исполняется — проверяем сам запрос текстом.
       const { service, query } = createServiceWithQueryResults([
+        { rows: [] },
         { rows: [] },
       ]);
       await service.getTeacherStatsReport(actor, {
@@ -458,7 +501,11 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
           lessonRow({ id: "l-2", teacher_id: "t-2", student_id: "s-2" }),
         ],
       },
-      { rows: [{ teacher_id: "t-1", rate: "600", effective_from: "2026-01-01" }] },
+      {
+        rows: [
+          { teacher_id: "t-1", rate: "600", effective_from: "2026-01-01" },
+        ],
+      },
       // Only t-1 passes the filter, so t-2's lessons must not reach the report.
       { rows: [{ id: "t-1", name: "Иван Петров" }] },
       { rows: [] },
@@ -472,21 +519,76 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
 
     expect(report.items.map((item) => item.teacherId)).toEqual(["t-1"]);
     const namesSql = String(query.mock.calls[2][0]);
-    expect(namesSql).toContain("t.status = $2");
+    expect(namesSql).toContain("t.status = $6");
     expect(namesSql).toContain("app.teacher_disciplines");
     expect(query.mock.calls[2][1]).toEqual([
+      null,
       ["t-1", "t-2"],
+      true,
+      "2026-07-01T00:00:00.000Z",
+      "2026-08-01T00:00:00.000Z",
       "active",
       "Гитара",
       null,
     ]);
   });
 
+  it("includes a payout-only teacher so period totals do not disappear", async () => {
+    const { service } = createServiceWithQueryResults([
+      { rows: [] },
+      { rows: [{ id: "t-1", name: "Иван Петров", salary: null }] },
+      {
+        rows: [
+          { teacher_id: "t-1", rate: "700", effective_from: "2026-01-01" },
+        ],
+      },
+      {
+        rows: [
+          {
+            teacher_id: "t-1",
+            paid_total: "500",
+            bonus_total: "0",
+            deduction_total: "0",
+          },
+        ],
+      },
+    ]);
+
+    const report = await service.getTeacherStatsReport(actor, {
+      from: "2026-07-01T00:00:00.000Z",
+      to: "2026-08-01T00:00:00.000Z",
+    });
+
+    expect(report.items).toHaveLength(1);
+    expect(report.items[0]).toMatchObject({
+      teacherId: "t-1",
+      completedLessons: 0,
+      accruedTotal: 0,
+      paidTotal: 500,
+      periodBalance: -500,
+    });
+    expect(report.totals.paidTotal).toBe(500);
+  });
+
+  it("rejects an inverted report period", async () => {
+    const { service, query } = createServiceWithQueryResults([]);
+
+    await expect(
+      service.getTeacherStatsReport(actor, {
+        from: "2026-08-01T00:00:00.000Z",
+        to: "2026-07-01T00:00:00.000Z",
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(query).not.toHaveBeenCalled();
+  });
+
   it("экспортирует отчёт в CSV для Excel", async () => {
     const { service } = createServiceWithQueryResults([
       { rows: [lessonRow({ id: "l-1", student_id: "s-1", is_trial: true })] },
-      { rows: [{ teacher_id: "t-1", rate: "0", effective_from: "2026-01-01" }] },
-      { rows: [{ id: "t-1", name: 'Иван "Гитарист"; Петров' }] },
+      {
+        rows: [{ teacher_id: "t-1", rate: "0", effective_from: "2026-01-01" }],
+      },
+      { rows: [{ id: "t-1", name: '=Иван "Гитарист"; Петров' }] },
       { rows: [] },
     ]);
 
@@ -498,15 +600,17 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
     expect(csv.startsWith("﻿")).toBe(true);
     expect(csv).toContain("Преподаватель;Учебная единица;Тип");
     // A name containing ';' and '"' must not break the column layout.
-    expect(csv).toContain('"Иван ""Гитарист""; Петров"');
+    expect(csv).toContain('"\'=Иван ""Гитарист""; Петров"');
+    expect(csv).toContain("2026-07-05 (1 астр.ч.)");
     // A zero rate is the trial "входит в оклад" case, not a missing value.
     expect(csv).toContain("Входит в оклад");
     expect(csv).toContain("ИТОГО");
   });
 
-  it("createTeacherPayout сохраняет выплату и пишет аудит", async () => {
-    const { service, query, audit } = createServiceWithQueryResults([
+  it("createTeacherPayout сохраняет выплату атомарно", async () => {
+    const { service, query, integrity } = createServiceWithQueryResults([
       { rows: [{ id: "t-1" }] },
+      { rows: [{ id: "p-1" }] },
       {
         rows: [
           {
@@ -521,23 +625,38 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
       },
     ]);
 
-    const payout = await service.createTeacherPayout(actor, "t-1", {
-      kind: "payout",
-      amount: 1500,
-      comment: "За июнь",
-    });
+    const payout = await service.createTeacherPayout(
+      actor,
+      "t-1",
+      {
+        kind: "payout",
+        amount: 1500,
+        comment: "За июнь",
+        expectedVersion: 0,
+        reasonText: "Оплата за июнь",
+      },
+      {
+        idempotencyKey: "payout-key",
+        requestId: "request-1",
+      },
+    );
 
     expect(payout.amount).toBe(1500);
     expect(payout.kind).toBe("payout");
-    expect(query).toHaveBeenCalledTimes(2);
-    expect(audit.record).toHaveBeenCalledWith(
-      expect.objectContaining({ action: "crm.teacher_payout_created" }),
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(integrity.executeVersionedMutation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: "crm.teacher-payout.create",
+        expectedVersion: 0,
+      }),
     );
+    expect(payout.version).toBe(1);
   });
 
   it("setTeacherRate добавляет запись истории ставок", async () => {
-    const { service, audit } = createServiceWithQueryResults([
+    const { service, integrity } = createServiceWithQueryResults([
       { rows: [{ id: "t-1" }] },
+      { rows: [{ id: "r-1" }] },
       {
         rows: [
           {
@@ -550,15 +669,43 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
       },
     ]);
 
-    const rate = await service.setTeacherRate(actor, "t-1", {
-      rate: 750,
-      effectiveFrom: "2026-08-01",
-    });
+    const rate = await service.setTeacherRate(
+      actor,
+      "t-1",
+      {
+        rate: 750,
+        effectiveFrom: "2026-08-01",
+        expectedVersion: 0,
+        reasonText: "Новая ставка с августа",
+      },
+      {
+        idempotencyKey: "rate-key",
+        requestId: "request-2",
+      },
+    );
 
     expect(rate.rate).toBe(750);
     expect(rate.effectiveFrom).toBe("2026-08-01");
-    expect(audit.record).toHaveBeenCalledWith(
-      expect.objectContaining({ action: "crm.teacher_rate_set" }),
+    expect(integrity.executeVersionedMutation).toHaveBeenCalledWith(
+      expect.objectContaining({ operation: "crm.teacher-rate.create" }),
     );
+  });
+
+  it("rejects a payroll mutation without safe request metadata", async () => {
+    const { service, integrity } = createServiceWithQueryResults([]);
+
+    await expect(
+      service.setTeacherRate(
+        actor,
+        "t-1",
+        {
+          rate: 750,
+          expectedVersion: 0,
+          reasonText: "Новая ставка",
+        },
+        { idempotencyKey: "", requestId: "" },
+      ),
+    ).rejects.toThrow("Передайте корректный Idempotency-Key");
+    expect(integrity.executeVersionedMutation).not.toHaveBeenCalled();
   });
 });

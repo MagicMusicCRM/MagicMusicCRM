@@ -105,6 +105,28 @@ void main() {
     expect(adapter.requests, hasLength(1));
   });
 
+  test('deletes an uncommitted v3 chat upload', () async {
+    final adapter = _FakeAdapter([
+      _FakeResponse(path: '/api/files/file-a', statusCode: 200, body: {}),
+    ]);
+    final service = ChatAttachmentService(_client(adapter));
+
+    await service.deleteUploadedFile('file-a');
+
+    expect(adapter.requests.single.method, 'DELETE');
+  });
+
+  test('ignores legacy references when rolling back a chat upload', () async {
+    final adapter = _FakeAdapter(const []);
+    final service = ChatAttachmentService(_client(adapter));
+
+    await service.deleteUploadedFile(
+      'storage://chat-attachments/user-a/file.png',
+    );
+
+    expect(adapter.requests, isEmpty);
+  });
+
   test(
     'does not try to sign legacy storage references through Supabase SDK',
     () async {
@@ -181,9 +203,11 @@ class _CapturedRequest {
   final Map<String, String> formFields;
   final String? fileName;
   final String? contentType;
+  final String method;
 
   const _CapturedRequest({
     required this.formFields,
+    required this.method,
     this.fileName,
     this.contentType,
   });
@@ -215,12 +239,15 @@ class _FakeAdapter implements HttpClientAdapter {
       requests.add(
         _CapturedRequest(
           formFields: Map<String, String>.fromEntries(data.fields),
+          method: options.method,
           fileName: data.files.single.value.filename,
           contentType: data.files.single.value.contentType?.mimeType,
         ),
       );
     } else {
-      requests.add(const _CapturedRequest(formFields: {}));
+      requests.add(
+        _CapturedRequest(formFields: const {}, method: options.method),
+      );
     }
     return ResponseBody.fromString(
       jsonEncode(response.body),

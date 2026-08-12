@@ -267,6 +267,7 @@ void main() {
               'content': 'Голосовое сообщение',
               'messageType': 'voice',
               'attachmentFileId': 'file-a',
+              'voiceDurationMs': 1500,
               'createdAt': '2026-06-12T10:01:00.000Z',
               'updatedAt': '2026-06-12T10:01:00.000Z',
               'deletedAt': null,
@@ -280,12 +281,15 @@ void main() {
           content: 'Голосовое сообщение',
           messageType: 'voice',
           attachmentFileId: 'file-a',
+          voiceDurationMs: 1500,
         );
 
         expect(message['message_type'], 'voice');
         expect(message['attachment_file_id'], 'file-a');
+        expect(message['voice_duration_ms'], 1500);
         expect(adapter.requests.single.body['messageType'], 'voice');
         expect(adapter.requests.single.body['attachmentFileId'], 'file-a');
+        expect(adapter.requests.single.body['voiceDurationMs'], 1500);
       },
     );
 
@@ -489,6 +493,7 @@ void main() {
                 'userId': 'user-a',
                 'email': 'anna@example.com',
                 'role': 'admin',
+                'userRole': 'manager',
                 'firstName': 'Анна',
                 'lastName': 'Иванова',
                 'avatarFileId': 'avatar-a',
@@ -506,6 +511,7 @@ void main() {
       expect(members.single['profile_id'], 'profile-a');
       expect(members.single['user_id'], 'user-a');
       expect(members.single['role'], 'admin');
+      expect(members.single['user_role'], 'manager');
       expect(members.single['_display_name'], 'Анна Иванова');
       expect(members.single['avatar_file_id'], 'avatar-a');
       expect(members.single['is_current_user'], isTrue);
@@ -615,6 +621,7 @@ void main() {
         adapter.requests[1].body['description'],
         'Только важные объявления',
       );
+      expect(adapter.requests[1].body.containsKey('permissions'), isFalse);
       expect(adapter.requests[2].body['content'], 'Пост');
     });
 

@@ -1,14 +1,23 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { createHash } from 'node:crypto';
-import { AuditService } from '../audit/audit.service';
-import { ActorContext } from '../common/security/actor-context';
-import { DatabaseService } from '../db/database.service';
-import { AcceptCurrentConsentsDto } from './dto/accept-current-consents.dto';
-import { CreateDeletionRequestDto } from './dto/create-deletion-request.dto';
-import { ListDeletionRequestsQuery } from './dto/list-deletion-requests.query';
-import { UpdateDeletionRequestDto } from './dto/update-deletion-request.dto';
-import { DeletionRequestAccessRecord, LegalPolicy } from './legal.policy';
-import { AccountDeletionStatus, ConsentEvidence, LegalDocumentType } from './legal.types';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import { createHash } from "node:crypto";
+import { AuditService } from "../audit/audit.service";
+import { ActorContext } from "../common/security/actor-context";
+import { DatabaseService } from "../db/database.service";
+import { AcceptCurrentConsentsDto } from "./dto/accept-current-consents.dto";
+import { CreateDeletionRequestDto } from "./dto/create-deletion-request.dto";
+import { ListDeletionRequestsQuery } from "./dto/list-deletion-requests.query";
+import { UpdateDeletionRequestDto } from "./dto/update-deletion-request.dto";
+import { DeletionRequestAccessRecord, LegalPolicy } from "./legal.policy";
+import {
+  AccountDeletionStatus,
+  ConsentEvidence,
+  LegalDocumentType,
+} from "./legal.types";
 
 interface LegalDocumentRow {
   id: string;
@@ -24,7 +33,7 @@ interface GateRow {
   current_count: string;
   accepted_count: string;
   deletion_pending: boolean;
-  role: ActorContext['role'];
+  role: ActorContext["role"];
   profile_complete: boolean;
 }
 
@@ -47,7 +56,7 @@ export class LegalService {
   constructor(
     private readonly database: DatabaseService,
     private readonly audit: AuditService,
-    private readonly policy: LegalPolicy
+    private readonly policy: LegalPolicy,
   ) {}
 
   async getGate(actor: ActorContext) {
@@ -103,18 +112,17 @@ export class LegalService {
             )
           ) as profile_complete
       `,
-      [actor.userId, actor.role]
+      [actor.userId, actor.role],
     );
     const row = result.rows[0];
-    const currentCount = Number(row?.current_count ?? '0');
-    const acceptedCount = Number(row?.accepted_count ?? '0');
-    const legalAccepted =
-      currentCount === 0 || acceptedCount === currentCount;
+    const currentCount = Number(row?.current_count ?? "0");
+    const acceptedCount = Number(row?.accepted_count ?? "0");
+    const legalAccepted = currentCount === 0 || acceptedCount === currentCount;
     return {
       role: row?.role ?? actor.role,
       profileComplete: row?.profile_complete === true,
       legalAccepted,
-      deletionPending: row?.deletion_pending === true
+      deletionPending: row?.deletion_pending === true,
     };
   }
 
@@ -125,7 +133,7 @@ export class LegalService {
         from app.legal_documents
         where is_current = true
         order by document_type asc
-      `
+      `,
     );
     return result.rows.map((row) => this.toDocumentDto(row));
   }
@@ -133,7 +141,7 @@ export class LegalService {
   async acceptCurrentDocuments(
     actor: ActorContext,
     dto: AcceptCurrentConsentsDto,
-    evidence: ConsentEvidence
+    evidence: ConsentEvidence,
   ) {
     const current = await this.database.query<LegalDocumentRow>(
       `
@@ -141,14 +149,16 @@ export class LegalService {
         from app.legal_documents
         where is_current = true
         order by document_type asc
-      `
+      `,
     );
     if (current.rows.length === 0) {
-      throw new BadRequestException('Нет опубликованных юридических документов.');
+      throw new BadRequestException(
+        "Нет опубликованных юридических документов.",
+      );
     }
     this.assertExactCurrentDocumentSet(
       current.rows.map((row) => row.id),
-      dto.documentIds
+      dto.documentIds,
     );
 
     const ipHash = this.optionalHash(evidence.ip);
@@ -164,41 +174,50 @@ export class LegalService {
             values ($1, $2, $3, $4, $5)
             on conflict (user_id, document_id) do nothing
           `,
-          [actor.userId, document.id, document.version, ipHash, userAgentHash]
+          [actor.userId, document.id, document.version, ipHash, userAgentHash],
         );
       }
     });
 
     await this.audit.record({
       actor,
-      action: 'legal.consents_accepted',
-      entityType: 'legal_consent',
-      metadata: { documentIds: current.rows.map((row) => row.id) }
+      action: "legal.consents_accepted",
+      entityType: "legal_consent",
+      metadata: { documentIds: current.rows.map((row) => row.id) },
     });
 
     return { accepted: true };
   }
 
-  async createDeletionRequest(actor: ActorContext, dto: CreateDeletionRequestDto) {
-    const existing = await this.findActiveDeletionRequest(actor.userId);
-    if (existing) return this.toDeletionRequestDto(existing);
-
+  async createDeletionRequest(
+    actor: ActorContext,
+    dto: CreateDeletionRequestDto,
+  ) {
     const result = await this.database.query<DeletionRequestRow>(
       `
         insert into app.account_deletion_requests (user_id, reason)
         values ($1, $2)
+        on conflict (user_id) where status in ('pending', 'processing')
+        do nothing
         returning id, user_id, status, reason, requested_at, resolved_at,
           resolved_by, resolution_note, updated_at
       `,
-      [actor.userId, dto.reason?.trim() || null]
+      [actor.userId, dto.reason?.trim() || null],
     );
     const request = result.rows[0];
+    if (!request) {
+      const existing = await this.findActiveDeletionRequest(actor.userId);
+      if (existing) return this.toDeletionRequestDto(existing);
+      throw new ConflictException(
+        "Активный запрос уже создаётся. Повторите проверку статуса.",
+      );
+    }
 
     await this.audit.record({
       actor,
-      action: 'legal.deletion_requested',
-      entityType: 'account_deletion_request',
-      entityId: request.id
+      action: "legal.deletion_requested",
+      entityType: "account_deletion_request",
+      entityId: request.id,
     });
 
     return this.toDeletionRequestDto(request);
@@ -209,7 +228,62 @@ export class LegalService {
     return request ? this.toDeletionRequestDto(request) : null;
   }
 
-  async listDeletionRequests(actor: ActorContext, query: ListDeletionRequestsQuery) {
+  async cancelOwnDeletionRequest(actor: ActorContext) {
+    const result = await this.database.transaction(async (client) => {
+      const currentResult = await client.query<DeletionRequestRow>(
+        `
+          select id, user_id, status, reason, requested_at, resolved_at,
+            resolved_by, resolution_note, updated_at
+          from app.account_deletion_requests
+          where user_id = $1
+            and status in ('pending', 'processing')
+          order by requested_at desc
+          limit 1
+          for update
+        `,
+        [actor.userId],
+      );
+      const current = currentResult.rows[0];
+      if (!current) {
+        throw new NotFoundException("Активный запрос на удаление не найден.");
+      }
+      if (current.status !== "pending") {
+        throw new ConflictException(
+          "Запрос уже обрабатывается. Для отмены обратитесь к администрации.",
+        );
+      }
+
+      const updated = await client.query<DeletionRequestRow>(
+        `
+          update app.account_deletion_requests
+          set status = 'cancelled',
+              resolved_at = now(),
+              resolved_by = $2,
+              resolution_note = 'Отозван пользователем',
+              updated_at = now()
+          where id = $1
+          returning id, user_id, status, reason, requested_at, resolved_at,
+            resolved_by, resolution_note, updated_at
+        `,
+        [current.id, actor.userId],
+      );
+      return { current, updated: updated.rows[0] };
+    });
+
+    await this.audit.record({
+      actor,
+      action: "legal.deletion_status_updated",
+      entityType: "account_deletion_request",
+      entityId: result.updated.id,
+      metadata: { from: result.current.status, to: "cancelled" },
+    });
+    return this.toDeletionRequestDto(result.updated);
+  }
+
+  async listDeletionRequests(
+    actor: ActorContext,
+    query: ListDeletionRequestsQuery,
+  ) {
     this.policy.assertCanListDeletionRequests(actor);
     const limit = Math.min(query.limit ?? 50, 100);
     const result = await this.database.query<DeletionRequestRow & CountRow>(
@@ -223,22 +297,45 @@ export class LegalService {
         order by adr.requested_at desc, adr.id desc
         limit $2
       `,
-      [query.status ?? null, limit]
+      [query.status ?? null, limit],
     );
 
     return {
       items: result.rows.map((row) => this.toDeletionRequestDto(row)),
-      total: Number(result.rows[0]?.total ?? '0')
+      total: Number(result.rows[0]?.total ?? "0"),
     };
   }
 
-  async updateDeletionRequest(actor: ActorContext, id: string, dto: UpdateDeletionRequestDto) {
+  async updateDeletionRequest(
+    actor: ActorContext,
+    id: string,
+    dto: UpdateDeletionRequestDto,
+  ) {
     this.policy.assertCanUpdateDeletionRequest(actor);
-    const current = await this.requireDeletionRequest(id);
-    this.policy.assertCanReadDeletionRequest(actor, current);
-    this.policy.assertValidTransition(current.status, dto.status);
-
+    if (
+      ["completed", "rejected"].includes(dto.status) &&
+      !dto.resolutionNote?.trim()
+    ) {
+      throw new BadRequestException("Укажите причину решения.");
+    }
     const result = await this.database.transaction(async (client) => {
+      const currentResult = await client.query<DeletionRequestRow>(
+        `
+          select id, user_id, status, reason, requested_at, resolved_at,
+            resolved_by, resolution_note, updated_at
+          from app.account_deletion_requests
+          where id = $1
+          limit 1
+          for update
+        `,
+        [id],
+      );
+      const current = currentResult.rows[0];
+      if (!current)
+        throw new NotFoundException("Запрос на удаление не найден.");
+      this.policy.assertCanReadDeletionRequest(actor, current);
+      this.policy.assertValidTransition(current.status, dto.status);
+
       const updated = await client.query<DeletionRequestRow>(
         `
           update app.account_deletion_requests
@@ -252,10 +349,10 @@ export class LegalService {
           returning id, user_id, status, reason, requested_at, resolved_at,
             resolved_by, resolution_note, updated_at
         `,
-        [id, dto.status, actor.userId, dto.resolutionNote?.trim() || null]
+        [id, dto.status, actor.userId, dto.resolutionNote?.trim() || null],
       );
 
-      if (dto.status === 'completed') {
+      if (dto.status === "completed") {
         // 152-ФЗ / Google Play Data Safety: при завершении удаления ОБЕЗЛИЧИВАЕМ
         // персональные данные, а не только проставляем deleted_at.
         // email маскируется уникальным плейсхолдером (освобождает повторную
@@ -271,7 +368,7 @@ export class LegalService {
                 updated_at = now()
             where id = $1
           `,
-          [current.user_id]
+          [current.user_id],
         );
         // Профиль: ФИО/телефон/дата рождения/аватар + импортированные PII в
         // custom_data (наследие HolliHop, S4) полностью очищаются.
@@ -288,29 +385,29 @@ export class LegalService {
                 updated_at = now()
             where user_id = $1
           `,
-          [current.user_id]
+          [current.user_id],
         );
         // Внешние идентификаторы входа (хранят email/sub) и push-токены удаляем.
         await client.query(
           `delete from app.user_identities where user_id = $1`,
-          [current.user_id]
+          [current.user_id],
         );
         await client.query(
           `delete from app.notification_devices where user_id = $1`,
-          [current.user_id]
+          [current.user_id],
         );
         // Аннулируем непогашенные одноразовые креденшелы.
         await client.query(
           `delete from app.password_reset_tokens where user_id = $1`,
-          [current.user_id]
+          [current.user_id],
         );
         await client.query(
           `delete from app.email_verification_tokens where user_id = $1`,
-          [current.user_id]
+          [current.user_id],
         );
         await client.query(
           `delete from app.otp_challenges where user_id = $1`,
-          [current.user_id]
+          [current.user_id],
         );
         await client.query(
           `
@@ -318,25 +415,27 @@ export class LegalService {
             set revoked_at = coalesce(revoked_at, now())
             where user_id = $1
           `,
-          [current.user_id]
+          [current.user_id],
         );
       }
 
-      return updated.rows[0];
+      return { current, updated: updated.rows[0] };
     });
 
     await this.audit.record({
       actor,
-      action: 'legal.deletion_status_updated',
-      entityType: 'account_deletion_request',
+      action: "legal.deletion_status_updated",
+      entityType: "account_deletion_request",
       entityId: id,
-      metadata: { from: current.status, to: dto.status }
+      metadata: { from: result.current.status, to: dto.status },
     });
 
-    return this.toDeletionRequestDto(result);
+    return this.toDeletionRequestDto(result.updated);
   }
 
-  private async findActiveDeletionRequest(userId: string): Promise<DeletionRequestRow | undefined> {
+  private async findActiveDeletionRequest(
+    userId: string,
+  ): Promise<DeletionRequestRow | undefined> {
     const result = await this.database.query<DeletionRequestRow>(
       `
         select id, user_id, status, reason, requested_at, resolved_at,
@@ -347,12 +446,14 @@ export class LegalService {
         order by requested_at desc
         limit 1
       `,
-      [userId]
+      [userId],
     );
     return result.rows[0];
   }
 
-  private async findLatestDeletionRequest(userId: string): Promise<DeletionRequestRow | undefined> {
+  private async findLatestDeletionRequest(
+    userId: string,
+  ): Promise<DeletionRequestRow | undefined> {
     const result = await this.database.query<DeletionRequestRow>(
       `
         select id, user_id, status, reason, requested_at, resolved_at,
@@ -362,36 +463,25 @@ export class LegalService {
         order by requested_at desc
         limit 1
       `,
-      [userId]
+      [userId],
     );
     return result.rows[0];
   }
 
-  private async requireDeletionRequest(id: string): Promise<DeletionRequestRow> {
-    const result = await this.database.query<DeletionRequestRow>(
-      `
-        select id, user_id, status, reason, requested_at, resolved_at,
-          resolved_by, resolution_note, updated_at
-        from app.account_deletion_requests
-        where id = $1
-        limit 1
-      `,
-      [id]
-    );
-    const row = result.rows[0];
-    if (!row) throw new NotFoundException('Запрос на удаление не найден.');
-    return row;
-  }
-
-  private assertExactCurrentDocumentSet(currentIds: string[], acceptedIds: string[]): void {
+  private assertExactCurrentDocumentSet(
+    currentIds: string[],
+    acceptedIds: string[],
+  ): void {
     const current = new Set(currentIds);
     const accepted = new Set(acceptedIds);
     if (current.size !== accepted.size) {
-      throw new BadRequestException('Нужно принять все актуальные документы.');
+      throw new BadRequestException("Нужно принять все актуальные документы.");
     }
     for (const id of current) {
       if (!accepted.has(id)) {
-        throw new BadRequestException('Нужно принять все актуальные документы.');
+        throw new BadRequestException(
+          "Нужно принять все актуальные документы.",
+        );
       }
     }
   }
@@ -399,7 +489,7 @@ export class LegalService {
   private optionalHash(value?: string): string | null {
     const normalized = value?.trim();
     if (!normalized) return null;
-    return createHash('sha256').update(normalized).digest('hex');
+    return createHash("sha256").update(normalized).digest("hex");
   }
 
   private toDocumentDto(row: LegalDocumentRow) {
@@ -411,7 +501,7 @@ export class LegalService {
       version: row.version,
       url: row.url,
       fileId: row.file_id,
-      publishedAt: row.published_at
+      publishedAt: row.published_at,
     };
   }
 
@@ -426,7 +516,7 @@ export class LegalService {
       resolvedAt: row.resolved_at,
       resolvedBy: row.resolved_by,
       resolutionNote: row.resolution_note,
-      updatedAt: row.updated_at
+      updatedAt: row.updated_at,
     };
   }
 }

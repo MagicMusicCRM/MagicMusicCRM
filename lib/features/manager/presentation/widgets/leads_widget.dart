@@ -12,6 +12,7 @@ import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/no_open_tasks_highlight.dart';
 import 'package:magic_music_crm/core/utils/status_color.dart';
+import 'package:magic_music_crm/core/utils/client_custom_field_display.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
 import 'package:magic_music_crm/core/models/types.dart';
 import 'package:magic_music_crm/core/services/hollihop_service.dart';
@@ -55,6 +56,8 @@ class _LeadsWidgetState extends ConsumerState<LeadsWidget>
   // P3-7: status id → whether moving a lead here needs a loss/pause reason.
   final Map<String, bool> _statusRequiresReason = {};
   List<Map<String, dynamic>> _branches = [];
+  List<Map<String, dynamic>> _sources = [];
+  List<Map<String, dynamic>> _responsibles = [];
   List<Map<String, dynamic>> _disciplines = [];
   List<Map<String, dynamic>> _levels = [];
   List<Map<String, dynamic>> _categories = [];

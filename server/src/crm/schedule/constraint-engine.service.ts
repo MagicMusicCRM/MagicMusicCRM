@@ -35,25 +35,31 @@ export class ScheduleConstraintEngine {
       };
     }
 
-    const [reference, roomMatchesBranch, conflicts] = await Promise.all([
+    const loadReference = () =>
       this.repository.resolveReference(
         draft,
         interval.startAt,
         interval.endAt,
         transaction,
-      ),
+      );
+    const loadRoomMatch = () =>
       this.repository.roomMatchesBranch(
         draft.roomId,
         draft.branchId,
         transaction,
-      ),
+      );
+    const loadConflicts = () =>
       this.repository.findConflicts(
         draft,
         interval.startAt,
         interval.endAt,
         transaction,
-      ),
-    ]);
+      );
+    // A pg PoolClient may execute only one query at a time. Keep read-only
+    // previews parallel on the pool, but serialize checks inside commit paths.
+    const [reference, roomMatchesBranch, conflicts] = transaction
+      ? [await loadReference(), await loadRoomMatch(), await loadConflicts()]
+      : await Promise.all([loadReference(), loadRoomMatch(), loadConflicts()]);
     const violations = [
       ...evaluateReferenceConstraints(interval, reference, {
         branchId: draft.branchId,

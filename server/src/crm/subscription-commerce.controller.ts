@@ -97,6 +97,42 @@ export class SubscriptionCommerceController {
     );
   }
 
+  @Post(":studentId/adjustments/:adjustmentId/reversal/preview")
+  previewAccountAdjustmentReversal(
+    @CurrentActor() actor: ActorContext,
+    @Param("studentId", ParseUUIDPipe) studentId: string,
+    @Param("adjustmentId", ParseUUIDPipe) adjustmentId: string,
+    @Body() dto: PreviewPaymentReversalDto,
+  ) {
+    return this.paymentReversal.previewAdjustment(
+      actor,
+      studentId,
+      adjustmentId,
+      dto,
+    );
+  }
+
+  @Post(":studentId/adjustments/:adjustmentId/reversal")
+  reverseAccountAdjustment(
+    @CurrentActor() actor: ActorContext,
+    @Param("studentId", ParseUUIDPipe) studentId: string,
+    @Param("adjustmentId", ParseUUIDPipe) adjustmentId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+    @Body() dto: ReversePaymentDto,
+  ) {
+    return this.paymentReversal.reverseAdjustment(
+      actor,
+      studentId,
+      adjustmentId,
+      dto,
+      {
+        idempotencyKey: idempotencyKey ?? "",
+        requestId: requestId ?? "",
+      },
+    );
+  }
+
   @Post(":studentId/payment-records")
   createPaymentRecord(
     @CurrentActor() actor: ActorContext,

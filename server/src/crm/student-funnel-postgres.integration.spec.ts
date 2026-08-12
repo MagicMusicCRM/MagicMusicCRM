@@ -10,6 +10,7 @@ import { DatabaseService } from "../db/database.service";
 import { MigrationRunner } from "../db/migration-runner";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { CrmPolicy } from "./crm.policy";
+import { CrmService } from "./crm.service";
 import { StudentFunnelStageDto } from "./dto/student-funnel.dto";
 import { StudentFunnelService } from "./student-funnel.service";
 
@@ -25,7 +26,9 @@ jest.setTimeout(60_000);
 describe("Student funnel effective configuration (PostgreSQL)", () => {
   let pool: Pool;
   let client: PoolClient;
+  let database: DatabaseService;
   let service: StudentFunnelService;
+  let crm: CrmService;
   let branchId: string;
   let otherBranchId: string;
   let studentId: string;
@@ -79,16 +82,35 @@ describe("Student funnel effective configuration (PostgreSQL)", () => {
       [studentId, profileId, branchId],
     );
 
-    const database = {
+    database = {
       query: (text: string, params?: unknown[]) => client.query(text, params),
       transaction: <T>(work: (transactionClient: PoolClient) => Promise<T>) =>
         work(client),
     } as unknown as DatabaseService;
+    const audit = {
+      record: jest.fn().mockResolvedValue(undefined),
+    } as unknown as AuditService;
+    const realtime = {
+      emitCrmChanged: jest.fn(),
+    } as unknown as RealtimeBus;
+    const policy = new CrmPolicy();
     service = new StudentFunnelService(
       database,
-      { record: jest.fn().mockResolvedValue(undefined) } as unknown as AuditService,
-      new CrmPolicy(),
-      { emitCrmChanged: jest.fn() } as unknown as RealtimeBus,
+      audit,
+      policy,
+      realtime,
+    );
+    crm = new CrmService(
+      database,
+      audit,
+      policy,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      realtime,
+      service,
     );
     director = { userId: directorId, role: "director" };
   });
@@ -258,7 +280,9 @@ describe("Student funnel effective configuration (PostgreSQL)", () => {
     const current = await service.getEffective(director, branchId);
     const restricted = current.stages.map((stage) =>
       stage.key === "active"
-        ? { ...stage, allowedTransitions: ["inactive"] }
+        ? { ...stage, allowedTransitions: ["paused"] }
+        : stage.key === "paused"
+          ? { ...stage, allowedTransitions: [] }
         : stage,
     );
     await service.publish(director, {
@@ -268,9 +292,46 @@ describe("Student funnel effective configuration (PostgreSQL)", () => {
       stages: restricted,
     });
     await expect(
-      service.assertTransition(client, branchId, "active", "paused"),
-    ).rejects.toBeInstanceOf(UnprocessableEntityException);
-    await service.assertTransition(client, branchId, "active", "inactive");
+      service.assertTransition(client, branchId, "active", "inactive"),
+    ).rejects.toMatchObject({
+      status: 422,
+      response: {
+        code: "STUDENT_FUNNEL_TRANSITION_DENIED",
+        field: "status",
+      },
+    });
+    await service.assertTransition(client, branchId, "active", "paused");
+
+    const before = await studentCounts(client, branchId);
+    expect(before).toMatchObject({ active: 1, paused: 0, inactive: 0 });
+    await expect(
+      crm.updateStudent(director, studentId, {
+        status: "paused",
+        clearResponsible: true,
+      }),
+    ).resolves.toMatchObject({ id: studentId, status: "paused" });
+    const afterAllowed = await studentCounts(client, branchId);
+    expect(afterAllowed).toMatchObject({ active: 0, paused: 1, inactive: 0 });
+
+    await expect(
+      crm.updateStudent(director, studentId, {
+        status: "inactive",
+        clearResponsible: true,
+      }),
+    ).rejects.toMatchObject({
+      status: 422,
+      response: {
+        code: "STUDENT_FUNNEL_TRANSITION_DENIED",
+        field: "status",
+      },
+    });
+    expect(await studentCounts(client, branchId)).toMatchObject(afterAllowed);
+    const history = await client.query<{ status: string }>(
+      `select status from app.student_status_history
+       where student_id = $1 order by changed_at asc, id asc`,
+      [studentId],
+    );
+    expect(history.rows.map((row) => row.status)).toEqual(["paused"]);
 
     const rollback = await service.rollback(director, {
       branchId,
@@ -279,7 +340,13 @@ describe("Student funnel effective configuration (PostgreSQL)", () => {
       reason: "Вернули согласованный вариант",
     });
     expect(rollback).toMatchObject({ version: 3, rollbackFromVersion: 1 });
-    await service.assertTransition(client, branchId, "active", "paused");
+    await client.query("update app.students set status = 'active' where id = $1", [
+      studentId,
+    ]);
+    await client.query(
+      "delete from app.student_status_history where student_id = $1",
+      [studentId],
+    );
   });
 
   it("keeps configuration director-only and revisions immutable", async () => {
@@ -412,4 +479,22 @@ function moveFirst(stages: StudentFunnelStageDto[], key: string) {
 
 function stageLabel(stages: StudentFunnelStageDto[], key: string) {
   return stages.find((stage) => stage.key === key)?.label;
+}
+
+async function studentCounts(client: PoolClient, branchId: string) {
+  const result = await client.query<{ status: string; count: string }>(
+    `select status, count(*)::text as count
+     from app.students
+     where branch_id = $1 and deleted_at is null
+     group by status`,
+    [branchId],
+  );
+  const counts = Object.fromEntries(
+    result.rows.map((row) => [row.status, Number(row.count)]),
+  );
+  return {
+    active: counts.active ?? 0,
+    paused: counts.paused ?? 0,
+    inactive: counts.inactive ?? 0,
+  };
 }

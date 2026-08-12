@@ -5,12 +5,14 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
+import { authorizeCurrentCapability } from "../access-control/capability-request-authorizer";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 import { CreateBranchDto } from "./dto/create-branch.dto";
-import { CrmListQuery } from "./dto/crm-list.query";
+import { BranchListQuery } from "./dto/branch-lifecycle.dto";
 import { UpdateBranchDto } from "./dto/update-branch.dto";
 import { CrmPolicy } from "./crm.policy";
+import { assertBranchHours } from "./schedule/availability.rules";
 import { assertSettingsBranchScope } from "./settings-branch-scope";
 
 interface BranchRow {
@@ -20,6 +22,11 @@ interface BranchRow {
   utc_offset_minutes: number | string;
   timezone_name?: string;
   schedule_reference_version?: number | string;
+  lifecycle_state?: "active" | "archived";
+  version?: number | string;
+  archived_at?: Date | string | null;
+  archive_reason?: string | null;
+  archive_effective_date?: string | null;
   created_at: Date | string;
 }
 
@@ -46,20 +53,43 @@ export class BranchesService {
       utcOffsetMinutes: Number(row.utc_offset_minutes ?? 180),
       timezone: row.timezone_name ?? "Europe/Moscow",
       scheduleReferenceVersion: Number(row.schedule_reference_version ?? 1),
+      lifecycleState: row.lifecycle_state ?? "active",
+      version: Number(row.version ?? 1),
+      archivedAt: row.archived_at ?? null,
+      archiveReason: row.archive_reason ?? null,
+      archiveEffectiveDate: row.archive_effective_date ?? null,
       createdAt: row.created_at,
     };
   }
 
-  async listBranches(actor: ActorContext, query: CrmListQuery) {
+  async listBranches(actor: ActorContext, query: BranchListQuery) {
     this.policy.assertCanReadOperationalData(actor);
+    const includeArchived = query.includeArchived ?? false;
+    if (
+      includeArchived &&
+      actor.role !== "director" &&
+      actor.role !== "system_admin"
+    ) {
+      throw new ForbiddenException(
+        "Архив филиалов доступен только директору.",
+      );
+    }
+    if (includeArchived) {
+      await authorizeCurrentCapability(
+        this.database,
+        actor,
+        "config.crm.edit",
+      );
+    }
     const limit = Math.min(query.limit ?? 100, 100);
     const q = query.q?.trim();
     const result = await this.database.query<BranchRow>(
       `
         select id, name, address, utc_offset_minutes, timezone_name,
-          schedule_reference_version, created_at
+          schedule_reference_version, lifecycle_state, version, archived_at,
+          archive_reason, archive_effective_date, created_at
         from app.branches
-        where deleted_at is null
+        where ($5::boolean or deleted_at is null)
           and (
             $3::text <> 'manager'
             or exists (
@@ -81,7 +111,7 @@ export class BranchesService {
         order by name asc, id asc
         limit $2
       `,
-      [q || null, limit, actor.role, actor.userId],
+      [q || null, limit, actor.role, actor.userId, includeArchived],
     );
 
     return { items: result.rows.map((row) => this.toBranchDto(row)) };
@@ -97,22 +127,46 @@ export class BranchesService {
       throw new BadRequestException("Название филиала обязательно.");
     }
     this.assertTimezone(dto.timezone);
+    if (!dto.weeklyHours?.length) {
+      throw new BadRequestException("Укажите рабочие часы хотя бы для одного дня.");
+    }
+    assertBranchHours(dto.weeklyHours, []);
     // Default to Moscow (UTC+3 / 180 minutes) when no offset is provided.
     const utcOffsetMinutes = dto.utcOffsetMinutes ?? 180;
     const result = await this.database.query<BranchRow>(
       `
-        insert into app.branches (
-          name, address, utc_offset_minutes, timezone_name
+        with created as (
+          insert into app.branches (
+            name, address, utc_offset_minutes, timezone_name
+          )
+          values ($1, $2, $3, coalesce($4, 'Europe/Moscow'))
+          returning id, name, address, utc_offset_minutes, timezone_name,
+            schedule_reference_version, lifecycle_state, version, archived_at,
+            archive_reason, archive_effective_date, created_at
+        ), inserted_hours as (
+          insert into app.branch_hours (
+            branch_id, weekday, open_local, close_local
+          )
+          select created.id, hours.weekday, hours.open::time, hours.close::time
+          from created
+          cross join jsonb_to_recordset($5::jsonb)
+            as hours(weekday integer, open text, close text)
+          returning branch_id
+        ), aggregate_seed as (
+          insert into app.aggregate_versions (
+            aggregate_type, aggregate_id, version
+          )
+          select 'organization:branch', id::text, version from created
+          on conflict (aggregate_type, aggregate_id) do nothing
         )
-        values ($1, $2, $3, coalesce($4, 'Europe/Moscow'))
-        returning id, name, address, utc_offset_minutes, timezone_name,
-          schedule_reference_version, created_at
+        select * from created
       `,
       [
         name,
         dto.address?.trim() || null,
         utcOffsetMinutes,
         dto.timezone?.trim() || null,
+        JSON.stringify(dto.weeklyHours),
       ],
     );
     const branch = result.rows[0];
@@ -124,6 +178,7 @@ export class BranchesService {
       metadata: {
         utcOffsetMinutes,
         timezone: branch.timezone_name ?? "Europe/Moscow",
+        weeklyHoursCount: dto.weeklyHours.length,
       },
     });
     return this.toBranchDto(branch);
@@ -147,7 +202,8 @@ export class BranchesService {
           updated_at = now()
         where id = $1 and deleted_at is null
         returning id, name, address, utc_offset_minutes, timezone_name,
-          schedule_reference_version, created_at
+          schedule_reference_version, lifecycle_state, version, archived_at,
+          archive_reason, archive_effective_date, created_at
       `,
       [
         branchId,

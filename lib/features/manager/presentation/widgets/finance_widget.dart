@@ -229,7 +229,7 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
             amount: result['amount'] as num,
             category: result['category'] as String,
             description: result['description'] as String?,
-            branchId: result['branchId'] as String?,
+            branchId: (result['branchId'] as String?) ?? widget.branchId,
           );
       if (mounted) {
         MagicToast.show(
@@ -244,6 +244,105 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
         MagicToast.show(
           context,
           'Не удалось добавить расход',
+          detail: '$e',
+          type: MagicToastType.danger,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _savingExpense = false);
+    }
+  }
+
+  Future<void> _editExpense(Map<String, dynamic> expense) async {
+    if (_savingExpense) return;
+    final expenseId = expense['id']?.toString();
+    if (expenseId == null || expenseId.isEmpty) return;
+    final result = await showMagicAdaptiveSurface<Map<String, dynamic>>(
+      context,
+      kind: AppSurfaceKind.quickView,
+      title: 'Изменить расход',
+      subtitle: 'Исправьте сумму, категорию или комментарий',
+      icon: Icons.edit_rounded,
+      builder: (_) => _ExpenseSheetForm(initialExpense: expense),
+    );
+    if (result == null || !mounted) return;
+
+    setState(() => _savingExpense = true);
+    try {
+      await ref
+          .read(magicCrmServiceProvider)
+          .updateExpense(
+            expenseId: expenseId,
+            amount: result['amount'] as num,
+            category: result['category'] as String,
+            description: result['description'] as String?,
+            branchId:
+                (expense['branchId'] as String?) ??
+                (result['branchId'] as String?) ??
+                widget.branchId,
+          );
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'Расход изменён',
+          type: MagicToastType.success,
+        );
+      }
+      await _loadExpenses();
+    } catch (e) {
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'Не удалось изменить расход',
+          detail: '$e',
+          type: MagicToastType.danger,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _savingExpense = false);
+    }
+  }
+
+  Future<void> _deleteExpense(Map<String, dynamic> expense) async {
+    if (_savingExpense) return;
+    final expenseId = expense['id']?.toString();
+    if (expenseId == null || expenseId.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Удалить расход?'),
+        content: const Text(
+          'Запись перестанет учитываться в итогах и аналитике, '
+          'но аудит операции сохранится.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            key: const ValueKey('confirm-delete-expense'),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(backgroundColor: AppColor.danger),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _savingExpense = true);
+    try {
+      await ref.read(magicCrmServiceProvider).deleteExpense(expenseId);
+      if (mounted) {
+        MagicToast.show(context, 'Расход удалён', type: MagicToastType.success);
+      }
+      await _loadExpenses();
+    } catch (e) {
+      if (mounted) {
+        MagicToast.show(
+          context,
+          'Не удалось удалить расход',
           detail: '$e',
           type: MagicToastType.danger,
         );
@@ -517,6 +616,8 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
             total: _expensesTotal,
             expenses: _expenses,
             onAdd: _addExpense,
+            onEdit: _editExpense,
+            onDelete: _deleteExpense,
           ),
           Expanded(
             child: _loading

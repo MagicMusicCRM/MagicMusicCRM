@@ -4,7 +4,14 @@ part of 'manage_entities_widget.dart';
 class _BranchesList extends ConsumerWidget {
   final String searchQuery;
   final bool canEdit;
-  const _BranchesList({required this.searchQuery, required this.canEdit});
+  final bool canManageLifecycle;
+  final bool includeArchived;
+  const _BranchesList({
+    required this.searchQuery,
+    required this.canEdit,
+    required this.canManageLifecycle,
+    required this.includeArchived,
+  });
 
   String _offsetLabel(int minutes) {
     final sign = minutes >= 0 ? '+' : '-';
@@ -25,12 +32,15 @@ class _BranchesList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(entitiesProvider('branches'));
+    final async = ref.watch(
+      entitiesProvider(includeArchived ? 'branches:all' : 'branches'),
+    );
     return async.when(
       loading: () =>
           const Padding(padding: EdgeInsets.all(12), child: ListSkeleton()),
-      error: (e, _) => Center(
-        child: Text('Ошибка: $e', style: TextStyle(color: AppTheme.danger)),
+      error: (_, _) => _EntityLoadError(
+        title: 'Не удалось загрузить филиалы',
+        onRetry: () => invalidateBranchCatalog(ref),
       ),
       data: (items) {
         var filtered = items;
@@ -66,11 +76,22 @@ class _BranchesList extends ConsumerWidget {
               final address = item['address'] as String? ?? '';
               final offsetMinutes =
                   (item['utc_offset_minutes'] as num?)?.toInt() ?? 180;
+              final archived = item['lifecycle_state'] == 'archived';
+
+              Future<void> openLifecycle() async {
+                final changed = await showDialog<bool>(
+                  context: context,
+                  builder: (_) => BranchLifecycleDialog(branch: item),
+                );
+                if (changed == true) invalidateBranchCatalog(ref);
+              }
 
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
                 child: ListTile(
-                  onTap: !canEdit
+                  onTap: archived
+                      ? (canManageLifecycle ? openLifecycle : null)
+                      : !canEdit
                       ? null
                       : () async {
                           final res = await showDialog<bool>(
@@ -78,7 +99,7 @@ class _BranchesList extends ConsumerWidget {
                             builder: (ctx) => BranchFormDialog(branch: item),
                           );
                           if (res == true) {
-                            ref.invalidate(entitiesProvider('branches'));
+                            invalidateBranchCatalog(ref);
                           }
                         },
                   leading: CircleAvatar(
@@ -88,7 +109,19 @@ class _BranchesList extends ConsumerWidget {
                       color: AppTheme.primaryGold,
                     ),
                   ),
-                  title: Text(name),
+                  title: Row(
+                    children: [
+                      Expanded(child: Text(name)),
+                      if (archived)
+                        const Padding(
+                          padding: EdgeInsets.only(left: 8),
+                          child: Chip(
+                            visualDensity: VisualDensity.compact,
+                            label: Text('Архив'),
+                          ),
+                        ),
+                    ],
+                  ),
                   subtitle: Text(
                     [
                       if (address.isNotEmpty) address,
@@ -99,10 +132,31 @@ class _BranchesList extends ConsumerWidget {
                       fontSize: 12,
                     ),
                   ),
-                  trailing: Icon(
-                    canEdit ? Icons.edit_rounded : Icons.lock_outline_rounded,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    size: 18,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (canManageLifecycle)
+                        IconButton(
+                          tooltip: archived
+                              ? 'Восстановить филиал'
+                              : 'Проверить закрытие',
+                          onPressed: openLifecycle,
+                          icon: Icon(
+                            archived
+                                ? Icons.restore_rounded
+                                : Icons.archive_outlined,
+                          ),
+                        ),
+                      Icon(
+                        archived
+                            ? Icons.lock_outline_rounded
+                            : canEdit
+                            ? Icons.edit_rounded
+                            : Icons.lock_outline_rounded,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        size: 18,
+                      ),
+                    ],
                   ),
                 ),
               );
@@ -120,18 +174,27 @@ class _BranchesList extends ConsumerWidget {
 class _PackagesList extends ConsumerWidget {
   final String searchQuery;
   final bool canEdit;
-  const _PackagesList({required this.searchQuery, required this.canEdit});
+  final bool includeArchived;
+  const _PackagesList({
+    required this.searchQuery,
+    required this.canEdit,
+    required this.includeArchived,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(entitiesProvider('subscription_packages'));
+    final provider = entitiesProvider(
+      includeArchived ? 'subscription_packages:all' : 'subscription_packages',
+    );
+    final async = ref.watch(provider);
     return async.when(
       loading: () => const Padding(
         padding: EdgeInsets.all(12),
         child: _PackagesSkeleton(),
       ),
-      error: (e, _) => Center(
-        child: Text('Ошибка: $e', style: TextStyle(color: AppTheme.danger)),
+      error: (_, _) => _EntityLoadError(
+        title: 'Не удалось загрузить абонементы',
+        onRetry: () => invalidateSubscriptionPackageCatalog(ref),
       ),
       data: (items) {
         var filtered = items;
@@ -156,8 +219,7 @@ class _PackagesList extends ConsumerWidget {
 
         return RefreshIndicator(
           color: AppColor.gold,
-          onRefresh: () async =>
-              ref.invalidate(entitiesProvider('subscription_packages')),
+          onRefresh: () async => ref.invalidate(provider),
           child: ListView.builder(
             padding: const EdgeInsets.all(12),
             itemCount: filtered.length,
@@ -187,16 +249,22 @@ class _PackageCard extends ConsumerWidget {
     final validity = item['validity_days'] ?? item['validityDays'];
     final validityDays = validity == null ? null : _asInt(validity);
     final branchName =
-        (item['branches']?['name'] ?? item['branch_name'])?.toString() ?? '';
-    final isActive =
-        item['is_active'] == true ||
-        item['isActive'] == true ||
-        (item['is_active'] == null && item['isActive'] == null);
+        (item['branches']?['name'] ?? item['branchName'] ?? item['branch_name'])
+            ?.toString() ??
+        '';
+    final isArchived =
+        item['archivedAt'] != null ||
+        item['archived_at'] != null ||
+        item['deleted_at'] != null ||
+        item['active'] == false ||
+        item['isActive'] == false ||
+        item['is_active'] == false;
+    final isActive = !isArchived;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
-        onTap: !canEdit
+        onTap: !canEdit || isArchived
             ? null
             : () async {
                 final saved = await showPackageSheet(
@@ -248,7 +316,7 @@ class _PackageCard extends ConsumerWidget {
                 icon: isActive
                     ? Icons.check_circle_outline_rounded
                     : Icons.pause_circle_outline_rounded,
-                label: isActive ? 'Активен' : 'Неактивен',
+                label: isActive ? 'Активен' : 'В архиве',
                 color: isActive ? AppTheme.success : cs.onSurfaceVariant,
               ),
             ],
@@ -256,9 +324,21 @@ class _PackageCard extends ConsumerWidget {
         ),
         trailing: canEdit
             ? IconButton(
-                icon: Icon(Icons.archive_outlined, color: AppColor.danger),
-                tooltip: 'Архивировать',
-                onPressed: () => _confirmArchivePackage(context, ref, item),
+                key: ValueKey(
+                  isArchived
+                      ? 'restore-subscription-package-${item['id']}'
+                      : 'archive-subscription-package-${item['id']}',
+                ),
+                icon: Icon(
+                  isArchived
+                      ? Icons.restore_from_trash_outlined
+                      : Icons.archive_outlined,
+                  color: isArchived ? AppTheme.success : AppColor.danger,
+                ),
+                tooltip: isArchived ? 'Восстановить' : 'Архивировать',
+                onPressed: () => isArchived
+                    ? _confirmRestorePackage(context, ref, item)
+                    : _confirmArchivePackage(context, ref, item),
               )
             : const Icon(Icons.lock_outline_rounded),
       ),
@@ -347,6 +427,61 @@ Future<void> _confirmArchivePackage(
       MagicToast.show(
         context,
         'Не удалось архивировать',
+        detail: '$e',
+        type: MagicToastType.danger,
+      );
+    }
+  }
+}
+
+Future<void> _confirmRestorePackage(
+  BuildContext context,
+  WidgetRef ref,
+  Map<String, dynamic> item,
+) async {
+  final id = item['id']?.toString();
+  if (id == null || id.isEmpty) return;
+  final version = _asInt(item['version']);
+  final name = item['name'] as String? ?? 'абонемент';
+
+  final confirm = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Восстановить абонемент?'),
+      content: Text(
+        '«$name» снова станет доступен для оформления новых абонементов.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Отмена'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Восстановить'),
+        ),
+      ],
+    ),
+  );
+  if (confirm != true || !context.mounted) return;
+
+  try {
+    await ref
+        .read(magicCrmServiceProvider)
+        .restoreSubscriptionPackage(id, expectedVersion: version);
+    invalidateSubscriptionPackageCatalog(ref);
+    if (context.mounted) {
+      MagicToast.show(
+        context,
+        'Абонемент восстановлен',
+        type: MagicToastType.success,
+      );
+    }
+  } catch (e) {
+    if (context.mounted) {
+      MagicToast.show(
+        context,
+        'Не удалось восстановить',
         detail: '$e',
         type: MagicToastType.danger,
       );

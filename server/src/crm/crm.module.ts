@@ -26,10 +26,13 @@ import { CrmService } from "./crm.service";
 import { BlacklistService } from "./blacklist.service";
 import { HomeworkService } from "./homework.service";
 import { ReferenceDataService } from "./reference-data.service";
+import { ReferenceCatalogLifecycleService } from "./reference-catalog-lifecycle.service";
 import { SubscriptionsService } from "./subscriptions.service";
 import { FinanceService } from "./finance.service";
 import { StaffService } from "./staff.service";
 import { TeachersService } from "./teachers.service";
+import { PersonAccountService } from "./person-account.service";
+import { PersonLifecycleService } from "./person-lifecycle.service";
 import { ScheduleService } from "./schedule.service";
 import { SectionViewsService } from "./section-views.service";
 import { TimelineService } from "./timeline.service";
@@ -42,8 +45,11 @@ import { PhoneReviewService } from "./phone-review.service";
 import { LeadsService } from "./leads.service";
 import { LeadIntakeService } from "./lead-intake.service";
 import { RoomsService } from "./rooms.service";
+import { RoomLifecycleService } from "./room-lifecycle.service";
 import { BranchesService } from "./branches.service";
+import { BranchLifecycleService } from "./branch-lifecycle.service";
 import { GroupsService } from "./groups.service";
+import { GroupLifecycleService } from "./group-lifecycle.service";
 import { PayrollService } from "./payroll.service";
 import { LeadWebhookController } from "./lead-webhook.controller";
 import { ScheduleSeriesWorker } from "./schedule-series.worker";
@@ -144,10 +150,13 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     BlacklistService,
     HomeworkService,
     ReferenceDataService,
+    ReferenceCatalogLifecycleService,
     SubscriptionsService,
     FinanceService,
     StaffService,
     TeachersService,
+    PersonAccountService,
+    PersonLifecycleService,
     ScheduleService,
     TimelineService,
     SectionViewsService,
@@ -160,8 +169,11 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     LeadsService,
     LeadIntakeService,
     RoomsService,
+    RoomLifecycleService,
     BranchesService,
+    BranchLifecycleService,
     GroupsService,
+    GroupLifecycleService,
     PayrollService,
     CrmPolicy,
     HolliHopMetadataService,

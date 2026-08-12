@@ -128,7 +128,7 @@ class _TeacherStudentsWidgetState extends ConsumerState<TeacherStudentsWidget> {
               ),
               const SizedBox(height: AppSpace.md),
               Text(
-                'Ошибка: $_loadError',
+                'Не удалось загрузить учеников. Проверьте подключение и повторите попытку.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
               ),

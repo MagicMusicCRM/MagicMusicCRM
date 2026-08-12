@@ -66,6 +66,11 @@ void main() {
     await tester.tap(find.widgetWithText(ListTile, 'Расписание'));
     await tester.pumpAndSettle();
     expect(find.text('Рабочие часы филиала'), findsOneWidget);
+    expect(find.text('Петрова Мария'), findsNothing);
+
+    await tester.tap(find.text('Графики преподавателей'));
+    await tester.pumpAndSettle();
+    expect(find.text('Доступность преподавателя'), findsOneWidget);
     expect(find.text('Петрова Мария'), findsWidgets);
     await captureEvidence(tester, 'settings-teacher-branch-availability');
   });

@@ -172,6 +172,7 @@ class MagicMessengerService {
     String? attachmentFileId,
     String? forwardedFromId,
     String messageType = 'text',
+    int? voiceDurationMs,
   }) async {
     final data = <String, dynamic>{'messageType': messageType};
     if (content.trim().isNotEmpty) data['content'] = content.trim();
@@ -180,6 +181,7 @@ class MagicMessengerService {
     if (attachmentFileId != null) {
       data['attachmentFileId'] = attachmentFileId;
     }
+    if (voiceDurationMs != null) data['voiceDurationMs'] = voiceDurationMs;
 
     final response = await _api.post<Map<String, dynamic>>(
       '/messenger/chats/$chatId/messages',
@@ -276,14 +278,14 @@ class MagicMessengerService {
     String channelId, {
     required String title,
     String? description,
-    List<Map<String, dynamic>> permissions = const [],
+    List<Map<String, dynamic>>? permissions,
   }) async {
     final response = await _api.patch<Map<String, dynamic>>(
       '/messenger/channels/$channelId',
       data: {
         'title': title.trim(),
         if (description != null) 'description': description.trim(),
-        'permissions': permissions,
+        'permissions': ?permissions,
       },
     );
     return _legacyChannel(response);
@@ -351,6 +353,9 @@ class MagicMessengerService {
     // we can delegate directly to the private mapper.
     return _legacyChat(summary);
   }
+
+  Map<String, dynamic> legacyChannelFromSummary(Map<String, dynamic> summary) =>
+      _legacyChannel(summary);
 
   Map<String, dynamic> _legacyChat(Map<String, dynamic> item) {
     final rawType = item['type']?.toString() ?? 'direct';
@@ -522,6 +527,7 @@ class MagicMessengerService {
       'id': item['userId'],
       'email': email,
       'role': item['role'],
+      'user_role': item['userRole'],
       'first_name': firstName,
       'last_name': lastName,
       'phone': item['phone'],

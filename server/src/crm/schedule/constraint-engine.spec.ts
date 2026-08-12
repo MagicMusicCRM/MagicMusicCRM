@@ -73,7 +73,7 @@ describe("schedule constraint engine rules", () => {
     expect(parseConstraintInterval(at(31), at(30))).toBeNull();
   });
 
-  it("does not close a branch before working hours are configured", () => {
+  it("rejects scheduling until branch working hours are configured", () => {
     const interval = parseConstraintInterval(at(30), at(60))!;
     expect(
       evaluateReferenceConstraints(
@@ -86,7 +86,12 @@ describe("schedule constraint engine rules", () => {
         },
         { branchId: "branch-1", teacherId: "teacher-1" },
       ),
-    ).toEqual([]);
+    ).toEqual([
+      violation("OUTSIDE_BRANCH_HOURS", {
+        type: "branch",
+        id: "branch-1",
+      }),
+    ]);
   });
 
   it("evaluates hours, positive availability, explicit unavailability and branch assignment", () => {

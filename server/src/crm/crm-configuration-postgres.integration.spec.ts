@@ -265,6 +265,7 @@ describe("Unified CRM configuration (PostgreSQL)", () => {
       branchId,
     );
     expect(catalog.branchId).toBe(branchId);
+    expect(catalog.defaultLessonDurationMinutes).toBe(60);
     expect(catalog.settlementTypes).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ stableKey: "free_lesson" }),
@@ -282,11 +283,15 @@ describe("Unified CRM configuration (PostgreSQL)", () => {
   it("keeps branch overrides sparse and manager scope branch-only", async () => {
     const school = await service.getEffective(director);
     const branch = structuredClone(school.snapshot as ConfigSnapshot);
-    branch.businessSettings = branch.businessSettings.map((setting) =>
-      setting.key === "payment_reminder_days"
-        ? { ...setting, value: setting.value + 1 }
-        : setting,
-    );
+    branch.businessSettings = branch.businessSettings.map((setting) => {
+      if (setting.key === "payment_reminder_days") {
+        return { ...setting, value: setting.value + 1 };
+      }
+      if (setting.key === "default_lesson_duration_minutes") {
+        return { ...setting, value: 75 };
+      }
+      return setting;
+    });
     const preview = await service.preview(manager, {
       branchId,
       baseVersion: 0,
@@ -303,8 +308,16 @@ describe("Unified CRM configuration (PostgreSQL)", () => {
     expect(effective).toMatchObject({
       source: "branch_override",
       branchVersion: 1,
-      sources: { payment_reminder_days: "branch_override" },
+      sources: {
+        default_lesson_duration_minutes: "branch_override",
+        payment_reminder_days: "branch_override",
+      },
     });
+    const branchCatalog = await service.getLessonDecisionCatalog(
+      { userId: randomUUID(), role: "admin" },
+      branchId,
+    );
+    expect(branchCatalog.defaultLessonDurationMinutes).toBe(75);
     await expect(service.getEffective(manager)).rejects.toBeInstanceOf(
       ForbiddenException,
     );

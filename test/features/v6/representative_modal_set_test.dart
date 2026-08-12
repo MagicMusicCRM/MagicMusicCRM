@@ -49,8 +49,11 @@ void main() {
                 studentName: 'Анна Смирнова',
                 roomName: 'Зал 1',
                 timeRange: '14:00–15:00',
-                currentStatus: 'scheduled',
+                currentStatus: 'settlement_pending',
                 conflicts: const [],
+                settlementIssue: lessonSettlementIssueLabel(
+                  'ConflictException',
+                ),
                 lessonId: 'lesson-1',
                 onEdit: () {},
                 onCancel: () async => cancelled++,
@@ -69,8 +72,25 @@ void main() {
     expect(find.text('Развернуть'), findsOneWidget);
     expect(find.text('Анна Смирнова'), findsNWidgets(2));
 
+    expect(find.text('Конфликт'), findsOneWidget);
+    expect(find.textContaining('Причина конфликта'), findsOneWidget);
+    expect(
+      find.text(
+        'Автоматический расчёт не завершён. Проверьте списание и оплату преподавателю.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('ConflictException'), findsNothing);
     expect(find.text('Исправить расчёт'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('lesson-repair-settlement')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Провести занятие'), findsNothing);
+    expect(find.textContaining('Завершить занятие'), findsNothing);
     expect(find.text('Перенести или изменить'), findsOneWidget);
+    await tester.ensureVisible(find.text('Отменить занятие'));
+    await tester.pump();
     await tester.tap(find.text('Отменить занятие'));
     await tester.pumpAndSettle();
     expect(cancelled, 1);

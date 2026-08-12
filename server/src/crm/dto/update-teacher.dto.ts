@@ -5,6 +5,7 @@ import {
   IsArray,
   IsDateString,
   IsEmail,
+  IsInt,
   IsNumber,
   IsObject,
   IsOptional,
@@ -59,7 +60,6 @@ export class UpdateTeacherDto {
   // KVA-238: мультивыбор дисциплин (m2m app.teacher_disciplines).
   @IsOptional()
   @IsArray()
-  @ArrayMinSize(1)
   @ArrayUnique()
   @IsUUID("all", { each: true })
   disciplineIds?: string[];
@@ -83,4 +83,17 @@ export class UpdateTeacherDto {
   @IsOptional()
   @IsDateString()
   rateEffectiveFrom?: string;
+
+  /** Payroll aggregate version, required only when salary or rate changes. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  payrollExpectedVersion?: number;
+
+  /** Human-readable audit reason, required only when salary or rate changes. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  payrollReasonText?: string;
 }

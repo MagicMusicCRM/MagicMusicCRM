@@ -177,6 +177,32 @@ void main() {
     });
 
     test(
+      'cancels a pending account deletion through the canonical route',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/profile/deletion-request',
+            statusCode: 200,
+            body: {
+              'id': 'request-c',
+              'status': 'cancelled',
+              'reason': 'Удаление',
+              'requestedAt': '2026-06-13T10:00:00.000Z',
+            },
+          ),
+        ]);
+        final service = _service(adapter);
+
+        final request = await service.cancelAccountDeletion();
+
+        expect(request.id, 'request-c');
+        expect(request.status, 'cancelled');
+        expect(adapter.requests.single.method, 'DELETE');
+        expect(adapter.requests.single.body, isEmpty);
+      },
+    );
+
+    test(
       'ensures administration chat thread through v3 messenger API',
       () async {
         final adapter = _FakeAdapter([

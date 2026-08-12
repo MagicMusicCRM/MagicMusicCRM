@@ -662,10 +662,11 @@ extension _ClientCardTabsA on _ClientCardState {
     final clientId = clientType == 'student' ? _studentId : _leadId;
     if (clientId.isEmpty) return;
     final date = bestDt ?? now;
-    final name = [
-      _leadData['first_name'],
-      _leadData['last_name'],
-    ].whereType<Object>().map((value) => value.toString()).join(' ').trim();
+    final name = [_clientFirstName, _clientLastName]
+        .whereType<String>()
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .join(' ');
     ref
         .read(scheduleNavigationProvider.notifier)
         .focusClientMonth(
@@ -673,6 +674,7 @@ extension _ClientCardTabsA on _ClientCardState {
           clientType: clientType,
           clientId: clientId,
           clientName: name.isEmpty ? null : name,
+          branchId: _clientBranchId,
         );
     ref
         .read(crmNavigationRequestProvider.notifier)

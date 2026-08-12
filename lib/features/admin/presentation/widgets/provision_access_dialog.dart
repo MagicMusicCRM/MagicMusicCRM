@@ -1,23 +1,21 @@
 import 'package:flutter/material.dart';
 
 typedef ProvisionAccessSubmit =
-    Future<void> Function(String email, String password, String? role);
+    Future<void> Function(String? email, String? password);
 
 Future<bool?> showProvisionAccessDialog(
   BuildContext context, {
   required String personLabel,
   required ProvisionAccessSubmit onSubmit,
   String initialEmail = '',
-  Map<String, String>? roles,
-  String? initialRole,
+  bool accessExists = false,
 }) {
   return showDialog<bool>(
     context: context,
     builder: (_) => _ProvisionAccessDialog(
       personLabel: personLabel,
       initialEmail: initialEmail,
-      roles: roles,
-      initialRole: initialRole,
+      accessExists: accessExists,
       onSubmit: onSubmit,
     ),
   );
@@ -27,15 +25,13 @@ class _ProvisionAccessDialog extends StatefulWidget {
   const _ProvisionAccessDialog({
     required this.personLabel,
     required this.initialEmail,
-    required this.roles,
-    required this.initialRole,
+    required this.accessExists,
     required this.onSubmit,
   });
 
   final String personLabel;
   final String initialEmail;
-  final Map<String, String>? roles;
-  final String? initialRole;
+  final bool accessExists;
   final ProvisionAccessSubmit onSubmit;
 
   @override
@@ -47,7 +43,6 @@ class _ProvisionAccessDialogState extends State<_ProvisionAccessDialog> {
   late final TextEditingController _email;
   final _password = TextEditingController();
   final _passwordAgain = TextEditingController();
-  String? _role;
   bool _saving = false;
   bool _showPassword = false;
 
@@ -62,7 +57,6 @@ class _ProvisionAccessDialogState extends State<_ProvisionAccessDialog> {
           ? ''
           : initialEmail,
     );
-    _role = widget.initialRole ?? widget.roles?.keys.firstOrNull;
   }
 
   @override
@@ -75,14 +69,31 @@ class _ProvisionAccessDialogState extends State<_ProvisionAccessDialog> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate() || _saving) return;
+    final email = _email.text.trim();
+    final initialEmail = widget.initialEmail.trim();
+    final emailChanged =
+        !widget.accessExists ||
+        email.toLowerCase() != initialEmail.toLowerCase();
+    final passwordChanged = _password.text.isNotEmpty;
+    if (widget.accessExists && !emailChanged && !passwordChanged) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Измените email или укажите новый пароль'),
+        ),
+      );
+      return;
+    }
     setState(() => _saving = true);
     try {
-      await widget.onSubmit(_email.text.trim(), _password.text, _role);
+      await widget.onSubmit(
+        emailChanged ? email : null,
+        passwordChanged ? _password.text : null,
+      );
       if (mounted) Navigator.pop(context, true);
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Не удалось создать доступ: $error')),
+          SnackBar(content: Text('Не удалось сохранить доступ: $error')),
         );
       }
     } finally {
@@ -93,7 +104,9 @@ class _ProvisionAccessDialogState extends State<_ProvisionAccessDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('Создать доступ: ${widget.personLabel}'),
+      title: Text(
+        '${widget.accessExists ? 'Данные для входа' : 'Создать доступ'}: ${widget.personLabel}',
+      ),
       content: SizedBox(
         width: 420,
         child: Form(
@@ -109,7 +122,7 @@ class _ProvisionAccessDialogState extends State<_ProvisionAccessDialog> {
                 ),
                 validator: (value) {
                   final email = value?.trim() ?? '';
-                  if (email.isEmpty) return 'Обязательное поле';
+                  if (email.isEmpty) return 'Укажите email для входа';
                   return email.contains('@')
                       ? null
                       : 'Введите корректный email';
@@ -120,8 +133,10 @@ class _ProvisionAccessDialogState extends State<_ProvisionAccessDialog> {
                 controller: _password,
                 obscureText: !_showPassword,
                 decoration: InputDecoration(
-                  labelText: 'Пароль *',
-                  helperText: 'Не менее 10 символов',
+                  labelText: widget.accessExists ? 'Новый пароль' : 'Пароль *',
+                  helperText: widget.accessExists
+                      ? 'Оставьте пустым, чтобы не менять'
+                      : 'Не менее 10 символов',
                   suffixIcon: IconButton(
                     tooltip: _showPassword
                         ? 'Скрыть пароль'
@@ -133,40 +148,28 @@ class _ProvisionAccessDialogState extends State<_ProvisionAccessDialog> {
                     ),
                   ),
                 ),
-                validator: (value) => (value?.length ?? 0) < 10
-                    ? 'Пароль должен содержать минимум 10 символов'
-                    : null,
+                validator: (value) {
+                  final password = value ?? '';
+                  if (widget.accessExists && password.isEmpty) return null;
+                  return password.length < 10
+                      ? 'Пароль должен содержать минимум 10 символов'
+                      : null;
+                },
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _passwordAgain,
                 obscureText: !_showPassword,
                 decoration: const InputDecoration(
-                  labelText: 'Повторите пароль *',
+                  labelText: 'Повторите новый пароль',
                 ),
-                validator: (value) =>
-                    value != _password.text ? 'Пароли не совпадают' : null,
+                validator: (value) {
+                  if (widget.accessExists && _password.text.isEmpty) {
+                    return null;
+                  }
+                  return value != _password.text ? 'Пароли не совпадают' : null;
+                },
               ),
-              if (widget.roles case final roles?) ...[
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  menuMaxHeight: 256,
-                  initialValue: _role,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Роль доступа *',
-                  ),
-                  items: [
-                    for (final entry in roles.entries)
-                      DropdownMenuItem(
-                        value: entry.key,
-                        child: Text(entry.value),
-                      ),
-                  ],
-                  onChanged: (value) => setState(() => _role = value),
-                  validator: (value) => value == null ? 'Выберите роль' : null,
-                ),
-              ],
             ],
           ),
         ),
@@ -184,7 +187,7 @@ class _ProvisionAccessDialogState extends State<_ProvisionAccessDialog> {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Создать доступ'),
+              : Text(widget.accessExists ? 'Сохранить' : 'Создать доступ'),
         ),
       ],
     );

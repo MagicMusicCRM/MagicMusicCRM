@@ -262,6 +262,18 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('client-desktop-canvas')), findsOneWidget);
+      expect(
+        find.byKey(const Key('client-desktop-section-rail')),
+        findsOneWidget,
+      );
+      expect(
+        tester.getTopLeft(find.byKey(const Key('client-desktop-canvas'))).dx,
+        greaterThan(
+          tester
+              .getTopRight(find.byKey(const Key('client-desktop-section-rail')))
+              .dx,
+        ),
+      );
       for (final section in const [
         'Обзор',
         'Занятия',
@@ -302,7 +314,7 @@ void main() {
       );
       await tester.tap(find.byKey(const ValueKey('client-lesson-lesson-1')));
       await tester.pumpAndSettle();
-      expect(find.text('Редактировать занятие'), findsOneWidget);
+      expect(find.text('Перенести или изменить занятие'), findsOneWidget);
       await tester.pageBack();
       await tester.pumpAndSettle();
       expect(
@@ -432,6 +444,7 @@ void main() {
           'name': 'Класс 1',
         },
       ],
+      mutateScheduleSeriesOnCreate: true,
     );
     await tester.pumpWidget(
       _app(
@@ -457,6 +470,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('Добавить предпочтение'));
     await tester.tap(find.text('Добавить предпочтение'));
     await tester.pumpAndSettle();
     final initialDay = DateTime.now().weekday;
@@ -501,6 +515,16 @@ void main() {
       '15:00',
       '16:00',
     });
+    expect(
+      api.getCalls
+          .where((request) => request.path == '/crm/schedule-series')
+          .length,
+      greaterThanOrEqualTo(2),
+    );
+    expect(
+      find.textContaining('60 мин · Мария Иванова · Класс 1'),
+      findsNWidgets(4),
+    );
     await tester.pump(const Duration(seconds: 4));
   });
 

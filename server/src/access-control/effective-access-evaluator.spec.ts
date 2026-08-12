@@ -61,6 +61,18 @@ const packageAllows: Readonly<Record<CapabilityKey, readonly AccessRole[]>> = {
     "system_admin",
   ],
   "commerce.school_finance.read": ["director", "system_admin"],
+  "commerce.teacher_payroll.read": [
+    "admin",
+    "manager",
+    "director",
+    "system_admin",
+  ],
+  "commerce.teacher_payroll.write": [
+    "admin",
+    "manager",
+    "director",
+    "system_admin",
+  ],
   "commerce.package.read": ["admin", "manager", "director", "system_admin"],
   "commerce.package.manage": ["director", "system_admin"],
   "commerce.subscription.issue": [

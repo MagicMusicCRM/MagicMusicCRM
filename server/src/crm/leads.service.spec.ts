@@ -168,7 +168,19 @@ describe("LeadsService", () => {
     const boardPromise = service.listLeadBoard(actor, {
       q: "анна",
       branchId: "22222222-2222-4222-8222-222222222222",
+      statusId: "33333333-3333-4333-8333-333333333333",
+      assignedTo: "44444444-4444-4444-8444-444444444444",
+      source: "Сайт",
       discipline: "Вокал",
+      level: "Начальный",
+      category: "Взрослый",
+      requestType: "Пробное занятие",
+      goal: "Поставить голос",
+      gender: "Женский",
+      preferredSchedule: "вечер",
+      from: "2026-06-01T00:00:00.000Z",
+      to: "2026-07-01T00:00:00.000Z",
+      sort: "oldest",
       quick: "active",
       openTasks: true,
       limit: 10,
@@ -204,14 +216,32 @@ describe("LeadsService", () => {
     // +1 for the leading «Без статуса» sort-setting read.
     expect(query).toHaveBeenCalledTimes(4);
     expect(query.mock.calls[3][1]).toContain("анна");
+    expect(query.mock.calls[3][1]).toContain(
+      "33333333-3333-4333-8333-333333333333",
+    );
+    expect(query.mock.calls[3][1]).toContain(
+      "44444444-4444-4444-8444-444444444444",
+    );
+    expect(query.mock.calls[3][1]).toContain("Сайт");
     expect(query.mock.calls[3][1]).toContain("Вокал");
+    expect(query.mock.calls[3][1]).toContain("Начальный");
+    expect(query.mock.calls[3][1]).toContain("Взрослый");
+    expect(query.mock.calls[3][1]).toContain("Пробное занятие");
+    expect(query.mock.calls[3][1]).toContain("Поставить голос");
+    expect(query.mock.calls[3][1]).toContain("Женский");
+    expect(query.mock.calls[3][1]).toContain("вечер");
+    expect(query.mock.calls[3][1]).toContain("2026-06-01T00:00:00.000Z");
+    expect(query.mock.calls[3][1]).toContain("2026-07-01T00:00:00.000Z");
     expect(query.mock.calls[3][1]).toContain(11);
     expect(String(query.mock.calls[3][0])).toContain("as cursor_created_at");
+    expect(String(query.mock.calls[3][0])).toContain(
+      "order by l.created_at asc, l.id asc",
+    );
     expect(String(query.mock.calls[3][0])).toContain("as linked_user_id");
     expect(String(query.mock.calls[3][0])).toContain("is_app_account = true");
   });
 
-  it("preserves PostgreSQL microseconds in the lead-board keyset cursor", async () => {
+  it("preserves microseconds and advances an oldest-first keyset cursor", async () => {
     const boundaryId = "11111111-1111-4111-8111-111111111111";
     const nextId = "22222222-2222-4222-8222-222222222222";
     const exactTimestamp = "2026-06-12T00:00:00.123456Z";
@@ -250,12 +280,14 @@ describe("LeadsService", () => {
     const firstPage = await service.listLeadBoard(actor, {
       limit: 1,
       unassigned: true,
+      sort: "oldest",
     } as never);
     const cursor = firstPage.columns[0].nextCursor;
     await service.listLeadBoard(actor, {
       limit: 1,
       unassigned: true,
       cursor,
+      sort: "oldest",
     } as never);
 
     expect(firstPage.nextCursor).toBeNull();
@@ -264,7 +296,10 @@ describe("LeadsService", () => {
     expect(secondLeadQuery[1]).toContain(exactTimestamp);
     expect(secondLeadQuery[1]).toContain(boundaryId);
     expect(String(secondLeadQuery[0])).toContain("l.status_id is null");
-    expect(String(secondLeadQuery[0])).toContain("(l.created_at, l.id) < (");
+    expect(String(secondLeadQuery[0])).toContain("(l.created_at, l.id) > (");
+    expect(String(secondLeadQuery[0])).toContain(
+      "order by l.created_at asc, l.id asc",
+    );
   });
 
   it("paginates divergent status partitions independently without skips or duplicates", async () => {
@@ -560,6 +595,7 @@ describe("LeadsService", () => {
           },
         ],
       },
+      { rows: [{ value_map: {} }] },
       // chat-work timeline is fetched via the injected ChatWorkTimelineService
       // (stubbed to []), so it no longer consumes a db.query result here.
     ]);
@@ -586,8 +622,9 @@ describe("LeadsService", () => {
     );
 
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
-    // 5 direct db.query calls: tasks use the canonical SharedTaskService.
-    expect(query).toHaveBeenCalledTimes(5);
+    // 6 direct db.query calls: tasks use the canonical SharedTaskService;
+    // the final query returns the typed custom-field value map.
+    expect(query).toHaveBeenCalledTimes(6);
   });
 
   it("lists a lead's status history newest-first", async () => {
@@ -796,12 +833,13 @@ describe("LeadsService", () => {
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "crm.lead_updated",
-        metadata: {
+        metadata: expect.objectContaining({
           changes: [
             { field: "phone", from: "+79161234567", to: "+79990000000" },
             { field: "custom_data.level", from: "A1", to: "A2" },
           ],
-        },
+          customFieldDefinitionIds: [],
+        }),
       }),
     );
   });
@@ -896,27 +934,19 @@ describe("LeadsService", () => {
     expect(params).toContain("44444444-4444-4444-4444-444444444444");
   });
 
-  it("soft deletes leads through CRM write policy", async () => {
-    const { service, query, audit, policy } = createService([{ id: "lead-a" }]);
+  it("blocks direct lead deletion without mutating CRM data", async () => {
+    const { service, query, transaction, audit, policy } = createService([
+      { id: "lead-a" },
+    ]);
 
-    await expect(service.deleteLead(actor, "lead-a")).resolves.toEqual({
-      success: true,
-    });
+    await expect(service.deleteLead(actor, "lead-a")).rejects.toThrow(
+      ConflictException,
+    );
 
     expect(policy.assertCanWriteCrm).toHaveBeenCalledWith(actor);
-    expect(query.mock.calls[0][1]).toEqual(["lead-a"]);
-    expect(
-      query.mock.calls.some((call) =>
-        String(call[0]).includes("update app.user_crm_links"),
-      ),
-    ).toBe(true);
-    expect(audit.record).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: "crm.lead_deleted",
-        entityType: "lead",
-        entityId: "lead-a",
-      }),
-    );
+    expect(transaction).not.toHaveBeenCalled();
+    expect(query).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
   });
 
   describe("statusId resolution (контракт 6, правки №2)", () => {

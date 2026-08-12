@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-08-12T20:58:00+03:00",
+  "environment": "production",
+  "status": "partial",
+  "privacy": {
+    "secretsStored": false,
+    "phonesStored": false,
+    "emailsStored": false,
+    "preserved": [
+      "entity and fact UUIDs",
+      "versions and counts",
+      "money and business outcomes"
+    ]
+  },
+  "records": [
+    {
+      "uatIds": ["UAT-030", "UAT-031", "UAT-032", "UAT-033", "UAT-034"],
+      "kind": "branch",
+      "id": "60958318-8d92-4c54-8d56-ded34ee8f8c1",
+      "label": "UAT-20260808-01 Оборонная",
+      "outcome": "organization inventory captured",
+      "evidence": ["api/uat-030-034-organization-inventory-20260810.json"]
+    },
+    {
+      "uatIds": ["UAT-044"],
+      "kind": "ingestion",
+      "id": "a33f706f-26b2-48a1-8123-202608090044",
+      "outcome": "same signed webhook replayed to one Lead",
+      "counts": {"leads": 1, "outboxEvents": 1},
+      "evidence": ["README.md#G4b--подписанная-внешняя-заявка"]
+    },
+    {
+      "uatIds": ["UAT-044"],
+      "kind": "lead",
+      "id": "9b35e688-45d7-4efb-bacc-1d3e952cf6b5",
+      "outcome": "external Lead created once",
+      "evidence": ["README.md#G4b--подписанная-внешняя-заявка"]
+    },
+    {
+      "uatIds": ["UAT-044"],
+      "kind": "outbox_event",
+      "id": "0643931d-48c4-4c95-ba44-306c9c7af11d",
+      "outcome": "published on first attempt",
+      "counts": {"notifications": 1, "recipients": 17, "deliveries": 17},
+      "evidence": ["README.md#G4b--подписанная-внешняя-заявка"]
+    },
+    {
+      "uatIds": ["UAT-045"],
+      "kind": "lead",
+      "id": "bd5627b5-2767-4cee-913c-ccfb2bca7a27",
+      "outcome": "typed Lead reference for the production trial lesson",
+      "evidence": ["README.md#G4d--единое-расписание-и-клиентский-контекст"]
+    },
+    {
+      "uatIds": ["UAT-045"],
+      "kind": "lesson",
+      "id": "05ec7b08-dd74-5120-84a1-b43ab7e04e32",
+      "outcome": "trial lesson visible in the canonical schedule",
+      "evidence": ["README.md#G4d--единое-расписание-и-клиентский-контекст"]
+    },
+    {
+      "uatIds": ["UAT-046"],
+      "kind": "shared_task",
+      "id": "00c7ab5e-b526-4337-b948-fb8262719595",
+      "version": 3,
+      "outcome": "closed by the assigned Admin exactly once",
+      "counts": {"audiences": 1, "closeFacts": 1},
+      "evidence": ["README.md#G4e--задачи-только-для-операционных-сотрудников"]
+    }
+  ],
+  "missingRequiredClasses": [
+    "room IDs and lifecycle journal IDs",
+    "teacher, profile, app-user and branch-assignment IDs",
+    "staff, profile, app-user and branch-assignment IDs",
+    "Lead-to-Student conversion and canonical link IDs",
+    "group, membership and schedule-plan IDs",
+    "payer, family relation, linked-user and invitation IDs",
+    "payment, account fact, subscription, reservation and reversal IDs",
+    "lesson snapshot, settlement plan, transition and financial fact IDs",
+    "notification recipient and delivery IDs",
+    "deletion request, audit, outbox and idempotency IDs for later UAT groups"
+  ]
+}

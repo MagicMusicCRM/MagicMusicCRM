@@ -157,7 +157,6 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
         }
         if (snapshot.hasError && !snapshot.hasData) {
           return _DashboardError(
-            error: snapshot.error,
             onRetry: () => _reloadDashboard(refreshBranches: true),
           );
         }

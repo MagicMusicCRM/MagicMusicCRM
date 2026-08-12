@@ -63,6 +63,13 @@ class MagicReleaseGateService {
     return AccountDeletionRequest.fromJson(result);
   }
 
+  Future<AccountDeletionRequest> cancelAccountDeletion() async {
+    final result = await _api.delete<Map<String, dynamic>>(
+      '/profile/deletion-request',
+    );
+    return AccountDeletionRequest.fromJson(result);
+  }
+
   Future<String> ensureAdminChatThread() async {
     final result = await _api.post<Map<String, dynamic>>(
       '/messenger/chats/direct',

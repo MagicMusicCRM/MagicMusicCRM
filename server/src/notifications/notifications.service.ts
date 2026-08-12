@@ -18,6 +18,7 @@ import { NotificationsPolicy } from './notifications.policy';
 import { UpdateNotificationPreferenceDto } from './dto/update-notification-preference.dto';
 import { NotificationChannel } from './notifications.types';
 import { RealtimeBus } from '../realtime/realtime-bus';
+import { audienceForLesson } from '../crm/audience';
 
 interface NotificationRow {
   id: string;
@@ -51,6 +52,21 @@ interface DeviceRow {
   last_seen_at: Date | string;
   created_at: Date | string;
   updated_at: Date | string;
+}
+
+type LessonChangeNotificationAction = 'created' | 'rescheduled' | 'cancelled';
+
+interface LessonNotificationContext {
+  id: string;
+  student_id: string | null;
+  group_id: string | null;
+  lead_id: string | null;
+  teacher_id: string | null;
+  teacher_user_id: string | null;
+  successor_id: string | null;
+  when_local: string;
+  branch_name: string | null;
+  room_name: string | null;
 }
 
 @Injectable()
@@ -194,7 +210,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
           type: 'lesson_reminder',
           title,
           body: bodyFor(row.when_local),
-          data: { lessonId: row.id, kind },
+          data: { entityType: 'lesson', entityId: row.id, kind },
           userIds,
           channels: ['push']
         });
@@ -513,6 +529,64 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  /**
+   * Materializes one user-visible lesson mutation from the durable platform
+   * outbox. The outbox event id is also the notification id, so a worker retry
+   * cannot duplicate the bell card or push side effects.
+   */
+  async notifyLessonChanged(input: {
+    eventId: string;
+    lessonId: string;
+    action: LessonChangeNotificationAction;
+    successorId?: string | null;
+  }): Promise<void> {
+    const source = await this.loadLessonNotificationContext(input.lessonId);
+    const target = input.action === 'rescheduled'
+      ? await this.loadLessonNotificationContext(
+          input.successorId ?? source.successor_id
+        )
+      : source;
+    const userIds = await audienceForLesson(this.database, target);
+    const copy = this.lessonChangeCopy(input.action, target);
+    if (userIds.length > 0) {
+      await this.createNotification({
+        type: 'lesson_change',
+        title: copy.title,
+        body: copy.body,
+        data: {
+          entityType: 'lesson',
+          entityId: target.id,
+          eventType: input.action
+        },
+        userIds,
+        channels: ['in_app', 'push'],
+        notificationId: input.eventId
+      });
+    }
+
+    if (
+      input.action === 'rescheduled' &&
+      source.teacher_user_id &&
+      source.teacher_user_id !== target.teacher_user_id
+    ) {
+      await this.createNotification({
+        type: 'lesson_change',
+        title: 'Занятие переназначено',
+        body: `Вы больше не назначены на занятие ${this.lessonContext(source)}.`,
+        data: {
+          entityType: 'lesson',
+          entityId: source.id,
+          eventType: 'teacher_unassigned'
+        },
+        userIds: [source.teacher_user_id],
+        channels: ['in_app', 'push'],
+        notificationId: this.stableUuid(
+          `lesson-change\0${input.eventId}\0teacher-unassigned`
+        )
+      });
+    }
+  }
+
   async list(actor: ActorContext, query: ListNotificationsQuery) {
     const limit = Math.min(query.limit ?? 50, 100);
     const result = await this.database.query<NotificationRow & CountRow>(
@@ -668,6 +742,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     body: string;
     data?: Record<string, unknown>;
     channels?: NotificationChannel[];
+    notificationId?: string;
   }): Promise<{ notificationId: string }> {
     const channels = input.channels ?? ['in_app'];
     const notificationId = await this.createNotification({
@@ -676,7 +751,8 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       body: input.body,
       data: this.sanitizeData(input.data),
       userIds: [input.userId],
-      channels
+      channels,
+      notificationId: input.notificationId
     });
     this.scheduleDelivery(channels);
     return { notificationId };
@@ -710,17 +786,20 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     data: Record<string, unknown>;
     userIds: string[];
     channels: NotificationChannel[];
+    notificationId?: string;
   }): Promise<string> {
     if (input.userIds.length === 0) throw new NotFoundException('Получатели не найдены.');
     const uniqueUserIds = [...new Set(input.userIds)];
     const notificationId = await this.database.transaction(async (client) => {
       const notification = await client.query<{ id: string }>(
         `
-          insert into app.notifications (type, title, body, data, created_by)
-          values ($1, $2, $3, $4::jsonb, $5)
+          insert into app.notifications (id, type, title, body, data, created_by)
+          values (coalesce($1::uuid, gen_random_uuid()), $2, $3, $4, $5::jsonb, $6)
+          on conflict (id) do update set id = excluded.id
           returning id
         `,
         [
+          input.notificationId ?? null,
           input.type,
           input.title,
           input.body,
@@ -747,13 +826,20 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
             await client.query(
               `
                 insert into app.email_outbox (user_id, to_email_hash, template, payload)
-                values ($1, $2, $3, $4::jsonb)
+                select $1, $2, $3, $4::jsonb
+                where not exists (
+                  select 1 from app.email_outbox
+                  where user_id = $1
+                    and template = $3
+                    and payload->>'notificationId' = $5
+                )
               `,
               [
                 userId,
                 this.sha256(user.rows[0].email.toLowerCase()),
                 input.type,
-                JSON.stringify({ notificationId, title: input.title, body: input.body })
+                JSON.stringify({ notificationId, title: input.title, body: input.body }),
+                notificationId
               ]
             );
           }
@@ -764,7 +850,11 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
               insert into app.notification_deliveries (
                 notification_id, user_id, channel, provider, status, attempt_count, last_error
               )
-              values ($1, $2, 'push', 'firebase', 'queued', 0, null)
+              select $1, $2, 'push', 'firebase', 'queued', 0, null
+              where not exists (
+                select 1 from app.notification_deliveries
+                where notification_id = $1 and user_id = $2 and channel = 'push'
+              )
             `,
             [notificationId, userId]
           );
@@ -842,6 +932,79 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
 
   private sha256(value: string): string {
     return createHash('sha256').update(value).digest('hex');
+  }
+
+  private stableUuid(value: string): string {
+    const digest = this.sha256(value);
+    return [
+      digest.slice(0, 8),
+      digest.slice(8, 12),
+      `5${digest.slice(13, 16)}`,
+      `${((parseInt(digest[16], 16) & 0x3) | 0x8).toString(16)}${digest.slice(17, 20)}`,
+      digest.slice(20, 32)
+    ].join('-');
+  }
+
+  private async loadLessonNotificationContext(
+    lessonId: string | null
+  ): Promise<LessonNotificationContext> {
+    if (!lessonId) throw new NotFoundException('Занятие для уведомления не найдено.');
+    const result = await this.database.query<LessonNotificationContext>(
+      `
+        select lesson.id, lesson.student_id, lesson.group_id, lesson.lead_id,
+          lesson.teacher_id, lesson.successor_id,
+          teacher_user.id as teacher_user_id,
+          to_char(
+            lesson.scheduled_at at time zone coalesce(branch.timezone_name, 'Europe/Moscow'),
+            'DD.MM.YYYY HH24:MI'
+          ) as when_local,
+          branch.name as branch_name,
+          room.name as room_name
+        from app.lessons lesson
+        left join app.branches branch
+          on branch.id = lesson.branch_id
+        left join app.rooms room
+          on room.id = lesson.room_id
+        left join app.teachers teacher
+          on teacher.id = lesson.teacher_id
+        left join app.profiles teacher_profile
+          on teacher_profile.id = teacher.profile_id
+         and teacher_profile.deleted_at is null
+        left join app.users teacher_user
+          on teacher_user.id = teacher_profile.user_id
+         and teacher_user.deleted_at is null
+         and teacher_user.is_app_account = true
+        where lesson.id = $1
+        limit 1
+      `,
+      [lessonId]
+    );
+    const row = result.rows[0];
+    if (!row) throw new NotFoundException('Занятие для уведомления не найдено.');
+    return row;
+  }
+
+  private lessonChangeCopy(
+    action: LessonChangeNotificationAction,
+    lesson: LessonNotificationContext
+  ): { title: string; body: string } {
+    const context = this.lessonContext(lesson);
+    if (action === 'created') {
+      return { title: 'Занятие назначено', body: `Занятие назначено на ${context}.` };
+    }
+    if (action === 'cancelled') {
+      return { title: 'Занятие отменено', body: `Занятие ${context} отменено.` };
+    }
+    return {
+      title: 'Занятие перенесено',
+      body: `Новая дата и время занятия: ${context}.`
+    };
+  }
+
+  private lessonContext(lesson: LessonNotificationContext): string {
+    return [lesson.when_local, lesson.branch_name, lesson.room_name]
+      .filter((value): value is string => !!value?.trim())
+      .join(' · ');
   }
 
   private scheduleEmailDispatch(): void {

@@ -1,15 +1,36 @@
 {
   "schemaVersion": 1,
   "task": "T8.3.3",
-  "generatedAt": "2026-08-07T10:26:47.401Z",
+  "generatedAt": "2026-08-11T18:09:54.833Z",
   "summary": {
-    "accessDecisions": 1782,
+    "accessDecisions": 2064,
     "scheduleDecisions": 2000,
-    "differences": 6,
-    "explainedDifferences": 6,
+    "differences": 17,
+    "explainedDifferences": 17,
     "unexplainedDifferences": 0
   },
   "safeDiffs": [
+    {
+      "domain": "access",
+      "corpusId": "GET /crm/client-pipelines:client",
+      "legacyAllowed": false,
+      "v4Allowed": true,
+      "explanation": "legacy_stricter_intersection"
+    },
+    {
+      "domain": "access",
+      "corpusId": "GET /crm/client-pipelines/revisions:manager",
+      "legacyAllowed": false,
+      "v4Allowed": true,
+      "explanation": "legacy_stricter_intersection"
+    },
+    {
+      "domain": "access",
+      "corpusId": "POST /crm/client-pipelines/preview:manager",
+      "legacyAllowed": false,
+      "v4Allowed": true,
+      "explanation": "legacy_stricter_intersection"
+    },
     {
       "domain": "access",
       "corpusId": "POST /crm/client-pipelines/rollback:manager",
@@ -26,21 +47,28 @@
     },
     {
       "domain": "access",
-      "corpusId": "POST /crm/client-pipelines/preview:manager",
+      "corpusId": "POST /crm/staff/:id/restore:manager",
       "legacyAllowed": false,
       "v4Allowed": true,
       "explanation": "legacy_stricter_intersection"
     },
     {
       "domain": "access",
-      "corpusId": "GET /crm/client-pipelines/revisions:manager",
+      "corpusId": "POST /crm/staff/:id/offboard:manager",
       "legacyAllowed": false,
       "v4Allowed": true,
       "explanation": "legacy_stricter_intersection"
     },
     {
       "domain": "access",
-      "corpusId": "GET /crm/client-pipelines:client",
+      "corpusId": "GET /crm/staff/:id/lifecycle-history:manager",
+      "legacyAllowed": false,
+      "v4Allowed": true,
+      "explanation": "legacy_stricter_intersection"
+    },
+    {
+      "domain": "access",
+      "corpusId": "GET /crm/schedule-reference/branches/:branchId/hours:client",
       "legacyAllowed": false,
       "v4Allowed": true,
       "explanation": "legacy_stricter_intersection"
@@ -48,6 +76,55 @@
     {
       "domain": "access",
       "corpusId": "GET /crm/schedule-reference:client",
+      "legacyAllowed": false,
+      "v4Allowed": true,
+      "explanation": "legacy_stricter_intersection"
+    },
+    {
+      "domain": "access",
+      "corpusId": "GET /crm/staff/:id/lifecycle-preview:manager",
+      "legacyAllowed": false,
+      "v4Allowed": true,
+      "explanation": "legacy_stricter_intersection"
+    },
+    {
+      "domain": "access",
+      "corpusId": "POST /crm/staff/:id/access:manager",
+      "legacyAllowed": false,
+      "v4Allowed": true,
+      "explanation": "legacy_stricter_intersection"
+    },
+    {
+      "domain": "access",
+      "corpusId": "POST /crm/teachers/:id/restore:manager",
+      "legacyAllowed": false,
+      "v4Allowed": true,
+      "explanation": "legacy_stricter_intersection"
+    },
+    {
+      "domain": "access",
+      "corpusId": "POST /crm/teachers/:id/offboard:manager",
+      "legacyAllowed": false,
+      "v4Allowed": true,
+      "explanation": "legacy_stricter_intersection"
+    },
+    {
+      "domain": "access",
+      "corpusId": "GET /crm/teachers/:id/lifecycle-history:manager",
+      "legacyAllowed": false,
+      "v4Allowed": true,
+      "explanation": "legacy_stricter_intersection"
+    },
+    {
+      "domain": "access",
+      "corpusId": "GET /crm/teachers/:id/lifecycle-preview:manager",
+      "legacyAllowed": false,
+      "v4Allowed": true,
+      "explanation": "legacy_stricter_intersection"
+    },
+    {
+      "domain": "access",
+      "corpusId": "POST /crm/teachers/:id/access:manager",
       "legacyAllowed": false,
       "v4Allowed": true,
       "explanation": "legacy_stricter_intersection"
@@ -74,7 +151,7 @@
     }
   ],
   "proof": {
-    "requestCorpusDigestSha256": "4cc2f2b6b8a9cca006c52c016108c47ccc5bac0b86f29d7a2c801345f04f1598",
+    "requestCorpusDigestSha256": "422a1f3b8aacc59f67eaa990685c0a402e1ccdec22c49341954c22e348d9eec8",
     "safePayload": true
   }
 }

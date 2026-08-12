@@ -65,6 +65,10 @@ export class SchedulePlanRepository {
       active_until: string | null;
       status: "active" | "ended";
       version: string | number;
+      ended_at: Date | string | null;
+      ended_by: string | null;
+      ended_by_name: string | null;
+      end_reason: string | null;
       series: Record<string, unknown>[];
       participants: Record<string, unknown>[];
     }>(
@@ -108,7 +112,15 @@ export class SchedulePlanRepository {
         )
         select plan.id, plan.kind, plan.title, plan.student_id, plan.group_id,
           plan.subscription_id, plan.active_from::text,
-          plan.active_until::text, plan.status, plan.version,
+          plan.active_until::text, plan.status, plan.version, plan.ended_at,
+          case when $1::text = any(array['admin','manager','director','system_admin'])
+            then plan.ended_by end as ended_by,
+          case when $1::text = any(array['admin','manager','director','system_admin'])
+            then plan.end_reason end as end_reason,
+          case when $1::text = any(array['admin','manager','director','system_admin'])
+            then nullif(trim(coalesce(ended_by_profile.first_name, '') || ' ' ||
+              coalesce(ended_by_profile.last_name, '')), '')
+            end as ended_by_name,
           coalesce((
             select jsonb_agg(jsonb_build_object(
               'id', series.id,
@@ -149,6 +161,9 @@ export class SchedulePlanRepository {
             where participant.plan_id = plan.id
           ), '[]'::jsonb) as participants
         from visible_plans plan
+        left join app.profiles ended_by_profile
+          on ended_by_profile.user_id = plan.ended_by
+          and ended_by_profile.deleted_at is null
         where ($5::boolean or plan.status = 'active')
           and (plan.status = 'active' or plan.status_rank <= 20)
         order by (plan.status = 'active') desc, plan.active_from desc, plan.id
@@ -173,6 +188,11 @@ export class SchedulePlanRepository {
         activeUntil: row.active_until,
         status: row.status,
         version: Number(row.version),
+        endedAt:
+          row.ended_at == null ? null : new Date(row.ended_at).toISOString(),
+        endedBy: row.ended_by,
+        endedByName: row.ended_by_name,
+        endReason: row.end_reason,
         rows: row.series,
         participants: row.participants,
       })),
@@ -221,7 +241,8 @@ export class SchedulePlanRepository {
        from app.schedule_plans where id = $1 for update`,
       [planId],
     );
-    if (!result.rows[0]) throw new NotFoundException("План расписания не найден.");
+    if (!result.rows[0])
+      throw new NotFoundException("План расписания не найден.");
     return result.rows[0];
   }
 
@@ -336,6 +357,15 @@ export class SchedulePlanRepository {
       `select id from app.schedule_series
        where plan_id = $1 and deleted_at is null and superseded_by is null
        order by id for update`,
+      [planId],
+    );
+  }
+
+  currentSeriesIds(client: PoolClient, planId: string) {
+    return client.query<{ id: string }>(
+      `select id from app.schedule_series
+       where plan_id = $1 and deleted_at is null and superseded_by is null
+       order by id`,
       [planId],
     );
   }
@@ -528,11 +558,7 @@ export class SchedulePlanRepository {
     );
   }
 
-  cancelLesson(
-    client: PoolClient,
-    lessonId: string,
-    expectedVersion: number,
-  ) {
+  cancelLesson(client: PoolClient, lessonId: string, expectedVersion: number) {
     return client.query<{ version: string | number }>(
       `update app.lessons set lifecycle_state = 'cancelled', updated_at = now()
        where id = $1 and version = $2

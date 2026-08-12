@@ -5,9 +5,11 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import {
+  AccountAdjustmentReversalPreviewTokenPayload,
   LessonTransitionPreviewTokenPayload,
   SchedulePlanEndPreviewTokenPayload,
   PaymentReversalPreviewTokenPayload,
+  signAccountAdjustmentReversalPreview,
   signLessonTransitionPreview,
   signPaymentReversalPreview,
   signSchedulePlanEndPreview,
@@ -19,6 +21,7 @@ import {
   SubscriptionPreviewTokenError,
   SubscriptionReplacePreviewTokenPayload,
   verifyPaymentReversalPreview,
+  verifyAccountAdjustmentReversalPreview,
   verifySchedulePlanEndPreview,
   verifyLessonTransitionPreview,
   verifySubscriptionCancelPreview,
@@ -216,6 +219,53 @@ export class SubscriptionPreviewTokenService {
           error.code === "PREVIEW_TOKEN_EXPIRED"
             ? "Предпросмотр удаления оплаты устарел. Обновите расчёт."
             : "Подписанный предпросмотр удаления оплаты недействителен.",
+      });
+    }
+  }
+
+  issueAccountAdjustmentReversal(
+    payload: Omit<
+      AccountAdjustmentReversalPreviewTokenPayload,
+      "issuedAtSeconds" | "expiresAtSeconds"
+    >,
+    now = new Date(),
+  ): {
+    token: string;
+    expiresAt: string;
+    payload: AccountAdjustmentReversalPreviewTokenPayload;
+  } {
+    const issuedAtSeconds = Math.floor(now.getTime() / 1000);
+    const complete: AccountAdjustmentReversalPreviewTokenPayload = {
+      ...payload,
+      issuedAtSeconds,
+      expiresAtSeconds:
+        issuedAtSeconds + SUBSCRIPTION_PREVIEW_TTL_SECONDS,
+    };
+    return {
+      token: signAccountAdjustmentReversalPreview(this.secret(), complete),
+      expiresAt: new Date(complete.expiresAtSeconds * 1000).toISOString(),
+      payload: complete,
+    };
+  }
+
+  verifyAccountAdjustmentReversal(
+    token: string,
+    now = new Date(),
+  ): AccountAdjustmentReversalPreviewTokenPayload {
+    try {
+      return verifyAccountAdjustmentReversalPreview(
+        this.secret(),
+        token,
+        Math.floor(now.getTime() / 1000),
+      );
+    } catch (error) {
+      if (!(error instanceof SubscriptionPreviewTokenError)) throw error;
+      throw new UnprocessableEntityException({
+        code: error.code,
+        message:
+          error.code === "PREVIEW_TOKEN_EXPIRED"
+            ? "Предпросмотр сторно корректировки устарел. Обновите расчёт."
+            : "Подписанный предпросмотр сторно корректировки недействителен.",
       });
     }
   }

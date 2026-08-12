@@ -7,9 +7,9 @@
 
 | Metric | Value |
 |---|---:|
-| inventory routes | 309 |
-| JWT private routes | 297 |
-| capability + resource-scope mapped | 297 |
+| inventory routes | 356 |
+| JWT private routes | 344 |
+| capability + resource-scope mapped | 344 |
 | public/external routes | 12 |
 | unmapped private routes | 0 |
 | missing resource scopes | 0 |
@@ -32,18 +32,20 @@ expand legacy access.
 | `commerce.package.read` | 1 |
 | `commerce.school_finance.read` | 10 |
 | `commerce.subscription.issue` | 2 |
-| `config.crm.edit` | 12 |
+| `commerce.teacher_payroll.read` | 3 |
+| `commerce.teacher_payroll.write` | 2 |
+| `config.crm.edit` | 36 |
 | `config.crm.publish` | 2 |
 | `config.crm.read` | 3 |
 | `crm.client.read.basic` | 111 |
 | `crm.client.read.contacts` | 2 |
-| `crm.client.write` | 40 |
+| `crm.client.write` | 39 |
 | `crm.comment.read.shared` | 2 |
-| `report.export.xlsx` | 6 |
-| `report.status.read` | 17 |
-| `schedule.lesson.read.assigned` | 23 |
-| `schedule.lesson.write` | 28 |
-| `system.settings.manage` | 6 |
+| `report.export.xlsx` | 5 |
+| `report.status.read` | 16 |
+| `schedule.lesson.read.assigned` | 25 |
+| `schedule.lesson.write` | 37 |
+| `system.settings.manage` | 16 |
 | `workflow.task.read` | 4 |
 | `workflow.task.write` | 3 |
 
@@ -70,10 +72,10 @@ pwsh -File scripts/v4_inventory.ps1 -Check
 
 | Gate | Result |
 |---|---:|
-| Exact access coverage | 297/297 private routes |
+| Exact access coverage | 344/344 private routes |
 | Registry/resource-scope mapping | 100% / 100% |
 | Unmapped / unexplained allow | 0 / 0 |
 | Targeted capability/JWT/repository tests | 4/4 suites, 56/56 tests |
 | Backend typecheck/build | PASS / PASS |
 | Full backend regression | 110/110 suites, 1026/1026 tests |
-| Current-state inventory | 309 routes, 776 DTO fields, 0 unowned |
+| Current-state inventory | 356 routes, 829 DTO fields, 0 unowned |

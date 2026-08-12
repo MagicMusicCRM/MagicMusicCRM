@@ -11,7 +11,7 @@ import { DeleteMessageDto } from "./dto/delete-message.dto";
 import { UpdateMessageDto } from "./dto/update-message.dto";
 import { MessengerFanoutService } from "./messenger-fanout.service";
 import { MessageRow, toMessageDto } from "./messenger.mappers";
-import { MessengerPolicy } from "./messenger.policy";
+import { ChatAccessRecord, MessengerPolicy } from "./messenger.policy";
 import { RealtimeGateway } from "./realtime.gateway";
 
 interface ReactionRow {
@@ -69,14 +69,14 @@ export class MessageService {
   async pinMessage(actor: ActorContext, messageId: string) {
     const message = await this.requireMessage(actor, messageId);
     const chat = await this.requireChat(actor, message.chat_id);
-    this.policy.assertCanManageGroup(actor, chat);
+    this.assertCanPin(actor, chat);
     const result = await this.database.query<MessageRow>(
       `
         update app.messages
         set pinned_by = $2, pinned_at = now(), updated_at = now()
         where id = $1 and deleted_at is null
         returning id, chat_id, sender_id, content, message_type,
-          attachment_file_id, reply_to_id, forwarded_from_id,
+          attachment_file_id, voice_duration_ms, reply_to_id, forwarded_from_id,
           pinned_by, pinned_at, created_at, updated_at, deleted_at,
           (select email from app.users where id = app.messages.sender_id) as sender_email,
           (
@@ -119,14 +119,14 @@ export class MessageService {
   async unpinMessage(actor: ActorContext, messageId: string) {
     const message = await this.requireMessage(actor, messageId);
     const chat = await this.requireChat(actor, message.chat_id);
-    this.policy.assertCanManageGroup(actor, chat);
+    this.assertCanPin(actor, chat);
     const result = await this.database.query<MessageRow>(
       `
         update app.messages
         set pinned_by = null, pinned_at = null, updated_at = now()
         where id = $1 and deleted_at is null
         returning id, chat_id, sender_id, content, message_type,
-          attachment_file_id, reply_to_id, forwarded_from_id,
+          attachment_file_id, voice_duration_ms, reply_to_id, forwarded_from_id,
           pinned_by, pinned_at, created_at, updated_at, deleted_at,
           (select email from app.users where id = app.messages.sender_id) as sender_email,
           (
@@ -183,7 +183,7 @@ export class MessageService {
           delete_mode = $2, updated_at = now()
         where id = $1
         returning id, chat_id, sender_id, content, message_type,
-          attachment_file_id, reply_to_id, forwarded_from_id,
+          attachment_file_id, voice_duration_ms, reply_to_id, forwarded_from_id,
           pinned_by, pinned_at, created_at, updated_at, deleted_at,
           (select email from app.users where id = app.messages.sender_id) as sender_email,
           (
@@ -267,7 +267,7 @@ export class MessageService {
         set content = $2, updated_at = now()
         where id = $1 and deleted_at is null
         returning id, chat_id, sender_id, content, message_type,
-          attachment_file_id, reply_to_id, forwarded_from_id,
+          attachment_file_id, voice_duration_ms, reply_to_id, forwarded_from_id,
           pinned_by, pinned_at, created_at, updated_at, deleted_at,
           (select email from app.users where id = app.messages.sender_id) as sender_email,
           (
@@ -320,7 +320,8 @@ export class MessageService {
     const result = await this.database.query<MessageRow>(
       `
         select m.id, m.chat_id, m.sender_id, m.content, m.message_type,
-          m.attachment_file_id, m.reply_to_id, m.forwarded_from_id,
+          m.attachment_file_id, m.voice_duration_ms, m.reply_to_id,
+          m.forwarded_from_id,
           m.pinned_by, m.pinned_at, m.created_at, m.updated_at, m.deleted_at,
           null::text as sender_email, null::text as sender_first_name,
           null::text as sender_last_name, false as is_read
@@ -352,6 +353,11 @@ export class MessageService {
       emoji: row.emoji,
       count: Number(row.count),
     }));
+  }
+
+  private assertCanPin(actor: ActorContext, chat: ChatAccessRecord): void {
+    if (chat.type === "direct" && chat.memberUserId === actor.userId) return;
+    this.policy.assertCanManageGroup(actor, chat);
   }
 
   // ponytail: 4-line policy wrapper copied from MessengerService; trivial,

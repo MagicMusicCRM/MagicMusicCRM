@@ -52,6 +52,11 @@ const requiredMigrations = [
   "0103_v7_client_commerce",
   "0106_v7_payment_lifecycle",
   "0107_v7_payment_reversal",
+  "0127_teacher_payroll_integrity",
+  "0128_teacher_payroll_history_management",
+  "0129_phone_review_resolution",
+  "0130_account_adjustment_reversal",
+  "0131_installment_payment_reminders",
 ];
 
 const invariantSql: ReadonlyArray<{ id: string; sql: string }> = [
@@ -72,11 +77,11 @@ const invariantSql: ReadonlyArray<{ id: string; sql: string }> = [
   {
     id: "access.capability-registry-packages",
     sql: `
-      select 25 as source_count,
-             (select count(*) from app.capability_definitions where active) as target_count,
-             greatest(0, 25 - (select count(*) from app.capability_definitions where active))
-             + abs(6 - (select count(*) from app.role_packages where active))
-             + abs(150 - (
+       select 27 as source_count,
+              (select count(*) from app.capability_definitions where active) as target_count,
+              greatest(0, 27 - (select count(*) from app.capability_definitions where active))
+              + abs(6 - (select count(*) from app.role_packages where active))
+              + abs(162 - (
                select count(*)
                  from app.role_package_capabilities entry
                  join app.role_packages package on package.id = entry.package_id

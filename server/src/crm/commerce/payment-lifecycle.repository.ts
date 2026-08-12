@@ -72,6 +72,26 @@ export interface MaterializedDuePayment {
   recipientStudentId: string;
 }
 
+export interface InstallmentPaymentReminderRow {
+  id: string;
+  installment_id: string;
+  issued_subscription_id: string;
+  payer_student_id: string;
+  recipient_student_id: string;
+  amount_minor: string;
+  currency_code: string;
+  due_at: Date | string;
+  reminder_days: number | string;
+  recipient_user_ids: string[];
+  status: "pending" | "claimed" | "delivered" | "cancelled" | "poison";
+  attempts: number | string;
+  next_attempt_at: Date | string | null;
+  claimed_by: string | null;
+  claimed_at: Date | string | null;
+  delivered_at: Date | string | null;
+  last_error: string | null;
+}
+
 @Injectable()
 export class PaymentLifecycleRepository {
   constructor(
@@ -442,6 +462,353 @@ export class PaymentLifecycleRepository {
       [paymentRecordId],
     );
     return result.rows;
+  }
+
+  async materializeInstallmentPaymentReminders(
+    now: Date,
+    limit: number,
+  ): Promise<number> {
+    const result = await this.database.query<{ id: string }>(
+      `
+        with school_configuration as (
+          select revision.effective_snapshot
+          from app.crm_configuration_revisions revision
+          where revision.branch_id is null
+          order by revision.version desc
+          limit 1
+        ), candidates as (
+          select
+            installment.id as installment_id,
+            installment.due_at,
+            subscription.id as issued_subscription_id,
+            subscription.student_id as recipient_student_id,
+            coalesce(
+              subscription.payer_student_id,
+              subscription.student_id
+            ) as payer_student_id,
+            target_student.branch_id,
+            coalesce(
+              branch_setting.value,
+              school_setting.value,
+              3
+            )::int as reminder_days
+          from app.subscription_installments installment
+          join app.subscriptions subscription
+            on subscription.id = installment.issued_subscription_id
+          join app.students target_student
+            on target_student.id = subscription.student_id
+           and target_student.deleted_at is null
+           and target_student.status = 'active'
+          left join lateral (
+            select revision.patch
+            from app.crm_configuration_revisions revision
+            where revision.branch_id = target_student.branch_id
+            order by revision.version desc
+            limit 1
+          ) branch_revision on true
+          left join lateral (
+            select (setting.value->>'value')::int as value
+            from jsonb_array_elements(
+              coalesce(
+                branch_revision.patch->'businessSettings',
+                '[]'::jsonb
+              )
+            ) setting(value)
+            where setting.value->>'key' = 'payment_reminder_days'
+            limit 1
+          ) branch_setting on true
+          left join lateral (
+            select (setting.value->>'value')::int as value
+            from school_configuration school
+            cross join lateral jsonb_array_elements(
+              coalesce(
+                school.effective_snapshot->'businessSettings',
+                '[]'::jsonb
+              )
+            ) setting(value)
+            where setting.value->>'key' = 'payment_reminder_days'
+            limit 1
+          ) school_setting on true
+          where installment.status = 'pending'
+            and subscription.status = 'active'
+            and not exists (
+              select 1
+              from app.installment_payment_reminders reminder
+              where reminder.installment_id = installment.id
+            )
+            and (
+              coalesce((
+                select sum(payment.amount_minor)
+                from app.commerce_ordinary_payments payment
+                where payment.issued_subscription_id = subscription.id
+                  and payment.deleted_at is null
+              ), 0)
+              + coalesce((
+                select sum(adjustment.amount_minor)
+                from app.commerce_ordinary_account_adjustments adjustment
+                join app.commerce_ordinary_payments source
+                  on source.id = adjustment.source_payment_id
+                where source.issued_subscription_id = subscription.id
+                  and adjustment.deleted_at is null
+                  and adjustment.status = 'paid'
+              ), 0)
+            ) < (
+              select sum(previous.amount_minor)
+              from app.subscription_installments previous
+              where previous.issued_subscription_id = subscription.id
+                and previous.status <> 'void'
+                and previous.installment_number <= installment.installment_number
+            )
+        ), eligible as (
+          select candidate.*
+          from candidates candidate
+          where candidate.due_at <=
+            $1::timestamptz + make_interval(days => candidate.reminder_days)
+          order by candidate.due_at, candidate.installment_id
+          limit $2
+        )
+        insert into app.installment_payment_reminders (
+          installment_id,
+          recipient_user_ids,
+          due_at,
+          reminder_days
+        )
+        select
+          eligible.installment_id,
+          coalesce(audience.user_ids, '{}'::uuid[]),
+          eligible.due_at,
+          eligible.reminder_days
+        from eligible
+        left join lateral (
+          select array_agg(distinct candidate.user_id order by candidate.user_id)
+            as user_ids
+          from (
+            select payer_profile.user_id
+            from app.students payer
+            join app.profiles payer_profile
+              on payer_profile.id = payer.profile_id
+             and payer_profile.deleted_at is null
+            where payer.id = eligible.payer_student_id
+              and payer.deleted_at is null
+              and payer.status = 'active'
+              and payer_profile.user_id is not null
+            union
+            select link.user_id
+            from app.user_crm_links link
+            where link.entity_type = 'student'
+              and link.entity_id = eligible.payer_student_id
+              and link.deleted_at is null
+            union
+            select family_profile.user_id
+            from app.family_members payer_member
+            join app.families family
+              on family.id = payer_member.family_id
+             and family.deleted_at is null
+            join app.family_members account_member
+              on account_member.family_id = family.id
+             and account_member.entity_type = 'profile'
+             and account_member.role in ('parent', 'payer')
+             and account_member.deleted_at is null
+            join app.profiles family_profile
+              on family_profile.id = account_member.entity_id
+             and family_profile.deleted_at is null
+            where payer_member.entity_type = 'student'
+              and payer_member.entity_id = eligible.payer_student_id
+              and payer_member.deleted_at is null
+          ) candidate
+          join app.users recipient
+            on recipient.id = candidate.user_id
+           and recipient.deleted_at is null
+           and recipient.role::text = 'client'
+           and recipient.is_app_account = true
+        ) audience on true
+        on conflict (installment_id) do nothing
+        returning id
+      `,
+      [now, Math.max(1, Math.min(200, Math.floor(limit)))],
+    );
+    return result.rowCount ?? 0;
+  }
+
+  claimInstallmentPaymentReminders(
+    workerId: string,
+    input: { limit: number; leaseSeconds: number; maxAttempts: number },
+  ): Promise<InstallmentPaymentReminderRow[]> {
+    return this.database.transaction(async (client) => {
+      await client.query(
+        `
+          update app.installment_payment_reminders reminder
+          set status = 'cancelled', claimed_by = null, claimed_at = null,
+              delivered_at = now(), last_error = 'no_longer_outstanding',
+              updated_at = now()
+          where reminder.status in ('pending', 'claimed')
+            and not exists (
+              select 1
+              from app.subscription_installments installment
+              join app.subscriptions subscription
+                on subscription.id = installment.issued_subscription_id
+              where installment.id = reminder.installment_id
+                and installment.status = 'pending'
+                and subscription.status = 'active'
+                and (
+                  coalesce((
+                    select sum(payment.amount_minor)
+                    from app.commerce_ordinary_payments payment
+                    where payment.issued_subscription_id = subscription.id
+                      and payment.deleted_at is null
+                  ), 0)
+                  + coalesce((
+                    select sum(adjustment.amount_minor)
+                    from app.commerce_ordinary_account_adjustments adjustment
+                    join app.commerce_ordinary_payments source
+                      on source.id = adjustment.source_payment_id
+                    where source.issued_subscription_id = subscription.id
+                      and adjustment.deleted_at is null
+                      and adjustment.status = 'paid'
+                  ), 0)
+                ) < (
+                  select sum(previous.amount_minor)
+                  from app.subscription_installments previous
+                  where previous.issued_subscription_id = subscription.id
+                    and previous.status <> 'void'
+                    and previous.installment_number <= installment.installment_number
+                )
+            )
+        `,
+      );
+      await client.query(
+        `
+          update app.installment_payment_reminders reminder
+          set status = 'poison', claimed_by = null, claimed_at = null,
+              updated_at = now()
+          where reminder.attempts >= $1
+            and (
+              (
+                reminder.status = 'pending'
+                and coalesce(reminder.next_attempt_at, reminder.created_at) <= now()
+              )
+              or (
+                reminder.status = 'claimed'
+                and reminder.claimed_at <
+                  now() - make_interval(secs => $2::int)
+              )
+            )
+        `,
+        [input.maxAttempts, input.leaseSeconds],
+      );
+      const result = await client.query<InstallmentPaymentReminderRow>(
+        `
+          with due as (
+            select reminder.id,
+              installment.id as installment_id,
+              installment.amount_minor::text,
+              installment.currency_code,
+              subscription.id as issued_subscription_id,
+              coalesce(
+                subscription.payer_student_id,
+                subscription.student_id
+              ) as payer_student_id,
+              subscription.student_id as recipient_student_id
+            from app.installment_payment_reminders reminder
+            join app.subscription_installments installment
+              on installment.id = reminder.installment_id
+            join app.subscriptions subscription
+              on subscription.id = installment.issued_subscription_id
+            where (
+                reminder.status = 'pending'
+                and coalesce(reminder.next_attempt_at, reminder.created_at) <= now()
+              )
+              or (
+                reminder.status = 'claimed'
+                and reminder.claimed_at <
+                  now() - make_interval(secs => $2::int)
+              )
+            order by
+              coalesce(reminder.next_attempt_at, reminder.created_at),
+              reminder.id
+            for update of reminder skip locked
+            limit $1
+          )
+          update app.installment_payment_reminders reminder
+          set status = 'claimed', attempts = reminder.attempts + 1,
+              claimed_at = now(), claimed_by = $4, updated_at = now()
+          from due
+          where reminder.id = due.id
+            and reminder.attempts < $3
+          returning reminder.*, due.issued_subscription_id,
+            due.payer_student_id, due.recipient_student_id,
+            due.amount_minor, due.currency_code
+        `,
+        [input.limit, input.leaseSeconds, input.maxAttempts, workerId],
+      );
+      return result.rows;
+    });
+  }
+
+  markInstallmentPaymentReminderDelivered(
+    reminderId: string,
+    workerId: string,
+  ) {
+    return this.database.query(
+      `
+        update app.installment_payment_reminders
+        set status = 'delivered', delivered_at = now(), claimed_by = null,
+            claimed_at = null, last_error = null, updated_at = now()
+        where id = $1 and status = 'claimed' and claimed_by = $2
+      `,
+      [reminderId, workerId],
+    );
+  }
+
+  markInstallmentPaymentReminderFailed(
+    reminder: InstallmentPaymentReminderRow,
+    workerId: string,
+    errorName: string,
+    input: { maxAttempts: number; baseSeconds: number; capSeconds: number },
+  ) {
+    const attempts = Number(reminder.attempts);
+    const poison = attempts >= input.maxAttempts;
+    const delay = Math.min(
+      input.capSeconds,
+      input.baseSeconds * 2 ** Math.max(0, attempts - 1),
+    );
+    return this.database.query(
+      `
+        update app.installment_payment_reminders
+        set status = $3,
+            next_attempt_at = case
+              when $3 = 'poison' then next_attempt_at
+              else now() + make_interval(secs => $4::int)
+            end,
+            claimed_by = null, claimed_at = null, last_error = $5,
+            updated_at = now()
+        where id = $1 and status = 'claimed' and claimed_by = $2
+      `,
+      [
+        reminder.id,
+        workerId,
+        poison ? "poison" : "pending",
+        delay,
+        errorName.slice(0, 240),
+      ],
+    );
+  }
+
+  installmentPaymentReminderMetrics() {
+    return this.database.query<{
+      pending: number;
+      poison: number;
+      oldest_created_at: Date | string | null;
+    }>(
+      `
+        select
+          count(*) filter (where status = 'pending')::int as pending,
+          count(*) filter (where status = 'poison')::int as poison,
+          min(coalesce(next_attempt_at, created_at))
+            filter (where status = 'pending') as oldest_created_at
+        from app.installment_payment_reminders
+      `,
+    );
   }
 
   materializeDueInstallments(

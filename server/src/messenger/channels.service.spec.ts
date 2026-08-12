@@ -33,6 +33,7 @@ describe("ChannelsService", () => {
     const realtime = {
       publishChatEvent: jest.fn(),
       publishChannelEvent: jest.fn(),
+      publishUserEvent: jest.fn(),
       ...overrides?.realtime,
     } as unknown as RealtimeGateway;
 
@@ -70,7 +71,7 @@ describe("ChannelsService", () => {
     );
   });
 
-  it("lists channel permissions for users who can write the channel", async () => {
+  it("lists channel permissions only for channel managers", async () => {
     const { service, database, policy } = createService({
       database: {
         query: jest.fn().mockResolvedValueOnce({
@@ -94,7 +95,7 @@ describe("ChannelsService", () => {
           canRead: true,
           canWrite: true,
         }),
-        assertCanWriteChannel: jest.fn(),
+        assertCanManageChannel: jest.fn(),
       },
     });
 
@@ -103,10 +104,10 @@ describe("ChannelsService", () => {
       "channel-a",
     );
 
-    expect(policy.assertCanWriteChannel).toHaveBeenCalledWith(
-      { userId: "manager-a", role: "manager" },
-      expect.objectContaining({ id: "channel-a", canWrite: true }),
-    );
+    expect(policy.assertCanManageChannel).toHaveBeenCalledWith({
+      userId: "manager-a",
+      role: "manager",
+    });
     expect(database.query).toHaveBeenCalledWith(
       expect.stringContaining("from app.channel_permissions cp"),
       ["channel-a"],
@@ -125,6 +126,210 @@ describe("ChannelsService", () => {
         }),
       }),
     ]);
+  });
+
+  it("updates channel text without clearing permissions when ACL is omitted", async () => {
+    const query = jest
+      .fn()
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "channel-a",
+            title: "Новое название",
+            description: null,
+            created_by: "manager-a",
+            created_at: new Date("2026-08-12T10:00:00Z"),
+            updated_at: new Date("2026-08-12T10:01:00Z"),
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] });
+    const { service, database } = createService({
+      database: { query },
+      policy: {
+        getChannelAccess: jest.fn().mockResolvedValue({
+          id: "channel-a",
+          canRead: true,
+          canWrite: true,
+        }),
+        assertCanManageChannel: jest.fn(),
+      },
+    });
+
+    await service.updateChannel(
+      { userId: "manager-a", role: "manager" },
+      "channel-a",
+      { title: " Новое название " },
+    );
+
+    expect(database.query).toHaveBeenCalledTimes(3);
+    expect(
+      query.mock.calls.some(([sql]) =>
+        sql.includes("delete from app.channel_permissions"),
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects duplicate ACL targets before deleting existing permissions", async () => {
+    const query = jest
+      .fn()
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "channel-a",
+            title: "Канал",
+            description: null,
+            created_by: "manager-a",
+            created_at: new Date("2026-08-12T10:00:00Z"),
+            updated_at: new Date("2026-08-12T10:01:00Z"),
+          },
+        ],
+      });
+    const { service } = createService({
+      database: { query },
+      policy: {
+        getChannelAccess: jest.fn().mockResolvedValue({
+          id: "channel-a",
+          canRead: true,
+          canWrite: true,
+        }),
+        assertCanManageChannel: jest.fn(),
+      },
+    });
+
+    await expect(
+      service.updateChannel(
+        { userId: "manager-a", role: "manager" },
+        "channel-a",
+        {
+          title: "Канал",
+          permissions: [
+            { role: "teacher", canRead: true },
+            { role: "teacher", canRead: true, canWrite: true },
+          ],
+        },
+      ),
+    ).rejects.toThrow(/не должны повторяться/i);
+
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(
+      query.mock.calls.some(([sql]) =>
+        sql.includes("delete from app.channel_permissions"),
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects write-only and ambiguous ACL rules", async () => {
+    const make = () =>
+      createService({
+        database: {
+          query: jest
+            .fn()
+            .mockResolvedValueOnce({
+              rows: [],
+            })
+            .mockResolvedValueOnce({
+              rows: [
+                {
+                  id: "channel-a",
+                  title: "Канал",
+                  description: null,
+                  created_by: "manager-a",
+                  created_at: new Date("2026-08-12T10:00:00Z"),
+                  updated_at: new Date("2026-08-12T10:01:00Z"),
+                },
+              ],
+            }),
+        },
+        policy: {
+          getChannelAccess: jest.fn().mockResolvedValue({
+            id: "channel-a",
+            canRead: true,
+            canWrite: true,
+          }),
+          assertCanManageChannel: jest.fn(),
+        },
+      }).service;
+
+    await expect(
+      make().updateChannel(
+        { userId: "manager-a", role: "manager" },
+        "channel-a",
+        {
+          title: "Канал",
+          permissions: [{ role: "teacher", canRead: false, canWrite: true }],
+        },
+      ),
+    ).rejects.toThrow(/требует права чтения/i);
+
+    await expect(
+      make().updateChannel(
+        { userId: "manager-a", role: "manager" },
+        "channel-a",
+        {
+          title: "Канал",
+          permissions: [{ userId: "user-a", role: "teacher" }],
+        },
+      ),
+    ).rejects.toThrow(/ровно одного пользователя/i);
+  });
+
+  it("fans channel ACL changes out to added, retained and removed readers", async () => {
+    const query = jest
+      .fn()
+      .mockResolvedValueOnce({
+        rows: [{ id: "reader-old" }, { id: "reader-shared" }],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "channel-a",
+            title: "Канал",
+            description: null,
+            created_by: "manager-a",
+            created_at: new Date("2026-08-12T10:00:00Z"),
+            updated_at: new Date("2026-08-12T10:01:00Z"),
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [{ id: "reader-shared" }, { id: "reader-new" }],
+      });
+    const { service, realtime } = createService({
+      database: { query },
+      policy: {
+        getChannelAccess: jest.fn().mockResolvedValue({
+          id: "channel-a",
+          canRead: true,
+          canWrite: true,
+        }),
+        assertCanManageChannel: jest.fn(),
+      },
+    });
+
+    await service.updateChannel(
+      { userId: "manager-a", role: "manager" },
+      "channel-a",
+      { title: "Канал" },
+    );
+
+    expect(realtime.publishUserEvent).toHaveBeenCalledWith(
+      "reader-shared",
+      "channel.updated",
+      expect.objectContaining({ id: "channel-a" }),
+    );
+    expect(realtime.publishUserEvent).toHaveBeenCalledWith(
+      "reader-new",
+      "channel.created",
+      expect.objectContaining({ id: "channel-a" }),
+    );
+    expect(realtime.publishUserEvent).toHaveBeenCalledWith(
+      "reader-old",
+      "channel.removed",
+      { id: "channel-a" },
+    );
   });
 
   it("publishes channel.post_created to the channel room, never a chat room", async () => {
@@ -147,7 +352,11 @@ describe("ChannelsService", () => {
       policy: {
         getChannelAccess: jest
           .fn()
-          .mockResolvedValue({ id: "channel-a", canRead: true, canWrite: true }),
+          .mockResolvedValue({
+            id: "channel-a",
+            canRead: true,
+            canWrite: true,
+          }),
         assertCanWriteChannel: jest.fn(),
       },
     });

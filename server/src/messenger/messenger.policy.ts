@@ -1,13 +1,17 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import {
   ActorContext,
   isAdminRole,
   isManagerOrAdminRole,
   isManagerRole,
-  isStaffRole
-} from '../common/security/actor-context';
-import { BLACKLIST_MESSAGE, isUserBlacklisted } from '../crm/blacklist';
-import { DatabaseService } from '../db/database.service';
+  isStaffRole,
+} from "../common/security/actor-context";
+import { BLACKLIST_MESSAGE, isUserBlacklisted } from "../crm/blacklist";
+import { DatabaseService } from "../db/database.service";
 
 export interface ChatAccessRecord {
   id: string;
@@ -31,23 +35,23 @@ export class MessengerPolicy {
 
   assertCanReadChat(actor: ActorContext, chat: ChatAccessRecord): void {
     if (chat.memberUserId === actor.userId) return;
-    if (chat.type === 'administration' && this.isStaff(actor)) return;
-    throw new NotFoundException('Чат не найден.');
+    if (chat.type === "administration" && this.isStaff(actor)) return;
+    throw new NotFoundException("Чат не найден.");
   }
 
   assertCanWriteChat(actor: ActorContext, chat: ChatAccessRecord): void {
     this.assertCanReadChat(actor, chat);
     // «Объявления»: everyone is a member and can read, but only the
     // управляющий/директор (and system_admin) may post.
-    if (chat.slug === 'announcements') {
+    if (chat.slug === "announcements") {
       if (isManagerRole(actor.role)) return;
       throw new ForbiddenException(
-        'Писать в «Объявления» могут только управляющий и директор.'
+        "Писать в «Объявления» могут только управляющий и директор.",
       );
     }
-    if (chat.type === 'administration' && this.isStaff(actor)) return;
+    if (chat.type === "administration" && this.isStaff(actor)) return;
     if (chat.memberUserId === actor.userId) return;
-    throw new ForbiddenException('Недостаточно прав для отправки сообщения.');
+    throw new ForbiddenException("Недостаточно прав для отправки сообщения.");
   }
 
   /**
@@ -62,7 +66,7 @@ export class MessengerPolicy {
    * конкретном чате, а бан — про человека и во всех чатах разом.
    */
   async assertNotBlacklisted(actor: ActorContext): Promise<void> {
-    if (actor.role !== 'client') return;
+    if (actor.role !== "client") return;
     if (await isUserBlacklisted(this.database, actor.userId)) {
       throw new ForbiddenException(BLACKLIST_MESSAGE);
     }
@@ -70,78 +74,103 @@ export class MessengerPolicy {
 
   assertCanManageGroup(actor: ActorContext, chat: ChatAccessRecord): void {
     if (isManagerOrAdminRole(actor.role)) return;
-    if (chat.type === 'group' && chat.memberUserId === actor.userId && chat.memberRole === 'admin') return;
-    throw new ForbiddenException('Недостаточно прав для управления группой.');
+    if (
+      chat.type === "group" &&
+      chat.memberUserId === actor.userId &&
+      chat.memberRole === "admin"
+    )
+      return;
+    throw new ForbiddenException("Недостаточно прав для управления группой.");
   }
 
   assertCanModerateMessage(actor: ActorContext, senderId: string | null): void {
     if (senderId === actor.userId) return;
     if (isAdminRole(actor.role)) return;
-    throw new ForbiddenException('Недостаточно прав для изменения сообщения.');
+    throw new ForbiddenException("Недостаточно прав для изменения сообщения.");
   }
 
   assertCanCreateGroup(actor: ActorContext): void {
     if (isManagerOrAdminRole(actor.role)) return;
-    throw new ForbiddenException('Недостаточно прав для создания группы.');
+    throw new ForbiddenException("Недостаточно прав для создания группы.");
   }
 
   /** Any staff member may mark an administration chat as being worked. */
   assertCanAssign(actor: ActorContext, chat: ChatAccessRecord): void {
     if (isStaffRole(actor.role)) return;
-    throw new ForbiddenException('Недостаточно прав для взятия чата в работу.');
+    throw new ForbiddenException("Недостаточно прав для взятия чата в работу.");
   }
 
-  assertCanWriteChannel(actor: ActorContext, channel: ChannelAccessRecord): void {
+  assertCanWriteChannel(
+    actor: ActorContext,
+    channel: ChannelAccessRecord,
+  ): void {
     if (isManagerOrAdminRole(actor.role) || channel.canWrite) return;
-    throw new ForbiddenException('Недостаточно прав для публикации в канале.');
+    throw new ForbiddenException("Недостаточно прав для публикации в канале.");
+  }
+
+  assertCanManageChannel(actor: ActorContext): void {
+    if (isManagerOrAdminRole(actor.role)) return;
+    throw new NotFoundException("Канал не найден.");
   }
 
   assertCanReadChannel(channel: ChannelAccessRecord): void {
     if (channel.canRead) return;
-    throw new NotFoundException('Канал не найден.');
+    throw new NotFoundException("Канал не найден.");
   }
 
-  async canCreateDirectChat(actor: ActorContext, targetUserId: string): Promise<void> {
+  async canCreateDirectChat(
+    actor: ActorContext,
+    targetUserId: string,
+  ): Promise<void> {
     if (actor.userId === targetUserId) {
-      throw new ForbiddenException('Нельзя создать чат с самим собой.');
+      throw new ForbiddenException("Нельзя создать чат с самим собой.");
     }
-    if (actor.role === 'client') {
-      throw new ForbiddenException('Клиенты не могут создавать личные чаты.');
+    if (actor.role === "client") {
+      throw new ForbiddenException("Клиенты не могут создавать личные чаты.");
     }
     const target = await this.database.query<{ role: string }>(
-      'select role from app.users where id = $1 and deleted_at is null limit 1',
+      "select role from app.users where id = $1 and deleted_at is null limit 1",
       [targetUserId],
     );
-    if (!target.rows[0]) throw new NotFoundException('Пользователь не найден.');
-    if (target.rows[0].role === 'client') {
-      throw new ForbiddenException('С клиентом можно общаться только через Администрацию или группу.');
+    if (!target.rows[0]) throw new NotFoundException("Пользователь не найден.");
+    if (target.rows[0].role === "client") {
+      throw new ForbiddenException(
+        "С клиентом можно общаться только через Администрацию или группу.",
+      );
     }
     // both non-client → allowed (teaching-relationship rule removed).
   }
 
-  async canJoinRealtimeRoom(actor: ActorContext, roomType: string, roomId: string): Promise<void> {
-    if (roomType === 'user') {
+  async canJoinRealtimeRoom(
+    actor: ActorContext,
+    roomType: string,
+    roomId: string,
+  ): Promise<void> {
+    if (roomType === "user") {
       if (roomId === actor.userId) return;
-      throw new ForbiddenException('Недостаточно прав для realtime-комнаты.');
+      throw new ForbiddenException("Недостаточно прав для realtime-комнаты.");
     }
 
-    if (roomType === 'channel') {
+    if (roomType === "channel") {
       const channel = await this.getChannelAccess(actor, roomId);
-      if (!channel) throw new NotFoundException('Канал не найден.');
+      if (!channel) throw new NotFoundException("Канал не найден.");
       this.assertCanReadChannel(channel);
       return;
     }
 
-    if (roomType !== 'chat') {
-      throw new ForbiddenException('Недостаточно прав для realtime-комнаты.');
+    if (roomType !== "chat") {
+      throw new ForbiddenException("Недостаточно прав для realtime-комнаты.");
     }
 
     const chat = await this.getChatAccess(actor, roomId);
-    if (!chat) throw new NotFoundException('Чат не найден.');
+    if (!chat) throw new NotFoundException("Чат не найден.");
     this.assertCanReadChat(actor, chat);
   }
 
-  async getChatAccess(actor: ActorContext, chatId: string): Promise<ChatAccessRecord | undefined> {
+  async getChatAccess(
+    actor: ActorContext,
+    chatId: string,
+  ): Promise<ChatAccessRecord | undefined> {
     const result = await this.database.query<ChatAccessRecord>(
       `
         select c.id, c.type, cm.user_id as "memberUserId", cm.role as "memberRole",
@@ -153,12 +182,15 @@ export class MessengerPolicy {
         where c.id = $1 and c.deleted_at is null
         limit 1
       `,
-      [chatId, actor.userId]
+      [chatId, actor.userId],
     );
     return result.rows[0];
   }
 
-  async getChannelAccess(actor: ActorContext, channelId: string): Promise<ChannelAccessRecord | undefined> {
+  async getChannelAccess(
+    actor: ActorContext,
+    channelId: string,
+  ): Promise<ChannelAccessRecord | undefined> {
     const result = await this.database.query<ChannelAccessRecord>(
       `
         select c.id,
@@ -184,7 +216,7 @@ export class MessengerPolicy {
         where c.id = $1 and c.deleted_at is null
         limit 1
       `,
-      [channelId, actor.role, actor.userId]
+      [channelId, actor.role, actor.userId],
     );
     return result.rows[0];
   }

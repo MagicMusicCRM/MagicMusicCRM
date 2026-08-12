@@ -188,6 +188,163 @@ describe('NotificationsService', () => {
     expect(worker.dispatchPendingPush).toHaveBeenCalled();
   });
 
+  it('reuses an explicit notification id and guards channel side effects', async () => {
+    const { service, database } = createService();
+    const client = {
+      query: jest
+        .fn()
+        .mockResolvedValueOnce({
+          rows: [{ id: '11111111-1111-5111-8111-111111111111' }]
+        })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ email: 'a@example.com' }] })
+        .mockResolvedValue({ rows: [] })
+    };
+    database.transaction.mockImplementationOnce(async (work) => work(client as never));
+
+    await service.notifyUser({
+      userId: 'user-a',
+      title: 'Напоминание',
+      body: 'Открытая задача',
+      data: { entityType: 'task', entityId: 'task-a' },
+      channels: ['in_app', 'email', 'push'],
+      notificationId: '11111111-1111-5111-8111-111111111111'
+    });
+
+    expect(String(client.query.mock.calls[0][0])).toContain('on conflict (id)');
+    expect(client.query.mock.calls[0][1]?.[0]).toBe('11111111-1111-5111-8111-111111111111');
+    expect(String(client.query.mock.calls[3][0])).toContain('where not exists');
+    expect(String(client.query.mock.calls[4][0])).toContain('where not exists');
+  });
+
+  it('routes a rescheduled lesson to its successor and informs the removed teacher', async () => {
+    const { service, database } = createService();
+    database.query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'lesson-source',
+            student_id: 'student-a',
+            group_id: null,
+            lead_id: null,
+            teacher_id: 'teacher-old',
+            teacher_user_id: 'user-old-teacher',
+            successor_id: 'lesson-successor',
+            when_local: '13.08.2026 10:00',
+            branch_name: 'Центр',
+            room_name: 'Аудитория 1'
+          }
+        ]
+      } as never)
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'lesson-successor',
+            student_id: 'student-a',
+            group_id: null,
+            lead_id: null,
+            teacher_id: 'teacher-new',
+            teacher_user_id: 'user-new-teacher',
+            successor_id: null,
+            when_local: '14.08.2026 12:00',
+            branch_name: 'Центр',
+            room_name: 'Аудитория 2'
+          }
+        ]
+      } as never)
+      .mockResolvedValueOnce({
+        rows: [
+          { user_id: 'user-client' },
+          { user_id: 'user-new-teacher' }
+        ]
+      } as never);
+    const client = {
+      query: jest.fn(async (sql: string, params?: unknown[]) =>
+        sql.includes('insert into app.notifications')
+          ? { rows: [{ id: params?.[0] }] }
+          : { rows: [] }
+      )
+    };
+    database.transaction.mockImplementation(async (work) => work(client as never));
+
+    await service.notifyLessonChanged({
+      eventId: '11111111-1111-4111-8111-111111111111',
+      lessonId: 'lesson-source',
+      action: 'rescheduled',
+      successorId: 'lesson-successor'
+    });
+
+    const inserts = client.query.mock.calls.filter((call) =>
+      String(call[0]).includes('insert into app.notifications')
+    );
+    expect(inserts).toHaveLength(2);
+    expect(inserts[0][1]?.[0]).toBe('11111111-1111-4111-8111-111111111111');
+    expect(inserts[0][1]?.[2]).toBe('Занятие перенесено');
+    expect(JSON.parse(String(inserts[0][1]?.[4]))).toEqual({
+      entityType: 'lesson',
+      entityId: 'lesson-successor',
+      eventType: 'rescheduled'
+    });
+    expect(inserts[1][1]?.[0]).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    );
+    expect(inserts[1][1]?.[2]).toBe('Занятие переназначено');
+    expect(JSON.parse(String(inserts[1][1]?.[4]))).toEqual({
+      entityType: 'lesson',
+      entityId: 'lesson-source',
+      eventType: 'teacher_unassigned'
+    });
+  });
+
+  it.each([
+    ['created', 'Занятие назначено'],
+    ['cancelled', 'Занятие отменено']
+  ] as const)('materializes the %s lesson event with an exact route', async (action, title) => {
+    const { service, database } = createService();
+    database.query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'lesson-a',
+            student_id: 'student-a',
+            group_id: null,
+            lead_id: null,
+            teacher_id: 'teacher-a',
+            teacher_user_id: 'user-teacher',
+            successor_id: null,
+            when_local: '14.08.2026 12:00',
+            branch_name: 'Центр',
+            room_name: 'Аудитория 1'
+          }
+        ]
+      } as never)
+      .mockResolvedValueOnce({ rows: [{ user_id: 'user-client' }] } as never);
+    const client = {
+      query: jest.fn(async (sql: string, params?: unknown[]) =>
+        sql.includes('insert into app.notifications')
+          ? { rows: [{ id: params?.[0] }] }
+          : { rows: [] }
+      )
+    };
+    database.transaction.mockImplementationOnce(async (work) => work(client as never));
+
+    await service.notifyLessonChanged({
+      eventId: '33333333-3333-4333-8333-333333333333',
+      lessonId: 'lesson-a',
+      action
+    });
+
+    const insert = client.query.mock.calls.find((call) =>
+      String(call[0]).includes('insert into app.notifications')
+    );
+    expect(insert?.[1]?.[2]).toBe(title);
+    expect(JSON.parse(String(insert?.[1]?.[4]))).toEqual({
+      entityType: 'lesson',
+      entityId: 'lesson-a',
+      eventType: action
+    });
+  });
+
   describe('lesson reminders', () => {
     it('claims the marker and notifies recipients for a due lesson', async () => {
       const { service, database } = createService();
@@ -202,13 +359,28 @@ describe('NotificationsService', () => {
         .mockResolvedValueOnce({ rows: [{ id: 'rem-1' }], rowCount: 1 } as never)
         // due (hour) -> none
         .mockResolvedValueOnce({ rows: [] } as never);
-      (database.transaction as jest.Mock).mockResolvedValue('notif-1');
+      const client = {
+        query: jest.fn(async (sql: string, _params?: unknown[]) =>
+          sql.includes('insert into app.notifications')
+            ? { rows: [{ id: 'notification-lesson' }] }
+            : { rows: [] }
+        )
+      };
+      database.transaction.mockImplementationOnce(async (work) => work(client as never));
 
       const result = await service.dispatchLessonReminders();
 
       expect(result.sent).toBe(1);
       // createNotification runs in a transaction exactly once (the day lesson).
       expect(database.transaction).toHaveBeenCalledTimes(1);
+      const notificationInsert = client.query.mock.calls.find((call) =>
+        String(call[0]).includes('insert into app.notifications')
+      );
+      expect(JSON.parse(String(notificationInsert?.[1]?.[4]))).toEqual({
+        entityType: 'lesson',
+        entityId: 'lesson-1',
+        kind: 'day'
+      });
     });
 
     it('does not send when the marker was already claimed (race)', async () => {

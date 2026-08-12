@@ -12,7 +12,7 @@
 - Close в одной транзакции отменяет все pending/claimed reminders.
 - После commit публикуется body-free `crm.changed` hint для общей CRM-комнаты и user rooms.
 - List projection возвращает независимые open/overdue counters.
-- Runtime worker включается только явным `V4_SHARED_TASK_REMINDERS_ENABLED=true`.
+- Runtime worker включается только явным `TASK_REMINDERS_ENABLED=true`.
 
 ## Проверки
 

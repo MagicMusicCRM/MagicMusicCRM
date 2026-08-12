@@ -4,6 +4,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  UnprocessableEntityException,
 } from "@nestjs/common";
 import type { PoolClient, QueryResult, QueryResultRow } from "pg";
 import { AuditEventInput, AuditService } from "../audit/audit.service";
@@ -29,9 +30,31 @@ import { UpsertLessonDto } from "./dto/upsert-lesson.dto";
 import { LessonRow, formatLessonTimeMoscow, toLessonDto } from "./crm-mappers";
 import { assertLessonPatchUsesTransition } from "./schedule/lesson-protected-patch.guard";
 import { SubscriptionReservationService } from "./commerce/subscription-reservation.service";
+import { ScheduleConstraintEngine } from "./schedule/constraint-engine.service";
+
+interface SeriesConstraintClientRef {
+  type: "lead" | "student";
+  id: string;
+}
+
+interface SeriesConstraintCandidate {
+  series_date: string;
+  plan_id: string | null;
+  group_id: string | null;
+  teacher_id: string | null;
+  branch_id: string | null;
+  room_id: string | null;
+  starts_at: Date | string;
+  ends_at: Date | string;
+  client_refs: SeriesConstraintClientRef[] | null;
+}
 
 interface ScheduleLessonRow extends LessonRow {
   conflict_types: string[] | null;
+  group_participants?: Array<{
+    clientId: string;
+    clientName: string | null;
+  }> | null;
   // Partner lesson ids this lesson overlaps with, per conflict type. Used to
   // deduplicate the aggregated conflicts list to one entry per pair (KVA-166).
   room_overlap_ids?: string[] | null;
@@ -116,6 +139,7 @@ export class ScheduleService {
     private readonly policy: CrmPolicy,
     private readonly notifications: NotificationsService,
     private readonly realtime: RealtimeBus,
+    private readonly constraints: ScheduleConstraintEngine,
     private readonly reservations?: SubscriptionReservationService,
   ) {}
 
@@ -127,9 +151,11 @@ export class ScheduleService {
     const result = await this.database.query<ScheduleLessonRow>(
       `
         with scoped as (
-          select l.id, l.lifecycle_state, l.student_id, l.group_id, l.lead_id, l.teacher_id,
+          select l.id, l.version, l.lifecycle_state, l.student_id, l.group_id, l.lead_id, l.teacher_id,
             l.branch_id, l.room_id, l.scheduled_at, l.duration_minutes,
             l.status, l.is_trial, l.notes,
+            case when ${managerAdminRolesSql("$10")}
+              then plan.failure_code else null end as settlement_failure_code,
             sp.user_id as student_user_id, tp.user_id as teacher_user_id,
             trim(coalesce(sp.first_name, '') || ' ' || coalesce(sp.last_name, '')) as student_name,
             trim(coalesce(ld.first_name, '') || ' ' || coalesce(ld.last_name, '')) as lead_name,
@@ -149,6 +175,7 @@ export class ScheduleService {
           left join app.branches b on b.id = l.branch_id and b.deleted_at is null
           left join app.rooms r on r.id = l.room_id and r.deleted_at is null
           left join app.groups g on g.id = l.group_id and g.deleted_at is null
+          left join app.lesson_settlement_plans plan on plan.lesson_id = l.id
           where l.deleted_at is null
             and l.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')
             and l.scheduled_at >= $1::timestamptz
@@ -163,7 +190,8 @@ export class ScheduleService {
           order by l.scheduled_at asc, l.id asc
           limit $9
         )
-        select scoped.id, scoped.lifecycle_state, scoped.student_id, scoped.group_id, scoped.lead_id,
+        select scoped.id, scoped.version, scoped.lifecycle_state, scoped.settlement_failure_code,
+          scoped.student_id, scoped.group_id, scoped.lead_id,
           scoped.teacher_id, scoped.branch_id, scoped.room_id,
           scoped.scheduled_at, scoped.duration_minutes, scoped.status,
           scoped.is_trial, scoped.notes, scoped.student_user_id,
@@ -171,6 +199,31 @@ export class ScheduleService {
           scoped.teacher_name,
           scoped.branch_name, scoped.room_name, scoped.group_name,
           scoped.group_price_per_lesson,
+          coalesce((
+            select jsonb_agg(
+              jsonb_build_object(
+                'clientId', participant.student_id,
+                'clientName', nullif(trim(
+                  coalesce(participant_profile.first_name, '') || ' ' ||
+                  coalesce(participant_profile.last_name, '')
+                ), '')
+              )
+              order by participant_profile.last_name,
+                participant_profile.first_name, participant.student_id
+            )
+            from app.lesson_snapshot_participants participant
+            join app.students participant_student
+              on participant_student.id = participant.student_id
+            left join app.profiles participant_profile
+              on participant_profile.id = participant_student.profile_id
+            where participant.lesson_id = scoped.id
+              and not exists (
+                select 1
+                from app.lesson_participant_exclusions exclusion
+                where exclusion.lesson_id = participant.lesson_id
+                  and exclusion.student_id = participant.student_id
+              )
+          ), '[]'::jsonb) as group_participants,
           array_remove(array[
             case when scoped.teacher_id is null then 'missing_teacher' end,
             case when scoped.room_id is not null and scoped.branch_id is not null
@@ -261,6 +314,7 @@ export class ScheduleService {
     );
     const items = result.rows.map((row) => ({
       ...toLessonDto(row),
+      groupParticipants: row.group_participants ?? [],
       conflictTypes: row.conflict_types ?? [],
     }));
     const groups = this.groupScheduleItems(items, groupBy);
@@ -412,6 +466,7 @@ export class ScheduleService {
               select tr.rate
               from app.teacher_rates tr
               where tr.teacher_id = l.teacher_id
+                and tr.deleted_at is null
                 and tr.effective_from <= l.scheduled_at::date
               order by tr.effective_from desc, tr.created_at desc
               limit 1
@@ -457,6 +512,9 @@ export class ScheduleService {
             where pay.lesson_id = l.id and pay.deleted_at is null
           )`
       : `null::numeric`;
+    const settlementFailureSql = isManagerOrAdminRole(actor.role)
+      ? "plan.failure_code"
+      : "null::text";
     const result = await this.database.query<LessonRow>(
       `
         select l.id, l.version, l.lifecycle_state,
@@ -471,6 +529,7 @@ export class ScheduleService {
           snapshot.trial as snapshot_trial,
           snapshot.validation_state as snapshot_validation_state,
           reservation.state as reservation_state,
+          ${settlementFailureSql} as settlement_failure_code,
           ${appliedRateSql} as applied_teacher_rate,
           ${paidSql} as paid_amount,
           sp.user_id as student_user_id, tp.user_id as teacher_user_id,
@@ -491,6 +550,7 @@ export class ScheduleService {
         left join app.rooms r on r.id = l.room_id and r.deleted_at is null
         left join app.groups g on g.id = l.group_id and g.deleted_at is null
         left join app.lesson_snapshots snapshot on snapshot.lesson_id = l.id
+        left join app.lesson_settlement_plans plan on plan.lesson_id = l.id
         left join lateral (
           select lesson_reservation.state
           from app.lesson_reservations lesson_reservation
@@ -499,33 +559,38 @@ export class ScheduleService {
           limit 1
         ) reservation on true
         where l.deleted_at is null
-          and l.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')
           and (
-            $3::uuid is null
-            or l.student_id = $3
+            $3::uuid is not null
+            or l.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')
+          )
+          and ($3::uuid is null or l.id = $3)
+          and (
+            $4::uuid is null
+            or l.student_id = $4
             or exists (
               select 1
               from app.group_students filter_gs
               where filter_gs.group_id = l.group_id
-                and filter_gs.student_id = $3
+                and filter_gs.student_id = $4
                 and filter_gs.left_at is null
             )
           )
-          and ($4::uuid is null or l.teacher_id = $4)
-          and ($5::timestamptz is null or l.scheduled_at >= $5)
-          and ($6::timestamptz is null or l.scheduled_at <= $6)
-          and ($7::boolean is null or l.is_trial = $7)
+          and ($5::uuid is null or l.teacher_id = $5)
+          and ($6::timestamptz is null or l.scheduled_at >= $6)
+          and ($7::timestamptz is null or l.scheduled_at <= $7)
+          and ($8::boolean is null or l.is_trial = $8)
           and (
             ${managerAdminRolesSql("$1")}
             or ($1::text = 'teacher' and tp.user_id = $2)
             or ($1::text = 'client' and ${this.clientLessonAccessSql("$2")})
           )
         order by l.scheduled_at ${sortDir}, l.id ${sortDir}
-        limit $8
+        limit $9
       `,
       [
         actor.role,
         actor.userId,
+        query.lessonId ?? null,
         query.studentId ?? null,
         query.teacherId ?? null,
         query.from ?? null,
@@ -703,6 +768,22 @@ export class ScheduleService {
   }
 
   /**
+   * Serialize aggregate Plan mutations with the horizon worker. Plan commands
+   * live in SchedulePlanService, but must use the exact same per-series lock
+   * keys as materializeSeries or a worker can add occurrences after impact was
+   * calculated and before the Plan mutation commits.
+   */
+  lockSchedulePlanSeries(
+    client: PoolClient,
+    seriesIds: string[],
+  ): Promise<void> {
+    return this.acquireScheduleLockKeys(
+      client,
+      seriesIds.map((seriesId) => `series:${seriesId}`),
+    );
+  }
+
+  /**
    * Contract 2: throw 409 {message, conflicts} when the teacher OR the room is
    * busy in the slot. No role may bypass a scheduling conflict.
    */
@@ -866,7 +947,11 @@ export class ScheduleService {
             userId,
             title: "Пробное занятие назначено",
             body: `Пробное занятие назначено на ${whenLocal} (по Москве). Подробности в приложении.`,
-            data: { type: "trial_lesson_booked", lessonId: lesson.id },
+            data: {
+              entityType: "lesson",
+              entityId: lesson.id,
+              eventType: "trial_lesson_booked",
+            },
             channels: ["in_app", "push"],
           })
           .catch(() => undefined),
@@ -1052,87 +1137,92 @@ export class ScheduleService {
    * уже закрытая строкой lessons.series_date (включая перенесённые и
    * отменённые), повторно не создаётся.
    */
-  private async assertNoScheduleSeriesConflicts(
+  private async seriesConstraintCandidates(
     seriesId: string,
     executor: ScheduleQueryExecutor = this.database,
-  ): Promise<void> {
-    const series = await executor.query<{
-      teacher_id: string | null;
-      room_id: string | null;
-    }>(
-      `select teacher_id, room_id
-       from app.schedule_series
-       where id = $1 and deleted_at is null
-       limit 1`,
-      [seriesId],
-    );
-    const resource = series.rows[0];
-    if (!resource) return;
-    await this.acquireScheduleResourceLocks(
-      executor,
-      resource.teacher_id,
-      resource.room_id,
-    );
-    const result = await executor.query<ConflictRow>(
+  ): Promise<SeriesConstraintCandidate[]> {
+    const result = await executor.query<SeriesConstraintCandidate>(
       `
-        with candidates as (
-          select s.id as series_id, d::date as series_date,
-            s.teacher_id, s.room_id,
-            (d::date + s.begin_time) at time zone 'Europe/Moscow' as starts_at,
-            (d::date + s.begin_time) at time zone 'Europe/Moscow'
-              + s.duration_minutes * interval '1 minute' as ends_at
+        with target as (
+          select s.*,
+            coalesce(s.timezone_name, branch.timezone_name, 'Europe/Moscow')
+              as effective_timezone,
+            timezone(
+              coalesce(s.timezone_name, branch.timezone_name, 'Europe/Moscow'),
+              now()
+            )::date as local_today
           from app.schedule_series s
+          left join app.branches branch
+            on branch.id = s.branch_id and branch.deleted_at is null
+          where s.id = $1 and s.deleted_at is null
+        ), candidates as (
+          select s.id as series_id, s.plan_id, s.client_type, s.client_id,
+            s.student_id, s.group_id, s.teacher_id, s.branch_id, s.room_id,
+            d::date as series_date,
+            (d::date + s.begin_time) at time zone s.effective_timezone
+              as starts_at,
+            (d::date + s.begin_time) at time zone s.effective_timezone
+              + s.duration_minutes * interval '1 minute' as ends_at
+          from target s
           cross join lateral generate_series(
-            greatest(s.valid_from, (now() at time zone 'Europe/Moscow')::date)::timestamp,
+            greatest(s.valid_from, s.local_today)::timestamp,
             least(
-              coalesce(s.valid_until, (now() at time zone 'Europe/Moscow')::date
+              coalesce(s.valid_until, s.local_today
                 + case when s.plan_id is not null or s.group_id is null
                     then $2::int else $3::int end),
-              (now() at time zone 'Europe/Moscow')::date
+              s.local_today
                 + case when s.plan_id is not null or s.group_id is null
                     then $2::int else $3::int end
             )::timestamp,
             interval '1 day'
           ) as d
-          where s.id = $1 and s.deleted_at is null
-            and extract(isodow from d) = s.weekday
+          where extract(isodow from d) = s.weekday
+            and not exists (
+              select 1 from app.lessons lesson
+              where lesson.series_id = s.id and lesson.series_date = d::date
+            )
         )
-        select l.id as lesson_id,
-          l.scheduled_at as starts_at,
-          l.scheduled_at + l.duration_minutes * interval '1 minute' as ends_at,
-          (c.teacher_id is not null and l.teacher_id = c.teacher_id) as teacher_hit,
-          (c.room_id is not null and l.room_id = c.room_id) as room_hit,
-          r.name as room_name,
-          trim(coalesce(tp.first_name, '') || ' ' || coalesce(tp.last_name, '')) as teacher_name,
-          coalesce(
-            nullif(g.name, ''),
-            nullif(trim(coalesce(sp.first_name, '') || ' ' || coalesce(sp.last_name, '')), ''),
-            nullif(trim(coalesce(ld.first_name, '') || ' ' || coalesce(ld.last_name, '')), ''),
-            'Занятие'
-          ) as title
-        from candidates c
-        join app.lessons l
-          on l.deleted_at is null
-          and l.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')
-          and (
-            l.series_id is distinct from c.series_id
-            or l.series_date is distinct from c.series_date
-          )
-          and l.scheduled_at < c.ends_at
-          and l.scheduled_at + l.duration_minutes * interval '1 minute' > c.starts_at
-          and (
-            (c.teacher_id is not null and l.teacher_id = c.teacher_id)
-            or (c.room_id is not null and l.room_id = c.room_id)
-          )
-        left join app.rooms r on r.id = l.room_id and r.deleted_at is null
-        left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
-        left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
-        left join app.students s on s.id = l.student_id and s.deleted_at is null
-        left join app.profiles sp on sp.id = s.profile_id and sp.deleted_at is null
-        left join app.groups g on g.id = l.group_id and g.deleted_at is null
-        left join app.leads ld on ld.id = l.lead_id and ld.deleted_at is null
-        order by l.scheduled_at asc, l.id asc
-        limit 20
+        select candidate.series_date::text, candidate.plan_id,
+          candidate.group_id, candidate.teacher_id, candidate.branch_id,
+          candidate.room_id, candidate.starts_at, candidate.ends_at,
+          case
+            when candidate.client_type is not null
+              and candidate.client_id is not null
+              then jsonb_build_array(jsonb_build_object(
+                'type', candidate.client_type,
+                'id', candidate.client_id
+              ))
+            when candidate.student_id is not null
+              then jsonb_build_array(jsonb_build_object(
+                'type', 'student',
+                'id', candidate.student_id
+              ))
+            when candidate.plan_id is not null then coalesce((
+              select jsonb_agg(
+                jsonb_build_object('type', 'student', 'id', participant.student_id)
+                order by participant.student_id
+              )
+              from app.schedule_plan_participants participant
+              where participant.plan_id = candidate.plan_id
+                and participant.effective_from <= candidate.series_date
+                and (participant.effective_until is null
+                  or participant.effective_until >= candidate.series_date)
+            ), '[]'::jsonb)
+            when candidate.group_id is not null then coalesce((
+              select jsonb_agg(
+                jsonb_build_object('type', 'student', 'id', membership.student_id)
+                order by membership.student_id
+              )
+              from app.group_students membership
+              join app.students student
+                on student.id = membership.student_id and student.deleted_at is null
+              where membership.group_id = candidate.group_id
+                and membership.left_at is null
+            ), '[]'::jsonb)
+            else '[]'::jsonb
+          end as client_refs
+        from candidates candidate
+        order by candidate.series_date
       `,
       [
         seriesId,
@@ -1140,11 +1230,99 @@ export class ScheduleService {
         ScheduleService.GROUP_SERIES_HORIZON_DAYS,
       ],
     );
-    if (!result.rows.length) return;
-    throw new ConflictException({
-      message: "Преподаватель или аудитория заняты в это время.",
-      conflicts: result.rows.map((row) => this.toConflictDto(row)),
-    });
+    return result.rows;
+  }
+
+  private seriesConstraintLockKeys(candidates: SeriesConstraintCandidate[]) {
+    return candidates.flatMap((candidate) => [
+      candidate.plan_id ? `plan:${candidate.plan_id}` : null,
+      candidate.branch_id ? `branch:${candidate.branch_id}` : null,
+      candidate.room_id ? `room:${candidate.room_id}` : null,
+      candidate.teacher_id ? `teacher:${candidate.teacher_id}` : null,
+      ...(candidate.client_refs ?? []).map(
+        (clientRef) => `client:${clientRef.type}:${clientRef.id}`,
+      ),
+    ]);
+  }
+
+  private async assertNoScheduleSeriesConflicts(
+    seriesId: string,
+    executor: ScheduleQueryExecutor = this.database,
+  ): Promise<void> {
+    const beforeLock = await this.seriesConstraintCandidates(
+      seriesId,
+      executor,
+    );
+    const lockedKeys = this.seriesConstraintLockKeys(beforeLock);
+    await this.acquireScheduleLockKeys(executor, lockedKeys);
+    await this.acquireScheduleSeriesLock(executor, seriesId);
+
+    // A Plan edit can finish while the worker waits for its locks. Re-read after
+    // locking and fail closed if the series moved to resources we did not lock.
+    const candidates = await this.seriesConstraintCandidates(
+      seriesId,
+      executor,
+    );
+    const normalizedLockedKeys = new Set(
+      lockedKeys
+        .filter((key): key is string => typeof key === "string")
+        .map((key) => key.toLowerCase()),
+    );
+    if (
+      this.seriesConstraintLockKeys(candidates).some(
+        (key) => key != null && !normalizedLockedKeys.has(key.toLowerCase()),
+      )
+    ) {
+      throw new ConflictException({
+        code: "SCHEDULE_SERIES_RESOURCES_CHANGED",
+        message: "Schedule series resources changed during materialization.",
+      });
+    }
+
+    for (const candidate of candidates) {
+      if (!candidate.teacher_id || !candidate.branch_id || !candidate.room_id) {
+        throw new UnprocessableEntityException({
+          code: "LESSON_SERIES_REQUIRED_RESOURCES_MISSING",
+          message: "Lesson series requires teacher, branch and room.",
+          occurrence: { localDate: candidate.series_date },
+        });
+      }
+      const clientRefs = candidate.client_refs?.length
+        ? candidate.client_refs
+        : [
+            {
+              type: "student" as const,
+              id: candidate.group_id ?? seriesId,
+            },
+          ];
+      for (const clientRef of clientRefs) {
+        const result = await this.constraints.validate(
+          {
+            clientRef,
+            teacherId: candidate.teacher_id,
+            branchId: candidate.branch_id,
+            roomId: candidate.room_id,
+            startAt: candidate.starts_at,
+            endAt: candidate.ends_at,
+            excludeScheduleSeriesIds: [seriesId],
+          },
+          executor as unknown as PoolClient,
+        );
+        if (!result.valid) {
+          throw new UnprocessableEntityException({
+            code: "LESSON_SERIES_CONSTRAINT_VIOLATIONS",
+            message: "Lesson series occurrence violates schedule constraints.",
+            occurrence: {
+              localDate: candidate.series_date,
+              startAt: new Date(candidate.starts_at).toISOString(),
+              endAt: new Date(candidate.ends_at).toISOString(),
+            },
+            clientRef,
+            violations: result.violations,
+          });
+        }
+      }
+    }
   }
 
   private async materializeSeries(
@@ -1154,7 +1332,6 @@ export class ScheduleService {
     // The worker, edit and stop flows all serialize on the same key. Without
     // this lock a worker can commit old future lessons after an edit deleted
     // them, or two edits can create competing continuations.
-    await this.acquireScheduleSeriesLock(executor, seriesId);
     await this.assertNoScheduleSeriesConflicts(seriesId, executor);
     const result = await executor.query<{ id: string }>(
       `
@@ -1164,17 +1341,32 @@ export class ScheduleService {
           series_id, series_date, created_by
         )
         select s.student_id, s.group_id, s.teacher_id, s.branch_id, s.room_id,
-          (d::date + s.begin_time) at time zone 'Europe/Moscow',
+          (d::date + s.begin_time) at time zone
+            coalesce(s.timezone_name, branch.timezone_name, 'Europe/Moscow'),
           s.duration_minutes, 'scheduled', false,
           s.id, d::date, s.created_by
         from app.schedule_series s
+        left join app.branches branch
+          on branch.id = s.branch_id and branch.deleted_at is null
         cross join lateral generate_series(
-          greatest(s.valid_from, (now() at time zone 'Europe/Moscow')::date)::timestamp,
+          greatest(
+            s.valid_from,
+            timezone(
+              coalesce(s.timezone_name, branch.timezone_name, 'Europe/Moscow'),
+              now()
+            )::date
+          )::timestamp,
           least(
-              coalesce(s.valid_until, (now() at time zone 'Europe/Moscow')::date
+              coalesce(s.valid_until, timezone(
+                coalesce(s.timezone_name, branch.timezone_name, 'Europe/Moscow'),
+                now()
+              )::date
                 + case when s.plan_id is not null or s.group_id is null
                     then $2::int else $3::int end),
-              (now() at time zone 'Europe/Moscow')::date
+              timezone(
+                coalesce(s.timezone_name, branch.timezone_name, 'Europe/Moscow'),
+                now()
+              )::date
                 + case when s.plan_id is not null or s.group_id is null
                     then $2::int else $3::int end
           )::timestamp,
@@ -1318,6 +1510,7 @@ export class ScheduleService {
             select teacher_rate.rate
             from app.teacher_rates teacher_rate
             where teacher_rate.teacher_id = series.teacher_id
+              and teacher_rate.deleted_at is null
               and teacher_rate.effective_from <= lesson.scheduled_at::date
             order by teacher_rate.effective_from desc, teacher_rate.created_at desc
             limit 1
@@ -1348,6 +1541,7 @@ export class ScheduleService {
             select teacher_rate.rate
             from app.teacher_rates teacher_rate
             where teacher_rate.teacher_id = series.teacher_id
+              and teacher_rate.deleted_at is null
               and teacher_rate.effective_from <= lesson.scheduled_at::date
             order by teacher_rate.effective_from desc, teacher_rate.created_at desc
             limit 1
@@ -1473,7 +1667,9 @@ export class ScheduleService {
       [lessonIds],
     );
     if (planCharges.rows.length && !this.reservations) {
-      throw new Error("SubscriptionReservationService is required for plan generation.");
+      throw new Error(
+        "SubscriptionReservationService is required for plan generation.",
+      );
     }
     for (const charge of planCharges.rows) {
       await this.reservations!.allocate(executor as PoolClient, {
@@ -1495,10 +1691,7 @@ export class ScheduleService {
     return lessonIds.length;
   }
 
-  materializePlanSeries(
-    client: PoolClient,
-    seriesId: string,
-  ): Promise<number> {
+  materializePlanSeries(client: PoolClient, seriesId: string): Promise<number> {
     return this.materializeSeries(seriesId, client);
   }
 
@@ -1510,11 +1703,16 @@ export class ScheduleService {
   }> {
     const rows = await this.database.query<{ id: string }>(
       `
-        select id from app.schedule_series
-        where deleted_at is null
+        select s.id
+        from app.schedule_series s
+        join app.branches branch on branch.id = s.branch_id
+        where s.deleted_at is null
           and (
-            valid_until is null
-            or valid_until >= (now() at time zone 'Europe/Moscow')::date
+            s.valid_until is null
+            or s.valid_until >= timezone(
+              coalesce(s.timezone_name, branch.timezone_name, 'Europe/Moscow'),
+              now()
+            )::date
           )
       `,
     );
@@ -1583,7 +1781,11 @@ export class ScheduleService {
             $5::boolean
             or s.valid_until is null
             or s.valid_until >= (
-              now() at time zone coalesce(s.timezone_name, 'Europe/Moscow')
+              now() at time zone coalesce(
+                s.timezone_name,
+                b.timezone_name,
+                'Europe/Moscow'
+              )
             )::date
           )
         order by s.weekday, s.begin_time
@@ -2136,10 +2338,10 @@ export class ScheduleService {
   }
 
   /**
-   * Applies one per-lesson teacher rate to many lessons in a single statement.
-   * Exists for the end-of-month «пробные в оклад» pass (spec §3), which used to
-   * be one PATCH per lesson from the client: a failure halfway left some
-   * lessons repriced and some not, with no way to tell which.
+   * Applies one per-lesson teacher rate to a bounded selection. Operational
+   * roles may change only unsettled lessons. Director/system_admin may also
+   * correct already-settled compensation: the previous fact remains intact
+   * and a superseding payroll fact becomes effective.
    *
    * Unlike updateLesson this SETS rather than coalesces — clearing the override
    * (rate = null, fall back to the group/history rate) is a thing the caller
@@ -2150,17 +2352,107 @@ export class ScheduleService {
     // teacher path: this writes payroll inputs across the schedule.
     this.policy.assertManagerOnly(actor);
     const rate = dto.teacherRate ?? null;
-    const result = await this.database.query<{ id: string }>(
-      `
-        update app.lessons
-        set teacher_rate = $2::numeric,
-          updated_at = now()
-        where id = any($1::uuid[]) and deleted_at is null
-        returning id
-      `,
-      [dto.lessonIds, rate],
-    );
-    const updated = result.rows.map((row) => row.id);
+    const reasonText = dto.reasonText.trim();
+    if (!reasonText) {
+      throw new BadRequestException("Укажите причину изменения ставки.");
+    }
+    const canCorrectSettled =
+      actor.role === "director" || actor.role === "system_admin";
+    const result = await this.database.transaction(async (client) => {
+      const targets = await client.query<{ id: string; locked: boolean }>(
+        `
+          select lesson.id,
+            exists (
+              select 1
+              from app.lesson_teacher_compensation_facts_effective fact
+              where fact.lesson_id = lesson.id
+            ) as locked
+          from app.lessons lesson
+          where lesson.id = any($1::uuid[]) and lesson.deleted_at is null
+          for update
+        `,
+        [dto.lessonIds],
+      );
+      if (targets.rows.length !== dto.lessonIds.length) {
+        throw new BadRequestException(
+          "Часть выбранных занятий не найдена или уже удалена.",
+        );
+      }
+      const locked = targets.rows
+        .filter((row) => row.locked)
+        .map((row) => row.id);
+      if (locked.length && !canCorrectSettled) {
+        throw new ConflictException({
+          code: "SETTLED_TEACHER_RATE_IMMUTABLE",
+          message:
+            "Расчёт завершённого занятия зафиксирован. Используйте корректировку расчёта в карточке занятия.",
+          lessonIds: locked,
+          canonicalAction: "lesson_settlement_correction",
+        });
+      }
+      if (locked.length && rate === null) {
+        throw new ConflictException({
+          code: "SETTLED_TEACHER_RATE_REQUIRED",
+          message:
+            "Для исправления зафиксированных расчётов укажите конкретную ставку.",
+          lessonIds: locked,
+        });
+      }
+      const updated = await client.query<{ id: string }>(
+        `
+          update app.lessons
+          set teacher_rate = $2::numeric,
+            updated_at = now()
+          where id = any($1::uuid[]) and deleted_at is null
+          returning id
+        `,
+        [dto.lessonIds, rate],
+      );
+      if (locked.length) {
+        await client.query(
+          `insert into app.lesson_teacher_compensation_facts (
+             lesson_id, teacher_id, compensation_type, snapshot_rate,
+             rate_minor, duration_minutes, amount_minor, currency_code,
+             compensation_rule_key, compensation_rule_label,
+             compensation_mode, compensation_default_value,
+             compensation_actual_value, compensation_override_reason,
+             configuration_revision_id, supersedes_fact_id
+           )
+           select lesson.id, current_fact.teacher_id,
+             case when $2::numeric = 0 then 'none' else 'hourly' end,
+             $2::numeric, round($2::numeric * 100)::bigint,
+             current_fact.duration_minutes,
+             case when $2::numeric = 0 then 0 else
+               round($2::numeric * 100 * current_fact.duration_minutes / 60)::bigint
+             end,
+             current_fact.currency_code,
+             case when current_fact.configuration_revision_id is null
+               then null else 'director.manual_rate_correction' end,
+             case when current_fact.configuration_revision_id is null
+               then null else 'Ручная коррекция ставки директором' end,
+             case when current_fact.configuration_revision_id is null
+               then null
+               when $2::numeric = 0 then 'none' else 'hourly' end,
+             case when current_fact.configuration_revision_id is null
+               then null else round($2::numeric * 100)::bigint end,
+             case when current_fact.configuration_revision_id is null
+               then null else round($2::numeric * 100)::bigint end,
+             case when current_fact.configuration_revision_id is null
+               then null else $3 end,
+             current_fact.configuration_revision_id,
+             current_fact.id
+           from app.lessons lesson
+           join app.lesson_teacher_compensation_facts_effective current_fact
+             on current_fact.lesson_id = lesson.id
+           where lesson.id = any($1::uuid[])`,
+          [locked, rate, reasonText],
+        );
+      }
+      return {
+        lessonIds: updated.rows.map((row) => row.id),
+        correctedSettled: locked.length,
+      };
+    });
     await this.recordAuditSafe({
       actor,
       action: "crm.lessons_teacher_rate_bulk_set",
@@ -2168,13 +2460,19 @@ export class ScheduleService {
       metadata: {
         teacherRate: rate,
         requested: dto.lessonIds.length,
-        updated: updated.length,
+        updated: result.lessonIds.length,
+        correctedSettled: result.correctedSettled,
+        reason: reasonText,
       },
     });
     // One event for the batch: 500 per-lesson events would just make every
     // connected client refetch 500 times.
     this.realtime.emitCrmChanged({ entity: "lesson", action: "updated" });
-    return { updated: updated.length, lessonIds: updated };
+    return {
+      updated: result.lessonIds.length,
+      correctedSettled: result.correctedSettled,
+      lessonIds: result.lessonIds,
+    };
   }
 
   private async assertCanUpdateLesson(

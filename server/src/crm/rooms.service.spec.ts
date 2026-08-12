@@ -56,6 +56,11 @@ describe("RoomsService", () => {
           branchName: "Центр",
           name: "101",
           capacity: 4,
+          lifecycleState: "active",
+          version: 1,
+          archivedAt: null,
+          archiveReason: null,
+          archiveEffectiveDate: null,
           createdAt: "2026-06-12T00:00:00.000Z",
         },
       ],
@@ -67,6 +72,7 @@ describe("RoomsService", () => {
       5,
       "manager",
       "manager-a",
+      false,
     ]);
   });
 
@@ -171,6 +177,11 @@ describe("RoomsService", () => {
       branchName: "Центр",
       name: "102",
       capacity: 6,
+      lifecycleState: "active",
+      version: 1,
+      archivedAt: null,
+      archiveReason: null,
+      archiveEffectiveDate: null,
       createdAt: "2026-06-12T00:00:00.000Z",
     });
 
@@ -197,19 +208,18 @@ describe("RoomsService", () => {
       },
     ]);
 
-    await expect(service.createRoom(director, {
-      branchId: "branch-a",
-      name: "Репетиционная",
-    })).resolves.toMatchObject({ capacity: null });
-    expect(query.mock.calls[0][1]).toEqual([
-      "branch-a",
-      "Репетиционная",
-      null,
-    ]);
+    await expect(
+      service.createRoom(director, {
+        branchId: "branch-a",
+        name: "Репетиционная",
+      }),
+    ).resolves.toMatchObject({ capacity: null });
+    expect(query.mock.calls[0][1]).toEqual(["branch-a", "Репетиционная", null]);
   });
 
-  it("updates and soft-deletes rooms through CRM write policy", async () => {
+  it("updates rooms but makes the legacy delete path fail closed", async () => {
     const { service, query, audit, policy } = createServiceWithQueryResults([
+      { rows: [{ branch_id: "branch-b" }] },
       {
         rows: [
           {
@@ -222,7 +232,6 @@ describe("RoomsService", () => {
           },
         ],
       },
-      { rows: [{ id: "room-a" }] },
     ]);
 
     await expect(
@@ -238,19 +247,21 @@ describe("RoomsService", () => {
       name: "201",
       capacity: 8,
     });
-    await expect(service.deleteRoom(director, "room-a")).resolves.toEqual({
-      success: true,
+    await expect(service.deleteRoom(director, "room-a")).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "ROOM_ARCHIVE_PREVIEW_REQUIRED",
+      }),
     });
 
     expect(policy.assertCanManageSystemSettings).toHaveBeenCalledTimes(2);
-    expect(query.mock.calls[0][1]).toEqual([
+    expect(query.mock.calls[0][1]).toEqual(["room-a"]);
+    expect(query.mock.calls[1][1]).toEqual([
       "room-a",
       "branch-b",
       "201",
       true,
       8,
     ]);
-    expect(query.mock.calls[1][1]).toEqual(["room-a"]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "crm.room_updated",
@@ -258,12 +269,21 @@ describe("RoomsService", () => {
         entityId: "room-a",
       }),
     );
-    expect(audit.record).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: "crm.room_deleted",
-        entityType: "room",
-        entityId: "room-a",
+    expect(audit.record).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not transfer an active room between branches through ordinary edit", async () => {
+    const { service, query } = createServiceWithQueryResults([
+      { rows: [{ branch_id: "branch-a" }] },
+    ]);
+
+    await expect(
+      service.updateRoom(director, "room-a", { branchId: "branch-b" }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "ROOM_BRANCH_TRANSFER_REQUIRES_REMEDIATION",
       }),
-    );
+    });
+    expect(query).toHaveBeenCalledTimes(1);
   });
 });

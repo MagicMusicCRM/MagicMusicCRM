@@ -57,6 +57,23 @@ String lessonStatusLabel(String? status) {
   }
 }
 
+/// Safe staff-facing explanation for an automatic settlement failure.
+/// Backend failure identifiers and exception messages must never be rendered
+/// verbatim: they may contain implementation details and are not actionable.
+String lessonSettlementIssueLabel(String? failureCode) {
+  return switch (failureCode) {
+    'LESSON_SETTLEMENT_PLAN_MISSING' =>
+      'Не найден план списания и оплаты преподавателю.',
+    'LESSON_SNAPSHOT_INCOMPLETE' =>
+      'В занятии не хватает данных для автоматического расчёта.',
+    'CLIENT_FUNDING_SOURCE_REQUIRED' => 'Не выбран источник оплаты клиента.',
+    'TEACHER_COMPENSATION_RULE_NOT_FOUND' =>
+      'Не найдено правило оплаты преподавателю.',
+    _ =>
+      'Автоматический расчёт не завершён. Проверьте списание и оплату преподавателю.',
+  };
+}
+
 /// Human-readable RU label for a schedule conflict type. Pure.
 String conflictLabel(String type) {
   return switch (type) {
@@ -141,6 +158,7 @@ Future<void> showLessonDetailsSheet(
   Future<void> Function()? onSettle,
   Future<void> Function()? onAdjustSettlement,
   String? adjustSettlementLabel,
+  String? settlementIssue,
   List<Map<String, dynamic>> settlementHistory = const [],
 }) {
   return showMagicAdaptiveSurface<void>(
@@ -190,6 +208,15 @@ Future<void> showLessonDetailsSheet(
           'Статус',
           lessonStatusLabel(currentStatus),
         ),
+        if (settlementIssue?.trim().isNotEmpty == true) ...[
+          const SizedBox(height: 10),
+          detailRow(
+            surfaceContext,
+            Icons.warning_amber_rounded,
+            'Причина конфликта',
+            settlementIssue!.trim(),
+          ),
+        ],
         if (conflicts.isNotEmpty) ...[
           const SizedBox(height: 10),
           detailRow(
@@ -231,6 +258,7 @@ Future<void> showLessonDetailsSheet(
           ],
           if (onSettle != null) ...[
             FilledButton.icon(
+              key: const Key('lesson-repair-settlement'),
               onPressed: () async {
                 Navigator.pop(surfaceContext);
                 await onSettle();

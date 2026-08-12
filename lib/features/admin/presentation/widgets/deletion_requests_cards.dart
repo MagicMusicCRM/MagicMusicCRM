@@ -149,12 +149,14 @@ class _FilterChip extends StatelessWidget {
 class _DeletionRequestCard extends StatelessWidget {
   final Map<String, dynamic> item;
   final bool busy;
+  final bool canManage;
   final Future<void> Function(Map<String, dynamic> item, _DeletionAction action)
-      onAction;
+  onAction;
 
   const _DeletionRequestCard({
     required this.item,
     required this.busy,
+    required this.canManage,
     required this.onAction,
   });
 
@@ -278,16 +280,13 @@ class _DeletionRequestCard extends StatelessWidget {
                   const SizedBox(width: 6),
                   Text(
                     requestedAt,
-                    style: TextStyle(
-                      color: cs.onSurfaceVariant,
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
                   ),
                 ],
               ),
             ],
             // Actions — only for non-terminal rows.
-            if (!status.isTerminal) ...[
+            if (!status.isTerminal && canManage) ...[
               const SizedBox(height: AppSpace.md),
               const Divider(height: 1, color: AppColor.divider),
               const SizedBox(height: AppSpace.md),
@@ -373,10 +372,7 @@ class _LabeledBlock extends StatelessWidget {
                 ),
                 TextSpan(
                   text: value,
-                  style: TextStyle(
-                    color: cs.onSurface,
-                    fontSize: 12.5,
-                  ),
+                  style: TextStyle(color: cs.onSurface, fontSize: 12.5),
                 ),
               ],
             ),
@@ -400,12 +396,13 @@ class _ActionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Pending can be taken into work; pending + processing can be
-    // completed/rejected.
+    // Match the authoritative backend state machine exactly.
     final actions = <_DeletionAction>[
       if (status == _DeletionStatus.pending) _DeletionAction.processing,
-      _DeletionAction.completed,
-      _DeletionAction.rejected,
+      if (status == _DeletionStatus.processing) ...[
+        _DeletionAction.completed,
+        _DeletionAction.rejected,
+      ],
     ];
 
     return Wrap(
@@ -500,7 +497,8 @@ class _ActionButton extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Confirm sheet body (collects an optional resolution note for complete/reject).
+// Confirm sheet body. Terminal staff decisions require a resolution note;
+// completion additionally requires an explicit anonymization acknowledgement.
 // ─────────────────────────────────────────────────────────────────────────────
 class _ConfirmSheetBody extends StatefulWidget {
   final _DeletionAction action;
@@ -512,9 +510,19 @@ class _ConfirmSheetBody extends StatefulWidget {
 
 class _ConfirmSheetBodyState extends State<_ConfirmSheetBody> {
   final TextEditingController _note = TextEditingController();
+  bool _acknowledged = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _note.addListener(_onChanged);
+  }
+
+  void _onChanged() => setState(() {});
 
   @override
   void dispose() {
+    _note.removeListener(_onChanged);
     _note.dispose();
     super.dispose();
   }
@@ -524,15 +532,22 @@ class _ConfirmSheetBodyState extends State<_ConfirmSheetBody> {
     final cs = Theme.of(context).colorScheme;
     final action = widget.action;
     final isDanger = action.danger;
+    final isCompletion = action == _DeletionAction.completed;
     final accent = isDanger ? AppColor.danger : AppColor.gold;
+    final noteReady = !action.collectsNote || _note.text.trim().isNotEmpty;
+    final canSubmit = noteReady && (!isCompletion || _acknowledged);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          isDanger
-              ? 'Запрос будет отклонён. Это действие изменит статус запроса.'
+          isCompletion
+              ? 'Аккаунт будет обезличен, способы входа удалены, а активные '
+                    'сеансы отозваны. Исторические записи, обязательные для '
+                    'работы школы и закона, сохранятся.'
+              : isDanger
+              ? 'Запрос будет отклонён. Укажите причину решения.'
               : 'Статус запроса будет изменён на «${_DeletionStatus.fromValue(action.status).label}».',
           style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
         ),
@@ -544,7 +559,7 @@ class _ConfirmSheetBodyState extends State<_ConfirmSheetBody> {
             maxLines: 4,
             textInputAction: TextInputAction.newline,
             decoration: InputDecoration(
-              labelText: 'Резолюция (необязательно)',
+              labelText: 'Резолюция',
               hintText: isDanger
                   ? 'Причина отклонения…'
                   : 'Комментарий к выполнению…',
@@ -562,6 +577,20 @@ class _ConfirmSheetBodyState extends State<_ConfirmSheetBody> {
                 borderRadius: BorderRadius.circular(AppRadius.control),
                 borderSide: BorderSide(color: accent.withValues(alpha: 0.6)),
               ),
+            ),
+          ),
+        ],
+        if (isCompletion) ...[
+          const SizedBox(height: AppSpace.md),
+          CheckboxListTile(
+            key: const ValueKey('confirm-deletion-anonymization'),
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            value: _acknowledged,
+            onChanged: (value) =>
+                setState(() => _acknowledged = value ?? false),
+            title: const Text(
+              'Подтверждаю обезличивание аккаунта и отзыв способов входа',
             ),
           ),
         ],
@@ -585,13 +614,15 @@ class _ConfirmSheetBodyState extends State<_ConfirmSheetBody> {
             const SizedBox(width: 10),
             Expanded(
               child: ElevatedButton(
-                onPressed: () {
-                  final text = _note.text.trim();
-                  Navigator.pop(
-                    context,
-                    _ConfirmOutcome(note: text.isEmpty ? null : text),
-                  );
-                },
+                onPressed: canSubmit
+                    ? () {
+                        final text = _note.text.trim();
+                        Navigator.pop(
+                          context,
+                          _ConfirmOutcome(note: text.isEmpty ? null : text),
+                        );
+                      }
+                    : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: accent,
                   foregroundColor: isDanger ? Colors.white : AppColor.onGold,

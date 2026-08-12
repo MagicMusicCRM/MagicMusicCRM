@@ -23,6 +23,8 @@
           "commerce.client_finance.read",
           "commerce.client_finance.write",
           "commerce.school_finance.read",
+          "commerce.teacher_payroll.read",
+          "commerce.teacher_payroll.write",
           "commerce.package.read",
           "commerce.package.manage",
           "commerce.subscription.issue",

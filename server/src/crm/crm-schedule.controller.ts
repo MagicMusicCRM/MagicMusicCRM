@@ -107,6 +107,15 @@ export class CrmScheduleController {
     return this.schedulePlans.previewConstraints(actor, dto);
   }
 
+  @Post("schedule-plans/:id/constraints/preview")
+  previewSchedulePlanUpdateConstraints(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: UpdateSchedulePlanDto,
+  ) {
+    return this.schedulePlans.previewUpdateConstraints(actor, id, dto);
+  }
+
   @Post("schedule-plans/:id/end/preview")
   previewSchedulePlanEnd(
     @CurrentActor() actor: ActorContext,

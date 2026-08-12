@@ -496,7 +496,16 @@ export class LessonTransitionService {
       },
       outbox: {
         type: "schedule.lesson.changed",
-        payload: { entityId: lessonId, state: toState },
+        payload: {
+          entityId: lessonId,
+          action: operation === "reschedule"
+            ? "rescheduled"
+            : operation === "cancel"
+              ? "cancelled"
+              : "settled",
+          state: toState,
+          successorId,
+        },
       },
       mutate: async (client, nextVersion) => {
         const signed = this.previewTokens.verifyLessonTransition(dto.previewToken);
@@ -541,6 +550,7 @@ export class LessonTransitionService {
   ): Promise<CalculatedTransitionPreview> {
     const source = await this.loadSource(lessonId, client, true);
     this.assertSource(source, dto.expectedVersion, operation);
+    await this.assertSettlementReviewPlan(client, lessonId, operation);
     const effectiveDto = this.effectiveTransitionDto(source, dto, operation);
     const successor = operation === "reschedule"
       ? this.successorDraft(
@@ -608,6 +618,11 @@ export class LessonTransitionService {
   ): Promise<CommittedTransition> {
     const source = await this.loadSource(input.lessonId, client, true);
     this.assertSource(source, input.dto.expectedVersion, input.operation);
+    await this.assertSettlementReviewPlan(
+      client,
+      input.lessonId,
+      input.operation,
+    );
     const effectiveDto = this.effectiveTransitionDto(
       source,
       input.dto,
@@ -677,6 +692,13 @@ export class LessonTransitionService {
         reasonText: effectiveDto.reasonText?.trim(),
       });
       await this.reservations.terminalize(client, settled);
+      if (input.operation === "settle") {
+        await this.settlement.markPlanState(
+          client,
+          input.lessonId,
+          "settled",
+        );
+      }
     }
     const transitionFingerprint = this.transitionFingerprint({
       operation: input.operation,
@@ -1239,13 +1261,17 @@ export class LessonTransitionService {
         currentVersion: source.version,
       });
     }
-    const allowed = source.lifecycleState === "scheduled" ||
-      source.lifecycleState === "settlement_pending" ||
-      (operation === "reschedule" &&
-        source.lifecycleState === "successfully_completed");
+    const allowed = operation === "settle"
+      ? source.lifecycleState === "settlement_pending"
+      : source.lifecycleState === "scheduled" ||
+        source.lifecycleState === "settlement_pending" ||
+        (operation === "reschedule" &&
+          source.lifecycleState === "successfully_completed");
     if (!allowed) {
       throw new ConflictException({
-        code: "LESSON_ALREADY_TERMINAL",
+        code: operation === "settle"
+          ? "LESSON_SETTLEMENT_REVIEW_NOT_REQUIRED"
+          : "LESSON_ALREADY_TERMINAL",
         state: source.lifecycleState,
       });
     }
@@ -1259,6 +1285,21 @@ export class LessonTransitionService {
       throw new UnprocessableEntityException({
         code: "LESSON_SNAPSHOT_INCOMPLETE",
         fields: ["snapshot"],
+      });
+    }
+  }
+
+  private async assertSettlementReviewPlan(
+    client: PoolClient,
+    lessonId: string,
+    operation: TransitionOperation,
+  ): Promise<void> {
+    if (operation !== "settle") return;
+    const plan = await this.settlement.loadPlan(client, lessonId, true);
+    if (plan?.state !== "review_required") {
+      throw new ConflictException({
+        code: "LESSON_SETTLEMENT_REVIEW_NOT_REQUIRED",
+        state: plan?.state ?? "missing",
       });
     }
   }

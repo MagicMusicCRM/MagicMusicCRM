@@ -98,6 +98,7 @@ void main() {
           reportFileOpenerProvider.overrideWithValue((bytes, name) async {
             openedBytes = bytes;
             filename = name;
+            return ReportFileOpenResult(path: 'C:/Reports/$name', opened: true);
           }),
         ],
         child: const MaterialApp(
@@ -125,8 +126,76 @@ void main() {
     expect(api.jobPolls, greaterThanOrEqualTo(1));
     expect(filename, 'client-status.xlsx');
     expect(openedBytes, [0x50, 0x4b, 0x03, 0x04]);
-    await tester.scrollUntilVisible(find.text('Файл готов'), 300);
-    expect(find.text('Файл готов'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Файл открыт: client-status.xlsx'),
+      300,
+    );
+    expect(find.text('Файл открыт: client-status.xlsx'), findsOneWidget);
+  });
+
+  testWidgets('rejects a corrupt XLSX before saving it', (tester) async {
+    final api = _ReportingApi(corruptExport: true);
+    var openerCalls = 0;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          magicCrmServiceProvider.overrideWithValue(MagicCrmService(api)),
+          reportFileOpenerProvider.overrideWithValue((bytes, name) async {
+            openerCalls++;
+            return ReportFileOpenResult(path: name, opened: true);
+          }),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(body: ReportingV4Panel(role: 'director')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'XLSX'));
+    await tester.pumpAndSettle();
+
+    expect(openerCalls, 0);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('report-export-error')),
+      300,
+    );
+    expect(find.textContaining('повреждённый XLSX-файл'), findsOneWidget);
+  });
+
+  testWidgets('reports the saved path when no desktop handler opens the file', (
+    tester,
+  ) async {
+    final api = _ReportingApi();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          magicCrmServiceProvider.overrideWithValue(MagicCrmService(api)),
+          reportFileOpenerProvider.overrideWithValue((bytes, name) async {
+            return ReportFileOpenResult(
+              path: 'C:/Reports/$name',
+              opened: false,
+            );
+          }),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(body: ReportingV4Panel(role: 'director')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'XLSX'));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('report-export-progress')),
+      300,
+    );
+    expect(
+      find.textContaining('Файл сохранён: C:/Reports/client-status-'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('loading empty error and forbidden states are explicit', (
@@ -291,6 +360,7 @@ class _ReportingApi extends MagicApiClient {
     this.fail = false,
     this.wait = false,
     this.asyncExport = false,
+    this.corruptExport = false,
     this.failPath,
   }) : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
@@ -298,6 +368,7 @@ class _ReportingApi extends MagicApiClient {
   final bool fail;
   final bool wait;
   final bool asyncExport;
+  final bool corruptExport;
   final String? failPath;
   final _gate = Completer<void>();
   Map<String, dynamic>? lastListFilter;
@@ -450,6 +521,7 @@ class _ReportingApi extends MagicApiClient {
         }),
       );
     }
+    if (corruptExport) return utf8.encode('{"not":"xlsx"}');
     return [0x50, 0x4b, 0x03, 0x04];
   }
 

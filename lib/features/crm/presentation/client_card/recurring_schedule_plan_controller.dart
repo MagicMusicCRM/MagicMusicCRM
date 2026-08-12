@@ -5,11 +5,14 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 class RecurringSchedulePlanController extends ChangeNotifier {
   RecurringSchedulePlanController({
     required MagicCrmService service,
-    required this.studentId,
-  }) : _service = service;
+    this.studentId,
+    this.groupId,
+  }) : assert((studentId == null) != (groupId == null)),
+       _service = service;
 
   final MagicCrmService _service;
-  final String studentId;
+  final String? studentId;
+  final String? groupId;
 
   bool loading = false;
   String? error;
@@ -17,6 +20,8 @@ class RecurringSchedulePlanController extends ChangeNotifier {
   final Map<String, SchedulePlanTrayPage> trays = {};
   final Set<String> loadingTrays = {};
   final Map<String, String> trayErrors = {};
+  final Map<String, ({String? cursor, String? direction})> trayRetryRequests =
+      {};
   bool _disposed = false;
 
   Future<void> load() async {
@@ -24,8 +29,16 @@ class RecurringSchedulePlanController extends ChangeNotifier {
     error = null;
     _notify();
     try {
-      plans = await _service.listSchedulePlans(studentId: studentId);
-      trays.removeWhere((planId, _) => !plans.any((plan) => plan.id == planId));
+      plans = await _service.listSchedulePlans(
+        studentId: studentId,
+        groupId: groupId,
+      );
+      final visiblePlanIds = plans.map((plan) => plan.id).toSet();
+      trays.removeWhere((planId, _) => !visiblePlanIds.contains(planId));
+      trayErrors.removeWhere((planId, _) => !visiblePlanIds.contains(planId));
+      trayRetryRequests.removeWhere(
+        (planId, _) => !visiblePlanIds.contains(planId),
+      );
       await Future.wait(plans.where((plan) => plan.isActive).map(ensureTray));
     } catch (exception) {
       error = '$exception';
@@ -49,13 +62,21 @@ class RecurringSchedulePlanController extends ChangeNotifier {
     await _loadTray(plan.id, cursor: cursor, direction: direction);
   }
 
-  Future<void> retryTray(SchedulePlan plan) => _loadTray(plan.id);
+  Future<void> retryTray(SchedulePlan plan) {
+    final request = trayRetryRequests[plan.id];
+    return _loadTray(
+      plan.id,
+      cursor: request?.cursor,
+      direction: request?.direction,
+    );
+  }
 
   Future<void> _loadTray(
     String planId, {
     String? cursor,
     String? direction,
   }) async {
+    if (loadingTrays.contains(planId)) return;
     loadingTrays.add(planId);
     trayErrors.remove(planId);
     _notify();
@@ -65,8 +86,10 @@ class RecurringSchedulePlanController extends ChangeNotifier {
         cursor: cursor,
         direction: direction,
       );
+      trayRetryRequests.remove(planId);
     } catch (exception) {
       trayErrors[planId] = '$exception';
+      trayRetryRequests[planId] = (cursor: cursor, direction: direction);
     } finally {
       loadingTrays.remove(planId);
       _notify();

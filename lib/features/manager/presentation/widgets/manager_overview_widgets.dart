@@ -363,10 +363,9 @@ class _KpiTile extends StatelessWidget {
 }
 
 class _DashboardError extends StatelessWidget {
-  final Object? error;
   final VoidCallback onRetry;
 
-  const _DashboardError({required this.error, required this.onRetry});
+  const _DashboardError({required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -382,8 +381,13 @@ class _DashboardError extends StatelessWidget {
               size: 48,
             ),
             const SizedBox(height: 8),
+            const Text(
+              'Не удалось загрузить обзор',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 6),
             Text(
-              'Ошибка загрузки: $error',
+              'Проверьте подключение и повторите загрузку.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,

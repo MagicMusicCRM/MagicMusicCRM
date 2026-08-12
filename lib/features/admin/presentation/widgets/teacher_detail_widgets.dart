@@ -3,8 +3,12 @@ part of 'teacher_detail_dialog.dart';
 /// KVA-238: диалог «Доплата / Вычет».
 class _BonusDeductionDialog extends ConsumerStatefulWidget {
   final String teacherId;
+  final int expectedVersion;
 
-  const _BonusDeductionDialog({required this.teacherId});
+  const _BonusDeductionDialog({
+    required this.teacherId,
+    required this.expectedVersion,
+  });
 
   @override
   ConsumerState<_BonusDeductionDialog> createState() =>
@@ -37,6 +41,8 @@ class _BonusDeductionDialogState extends ConsumerState<_BonusDeductionDialog> {
             amount: num.parse(
               _amountController.text.trim().replaceAll(',', '.'),
             ),
+            expectedVersion: widget.expectedVersion,
+            reasonText: _commentController.text,
             comment: _commentController.text,
           );
       if (mounted) Navigator.pop(context, true);
@@ -91,7 +97,10 @@ class _BonusDeductionDialogState extends ConsumerState<_BonusDeductionDialog> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _commentController,
-                decoration: const InputDecoration(labelText: 'Комментарий'),
+                decoration: const InputDecoration(labelText: 'Причина *'),
+                maxLength: 500,
+                validator: (value) =>
+                    value?.trim().isEmpty == true ? 'Укажите причину' : null,
               ),
             ],
           ),

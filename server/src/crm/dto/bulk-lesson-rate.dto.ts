@@ -5,7 +5,9 @@ import {
   IsArray,
   IsNumber,
   IsOptional,
+  IsString,
   IsUUID,
+  MaxLength,
   Min,
 } from "class-validator";
 
@@ -31,4 +33,8 @@ export class BulkLessonRateDto {
   @IsNumber()
   @Min(0)
   teacherRate?: number | null;
+
+  @IsString()
+  @MaxLength(500)
+  reasonText!: string;
 }

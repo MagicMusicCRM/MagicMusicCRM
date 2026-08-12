@@ -1,4 +1,6 @@
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
   IsEmail,
   IsObject,
@@ -6,7 +8,10 @@ import {
   IsString,
   IsUUID,
   MaxLength,
+  ValidateNested,
 } from "class-validator";
+import { Type } from "class-transformer";
+import { ClientCustomFieldInputDto } from "./client-config.dto";
 
 export class UpsertLeadDto {
   // Contract 6: NOT @IsUUID on purpose. The client historically sends status
@@ -70,6 +75,13 @@ export class UpsertLeadDto {
   @IsOptional()
   @IsObject()
   customDataPatch?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => ClientCustomFieldInputDto)
+  customFields?: ClientCustomFieldInputDto[];
 
   @IsOptional()
   @IsUUID()

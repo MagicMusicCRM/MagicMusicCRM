@@ -276,6 +276,7 @@ export async function audienceForGroup(
 export async function audienceForLesson(
   db: DatabaseService,
   lesson: {
+    id?: string | null;
     student_id: string | null;
     group_id: string | null;
     lead_id: string | null;
@@ -284,7 +285,22 @@ export async function audienceForLesson(
 ): Promise<string[]> {
   const result = await db.query<{ user_id: string }>(
     `
-      select distinct user_id
+      with group_lesson_students as (
+        select participant.student_id
+        from app.lesson_snapshot_participants participant
+        where participant.lesson_id = $5
+        union
+        select membership.student_id
+        from app.group_students membership
+        where membership.group_id = $3
+          and membership.left_at is null
+          and not exists (
+            select 1
+            from app.lesson_snapshot_participants participant
+            where participant.lesson_id = $5
+          )
+      )
+      select distinct affected.user_id
       from (
         select p.user_id
         from app.students s
@@ -343,25 +359,24 @@ export async function audienceForLesson(
         where t.id = $4 and t.deleted_at is null and tp.user_id is not null
         union
         select gp.user_id
-        from app.group_students gs
+        from group_lesson_students gs
         join app.students gs_student
           on gs_student.id = gs.student_id
          and gs_student.deleted_at is null
         join app.profiles gp
           on gp.id = gs_student.profile_id
          and gp.deleted_at is null
-        where gs.group_id = $3 and gs.left_at is null and gp.user_id is not null
+        where gp.user_id is not null
         union
         select group_link.user_id
-        from app.group_students gs
+        from group_lesson_students gs
         join app.user_crm_links group_link
           on group_link.entity_type = 'student'
          and group_link.entity_id = gs.student_id
          and group_link.deleted_at is null
-        where gs.group_id = $3 and gs.left_at is null
         union
         select group_family_profile.user_id
-        from app.group_students gs
+        from group_lesson_students gs
         join app.family_members group_student_member
           on group_student_member.entity_type = 'student'
          and group_student_member.entity_id = gs.student_id
@@ -377,11 +392,20 @@ export async function audienceForLesson(
         join app.profiles group_family_profile
           on group_family_profile.id = group_account_member.entity_id
          and group_family_profile.deleted_at is null
-        where gs.group_id = $3 and gs.left_at is null
       ) affected
-      where user_id is not null
+      join app.users recipient
+        on recipient.id = affected.user_id
+       and recipient.deleted_at is null
+       and recipient.is_app_account = true
+      where affected.user_id is not null
     `,
-    [lesson.student_id, lesson.lead_id, lesson.group_id, lesson.teacher_id],
+    [
+      lesson.student_id,
+      lesson.lead_id,
+      lesson.group_id,
+      lesson.teacher_id,
+      lesson.id ?? null,
+    ],
   );
   return (result?.rows ?? []).map((row) => row.user_id);
 }

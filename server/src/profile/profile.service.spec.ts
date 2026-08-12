@@ -20,7 +20,6 @@ function createService(overrides: {
   const policy = {
     assertCanReadProfile: jest.fn(),
     assertCanListProfiles: jest.fn(),
-    assertCanUpdateRole: jest.fn(),
     ...overrides.policy,
   };
 
@@ -303,33 +302,7 @@ describe("ProfileService profile updates", () => {
   });
 });
 
-describe("ProfileService role updates", () => {
-  const sysAdminRow = {
-    ...profileRow,
-    id: "profile-sys",
-    user_id: "user-sys",
-    role: "system_admin",
-  };
-
-  it("blocks demoting the last active system_admin", async () => {
-    const { service, database } = createService({
-      database: {
-        query: jest
-          .fn()
-          // findById -> the target system_admin
-          .mockResolvedValueOnce({ rows: [sysAdminRow] })
-          // count of OTHER active system_admins -> none left
-          .mockResolvedValueOnce({ rows: [{ count: "0" }] }),
-      },
-    });
-
-    await expect(
-      service.updateRole(actor, "profile-sys", "manager"),
-    ).rejects.toBeInstanceOf(BadRequestException);
-    // Must not have run the UPDATE.
-    expect(database.query).toHaveBeenCalledTimes(2);
-  });
-
+describe("ProfileService branch projection", () => {
   it("getMe returns the staff member's assigned branches, home = first", async () => {
     const { service, database } = createService({
       database: {
@@ -366,25 +339,5 @@ describe("ProfileService role updates", () => {
     const me = await service.getMe(actor);
 
     expect(me).toMatchObject({ branchIds: [], homeBranchId: null });
-  });
-
-  it("allows demoting a system_admin when another one remains", async () => {
-    const { service, database } = createService({
-      database: {
-        query: jest
-          .fn()
-          .mockResolvedValueOnce({ rows: [sysAdminRow] })
-          .mockResolvedValueOnce({ rows: [{ count: "1" }] })
-          .mockResolvedValueOnce({ rows: [] })
-          .mockResolvedValueOnce({
-            rows: [{ ...sysAdminRow, role: "manager" }],
-          }),
-      },
-    });
-
-    const result = await service.updateRole(actor, "profile-sys", "manager");
-
-    expect(result.role).toBe("manager");
-    expect(database.query).toHaveBeenCalledTimes(4);
   });
 });

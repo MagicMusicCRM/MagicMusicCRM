@@ -6,13 +6,20 @@ import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 import { MigrationRunner } from "../db/migration-runner";
 import { CrmPolicy } from "./crm.policy";
+import { PersonAccountService } from "./person-account.service";
 import { StaffService } from "./staff.service";
 import { TeachersService } from "./teachers.service";
+import { PlatformIntegrityRepository } from "../platform/platform-integrity.repository";
+import { PlatformIntegrityService } from "../platform/platform-integrity.service";
 
 const databaseUrl =
   process.env.V4_PLATFORM_TEST_DATABASE_URL ??
   "postgresql://magiccrm_owner:magiccrm_owner@127.0.0.1:54329/magiccrm";
-if (!new Set(["127.0.0.1", "localhost", "[::1]"]).has(new URL(databaseUrl).hostname)) {
+if (
+  !new Set(["127.0.0.1", "localhost", "[::1]"]).has(
+    new URL(databaseUrl).hostname,
+  )
+) {
   throw new Error("Person account tests require local PostgreSQL.");
 }
 
@@ -66,8 +73,15 @@ describe("Teacher and staff app accounts (PostgreSQL)", () => {
     } as unknown as AuditService;
     passwords = new PasswordService();
     const policy = new CrmPolicy();
-    staff = new StaffService(database, audit, policy, passwords);
-    teachers = new TeachersService(database, audit, policy, passwords);
+    const accounts = new PersonAccountService(database, passwords, audit);
+    staff = new StaffService(database, audit, policy, accounts);
+    teachers = new TeachersService(
+      database,
+      audit,
+      policy,
+      accounts,
+      new PlatformIntegrityService(database, new PlatformIntegrityRepository()),
+    );
   });
 
   afterAll(async () => {
@@ -76,7 +90,7 @@ describe("Teacher and staff app accounts (PostgreSQL)", () => {
     await pool.end();
   });
 
-  it("creates new accounts atomically and provisions access for legacy records once", async () => {
+  it("creates optional app accounts and manages linked credentials atomically", async () => {
     const suffix = randomUUID();
     const staffEmail = `staff-${suffix}@test.local`;
     const teacherEmail = `teacher-${suffix}@test.local`;
@@ -85,12 +99,58 @@ describe("Teacher and staff app accounts (PostgreSQL)", () => {
     const staffPassword = "staff-password-123";
     const teacherPassword = "teacher-password-123";
 
+    const staffWithoutLogin = await staff.createStaff(actor, {
+      firstName: "Технический",
+      lastName: "Администратор",
+      branchIds: [branchId],
+    });
+    const teacherWithoutLogin = await teachers.createTeacher(actor, {
+      firstName: "Технический",
+      lastName: "Преподаватель",
+      branchIds: [branchId],
+      disciplineIds: [disciplineId],
+    });
+    expect(staffWithoutLogin).toMatchObject({
+      email: null,
+      appRole: "admin",
+      isAppAccount: false,
+      passwordConfigured: false,
+    });
+    expect(teacherWithoutLogin).toMatchObject({
+      email: null,
+      appRole: "teacher",
+      isAppAccount: false,
+      passwordConfigured: false,
+    });
+    const technicalAccounts = await client.query<{
+      is_app_account: boolean;
+      password_hash: string | null;
+      link_count: string;
+    }>(
+      `select u.is_app_account, u.password_hash,
+         count(link.id)::text as link_count
+       from app.user_crm_links link
+       join app.users u on u.id = link.user_id
+       where (link.entity_type = 'staff' and link.entity_id = $1)
+          or (link.entity_type = 'teacher' and link.entity_id = $2)
+       group by u.id`,
+      [staffWithoutLogin.id, teacherWithoutLogin.id],
+    );
+    expect(technicalAccounts.rows).toHaveLength(2);
+    expect(
+      technicalAccounts.rows.every(
+        (row) =>
+          !row.is_app_account &&
+          row.password_hash === null &&
+          row.link_count === "1",
+      ),
+    ).toBe(true);
+
     const createdStaff = await staff.createStaff(actor, {
       firstName: "Анна",
       lastName: "Администратор",
       email: staffEmail,
       password: staffPassword,
-      role: "admin",
       branchIds: [branchId],
     });
     const createdTeacher = await teachers.createTeacher(actor, {
@@ -122,6 +182,7 @@ describe("Teacher and staff app accounts (PostgreSQL)", () => {
       currentRate: 750,
     });
 
+    const teacherUpdateRequestId = `request-teacher-update-${suffix}`;
     const updatedTeacher = await teachers.updateTeacher(
       actor,
       String(createdTeacher.id),
@@ -134,15 +195,42 @@ describe("Teacher and staff app accounts (PostgreSQL)", () => {
         rate: 900,
         branchIds: [branchId],
         disciplineIds: [disciplineId],
+        payrollExpectedVersion: 0,
+        payrollReasonText: "Плановое изменение условий",
+      },
+      {
+        idempotencyKey: `teacher-update-${suffix}`,
+        requestId: teacherUpdateRequestId,
       },
     );
     expect(updatedTeacher).toMatchObject({
       salary: 20000,
       currentRate: 900,
+      payrollVersion: 1,
       customData: {
         levels: ["Начальный", "Средний"],
         categories: ["Дети"],
       },
+    });
+    const payrollIntegrity = await client.query<{
+      aggregate_version: string;
+      audit_count: string;
+      outbox_count: string;
+    }>(
+      `select
+         (select version::text from app.aggregate_versions
+           where aggregate_type = 'teacher:payroll' and aggregate_id = $1)
+           as aggregate_version,
+         (select count(*)::text from app.audit_events where request_id = $2)
+           as audit_count,
+         (select count(*)::text from app.platform_outbox_events where request_id = $2)
+           as outbox_count`,
+      [createdTeacher.id, teacherUpdateRequestId],
+    );
+    expect(payrollIntegrity.rows[0]).toEqual({
+      aggregate_version: "1",
+      audit_count: "1",
+      outbox_count: "1",
     });
     const compensationSettings = await client.query<{
       salary: string;
@@ -155,7 +243,7 @@ describe("Teacher and staff app accounts (PostgreSQL)", () => {
          (array_agg(tr.rate order by tr.effective_from desc, tr.created_at desc, tr.id desc))[1]::text
            as current_rate
        from app.teachers t
-       join app.teacher_rates tr on tr.teacher_id = t.id
+       join app.teacher_rates tr on tr.teacher_id = t.id and tr.deleted_at is null
        where t.id = $1
        group by t.id`,
       [createdTeacher.id],
@@ -180,7 +268,9 @@ describe("Teacher and staff app accounts (PostgreSQL)", () => {
         disciplineIds: [randomUUID()],
         rate: 700,
       }),
-    ).rejects.toThrow("Выберите действующие филиалы и их дисциплины");
+    ).rejects.toThrow(
+      "Выберите действующие филиалы и корректные справочные дисциплины",
+    );
     const rejectedAccount = await client.query<{ count: string }>(
       `select count(*)::text as count from app.users where email = $1`,
       [rejectedEmail],
@@ -197,10 +287,11 @@ describe("Teacher and staff app accounts (PostgreSQL)", () => {
       branchIds: [branchId],
       disciplineIds: [disciplineId],
     });
-    const reopenedAssignment = await client.query<{ active_until: Date | null }>(
-      `select active_until from app.teacher_branches where teacher_id = $1`,
-      [createdTeacher.id],
-    );
+    const reopenedAssignment = await client.query<{
+      active_until: Date | null;
+    }>(`select active_until from app.teacher_branches where teacher_id = $1`, [
+      createdTeacher.id,
+    ]);
     expect(reopenedAssignment.rows[0]?.active_until).toBeNull();
 
     const legacyStaffId = randomUUID();
@@ -224,7 +315,6 @@ describe("Teacher and staff app accounts (PostgreSQL)", () => {
     const provisionedStaff = await staff.provisionAccess(actor, legacyStaffId, {
       email: legacyStaffEmail,
       password: staffPassword,
-      role: "admin",
     });
     const provisionedTeacher = await teachers.provisionAccess(
       actor,
@@ -260,7 +350,11 @@ describe("Teacher and staff app accounts (PostgreSQL)", () => {
       [[staffEmail, teacherEmail, legacyStaffEmail, legacyTeacherEmail]],
     );
     expect(accounts.rows).toHaveLength(4);
-    expect(accounts.rows.every((row) => row.is_app_account && row.link_count === "1")).toBe(true);
+    expect(
+      accounts.rows.every(
+        (row) => row.is_app_account && row.link_count === "1",
+      ),
+    ).toBe(true);
     for (const account of accounts.rows) {
       expect(
         await passwords.verify(
@@ -270,18 +364,50 @@ describe("Teacher and staff app accounts (PostgreSQL)", () => {
       ).toBe(true);
     }
 
+    const changedStaffEmail = `changed-${legacyStaffEmail}`;
+    const changedTeacherPassword = "changed-teacher-password-123";
     await expect(
       staff.provisionAccess(actor, legacyStaffId, {
-        email: `duplicate-${legacyStaffEmail}`,
-        password: staffPassword,
-        role: "admin",
+        email: changedStaffEmail,
       }),
-    ).rejects.toThrow("уже имеет аккаунт");
+    ).resolves.toMatchObject({
+      email: changedStaffEmail,
+      passwordConfigured: true,
+    });
     await expect(
       teachers.provisionAccess(actor, legacyTeacherId, {
-        email: `duplicate-${legacyTeacherEmail}`,
-        password: teacherPassword,
+        password: changedTeacherPassword,
       }),
-    ).rejects.toThrow("уже имеет аккаунт");
+    ).resolves.toMatchObject({
+      email: legacyTeacherEmail,
+      passwordConfigured: true,
+    });
+    const changedCredentials = await client.query<{
+      email: string;
+      password_hash: string;
+      email_changed_at: Date | null;
+      password_changed_at: Date | null;
+    }>(
+      `select email, password_hash, email_changed_at, password_changed_at
+       from app.users
+       where email = any($1::text[])
+       order by email`,
+      [[changedStaffEmail, legacyTeacherEmail]],
+    );
+    expect(changedCredentials.rows).toHaveLength(2);
+    expect(
+      changedCredentials.rows.find((row) => row.email === changedStaffEmail)
+        ?.email_changed_at,
+    ).not.toBeNull();
+    const changedTeacher = changedCredentials.rows.find(
+      (row) => row.email === legacyTeacherEmail,
+    );
+    expect(changedTeacher?.password_changed_at).not.toBeNull();
+    expect(
+      await passwords.verify(
+        changedTeacherPassword,
+        changedTeacher?.password_hash ?? "",
+      ),
+    ).toBe(true);
   });
 });

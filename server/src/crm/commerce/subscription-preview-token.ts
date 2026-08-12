@@ -9,6 +9,8 @@ const PURCHASE_TOKEN_DOMAIN =
   "magicmusiccrm:subscription-purchase-preview:v1";
 const PAYMENT_REVERSAL_TOKEN_DOMAIN =
   "magicmusiccrm:payment-reversal-preview:v1";
+const ACCOUNT_ADJUSTMENT_REVERSAL_TOKEN_DOMAIN =
+  "magicmusiccrm:account-adjustment-reversal-preview:v1";
 const LESSON_TRANSITION_TOKEN_DOMAIN =
   "magicmusiccrm:lesson-transition-preview:v1";
 const SCHEDULE_PLAN_END_TOKEN_DOMAIN =
@@ -47,6 +49,21 @@ export interface PaymentReversalPreviewTokenPayload {
   status: "unpaid" | "posted_pending" | "paid";
   actualPaymentId: string | null;
   issuedSubscriptionId: string | null;
+  amountMinor: string;
+  currencyCode: string;
+  walletBalanceMinor: string;
+  resultingBalanceMinor: string;
+  issuedAtSeconds: number;
+  expiresAtSeconds: number;
+}
+
+export interface AccountAdjustmentReversalPreviewTokenPayload {
+  kind: "account.adjustment.reversal";
+  actorUserId: string;
+  studentId: string;
+  adjustmentId: string;
+  expectedVersion: number;
+  sourcePaymentId: string;
   amountMinor: string;
   currencyCode: string;
   walletBalanceMinor: string;
@@ -245,6 +262,32 @@ export function verifyPaymentReversalPreview(
     token,
     nowSeconds,
     assertPaymentReversalPayload,
+  );
+}
+
+export function signAccountAdjustmentReversalPreview(
+  secret: string,
+  payload: AccountAdjustmentReversalPreviewTokenPayload,
+): string {
+  return signPayload(
+    secret,
+    ACCOUNT_ADJUSTMENT_REVERSAL_TOKEN_DOMAIN,
+    payload,
+    assertAccountAdjustmentReversalPayload,
+  );
+}
+
+export function verifyAccountAdjustmentReversalPreview(
+  secret: string,
+  token: string,
+  nowSeconds: number,
+): AccountAdjustmentReversalPreviewTokenPayload {
+  return verifyPayload(
+    secret,
+    ACCOUNT_ADJUSTMENT_REVERSAL_TOKEN_DOMAIN,
+    token,
+    nowSeconds,
+    assertAccountAdjustmentReversalPayload,
   );
 }
 
@@ -655,6 +698,50 @@ function assertPaymentReversalPayload(
     (payload.issuedSubscriptionId !== null &&
       !isUuid(payload.issuedSubscriptionId)) ||
     !isMinor(payload.amountMinor) ||
+    payload.amountMinor === "0" ||
+    typeof payload.currencyCode !== "string" ||
+    !/^[A-Z]{3}$/.test(payload.currencyCode) ||
+    !isSignedMinor(payload.walletBalanceMinor) ||
+    !isSignedMinor(payload.resultingBalanceMinor) ||
+    !isPositiveInteger(payload.issuedAtSeconds) ||
+    !isPositiveInteger(payload.expiresAtSeconds) ||
+    payload.expiresAtSeconds < payload.issuedAtSeconds
+  ) {
+    throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
+  }
+}
+
+function assertAccountAdjustmentReversalPayload(
+  value: unknown,
+): asserts value is AccountAdjustmentReversalPreviewTokenPayload {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
+  }
+  const payload = value as Record<string, unknown>;
+  const exactKeys = [
+    "kind",
+    "actorUserId",
+    "studentId",
+    "adjustmentId",
+    "expectedVersion",
+    "sourcePaymentId",
+    "amountMinor",
+    "currencyCode",
+    "walletBalanceMinor",
+    "resultingBalanceMinor",
+    "issuedAtSeconds",
+    "expiresAtSeconds",
+  ];
+  if (
+    Object.keys(payload).length !== exactKeys.length ||
+    exactKeys.some((key) => !(key in payload)) ||
+    payload.kind !== "account.adjustment.reversal" ||
+    !isUuid(payload.actorUserId) ||
+    !isUuid(payload.studentId) ||
+    !isUuid(payload.adjustmentId) ||
+    !isPositiveInteger(payload.expectedVersion) ||
+    !isUuid(payload.sourcePaymentId) ||
+    !isSignedMinor(payload.amountMinor) ||
     payload.amountMinor === "0" ||
     typeof payload.currencyCode !== "string" ||
     !/^[A-Z]{3}$/.test(payload.currencyCode) ||

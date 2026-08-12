@@ -66,6 +66,39 @@ class SchedulePlanRow {
   };
 }
 
+class SchedulePlanParticipant {
+  const SchedulePlanParticipant({
+    required this.id,
+    required this.studentId,
+    required this.subscriptionId,
+    required this.effectiveFrom,
+    required this.effectiveUntil,
+    required this.version,
+  });
+
+  factory SchedulePlanParticipant.fromMap(Map<String, dynamic> map) =>
+      SchedulePlanParticipant(
+        id: map['id']?.toString() ?? '',
+        studentId: map['studentId']?.toString() ?? '',
+        subscriptionId: map['subscriptionId']?.toString() ?? '',
+        effectiveFrom: map['effectiveFrom']?.toString() ?? '',
+        effectiveUntil: map['effectiveUntil']?.toString(),
+        version: (map['version'] as num?)?.toInt() ?? 1,
+      );
+
+  final String id;
+  final String studentId;
+  final String subscriptionId;
+  final String effectiveFrom;
+  final String? effectiveUntil;
+  final int version;
+
+  Map<String, dynamic> get command => {
+    'studentId': studentId,
+    'subscriptionId': subscriptionId,
+  };
+}
+
 class SchedulePlan {
   const SchedulePlan({
     required this.id,
@@ -78,7 +111,12 @@ class SchedulePlan {
     required this.activeUntil,
     required this.status,
     required this.version,
+    required this.endedAt,
+    required this.endedBy,
+    required this.endedByName,
+    required this.endReason,
     required this.rows,
+    required this.participants,
   });
 
   factory SchedulePlan.fromMap(Map<String, dynamic> map) => SchedulePlan(
@@ -92,9 +130,21 @@ class SchedulePlan {
     activeUntil: map['activeUntil']?.toString(),
     status: map['status']?.toString() ?? 'active',
     version: (map['version'] as num?)?.toInt() ?? 1,
+    endedAt: map['endedAt']?.toString(),
+    endedBy: map['endedBy']?.toString(),
+    endedByName: map['endedByName']?.toString(),
+    endReason: map['endReason']?.toString(),
     rows: (map['rows'] as List? ?? const [])
         .whereType<Map>()
         .map((row) => SchedulePlanRow.fromMap(Map<String, dynamic>.from(row)))
+        .toList(growable: false),
+    participants: (map['participants'] as List? ?? const [])
+        .whereType<Map>()
+        .map(
+          (participant) => SchedulePlanParticipant.fromMap(
+            Map<String, dynamic>.from(participant),
+          ),
+        )
         .toList(growable: false),
   );
 
@@ -108,12 +158,28 @@ class SchedulePlan {
   final String? activeUntil;
   final String status;
   final int version;
+  final String? endedAt;
+  final String? endedBy;
+  final String? endedByName;
+  final String? endReason;
   final List<SchedulePlanRow> rows;
+  final List<SchedulePlanParticipant> participants;
 
   bool get isActive => status == 'active';
   bool get isGroup => kind == 'group';
   List<SchedulePlanRow> get currentRows =>
       rows.where((row) => row.active).toList();
+  List<SchedulePlanParticipant> get currentParticipants {
+    if (participants.isEmpty) return const [];
+    final latestEffectiveFrom = participants
+        .map((participant) => participant.effectiveFrom)
+        .reduce((left, right) => left.compareTo(right) >= 0 ? left : right);
+    return participants
+        .where(
+          (participant) => participant.effectiveFrom == latestEffectiveFrom,
+        )
+        .toList(growable: false);
+  }
 }
 
 class SchedulePlanTrayItem {

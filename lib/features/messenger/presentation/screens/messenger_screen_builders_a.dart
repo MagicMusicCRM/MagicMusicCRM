@@ -175,8 +175,8 @@ extension _MessengerBuildersA on _MessengerScreenState {
           .sendMessage(
             targetId,
             content: msg['content'] ?? '',
-            messageType: msg['message_type'] ?? 'text',
-            forwardedFromId: msg['sender_id'],
+            messageType: 'text',
+            forwardedFromId: msg['id']?.toString(),
           );
 
       if (mounted) {
@@ -417,17 +417,36 @@ extension _MessengerBuildersA on _MessengerScreenState {
                   },
                 ),
               if (canCreateGroups)
-                IconButton(
-                  icon: const Icon(Icons.group_add_rounded),
-                  tooltip: 'Новая группа',
-                  onPressed: () async {
-                    final groupId = await showDialog<String>(
-                      context: context,
-                      builder: (_) => const CreateGroupChatDialog(),
-                    );
-                    if (groupId != null) {
-                      await _loadChatList();
+                PopupMenuButton<String>(
+                  tooltip: 'Создать чат или канал',
+                  icon: const Icon(Icons.add_circle_outline_rounded),
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(
+                      value: 'group',
+                      child: ListTile(
+                        leading: Icon(Icons.group_add_rounded),
+                        title: Text('Новая группа'),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'channel',
+                      child: ListTile(
+                        leading: Icon(Icons.campaign_rounded),
+                        title: Text('Новый канал'),
+                      ),
+                    ),
+                  ],
+                  onSelected: (value) async {
+                    Object? result;
+                    if (value == 'group') {
+                      result = await showDialog<String>(
+                        context: context,
+                        builder: (_) => const CreateGroupChatDialog(),
+                      );
+                    } else if (value == 'channel') {
+                      result = await ChannelEditorDialog.show(context);
                     }
+                    if (result != null) await _loadChatList();
                   },
                 ),
             ],
@@ -493,6 +512,14 @@ extension _MessengerBuildersA on _MessengerScreenState {
           child: _loadingChats
               ? const Center(
                   child: CircularProgressIndicator(color: AppColor.gold),
+                )
+              : _chatListError != null
+              ? MagicPageState(
+                  kind: MagicPageStateKind.error,
+                  title: 'Не удалось загрузить чаты',
+                  message: _chatListError,
+                  actionLabel: 'Повторить',
+                  onAction: _loadChatList,
                 )
               : Builder(
                   builder: (context) {

@@ -91,6 +91,11 @@ app.*.map.json
 
 # Temporary Microsoft Office owner/lock files.
 ~$*.docx
+~*.tmp
+/outputs/~*.tmp
+
+# Local scratch evidence that has already been copied into the canonical audit tree.
+/.tmp/
 
 # HolliHop data dumps (real client PII — never commit)
 hollihop-dump/

@@ -128,7 +128,7 @@ class _ExportButton extends StatelessWidget {
   }
 }
 
-/// v7 «Расходы» panel — total + the most recent expenses, with the flat-gold
+/// v7 «Расходы» panel — total + the loaded expense history, with the flat-gold
 /// «+ Расход» action that opens the [showMagicSheet]-based add flow.
 ///
 /// Theme-aware: surfaces/text read from [ColorScheme]; brand accents (gold) and
@@ -140,6 +140,8 @@ class _ExpensesPanel extends StatelessWidget {
     required this.total,
     required this.expenses,
     required this.onAdd,
+    required this.onEdit,
+    required this.onDelete,
   });
 
   final bool loading;
@@ -147,13 +149,13 @@ class _ExpensesPanel extends StatelessWidget {
   final double total;
   final List<Map<String, dynamic>> expenses;
   final VoidCallback onAdd;
+  final ValueChanged<Map<String, dynamic>> onEdit;
+  final ValueChanged<Map<String, dynamic>> onDelete;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final fmt = NumberFormat('#,##0', 'ru');
-    // Surface a few recent rows; the full ledger lives on its own screen.
-    final recent = expenses.take(3).toList();
 
     return Container(
       margin: const EdgeInsets.fromLTRB(14, 0, 14, 14),
@@ -207,7 +209,7 @@ class _ExpensesPanel extends StatelessWidget {
                 padding: EdgeInsets.only(top: 8),
                 child: SkeletonBox(height: 14, radius: AppRadius.sm),
               ),
-          ] else if (recent.isEmpty) ...[
+          ] else if (expenses.isEmpty) ...[
             const SizedBox(height: 10),
             Text(
               'Нет расходов за период',
@@ -215,7 +217,23 @@ class _ExpensesPanel extends StatelessWidget {
             ),
           ] else ...[
             const SizedBox(height: 10),
-            for (final e in recent) _ExpenseRow(expense: e, fmt: fmt),
+            SizedBox(
+              height: expenses.length <= 3 ? expenses.length * 52 : 196,
+              child: ListView.builder(
+                key: const ValueKey('expense-history-list'),
+                itemCount: expenses.length,
+                itemBuilder: (context, index) {
+                  final expense = expenses[index];
+                  return _ExpenseRow(
+                    expense: expense,
+                    fmt: fmt,
+                    saving: saving,
+                    onEdit: () => onEdit(expense),
+                    onDelete: () => onDelete(expense),
+                  );
+                },
+              ),
+            ),
           ],
         ],
       ),
@@ -263,12 +281,21 @@ class _AddExpenseButton extends StatelessWidget {
   }
 }
 
-/// One recent-expense row inside [_ExpensesPanel].
+/// One expense-history row inside [_ExpensesPanel].
 class _ExpenseRow extends StatelessWidget {
-  const _ExpenseRow({required this.expense, required this.fmt});
+  const _ExpenseRow({
+    required this.expense,
+    required this.fmt,
+    required this.saving,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   final Map<String, dynamic> expense;
   final NumberFormat fmt;
+  final bool saving;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -337,6 +364,34 @@ class _ExpenseRow extends StatelessWidget {
               fontSize: 14,
             ),
           ),
+          const SizedBox(width: 2),
+          PopupMenuButton<String>(
+            key: ValueKey('expense-actions-${expense['id']}'),
+            enabled: !saving,
+            tooltip: 'Действия с расходом',
+            onSelected: (value) {
+              if (value == 'edit') onEdit();
+              if (value == 'delete') onDelete();
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: 'edit',
+                child: ListTile(
+                  dense: true,
+                  leading: Icon(Icons.edit_rounded),
+                  title: Text('Изменить'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'delete',
+                child: ListTile(
+                  dense: true,
+                  leading: Icon(Icons.delete_outline_rounded),
+                  title: Text('Удалить'),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -347,20 +402,37 @@ class _ExpenseRow extends StatelessWidget {
 /// dropdown, optional description, and a flat-gold «Сохранить» that pops the
 /// sheet with the payload for [_FinanceWidgetState._addExpense].
 class _ExpenseSheetForm extends StatefulWidget {
-  const _ExpenseSheetForm();
+  const _ExpenseSheetForm({this.initialExpense});
+
+  final Map<String, dynamic>? initialExpense;
 
   @override
   State<_ExpenseSheetForm> createState() => _ExpenseSheetFormState();
 }
 
 class _ExpenseSheetFormState extends State<_ExpenseSheetForm> {
-  final _amountCtrl = TextEditingController();
-  final _descriptionCtrl = TextEditingController();
-  String _category = _kExpenseCategories.first.key;
+  late final TextEditingController _amountCtrl;
+  late final TextEditingController _descriptionCtrl;
+  late String _category;
 
   @override
   void initState() {
     super.initState();
+    final expense = widget.initialExpense;
+    final amount = (expense?['amount'] as num?)?.toDouble();
+    final amountText = amount == null
+        ? ''
+        : amount == amount.truncateToDouble()
+        ? amount.toInt().toString()
+        : amount.toString();
+    _amountCtrl = TextEditingController(text: amountText);
+    _descriptionCtrl = TextEditingController(
+      text: expense?['description']?.toString() ?? '',
+    );
+    final initialCategory = expense?['category']?.toString();
+    _category = _kExpenseCategories.any((item) => item.key == initialCategory)
+        ? initialCategory!
+        : _kExpenseCategories.first.key;
     _amountCtrl.addListener(_onChanged);
   }
 
@@ -390,7 +462,7 @@ class _ExpenseSheetFormState extends State<_ExpenseSheetForm> {
       'amount': _amount,
       'category': _category,
       'description': description.isEmpty ? null : description,
-      'branchId': null,
+      'branchId': widget.initialExpense?['branchId'],
     });
   }
 
@@ -413,7 +485,7 @@ class _ExpenseSheetFormState extends State<_ExpenseSheetForm> {
         const SizedBox(height: 6),
         TextField(
           controller: _amountCtrl,
-          autofocus: true,
+          autofocus: widget.initialExpense == null,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           inputFormatters: [
             FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
@@ -534,7 +606,11 @@ class _ExpenseSheetFormState extends State<_ExpenseSheetForm> {
                 fontWeight: FontWeight.w700,
               ),
             ),
-            child: const Text('Сохранить'),
+            child: Text(
+              widget.initialExpense == null
+                  ? 'Сохранить'
+                  : 'Сохранить изменения',
+            ),
           ),
         ),
       ],

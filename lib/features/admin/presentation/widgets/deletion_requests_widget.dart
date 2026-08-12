@@ -18,10 +18,12 @@ part 'deletion_requests_cards.dart';
 /// Surfaces come from [Theme.of]'s [ColorScheme] (light + dark aware); brand
 /// accents come from the v7 [AppColor] tokens. Loading renders skeletons,
 /// errors render a retry, and empty renders a friendly empty state. The backend
-/// restricts updates to admins and returns 403 otherwise — that error is
-/// surfaced verbatim through a [MagicToast].
+/// restricts updates to Admin/Director/system_admin. Read-only roles never
+/// render action buttons and therefore never emit a forbidden mutation.
 class DeletionRequestsWidget extends ConsumerStatefulWidget {
-  const DeletionRequestsWidget({super.key});
+  const DeletionRequestsWidget({super.key, required this.canManage});
+
+  final bool canManage;
 
   @override
   ConsumerState<DeletionRequestsWidget> createState() =>
@@ -95,7 +97,9 @@ class _DeletionRequestsWidgetState
 
     setState(() => _busyId = id);
     try {
-      await ref.read(magicProfileAdminServiceProvider).updateDeletionRequest(
+      await ref
+          .read(magicProfileAdminServiceProvider)
+          .updateDeletionRequest(
             id,
             status: action.status,
             resolutionNote: outcome.note,
@@ -187,6 +191,7 @@ class _DeletionRequestsWidgetState
         return _DeletionRequestCard(
           item: item,
           busy: _busyId == id,
+          canManage: widget.canManage,
           onAction: _advance,
         );
       },
@@ -255,7 +260,7 @@ enum _DeletionAction {
   completed(
     status: 'completed',
     buttonLabel: 'Выполнить',
-    confirmTitle: 'Отметить выполненным?',
+    confirmTitle: 'Завершить удаление аккаунта?',
     icon: Icons.check_rounded,
     successMessage: 'Запрос выполнен',
     collectsNote: true,
@@ -289,4 +294,3 @@ enum _DeletionAction {
   final bool collectsNote;
   final bool danger;
 }
-

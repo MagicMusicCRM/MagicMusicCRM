@@ -3,7 +3,10 @@ import {
   ForbiddenException,
   Injectable,
 } from "@nestjs/common";
-import { ActorContext, isManagerOrAdminRole } from "../../common/security/actor-context";
+import {
+  ActorContext,
+  isManagerOrAdminRole,
+} from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
 import { PlatformIntegrityRepository } from "../../platform/platform-integrity.repository";
 import { RealtimeBus } from "../../realtime/realtime-bus";
@@ -43,6 +46,7 @@ interface HistoryRow {
 }
 
 const HISTORY_ACTIONS = [
+  "crm.lead_converted",
   "crm.subscription_purchased",
   "crm.subscription_issued",
   "crm.subscription_replaced",
@@ -58,18 +62,25 @@ const HISTORY_ACTIONS = [
   "crm.lessons_bulk_transitioned",
   "crm.schedule_plan_ended",
   "crm.client_internal_note_changed",
+  "crm.comment_created",
+  "crm.comment_teacher_sharing_changed",
+  "workflow.shared_task_created",
+  "workflow.shared_task_updated",
+  "workflow.shared_task_closed",
   "crm.client_blacklisted",
   "crm.client_unblacklisted",
 ] as const;
 
 const ACTION_LABELS: Record<string, string> = {
+  "crm.lead_converted": "Лид конвертирован в ученика",
   "crm.subscription_purchased": "Абонемент куплен",
   "crm.subscription_issued": "Абонемент выдан",
   "crm.subscription_replaced": "Абонемент заменён",
   "crm.subscription_cancelled": "Абонемент отменён",
   "crm.payment_record_created": "Оплата добавлена",
   "crm.payment_record_transitioned": "Статус оплаты изменён",
-  "crm.installment_payment_due": "Срок платежа рассрочки наступил — требуется проверка",
+  "crm.installment_payment_due":
+    "Срок платежа рассрочки наступил — требуется проверка",
   "crm.payment_reversed": "Оплата удалена из обычного учёта",
   "crm.payment_adjustment_recorded": "Возврат или корректировка",
   "crm.lesson_rescheduled": "Занятие перенесено",
@@ -78,6 +89,11 @@ const ACTION_LABELS: Record<string, string> = {
   "crm.lessons_bulk_transitioned": "Занятия изменены",
   "crm.schedule_plan_ended": "Постоянное расписание завершено",
   "crm.client_internal_note_changed": "Общая заметка изменена",
+  "crm.comment_created": "Комментарий добавлен",
+  "crm.comment_teacher_sharing_changed": "Видимость комментария изменена",
+  "workflow.shared_task_created": "Задача создана",
+  "workflow.shared_task_updated": "Задача изменена",
+  "workflow.shared_task_closed": "Задача закрыта",
   "crm.client_blacklisted": "Клиент добавлен в чёрный список",
   "crm.client_unblacklisted": "Клиент убран из чёрного списка",
 };
@@ -159,7 +175,13 @@ export class ClientInternalContextService {
              where id = $1
              returning id, lead_id, student_id, body, version, updated_by,
                null::text as updated_by_name, updated_at`,
-            [current.id, lineage.lead_id, lineage.student_id, body, actor.userId],
+            [
+              current.id,
+              lineage.lead_id,
+              lineage.student_id,
+              body,
+              actor.userId,
+            ],
           )
         : await client.query<NoteRow>(
             `insert into app.client_internal_notes (
@@ -178,7 +200,10 @@ export class ClientInternalContextService {
         requestId: `client-note:${note.id}:${note.version}`,
         reason: "client.internal-note.update",
         reasonText: "Общая заметка обновлена",
-        beforeRef: { version: currentVersion, bodyLength: current?.body.length ?? 0 },
+        beforeRef: {
+          version: currentVersion,
+          bodyLength: current?.body.length ?? 0,
+        },
         afterRef: { version: Number(note.version), bodyLength: body.length },
         metadata: {
           leadId: lineage.lead_id,
@@ -230,6 +255,28 @@ export class ClientInternalContextService {
              where note.id::text = audit.entity_id
                and ((lineage.lead_id is not null and note.lead_id = lineage.lead_id)
                  or (lineage.student_id is not null and note.student_id = lineage.student_id))
+           )
+           or audit.entity_type = 'crm:comment' and exists (
+             select 1 from app.entity_comments comment
+             where comment.id::text = audit.entity_id
+               and comment.deleted_at is null
+               and ((lineage.lead_id is not null
+                     and comment.entity_type::text = 'lead'
+                     and comment.entity_id = lineage.lead_id)
+                 or (lineage.student_id is not null
+                     and comment.entity_type::text = 'student'
+                     and comment.entity_id = lineage.student_id))
+           )
+           or audit.entity_type = 'shared_task' and exists (
+             select 1 from app.shared_tasks task
+             where task.id::text = audit.entity_id
+               and task.deleted_at is null
+               and ((lineage.lead_id is not null
+                     and task.linked_entity_type = 'lead'
+                     and task.linked_entity_id = lineage.lead_id)
+                 or (lineage.student_id is not null
+                     and task.linked_entity_type = 'student'
+                     and task.linked_entity_id = lineage.student_id))
            )
            or audit.entity_type = 'subscription' and exists (
              select 1 from app.subscriptions subscription
@@ -346,9 +393,7 @@ export class ClientInternalContextService {
     const after = row.after_ref ?? {};
     const status = metadata["targetStatus"];
     const rawMetadataReason =
-      typeof metadata["reason"] === "string"
-        ? metadata["reason"].trim()
-        : "";
+      typeof metadata["reason"] === "string" ? metadata["reason"].trim() : "";
     const metadataReason = /^\[(?:PRIVATE|PII|REDACTED)\]$/.test(
       rawMetadataReason,
     )
@@ -358,9 +403,13 @@ export class ClientInternalContextService {
       ? `Новый статус: ${this.paymentStatusLabel(String(status))}`
       : row.action === "crm.client_internal_note_changed"
         ? `Версия ${before["version"] ?? 0} → ${after["version"] ?? "—"}`
-        : row.action === "crm.lessons_bulk_transitioned"
-          ? `Изменено занятий: ${Array.isArray(before["items"]) ? before["items"].length : 0}`
-          : null;
+        : row.action === "crm.comment_teacher_sharing_changed"
+          ? after["sharedWithTeacher"] === true
+            ? "Опубликован преподавателю"
+            : "Скрыт от преподавателя"
+          : row.action === "crm.lessons_bulk_transitioned"
+            ? `Изменено занятий: ${Array.isArray(before["items"]) ? before["items"].length : 0}`
+            : null;
     return {
       id: row.id,
       actionKey: row.action,
@@ -368,6 +417,7 @@ export class ClientInternalContextService {
       reason:
         row.reason_text?.trim() ||
         metadataReason ||
+        this.defaultHistoryReason(row.action, after) ||
         row.reason ||
         "Причина не указана",
       summary,
@@ -376,9 +426,27 @@ export class ClientInternalContextService {
     };
   }
 
+  private defaultHistoryReason(
+    action: string,
+    after: Record<string, unknown>,
+  ): string | null {
+    if (action === "crm.lead_converted") return "Конвертация лида завершена";
+    if (action === "crm.comment_created") return "Комментарий добавлен";
+    if (action === "crm.comment_teacher_sharing_changed") {
+      return after["sharedWithTeacher"] === true
+        ? "Комментарий опубликован преподавателю"
+        : "Комментарий скрыт от преподавателя";
+    }
+    if (action === "workflow.shared_task_created") return "Задача создана";
+    if (action === "workflow.shared_task_updated") return "Задача изменена";
+    if (action === "workflow.shared_task_closed") return "Задача закрыта";
+    return null;
+  }
+
   private paymentStatusLabel(status: string) {
     if (status === "paid") return "Оплачен";
-    if (status === "posted_pending") return "Срок наступил — требуется проверка";
+    if (status === "posted_pending")
+      return "Срок наступил — требуется проверка";
     if (status === "unpaid") return "Не оплачен";
     return status;
   }

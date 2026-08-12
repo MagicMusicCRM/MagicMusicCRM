@@ -38,6 +38,14 @@ export function calculateClientSettlement(input: {
     throw new LessonSettlementCalculationError("INVALID_CLIENT_SETTLEMENT");
   }
   const penalty = BigInt(input.fixedPenaltyMinor);
+  if (
+    input.chargeType === "none" &&
+    (input.hourShareBasisPoints > 0 || penalty > 0n)
+  ) {
+    throw new LessonSettlementCalculationError(
+      "CLIENT_FUNDING_SOURCE_REQUIRED",
+    );
+  }
   const unitsHundredths = input.chargeType === "none"
     ? 0n
     : roundRatio(

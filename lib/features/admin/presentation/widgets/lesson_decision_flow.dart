@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
@@ -136,26 +137,126 @@ class LessonDecisionPreview {
   ];
 }
 
+class LessonDecisionParticipant {
+  const LessonDecisionParticipant({required this.id, required this.name});
+
+  final String id;
+  final String name;
+}
+
 class LessonDecisionController {
   LessonDecisionController({
     required MagicApiClient api,
     required this.operation,
     required this.lesson,
     this.successor,
-  }) : _api = api;
+  }) : _api = api,
+       _expectedVersion = (lesson['version'] as num?)?.toInt();
 
   final MagicApiClient _api;
   final LessonDecisionOperation operation;
   final Map<String, dynamic> lesson;
   final Map<String, dynamic>? successor;
 
+  bool get isGroupLesson {
+    final groupId = lesson['group_id'] ?? lesson['groupId'];
+    return groupId?.toString().isNotEmpty == true;
+  }
+
+  List<LessonDecisionParticipant> get groupParticipants {
+    final raw = lesson['group_participants'] ?? lesson['groupParticipants'];
+    final result = <LessonDecisionParticipant>[];
+    final seen = <String>{};
+    for (final item in raw as List? ?? const []) {
+      if (item is! Map) continue;
+      final participant = Map<String, dynamic>.from(item);
+      final id =
+          (participant['clientId'] ??
+                  participant['client_id'] ??
+                  participant['studentId'] ??
+                  participant['student_id'])
+              ?.toString();
+      if (id == null || id.isEmpty || !seen.add(id)) continue;
+      final name =
+          (participant['clientName'] ??
+                  participant['client_name'] ??
+                  participant['studentName'] ??
+                  participant['student_name'])
+              ?.toString()
+              .trim();
+      result.add(
+        LessonDecisionParticipant(
+          id: id,
+          name: name?.isNotEmpty == true
+              ? name!
+              : 'Ученик ${result.length + 1}',
+        ),
+      );
+    }
+    return result;
+  }
+
+  Map<String, String> get participantNames => {
+    for (final participant in groupParticipants)
+      participant.id: participant.name,
+  };
+
+  bool get isCompletedReschedule {
+    if (operation != LessonDecisionOperation.reschedule) return false;
+    final state =
+        (lesson['lifecycle_state'] ??
+                lesson['lifecycleState'] ??
+                lesson['status'])
+            ?.toString()
+            .toLowerCase();
+    return state == 'successfully_completed' ||
+        state == 'completed' ||
+        state == 'done';
+  }
+
   Map<String, dynamic>? _previewPayload;
   MagicMutationIdentity? _commitIdentity;
+  int? _expectedVersion;
+
+  MagicApiException? recoverStaleCommit(Object error) {
+    if (error is! MagicApiException || error.details is! Map) return null;
+    final details = Map<String, dynamic>.from(error.details! as Map);
+    final code = details['code']?.toString();
+    if (code != 'STALE_LESSON_VERSION' &&
+        code != 'LESSON_TRANSITION_PREVIEW_STALE') {
+      return null;
+    }
+    if (code == 'STALE_LESSON_VERSION') {
+      final rawVersion = details['currentVersion'];
+      final currentVersion = rawVersion is num
+          ? rawVersion.toInt()
+          : int.tryParse(rawVersion?.toString() ?? '');
+      if (currentVersion != null && currentVersion > 0) {
+        _expectedVersion = currentVersion;
+      }
+    }
+    _previewPayload = null;
+    _commitIdentity = null;
+    return MagicApiException(
+      statusCode: error.statusCode,
+      details: details,
+      message: code == 'STALE_LESSON_VERSION'
+          ? 'Занятие уже изменил другой сотрудник. Версия обновлена — '
+                'проверьте параметры и нажмите «Рассчитать» ещё раз.'
+          : 'Условия расчёта изменились после предварительного просмотра. '
+                'Проверьте параметры и нажмите «Рассчитать» ещё раз.',
+    );
+  }
 
   Future<LessonDecisionCatalog> loadCatalog() async {
+    final effectiveBranchId =
+        successor?['branchId'] ??
+        successor?['branch_id'] ??
+        lesson['branch_id'] ??
+        lesson['branchId'];
     final response = await _api.get<Map<String, dynamic>>(
       '/crm/configuration/lesson-decisions',
-      queryParameters: {'branchId': lesson['branch_id']?.toString()},
+      queryParameters: {'branchId': effectiveBranchId?.toString()},
     );
     return LessonDecisionCatalog.fromJson(response, operation);
   }
@@ -165,8 +266,9 @@ class LessonDecisionController {
     required String settlementTypeKey,
     required String compensationRuleKey,
     String? compensationValueMinor,
+    List<Map<String, dynamic>> clientDecisions = const [],
   }) async {
-    final expectedVersion = (lesson['version'] as num?)?.toInt();
+    final expectedVersion = _expectedVersion;
     if (expectedVersion == null || expectedVersion < 1) {
       throw StateError('Обновите расписание: версия занятия не получена.');
     }
@@ -178,6 +280,11 @@ class LessonDecisionController {
       'reasonText': reason.trim(),
       'financialDecision': {
         'settlementTypeKey': settlementTypeKey,
+        if (clientDecisions.isNotEmpty)
+          'clientDecisions': [
+            for (final decision in clientDecisions)
+              Map<String, dynamic>.from(decision),
+          ],
         'teacherCompensationRuleKey': compensationRuleKey,
         'teacherCompensationValueMinor': ?compensationValueMinor,
       },
@@ -258,6 +365,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
   final _formKey = GlobalKey<FormState>();
   final _reasonController = TextEditingController();
   final _compensationValueController = TextEditingController();
+  final Map<String, String?> _clientSettlementKeys = {};
 
   LessonDecisionCatalog? _catalog;
   LessonDecisionPreview? _preview;
@@ -297,9 +405,26 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
     });
     try {
       final catalog = await widget.controller.loadCatalog();
+      final completedReschedule = widget.controller.isCompletedReschedule;
+      final reversalSettlement = completedReschedule
+          ? _catalogItem(catalog.settlementTypes, 'free_lesson')
+          : null;
+      final reversalCompensation = completedReschedule
+          ? _catalogItem(catalog.compensationRules, 'none')
+          : null;
+      if (completedReschedule &&
+          (reversalSettlement == null || reversalCompensation == null)) {
+        throw StateError(
+          'Не удалось подготовить безопасную отмену расчёта. Обновите настройки занятия.',
+        );
+      }
       if (!mounted) return;
       setState(() {
         _catalog = catalog;
+        if (completedReschedule) {
+          _settlementKey = reversalSettlement!.key;
+          _compensationKey = reversalCompensation!.key;
+        }
         _loading = false;
       });
     } catch (error) {
@@ -361,6 +486,12 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
         .toString();
   }
 
+  List<Map<String, dynamic>> _clientDecisions() => [
+    for (final participant in widget.controller.groupParticipants)
+      if (_clientSettlementKeys[participant.id] case final settlementKey?)
+        {'clientId': participant.id, 'settlementTypeKey': settlementKey},
+  ];
+
   Future<void> _calculate() async {
     if (_busy) return;
     FocusScope.of(context).unfocus();
@@ -376,6 +507,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
         settlementTypeKey: _settlementKey!,
         compensationRuleKey: _compensationKey!,
         compensationValueMinor: _compensationValueMinor(),
+        clientDecisions: _clientDecisions(),
       );
       if (!mounted) return;
       setState(() => _preview = preview);
@@ -398,7 +530,16 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
       await widget.controller.commit(preview);
       if (mounted) Navigator.pop(context, true);
     } catch (error) {
-      if (mounted) setState(() => _error = error);
+      if (mounted) {
+        final recovered = widget.controller.recoverStaleCommit(error);
+        setState(() {
+          _error = recovered ?? error;
+          if (recovered != null) {
+            _preview = null;
+            _commitAttempted = false;
+          }
+        });
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -443,73 +584,97 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
             onChanged: (_) => _invalidatePreview(),
           ),
           const SizedBox(height: AppSpace.md),
-          DropdownButtonFormField<String>(
-            menuMaxHeight: 256,
-            key: const Key('lesson-decision-settlement'),
-            initialValue: _settlementKey,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Списание *'),
-            items: [
-              for (final item in catalog.settlementTypes)
-                DropdownMenuItem(
-                  value: item.key,
-                  child: _CatalogLabel(item: item),
-                ),
-            ],
-            validator: (value) => value == null ? 'Выберите списание' : null,
-            onChanged: _busy
-                ? null
-                : (value) {
-                    setState(() => _settlementKey = value);
-                    _invalidatePreview();
-                  },
-          ),
-          const SizedBox(height: AppSpace.md),
-          DropdownButtonFormField<String>(
-            menuMaxHeight: 256,
-            key: const Key('lesson-decision-compensation'),
-            initialValue: _compensationKey,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              labelText: 'Оплата преподавателю *',
-              helperText: 'Выбирается сотрудником независимо от списания',
-            ),
-            items: [
-              for (final item in catalog.compensationRules)
-                DropdownMenuItem(value: item.key, child: Text(item.label)),
-            ],
-            validator: (value) => value == null ? 'Выберите оплату' : null,
-            onChanged: _busy ? null : _selectCompensation,
-          ),
-          if (_compensationRule case final rule?
-              when rule.mode != 'none' && rule.mode != 'standard') ...[
-            const SizedBox(height: AppSpace.md),
-            TextFormField(
-              key: const Key('lesson-decision-compensation-value'),
-              controller: _compensationValueController,
-              enabled: !_busy,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[0-9,. ]')),
+          if (widget.controller.isCompletedReschedule)
+            const _CompletedRescheduleNotice()
+          else ...[
+            DropdownButtonFormField<String>(
+              menuMaxHeight: 256,
+              key: const Key('lesson-decision-settlement'),
+              initialValue: _settlementKey,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Списание *'),
+              items: [
+                for (final item in catalog.settlementTypes)
+                  DropdownMenuItem(
+                    value: item.key,
+                    child: _CatalogLabel(item: item),
+                  ),
               ],
-              decoration: InputDecoration(
-                labelText: rule.mode == 'percent'
-                    ? 'Процент ставки *'
-                    : rule.mode == 'hourly'
-                    ? 'Ставка за час, ₽ *'
-                    : 'Сумма, ₽ *',
+              validator: (value) => value == null ? 'Выберите списание' : null,
+              onChanged: _busy
+                  ? null
+                  : (value) {
+                      setState(() => _settlementKey = value);
+                      _invalidatePreview();
+                    },
+            ),
+            const SizedBox(height: AppSpace.md),
+            if (widget.controller.isGroupLesson &&
+                widget.controller.groupParticipants.isNotEmpty) ...[
+              _GroupClientOverrides(
+                participants: widget.controller.groupParticipants,
+                settlementTypes: catalog.settlementTypes,
+                selectedKeys: _clientSettlementKeys,
+                enabled: !_busy,
+                onChanged: (clientId, settlementKey) {
+                  setState(() {
+                    _clientSettlementKeys[clientId] = settlementKey;
+                  });
+                  _invalidatePreview();
+                },
               ),
-              validator: (_) => _compensationValueMinor() == null
-                  ? 'Введите корректное значение'
-                  : null,
-              onChanged: (_) => _invalidatePreview(),
+              const SizedBox(height: AppSpace.md),
+            ],
+            DropdownButtonFormField<String>(
+              menuMaxHeight: 256,
+              key: const Key('lesson-decision-compensation'),
+              initialValue: _compensationKey,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Оплата преподавателю *',
+                helperText: 'Выбирается сотрудником независимо от списания',
+              ),
+              items: [
+                for (final item in catalog.compensationRules)
+                  DropdownMenuItem(value: item.key, child: Text(item.label)),
+              ],
+              validator: (value) => value == null ? 'Выберите оплату' : null,
+              onChanged: _busy ? null : _selectCompensation,
             ),
           ],
+          if (!widget.controller.isCompletedReschedule)
+            if (_compensationRule case final rule?
+                when rule.mode != 'none' && rule.mode != 'standard') ...[
+              const SizedBox(height: AppSpace.md),
+              TextFormField(
+                key: const Key('lesson-decision-compensation-value'),
+                controller: _compensationValueController,
+                enabled: !_busy,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9,. ]')),
+                ],
+                decoration: InputDecoration(
+                  labelText: rule.mode == 'percent'
+                      ? 'Процент ставки *'
+                      : rule.mode == 'hourly'
+                      ? 'Ставка за час, ₽ *'
+                      : 'Сумма, ₽ *',
+                ),
+                validator: (_) => _compensationValueMinor() == null
+                    ? 'Введите корректное значение'
+                    : null,
+                onChanged: (_) => _invalidatePreview(),
+              ),
+            ],
           if (_preview case final preview?) ...[
             const SizedBox(height: AppSpace.lg),
-            _PreviewCard(preview: preview),
+            _PreviewCard(
+              preview: preview,
+              participantNames: widget.controller.participantNames,
+            ),
           ],
           if (_error != null) ...[
             const SizedBox(height: AppSpace.md),
@@ -558,6 +723,85 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
   }
 }
 
+const _commonSettlementOverride = '__common_settlement__';
+
+class _GroupClientOverrides extends StatelessWidget {
+  const _GroupClientOverrides({
+    required this.participants,
+    required this.settlementTypes,
+    required this.selectedKeys,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final List<LessonDecisionParticipant> participants;
+  final List<LessonDecisionCatalogItem> settlementTypes;
+  final Map<String, String?> selectedKeys;
+  final bool enabled;
+  final void Function(String clientId, String? settlementKey) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('lesson-decision-client-overrides'),
+      padding: const EdgeInsets.all(AppSpace.md),
+      decoration: BoxDecoration(
+        color: AppColor.input,
+        border: Border.all(color: AppColor.divider),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Индивидуальные условия участников',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: AppSpace.xs),
+          Text(
+            'Общее списание применяется ко всей группе. Здесь можно изменить его только для конкретного ученика; источник средств берётся из закреплённого плана ученика.',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: AppSpace.md),
+          for (var index = 0; index < participants.length; index++) ...[
+            DropdownButtonFormField<String>(
+              menuMaxHeight: 256,
+              key: Key('lesson-decision-client-${participants[index].id}'),
+              initialValue:
+                  selectedKeys[participants[index].id] ??
+                  _commonSettlementOverride,
+              isExpanded: true,
+              decoration: InputDecoration(labelText: participants[index].name),
+              items: [
+                const DropdownMenuItem(
+                  value: _commonSettlementOverride,
+                  child: Text('Как у всей группы'),
+                ),
+                for (final item in settlementTypes)
+                  DropdownMenuItem(
+                    value: item.key,
+                    child: _CatalogLabel(item: item),
+                  ),
+              ],
+              onChanged: !enabled
+                  ? null
+                  : (value) => onChanged(
+                      participants[index].id,
+                      value == _commonSettlementOverride ? null : value,
+                    ),
+            ),
+            if (index != participants.length - 1)
+              const SizedBox(height: AppSpace.sm),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _LessonMoveSummary extends StatelessWidget {
   const _LessonMoveSummary({required this.controller});
 
@@ -565,7 +809,9 @@ class _LessonMoveSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final source = _lessonTime(controller.lesson['scheduled_at']);
+    final source = _lessonTime(
+      controller.lesson['scheduled_at'] ?? controller.lesson['scheduledAt'],
+    );
     final successor = _lessonTime(controller.successor?['scheduledAt']);
     return Container(
       key: const Key('lesson-decision-summary'),
@@ -592,6 +838,35 @@ class _LessonMoveSummary extends StatelessWidget {
   }
 }
 
+class _CompletedRescheduleNotice extends StatelessWidget {
+  const _CompletedRescheduleNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('completed-reschedule-notice'),
+      padding: const EdgeInsets.all(AppSpace.md),
+      decoration: BoxDecoration(
+        color: AppColor.warning.withValues(alpha: 0.12),
+        border: Border.all(color: AppColor.warning),
+        borderRadius: BorderRadius.circular(AppRadius.control),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.history_rounded, color: AppColor.warning),
+          SizedBox(width: AppSpace.sm),
+          Expanded(
+            child: Text(
+              'Это занятие уже завершено. Прежний расчёт будет отменён без удаления истории, а новое занятие сохранит исходный план и рассчитает его после завершения.',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _CatalogLabel extends StatelessWidget {
   const _CatalogLabel({required this.item});
 
@@ -611,9 +886,10 @@ class _CatalogLabel extends StatelessWidget {
 }
 
 class _PreviewCard extends StatelessWidget {
-  const _PreviewCard({required this.preview});
+  const _PreviewCard({required this.preview, required this.participantNames});
 
   final LessonDecisionPreview preview;
+  final Map<String, String> participantNames;
 
   @override
   Widget build(BuildContext context) {
@@ -660,7 +936,8 @@ class _PreviewCard extends StatelessWidget {
           for (final fact in clientFacts) ...[
             const SizedBox(height: AppSpace.sm),
             Text(
-              'Клиент: ${fact['settlementLabel'] ?? fact['settlementTypeKey'] ?? '—'} · '
+              '${participantNames[fact['clientId']?.toString() ?? fact['client_id']?.toString()] ?? 'Клиент'}: '
+              '${fact['settlementLabel'] ?? fact['settlementTypeKey'] ?? '—'} · '
               '${fact['units'] ?? '0'} ч · ${_formatMinor(fact['amountMinor'])}',
             ),
           ],
@@ -764,18 +1041,33 @@ String _formatMinor(Object? value) {
 }
 
 String _warningLabel(String value) => switch (value) {
+  'COMPLETED_LESSON_EFFECTS_WILL_BE_REVERSED' =>
+    'Прежние списание и оплата преподавателю будут отменены без удаления истории. Новое занятие рассчитается отдельно после завершения.',
   'SUCCESSOR_MAY_CHARGE_AGAIN' =>
     'Перенос завершает текущее занятие. Новое занятие может создать отдельное списание.',
   _ => value,
 };
 
-String _violationLabel(Map<String, dynamic> value) =>
-    switch (value['code']?.toString()) {
-      'TEACHER_OVERLAP' => 'У преподавателя уже есть занятие в это время',
-      'CLIENT_OVERLAP' => 'У клиента уже есть занятие в это время',
-      'ROOM_OVERLAP' => 'Аудитория уже занята',
-      'TEACHER_UNAVAILABLE' => 'Преподаватель недоступен',
-      'OUTSIDE_BRANCH_HOURS' => 'Филиал закрыт в это время',
-      final code? => code,
-      _ => 'Ограничение расписания',
-    };
+LessonDecisionCatalogItem? _catalogItem(
+  List<LessonDecisionCatalogItem> items,
+  String key,
+) {
+  for (final item in items) {
+    if (item.key == key) return item;
+  }
+  return null;
+}
+
+String _violationLabel(Map<String, dynamic> value) => switch (value['code']
+    ?.toString()) {
+  'TEACHER_OVERLAP' => 'У преподавателя уже есть занятие в это время',
+  'CLIENT_OVERLAP' => 'У клиента уже есть занятие в это время',
+  'ROOM_OVERLAP' => 'Аудитория уже занята',
+  'TEACHER_UNAVAILABLE' => 'Преподаватель недоступен',
+  'TEACHER_BRANCH_MISMATCH' => 'Преподаватель не назначен в выбранный филиал',
+  'ROOM_BRANCH_MISMATCH' => 'Аудитория относится к другому филиалу',
+  'OUTSIDE_BRANCH_HOURS' => 'Филиал закрыт в это время',
+  'INVALID_INTERVAL' => 'Некорректное время занятия',
+  final code? => code,
+  _ => 'Ограничение расписания',
+};

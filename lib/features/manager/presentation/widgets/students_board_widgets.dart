@@ -478,6 +478,9 @@ class _CardBody extends ConsumerWidget {
     final openTasks = _intValue(student['open_tasks_count']);
     final lessonsCount = _intValue(student['lessons_count']);
     final groupsCount = _intValue(student['groups_count']);
+    final tableFields = (student['table_custom_fields'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .toList(growable: false);
 
     // Жёлтым — ученик, по которому не висит ни одной задачи: про него забыли
     // (требование заказчика 17.07). Тот же приём, что на доске лидов, и то же
@@ -571,6 +574,24 @@ class _CardBody extends ConsumerWidget {
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
                   ),
+                ),
+              ),
+            if (tableFields.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    for (final field in tableFields)
+                      KeyedSubtree(
+                        key: ValueKey('student-table-field-${field['key']}'),
+                        child: _IconBadge(
+                          icon: Icons.tune_rounded,
+                          text: clientTableFieldText(field),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             // ── Branch badge ──────────────────────────────────────────────

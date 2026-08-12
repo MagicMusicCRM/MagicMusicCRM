@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
-import 'package:magic_music_crm/core/theme/app_theme.dart';
 
 class CreateRoomDialog extends ConsumerStatefulWidget {
   final Map<String, dynamic>? room;
@@ -84,49 +83,6 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
     }
   }
 
-  Future<void> _delete() async {
-    if (widget.room == null) return;
-
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Удалить аудиторию?'),
-        content: const Text('Это действие нельзя отменить.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Назад'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              'Удалить',
-              style: TextStyle(color: AppTheme.danger),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      final roomId = widget.room!['id']?.toString();
-      if (roomId == null || roomId.isEmpty) return;
-      if (_saving) return;
-      setState(() => _saving = true);
-      try {
-        await ref.read(magicCrmServiceProvider).deleteRoom(roomId);
-        if (mounted) Navigator.pop(context, true);
-      } catch (_) {
-        if (mounted) {
-          setState(() => _saving = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Не удалось удалить аудиторию.')),
-          );
-        }
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -169,14 +125,6 @@ class _CreateRoomDialogState extends ConsumerState<CreateRoomDialog> {
         ),
       ),
       actions: [
-        if (widget.room != null)
-          TextButton(
-            onPressed: _saving ? null : _delete,
-            child: const Text(
-              'Удалить',
-              style: TextStyle(color: AppTheme.danger),
-            ),
-          ),
         TextButton(
           onPressed: _saving ? null : () => Navigator.pop(context),
           child: const Text('Отмена'),

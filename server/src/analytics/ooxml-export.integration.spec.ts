@@ -164,6 +164,113 @@ describe("v4 OOXML export", () => {
     );
   });
 
+  it("keeps filtered XLSX and CSV rows and columns identical", async () => {
+    const branchId = "11111111-1111-4111-8111-111111111111";
+    const sourceRows = [
+      {
+        type: "student",
+        id: "student-1",
+        displayName: "Алёна Смирнова",
+        status: "active",
+        statusLabel: "Занимается",
+        branchId,
+        createdAt: "2026-07-10T09:30:00.000Z",
+      },
+      {
+        type: "student",
+        id: "student-2",
+        displayName: "Илья Ёлкин",
+        status: "active",
+        statusLabel: "Занимается",
+        branchId,
+        createdAt: "2026-07-11T10:30:00.000Z",
+      },
+    ];
+    const list = jest.fn(
+      async (_actor: ActorContext, query: { limit: number; offset: number }) => ({
+        total: sourceRows.length,
+        items: sourceRows.slice(query.offset, query.offset + query.limit),
+      }),
+    );
+    const service = new ReportExportService(
+      database,
+      { list } as unknown as ClientStatusReadService,
+      {} as ReportingReadService,
+      builder,
+      {
+        record: jest.fn().mockResolvedValue(undefined),
+      } as unknown as AuditService,
+    );
+    const filter = {
+      reportKey: "client_status" as const,
+      clientType: "student" as const,
+      status: "active",
+      branchId,
+      from: "2026-07-01T00:00:00.000Z",
+      to: "2026-08-01T00:00:00.000Z",
+      q: "Смирнова",
+    };
+
+    const xlsx = await service.request(actors.owner, {
+      ...filter,
+      format: "xlsx",
+    });
+    const csv = await service.request(actors.owner, {
+      ...filter,
+      format: "csv",
+    });
+    if (xlsx.mode !== "sync" || csv.mode !== "sync") {
+      throw new Error("Expected synchronous exports.");
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(Uint8Array.from(xlsx.content).buffer);
+    const sheet = workbook.getWorksheet("Статусы клиентов")!;
+    expect(sheet.rowCount).toBe(sourceRows.length + 1);
+    expect(sheet.getRow(1).values).toEqual([
+      undefined,
+      "Тип",
+      "Клиент",
+      "Статус",
+      "Филиал ID",
+      "Создан",
+    ]);
+    expect(sheet.getRow(2).values).toEqual([
+      undefined,
+      "student",
+      "Алёна Смирнова",
+      "Занимается",
+      branchId,
+      new Date("2026-07-10T09:30:00.000Z"),
+    ]);
+    expect(sheet.getRow(3).getCell(2).value).toBe("Илья Ёлкин");
+
+    const csvText = csv.content.toString("utf8");
+    expect([...csv.content.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+    expect(csvText.startsWith("\uFEFF")).toBe(true);
+    const csvLines = csvText.slice(1).trim().split("\r\n");
+    expect(csvLines).toHaveLength(sourceRows.length + 1);
+    expect(csvLines[0]).toBe("Тип;Клиент;Статус;Филиал ID;Создан");
+    expect(csvLines[1]).toContain(`student;Алёна Смирнова;Занимается;${branchId}`);
+    expect(csvLines[2]).toContain(`student;Илья Ёлкин;Занимается;${branchId}`);
+
+    for (const call of list.mock.calls) {
+      expect(call[1]).toMatchObject({
+        clientType: "student",
+        status: "active",
+        branchId,
+        from: filter.from,
+        to: filter.to,
+        q: "Смирнова",
+      });
+    }
+
+    const fixtureDir = resolve(process.cwd(), "..", "build", "uat-122");
+    await mkdir(fixtureDir, { recursive: true });
+    await writeFile(resolve(fixtureDir, "client-status.xlsx"), xlsx.content);
+    await writeFile(resolve(fixtureDir, "client-status.csv"), csv.content);
+  });
+
   it("keeps async downloads private and produces a validated streaming XLSX", async () => {
     const rowCount = SYNC_EXPORT_ROW_LIMIT + 1;
     const clientStatus = {

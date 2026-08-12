@@ -71,6 +71,7 @@ export class CommentSharingService {
       entityType: string;
       entityId: string;
       reason: string;
+      reasonText?: string;
       beforeRef?: Record<string, unknown>;
       afterRef?: Record<string, unknown>;
       metadata: Record<string, unknown>;
@@ -79,6 +80,9 @@ export class CommentSharingService {
       entityType: "crm:comment",
       entityId: command.commentId,
       reason: command.reasonCode,
+      reasonText: command.sharedWithTeacher
+        ? "Комментарий опубликован преподавателю"
+        : "Комментарий скрыт от преподавателя",
       metadata: { commentId: command.commentId },
     };
 

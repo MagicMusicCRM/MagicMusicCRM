@@ -5,6 +5,7 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/provision_access_dialog.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/person_lifecycle_dialog.dart';
 
 class StaffDetailDialog extends ConsumerStatefulWidget {
   final Map<String, dynamic> staff;
@@ -48,19 +49,7 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
   String? _branchesError;
   bool _saving = false;
 
-  static const _roleLabels = {
-    'manager': 'Управляющий',
-    'director': 'Директор',
-    'admin': 'Администратор',
-    'system_admin': 'Администратор системы',
-  };
-
-  static const _statusLabels = {
-    'working': 'Работает',
-    'active': 'Активен',
-    'inactive': 'Неактивен',
-    'archived': 'В архиве',
-  };
+  static const _statusLabels = {'working': 'Работает', 'active': 'Активен'};
 
   @override
   void initState() {
@@ -154,40 +143,23 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
     Navigator.of(context, rootNavigator: true).pop(false);
   }
 
-  Map<String, String> get _provisionRoles => switch (widget.currentRole) {
-    'system_admin' => const {
-      'admin': 'Администратор',
-      'manager': 'Управляющий',
-      'director': 'Директор',
-      'system_admin': 'Администратор системы',
-    },
-    'director' => const {'admin': 'Администратор', 'manager': 'Управляющий'},
-    _ => const {'admin': 'Администратор'},
-  };
-
   Future<void> _provisionAccess() async {
     final id = _staff['id']?.toString();
     if (id == null || id.isEmpty) return;
     Map<String, dynamic>? updated;
-    final currentRole = _staff['role']?.toString();
-    final roles = _provisionRoles;
     final saved = await showProvisionAccessDialog(
       context,
       personLabel: '${_lastNameController.text} ${_firstNameController.text}'
           .trim(),
       initialEmail: _emailController.text,
-      roles: roles,
-      initialRole: roles.containsKey(currentRole)
-          ? currentRole
-          : roles.keys.first,
-      onSubmit: (email, password, role) async {
+      accessExists: _staff['is_app_account'] == true,
+      onSubmit: (email, password) async {
         updated = await ref
             .read(magicCrmServiceProvider)
             .provisionStaffAccess(
               staffId: id,
               email: email,
               password: password,
-              role: role!,
             );
       },
     );
@@ -200,6 +172,19 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
         context,
       ).showSnackBar(const SnackBar(content: Text('Доступ сотрудника создан')));
     }
+  }
+
+  Future<void> _manageLifecycle() async {
+    final id = _staff['id']?.toString();
+    if (id == null || id.isEmpty) return;
+    final saved = await showPersonLifecycleDialog(
+      context,
+      personType: 'staff',
+      personId: id,
+      personName: '${_lastNameController.text} ${_firstNameController.text}'
+          .trim(),
+    );
+    if (saved == true && mounted) Navigator.pop(context, true);
   }
 
   Future<void> _save() async {
@@ -230,7 +215,6 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
             lastName: _lastNameController.text,
             phone: _canonicalPhone,
             email: _emailController.text,
-            role: _role,
             position: _positionController.text,
             status: _status,
             branchIds: _branchIds.toList(),
@@ -291,6 +275,18 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
                           ? AppTheme.success
                           : Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
+                    _SummaryChip(
+                      icon: _staff['password_configured'] == true
+                          ? Icons.password_rounded
+                          : Icons.no_encryption_gmailerrorred_rounded,
+                      label: 'Пароль',
+                      value: _staff['password_configured'] == true
+                          ? 'Настроен'
+                          : 'Не задан',
+                      color: _staff['password_configured'] == true
+                          ? AppTheme.success
+                          : Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                     if (branches.isNotEmpty)
                       _SummaryChip(
                         icon: Icons.location_on_outlined,
@@ -301,17 +297,42 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
                       ),
                   ],
                 ),
-                if (!isAppAccount) ...[
+                if (const {
+                  'director',
+                  'system_admin',
+                }.contains(widget.currentRole)) ...[
                   const SizedBox(height: 12),
                   Align(
                     alignment: Alignment.centerLeft,
                     child: FilledButton.tonalIcon(
-                      onPressed: _provisionAccess,
+                      onPressed: _staff['lifecycle_state'] == 'archived'
+                          ? null
+                          : _provisionAccess,
                       icon: const Icon(Icons.key_rounded),
-                      label: const Text('Создать доступ'),
+                      label: Text(
+                        isAppAccount ? 'Данные для входа' : 'Создать доступ',
+                      ),
                     ),
                   ),
-                ] else if (linkSearchValue != null) ...[
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton.icon(
+                      onPressed: _manageLifecycle,
+                      icon: Icon(
+                        _staff['lifecycle_state'] == 'archived'
+                            ? Icons.restore_rounded
+                            : Icons.person_off_outlined,
+                      ),
+                      label: Text(
+                        _staff['lifecycle_state'] == 'archived'
+                            ? 'Восстановить сотрудника'
+                            : 'Отключить сотрудника',
+                      ),
+                    ),
+                  ),
+                ],
+                if (isAppAccount && linkSearchValue != null) ...[
                   const SizedBox(height: 12),
                   Align(
                     alignment: Alignment.centerLeft,
@@ -344,21 +365,20 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
                 TextFormField(
                   controller: _emailController,
                   readOnly: true,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Email для входа',
-                    helperText: 'Управляется через раздел «Пользователи»',
+                    helperText: _credentialHelper(_staff),
                   ),
                   keyboardType: TextInputType.emailAddress,
                   validator: _emailValidator,
                 ),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  menuMaxHeight: 256,
-                  initialValue: _role.isEmpty ? null : _role,
-                  decoration: const InputDecoration(labelText: 'CRM роль'),
-                  items: _dropdownItems(_roleLabels, _role),
-                  onChanged: (value) => setState(() => _role = value ?? _role),
-                  validator: _required,
+                InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Роль доступа',
+                    helperText: 'Изменяется только в «Настройки → Доступы»',
+                  ),
+                  child: Text(_staffRoleLabel(_role)),
                 ),
                 const SizedBox(height: 12),
                 const Text('Филиалы *'),
@@ -441,7 +461,9 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
           ),
         ),
         FilledButton(
-          onPressed: _saving ? null : _save,
+          onPressed: _saving || _staff['lifecycle_state'] == 'archived'
+              ? null
+              : _save,
           child: _saving
               ? const SizedBox(
                   width: 16,
@@ -463,6 +485,27 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
     if (email.isEmpty) return null;
     if (!email.contains('@')) return 'Некорректная почта';
     return null;
+  }
+
+  String _credentialHelper(Map<String, dynamic> data) {
+    final passwordChanged = data['password_changed_at']?.toString();
+    final emailChanged = data['email_changed_at']?.toString();
+    final parts = <String>[
+      if (data['password_configured'] == true) 'Пароль настроен',
+      if (emailChanged != null && emailChanged.isNotEmpty)
+        'email обновлён ${_shortDate(emailChanged)}',
+      if (passwordChanged != null && passwordChanged.isNotEmpty)
+        'пароль обновлён ${_shortDate(passwordChanged)}',
+    ];
+    return parts.isEmpty ? 'Доступ ещё не создан' : parts.join(' · ');
+  }
+
+  String _shortDate(String value) {
+    final parsed = DateTime.tryParse(value)?.toLocal();
+    if (parsed == null) return value;
+    String two(int number) => number.toString().padLeft(2, '0');
+    return '${two(parsed.day)}.${two(parsed.month)}.${parsed.year} '
+        '${two(parsed.hour)}:${two(parsed.minute)}';
   }
 
   List<DropdownMenuItem<String>> _dropdownItems(

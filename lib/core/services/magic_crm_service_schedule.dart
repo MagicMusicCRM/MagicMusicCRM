@@ -277,6 +277,7 @@ extension MagicCrmSchedule on MagicCrmService {
   }
 
   Future<List<Map<String, dynamic>>> listLessons({
+    String? lessonId,
     String? from,
     String? to,
     String? studentId,
@@ -288,6 +289,7 @@ extension MagicCrmSchedule on MagicCrmService {
     int limit = 100,
   }) async {
     final queryParameters = <String, dynamic>{'limit': limit};
+    if (lessonId != null) queryParameters['lessonId'] = lessonId;
     if (from != null) queryParameters['from'] = from;
     if (to != null) queryParameters['to'] = to;
     if (studentId != null) queryParameters['studentId'] = studentId;
@@ -320,6 +322,16 @@ extension MagicCrmSchedule on MagicCrmService {
       },
     );
     return _items(response);
+  }
+
+  Future<Map<String, dynamic>> resolveClientRef({
+    required String type,
+    required String id,
+  }) {
+    return _api.get<Map<String, dynamic>>(
+      '/crm/clients/resolve',
+      queryParameters: {'type': type, 'id': id},
+    );
   }
 
   Future<Map<String, dynamic>> createLesson({
@@ -369,10 +381,15 @@ extension MagicCrmSchedule on MagicCrmService {
   Future<int> setLessonsTeacherRate({
     required List<String> lessonIds,
     required num? teacherRate,
+    required String reasonText,
   }) async {
     final response = await _api.patch<Map<String, dynamic>>(
       '/crm/lessons/teacher-rate',
-      data: {'lessonIds': lessonIds, 'teacherRate': teacherRate},
+      data: {
+        'lessonIds': lessonIds,
+        'teacherRate': teacherRate,
+        'reasonText': reasonText.trim(),
+      },
     );
     final updated = response['updated'];
     return updated is num ? updated.toInt() : 0;
@@ -571,8 +588,11 @@ extension MagicCrmSchedule on MagicCrmService {
   Future<Map<String, dynamic>> createSchedulePlan({
     required MagicMutationIdentity identity,
     required String title,
-    required String studentId,
-    required String subscriptionId,
+    String kind = 'individual',
+    String? studentId,
+    String? groupId,
+    String? subscriptionId,
+    List<Map<String, dynamic>> participants = const [],
     required String activeFrom,
     required String? activeUntil,
     required List<Map<String, dynamic>> rows,
@@ -581,10 +601,12 @@ extension MagicCrmSchedule on MagicCrmService {
       '/crm/schedule-plans',
       identity: identity,
       data: {
-        'kind': 'individual',
+        'kind': kind,
         'title': title.trim(),
-        'studentId': studentId,
-        'subscriptionId': subscriptionId,
+        if (kind == 'individual') 'studentId': studentId,
+        if (kind == 'individual') 'subscriptionId': subscriptionId,
+        if (kind == 'group') 'groupId': groupId,
+        if (kind == 'group') 'participants': participants,
         'activeFrom': activeFrom,
         'activeUntil': activeUntil,
         'rows': rows,
@@ -594,8 +616,11 @@ extension MagicCrmSchedule on MagicCrmService {
 
   Future<Map<String, dynamic>> previewSchedulePlanConstraints({
     required String title,
-    required String studentId,
-    required String subscriptionId,
+    String kind = 'individual',
+    String? studentId,
+    String? groupId,
+    String? subscriptionId,
+    List<Map<String, dynamic>> participants = const [],
     required String activeFrom,
     required String? activeUntil,
     required List<Map<String, dynamic>> rows,
@@ -603,10 +628,12 @@ extension MagicCrmSchedule on MagicCrmService {
     return _api.post<Map<String, dynamic>>(
       '/crm/schedule-plans/constraints/preview',
       data: {
-        'kind': 'individual',
+        'kind': kind,
         'title': title.trim(),
-        'studentId': studentId,
-        'subscriptionId': subscriptionId,
+        if (kind == 'individual') 'studentId': studentId,
+        if (kind == 'individual') 'subscriptionId': subscriptionId,
+        if (kind == 'group') 'groupId': groupId,
+        if (kind == 'group') 'participants': participants,
         'activeFrom': activeFrom,
         'activeUntil': activeUntil,
         'rows': rows,
@@ -621,22 +648,66 @@ extension MagicCrmSchedule on MagicCrmService {
     required String effectiveFrom,
     required String title,
     String? subscriptionId,
+    List<Map<String, dynamic>>? participants,
     required String? activeUntil,
     required List<Map<String, dynamic>> rows,
   }) {
     return _api.patchIdempotent<Map<String, dynamic>>(
       '/crm/schedule-plans/$planId',
       identity: identity,
-      data: {
-        'expectedVersion': expectedVersion,
-        'effectiveFrom': effectiveFrom,
-        'title': title.trim(),
-        'subscriptionId': ?subscriptionId,
-        'activeUntil': activeUntil,
-        'rows': rows,
-      },
+      data: _schedulePlanUpdateData(
+        expectedVersion: expectedVersion,
+        effectiveFrom: effectiveFrom,
+        title: title,
+        subscriptionId: subscriptionId,
+        participants: participants,
+        activeUntil: activeUntil,
+        rows: rows,
+      ),
     );
   }
+
+  Future<Map<String, dynamic>> previewSchedulePlanUpdateConstraints(
+    String planId, {
+    required int expectedVersion,
+    required String effectiveFrom,
+    required String title,
+    String? subscriptionId,
+    List<Map<String, dynamic>>? participants,
+    required String? activeUntil,
+    required List<Map<String, dynamic>> rows,
+  }) {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/schedule-plans/$planId/constraints/preview',
+      data: _schedulePlanUpdateData(
+        expectedVersion: expectedVersion,
+        effectiveFrom: effectiveFrom,
+        title: title,
+        subscriptionId: subscriptionId,
+        participants: participants,
+        activeUntil: activeUntil,
+        rows: rows,
+      ),
+    );
+  }
+
+  Map<String, dynamic> _schedulePlanUpdateData({
+    required int expectedVersion,
+    required String effectiveFrom,
+    required String title,
+    required String? subscriptionId,
+    required List<Map<String, dynamic>>? participants,
+    required String? activeUntil,
+    required List<Map<String, dynamic>> rows,
+  }) => {
+    'expectedVersion': expectedVersion,
+    'effectiveFrom': effectiveFrom,
+    'title': title.trim(),
+    'subscriptionId': ?subscriptionId,
+    'participants': ?participants,
+    'activeUntil': activeUntil,
+    'rows': rows,
+  };
 
   Future<SchedulePlanEndPreview> previewSchedulePlanEnd(
     String planId, {

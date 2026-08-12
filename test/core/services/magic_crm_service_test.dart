@@ -242,6 +242,91 @@ void main() {
       expect(adapter.requests[2].queryParameters['branchId'], 'branch-a');
     });
 
+    test(
+      'branch lifecycle uses preview, versioned commit and archive listing',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/crm/branches',
+            statusCode: 200,
+            body: {
+              'items': [
+                {
+                  'id': 'branch-a',
+                  'name': 'Сокол',
+                  'lifecycleState': 'archived',
+                  'version': 4,
+                  'archivedAt': '2026-08-11T12:00:00.000Z',
+                  'archiveReason': 'Переезд',
+                },
+              ],
+            },
+          ),
+          _FakeResponse(
+            path: '/crm/branches/branch-a/close-preview',
+            statusCode: 200,
+            body: {
+              'branch': {'id': 'branch-a', 'version': 3},
+              'canClose': true,
+              'blockers': <Object>[],
+            },
+          ),
+          _FakeResponse(
+            path: '/crm/branches/branch-a/close',
+            statusCode: 200,
+            body: {
+              'branch': {
+                'id': 'branch-a',
+                'lifecycleState': 'archived',
+                'version': 4,
+              },
+            },
+          ),
+          _FakeResponse(
+            path: '/crm/branches/branch-a/history',
+            statusCode: 200,
+            body: {
+              'items': [
+                {
+                  'operation': 'archive',
+                  'toState': 'archived',
+                  'reasonText': 'Переезд',
+                },
+              ],
+            },
+          ),
+        ]);
+        final service = MagicCrmService(_client(adapter));
+
+        final branches = await service.listBranches(includeArchived: true);
+        final preview = await service.previewBranchClose('branch-a');
+        await service.closeBranch(
+          'branch-a',
+          expectedVersion: 3,
+          reasonText: ' Переезд ',
+          effectiveDate: '2026-08-11',
+        );
+        final history = await service.listBranchLifecycleHistory('branch-a');
+
+        expect(branches.single, containsPair('lifecycle_state', 'archived'));
+        expect(branches.single['version'], 4);
+        expect(preview['canClose'], isTrue);
+        expect(history.single['reasonText'], 'Переезд');
+        expect(
+          adapter.requests.first.queryParameters['includeArchived'],
+          isTrue,
+        );
+        expect(adapter.requests[2].body, {
+          'expectedVersion': 3,
+          'confirm': true,
+          'reasonText': 'Переезд',
+          'effectiveDate': '2026-08-11',
+        });
+        expect(adapter.requests[2].headers['Idempotency-Key'], isNotEmpty);
+        expect(adapter.requests[2].headers['X-Request-Id'], isNotEmpty);
+      },
+    );
+
     test('maps schedule matrix and room availability contracts', () async {
       final adapter = _FakeAdapter([
         _FakeResponse(
@@ -288,6 +373,8 @@ void main() {
                 'scheduledAt': '2026-06-15T09:00:00.000Z',
                 'durationMinutes': 60,
                 'status': 'scheduled',
+                'lifecycleState': 'settlement_pending',
+                'settlementFailureCode': 'ConflictException',
                 'isTrial': true,
                 'notes': null,
                 'studentName': 'Анна Иванова',
@@ -296,6 +383,9 @@ void main() {
                 'roomName': '101',
                 'groupName': null,
                 'groupPricePerLesson': null,
+                'groupParticipants': const [
+                  {'clientId': 'student-a', 'clientName': 'Анна Иванова'},
+                ],
                 'conflictTypes': ['room_overlap'],
               },
             ],
@@ -355,6 +445,14 @@ void main() {
       expect(availability['items'].single['is_available'], false);
       expect(availability['items'].single['conflict_types'], ['room_overlap']);
       expect(matrix['items'].single['conflict_types'], ['room_overlap']);
+      expect(matrix['items'].single['version'], 7);
+      expect(matrix['items'].single['group_participants'], [
+        {'clientId': 'student-a', 'clientName': 'Анна Иванова'},
+      ]);
+      expect(
+        matrix['items'].single['settlement_failure_code'],
+        'ConflictException',
+      );
       expect(matrix['groups'].single['label'], '101');
       expect(matrix['conflicts'].single['type'], 'room_overlap');
       expect(adapter.requests[0].queryParameters['durationMinutes'], 60);
@@ -728,11 +826,15 @@ void main() {
           teacherId: 'teacher-a',
           kind: 'bonus',
           amount: 1000,
+          expectedVersion: 2,
+          reasonText: 'Премия за июль',
           comment: 'Премия',
         );
         final rate = await service.setTeacherHourRate(
           teacherId: 'teacher-a',
           rate: 900,
+          expectedVersion: 3,
+          reasonText: 'Новая ставка с августа',
           effectiveFrom: '2026-08-01',
         );
         final stats = await service.getTeacherStatsReport(
@@ -757,9 +859,12 @@ void main() {
         expect(adapter.requests[1].body['kind'], 'bonus');
         expect(adapter.requests[1].body['amount'], 1000);
         expect(adapter.requests[1].body['comment'], 'Премия');
+        expect(adapter.requests[1].body['expectedVersion'], 2);
+        expect(adapter.requests[1].body['reasonText'], 'Премия за июль');
 
         expect(rate['rate'], 900);
         expect(adapter.requests[2].body['rate'], 900);
+        expect(adapter.requests[2].body['expectedVersion'], 3);
         expect(adapter.requests[2].body['effectiveFrom'], '2026-08-01');
 
         expect((stats['items'] as List).single['teacherName'], 'Мария Петрова');
@@ -1088,7 +1193,7 @@ void main() {
             'id': 'profile-c',
             'userId': 'staff-a',
             'email': 'staff@example.com',
-            'role': 'manager',
+            'role': 'admin',
             'firstName': 'Ольга',
             'lastName': 'Смирнова',
             'phone': '+79992222222',
@@ -1177,6 +1282,8 @@ void main() {
         salary: 20000,
         rate: 900,
         rateEffectiveFrom: '2026-08-10',
+        payrollExpectedVersion: 3,
+        payrollReasonText: 'Плановое изменение условий',
       );
       final staff = await service.createStaff(
         firstName: 'Ольга',
@@ -1184,7 +1291,6 @@ void main() {
         email: 'staff@example.com',
         password: 'password-123',
         phone: '+79992222222',
-        role: 'manager',
         branchIds: const ['branch-a'],
       );
       final updatedStaff = await service.updateStaff(
@@ -1193,7 +1299,6 @@ void main() {
         lastName: 'Смирнова',
         email: 'staff@example.com',
         phone: '+79992222222',
-        role: 'manager',
         position: 'Операционный управляющий',
         status: 'working',
         customDataPatch: {'birthday': '1990-06-01'},
@@ -1207,13 +1312,12 @@ void main() {
         staffId: 'legacy-staff',
         email: 'legacy.staff@example.com',
         password: 'password-123',
-        role: 'admin',
       );
 
       expect(student['first_name'], 'Анна');
       expect(teacher['specialization'], 'Вокал');
       expect(updatedTeacher['specialization'], 'Фортепиано');
-      expect(staff['role'], 'manager');
+      expect(staff['role'], 'admin');
       expect(updatedStaff['position'], 'Операционный управляющий');
       expect(updatedStaff['custom_data']['birthday'], '1990-06-01');
       expect(provisionedTeacher['is_app_account'], true);
@@ -1236,7 +1340,12 @@ void main() {
       expect(adapter.requests[2].body['salary'], 20000);
       expect(adapter.requests[2].body['rate'], 900);
       expect(adapter.requests[2].body['rateEffectiveFrom'], '2026-08-10');
-      expect(adapter.requests[3].body['role'], 'manager');
+      expect(adapter.requests[2].body['payrollExpectedVersion'], 3);
+      expect(
+        adapter.requests[2].body['payrollReasonText'],
+        'Плановое изменение условий',
+      );
+      expect(adapter.requests[3].body.containsKey('role'), false);
       expect(adapter.requests[3].body['branchIds'], ['branch-a']);
       expect(adapter.requests[3].body['password'], 'password-123');
       expect(adapter.requests[4].body['position'], 'Операционный управляющий');
@@ -1251,7 +1360,6 @@ void main() {
       expect(adapter.requests[6].body, {
         'email': 'legacy.staff@example.com',
         'password': 'password-123',
-        'role': 'admin',
       });
     });
 
@@ -1295,28 +1403,6 @@ void main() {
       );
     });
 
-    test('returns student to lead through v3 API', () async {
-      final adapter = _FakeAdapter([
-        _FakeResponse(
-          path: '/crm/students/student-a/return-to-lead',
-          statusCode: 201,
-          body: {
-            'success': true,
-            'studentId': 'student-a',
-            'leadId': 'lead-a',
-            'createdLead': false,
-          },
-        ),
-      ]);
-      final service = MagicCrmService(_client(adapter));
-
-      final result = await service.returnStudentToLead('student-a');
-
-      expect(result['leadId'], 'lead-a');
-      expect(result['createdLead'], false);
-      expect(adapter.requests.single.body, isEmpty);
-    });
-
     test('lists student groups through v3 API', () async {
       final adapter = _FakeAdapter([
         _FakeResponse(
@@ -1348,7 +1434,7 @@ void main() {
       expect(adapter.requests.single.queryParameters['limit'], 10);
     });
 
-    test('creates updates and deletes rooms through v3 API', () async {
+    test('creates, updates and archives rooms through lifecycle API', () async {
       final adapter = _FakeAdapter([
         _FakeResponse(
           path: '/crm/rooms',
@@ -1375,9 +1461,33 @@ void main() {
           },
         ),
         _FakeResponse(
-          path: '/crm/rooms/room-b',
+          path: '/crm/rooms/room-b/archive-preview',
           statusCode: 200,
-          body: {'success': true},
+          body: {
+            'room': {'id': 'room-b', 'version': 1},
+            'canArchive': true,
+            'blockers': <dynamic>[],
+          },
+        ),
+        _FakeResponse(
+          path: '/crm/rooms/room-b/archive',
+          statusCode: 200,
+          body: {
+            'room': {
+              'id': 'room-b',
+              'lifecycleState': 'archived',
+              'version': 2,
+            },
+          },
+        ),
+        _FakeResponse(
+          path: '/crm/rooms/room-b/history',
+          statusCode: 200,
+          body: {
+            'items': [
+              {'operation': 'archive', 'reasonText': 'Ремонт класса'},
+            ],
+          },
         ),
       ]);
       final service = MagicCrmService(_client(adapter));
@@ -1393,7 +1503,14 @@ void main() {
         branchId: 'branch-a',
         capacity: 8,
       );
-      await service.deleteRoom('room-b');
+      final preview = await service.previewRoomArchive('room-b');
+      await service.archiveRoom(
+        'room-b',
+        expectedVersion: 1,
+        reasonText: ' Ремонт класса ',
+        effectiveDate: '2026-08-11',
+      );
+      final history = await service.listRoomLifecycleHistory('room-b');
 
       expect(created['branch_id'], 'branch-a');
       expect(created['branches']['name'], 'Центр');
@@ -1403,6 +1520,16 @@ void main() {
       expect(adapter.requests[0].body['capacity'], 6);
       expect(adapter.requests[1].body['name'], '103');
       expect(adapter.requests[1].body['capacity'], 8);
+      expect(preview['canArchive'], isTrue);
+      expect(history.single['reasonText'], 'Ремонт класса');
+      expect(adapter.requests[3].body, {
+        'expectedVersion': 1,
+        'confirm': true,
+        'reasonText': 'Ремонт класса',
+        'effectiveDate': '2026-08-11',
+      });
+      expect(adapter.requests[3].headers['Idempotency-Key'], isNotEmpty);
+      expect(adapter.requests[3].headers['X-Request-Id'], isNotEmpty);
     });
 
     test('maps leads and passes trial lesson filter', () async {
@@ -1453,6 +1580,7 @@ void main() {
                 'status': 'completed',
                 'lifecycleState': 'successfully_completed',
                 'reservationState': 'reserved',
+                'settlementFailureCode': 'ConflictException',
                 'isTrial': true,
                 'notes': null,
                 'studentName': 'Анна Иванова',
@@ -1479,6 +1607,7 @@ void main() {
       expect(lessons.single['is_trial'], true);
       expect(lessons.single['lifecycle_state'], 'successfully_completed');
       expect(lessons.single['reservation_state'], 'reserved');
+      expect(lessons.single['settlement_failure_code'], 'ConflictException');
       expect(lessons.single['version'], 7);
       expect(adapter.requests[0].queryParameters['limit'], 10);
       expect(adapter.requests[1].queryParameters['isTrial'], true);
@@ -1765,6 +1894,96 @@ void main() {
       );
     });
 
+    test('passes the complete lead-board filter and sort contract', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/crm/leads/board',
+          statusCode: 200,
+          body: {'columns': <dynamic>[], 'totalCount': 0, 'nextCursor': null},
+        ),
+        _FakeResponse(
+          path: '/crm/lead-sources',
+          statusCode: 200,
+          body: {
+            'items': [
+              {
+                'id': 'source-a',
+                'canonicalName': 'site',
+                'displayName': 'Сайт',
+              },
+            ],
+          },
+        ),
+        _FakeResponse(
+          path: '/admin/staff',
+          statusCode: 200,
+          body: [
+            {
+              'id': 'manager-a',
+              'displayName': 'Мария Менеджер',
+              'role': 'manager',
+            },
+          ],
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      await service.listLeadBoard(
+        q: 'Анна',
+        statusId: 'status-a',
+        branchId: 'branch-a',
+        assignedTo: 'manager-a',
+        source: 'Сайт',
+        discipline: 'Вокал',
+        level: 'Начальный',
+        category: 'Взрослый',
+        requestType: 'Пробное занятие',
+        goal: 'Поставить голос',
+        gender: 'Женский',
+        preferredSchedule: 'вечер',
+        from: '2026-06-01T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+        sort: 'oldest',
+        quick: 'active',
+        openTasks: true,
+        hideConverted: true,
+      );
+      final sources = await service.listLeadSources();
+      final staff = await service.listResponsibleStaff();
+
+      expect(adapter.requests.first.queryParameters, {
+        'limit': 25,
+        'quick': 'active',
+        'sort': 'oldest',
+        'q': 'Анна',
+        'statusId': 'status-a',
+        'branchId': 'branch-a',
+        'assignedTo': 'manager-a',
+        'source': 'Сайт',
+        'discipline': 'Вокал',
+        'level': 'Начальный',
+        'category': 'Взрослый',
+        'requestType': 'Пробное занятие',
+        'goal': 'Поставить голос',
+        'gender': 'Женский',
+        'preferredSchedule': 'вечер',
+        'from': '2026-06-01T00:00:00.000Z',
+        'to': '2026-07-01T00:00:00.000Z',
+        'openTasks': true,
+        'hideConverted': true,
+      });
+      expect(sources.single, {'id': 'source-a', 'name': 'Сайт'});
+      expect(staff.single, {
+        'id': 'manager-a',
+        'name': 'Мария Менеджер',
+        'role': 'manager',
+      });
+      expect(
+        adapter.requests.last.queryParameters['roles'],
+        'admin,manager,director',
+      );
+    });
+
     test('manages leads and lead statuses through v3 API', () async {
       final adapter = _FakeAdapter([
         _FakeResponse(
@@ -1807,7 +2026,6 @@ void main() {
             'updatedAt': '2026-06-12T00:10:00.000Z',
           },
         ),
-        _FakeResponse(path: '/crm/leads/lead-a', statusCode: 200, body: {}),
       ]);
       final service = MagicCrmService(_client(adapter));
 
@@ -1825,7 +2043,6 @@ void main() {
         notes: 'Важно',
         customDataPatch: {'level': 'beginner'},
       );
-      await service.deleteLead('lead-a');
       expect(created['name'], 'Петр');
       expect(created['status'], 'status-a');
       expect(updated['last_name'], 'Сидоров');
@@ -2428,6 +2645,8 @@ void main() {
                 'disciplineId': 'disc-1',
                 'name': 'Вокал',
                 'sortOrder': 0,
+                'lifecycleState': 'active',
+                'version': 2,
               },
               {
                 'id': 'bd-2',
@@ -2448,8 +2667,30 @@ void main() {
       expect(items.first['discipline_id'], 'disc-1');
       expect(items.first['name'], 'Вокал');
       expect(items.first['sort_order'], 0);
+      expect(items.first['lifecycle_state'], 'active');
+      expect(items.first['version'], 2);
       expect(adapter.requests.single.queryParameters, isEmpty);
     });
+
+    test(
+      'listBranchDisciplines can include archived links explicitly',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/crm/branches/branch-a/disciplines',
+            statusCode: 200,
+            body: {'items': <Map<String, dynamic>>[]},
+          ),
+        ]);
+        final service = MagicCrmService(_client(adapter));
+
+        await service.listBranchDisciplines('branch-a', includeArchived: true);
+
+        expect(adapter.requests.single.queryParameters, {
+          'includeArchived': true,
+        });
+      },
+    );
 
     test('listDisciplines maps items to {id, name}', () async {
       final adapter = _FakeAdapter([
@@ -2458,18 +2699,29 @@ void main() {
           statusCode: 200,
           body: {
             'items': [
-              {'id': 'disc-1', 'name': 'Вокал'},
+              {
+                'id': 'disc-1',
+                'name': 'Вокал',
+                'lifecycleState': 'archived',
+                'version': 4,
+                'archiveReason': 'Больше не ведём',
+              },
             ],
           },
         ),
       ]);
       final service = MagicCrmService(_client(adapter));
 
-      final items = await service.listDisciplines();
+      final items = await service.listDisciplines(includeArchived: true);
 
       expect(items.single['id'], 'disc-1');
       expect(items.single['name'], 'Вокал');
-      expect(adapter.requests.single.queryParameters, isEmpty);
+      expect(items.single['lifecycle_state'], 'archived');
+      expect(items.single['version'], 4);
+      expect(items.single['archive_reason'], 'Больше не ведём');
+      expect(adapter.requests.single.queryParameters, {
+        'includeArchived': true,
+      });
     });
 
     test('assignBranchDiscipline posts selected dictionary value', () async {
@@ -2488,6 +2740,120 @@ void main() {
       );
 
       expect(adapter.requests.single.body, {'disciplineId': 'disc-1'});
+    });
+
+    test(
+      'reference lifecycle uses preview, history and versioned mutation paths',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/crm/disciplines/disc-1/lifecycle-preview',
+            statusCode: 201,
+            body: {
+              'entity': {'id': 'disc-1', 'version': 3},
+              'blockers': <Map<String, dynamic>>[],
+            },
+          ),
+          _FakeResponse(
+            path: '/crm/disciplines/disc-1/history',
+            statusCode: 200,
+            body: {
+              'items': [
+                {'operation': 'rename', 'version': 2},
+              ],
+            },
+          ),
+          _FakeResponse(
+            path: '/crm/loss-reasons/reason-1',
+            statusCode: 200,
+            body: {
+              'preview': {
+                'entity': {'id': 'reason-1', 'version': 2},
+              },
+            },
+          ),
+          _FakeResponse(
+            path: '/crm/branch-disciplines/link-1/unassign',
+            statusCode: 201,
+            body: {
+              'preview': {
+                'entity': {'id': 'link-1', 'version': 2},
+              },
+            },
+          ),
+        ]);
+        final service = MagicCrmService(_client(adapter));
+
+        final preview = await service.previewReferenceCatalogLifecycle(
+          entityType: 'discipline',
+          id: 'disc-1',
+        );
+        final history = await service.listReferenceCatalogHistory(
+          entityType: 'discipline',
+          id: 'disc-1',
+        );
+        await service.renameReferenceCatalogItem(
+          entityType: 'loss_reason',
+          id: 'reason-1',
+          name: 'Высокая цена',
+          expectedVersion: 1,
+          reasonText: 'Уточнили формулировку',
+        );
+        await service.archiveReferenceCatalogItem(
+          entityType: 'branch_discipline',
+          id: 'link-1',
+          expectedVersion: 1,
+          reasonText: 'Больше не ведём в филиале',
+        );
+
+        expect(preview['entity']['version'], 3);
+        expect(history.single['operation'], 'rename');
+        expect(adapter.requests[2].method, 'PATCH');
+        expect(adapter.requests[2].body, {
+          'name': 'Высокая цена',
+          'expectedVersion': 1,
+          'confirm': true,
+          'reasonText': 'Уточнили формулировку',
+        });
+        expect(adapter.requests[3].method, 'POST');
+        expect(adapter.requests[3].body['confirm'], true);
+        expect(adapter.requests[2].headers['Idempotency-Key'], isNotEmpty);
+        expect(adapter.requests[3].headers['X-Request-Id'], isNotEmpty);
+      },
+    );
+
+    test('loss reason catalog supports archive listing and creation', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/crm/loss-reasons',
+          statusCode: 200,
+          body: {
+            'items': [
+              {
+                'id': 'reason-1',
+                'name': 'Нет времени',
+                'lifecycleState': 'archived',
+              },
+            ],
+          },
+        ),
+        _FakeResponse(
+          path: '/crm/loss-reasons',
+          statusCode: 201,
+          body: {'id': 'reason-2', 'name': 'Подумает позже', 'kind': 'paused'},
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      final items = await service.listLossReasons(includeArchived: true);
+      await service.createLossReason(name: 'Подумает позже', kind: 'paused');
+
+      expect(items.single['lifecycleState'], 'archived');
+      expect(adapter.requests.first.queryParameters, {'includeArchived': true});
+      expect(adapter.requests.last.body, {
+        'name': 'Подумает позже',
+        'kind': 'paused',
+      });
     });
 
     test(
@@ -2779,6 +3145,117 @@ void main() {
         });
       },
     );
+
+    test(
+      'group schedule plan preview, create and update keep participant contract',
+      () async {
+        final adapter = _FakeAdapter([
+          const _FakeResponse(
+            path: '/crm/schedule-plans/constraints/preview',
+            statusCode: 200,
+            body: {'valid': true, 'conflicts': <dynamic>[]},
+          ),
+          const _FakeResponse(
+            path: '/crm/schedule-plans',
+            statusCode: 201,
+            body: {'id': 'plan-group', 'version': 1},
+          ),
+          const _FakeResponse(
+            path: '/crm/schedule-plans/plan-group/constraints/preview',
+            statusCode: 200,
+            body: {'valid': true, 'rows': <dynamic>[]},
+          ),
+          const _FakeResponse(
+            path: '/crm/schedule-plans/plan-group',
+            statusCode: 200,
+            body: {'id': 'plan-group', 'version': 2},
+          ),
+        ]);
+        final service = MagicCrmService(_client(adapter));
+        const participants = [
+          {'studentId': 'student-a', 'subscriptionId': 'subscription-a'},
+          {'studentId': 'student-b', 'subscriptionId': 'subscription-b'},
+        ];
+        const rows = [
+          {
+            'teacherId': 'teacher-a',
+            'roomId': 'room-a',
+            'branchId': 'branch-a',
+            'weekday': DateTime.monday,
+            'beginTime': '16:00',
+            'durationMinutes': 60,
+            'financialDecision': {
+              'settlementTypeKey': 'free_lesson',
+              'teacherCompensationRuleKey': 'none',
+            },
+          },
+        ];
+        const identity = MagicMutationIdentity(
+          idempotencyKey: 'group-plan-command',
+          requestId: 'group-plan-request',
+        );
+
+        await service.previewSchedulePlanConstraints(
+          title: ' Ансамбль ',
+          kind: 'group',
+          groupId: 'group-a',
+          participants: participants,
+          activeFrom: '2026-08-17',
+          activeUntil: null,
+          rows: rows,
+        );
+        await service.createSchedulePlan(
+          identity: identity,
+          title: ' Ансамбль ',
+          kind: 'group',
+          groupId: 'group-a',
+          participants: participants,
+          activeFrom: '2026-08-17',
+          activeUntil: null,
+          rows: rows,
+        );
+        await service.previewSchedulePlanUpdateConstraints(
+          'plan-group',
+          expectedVersion: 1,
+          effectiveFrom: '2026-09-01',
+          title: ' Ансамбль ',
+          participants: participants.take(1).toList(),
+          activeUntil: null,
+          rows: rows,
+        );
+        await service.updateSchedulePlan(
+          'plan-group',
+          identity: identity,
+          expectedVersion: 1,
+          effectiveFrom: '2026-09-01',
+          title: 'Ансамбль',
+          participants: participants.take(1).toList(),
+          activeUntil: null,
+          rows: rows,
+        );
+
+        for (final request in adapter.requests.take(2)) {
+          expect(request.body['kind'], 'group');
+          expect(request.body['groupId'], 'group-a');
+          expect(request.body['participants'], participants);
+          expect(request.body, isNot(contains('studentId')));
+          expect(request.body, isNot(contains('subscriptionId')));
+          expect(request.body['title'], 'Ансамбль');
+        }
+        expect(adapter.requests[1].method, 'POST');
+        expect(
+          adapter.requests[1].headers['Idempotency-Key'],
+          'group-plan-command',
+        );
+        expect(adapter.requests[2].method, 'POST');
+        expect(adapter.requests[2].body['expectedVersion'], 1);
+        expect(adapter.requests[2].body['title'], 'Ансамбль');
+        expect(adapter.requests[2].body['participants'], [participants.first]);
+        expect(adapter.requests[3].method, 'PATCH');
+        expect(adapter.requests[3].body, adapter.requests[2].body);
+        expect(adapter.requests[3].body, isNot(contains('subscriptionId')));
+      },
+    );
   });
 }
 
@@ -2809,10 +3286,17 @@ class _FakeResponse {
 }
 
 class _CapturedRequest {
+  final String method;
   final Map<String, dynamic> queryParameters;
   final Map<String, dynamic> body;
+  final Map<String, dynamic> headers;
 
-  const _CapturedRequest({required this.queryParameters, required this.body});
+  const _CapturedRequest({
+    required this.method,
+    required this.queryParameters,
+    required this.body,
+    required this.headers,
+  });
 }
 
 class _FakeAdapter implements HttpClientAdapter {
@@ -2841,8 +3325,10 @@ class _FakeAdapter implements HttpClientAdapter {
         : <String, dynamic>{};
     requests.add(
       _CapturedRequest(
+        method: options.method,
         queryParameters: Map<String, dynamic>.from(options.queryParameters),
         body: requestBody,
+        headers: Map<String, dynamic>.from(options.headers),
       ),
     );
     return ResponseBody.fromString(

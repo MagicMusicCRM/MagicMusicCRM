@@ -2,12 +2,68 @@ part of 'magic_crm_service.dart';
 
 /// Org: branches, disciplines, rooms, room availability, groups.
 extension MagicCrmOrg on MagicCrmService {
-  Future<List<Map<String, dynamic>>> listBranches({int limit = 100}) async {
+  Future<List<Map<String, dynamic>>> listBranches({
+    int limit = 100,
+    bool includeArchived = false,
+  }) async {
     final response = await _api.get<Map<String, dynamic>>(
       '/crm/branches',
-      queryParameters: {'limit': limit},
+      queryParameters: {
+        'limit': limit,
+        if (includeArchived) 'includeArchived': true,
+      },
     );
     return _items(response).map(_legacyBranch).toList();
+  }
+
+  Future<Map<String, dynamic>> previewBranchClose(String id) {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/branches/$id/close-preview',
+      data: const <String, dynamic>{},
+    );
+  }
+
+  Future<Map<String, dynamic>> closeBranch(
+    String id, {
+    required int expectedVersion,
+    required String reasonText,
+    required String effectiveDate,
+  }) {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/branches/$id/close',
+      data: {
+        'expectedVersion': expectedVersion,
+        'confirm': true,
+        'reasonText': reasonText.trim(),
+        'effectiveDate': effectiveDate,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> restoreBranch(
+    String id, {
+    required int expectedVersion,
+    required String reasonText,
+    required String effectiveDate,
+  }) {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/branches/$id/restore',
+      data: {
+        'expectedVersion': expectedVersion,
+        'confirm': true,
+        'reasonText': reasonText.trim(),
+        'effectiveDate': effectiveDate,
+      },
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> listBranchLifecycleHistory(
+    String id,
+  ) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/branches/$id/history',
+    );
+    return _items(response);
   }
 
   Future<int> getAppLeadsCount() async {
@@ -21,10 +77,12 @@ extension MagicCrmOrg on MagicCrmService {
   }
 
   Future<List<Map<String, dynamic>>> listBranchDisciplines(
-    String branchId,
-  ) async {
+    String branchId, {
+    bool includeArchived = false,
+  }) async {
     final response = await _api.get<Map<String, dynamic>>(
       '/crm/branches/$branchId/disciplines',
+      queryParameters: {if (includeArchived) 'includeArchived': true},
     );
     return _items(response).map((item) {
       return {
@@ -32,15 +90,39 @@ extension MagicCrmOrg on MagicCrmService {
         'discipline_id': item['disciplineId'],
         'name': item['name'],
         'sort_order': (item['sortOrder'] as num?)?.toInt() ?? 0,
+        'lifecycle_state': item['lifecycleState'] ?? 'active',
+        'version': (item['version'] as num?)?.toInt() ?? 1,
+        'archived_at': item['archivedAt'],
+        'archive_reason': item['archiveReason'],
       };
     }).toList();
   }
 
-  Future<List<Map<String, dynamic>>> listDisciplines() async {
-    final response = await _api.get<Map<String, dynamic>>('/crm/disciplines');
-    return _items(
-      response,
-    ).map((item) => {'id': item['id'], 'name': item['name']}).toList();
+  Future<List<Map<String, dynamic>>> listDisciplines({
+    bool includeArchived = false,
+  }) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/disciplines',
+      queryParameters: {if (includeArchived) 'includeArchived': true},
+    );
+    return _items(response).map((item) {
+      return {
+        'id': item['id'],
+        'name': item['name'],
+        'lifecycle_state': item['lifecycleState'] ?? 'active',
+        'version': (item['version'] as num?)?.toInt() ?? 1,
+        'archived_at': item['archivedAt'],
+        'archive_reason': item['archiveReason'],
+        'active_usage': item['activeUsage'],
+      };
+    }).toList();
+  }
+
+  Future<Map<String, dynamic>> createDiscipline(String name) {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/disciplines',
+      data: {'name': name.trim()},
+    );
   }
 
   Future<void> assignBranchDiscipline({
@@ -53,12 +135,96 @@ extension MagicCrmOrg on MagicCrmService {
     );
   }
 
+  Future<Map<String, dynamic>> previewReferenceCatalogLifecycle({
+    required String entityType,
+    required String id,
+  }) {
+    return _api.post<Map<String, dynamic>>(
+      '${_referenceCatalogPath(entityType, id)}/lifecycle-preview',
+      data: const <String, dynamic>{},
+    );
+  }
+
+  Future<Map<String, dynamic>> renameReferenceCatalogItem({
+    required String entityType,
+    required String id,
+    required String name,
+    required int expectedVersion,
+    required String reasonText,
+  }) {
+    return _api.patch<Map<String, dynamic>>(
+      _referenceCatalogPath(entityType, id),
+      data: {
+        'name': name.trim(),
+        'expectedVersion': expectedVersion,
+        'confirm': true,
+        'reasonText': reasonText.trim(),
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> archiveReferenceCatalogItem({
+    required String entityType,
+    required String id,
+    required int expectedVersion,
+    required String reasonText,
+  }) {
+    final action = entityType == 'branch_discipline' ? 'unassign' : 'archive';
+    return _api.post<Map<String, dynamic>>(
+      '${_referenceCatalogPath(entityType, id)}/$action',
+      data: {
+        'expectedVersion': expectedVersion,
+        'confirm': true,
+        'reasonText': reasonText.trim(),
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> restoreReferenceCatalogItem({
+    required String entityType,
+    required String id,
+    required int expectedVersion,
+    required String reasonText,
+  }) {
+    return _api.post<Map<String, dynamic>>(
+      '${_referenceCatalogPath(entityType, id)}/restore',
+      data: {
+        'expectedVersion': expectedVersion,
+        'confirm': true,
+        'reasonText': reasonText.trim(),
+      },
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> listReferenceCatalogHistory({
+    required String entityType,
+    required String id,
+  }) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '${_referenceCatalogPath(entityType, id)}/history',
+    );
+    return _items(response);
+  }
+
+  String _referenceCatalogPath(String entityType, String id) {
+    return switch (entityType) {
+      'discipline' => '/crm/disciplines/$id',
+      'loss_reason' => '/crm/loss-reasons/$id',
+      'branch_discipline' => '/crm/branch-disciplines/$id',
+      _ => throw ArgumentError.value(entityType, 'entityType'),
+    };
+  }
+
   Future<Map<String, dynamic>> createBranch({
     required String name,
+    required List<Map<String, dynamic>> weeklyHours,
     String? address,
     int? utcOffsetMinutes,
   }) async {
-    final data = <String, dynamic>{'name': name.trim()};
+    final data = <String, dynamic>{
+      'name': name.trim(),
+      'weeklyHours': weeklyHours,
+    };
     final trimmedAddress = address?.trim();
     if (trimmedAddress != null && trimmedAddress.isNotEmpty) {
       data['address'] = trimmedAddress;
@@ -91,9 +257,11 @@ extension MagicCrmOrg on MagicCrmService {
   Future<List<Map<String, dynamic>>> listRooms({
     String? branchId,
     int limit = 100,
+    bool includeArchived = false,
   }) async {
     final queryParameters = <String, dynamic>{'limit': limit};
     if (branchId != null) queryParameters['branchId'] = branchId;
+    if (includeArchived) queryParameters['includeArchived'] = true;
 
     final response = await _api.get<Map<String, dynamic>>(
       '/crm/rooms',
@@ -177,22 +345,118 @@ extension MagicCrmOrg on MagicCrmService {
     return _legacyRoom(response);
   }
 
-  Future<void> deleteRoom(String id) async {
-    await _api.delete<Map<String, dynamic>>('/crm/rooms/$id');
+  Future<Map<String, dynamic>> previewRoomArchive(String id) {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/rooms/$id/archive-preview',
+      data: const <String, dynamic>{},
+    );
+  }
+
+  Future<Map<String, dynamic>> archiveRoom(
+    String id, {
+    required int expectedVersion,
+    required String reasonText,
+    required String effectiveDate,
+  }) {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/rooms/$id/archive',
+      data: {
+        'expectedVersion': expectedVersion,
+        'confirm': true,
+        'reasonText': reasonText.trim(),
+        'effectiveDate': effectiveDate,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> restoreRoom(
+    String id, {
+    required int expectedVersion,
+    required String reasonText,
+    required String effectiveDate,
+  }) {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/rooms/$id/restore',
+      data: {
+        'expectedVersion': expectedVersion,
+        'confirm': true,
+        'reasonText': reasonText.trim(),
+        'effectiveDate': effectiveDate,
+      },
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> listRoomLifecycleHistory(String id) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/rooms/$id/history',
+    );
+    return _items(response);
   }
 
   Future<List<Map<String, dynamic>>> listGroups({
     String? branchId,
     int limit = 100,
+    bool includeArchived = false,
   }) async {
     final queryParameters = <String, dynamic>{'limit': limit};
     if (branchId != null) queryParameters['branchId'] = branchId;
+    if (includeArchived) queryParameters['includeArchived'] = true;
 
     final response = await _api.get<Map<String, dynamic>>(
       '/crm/groups',
       queryParameters: queryParameters,
     );
     return _items(response).map(_legacyGroup).toList();
+  }
+
+  Future<Map<String, dynamic>> previewGroupArchive(String id) {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/groups/$id/archive-preview',
+      data: const <String, dynamic>{},
+    );
+  }
+
+  Future<Map<String, dynamic>> archiveGroup(
+    String id, {
+    required int expectedVersion,
+    required String reasonText,
+    required String effectiveDate,
+  }) {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/groups/$id/archive',
+      data: {
+        'expectedVersion': expectedVersion,
+        'confirm': true,
+        'reasonText': reasonText.trim(),
+        'effectiveDate': effectiveDate,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> restoreGroup(
+    String id, {
+    required int expectedVersion,
+    required String reasonText,
+    required String effectiveDate,
+  }) {
+    return _api.post<Map<String, dynamic>>(
+      '/crm/groups/$id/restore',
+      data: {
+        'expectedVersion': expectedVersion,
+        'confirm': true,
+        'reasonText': reasonText.trim(),
+        'effectiveDate': effectiveDate,
+      },
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> listGroupLifecycleHistory(
+    String id,
+  ) async {
+    final response = await _api.get<Map<String, dynamic>>(
+      '/crm/groups/$id/history',
+    );
+    return _items(response);
   }
 
   /// One group by id. Callers holding only an id (a task pointing at a group)

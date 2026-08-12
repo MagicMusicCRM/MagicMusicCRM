@@ -43,6 +43,13 @@ const _compensationModeLabels = <String, String>{
   'hourly': 'Почасовая сумма',
 };
 
+const _fieldPlacementLabels = <String, String>{
+  'create': 'Создание',
+  'edit': 'Редактирование',
+  'card': 'Карточка',
+  'table': 'Таблица',
+};
+
 typedef _FieldEditorResult = ({
   Map<String, dynamic> field,
   List<Map<String, dynamic>> createdOptionSets,
@@ -591,7 +598,12 @@ class _CrmConfigurationWorkspaceState
 
   Widget _fieldList() {
     final fields = _items('fields');
-    final categories = _items('categories');
+    final categories = _items('categories')
+      ..sort(
+        (left, right) => ((left['order'] as num?)?.toInt() ?? 0).compareTo(
+          (right['order'] as num?)?.toInt() ?? 0,
+        ),
+      );
     return _listPane(
       title: 'Поля форм и карточек',
       addLabel: 'Добавить поле',
@@ -608,13 +620,57 @@ class _CrmConfigurationWorkspaceState
                 )
               : null,
         ),
-        for (final category in categories)
+        for (var index = 0; index < categories.length; index++)
           Padding(
             padding: const EdgeInsets.only(left: AppSpace.lg),
             child: ListTile(
               dense: true,
-              title: Text(category['label']?.toString() ?? ''),
-              subtitle: Text(category['key']?.toString() ?? ''),
+              title: Text(categories[index]['label']?.toString() ?? ''),
+              subtitle: Text(
+                '${categories[index]['key'] ?? ''} · '
+                '${categories[index]['active'] == false ? 'в архиве' : 'активна'}',
+              ),
+              leading: categories[index]['active'] == false
+                  ? const Icon(Icons.archive_outlined, size: 18)
+                  : const Icon(Icons.folder_outlined, size: 18),
+              trailing: !_canEdit || _branchId != null
+                  ? null
+                  : SizedBox(
+                      width: 120,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          IconButton(
+                            tooltip: 'Выше',
+                            visualDensity: VisualDensity.compact,
+                            onPressed: index == 0
+                                ? null
+                                : () => _reorderCategory(index, -1),
+                            icon: const Icon(
+                              Icons.arrow_upward_rounded,
+                              size: 18,
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Ниже',
+                            visualDensity: VisualDensity.compact,
+                            onPressed: index == categories.length - 1
+                                ? null
+                                : () => _reorderCategory(index, 1),
+                            icon: const Icon(
+                              Icons.arrow_downward_rounded,
+                              size: 18,
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Изменить категорию',
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => _editCategory(categories[index]),
+                            icon: const Icon(Icons.edit_outlined, size: 18),
+                          ),
+                        ],
+                      ),
+                    ),
             ),
           ),
         const Divider(),
@@ -1200,14 +1256,52 @@ class _CrmConfigurationWorkspaceState
     setState(() => _selectedKey = '${draft['entityType']}:${draft['key']}');
   }
 
-  Future<void> _editCategory() async {
+  Future<void> _editCategory([Map<String, dynamic>? current]) async {
     final draft = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (_) => const _CategoryEditorDialog(),
+      builder: (_) => _CategoryEditorDialog(category: current),
     );
     if (draft == null) return;
     final categories = _items('categories');
-    categories.add({...draft, 'order': categories.length, 'active': true});
+    final index = current == null
+        ? -1
+        : categories.indexWhere(
+            (category) => category['key'] == current['key'],
+          );
+    if (draft['active'] == false &&
+        _items('fields').any(
+          (field) =>
+              field['active'] != false && field['categoryKey'] == draft['key'],
+        )) {
+      _toast('Сначала перенесите активные поля в другую категорию.');
+      return;
+    }
+    if (index < 0) {
+      categories.add({...draft, 'order': categories.length, 'active': true});
+    } else {
+      categories[index] = {
+        ...categories[index],
+        'label': draft['label'],
+        'active': draft['active'],
+      };
+    }
+    _replaceItems('categories', categories);
+  }
+
+  void _reorderCategory(int from, int delta) {
+    final categories = _items('categories')
+      ..sort(
+        (left, right) => ((left['order'] as num?)?.toInt() ?? 0).compareTo(
+          (right['order'] as num?)?.toInt() ?? 0,
+        ),
+      );
+    final to = from + delta;
+    if (from < 0 || to < 0 || to >= categories.length) return;
+    final moved = categories.removeAt(from);
+    categories.insert(to, moved);
+    for (var index = 0; index < categories.length; index++) {
+      categories[index] = {...categories[index], 'order': index};
+    }
     _replaceItems('categories', categories);
   }
 
@@ -1556,10 +1650,17 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
       widget.categories.firstOrNull?['key']?.toString() ??
       'general';
   late String _width = widget.field?['width']?.toString() ?? 'full';
+  late final Set<String> _placements = {
+    for (final placement
+        in (widget.field?['placements'] as List? ??
+            const ['create', 'edit', 'card']))
+      placement.toString(),
+  };
   late bool _required = widget.field?['required'] == true;
   late bool _active = widget.field?['active'] != false;
   late String? _optionSetKey = widget.field?['optionSetKey']?.toString();
   String? _optionSetError;
+  String? _placementsError;
 
   @override
   void dispose() {
@@ -1616,6 +1717,7 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       menuMaxHeight: 256,
+                      key: const ValueKey('field-type'),
                       initialValue: _type,
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Тип'),
@@ -1631,7 +1733,8 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
                           ? null
                           : (v) => setState(() {
                               _type = v!;
-                              if (!_selectionFieldTypes.contains(_type)) {
+                              if (!_selectionFieldTypes.contains(_type) ||
+                                  !_optionSetMatchesType(_optionSetKey)) {
                                 _optionSetKey = null;
                                 _optionSetError = null;
                               }
@@ -1649,6 +1752,11 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
                       initialValue: _category,
                       decoration: const InputDecoration(labelText: 'Категория'),
                       items: widget.categories
+                          .where(
+                            (category) =>
+                                category['active'] != false ||
+                                category['key']?.toString() == _category,
+                          )
                           .map(
                             (category) => DropdownMenuItem(
                               value: category['key']?.toString(),
@@ -1663,6 +1771,7 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       menuMaxHeight: 256,
+                      key: const ValueKey('field-width'),
                       initialValue: _width,
                       decoration: const InputDecoration(labelText: 'Ширина'),
                       items: const [
@@ -1702,12 +1811,18 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
                       value: null,
                       child: Text('Выберите набор'),
                     ),
-                    ..._optionSets.map(
-                      (set) => DropdownMenuItem<String?>(
-                        value: set['key']?.toString(),
-                        child: Text(set['label']?.toString() ?? ''),
-                      ),
-                    ),
+                    ..._optionSets
+                        .where(
+                          (set) =>
+                              set['key']?.toString() == _optionSetKey ||
+                              _optionSetMatchesCurrentType(set),
+                        )
+                        .map(
+                          (set) => DropdownMenuItem<String?>(
+                            value: set['key']?.toString(),
+                            child: Text(set['label']?.toString() ?? ''),
+                          ),
+                        ),
                   ],
                   onChanged: (value) => setState(() {
                     _optionSetKey = value;
@@ -1738,6 +1853,44 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
                     ? null
                     : (v) => setState(() => _active = v == true),
               ),
+              const SizedBox(height: AppSpace.xs),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Показывать поле в',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
+              const SizedBox(height: AppSpace.xs),
+              Wrap(
+                spacing: AppSpace.xs,
+                runSpacing: AppSpace.xs,
+                children: [
+                  for (final entry in _fieldPlacementLabels.entries)
+                    FilterChip(
+                      key: ValueKey('field-placement-${entry.key}'),
+                      label: Text(entry.value),
+                      selected: _placements.contains(entry.key),
+                      onSelected: (selected) => setState(() {
+                        selected
+                            ? _placements.add(entry.key)
+                            : _placements.remove(entry.key);
+                        _placementsError = null;
+                      }),
+                    ),
+                ],
+              ),
+              if (_placementsError != null)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: AppSpace.xs),
+                    child: Text(
+                      _placementsError!,
+                      style: const TextStyle(color: AppColor.danger),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -1762,6 +1915,10 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
     final selection = _selectionFieldTypes.contains(_type);
     if (selection && _optionSetKey == null) {
       setState(() => _optionSetError = 'Выберите или создайте набор');
+      return;
+    }
+    if (_placements.isEmpty) {
+      setState(() => _placementsError = 'Выберите хотя бы одно размещение');
       return;
     }
     final optionSet = selection
@@ -1791,7 +1948,10 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
         'categoryKey': _category,
         'order': widget.field?['order'] ?? 0,
         'width': _width,
-        'placements': widget.field?['placements'] ?? ['create', 'edit', 'card'],
+        'placements': [
+          for (final key in _fieldPlacementLabels.keys)
+            if (_placements.contains(key)) key,
+        ],
         'options': options.map((option) => option['label']).toList(),
         'optionSetKey': selection ? _optionSetKey : null,
       },
@@ -1802,7 +1962,13 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
   Future<void> _createOptionSet() async {
     final draft = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (_) => const _OptionSetEditorDialog(optionSet: null),
+      builder: (_) => _OptionSetEditorDialog(
+        optionSet: null,
+        initialMultiple: const {
+          'multi_select',
+          'checkbox_group',
+        }.contains(_type),
+      ),
     );
     if (draft == null || !mounted) return;
     setState(() {
@@ -1812,18 +1978,41 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
       _optionSetError = null;
     });
   }
+
+  bool _optionSetMatchesCurrentType(Map<String, dynamic> set) {
+    final expectsMultiple = const {
+      'multi_select',
+      'checkbox_group',
+    }.contains(_type);
+    return (set['multiple'] == true) == expectsMultiple;
+  }
+
+  bool _optionSetMatchesType(String? key) {
+    if (key == null) return true;
+    final set = _optionSets
+        .where((candidate) => candidate['key']?.toString() == key)
+        .firstOrNull;
+    return set == null || _optionSetMatchesCurrentType(set);
+  }
 }
 
 class _CategoryEditorDialog extends StatefulWidget {
-  const _CategoryEditorDialog();
+  const _CategoryEditorDialog({required this.category});
+
+  final Map<String, dynamic>? category;
 
   @override
   State<_CategoryEditorDialog> createState() => _CategoryEditorDialogState();
 }
 
 class _CategoryEditorDialogState extends State<_CategoryEditorDialog> {
-  final _key = TextEditingController();
-  final _label = TextEditingController();
+  late final _key = TextEditingController(
+    text: widget.category?['key']?.toString() ?? '',
+  );
+  late final _label = TextEditingController(
+    text: widget.category?['label']?.toString() ?? '',
+  );
+  late bool _active = widget.category?['active'] != false;
 
   @override
   void dispose() {
@@ -1834,7 +2023,7 @@ class _CategoryEditorDialogState extends State<_CategoryEditorDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Новая категория'),
+    title: Text(widget.category == null ? 'Новая категория' : 'Категория'),
     content: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1845,8 +2034,20 @@ class _CategoryEditorDialogState extends State<_CategoryEditorDialog> {
         const SizedBox(height: AppSpace.sm),
         TextField(
           controller: _key,
+          enabled: widget.category == null,
           decoration: const InputDecoration(labelText: 'Стабильный ключ *'),
         ),
+        if (widget.category != null)
+          SwitchListTile(
+            key: const ValueKey('category-active'),
+            contentPadding: EdgeInsets.zero,
+            value: _active,
+            title: Text(_active ? 'Активна' : 'В архиве'),
+            subtitle: const Text(
+              'Архивировать можно только категорию без активных полей',
+            ),
+            onChanged: (value) => setState(() => _active = value),
+          ),
       ],
     ),
     actions: [
@@ -1862,17 +2063,26 @@ class _CategoryEditorDialogState extends State<_CategoryEditorDialog> {
               !RegExp(r'^[A-Za-z][A-Za-z0-9_-]{0,63}$').hasMatch(key)) {
             return;
           }
-          Navigator.pop(context, {'key': key, 'label': label});
+          Navigator.pop(context, {
+            'key': key,
+            'label': label,
+            'active': _active,
+          });
         },
-        child: const Text('Добавить'),
+        child: Text(widget.category == null ? 'Добавить' : 'Сохранить'),
       ),
     ],
   );
 }
 
 class _OptionSetEditorDialog extends StatefulWidget {
-  const _OptionSetEditorDialog({required this.optionSet});
+  const _OptionSetEditorDialog({
+    required this.optionSet,
+    this.initialMultiple = false,
+  });
+
   final Map<String, dynamic>? optionSet;
+  final bool initialMultiple;
 
   @override
   State<_OptionSetEditorDialog> createState() => _OptionSetEditorDialogState();
@@ -1885,18 +2095,43 @@ class _OptionSetEditorDialogState extends State<_OptionSetEditorDialog> {
   late final _label = TextEditingController(
     text: widget.optionSet?['label']?.toString() ?? '',
   );
-  late final _options = TextEditingController(
-    text: (widget.optionSet?['options'] as List? ?? const [])
-        .map((item) => (item as Map)['label'])
-        .join(', '),
-  );
-  late bool _multiple = widget.optionSet?['multiple'] == true;
+  late final List<_OptionDraft> _options;
+  late bool _multiple = widget.optionSet == null
+      ? widget.initialMultiple
+      : widget.optionSet?['multiple'] == true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    final raw =
+        (widget.optionSet?['options'] as List? ?? const [])
+            .whereType<Map>()
+            .map((option) => Map<String, dynamic>.from(option))
+            .toList()
+          ..sort(
+            (left, right) => ((left['order'] as num?)?.toInt() ?? 0).compareTo(
+              (right['order'] as num?)?.toInt() ?? 0,
+            ),
+          );
+    _options = [
+      for (final option in raw)
+        _OptionDraft(
+          key: option['key']?.toString(),
+          label: option['label']?.toString() ?? '',
+          active: option['active'] != false,
+        ),
+    ];
+    if (_options.isEmpty) _options.add(_OptionDraft());
+  }
 
   @override
   void dispose() {
     _key.dispose();
     _label.dispose();
-    _options.dispose();
+    for (final option in _options) {
+      option.dispose();
+    }
     super.dispose();
   }
 
@@ -1906,9 +2141,9 @@ class _OptionSetEditorDialogState extends State<_OptionSetEditorDialog> {
       widget.optionSet == null ? 'Новый набор вариантов' : 'Набор вариантов',
     ),
     content: SizedBox(
-      width: 480,
+      width: 560,
+      height: 520,
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
           TextField(
             controller: _label,
@@ -1920,19 +2155,99 @@ class _OptionSetEditorDialogState extends State<_OptionSetEditorDialog> {
             enabled: widget.optionSet == null,
             decoration: const InputDecoration(labelText: 'Стабильный ключ *'),
           ),
-          const SizedBox(height: AppSpace.sm),
-          TextField(
-            controller: _options,
-            decoration: const InputDecoration(
-              labelText: 'Варианты через запятую *',
-            ),
-          ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             value: _multiple,
             title: const Text('Можно выбрать несколько'),
             onChanged: (v) => setState(() => _multiple = v),
           ),
+          const Divider(),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Варианты',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
+              TextButton.icon(
+                key: const ValueKey('option-set-add-option'),
+                onPressed: () => setState(() {
+                  _options.add(_OptionDraft());
+                  _error = null;
+                }),
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('Добавить'),
+              ),
+            ],
+          ),
+          Expanded(
+            child: ListView.builder(
+              itemCount: _options.length,
+              itemBuilder: (context, index) {
+                final option = _options[index];
+                return Padding(
+                  key: option.identity,
+                  padding: const EdgeInsets.only(bottom: AppSpace.xs),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: option.label,
+                          decoration: InputDecoration(
+                            labelText: 'Вариант ${index + 1} *',
+                            helperText: option.active ? null : 'В архиве',
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Выше',
+                        onPressed: index == 0
+                            ? null
+                            : () => _moveOption(index, -1),
+                        icon: const Icon(Icons.arrow_upward_rounded),
+                      ),
+                      IconButton(
+                        tooltip: 'Ниже',
+                        onPressed: index == _options.length - 1
+                            ? null
+                            : () => _moveOption(index, 1),
+                        icon: const Icon(Icons.arrow_downward_rounded),
+                      ),
+                      IconButton(
+                        tooltip: option.active
+                            ? 'Архивировать вариант'
+                            : 'Вернуть вариант',
+                        onPressed: () => setState(() {
+                          option.active = !option.active;
+                          _error = null;
+                        }),
+                        icon: Icon(
+                          option.active
+                              ? Icons.archive_outlined
+                              : Icons.unarchive_outlined,
+                        ),
+                      ),
+                      if (option.key == null)
+                        IconButton(
+                          tooltip: 'Удалить новый вариант',
+                          onPressed: () => _removeNewOption(index),
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+          if (_error != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                _error!,
+                style: const TextStyle(color: AppColor.danger),
+              ),
+            ),
         ],
       ),
     ),
@@ -1948,16 +2263,18 @@ class _OptionSetEditorDialogState extends State<_OptionSetEditorDialog> {
   void _submit() {
     final key = _key.text.trim();
     final label = _label.text.trim();
-    final labels = _options.text
-        .split(',')
-        .map((item) => item.trim())
-        .where((item) => item.isNotEmpty)
-        .toList();
+    final labels = _options.map((option) => option.label.text.trim()).toList();
     if (!RegExp(r'^[A-Za-z][A-Za-z0-9_-]{0,63}$').hasMatch(key) ||
         label.isEmpty ||
-        labels.isEmpty) {
+        labels.isEmpty ||
+        labels.any((value) => value.isEmpty) ||
+        !_options.any((option) => option.active)) {
+      setState(() {
+        _error = 'Заполните все варианты и оставьте хотя бы один активным.';
+      });
       return;
     }
+    final usedKeys = <String>{};
     Navigator.pop(context, <String, dynamic>{
       'key': key,
       'label': label,
@@ -1965,14 +2282,66 @@ class _OptionSetEditorDialogState extends State<_OptionSetEditorDialog> {
       'options': [
         for (var i = 0; i < labels.length; i++)
           {
-            'key': _stableOptionKey(labels[i], i),
+            'key': _optionKey(_options[i].key, labels[i], i, usedKeys),
             'label': labels[i],
             'order': i,
-            'active': true,
+            'active': _options[i].active,
           },
       ],
     });
   }
+
+  void _moveOption(int from, int delta) {
+    final to = from + delta;
+    if (to < 0 || to >= _options.length) return;
+    setState(() {
+      final moved = _options.removeAt(from);
+      _options.insert(to, moved);
+    });
+  }
+
+  void _removeNewOption(int index) {
+    setState(() {
+      final removed = _options.removeAt(index);
+      removed.dispose();
+      if (_options.isEmpty) _options.add(_OptionDraft());
+      _error = null;
+    });
+  }
+}
+
+class _OptionDraft {
+  _OptionDraft({this.key, String label = '', this.active = true})
+    : label = TextEditingController(text: label),
+      identity = UniqueKey();
+
+  final String? key;
+  final TextEditingController label;
+  final Key identity;
+  bool active;
+
+  void dispose() => label.dispose();
+}
+
+String _optionKey(
+  String? existing,
+  String label,
+  int index,
+  Set<String> usedKeys,
+) {
+  if (existing != null && existing.isNotEmpty) {
+    usedKeys.add(existing);
+    return existing;
+  }
+  final base = _stableOptionKey(label, index);
+  var candidate = base;
+  for (var suffix = 2; usedKeys.contains(candidate); suffix++) {
+    final tail = '_$suffix';
+    candidate =
+        '${base.substring(0, base.length.clamp(0, 64 - tail.length))}$tail';
+  }
+  usedKeys.add(candidate);
+  return candidate;
 }
 
 Map<String, dynamic> _copyMap(Object? value) {

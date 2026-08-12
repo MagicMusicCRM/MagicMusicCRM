@@ -13,10 +13,13 @@ import '../../../../core/widgets/v7/v7.dart';
 import 'teacher_detail_dialog.dart';
 import 'staff_detail_dialog.dart';
 import 'group_detail_dialog.dart';
+import 'group_lifecycle_dialog.dart';
 import 'create_employee_dialog.dart';
 import 'create_group_dialog.dart';
 import 'create_teacher_dialog.dart';
 import 'branch_form_dialog.dart';
+import 'branch_lifecycle_dialog.dart';
+import 'reference_catalog_settings.dart';
 import 'data_quality_widget.dart';
 import 'deletion_requests_widget.dart';
 import 'schedule_reference_settings.dart';
@@ -39,9 +42,14 @@ class SystemSettingsRouteScreen extends ConsumerWidget {
         title: const Text('Настройки системы'),
       ),
       body: access.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, _) =>
-            const Center(child: Text('Не удалось проверить доступ.')),
+        loading: () => const MagicPageState.loading(),
+        error: (_, _) => MagicPageState(
+          kind: MagicPageStateKind.error,
+          title: 'Не удалось проверить доступ',
+          message: 'Проверьте подключение и повторите попытку.',
+          actionLabel: 'Повторить',
+          onAction: () => ref.invalidate(capabilitySnapshotProvider),
+        ),
         data: (snapshot) =>
             snapshot.allows('system.settings.manage') ||
                 snapshot.allows('config.crm.read')
@@ -49,8 +57,30 @@ class SystemSettingsRouteScreen extends ConsumerWidget {
                 role: snapshot.role,
                 initialArea: initialArea,
               )
-            : const Center(child: Text('Недостаточно прав для настроек.')),
+            : const MagicPageState(
+                kind: MagicPageStateKind.forbidden,
+                title: 'Нет доступа к настройкам',
+                message: 'Обратитесь к директору для проверки ваших прав.',
+              ),
       ),
+    );
+  }
+}
+
+class _EntityLoadError extends StatelessWidget {
+  const _EntityLoadError({required this.title, required this.onRetry});
+
+  final String title;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return MagicPageState(
+      kind: MagicPageStateKind.error,
+      title: title,
+      message: 'Проверьте подключение и повторите загрузку.',
+      actionLabel: 'Повторить',
+      onAction: onRetry,
     );
   }
 }
@@ -64,14 +94,19 @@ final entitiesProvider =
 
       if (table == 'teachers') {
         return crm.listTeachers(limit: 100);
-      } else if (table == 'groups') {
-        return crm.listGroups(limit: 100);
+      } else if (table == 'groups' || table == 'groups:all') {
+        return crm.listGroups(
+          limit: 100,
+          includeArchived: table.endsWith(':all'),
+        );
       } else if (table == 'rooms') {
         return crm.listRooms(limit: 100);
       } else if (table == 'employees') {
         return crm.listStaff(limit: 100);
       } else if (table == 'branches') {
         return crm.listBranches(limit: 100);
+      } else if (table == 'branches:all') {
+        return crm.listBranches(limit: 100, includeArchived: true);
       } else if (table == 'subscription_packages' ||
           table == 'subscription_packages:all') {
         return crm.listSubscriptionPackages(
@@ -86,6 +121,16 @@ final entitiesProvider =
 void invalidateSubscriptionPackageCatalog(WidgetRef ref) {
   ref.invalidate(entitiesProvider('subscription_packages'));
   ref.invalidate(entitiesProvider('subscription_packages:all'));
+}
+
+void invalidateBranchCatalog(WidgetRef ref) {
+  ref.invalidate(entitiesProvider('branches'));
+  ref.invalidate(entitiesProvider('branches:all'));
+}
+
+void invalidateGroupCatalog(WidgetRef ref) {
+  ref.invalidate(entitiesProvider('groups'));
+  ref.invalidate(entitiesProvider('groups:all'));
 }
 
 final teacherSearchProvider =
@@ -237,6 +282,9 @@ class _SystemSettingsWorkspaceState
         canCreateBranch:
             canEdit &&
             (snapshot.role == 'director' || snapshot.role == 'system_admin'),
+        canManageLifecycle:
+            canEdit &&
+            (snapshot.role == 'director' || snapshot.role == 'system_admin'),
       ),
       'schedule' => _ScheduleSettings(
         canEditReferences: canEdit,
@@ -257,7 +305,12 @@ class _SystemSettingsWorkspaceState
         initialSearch: widget.initialUserSearch,
         canCreatePeople: snapshot.allows('crm.client.write'),
       ),
-      'data' => const _DataSettings(),
+      'data' => _DataSettings(
+        canManageDeletion:
+            snapshot.role == 'admin' ||
+            snapshot.role == 'director' ||
+            snapshot.role == 'system_admin',
+      ),
       _ => const SizedBox.shrink(),
     };
   }
@@ -281,6 +334,7 @@ enum _ScheduleSettingsView { branchHours, teacherSchedules, groups }
 class _ScheduleSettingsState extends State<_ScheduleSettings> {
   final _search = TextEditingController();
   _ScheduleSettingsView _view = _ScheduleSettingsView.branchHours;
+  bool _showArchivedGroups = false;
 
   @override
   void dispose() {
@@ -291,7 +345,9 @@ class _ScheduleSettingsState extends State<_ScheduleSettings> {
   Future<void> _createGroup() async {
     final saved = await showCreateGroupSurface(context);
     if (saved == true && mounted) {
-      ProviderScope.containerOf(context).invalidate(entitiesProvider('groups'));
+      final container = ProviderScope.containerOf(context);
+      container.invalidate(entitiesProvider('groups'));
+      container.invalidate(entitiesProvider('groups:all'));
     }
   }
 
@@ -353,17 +409,32 @@ class _ScheduleSettingsState extends State<_ScheduleSettings> {
               ),
               if (groups) ...[
                 const SizedBox(height: 12),
-                SizedBox(
-                  width: 420,
-                  child: TextField(
-                    controller: _search,
-                    onChanged: (_) => setState(() {}),
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      prefixIcon: Icon(Icons.search_rounded),
-                      labelText: 'Поиск группы',
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 420,
+                      child: TextField(
+                        controller: _search,
+                        onChanged: (_) => setState(() {}),
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          prefixIcon: Icon(Icons.search_rounded),
+                          labelText: 'Поиск группы',
+                        ),
+                      ),
                     ),
-                  ),
+                    FilterChip(
+                      selected: _showArchivedGroups,
+                      onSelected: (value) {
+                        setState(() => _showArchivedGroups = value);
+                      },
+                      avatar: const Icon(Icons.archive_outlined, size: 18),
+                      label: const Text('Показывать завершённые'),
+                    ),
+                  ],
                 ),
               ],
             ],
@@ -383,6 +454,8 @@ class _ScheduleSettingsState extends State<_ScheduleSettings> {
             ),
             _ScheduleSettingsView.groups => _GroupsList(
               searchQuery: _search.text,
+              includeArchived: _showArchivedGroups,
+              canManageLifecycle: widget.canManageGroups,
             ),
           },
         ),
@@ -419,10 +492,7 @@ class _UsersSettingsState extends State<_UsersSettings> {
   Future<void> _create() async {
     bool? saved;
     if (_section == 'staff') {
-      saved = await showCreateEmployeeSurface(
-        context,
-        currentRole: widget.currentRole,
-      );
+      saved = await showCreateEmployeeSurface(context);
     } else if (_section == 'teachers') {
       saved = await showCreateTeacherSurface(context);
     }
@@ -525,10 +595,12 @@ class _OrganizationSettings extends ConsumerStatefulWidget {
   const _OrganizationSettings({
     required this.canEdit,
     required this.canCreateBranch,
+    required this.canManageLifecycle,
   });
 
   final bool canEdit;
   final bool canCreateBranch;
+  final bool canManageLifecycle;
 
   @override
   ConsumerState<_OrganizationSettings> createState() =>
@@ -537,6 +609,8 @@ class _OrganizationSettings extends ConsumerStatefulWidget {
 
 class _OrganizationSettingsState extends ConsumerState<_OrganizationSettings> {
   final _search = TextEditingController();
+  String _section = 'branches';
+  bool _showArchived = false;
 
   @override
   void dispose() {
@@ -550,20 +624,23 @@ class _OrganizationSettingsState extends ConsumerState<_OrganizationSettings> {
       builder: (_) => const BranchFormDialog(),
     );
     if (saved == true) {
-      ref.invalidate(entitiesProvider('branches'));
+      invalidateBranchCatalog(ref);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final branches = _section == 'branches';
     return Column(
       children: [
         _SettingsToolbar(
-          title: 'Организация',
-          subtitle: widget.canEdit
-              ? 'Филиалы; аудитории настраиваются внутри филиала'
-              : 'Только просмотр назначенных филиалов',
-          action: widget.canCreateBranch
+          title: branches ? 'Организация' : 'Организационные справочники',
+          subtitle: branches
+              ? widget.canEdit
+                    ? 'Филиалы; аудитории и дисциплины настраиваются внутри филиала'
+                    : 'Только просмотр назначенных филиалов'
+              : 'Дисциплины школы и причины отказа в CRM',
+          action: branches && widget.canCreateBranch
               ? FilledButton.icon(
                   onPressed: _create,
                   icon: const Icon(Icons.add_rounded),
@@ -573,47 +650,105 @@ class _OrganizationSettingsState extends ConsumerState<_OrganizationSettings> {
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _search,
-                  onChanged: (_) => setState(() {}),
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    prefixIcon: Icon(Icons.search_rounded),
-                    labelText: 'Поиск по названию',
-                  ),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(
+                  value: 'branches',
+                  label: Text('Филиалы'),
+                  icon: Icon(Icons.apartment_rounded),
                 ),
-              ),
-            ],
+                ButtonSegment(
+                  value: 'references',
+                  label: Text('Справочники'),
+                  icon: Icon(Icons.library_books_outlined),
+                ),
+              ],
+              selected: {_section},
+              onSelectionChanged: (value) {
+                setState(() => _section = value.first);
+              },
+            ),
           ),
         ),
-        Expanded(
-          child: _BranchesList(
-            searchQuery: _search.text,
-            canEdit: widget.canEdit,
+        if (branches)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _search,
+                    onChanged: (_) => setState(() {}),
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      prefixIcon: Icon(Icons.search_rounded),
+                      labelText: 'Поиск по названию',
+                    ),
+                  ),
+                ),
+                if (widget.canManageLifecycle) ...[
+                  const SizedBox(width: 12),
+                  FilterChip(
+                    selected: _showArchived,
+                    onSelected: (value) =>
+                        setState(() => _showArchived = value),
+                    avatar: const Icon(Icons.archive_outlined, size: 18),
+                    label: const Text('Показать архив'),
+                  ),
+                ],
+              ],
+            ),
           ),
+        Expanded(
+          child: branches
+              ? _BranchesList(
+                  searchQuery: _search.text,
+                  canEdit: widget.canEdit,
+                  canManageLifecycle: widget.canManageLifecycle,
+                  includeArchived: _showArchived,
+                )
+              : ReferenceCatalogSettings(canEdit: widget.canManageLifecycle),
         ),
       ],
     );
   }
 }
 
-class _SalesSettings extends ConsumerWidget {
+class _SalesSettings extends ConsumerStatefulWidget {
   const _SalesSettings({required this.canEdit});
 
   final bool canEdit;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_SalesSettings> createState() => _SalesSettingsState();
+}
+
+class _SalesSettingsState extends ConsumerState<_SalesSettings> {
+  bool _showArchived = false;
+
+  @override
+  Widget build(BuildContext context) {
     return Column(
       children: [
         _SettingsToolbar(
           title: 'Продажи и оплаты',
           subtitle: 'Каталог абонементов',
-          action: canEdit
-              ? FilledButton.icon(
+          action: Wrap(
+            spacing: 10,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              FilterChip(
+                key: const ValueKey('subscription-packages-archive-filter'),
+                selected: _showArchived,
+                onSelected: (value) => setState(() => _showArchived = value),
+                avatar: const Icon(Icons.archive_outlined, size: 18),
+                label: const Text('Показать архив'),
+              ),
+              if (widget.canEdit)
+                FilledButton.icon(
                   onPressed: () async {
                     if (await showPackageSheet(context, ref) == true) {
                       invalidateSubscriptionPackageCatalog(ref);
@@ -621,11 +756,16 @@ class _SalesSettings extends ConsumerWidget {
                   },
                   icon: const Icon(Icons.add_rounded),
                   label: const Text('Новый абонемент'),
-                )
-              : null,
+                ),
+            ],
+          ),
         ),
         Expanded(
-          child: _PackagesList(searchQuery: '', canEdit: canEdit),
+          child: _PackagesList(
+            searchQuery: '',
+            canEdit: widget.canEdit,
+            includeArchived: _showArchived,
+          ),
         ),
       ],
     );
@@ -633,19 +773,21 @@ class _SalesSettings extends ConsumerWidget {
 }
 
 class _DataSettings extends StatelessWidget {
-  const _DataSettings();
+  const _DataSettings({required this.canManageDeletion});
+
+  final bool canManageDeletion;
 
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 2,
       child: Column(
-        children: const [
-          _SettingsToolbar(
+        children: [
+          const _SettingsToolbar(
             title: 'Данные и обслуживание',
             subtitle: 'Контроль качества и запросы на удаление',
           ),
-          TabBar(
+          const TabBar(
             tabs: [
               Tab(text: 'Качество данных'),
               Tab(text: 'Запросы на удаление'),
@@ -653,7 +795,10 @@ class _DataSettings extends StatelessWidget {
           ),
           Expanded(
             child: TabBarView(
-              children: [DataQualityWidget(), DeletionRequestsWidget()],
+              children: [
+                const DataQualityWidget(),
+                DeletionRequestsWidget(canManage: canManageDeletion),
+              ],
             ),
           ),
         ],

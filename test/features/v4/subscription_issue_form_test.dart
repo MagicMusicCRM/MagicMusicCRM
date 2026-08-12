@@ -67,14 +67,16 @@ const _payerId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 SubscriptionPurchasePreview _preview({
   String payerId = _recipientId,
   SubscriptionFundingMode mode = SubscriptionFundingMode.personalAccount,
+  BigInt? finalPriceMinor,
 }) => SubscriptionPurchasePreview(
   recipientStudentId: _recipientId,
   payerStudentId: payerId,
   fundingMode: mode,
   currencyCode: 'RUB',
-  finalPriceMinor: BigInt.from(640000),
+  finalPriceMinor: finalPriceMinor ?? BigInt.from(640000),
   payerBalanceMinor: BigInt.from(800000),
-  balanceAfterMinor: BigInt.from(160000),
+  balanceAfterMinor:
+      BigInt.from(800000) - (finalPriceMinor ?? BigInt.from(640000)),
   canCommit: true,
   shortageMinor: BigInt.zero,
   previewToken: 'signed-preview',
@@ -301,5 +303,74 @@ void main() {
     await _tap(tester, find.byKey(const Key('subscription-issue-submit')));
     expect(previews, 1);
     expect(find.text('Петров Пётр'), findsWidgets);
+  });
+
+  testWidgets('fixed discount and installment schedule commit exact terms', (
+    tester,
+  ) async {
+    PurchaseSubscriptionInput? previewInput;
+    SubscriptionIssueSubmission? submission;
+    await _openSheet(
+      tester,
+      onPreview: (input) async {
+        previewInput = input;
+        return _preview(
+          mode: input.fundingMode,
+          finalPriceMinor: BigInt.from(700000),
+        );
+      },
+      onSubmit: (value) async => submission = value,
+    );
+    await _tap(tester, find.byKey(const Key('subscription-discount-fixed')));
+    await tester.enterText(
+      find.byKey(const Key('subscription-discount-value')),
+      '1000',
+    );
+    await tester.enterText(
+      find.byKey(const Key('subscription-discount-reason')),
+      'Фиксированная семейная скидка',
+    );
+    await _tap(
+      tester,
+      find.byKey(const Key('subscription-funding-installment')),
+    );
+    tester
+        .widget<DropdownButtonFormField<int>>(
+          find.byKey(const Key('subscription-installment-count')),
+        )
+        .onChanged!(3);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('subscription-installment-preview')),
+      findsOneWidget,
+    );
+
+    await _tap(tester, find.byKey(const Key('subscription-issue-submit')));
+    expect(previewInput, isNotNull);
+    expect(previewInput!.fundingMode, SubscriptionFundingMode.installment);
+    expect(previewInput!.issue.discount!.toJson(), {
+      'type': 'fixed',
+      'fixedMinor': '100000',
+      'reason': 'Фиксированная семейная скидка',
+    });
+    expect(previewInput!.issue.installments, hasLength(3));
+    expect(
+      previewInput!.issue.installments.fold<BigInt>(
+        BigInt.zero,
+        (sum, installment) => sum + installment.amountMinor,
+      ),
+      BigInt.from(700000),
+    );
+    expect(
+      previewInput!.issue.installments
+          .map((installment) => installment.amountMinor)
+          .toList(),
+      [BigInt.from(233334), BigInt.from(233333), BigInt.from(233333)],
+    );
+    expect(find.text('Обязательство'), findsOneWidget);
+
+    await _tap(tester, find.byKey(const Key('subscription-issue-submit')));
+    expect(submission, isNotNull);
+    expect(submission!.purchase.toJson(), previewInput!.toJson());
   });
 }

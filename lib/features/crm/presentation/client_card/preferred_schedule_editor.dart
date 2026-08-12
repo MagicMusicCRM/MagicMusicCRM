@@ -18,6 +18,7 @@ class PreferredScheduleDraft {
     required this.teacherId,
     required this.roomId,
     required this.notes,
+    this.seriesId,
     this.title,
     this.subscriptionId,
     this.settlementTypeKey = '',
@@ -35,6 +36,7 @@ class PreferredScheduleDraft {
   final String teacherId;
   final String roomId;
   final String notes;
+  final String? seriesId;
   final String? title;
   final String? subscriptionId;
   final String settlementTypeKey;
@@ -214,6 +216,7 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
     teacherId: _teacherId ?? '',
     roomId: _roomId ?? '',
     notes: _notesController.text.trim(),
+    seriesId: widget.initialDraft?.seriesId ?? widget.series?['id']?.toString(),
     title: widget.planMode ? _titleController.text.trim() : null,
     subscriptionId: _subscriptionId,
     settlementTypeKey: _settlementTypeKey ?? '',
@@ -435,85 +438,82 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
             ],
           ),
           const SizedBox(height: AppSpace.md),
-          if (widget.showPeriod)
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final fields = [
-                  InkWell(
-                    key: const ValueKey('preferred-schedule-time'),
-                    onTap: _pickTime,
-                    child: InputDecorator(
-                      decoration: const InputDecoration(labelText: 'Время'),
-                      child: Text(_beginTime),
-                    ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final fields = [
+                InkWell(
+                  key: const ValueKey('preferred-schedule-time'),
+                  onTap: _pickTime,
+                  child: InputDecorator(
+                    decoration: const InputDecoration(labelText: 'Время'),
+                    child: Text(_beginTime),
                   ),
-                  DropdownButtonFormField<int>(
-                    menuMaxHeight: 256,
-                    key: const ValueKey('preferred-schedule-duration'),
-                    initialValue: _durationMinutes,
-                    decoration: const InputDecoration(
-                      labelText: 'Длительность',
-                    ),
-                    items: const [30, 45, 60, 90, 120]
-                        .map(
-                          (value) => DropdownMenuItem(
-                            value: value,
-                            child: Text('$value мин'),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      if (value != null) {
-                        _changed(() => _durationMinutes = value);
-                      }
-                    },
+                ),
+                DropdownButtonFormField<int>(
+                  menuMaxHeight: 256,
+                  key: const ValueKey('preferred-schedule-duration'),
+                  initialValue: _durationMinutes,
+                  decoration: const InputDecoration(labelText: 'Длительность'),
+                  items: const [30, 45, 60, 90, 120]
+                      .map(
+                        (value) => DropdownMenuItem(
+                          value: value,
+                          child: Text('$value мин'),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      _changed(() => _durationMinutes = value);
+                    }
+                  },
+                ),
+                DropdownButtonFormField<int>(
+                  menuMaxHeight: 256,
+                  key: const ValueKey('preferred-schedule-lessons-per-day'),
+                  initialValue: _lessonsPerDay,
+                  decoration: const InputDecoration(
+                    labelText: 'Занятий в день',
+                    helperText: 'Идут подряд',
                   ),
-                  DropdownButtonFormField<int>(
-                    menuMaxHeight: 256,
-                    key: const ValueKey('preferred-schedule-lessons-per-day'),
-                    initialValue: _lessonsPerDay,
-                    decoration: const InputDecoration(
-                      labelText: 'Занятий в день',
-                      helperText: 'Идут подряд',
-                    ),
-                    items: const [1, 2, 3, 4]
-                        .map(
-                          (value) => DropdownMenuItem(
-                            value: value,
-                            child: Text('$value'),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: _isEdit
-                        ? null
-                        : (value) {
-                            if (value != null) {
-                              _changed(() => _lessonsPerDay = value);
-                            }
-                          },
-                  ),
-                ];
-                if (constraints.maxWidth < 520) {
-                  return Column(
-                    children: [
-                      for (final field in fields) ...[
-                        field,
-                        const SizedBox(height: AppSpace.md),
-                      ],
-                    ],
-                  );
-                }
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  items: const [1, 2, 3, 4]
+                      .map(
+                        (value) => DropdownMenuItem(
+                          value: value,
+                          child: Text('$value'),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: _isEdit
+                      ? null
+                      : (value) {
+                          if (value != null) {
+                            _changed(() => _lessonsPerDay = value);
+                          }
+                        },
+                ),
+              ];
+              if (constraints.maxWidth < 520) {
+                return Column(
                   children: [
-                    for (var index = 0; index < fields.length; index++) ...[
-                      if (index > 0) const SizedBox(width: AppSpace.sm),
-                      Expanded(child: fields[index]),
+                    for (final field in fields) ...[
+                      field,
+                      const SizedBox(height: AppSpace.md),
                     ],
                   ],
                 );
-              },
-            ),
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (var index = 0; index < fields.length; index++) ...[
+                    if (index > 0) const SizedBox(width: AppSpace.sm),
+                    Expanded(child: fields[index]),
+                  ],
+                ],
+              );
+            },
+          ),
           const SizedBox(height: AppSpace.md),
           SearchablePickerField(
             key: const ValueKey('preferred-schedule-teacher'),
@@ -614,42 +614,44 @@ class _PreferredScheduleEditorState extends State<PreferredScheduleEditor> {
               },
             ),
           ],
-          const SizedBox(height: AppSpace.md),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final start = _dateField(
-                key: const ValueKey('preferred-schedule-start'),
-                label: _isEdit ? 'Применить с даты' : 'Дата начала',
-                value: _validFrom,
-                onTap: () => _pickDate(start: true),
-              );
-              final end = _dateField(
-                key: const ValueKey('preferred-schedule-end'),
-                label: 'Дата окончания',
-                value: _validUntil,
-                onTap: () => _pickDate(start: false),
-              );
-              final fields = [start, if (!_openEnded) end];
-              if (constraints.maxWidth < 520) {
-                return Column(
+          if (widget.showPeriod) ...[
+            const SizedBox(height: AppSpace.md),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final start = _dateField(
+                  key: const ValueKey('preferred-schedule-start'),
+                  label: _isEdit ? 'Применить с даты' : 'Дата начала',
+                  value: _validFrom,
+                  onTap: () => _pickDate(start: true),
+                );
+                final end = _dateField(
+                  key: const ValueKey('preferred-schedule-end'),
+                  label: 'Дата окончания',
+                  value: _validUntil,
+                  onTap: () => _pickDate(start: false),
+                );
+                final fields = [start, if (!_openEnded) end];
+                if (constraints.maxWidth < 520) {
+                  return Column(
+                    children: [
+                      for (var index = 0; index < fields.length; index++) ...[
+                        if (index > 0) const SizedBox(height: AppSpace.md),
+                        fields[index],
+                      ],
+                    ],
+                  );
+                }
+                return Row(
                   children: [
                     for (var index = 0; index < fields.length; index++) ...[
-                      if (index > 0) const SizedBox(height: AppSpace.md),
-                      fields[index],
+                      if (index > 0) const SizedBox(width: AppSpace.sm),
+                      Expanded(child: fields[index]),
                     ],
                   ],
                 );
-              }
-              return Row(
-                children: [
-                  for (var index = 0; index < fields.length; index++) ...[
-                    if (index > 0) const SizedBox(width: AppSpace.sm),
-                    Expanded(child: fields[index]),
-                  ],
-                ],
-              );
-            },
-          ),
+              },
+            ),
+          ],
           if (widget.showPeriod && widget.allowOpenEnded) ...[
             const SizedBox(height: AppSpace.sm),
             SwitchListTile.adaptive(

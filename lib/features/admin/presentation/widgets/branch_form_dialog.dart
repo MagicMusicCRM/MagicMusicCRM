@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/create_room_dialog.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/room_lifecycle_dialog.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/reference_catalog_lifecycle_dialog.dart';
 
 String _utcOffsetLabel(int minutes) {
   final sign = minutes >= 0 ? '+' : '-';
@@ -30,13 +32,25 @@ class BranchFormDialog extends ConsumerStatefulWidget {
 }
 
 class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
+  static const _dayNames = <int, String>{
+    1: 'Понедельник',
+    2: 'Вторник',
+    3: 'Среда',
+    4: 'Четверг',
+    5: 'Пятница',
+    6: 'Суббота',
+    7: 'Воскресенье',
+  };
+
   final _nameController = TextEditingController();
   final _addressController = TextEditingController();
+  final Map<int, Map<String, dynamic>> _weeklyHours = {};
   int _utcOffsetMinutes = 180;
   bool _saving = false;
   bool _loadingRooms = false;
   String? _roomsError;
   List<Map<String, dynamic>> _rooms = const [];
+  bool _showArchivedRooms = false;
   bool _loadingDisciplines = false;
   String? _disciplinesError;
   List<Map<String, dynamic>> _disciplines = const [];
@@ -70,7 +84,7 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
     try {
       final rooms = await ref
           .read(magicCrmServiceProvider)
-          .listRooms(branchId: id);
+          .listRooms(branchId: id, includeArchived: _showArchivedRooms);
       if (!mounted) return;
       setState(() {
         _rooms = rooms;
@@ -99,6 +113,14 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
     if (saved == true) await _loadRooms();
   }
 
+  Future<void> _openRoomLifecycle(Map<String, dynamic> room) async {
+    final changed = await showDialog<bool>(
+      context: context,
+      builder: (_) => RoomLifecycleDialog(room: room),
+    );
+    if (changed == true) await _loadRooms();
+  }
+
   Future<void> _loadDisciplines() async {
     final id = widget.branch?['id']?.toString();
     if (id == null || id.isEmpty) return;
@@ -109,7 +131,7 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
     try {
       final crm = ref.read(magicCrmServiceProvider);
       final values = await Future.wait([
-        crm.listBranchDisciplines(id),
+        crm.listBranchDisciplines(id, includeArchived: true),
         crm.listDisciplines(),
       ]);
       if (!mounted) return;
@@ -170,6 +192,17 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
     }
   }
 
+  Future<void> _openDisciplineLifecycle(Map<String, dynamic> discipline) async {
+    final changed = await showDialog<bool>(
+      context: context,
+      builder: (_) => ReferenceCatalogLifecycleDialog(
+        entityType: 'branch_discipline',
+        item: discipline,
+      ),
+    );
+    if (changed == true) await _loadDisciplines();
+  }
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -185,6 +218,28 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
       ).showSnackBar(const SnackBar(content: Text('Введите название филиала')));
       return;
     }
+    if (widget.branch == null && _weeklyHours.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Укажите рабочие часы хотя бы для одного дня'),
+        ),
+      );
+      return;
+    }
+    if (_weeklyHours.values.any(
+      (value) =>
+          (value['open']?.toString() ?? '').compareTo(
+            value['close']?.toString() ?? '',
+          ) >=
+          0,
+    )) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Время закрытия должно быть позже времени открытия'),
+        ),
+      );
+      return;
+    }
 
     setState(() => _saving = true);
     try {
@@ -196,6 +251,16 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
           name: name,
           address: address.isEmpty ? null : address,
           utcOffsetMinutes: _utcOffsetMinutes,
+          weeklyHours: [
+            for (final entry
+                in _weeklyHours.entries.toList()
+                  ..sort((a, b) => a.key.compareTo(b.key)))
+              {
+                'weekday': entry.key,
+                'open': entry.value['open'],
+                'close': entry.value['close'],
+              },
+          ],
         );
       } else {
         final id = widget.branch!['id']?.toString();
@@ -217,6 +282,87 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Future<String?> _pickTime(String current) async {
+    final parts = current.split(':').map(int.tryParse).toList();
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(
+        hour: parts.firstOrNull ?? 9,
+        minute: parts.elementAtOrNull(1) ?? 0,
+      ),
+    );
+    return picked == null
+        ? null
+        : '${picked.hour.toString().padLeft(2, '0')}:'
+              '${picked.minute.toString().padLeft(2, '0')}';
+  }
+
+  Widget _workingHoursEditor() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Рабочие часы *',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 4),
+        const Text('Занятия можно создавать только внутри этого графика.'),
+        const SizedBox(height: 8),
+        for (final day in _dayNames.entries)
+          Row(
+            children: [
+              Semantics(
+                label:
+                    '${day.value}: ${_weeklyHours.containsKey(day.key) ? 'включено' : 'выключено'}',
+                toggled: _weeklyHours.containsKey(day.key),
+                child: ExcludeSemantics(
+                  child: Switch(
+                    value: _weeklyHours.containsKey(day.key),
+                    onChanged: (enabled) => setState(() {
+                      if (enabled) {
+                        _weeklyHours[day.key] = {
+                          'open': '09:00',
+                          'close': '21:00',
+                        };
+                      } else {
+                        _weeklyHours.remove(day.key);
+                      }
+                    }),
+                  ),
+                ),
+              ),
+              Expanded(child: Text(day.value)),
+              if (_weeklyHours[day.key] case final hours?) ...[
+                TextButton(
+                  onPressed: () async {
+                    final value = await _pickTime(
+                      hours['open']?.toString() ?? '09:00',
+                    );
+                    if (value != null && mounted) {
+                      setState(() => hours['open'] = value);
+                    }
+                  },
+                  child: Text(hours['open']?.toString() ?? '09:00'),
+                ),
+                const Text('—'),
+                TextButton(
+                  onPressed: () async {
+                    final value = await _pickTime(
+                      hours['close']?.toString() ?? '21:00',
+                    );
+                    if (value != null && mounted) {
+                      setState(() => hours['close'] = value);
+                    }
+                  },
+                  child: Text(hours['close']?.toString() ?? '21:00'),
+                ),
+              ],
+            ],
+          ),
+      ],
+    );
   }
 
   @override
@@ -261,6 +407,10 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
                   if (v != null) setState(() => _utcOffsetMinutes = v);
                 },
               ),
+              if (!isEdit) ...[
+                const SizedBox(height: 20),
+                _workingHoursEditor(),
+              ],
               if (isEdit) ...[
                 const SizedBox(height: 20),
                 Row(
@@ -301,10 +451,21 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
                     runSpacing: 8,
                     children: [
                       for (final discipline in _disciplines)
-                        Chip(
-                          label: Text(
-                            discipline['name']?.toString() ?? 'Дисциплина',
+                        InputChip(
+                          avatar: Icon(
+                            discipline['lifecycle_state'] == 'archived'
+                                ? Icons.restore_rounded
+                                : Icons.school_outlined,
+                            size: 18,
                           ),
+                          label: Text(
+                            '${discipline['name']?.toString() ?? 'Дисциплина'}'
+                            '${discipline['lifecycle_state'] == 'archived' ? ' (в архиве)' : ''}',
+                          ),
+                          tooltip: discipline['lifecycle_state'] == 'archived'
+                              ? 'Восстановить привязку'
+                              : 'Проверить связи и отвязать',
+                          onPressed: () => _openDisciplineLifecycle(discipline),
                         ),
                     ],
                   ),
@@ -317,6 +478,25 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
                         style: TextStyle(fontWeight: FontWeight.w700),
                       ),
                     ),
+                    TextButton.icon(
+                      onPressed: _loadingRooms
+                          ? null
+                          : () {
+                              setState(
+                                () => _showArchivedRooms = !_showArchivedRooms,
+                              );
+                              _loadRooms();
+                            },
+                      icon: Icon(
+                        _showArchivedRooms
+                            ? Icons.visibility_off_outlined
+                            : Icons.inventory_2_outlined,
+                      ),
+                      label: Text(
+                        _showArchivedRooms ? 'Скрыть архив' : 'Архив',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     FilledButton.tonalIcon(
                       onPressed: _openRoom,
                       icon: const Icon(Icons.add_rounded),
@@ -345,13 +525,42 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
                   for (final room in _rooms)
                     ListTile(
                       contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.meeting_room_outlined),
+                      leading: Icon(
+                        room['lifecycle_state'] == 'archived'
+                            ? Icons.inventory_2_outlined
+                            : Icons.meeting_room_outlined,
+                      ),
                       title: Text(room['name']?.toString() ?? 'Аудитория'),
                       subtitle: Text(
-                        'Вместимость: ${room['capacity']?.toString() ?? 'не указана'}',
+                        room['lifecycle_state'] == 'archived'
+                            ? 'В архиве${room['archive_reason'] == null ? '' : ' • ${room['archive_reason']}'}'
+                            : 'Вместимость: ${room['capacity']?.toString() ?? 'не указана'}',
                       ),
-                      trailing: const Icon(Icons.edit_outlined),
-                      onTap: () => _openRoom(room),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (room['lifecycle_state'] != 'archived')
+                            IconButton(
+                              tooltip: 'Редактировать',
+                              onPressed: () => _openRoom(room),
+                              icon: const Icon(Icons.edit_outlined),
+                            ),
+                          IconButton(
+                            tooltip: room['lifecycle_state'] == 'archived'
+                                ? 'Восстановить'
+                                : 'Проверить связи и архивировать',
+                            onPressed: () => _openRoomLifecycle(room),
+                            icon: Icon(
+                              room['lifecycle_state'] == 'archived'
+                                  ? Icons.restore_rounded
+                                  : Icons.archive_outlined,
+                            ),
+                          ),
+                        ],
+                      ),
+                      onTap: room['lifecycle_state'] == 'archived'
+                          ? () => _openRoomLifecycle(room)
+                          : () => _openRoom(room),
                     ),
               ],
             ],

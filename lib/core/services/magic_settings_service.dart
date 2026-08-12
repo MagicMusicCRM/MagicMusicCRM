@@ -25,6 +25,7 @@ const crmCustomFieldTypes = <String, String>{
 };
 
 class CrmCustomFieldDefinition {
+  final String? id;
   final String entity;
   final String key;
   final String label;
@@ -32,8 +33,11 @@ class CrmCustomFieldDefinition {
   final bool required;
   final String? hint;
   final List<String> options;
+  final String width;
+  final List<String> placements;
 
   const CrmCustomFieldDefinition({
+    this.id,
     required this.entity,
     required this.key,
     required this.label,
@@ -41,11 +45,14 @@ class CrmCustomFieldDefinition {
     this.required = false,
     this.hint,
     this.options = const [],
+    this.width = 'full',
+    this.placements = const ['edit', 'card'],
   });
 
   factory CrmCustomFieldDefinition.fromJson(Map<String, dynamic> json) {
     final options = json['options'];
     return CrmCustomFieldDefinition(
+      id: json['id']?.toString(),
       entity: json['entity']?.toString() ?? 'students',
       key: json['key']?.toString() ?? '',
       label: json['label']?.toString() ?? '',
@@ -55,6 +62,29 @@ class CrmCustomFieldDefinition {
       options: options is List
           ? options.map((e) => e.toString()).toList()
           : const [],
+      width: json['width']?.toString() ?? 'full',
+      placements: (json['placements'] as List? ?? const ['edit', 'card'])
+          .map((value) => value.toString())
+          .toList(growable: false),
+    );
+  }
+
+  factory CrmCustomFieldDefinition.fromClientConfig(Map<String, dynamic> json) {
+    final entityType = json['entityType']?.toString() ?? 'student';
+    return CrmCustomFieldDefinition(
+      id: json['id']?.toString(),
+      entity: entityType == 'lead' ? 'leads' : 'students',
+      key: json['key']?.toString() ?? '',
+      label: json['label']?.toString() ?? '',
+      type: json['valueType']?.toString() ?? 'text',
+      required: json['required'] == true,
+      options: (json['options'] as List? ?? const [])
+          .map((value) => value.toString())
+          .toList(growable: false),
+      width: json['width']?.toString() ?? 'full',
+      placements: (json['placements'] as List? ?? const ['edit', 'card'])
+          .map((value) => value.toString())
+          .toList(growable: false),
     );
   }
 

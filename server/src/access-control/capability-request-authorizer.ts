@@ -86,7 +86,8 @@ export async function authorizeCurrentCapability(
     `
       select
         user_account.role,
-        (user_account.deleted_at is null) as active,
+        (user_account.deleted_at is null and user_account.is_app_account = true)
+          as active,
         coalesce(definition.active, false) as definition_active,
         definition.override_mode as definition_override_mode,
         package_entry.effect as role_effect,

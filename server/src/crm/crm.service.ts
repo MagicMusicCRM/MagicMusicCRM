@@ -8,7 +8,11 @@ import {
 } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import { AuditService } from "../audit/audit.service";
-import { branchIdExpr, extractBranchId } from "./branch-scope";
+import {
+  branchIdExpr,
+  extractBranchId,
+  managerBranchScopeSql,
+} from "./branch-scope";
 import {
   rethrowCreatePersonError,
   requiredTrim,
@@ -31,8 +35,15 @@ import {
   presentableEmail,
   toTimelineDto,
 } from "./crm-mappers";
-import { ValidatedStudentCreate } from "./clients/client-write.validator";
-import { saveTypedClientValues } from "./clients/client-config.repository";
+import {
+  ValidatedCustomFields,
+  ValidatedStudentCreate,
+} from "./clients/client-write.validator";
+import {
+  replaceTypedClientValues,
+  saveTypedClientValues,
+  typedClientTableFieldsSql,
+} from "./clients/client-config.repository";
 
 /**
  * Student fields worth an audit entry. Name/phone/email live on
@@ -65,6 +76,7 @@ import { SharedTaskService } from "./tasks/shared-task.service";
 import { ScheduleService } from "./schedule.service";
 import { TimelineService } from "./timeline.service";
 import { StudentFunnelService } from "./student-funnel.service";
+import { assertGroupBranchScope } from "./group-branch-scope";
 
 interface StudentSearchRow extends StudentRow {
   total_count: string | number;
@@ -78,6 +90,7 @@ interface StudentSearchRow extends StudentRow {
   linked_user_email: string | null;
   is_app_account: boolean | null;
   disciplines: { id: string; name: string }[] | null;
+  table_custom_fields: Record<string, unknown>[] | null;
 }
 
 interface GroupRow {
@@ -136,7 +149,9 @@ export class CrmService {
     let openTasks: unknown[] = [];
     if (studentIds.length) {
       [upcomingLessons, openTasks] = await Promise.all([
-        this.schedule.listUpcomingLessonsForStudents(studentIds).catch(() => []),
+        this.schedule
+          .listUpcomingLessonsForStudents(studentIds)
+          .catch(() => []),
         Promise.all(
           studentIds.map((studentId) =>
             this.tasks.list(actor, {
@@ -179,6 +194,11 @@ export class CrmService {
             ${managerAdminRolesSql("$1")}
             or ($1::text = 'teacher' and tp.user_id = $2)
           )
+          and ${managerBranchScopeSql({
+            roleExpression: "$1",
+            userIdExpression: "$2",
+            branchExpression: branchIdExpr("s"),
+          })}
           and (
             $3::text is null
             or lower(coalesce(p.first_name, '') || ' ' || coalesce(p.last_name, '') || ' ' || coalesce(u.email, '')) like lower('%' || $3 || '%')
@@ -200,10 +220,12 @@ export class CrmService {
     const result = await this.database.query<StudentSearchRow>(
       `
         select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
-          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone,
+          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason,
+          ${typedClientTableFieldsSql("student", "s.id")} as table_custom_fields,
+          p.first_name, p.last_name, u.email, p.phone,
           s.created_at, count(*) over() as total_count,
           coalesce(array_remove(array_agg(distinct tp.user_id), null), '{}'::uuid[]) as teacher_user_ids,
-          ${branchIdExpr('s')} as branch_id,
+          ${branchIdExpr("s")} as branch_id,
           b.name as branch_name,
           (
             select count(*)
@@ -255,7 +277,7 @@ export class CrmService {
         left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
         left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
         left join app.branches b
-          on b.id::text = ${branchIdExpr('s')}
+          on b.id::text = ${branchIdExpr("s")}
          and b.deleted_at is null
         left join app.user_crm_links link
           on link.entity_type = 'student'
@@ -279,9 +301,10 @@ export class CrmService {
     return {
       items: page.map((row) => this.toStudentSearchDto(row)),
       totalCount: Number(result.rows[0]?.total_count ?? page.length),
-      nextCursor: hasMore && boundary
-        ? `${new Date(boundary.created_at).toISOString()}|${boundary.id}`
-        : null,
+      nextCursor:
+        hasMore && boundary
+          ? `${new Date(boundary.created_at).toISOString()}|${boundary.id}`
+          : null,
     };
   }
 
@@ -291,10 +314,7 @@ export class CrmService {
     validated?: ValidatedStudentCreate,
   ) {
     this.policy.assertCanWriteCrm(actor);
-    const firstName = requiredTrim(
-      dto.firstName,
-      "Имя ученика обязательно.",
-    );
+    const firstName = requiredTrim(dto.firstName, "Имя ученика обязательно.");
     const lastName = trimOptional(dto.lastName);
     const phone = trimOptional(dto.phone);
     const email = trimOptional(dto.email)?.toLowerCase() ?? null;
@@ -302,9 +322,8 @@ export class CrmService {
     const fullName = [firstName, lastName].filter(Boolean).join(" ");
     const leadId = dto.leadId ?? null;
     const customDataPatch = sanitizeJsonObject(dto.customDataPatch);
-    const requestedResponsibleId = responsibleUserIdFromCustomDataPatch(
-      customDataPatch,
-    );
+    const requestedResponsibleId =
+      responsibleUserIdFromCustomDataPatch(customDataPatch);
     const branchId = extractBranchId(dto.customDataPatch);
 
     if (leadId) {
@@ -333,7 +352,10 @@ export class CrmService {
       // исходная дата HolliHop, у пришедшего через приложение — момент, когда
       // он стал тут лидом. Явное значение от клиента не трогаем.
       if (!customDataPatch[APPEAL_KEY]) {
-        const appeal = resolveAppealDate(leadRow.custom_data, leadRow.created_at);
+        const appeal = resolveAppealDate(
+          leadRow.custom_data,
+          leadRow.created_at,
+        );
         if (appeal.value) customDataPatch[APPEAL_KEY] = appeal.value;
       }
     }
@@ -369,7 +391,7 @@ export class CrmService {
           );
         }
         const inserted = await client.query<StudentRow>(
-        `
+          `
           with identity as (
             select coalesce($3::text, 'student-' || gen_random_uuid()::text || '@local.magicmusiccrm.invalid') as email
           ),
@@ -424,18 +446,18 @@ export class CrmService {
           left join app.lead_sources source on source.id = s.source_id
           limit 1
         `,
-        [
-          firstName,
-          lastName,
-          email,
-          fullName,
-          phone,
-          status,
-          leadId,
-          JSON.stringify(transactionCustomData),
-          branchId,
-          validated?.sourceId ?? null,
-        ],
+          [
+            firstName,
+            lastName,
+            email,
+            fullName,
+            phone,
+            status,
+            leadId,
+            JSON.stringify(transactionCustomData),
+            branchId,
+            validated?.sourceId ?? null,
+          ],
         );
         if (validated) {
           await saveTypedClientValues(
@@ -453,7 +475,12 @@ export class CrmService {
       // Contract 5: creating admin/manager/director becomes «Ответственный»
       // when the card has none. Await before audit/realtime publication.
       if (!requestedResponsibleId) {
-        await ensureResponsibleSafe(this.database, actor, "student", student.id);
+        await ensureResponsibleSafe(
+          this.database,
+          actor,
+          "student",
+          student.id,
+        );
       }
       await this.audit.record({
         actor,
@@ -500,36 +527,31 @@ export class CrmService {
     // the base card finance-free prevents mixed-scope DTOs and cache entries.
     const emptyList = { items: [] as never[] };
 
-    const [
-      groups,
-      lessons,
-      tasks,
-      comments,
-      links,
-      chatWork,
-      fieldAudit,
-    ] = await Promise.all([
-      this.listStudentGroups(actor, studentId, { limit: 100 }),
-      this.schedule.listLessons(actor, { studentId, limit: 100 }),
-      this.tasks.list(actor, {
-        linkedEntityType: "student",
-        linkedEntityId: studentId,
-        limit: 100,
-      }),
-      this.timeline.listComments(actor, {
-        entityType: "student",
-        entityId: studentId,
-        limit: 100,
-      }).catch(() => emptyList),
-      this.listUserCrmLinks("student", studentId),
-      this.listChatWorkTimeline("student", studentId),
-      // Field edits («кто поменял телефон»). Returns empty for non-staff, and
-      // is caught like the other optional sections: a missing audit list must
-      // not take the whole card down.
-      this.timeline
-        .listFieldAudit(actor, "student", studentId, 50)
-        .catch(() => emptyList),
-    ]);
+    const [groups, lessons, tasks, comments, links, chatWork, fieldAudit] =
+      await Promise.all([
+        this.listStudentGroups(actor, studentId, { limit: 100 }),
+        this.schedule.listLessons(actor, { studentId, limit: 100 }),
+        this.tasks.list(actor, {
+          linkedEntityType: "student",
+          linkedEntityId: studentId,
+          limit: 100,
+        }),
+        this.timeline
+          .listComments(actor, {
+            entityType: "student",
+            entityId: studentId,
+            limit: 100,
+          })
+          .catch(() => emptyList),
+        this.listUserCrmLinks("student", studentId),
+        this.listChatWorkTimeline("student", studentId),
+        // Field edits («кто поменял телефон»). Returns empty for non-staff, and
+        // is caught like the other optional sections: a missing audit list must
+        // not take the whole card down.
+        this.timeline
+          .listFieldAudit(actor, "student", studentId, 50)
+          .catch(() => emptyList),
+      ]);
 
     const timeline = [
       ...comments.items.map((comment) => ({
@@ -624,6 +646,7 @@ export class CrmService {
     actor: ActorContext,
     studentId: string,
     dto: UpdateStudentDto,
+    customFields?: ValidatedCustomFields,
   ) {
     this.policy.assertCanWriteCrm(actor);
     const initialCustomData = sanitizeJsonObject(dto.customDataPatch);
@@ -785,6 +808,14 @@ export class CrmService {
           ],
         );
         const updatedStudent = updated.rows[0];
+        if (updatedStudent && customFields) {
+          await replaceTypedClientValues(
+            client,
+            "student",
+            studentId,
+            customFields.values,
+          );
+        }
         if (
           updatedStudent &&
           before &&
@@ -820,6 +851,8 @@ export class CrmService {
               STUDENT_AUDITED_FIELDS,
             )
           : [],
+        customFieldDefinitionIds:
+          customFields?.values.map((value) => value.definitionId) ?? [],
       },
     });
     this.realtime.emitCrmChanged({
@@ -828,7 +861,10 @@ export class CrmService {
       id: student.id,
       branchId: branchId ?? beforeStudent?.branch_id ?? null,
     });
-    return this.toStudentDto(student);
+    return {
+      ...this.toStudentDto(student),
+      ...(customFields ? { warnings: customFields.warnings } : {}),
+    };
   }
 
   async inviteStudent(actor: ActorContext, studentId: string) {
@@ -871,6 +907,7 @@ export class CrmService {
     query: CrmListQuery,
   ) {
     this.policy.assertCanReadOperationalData(actor);
+    await assertGroupBranchScope(this.database, actor, groupId);
     const limit = Math.min(query.limit ?? 100, 100);
     const result = await this.database.query<StudentRow>(
       `
@@ -909,202 +946,26 @@ export class CrmService {
     return { items: result.rows.map((row) => this.toStudentDto(row)) };
   }
 
-  // Soft-delete a student (mirrors deleteLead). Enables a real undo of the
-  // Лид→Ученик drag conversion: «Отменить» removes the just-created student.
+  // Kept temporarily for compatibility with already released clients. Direct
+  // lifecycle reversal is unsafe until it has a dependency preview and an
+  // explicit archival plan for lessons, subscriptions and financial facts.
   async deleteStudent(actor: ActorContext, studentId: string) {
     this.policy.assertCanWriteCrm(actor);
-    const result = await this.database.transaction(async (client) => {
-      const deleted = await client.query<{ id: string }>(
-        `update app.students
-         set deleted_at = now(), updated_at = now()
-         where id = $1 and deleted_at is null
-         returning id`,
-        [studentId],
-      );
-      if (deleted.rows[0]) {
-        await client.query(
-          `update app.user_crm_links
-           set deleted_at = now()
-           where entity_type = 'student' and entity_id = $1
-             and deleted_at is null`,
-          [studentId],
-        );
-      }
-      return deleted;
-    });
-    const row = result.rows[0];
-    if (!row) throw new NotFoundException("Ученик не найден.");
-    await this.audit.record({
-      actor,
-      action: "crm.student_deleted",
-      entityType: "student",
-      entityId: row.id,
-    });
-    this.realtime.emitCrmChanged({
-      entity: "student",
-      action: "deleted",
-      id: row.id,
-    });
-    return { success: true };
+    void studentId;
+    throw new ConflictException(
+      "Прямое удаление ученика отключено. Используйте управляемое архивирование с предварительной проверкой связанных занятий, абонементов и финансовых операций.",
+    );
   }
 
+  // Legacy compatibility guard. The old operation deleted the student while
+  // leaving lessons, subscriptions and financial history without a lifecycle
+  // decision, so it must remain fail-closed until preview/commit exists.
   async returnStudentToLead(actor: ActorContext, studentId: string) {
     this.policy.assertCanWriteCrm(actor);
-    const current = await this.database.query<{
-      id: string;
-      lead_id: string | null;
-      branch_id: string | null;
-      custom_data: Record<string, unknown> | null;
-      first_name: string | null;
-      last_name: string | null;
-      email: string | null;
-      phone: string | null;
-      profile_user_id: string | null;
-    }>(
-      `
-        select s.id, s.lead_id, s.branch_id, s.custom_data,
-          p.first_name, p.last_name, u.email, p.phone,
-          p.user_id as profile_user_id
-        from app.students s
-        left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
-        left join app.users u on u.id = p.user_id and u.deleted_at is null
-        where s.id = $1 and s.deleted_at is null
-        limit 1
-      `,
-      [studentId],
+    void studentId;
+    throw new ConflictException(
+      "Возврат ученика в лиды отключён. Сначала нужен управляемый сценарий с предварительной проверкой занятий, абонементов и финансовых операций.",
     );
-    const student = current.rows[0];
-    if (!student) throw new NotFoundException("Ученик не найден.");
-
-    const returned = await this.database.transaction(async (client) => {
-      let leadId = student.lead_id;
-      let created = false;
-      if (leadId) {
-        const existingLead = await client.query<{ id: string }>(
-          `select id from app.leads where id = $1 and deleted_at is null limit 1`,
-          [leadId],
-        );
-        if (!existingLead.rows[0]) {
-          leadId = null;
-        }
-      }
-
-      if (!leadId) {
-        const statusRow = await client.query<{ id: string }>(
-          `select min(id::text)::uuid as id
-           from app.lead_statuses
-           where lower(btrim(name)) = 'новый'
-           having count(*) = 1`,
-        );
-        const customData = {
-          ...(student.custom_data ?? {}),
-          sourceStudentId: student.id,
-        };
-        const inserted = await client.query<{ id: string }>(
-          `
-            insert into app.leads (
-              status_id, first_name, last_name, phone, email,
-              source, notes, assigned_to, custom_data, created_by, branch_id
-            )
-            values ($1, $2, $3, $4, $5, 'Возврат из ученика', null, null, $6::jsonb, $7, $8)
-            returning id
-          `,
-          [
-            statusRow.rows[0]?.id ?? null,
-            student.first_name,
-            student.last_name,
-            student.phone,
-            student.email,
-            JSON.stringify(customData),
-            actor.userId,
-            student.branch_id,
-          ],
-        );
-        leadId = inserted.rows[0].id;
-        created = true;
-      }
-
-      await client.query(
-        `
-          update app.students
-          set deleted_at = now(), updated_at = now()
-          where id = $1 and deleted_at is null
-        `,
-        [student.id],
-      );
-      const linkedUser = await client.query<{
-        user_id: string;
-        matched_phone: string | null;
-      }>(
-        `select candidate.user_id, candidate.matched_phone
-         from (
-           select link.user_id, link.matched_phone, 0 as priority
-           from app.user_crm_links link
-           where link.entity_type = 'student' and link.entity_id = $1
-             and link.deleted_at is null
-           union all
-           select $2::uuid, null::text, 1
-           where $2::uuid is not null
-         ) candidate
-         order by candidate.priority
-         limit 1`,
-        [student.id, student.profile_user_id],
-      );
-      await client.query(
-        `update app.user_crm_links
-         set deleted_at = now()
-         where entity_type = 'student' and entity_id = $1
-           and deleted_at is null`,
-        [student.id],
-      );
-      if (linkedUser.rows[0]) {
-        await client.query(
-          `insert into app.user_crm_links (
-             user_id, entity_type, entity_id, matched_phone,
-             link_source, created_by, confirmed_at
-           )
-           values ($1, 'lead', $2, $3, 'manual_phone', $4, now())
-           on conflict (entity_type, entity_id) where deleted_at is null
-           do nothing`,
-          [
-            linkedUser.rows[0].user_id,
-            leadId,
-            linkedUser.rows[0].matched_phone,
-            actor.userId,
-          ],
-        );
-      }
-      return { leadId, created };
-    });
-
-    await this.audit.record({
-      actor,
-      action: "crm.student_returned_to_lead",
-      entityType: "student",
-      entityId: student.id,
-      metadata: {
-        leadId: returned.leadId,
-        createdLead: returned.created,
-      },
-    });
-    this.realtime.emitCrmChanged({
-      entity: "student",
-      action: "deleted",
-      id: student.id,
-      branchId: student.branch_id ?? null,
-    });
-    this.realtime.emitCrmChanged({
-      entity: "lead",
-      action: returned.created ? "created" : "updated",
-      id: returned.leadId,
-      branchId: student.branch_id ?? null,
-    });
-    return {
-      success: true,
-      studentId: student.id,
-      leadId: returned.leadId,
-      createdLead: returned.created,
-    };
   }
 
   private buildStudentSearchFilter(
@@ -1125,6 +986,13 @@ export class CrmService {
         or (${role}::text = 'teacher' and tp.user_id = ${userId})
       )
     `);
+    filters.push(
+      managerBranchScopeSql({
+        roleExpression: role,
+        userIdExpression: userId,
+        branchExpression: branchIdExpr("s"),
+      }),
+    );
 
     const q = query.q?.trim();
     let searchRank: string | null = null;
@@ -1145,14 +1013,12 @@ export class CrmService {
     }
     if (query.branchId) {
       const p = add(query.branchId);
-      filters.push(
-        `${branchIdExpr('s')} = ${p}::text`,
-      );
+      filters.push(`${branchIdExpr("s")} = ${p}::text`);
     }
     // «Без филиала» board: students with no branch on the FK column nor any
     // legacy custom_data branch key. Mutually exclusive with branchId in practice.
     if (query.noBranch) {
-      filters.push(`${branchIdExpr('s')} is null`);
+      filters.push(`${branchIdExpr("s")} is null`);
     }
     if (query.groupId) {
       filters.push(`
@@ -1425,6 +1291,7 @@ export class CrmService {
       linkedUserEmail: row.linked_user_email,
       isAppAccount: row.is_app_account ?? false,
       disciplines: row.disciplines ?? [],
+      tableFields: row.table_custom_fields ?? [],
     };
   }
 
@@ -1454,5 +1321,4 @@ export class CrmService {
     const numeric = Number(value);
     return Number.isFinite(numeric) ? numeric : 0;
   }
-
 }

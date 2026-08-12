@@ -9,17 +9,53 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
+import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/create_lesson_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision_flow.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_conflicts_api.dart';
 
 const _teacherId = '22222222-2222-2222-2222-222222222222';
+const _replacementTeacherId = '22222222-2222-4222-8222-222222222223';
+const _inactiveTeacherId = '22222222-2222-4222-8222-222222222224';
+const _foreignTeacherId = '22222222-2222-4222-8222-222222222225';
 const _studentId = '33333333-3333-3333-3333-333333333333';
 const _leadId = '77777777-7777-7777-7777-777777777777';
 const _branchId = '11111111-1111-1111-1111-111111111111';
 const _roomId = '55555555-5555-5555-5555-555555555555';
+const _replacementRoomId = '55555555-5555-4555-8555-555555555556';
+const _foreignRoomId = '55555555-5555-4555-8555-555555555557';
+const _foreignBranchId = '11111111-1111-4111-8111-111111111112';
 const _conflictId = '44444444-4444-4444-4444-444444444444';
+const _groupId = '88888888-8888-4888-8888-888888888888';
 
 Map<String, dynamic> _freePreview() => {'valid': true, 'violations': const []};
+
+Map<String, dynamic> _editableLesson({bool group = false}) => {
+  'id': '66666666-6666-6666-6666-666666666666',
+  'version': 7,
+  if (group) ...{
+    'group_id': _groupId,
+    'group_name': 'Ансамбль Север',
+    'group_participants': const [
+      {'clientId': _studentId, 'clientName': 'Иван Прилежный'},
+    ],
+  } else ...{
+    'student_id': _studentId,
+    'student_name': 'Иван Прилежный',
+  },
+  'teacher_id': _teacherId,
+  'branch_id': _branchId,
+  'room_id': _roomId,
+  'scheduled_at': '2026-07-18T07:00:00.000Z',
+  'duration_minutes': 60,
+  'is_trial': true,
+  'snapshot_trial': true,
+  'completion_type': 'custom.success',
+  'client_charge_type': group ? 'personal_account' : 'none',
+  'client_charge_value': group ? 800 : 0,
+  'teacher_compensation_type': 'none',
+  'teacher_compensation_value': 0,
+};
 
 Map<String, dynamic> _busyPreview() => {
   'valid': false,
@@ -50,12 +86,19 @@ class _FakeApiClient extends MagicApiClient {
     this.preview,
     this.createError,
     this.subscriptions = const [],
+    this.decisionCatalog,
+    this.decisionViolations = const [],
+    this.teacherCurrentRate,
   }) : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   Map<String, dynamic>? preview;
   MagicApiException? createError;
   final List<Map<String, dynamic>> subscriptions;
+  final Map<String, dynamic>? decisionCatalog;
+  final List<Map<String, dynamic>> decisionViolations;
+  final num? teacherCurrentRate;
   Completer<void>? createGate;
+  final constraintPreviews = <Map<String, dynamic>>[];
   final lessonPosts = <Map<String, dynamic>>[];
   final decisionPreviews = <Map<String, dynamic>>[];
   final decisionCommits = <Map<String, dynamic>>[];
@@ -76,8 +119,37 @@ class _FakeApiClient extends MagicApiClient {
                   'firstName': 'Пётр',
                   'lastName': 'Педагогов',
                   'status': 'active',
+                  if (teacherCurrentRate != null)
+                    'currentRate': teacherCurrentRate,
                   'assignedBranches': const [
                     {'id': _branchId, 'name': 'Главный филиал'},
+                  ],
+                },
+                {
+                  'id': _replacementTeacherId,
+                  'firstName': 'Мария',
+                  'lastName': 'Сменова',
+                  'status': 'active',
+                  'assignedBranches': const [
+                    {'id': _branchId, 'name': 'Главный филиал'},
+                  ],
+                },
+                {
+                  'id': _inactiveTeacherId,
+                  'firstName': 'Ирина',
+                  'lastName': 'Неактивная',
+                  'status': 'inactive',
+                  'assignedBranches': const [
+                    {'id': _branchId, 'name': 'Главный филиал'},
+                  ],
+                },
+                {
+                  'id': _foreignTeacherId,
+                  'firstName': 'Олег',
+                  'lastName': 'Другой',
+                  'status': 'active',
+                  'assignedBranches': const [
+                    {'id': _foreignBranchId, 'name': 'Другой филиал'},
                   ],
                 },
               ],
@@ -98,6 +170,16 @@ class _FakeApiClient extends MagicApiClient {
         return <String, dynamic>{
               'items': [
                 {'id': _roomId, 'name': 'Зал 1', 'branchId': _branchId},
+                {
+                  'id': _replacementRoomId,
+                  'name': 'Зал 2',
+                  'branchId': _branchId,
+                },
+                {
+                  'id': _foreignRoomId,
+                  'name': 'Чужой зал',
+                  'branchId': _foreignBranchId,
+                },
               ],
             }
             as T;
@@ -121,6 +203,19 @@ class _FakeApiClient extends MagicApiClient {
                   'links': const [],
                 },
               ],
+            }
+            as T;
+      case '/crm/clients/resolve':
+        final type = queryParameters?['type']?.toString();
+        final id = queryParameters?['id']?.toString();
+        return <String, dynamic>{
+              'ref': {'type': type, 'id': id},
+              'label': type == 'lead' ? 'Анна Лидова' : 'Иван Прилежный',
+              'branchId': _branchId,
+              'lifecycleState': 'active',
+              'tombstone': false,
+              'version': 1,
+              'links': const [],
             }
             as T;
       case '/crm/subscriptions':
@@ -186,40 +281,49 @@ class _FakeApiClient extends MagicApiClient {
             }
             as T;
       case '/crm/configuration/lesson-decisions':
-        return <String, dynamic>{
-              'settlementTypes': const [
-                {
-                  'stableKey': 'standard_lesson',
-                  'label': 'Занятие',
-                  'colorToken': 'success',
-                  'allowedContexts': ['settle'],
-                  'active': true,
-                  'order': 0,
-                  'hourShareBasisPoints': 10000,
-                  'fixedPenaltyMinor': '0',
-                },
-                {
-                  'stableKey': 'free_lesson',
-                  'label': 'Бесплатное занятие',
-                  'colorToken': 'warning',
-                  'allowedContexts': ['cancel', 'reschedule', 'settle'],
-                  'active': true,
-                  'order': 1,
-                  'hourShareBasisPoints': 0,
-                  'fixedPenaltyMinor': '0',
-                },
-              ],
-              'teacherCompensationRules': const [
-                {
-                  'stableKey': 'none',
-                  'label': 'Не оплачивать',
-                  'mode': 'none',
-                  'value': '0',
-                  'active': true,
-                  'order': 0,
-                },
-              ],
-            }
+        return (decisionCatalog ??
+                <String, dynamic>{
+                  'settlementTypes': const [
+                    {
+                      'stableKey': 'standard_lesson',
+                      'label': 'Занятие',
+                      'colorToken': 'success',
+                      'allowedContexts': ['settle'],
+                      'active': true,
+                      'order': 0,
+                      'hourShareBasisPoints': 10000,
+                      'fixedPenaltyMinor': '0',
+                    },
+                    {
+                      'stableKey': 'free_lesson',
+                      'label': 'Бесплатное занятие',
+                      'colorToken': 'warning',
+                      'allowedContexts': ['cancel', 'reschedule', 'settle'],
+                      'active': true,
+                      'order': 1,
+                      'hourShareBasisPoints': 0,
+                      'fixedPenaltyMinor': '0',
+                    },
+                  ],
+                  'teacherCompensationRules': const [
+                    {
+                      'stableKey': 'none',
+                      'label': 'Не оплачивать',
+                      'mode': 'none',
+                      'value': '0',
+                      'active': true,
+                      'order': 0,
+                    },
+                    {
+                      'stableKey': 'standard',
+                      'label': 'Стандартная ставка',
+                      'mode': 'standard',
+                      'value': '0',
+                      'active': true,
+                      'order': 1,
+                    },
+                  ],
+                })
             as T;
       default:
         return <String, dynamic>{'items': const []} as T;
@@ -234,6 +338,7 @@ class _FakeApiClient extends MagicApiClient {
     bool authenticated = true,
   }) async {
     if (path == '/crm/lessons/constraints/preview') {
+      constraintPreviews.add(Map<String, dynamic>.from(data as Map));
       return (preview ?? _freePreview()) as T;
     }
     if (path == '/crm/lessons') {
@@ -255,25 +360,27 @@ class _FakeApiClient extends MagicApiClient {
             },
             'successor': const {},
             'financialDecision': const {},
-            'violations': const [],
-            'canConfirm': true,
+            'violations': decisionViolations,
+            'canConfirm': decisionViolations.isEmpty,
             'confirmRequired': true,
-            'financialPreview': {
-              'clientFacts': const [
-                {
-                  'settlementTypeKey': 'free_lesson',
-                  'settlementLabel': 'Бесплатное занятие',
+            if (decisionViolations.isEmpty)
+              'financialPreview': {
+                'clientFacts': const [
+                  {
+                    'settlementTypeKey': 'free_lesson',
+                    'settlementLabel': 'Бесплатное занятие',
+                    'amountMinor': '0',
+                    'units': '0.00',
+                  },
+                ],
+                'teacherFact': const {
+                  'compensationRuleKey': 'none',
+                  'compensationRuleLabel': 'Не оплачивать',
                   'amountMinor': '0',
-                  'units': '0.00',
                 },
-              ],
-              'teacherFact': const {
-                'compensationRuleKey': 'none',
-                'compensationRuleLabel': 'Не оплачивать',
-                'amountMinor': '0',
               },
-            },
-            'previewToken': 'signed-lesson-preview',
+            if (decisionViolations.isEmpty)
+              'previewToken': 'signed-lesson-preview',
           }
           as T;
     }
@@ -317,7 +424,14 @@ class _FakeApiClient extends MagicApiClient {
   }
 }
 
-Widget _host(_FakeApiClient client, {Map<String, dynamic>? lesson}) {
+Widget _host(
+  _FakeApiClient client, {
+  Map<String, dynamic>? lesson,
+  String? leadId,
+  String? leadName,
+  String? initialBranchId,
+  bool initialIsTrial = false,
+}) {
   return ProviderScope(
     overrides: [magicApiClientProvider.overrideWithValue(client)],
     child: MaterialApp(
@@ -325,7 +439,14 @@ Widget _host(_FakeApiClient client, {Map<String, dynamic>? lesson}) {
         body: Builder(
           builder: (context) => Center(
             child: FilledButton(
-              onPressed: () => CreateLessonDialog.show(context, lesson: lesson),
+              onPressed: () => CreateLessonDialog.show(
+                context,
+                lesson: lesson,
+                leadId: leadId,
+                leadName: leadName,
+                initialBranchId: initialBranchId,
+                initialIsTrial: initialIsTrial,
+              ),
               child: const Text('открыть диалог'),
             ),
           ),
@@ -362,11 +483,24 @@ Future<void> _pumpDialog(
   WidgetTester tester,
   _FakeApiClient client, {
   Map<String, dynamic>? lesson,
+  String? leadId,
+  String? leadName,
+  String? initialBranchId,
+  bool initialIsTrial = false,
 }) async {
   tester.view.physicalSize = const Size(1400, 2400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(_host(client, lesson: lesson));
+  await tester.pumpWidget(
+    _host(
+      client,
+      lesson: lesson,
+      leadId: leadId,
+      leadName: leadName,
+      initialBranchId: initialBranchId,
+      initialIsTrial: initialIsTrial,
+    ),
+  );
   await tester.pumpAndSettle();
   await tester.tap(find.text('открыть диалог'));
   await tester.pumpAndSettle();
@@ -438,8 +572,68 @@ Future<void> _tapCreate(WidgetTester tester) async {
   }
 }
 
+Future<void> _moveEditableLessonToNextDay(WidgetTester tester) async {
+  await tester.ensureVisible(find.byKey(const ValueKey('lesson-date-field')));
+  await tester.tap(find.byKey(const ValueKey('lesson-date-field')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('19'));
+  await tester.tap(find.text('OK'));
+  await tester.pumpAndSettle();
+  expect(find.text('19.07.2026'), findsOneWidget);
+}
+
+Future<void> _fillRescheduleDecision(
+  WidgetTester tester, {
+  required String reason,
+}) async {
+  await tester.ensureVisible(find.text('Перейти к расчёту'));
+  await tester.tap(find.text('Перейти к расчёту'));
+  for (var frame = 0; frame < 6; frame++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  await tester.enterText(
+    find.byKey(const Key('lesson-decision-reason')),
+    reason,
+  );
+  await tester.tap(find.byKey(const Key('lesson-decision-settlement')));
+  await tester.pump(const Duration(milliseconds: 400));
+  await tester.tap(find.text('Бесплатное занятие').last);
+  await tester.pump(const Duration(milliseconds: 400));
+  await tester.ensureVisible(
+    find.byKey(const Key('lesson-decision-compensation')),
+  );
+  await tester.tap(find.byKey(const Key('lesson-decision-compensation')));
+  await tester.pump(const Duration(milliseconds: 400));
+  await tester.tap(find.text('Не оплачивать').last);
+  await tester.pump(const Duration(milliseconds: 400));
+  await tester.ensureVisible(find.byKey(const Key('lesson-decision-submit')));
+  await tester.tap(find.byKey(const Key('lesson-decision-submit')));
+  await tester.pump(const Duration(milliseconds: 300));
+}
+
 void main() {
   setUpAll(() => initializeDateFormatting('ru'));
+
+  test('every schedule constraint has a clear Russian title', () {
+    const titles = {
+      'INVALID_INTERVAL': 'Некорректное время занятия',
+      'OUTSIDE_BRANCH_HOURS': 'Филиал закрыт в это время',
+      'TEACHER_UNAVAILABLE': 'Преподаватель недоступен',
+      'TEACHER_BRANCH_MISMATCH': 'Преподаватель не назначен в филиал',
+      'ROOM_BRANCH_MISMATCH': 'Аудитория относится к другому филиалу',
+      'TEACHER_OVERLAP': 'У преподавателя уже есть занятие',
+      'CLIENT_OVERLAP': 'У клиента уже есть занятие',
+      'ROOM_OVERLAP': 'Аудитория уже занята',
+    };
+
+    for (final entry in titles.entries) {
+      final violation = LessonConstraintViolation.fromJson({
+        'code': entry.key,
+        'resource': const {'type': 'room', 'id': _foreignRoomId},
+      });
+      expect(violation.title, entry.value, reason: entry.key);
+    }
+  });
 
   testWidgets('new lesson always opens at the required client field', (
     tester,
@@ -452,6 +646,174 @@ void main() {
     expect(scroll.controller?.keepScrollOffset, isFalse);
     expect(find.byKey(const ValueKey('lesson-client-field')), findsOneWidget);
   });
+
+  testWidgets('new lesson uses the effective branch duration', (tester) async {
+    final client = _FakeApiClient(
+      decisionCatalog: const {
+        'defaultLessonDurationMinutes': 75,
+        'settlementTypes': [
+          {
+            'stableKey': 'free_lesson',
+            'label': 'Бесплатное занятие',
+            'colorToken': 'warning',
+            'allowedContexts': ['settle'],
+            'active': true,
+            'order': 0,
+            'hourShareBasisPoints': 0,
+            'fixedPenaltyMinor': '0',
+          },
+        ],
+        'teacherCompensationRules': [
+          {
+            'stableKey': 'none',
+            'label': 'Не оплачивать',
+            'mode': 'none',
+            'value': '0',
+            'active': true,
+            'order': 0,
+          },
+        ],
+      },
+    );
+    await _pumpDialog(tester, client);
+
+    expect(
+      tester
+          .state<FormFieldState<int>>(
+            find.byKey(const ValueKey('lesson-duration-field')),
+          )
+          .value,
+      75,
+    );
+    expect(find.text('75 мин'), findsOneWidget);
+  });
+
+  testWidgets(
+    'Lead preset previews and commits a trial with required resources and snapshot',
+    (tester) async {
+      final client = _FakeApiClient(teacherCurrentRate: 1250);
+      await _pumpDialog(
+        tester,
+        client,
+        leadId: _leadId,
+        leadName: 'Анна Лидова',
+        initialBranchId: _branchId,
+        initialIsTrial: true,
+      );
+
+      expect(find.text('Пробное занятие'), findsWidgets);
+      final clientField = tester.widget<SearchablePickerField>(
+        find.byKey(const ValueKey('lesson-client-field')),
+      );
+      expect(clientField.selectedId, 'lead:$_leadId');
+      expect(clientField.enabled, isFalse);
+      expect(
+        find.byKey(const ValueKey('lesson-branch-field:$_branchId')),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.byKey(const ValueKey('lesson-trial-toggle')),
+            )
+            .value,
+        isTrue,
+      );
+
+      await _chooseSearchable(
+        tester,
+        const ValueKey('lesson-teacher-field'),
+        'Пётр Педагогов',
+      );
+      await _chooseSearchable(
+        tester,
+        const ValueKey('lesson-room-field'),
+        'Зал 1',
+      );
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('lesson-settlement-type-field')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('lesson-settlement-type-field')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Бесплатное занятие').last);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('lesson-compensation-rule-field')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Стандартная ставка').last);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('lesson-snapshot-preview')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('lesson-snapshot-trial')),
+          matching: find.text('Пробное'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('lesson-snapshot-client-charge')),
+          matching: find.textContaining('Бесплатное занятие · 0 ₽'),
+        ),
+        findsOneWidget,
+      );
+      final teacherPreview = tester
+          .widgetList<Text>(
+            find.descendant(
+              of: find.byKey(
+                const ValueKey('lesson-snapshot-teacher-compensation'),
+              ),
+              matching: find.byType(Text),
+            ),
+          )
+          .map((text) => text.data ?? '')
+          .join(' ')
+          .replaceAll('\u00a0', ' ');
+      expect(teacherPreview, contains('Стандартная ставка'));
+      expect(teacherPreview, contains('1 250 ₽/ч'));
+
+      await _tapCreate(tester);
+      await tester.pumpAndSettle();
+
+      expect(client.constraintPreviews, hasLength(1));
+      expect(client.constraintPreviews.single, {
+        'clientRef': {'type': 'lead', 'id': _leadId},
+        'teacherId': _teacherId,
+        'branchId': _branchId,
+        'roomId': _roomId,
+        'scheduledAt': isA<String>(),
+        'durationMinutes': 60,
+      });
+      expect(client.lessonPosts, hasLength(1));
+      expect(client.lessonPosts.single, containsPair('isTrial', true));
+      expect(client.lessonPosts.single['clientRef'], {
+        'type': 'lead',
+        'id': _leadId,
+      });
+      expect(client.lessonPosts.single, containsPair('teacherId', _teacherId));
+      expect(client.lessonPosts.single, containsPair('branchId', _branchId));
+      expect(client.lessonPosts.single, containsPair('roomId', _roomId));
+      expect(
+        client.lessonPosts.single,
+        containsPair('teacherCompensationType', 'hourly'),
+      );
+      expect(
+        client.lessonPosts.single,
+        containsPair('teacherCompensationValue', 1250),
+      );
+      expect(client.lessonPosts.single['financialDecision'], {
+        'settlementTypeKey': 'free_lesson',
+        'teacherCompensationRuleKey': 'standard',
+      });
+    },
+  );
 
   testWidgets('единый Client selector отправляет Lead и trial независимо', (
     tester,
@@ -491,8 +853,80 @@ void main() {
     expect(body, isNot(contains('force')));
   });
 
+  testWidgets('trial marker does not disable paid subscription funding', (
+    tester,
+  ) async {
+    final client = _FakeApiClient(
+      subscriptions: const [
+        {
+          'id': 'subscription-1',
+          'studentId': _studentId,
+          'lessonsTotal': 12,
+          'lessonsUsed': 1,
+          'status': 'active',
+          'packageName': '12 занятий',
+          'packagePrice': 30000,
+        },
+      ],
+    );
+    await _pumpDialog(tester, client);
+    await _chooseSearchable(
+      tester,
+      const ValueKey('lesson-client-field'),
+      'Иван Прилежный',
+    );
+    await _chooseSearchable(
+      tester,
+      const ValueKey('lesson-teacher-field'),
+      'Пётр Педагогов',
+    );
+    await _chooseSearchable(
+      tester,
+      const ValueKey('lesson-room-field'),
+      'Зал 1',
+    );
+    await tester.tap(find.byKey(const ValueKey('lesson-trial-toggle')));
+    await tester.pumpAndSettle();
+
+    await _tapCreate(tester);
+    await tester.pumpAndSettle();
+
+    final body = client.lessonPosts.single;
+    expect(body['isTrial'], isTrue);
+    expect(body['clientChargeType'], 'subscription');
+    expect(body['clientChargeValue'], 1);
+    expect(body['subscriptionId'], 'subscription-1');
+    expect(body['financialDecision'], {
+      'settlementTypeKey': 'standard_lesson',
+      'teacherCompensationRuleKey': 'none',
+    });
+  });
+
+  testWidgets('trial marker can coexist with an explicit free settlement', (
+    tester,
+  ) async {
+    final client = _FakeApiClient();
+    await _pumpDialog(tester, client);
+    await _selectRequiredResources(tester, clientName: 'Иван Прилежный');
+    await tester.tap(find.byKey(const ValueKey('lesson-trial-toggle')));
+    await tester.pumpAndSettle();
+
+    await _tapCreate(tester);
+    await tester.pumpAndSettle();
+
+    final body = client.lessonPosts.single;
+    expect(body['isTrial'], isTrue);
+    expect(body['clientChargeType'], 'none');
+    expect(body['clientChargeValue'], 0);
+    expect(body, isNot(contains('subscriptionId')));
+    expect(body['financialDecision'], {
+      'settlementTypeKey': 'free_lesson',
+      'teacherCompensationRuleKey': 'none',
+    });
+  });
+
   testWidgets(
-    'student defaults to subscription and raw money fields stay absent',
+    'student defaults to a concrete active subscription in the create payload',
     (tester) async {
       final client = _FakeApiClient(
         subscriptions: const [
@@ -513,6 +947,16 @@ void main() {
         const ValueKey('lesson-client-field'),
         'Иван Прилежный',
       );
+      await _chooseSearchable(
+        tester,
+        const ValueKey('lesson-teacher-field'),
+        'Пётр Педагогов',
+      );
+      await _chooseSearchable(
+        tester,
+        const ValueKey('lesson-room-field'),
+        'Зал 1',
+      );
 
       await tester.ensureVisible(
         find.byKey(const ValueKey('lesson-charge-type-field')),
@@ -522,8 +966,196 @@ void main() {
       expect(find.text('Стоимость / списание *'), findsNothing);
       expect(find.text('Оплата преподавателя *'), findsNothing);
       expect(find.text('Сумма / ставка *'), findsNothing);
+
+      await _tapCreate(tester);
+      await tester.pumpAndSettle();
+
+      final body = client.lessonPosts.single;
+      expect(body['clientChargeType'], 'subscription');
+      expect(body['clientChargeValue'], 1);
+      expect(body['subscriptionId'], 'subscription-1');
+      expect(body['financialDecision'], {
+        'settlementTypeKey': 'standard_lesson',
+        'teacherCompensationRuleKey': 'none',
+      });
     },
   );
+
+  testWidgets(
+    'Без списания доступно для бесплатного типа и очищает абонемент',
+    (tester) async {
+      final client = _FakeApiClient(
+        subscriptions: const [
+          {
+            'id': 'subscription-1',
+            'studentId': _studentId,
+            'lessonsTotal': 12,
+            'lessonsUsed': 1,
+            'status': 'active',
+            'packageName': '12 занятий',
+            'packagePrice': 30000,
+          },
+        ],
+      );
+      await _pumpDialog(tester, client);
+      await _chooseSearchable(
+        tester,
+        const ValueKey('lesson-client-field'),
+        'Иван Прилежный',
+      );
+      await _chooseSearchable(
+        tester,
+        const ValueKey('lesson-teacher-field'),
+        'Пётр Педагогов',
+      );
+      await _chooseSearchable(
+        tester,
+        const ValueKey('lesson-room-field'),
+        'Зал 1',
+      );
+
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('lesson-charge-type-field')),
+      );
+      await tester.tap(find.byKey(const ValueKey('lesson-charge-type-field')));
+      await tester.pumpAndSettle();
+      expect(find.text('Без списания'), findsNothing);
+      await tester.tap(find.text('С абонемента').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey('lesson-settlement-type-field')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Бесплатное занятие').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Без списания'), findsOneWidget);
+
+      await _tapCreate(tester);
+      await tester.pumpAndSettle();
+
+      final body = client.lessonPosts.single;
+      expect(body['clientChargeType'], 'none');
+      expect(body['clientChargeValue'], 0);
+      expect(body, isNot(contains('subscriptionId')));
+      expect(body['financialDecision'], {
+        'settlementTypeKey': 'free_lesson',
+        'teacherCompensationRuleKey': 'none',
+      });
+    },
+  );
+
+  testWidgets(
+    'settlement pay rule and funding source are independent required choices',
+    (tester) async {
+      final client = _FakeApiClient(
+        subscriptions: const [
+          {
+            'id': 'subscription-1',
+            'studentId': _studentId,
+            'lessonsTotal': 12,
+            'lessonsUsed': 1,
+            'status': 'active',
+            'packageName': '12 занятий',
+            'packagePrice': 30000,
+          },
+        ],
+      );
+      await _pumpDialog(tester, client);
+      await _chooseSearchable(
+        tester,
+        const ValueKey('lesson-client-field'),
+        'Иван Прилежный',
+      );
+      await _chooseSearchable(
+        tester,
+        const ValueKey('lesson-teacher-field'),
+        'Пётр Педагогов',
+      );
+      await _chooseSearchable(
+        tester,
+        const ValueKey('lesson-room-field'),
+        'Зал 1',
+      );
+
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('lesson-settlement-type-field')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('lesson-settlement-type-field')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Занятие').last);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('lesson-compensation-rule-field')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Стандартная ставка').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('lesson-charge-type-field')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('С личного счёта').last);
+      await tester.pumpAndSettle();
+
+      await _tapCreate(tester);
+      await tester.pumpAndSettle();
+
+      final body = client.lessonPosts.single;
+      expect(body['financialDecision'], {
+        'settlementTypeKey': 'standard_lesson',
+        'teacherCompensationRuleKey': 'standard',
+      });
+      expect(body['clientChargeType'], 'personal_account');
+      expect(body, isNot(contains('subscriptionId')));
+    },
+  );
+
+  testWidgets('empty decision catalog blocks lesson creation', (tester) async {
+    final client = _FakeApiClient(
+      decisionCatalog: const {
+        'settlementTypes': <Map<String, dynamic>>[],
+        'teacherCompensationRules': <Map<String, dynamic>>[],
+      },
+    );
+    await _pumpDialog(tester, client);
+    await _chooseSearchable(
+      tester,
+      const ValueKey('lesson-client-field'),
+      'Иван Прилежный',
+    );
+    await _chooseSearchable(
+      tester,
+      const ValueKey('lesson-teacher-field'),
+      'Пётр Педагогов',
+    );
+    await _chooseSearchable(
+      tester,
+      const ValueKey('lesson-room-field'),
+      'Зал 1',
+    );
+    expect(
+      tester
+          .widget<DropdownButtonFormField<String>>(
+            find.byKey(const ValueKey('lesson-settlement-type-field')),
+          )
+          .initialValue,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<DropdownButtonFormField<String>>(
+            find.byKey(const ValueKey('lesson-compensation-rule-field')),
+          )
+          .initialValue,
+      isNull,
+    );
+
+    await _tapCreate(tester);
+
+    expect(client.lessonPosts, isEmpty);
+    expect(find.text('Новое занятие'), findsOneWidget);
+  });
 
   testWidgets('preview-конфликт блокирует create без force affordance', (
     tester,
@@ -560,7 +1192,7 @@ void main() {
   });
 
   testWidgets(
-    'authoritative 422 показывает structured violations и lesson link',
+    'authoritative race 422 показывает conflict и сохраняет весь черновик',
     (tester) async {
       final error = MagicApiException(
         statusCode: 422,
@@ -586,6 +1218,35 @@ void main() {
       final client = _FakeApiClient(createError: error);
       await _pumpDialog(tester, client);
       await _selectRequiredResources(tester, clientName: 'Иван Прилежный');
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('lesson-duration-field')),
+      );
+      await tester.tap(find.byKey(const ValueKey('lesson-duration-field')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('90 мин').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('lesson-trial-toggle')));
+      await tester.pumpAndSettle();
+      final dateBefore = tester
+          .widget<Text>(
+            find
+                .descendant(
+                  of: find.byKey(const ValueKey('lesson-date-field')),
+                  matching: find.byType(Text),
+                )
+                .first,
+          )
+          .data;
+      final timeBefore = tester
+          .widget<Text>(
+            find
+                .descendant(
+                  of: find.byKey(const ValueKey('lesson-time-field')),
+                  matching: find.byType(Text),
+                )
+                .first,
+          )
+          .data;
       await _tapCreate(tester);
 
       expect(client.lessonPosts, hasLength(1));
@@ -598,6 +1259,85 @@ void main() {
       );
       expect(find.text('Всё равно назначить'), findsNothing);
 
+      await tester.tap(find.text('Исправить'));
+      await tester.pumpAndSettle();
+      expect(find.text('Новое занятие'), findsOneWidget);
+      expect(
+        tester
+            .widget<SearchablePickerField>(
+              find.byKey(const ValueKey('lesson-client-field')),
+            )
+            .selectedId,
+        'student:$_studentId',
+      );
+      expect(
+        tester
+            .widget<SearchablePickerField>(
+              find.byKey(const ValueKey('lesson-teacher-field')),
+            )
+            .selectedId,
+        _teacherId,
+      );
+      expect(
+        tester
+            .widget<SearchablePickerField>(
+              find.byKey(const ValueKey('lesson-room-field')),
+            )
+            .selectedId,
+        _roomId,
+      );
+      expect(
+        find.byKey(const ValueKey('lesson-branch-field:$_branchId')),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .state<FormFieldState<int>>(
+              find.byKey(const ValueKey('lesson-duration-field')),
+            )
+            .value,
+        90,
+      );
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.byKey(const ValueKey('lesson-trial-toggle')),
+            )
+            .value,
+        isTrue,
+      );
+      expect(
+        tester
+            .widget<Text>(
+              find
+                  .descendant(
+                    of: find.byKey(const ValueKey('lesson-date-field')),
+                    matching: find.byType(Text),
+                  )
+                  .first,
+            )
+            .data,
+        dateBefore,
+      );
+      expect(
+        tester
+            .widget<Text>(
+              find
+                  .descendant(
+                    of: find.byKey(const ValueKey('lesson-time-field')),
+                    matching: find.byType(Text),
+                  )
+                  .first,
+            )
+            .data,
+        timeBefore,
+      );
+      expect(client.lessonPosts.single, containsPair('durationMinutes', 90));
+      expect(client.lessonPosts.single, containsPair('isTrial', true));
+
+      await _tapCreate(tester);
+      expect(client.lessonPosts, hasLength(2));
+      expect(find.text('Занятие не сохранено'), findsOneWidget);
       await tester.tap(
         find.byKey(const ValueKey('conflict-lesson-$_conflictId')),
       );
@@ -611,28 +1351,12 @@ void main() {
     tester,
   ) async {
     final client = _FakeApiClient();
-    final lesson = <String, dynamic>{
-      'id': '66666666-6666-6666-6666-666666666666',
-      'version': 7,
-      'student_id': _studentId,
-      'student_name': 'Иван Прилежный',
-      'teacher_id': _teacherId,
-      'branch_id': _branchId,
-      'room_id': _roomId,
-      'scheduled_at': '2026-07-18T07:00:00.000Z',
-      'duration_minutes': 60,
-      'is_trial': true,
-      'snapshot_trial': true,
-      'completion_type': 'custom.success',
-      'client_charge_type': 'none',
-      'client_charge_value': 0,
-      'teacher_compensation_type': 'none',
-      'teacher_compensation_value': 0,
-    };
+    final lesson = _editableLesson();
     await _pumpDialog(tester, client, lesson: lesson);
+    await _moveEditableLessonToNextDay(tester);
 
-    await tester.ensureVisible(find.text('Сохранить'));
-    await tester.tap(find.text('Сохранить'));
+    await tester.ensureVisible(find.text('Перейти к расчёту'));
+    await tester.tap(find.text('Перейти к расчёту'));
     for (var frame = 0; frame < 6; frame++) {
       await tester.pump(const Duration(milliseconds: 100));
     }
@@ -677,12 +1401,151 @@ void main() {
     });
     expect(body['successor']['teacherId'], _teacherId);
     expect(body['successor']['roomId'], _roomId);
+    expect(body['successor']['scheduledAt'], '2026-07-19T07:00:00.000Z');
     expect(body['successor'], isNot(contains('clientRef')));
     expect(body['successor'], isNot(contains('isTrial')));
     expect(body['successor'], isNot(contains('completionType')));
     expect(body['successor'], isNot(contains('force')));
     expect(body['previewToken'], 'signed-lesson-preview');
     expect(body['confirm'], isTrue);
+  });
+
+  testWidgets(
+    'подмена показывает только ресурсы филиала и атомарно сохраняет выбор',
+    (tester) async {
+      final client = _FakeApiClient();
+      await _pumpDialog(tester, client, lesson: _editableLesson());
+
+      final teacherField = tester.widget<SearchablePickerField>(
+        find.byKey(const ValueKey('lesson-teacher-field')),
+      );
+      expect(
+        teacherField.items.map((item) => item.label),
+        containsAll(['Пётр Педагогов', 'Мария Сменова']),
+      );
+      expect(
+        teacherField.items.map((item) => item.label),
+        isNot(contains('Ирина Неактивная')),
+      );
+      expect(
+        teacherField.items.map((item) => item.label),
+        isNot(contains('Олег Другой')),
+      );
+      final roomField = tester.widget<SearchablePickerField>(
+        find.byKey(const ValueKey('lesson-room-field')),
+      );
+      expect(roomField.items.map((item) => item.label), ['Зал 1', 'Зал 2']);
+      expect(
+        find.byKey(const ValueKey('lesson-replacement-availability-hint')),
+        findsOneWidget,
+      );
+
+      await _chooseSearchable(
+        tester,
+        const ValueKey('lesson-teacher-field'),
+        'Мария Сменова',
+      );
+      await _chooseSearchable(
+        tester,
+        const ValueKey('lesson-room-field'),
+        'Зал 2',
+      );
+      await _fillRescheduleDecision(
+        tester,
+        reason: 'Назначена согласованная подмена',
+      );
+
+      expect(client.decisionPreviews, hasLength(1));
+      expect(find.byKey(const Key('lesson-decision-preview')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('lesson-decision-submit')));
+      await tester.pumpAndSettle();
+
+      final body = client.decisionCommits.single;
+      expect(body['successor']['teacherId'], _replacementTeacherId);
+      expect(body['successor']['roomId'], _replacementRoomId);
+      expect(body['successor'], isNot(contains('clientRef')));
+      expect(body['previewToken'], 'signed-lesson-preview');
+      expect(body['confirm'], isTrue);
+    },
+  );
+
+  testWidgets('занятая подмена блокируется с понятной причиной', (
+    tester,
+  ) async {
+    final client = _FakeApiClient(
+      decisionViolations: const [
+        {
+          'code': 'TEACHER_OVERLAP',
+          'resource': {'type': 'teacher', 'id': _replacementTeacherId},
+        },
+        {
+          'code': 'ROOM_OVERLAP',
+          'resource': {'type': 'room', 'id': _replacementRoomId},
+        },
+      ],
+    );
+    await _pumpDialog(tester, client, lesson: _editableLesson());
+    await _chooseSearchable(
+      tester,
+      const ValueKey('lesson-teacher-field'),
+      'Мария Сменова',
+    );
+    await _chooseSearchable(
+      tester,
+      const ValueKey('lesson-room-field'),
+      'Зал 2',
+    );
+    await _fillRescheduleDecision(tester, reason: 'Проверка занятой подмены');
+
+    expect(find.text('Изменение заблокировано'), findsOneWidget);
+    expect(
+      find.textContaining('У преподавателя уже есть занятие в это время'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Аудитория уже занята'), findsOneWidget);
+    expect(find.text('Повторить расчёт'), findsOneWidget);
+    expect(client.decisionCommits, isEmpty);
+  });
+
+  testWidgets('edit без изменений не создаёт фиктивный перенос', (
+    tester,
+  ) async {
+    final client = _FakeApiClient();
+    await _pumpDialog(tester, client, lesson: _editableLesson());
+
+    await tester.ensureVisible(find.text('Перейти к расчёту'));
+    await tester.tap(find.text('Перейти к расчёту'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'Измените дату, время, длительность, филиал, аудиторию или преподавателя',
+      ),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('lesson-decision-reason')), findsNothing);
+    expect(client.decisionPreviews, isEmpty);
+    expect(client.decisionCommits, isEmpty);
+  });
+
+  testWidgets('group lesson открывает перенос без фиктивного клиента', (
+    tester,
+  ) async {
+    final client = _FakeApiClient();
+    await _pumpDialog(tester, client, lesson: _editableLesson(group: true));
+
+    expect(find.byKey(const ValueKey('lesson-group-field')), findsOneWidget);
+    expect(find.text('Ансамбль Север'), findsOneWidget);
+    expect(find.byKey(const ValueKey('lesson-client-field')), findsNothing);
+    await _moveEditableLessonToNextDay(tester);
+    await tester.ensureVisible(find.text('Перейти к расчёту'));
+    await tester.tap(find.text('Перейти к расчёту'));
+    for (var frame = 0; frame < 6; frame++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    expect(find.text('Перенос занятия'), findsOneWidget);
+    expect(find.byKey(const Key('lesson-decision-reason')), findsOneWidget);
   });
 
   for (final operation in const [

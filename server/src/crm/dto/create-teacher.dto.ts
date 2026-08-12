@@ -31,14 +31,16 @@ export class CreateTeacherDto {
   @MaxLength(50)
   phone?: string;
 
+  @IsOptional()
   @IsEmail()
   @MaxLength(255)
-  email!: string;
+  email?: string;
 
+  @IsOptional()
   @IsString()
   @MinLength(10)
   @MaxLength(128)
-  password!: string;
+  password?: string;
 
   @IsOptional()
   @IsString()
@@ -51,11 +53,11 @@ export class CreateTeacherDto {
   @IsUUID("all", { each: true })
   branchIds!: string[];
 
+  @IsOptional()
   @IsArray()
-  @ArrayMinSize(1)
   @ArrayUnique()
   @IsUUID("all", { each: true })
-  disciplineIds!: string[];
+  disciplineIds?: string[];
 
   @IsOptional()
   @IsObject()

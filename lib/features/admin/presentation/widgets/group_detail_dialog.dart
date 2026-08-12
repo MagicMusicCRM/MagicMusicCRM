@@ -4,16 +4,27 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/core/widgets/v7/magic_desktop_scrollbar.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_card/group_schedule_participants_editor.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_card/recurring_schedule_plan_section.dart';
 
 class GroupDetailDialog extends ConsumerStatefulWidget {
   final Map<String, dynamic> group;
+  final bool canWrite;
 
-  const GroupDetailDialog({super.key, required this.group});
+  const GroupDetailDialog({
+    super.key,
+    required this.group,
+    this.canWrite = true,
+  });
 
-  static Future<bool?> show(BuildContext context, Map<String, dynamic> group) {
+  static Future<bool?> show(
+    BuildContext context,
+    Map<String, dynamic> group, {
+    bool canWrite = true,
+  }) {
     return showDialog<bool>(
       context: context,
-      builder: (ctx) => GroupDetailDialog(group: group),
+      builder: (ctx) => GroupDetailDialog(group: group, canWrite: canWrite),
     );
   }
 
@@ -28,6 +39,7 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
   String? _error;
   List<Map<String, dynamic>> _groupStudents = [];
   List<Map<String, dynamic>> _allStudents = [];
+  List<GroupScheduleMemberOption> _scheduleMembers = [];
 
   @override
   void initState() {
@@ -46,11 +58,17 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
         crm.listGroupStudents(widget.group['id'].toString(), limit: 100),
         crm.listStudents(limit: 100),
       ]);
+      final groupStudents = results[0];
+      final scheduleMembers = await Future.wait([
+        for (final student in groupStudents)
+          _scheduleMember(crm, student, loadSubscriptions: widget.canWrite),
+      ]);
 
       if (!mounted) return;
       setState(() {
-        _groupStudents = results[0];
+        _groupStudents = groupStudents;
         _allStudents = results[1];
+        _scheduleMembers = scheduleMembers;
         _loading = false;
       });
     } catch (e) {
@@ -62,6 +80,33 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
         });
       }
     }
+  }
+
+  Future<GroupScheduleMemberOption> _scheduleMember(
+    MagicCrmService crm,
+    Map<String, dynamic> student, {
+    required bool loadSubscriptions,
+  }) async {
+    final studentId = student['id']?.toString() ?? '';
+    List<Map<String, dynamic>> subscriptions = const [];
+    if (loadSubscriptions && studentId.isNotEmpty) {
+      try {
+        final rows = await crm.listSubscriptions(
+          studentId: studentId,
+          limit: 100,
+        );
+        subscriptions = rows
+            .where((subscription) => subscription['status'] == 'active')
+            .toList(growable: false);
+      } catch (error) {
+        debugPrint('Error loading group member subscriptions: $error');
+      }
+    }
+    return GroupScheduleMemberOption(
+      studentId: studentId,
+      label: _studentName(student),
+      subscriptions: subscriptions,
+    );
   }
 
   Future<void> _addStudent() async {
@@ -244,26 +289,47 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
                               displayName,
                               style: const TextStyle(fontSize: 13),
                             ),
-                            trailing: IconButton(
-                              tooltip: 'Удалить $displayName из группы',
-                              icon: const Icon(
-                                Icons.remove_circle_outline,
-                                color: AppTheme.danger,
-                                size: 20,
-                              ),
-                              onPressed: _saving
-                                  ? null
-                                  : () => _removeStudent(
-                                      student['id'].toString(),
+                            trailing: widget.canWrite
+                                ? IconButton(
+                                    tooltip: 'Удалить $displayName из группы',
+                                    icon: const Icon(
+                                      Icons.remove_circle_outline,
+                                      color: AppTheme.danger,
+                                      size: 20,
                                     ),
-                            ),
+                                    onPressed: _saving
+                                        ? null
+                                        : () => _removeStudent(
+                                            student['id'].toString(),
+                                          ),
+                                  )
+                                : null,
                           );
                         }),
-                      const SizedBox(height: 16),
-                      OutlinedButton.icon(
-                        onPressed: _saving ? null : _addStudent,
-                        icon: const Icon(Icons.person_add_rounded, size: 18),
-                        label: const Text('Добавить ученика'),
+                      if (widget.canWrite) ...[
+                        const SizedBox(height: 16),
+                        OutlinedButton.icon(
+                          onPressed: _saving ? null : _addStudent,
+                          icon: const Icon(Icons.person_add_rounded, size: 18),
+                          label: const Text('Добавить ученика'),
+                        ),
+                      ],
+                      const SizedBox(height: 20),
+                      const Divider(),
+                      const SizedBox(height: 12),
+                      RecurringSchedulePlanSection(
+                        key: ValueKey(
+                          'group-schedule-plans-${widget.group['id']}',
+                        ),
+                        groupId: widget.group['id']?.toString(),
+                        subjectName: groupName.toString(),
+                        fallbackLessons: const [],
+                        branches: _groupBranches(),
+                        defaultBranchId: _groupBranchId(),
+                        subscriptions: const [],
+                        groupMembers: _scheduleMembers,
+                        canWrite: widget.canWrite,
+                        onChanged: () => _changed = true,
                       ),
                     ],
                   ),
@@ -282,6 +348,23 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
         ),
       ],
     );
+  }
+
+  String? _groupBranchId() =>
+      (widget.group['branch_id'] ?? (widget.group['branches'] as Map?)?['id'])
+          ?.toString();
+
+  List<Map<String, dynamic>> _groupBranches() {
+    final id = _groupBranchId();
+    if (id == null || id.isEmpty) return const [];
+    final name =
+        (widget.group['branch_name'] ??
+                (widget.group['branches'] as Map?)?['name'] ??
+                'Филиал')
+            .toString();
+    return [
+      {'id': id, 'name': name},
+    ];
   }
 
   Future<SearchableSelectItem?> _showStudentPicker() async {

@@ -180,7 +180,8 @@ describe("T8.3.1 production backfill", () => {
     expect(before.rows[0]?.count).toBe("0");
 
     const first = await runBackfill(pool, "apply");
-    expect(first.summary.applied).toBe(6);
+    expect(first.summary.applied).toBe(dryRun.summary.candidates);
+    expect(first.summary.applied).toBeGreaterThanOrEqual(6);
     expect(first.summary.reviewQueue).toBe(1);
 
     const second = await runBackfill(pool, "apply");

@@ -6,6 +6,10 @@ import { BranchesService } from "./branches.service";
 describe("BranchesService", () => {
   const actor = { userId: "manager-a", role: "manager" as const };
   const director = { userId: "director-a", role: "director" as const };
+  const weeklyHours = [
+    { weekday: 1, open: "09:00", close: "21:00" },
+    { weekday: 2, open: "09:00", close: "21:00" },
+  ];
 
   const createService = (rows: Record<string, unknown>[] = []) => {
     const query = jest.fn().mockResolvedValue({ rows });
@@ -46,6 +50,11 @@ describe("BranchesService", () => {
           utcOffsetMinutes: 180,
           timezone: "Europe/Moscow",
           scheduleReferenceVersion: 1,
+          lifecycleState: "active",
+          version: 1,
+          archivedAt: null,
+          archiveReason: null,
+          archiveEffectiveDate: null,
           createdAt: "2026-06-12T00:00:00.000Z",
         },
       ],
@@ -57,6 +66,7 @@ describe("BranchesService", () => {
       10,
       "manager",
       "manager-a",
+      false,
     ]);
   });
 
@@ -99,6 +109,7 @@ describe("BranchesService", () => {
         name: " Сокол ",
         address: " Москва, Сокол ",
         utcOffsetMinutes: 240,
+        weeklyHours,
       }),
     ).resolves.toEqual({
       id: "branch-b",
@@ -107,6 +118,11 @@ describe("BranchesService", () => {
       utcOffsetMinutes: 240,
       timezone: "Europe/Moscow",
       scheduleReferenceVersion: 1,
+      lifecycleState: "active",
+      version: 1,
+      archivedAt: null,
+      archiveReason: null,
+      archiveEffectiveDate: null,
       createdAt: "2026-06-12T00:00:00.000Z",
     });
 
@@ -117,6 +133,7 @@ describe("BranchesService", () => {
       "Москва, Сокол",
       240,
       null,
+      JSON.stringify(weeklyHours),
     ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -126,6 +143,7 @@ describe("BranchesService", () => {
         metadata: {
           utcOffsetMinutes: 240,
           timezone: "Europe/Moscow",
+          weeklyHoursCount: 2,
         },
       }),
     );
@@ -143,7 +161,7 @@ describe("BranchesService", () => {
     ]);
 
     await expect(
-      service.createBranch(director, { name: "Новый" }),
+      service.createBranch(director, { name: "Новый", weeklyHours }),
     ).resolves.toMatchObject({
       id: "branch-c",
       name: "Новый",
@@ -151,14 +169,20 @@ describe("BranchesService", () => {
       utcOffsetMinutes: 180,
     });
 
-    expect(query.mock.calls[0][1]).toEqual(["Новый", null, 180, null]);
+    expect(query.mock.calls[0][1]).toEqual([
+      "Новый",
+      null,
+      180,
+      null,
+      JSON.stringify(weeklyHours),
+    ]);
   });
 
   it("rejects branch creation when name is blank", async () => {
     const { service, query } = createService();
 
     await expect(
-      service.createBranch(director, { name: "   " }),
+      service.createBranch(director, { name: "   ", weeklyHours }),
     ).rejects.toThrow("Название филиала обязательно.");
     expect(query).not.toHaveBeenCalled();
   });
@@ -166,8 +190,24 @@ describe("BranchesService", () => {
   it("keeps delegated managers from creating unassigned branches", async () => {
     const { service, query } = createService();
     await expect(
-      service.createBranch(actor, { name: "Чужой" }),
+      service.createBranch(actor, { name: "Чужой", weeklyHours }),
     ).rejects.toThrow("Создавать филиалы может только директор.");
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it("rejects branch creation without working hours", async () => {
+    const { service, query } = createService();
+    await expect(
+      service.createBranch(director, { name: "Без графика", weeklyHours: [] }),
+    ).rejects.toThrow("Укажите рабочие часы");
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it("keeps delegated managers from reading the branch archive", async () => {
+    const { service, query } = createService();
+    await expect(
+      service.listBranches(actor, { includeArchived: true }),
+    ).rejects.toThrow("Архив филиалов доступен только директору.");
     expect(query).not.toHaveBeenCalled();
   });
 });

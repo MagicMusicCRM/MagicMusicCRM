@@ -97,6 +97,8 @@ extension _LeadsActions on _LeadsWidgetState {
       final hollihop = ref.read(hollihopServiceProvider);
       final results = await Future.wait<dynamic>([
         crm.listBranches(limit: 100),
+        crm.listLeadSources(),
+        crm.listResponsibleStaff(),
         hollihop.getDisciplines(),
         hollihop.getLevels(),
         hollihop.getCategories(),
@@ -104,9 +106,11 @@ extension _LeadsActions on _LeadsWidgetState {
       if (!mounted) return;
       _emitState(() {
         _branches = List<Map<String, dynamic>>.from(results[0] as List);
-        _disciplines = _stringOptions(results[1] as List);
-        _levels = _stringOptions(results[2] as List);
-        _categories = _stringOptions(results[3] as List);
+        _sources = List<Map<String, dynamic>>.from(results[1] as List);
+        _responsibles = List<Map<String, dynamic>>.from(results[2] as List);
+        _disciplines = _stringOptions(results[3] as List);
+        _levels = _stringOptions(results[4] as List);
+        _categories = _stringOptions(results[5] as List);
       });
     } catch (_) {
       // Filter metadata is progressive; the board remains usable without it.
@@ -341,37 +345,6 @@ extension _LeadsActions on _LeadsWidgetState {
     }
   }
 
-  Future<void> _deleteLead(String id) async {
-    if (id.isEmpty || _pendingLeadIds.contains(id)) return;
-    final confirmed = await confirmDelete(
-      context,
-      title: 'Удалить лид?',
-      body: 'Лид будет скрыт из воронки.',
-    );
-    if (!confirmed) return;
-    _emitState(() {
-      _hiddenLeadIds.add(id);
-      _pendingLeadIds.add(id);
-    });
-    try {
-      await ref.read(magicCrmServiceProvider).deleteLead(id);
-      _refreshBoard();
-      await ref.read(leadBoardProvider(_filters).future);
-      if (!mounted) return;
-      _emitState(() {
-        _hiddenLeadIds.remove(id);
-        _pendingLeadIds.remove(id);
-      });
-    } catch (e) {
-      if (!mounted) return;
-      _emitState(() {
-        _hiddenLeadIds.remove(id);
-        _pendingLeadIds.remove(id);
-      });
-      _showError('Не удалось удалить лид: $e');
-    }
-  }
-
   void _openDetail(Map<String, dynamic> lead) async {
     final changed = await showClientCard(
       context,
@@ -397,11 +370,19 @@ extension _LeadsActions on _LeadsWidgetState {
     var count = 0;
     if (_filters.quick != 'all') count++;
     if (_filters.openTasks) count++;
+    if (_filters.hideConverted) count++;
     if (_filters.branchId.isNotEmpty) count++;
     if (_filters.statusId.isNotEmpty) count++;
+    if (_filters.assignedTo.isNotEmpty) count++;
+    if (_filters.source.isNotEmpty) count++;
     if (_filters.discipline.isNotEmpty) count++;
     if (_filters.level.isNotEmpty) count++;
     if (_filters.category.isNotEmpty) count++;
+    if (_filters.requestType.isNotEmpty) count++;
+    if (_filters.goal.isNotEmpty) count++;
+    if (_filters.gender.isNotEmpty) count++;
+    if (_filters.preferredSchedule.isNotEmpty) count++;
+    if (_filters.from.isNotEmpty || _filters.to.isNotEmpty) count++;
     return count;
   }
 
@@ -418,6 +399,8 @@ extension _LeadsActions on _LeadsWidgetState {
     filters: _filters,
     searchText: _searchCtrl.text.trim(),
     branches: _branches,
+    sources: _sources,
+    responsibles: _responsibles,
     statuses: _activeStatuses,
     disciplines: _disciplines,
     levels: _levels,
@@ -431,6 +414,8 @@ extension _LeadsActions on _LeadsWidgetState {
     filters: _filters,
     searchText: _searchCtrl.text.trim(),
     branches: _branches,
+    sources: _sources,
+    responsibles: _responsibles,
     statuses: _activeStatuses,
     disciplines: _disciplines,
     levels: _levels,
@@ -561,7 +546,6 @@ extension _LeadsActions on _LeadsWidgetState {
                             leads: leads,
                             totalCount: totalCount,
                             onMove: _moveStatus,
-                            onDelete: _deleteLead,
                             onTap: _openDetail,
                             allStatuses: active,
                             onRefresh: _refreshBoard,

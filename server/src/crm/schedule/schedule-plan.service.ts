@@ -61,9 +61,10 @@ export class SchedulePlanService {
     this.policy.assertCanWriteCrm(actor);
     const normalized = this.normalizeCreate(dto);
     return this.database.transaction(async (client) => {
-      const studentIds = normalized.kind === "individual"
-        ? [normalized.studentId!]
-        : normalized.participants.map((participant) => participant.studentId);
+      const studentIds =
+        normalized.kind === "individual"
+          ? [normalized.studentId!]
+          : normalized.participants.map((participant) => participant.studentId);
       await this.lockAndValidate(
         client,
         this.stableId(`schedule.plan.preview\0${actor.userId}`),
@@ -92,7 +93,51 @@ export class SchedulePlanService {
           )),
         });
       }
-      this.addCrossRowViolations(normalized.rows, rows, studentIds[0]!);
+      this.addCrossRowViolations(normalized.rows, rows, studentIds);
+      return {
+        valid: rows.every((row) => row.failures.length === 0),
+        rows: rows.map((row) => ({
+          index: row.index,
+          valid: row.failures.length === 0,
+          occurrencesChecked: row.occurrences.length,
+          failures: row.failures,
+        })),
+      };
+    });
+  }
+
+  async previewUpdateConstraints(
+    actor: ActorContext,
+    planId: string,
+    dto: UpdateSchedulePlanDto,
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    this.assertRows(dto.rows);
+    return this.database.transaction(async (client) => {
+      const prepared = await this.prepareUpdate(client, planId, dto);
+      const excludeScheduleSeriesIds = prepared.activeSeries.map(
+        (series) => series.id,
+      );
+      const rows = [];
+      for (const [index, row] of dto.rows.entries()) {
+        await this.settlement.preparePlan(
+          client,
+          row.branchId,
+          row.financialDecision,
+        );
+        rows.push({
+          index,
+          ...(await this.series.previewPlanRow(
+            client,
+            row,
+            prepared.effectiveFrom,
+            prepared.activeUntil,
+            prepared.studentIds,
+            { excludeScheduleSeriesIds },
+          )),
+        });
+      }
+      this.addCrossRowViolations(dto.rows, rows, prepared.studentIds);
       return {
         valid: rows.every((row) => row.failures.length === 0),
         rows: rows.map((row) => ({
@@ -120,11 +165,7 @@ export class SchedulePlanService {
         planId,
         normalized.lastDate,
       );
-      const impactFingerprint = this.endFingerprint(
-        plan,
-        normalized,
-        impact,
-      );
+      const impactFingerprint = this.endFingerprint(plan, normalized, impact);
       const signed = this.previewTokens.issueSchedulePlanEnd({
         kind: "schedule.plan.end",
         actorUserId: actor.userId,
@@ -184,20 +225,26 @@ export class SchedulePlanService {
         payload: { entityId: planId, state: "ended" },
       },
       mutate: async (client, version) => {
-        const signed = this.previewTokens.verifySchedulePlanEnd(dto.previewToken);
+        const signed = this.previewTokens.verifySchedulePlanEnd(
+          dto.previewToken,
+        );
         const plan = await this.repository.lock(client, planId);
         await this.assertEndable(client, plan, normalized);
+        const currentSeries = await this.repository.currentSeriesIds(
+          client,
+          planId,
+        );
+        await this.schedule.lockSchedulePlanSeries(
+          client,
+          currentSeries.rows.map((series) => series.id),
+        );
         const impact = await this.repository.endImpact(
           client,
           planId,
           normalized.lastDate,
           true,
         );
-        const impactFingerprint = this.endFingerprint(
-          plan,
-          normalized,
-          impact,
-        );
+        const impactFingerprint = this.endFingerprint(plan, normalized, impact);
         if (
           signed.actorUserId !== actor.userId ||
           signed.planId !== planId ||
@@ -265,8 +312,8 @@ export class SchedulePlanService {
       version: mutation.version,
       endedLessons: mutation.resultRef.endedLessons as number,
       releasedReservations: mutation.resultRef.releasedReservations as number,
-      preservedTerminalLessons:
-        mutation.resultRef.preservedTerminalLessons as number,
+      preservedTerminalLessons: mutation.resultRef
+        .preservedTerminalLessons as number,
       replayed: mutation.replayed,
     };
   }
@@ -316,14 +363,7 @@ export class SchedulePlanService {
             previousLimit,
           )
         : Promise.resolve([]),
-      this.repository.trayPage(
-        actor,
-        planId,
-        "next",
-        anchor,
-        nextLimit,
-        true,
-      ),
+      this.repository.trayPage(actor, planId, "next", anchor, nextLimit, true),
     ]);
     const hasPrevious = previousRows.length > previousLimit;
     const hasNext = nextRows.length > nextLimit;
@@ -367,9 +407,10 @@ export class SchedulePlanService {
       },
       mutate: async (client, version) => {
         const participants = normalized.participants;
-        const studentIds = normalized.kind === "individual"
-          ? [normalized.studentId!]
-          : participants.map((participant) => participant.studentId);
+        const studentIds =
+          normalized.kind === "individual"
+            ? [normalized.studentId!]
+            : participants.map((participant) => participant.studentId);
         await this.lockAndValidate(
           client,
           planId,
@@ -432,7 +473,7 @@ export class SchedulePlanService {
           });
           await this.schedule.materializePlanSeries(client, seriesId);
           seriesIds.push(seriesId);
-          lessonIds.push(...await this.lessonIds(client, seriesId));
+          lessonIds.push(...(await this.lessonIds(client, seriesId)));
         }
         return { planId, seriesIds, lessonIds };
       },
@@ -476,58 +517,20 @@ export class SchedulePlanService {
         payload: { entityId: planId, state: "updated" },
       },
       mutate: async (client, version) => {
-        const plan = await this.repository.lock(client, planId);
-        this.assertEditable(plan, dto);
-        const participants = plan.kind === "group"
-          ? (dto.participants ?? await this.currentParticipants(
-              client,
-              planId,
-              dto.effectiveFrom.slice(0, 10),
-            ))
-          : [];
-        const subscriptionId = plan.kind === "individual"
-          ? (dto.subscriptionId ?? plan.subscription_id)
-          : null;
-        const activeUntil = Object.prototype.hasOwnProperty.call(dto, "activeUntil")
-          ? (dto.activeUntil?.slice(0, 10) ?? null)
-          : plan.active_until;
-        this.assertPeriod(dto.effectiveFrom, activeUntil);
-        const effectiveDate = await client.query<{ valid: boolean }>(
-          `select not exists (
-             select 1 from app.branches branch
-             where branch.id = any($2::uuid[])
-               and $1::date < timezone(branch.timezone_name, now())::date
-           ) as valid`,
-          [dto.effectiveFrom.slice(0, 10), [...new Set(dto.rows.map((row) => row.branchId))]],
-        );
-        if (!effectiveDate.rows[0]?.valid) {
-          this.fail("SCHEDULE_PLAN_EFFECTIVE_DATE_PAST", ["effectiveFrom"]);
-        }
-        const studentIds = plan.kind === "individual"
-          ? [plan.student_id!]
-          : participants.map((participant) => participant.studentId);
-        await this.lockAndValidate(
-          client,
-          planId,
-          plan.kind,
-          plan.student_id,
-          plan.group_id,
-          subscriptionId,
+        const {
+          plan,
           participants,
-          dto.rows,
-        );
+          subscriptionId,
+          activeUntil,
+          studentIds,
+          activeSeries,
+          effectiveFrom,
+        } = await this.prepareUpdate(client, planId, dto);
 
-        const activeSeries = (await this.repository.activeSeries(client, planId)).rows;
-        const activeIds = new Set(activeSeries.map((row) => row.id));
-        const requestedIds = dto.rows
-          .map((row) => row.seriesId)
-          .filter((id): id is string => Boolean(id));
-        if (requestedIds.some((id) => !activeIds.has(id))) {
-          throw new ConflictException({
-            code: "SCHEDULE_PLAN_SERIES_STALE",
-            message: "One of the edited rows is no longer active.",
-          });
-        }
+        await this.schedule.lockSchedulePlanSeries(
+          client,
+          activeSeries.map((series) => series.id),
+        );
 
         const continuations = new Map<string, string>();
         const seriesIds: string[] = [];
@@ -543,7 +546,7 @@ export class SchedulePlanService {
             planId,
             studentId: plan.student_id,
             groupId: plan.group_id,
-            validFrom: dto.effectiveFrom.slice(0, 10),
+            validFrom: effectiveFrom,
             validUntil: activeUntil,
             row,
             actorUserId: actor.userId,
@@ -557,7 +560,7 @@ export class SchedulePlanService {
           await this.repository.retireSeries(
             client,
             old.id,
-            dto.effectiveFrom.slice(0, 10),
+            effectiveFrom,
             continuations.get(old.id) ?? null,
           );
         }
@@ -566,7 +569,7 @@ export class SchedulePlanService {
             client,
             planId,
             participants,
-            dto.effectiveFrom.slice(0, 10),
+            effectiveFrom,
             activeUntil,
             version,
           );
@@ -583,13 +586,13 @@ export class SchedulePlanService {
           await this.series.validatePlanRow(
             client,
             row,
-            dto.effectiveFrom.slice(0, 10),
+            effectiveFrom,
             activeUntil,
             studentIds,
           );
           const seriesId = seriesIds[index]!;
           await this.schedule.materializePlanSeries(client, seriesId);
-          lessonIds.push(...await this.lessonIds(client, seriesId));
+          lessonIds.push(...(await this.lessonIds(client, seriesId)));
         }
         return { planId, seriesIds, lessonIds };
       },
@@ -603,23 +606,99 @@ export class SchedulePlanService {
     };
   }
 
+  private async prepareUpdate(
+    client: PoolClient,
+    planId: string,
+    dto: UpdateSchedulePlanDto,
+  ) {
+    const plan = await this.repository.lock(client, planId);
+    this.assertEditable(plan, dto);
+    const effectiveFrom = dto.effectiveFrom.slice(0, 10);
+    const participants =
+      plan.kind === "group"
+        ? (dto.participants ??
+          (await this.currentParticipants(client, planId, effectiveFrom)))
+        : [];
+    const subscriptionId =
+      plan.kind === "individual"
+        ? (dto.subscriptionId ?? plan.subscription_id)
+        : null;
+    const activeUntil = Object.prototype.hasOwnProperty.call(dto, "activeUntil")
+      ? (dto.activeUntil?.slice(0, 10) ?? null)
+      : plan.active_until;
+    this.assertPeriod(effectiveFrom, activeUntil);
+    const effectiveDate = await client.query<{ valid: boolean }>(
+      `select not exists (
+         select 1 from app.branches branch
+         where branch.id = any($2::uuid[])
+           and $1::date < timezone(branch.timezone_name, now())::date
+       ) as valid`,
+      [effectiveFrom, [...new Set(dto.rows.map((row) => row.branchId))]],
+    );
+    if (!effectiveDate.rows[0]?.valid) {
+      this.fail("SCHEDULE_PLAN_EFFECTIVE_DATE_PAST", ["effectiveFrom"]);
+    }
+    const studentIds =
+      plan.kind === "individual"
+        ? [plan.student_id!]
+        : participants.map((participant) => participant.studentId);
+    await this.lockAndValidate(
+      client,
+      planId,
+      plan.kind,
+      plan.student_id,
+      plan.group_id,
+      subscriptionId,
+      participants,
+      dto.rows,
+    );
+    const activeSeries = (await this.repository.activeSeries(client, planId))
+      .rows;
+    const activeIds = new Set(activeSeries.map((row) => row.id));
+    const requestedIds = dto.rows
+      .map((row) => row.seriesId)
+      .filter((id): id is string => Boolean(id));
+    if (requestedIds.some((id) => !activeIds.has(id))) {
+      throw new ConflictException({
+        code: "SCHEDULE_PLAN_SERIES_STALE",
+        message: "One of the edited rows is no longer active.",
+      });
+    }
+    return {
+      plan,
+      participants,
+      subscriptionId,
+      activeUntil,
+      studentIds,
+      activeSeries,
+      effectiveFrom,
+    };
+  }
+
   private normalizeCreate(dto: CreateSchedulePlanDto) {
     const title = dto.title.trim();
     if (!title) this.fail("SCHEDULE_PLAN_TITLE_REQUIRED", ["title"]);
-    const studentId = dto.kind === "individual" ? dto.studentId ?? null : null;
-    const groupId = dto.kind === "group" ? dto.groupId ?? null : null;
-    const subscriptionId = dto.kind === "individual"
-      ? dto.subscriptionId ?? null
-      : null;
-    const participants = dto.kind === "group" ? dto.participants ?? [] : [];
+    const studentId =
+      dto.kind === "individual" ? (dto.studentId ?? null) : null;
+    const groupId = dto.kind === "group" ? (dto.groupId ?? null) : null;
+    const subscriptionId =
+      dto.kind === "individual" ? (dto.subscriptionId ?? null) : null;
+    const participants = dto.kind === "group" ? (dto.participants ?? []) : [];
     if (dto.kind === "individual" && (!studentId || !subscriptionId)) {
-      this.fail("SCHEDULE_PLAN_INDIVIDUAL_SUBJECT_REQUIRED", ["studentId", "subscriptionId"]);
+      this.fail("SCHEDULE_PLAN_INDIVIDUAL_SUBJECT_REQUIRED", [
+        "studentId",
+        "subscriptionId",
+      ]);
     }
     if (dto.kind === "group" && (!groupId || participants.length === 0)) {
-      this.fail("SCHEDULE_PLAN_GROUP_SUBJECT_REQUIRED", ["groupId", "participants"]);
+      this.fail("SCHEDULE_PLAN_GROUP_SUBJECT_REQUIRED", [
+        "groupId",
+        "participants",
+      ]);
     }
     if (
-      (dto.kind === "individual" && (dto.groupId || (dto.participants?.length ?? 0) > 0)) ||
+      (dto.kind === "individual" &&
+        (dto.groupId || (dto.participants?.length ?? 0) > 0)) ||
       (dto.kind === "group" && (dto.studentId || dto.subscriptionId))
     ) {
       this.fail("SCHEDULE_PLAN_SUBJECT_AMBIGUOUS", ["kind"]);
@@ -673,14 +752,16 @@ export class SchedulePlanService {
     if (new Set(ids).size !== ids.length) {
       this.fail("SCHEDULE_PLAN_DUPLICATE_SERIES", ["rows"]);
     }
-    const keys = rows.map((row) => [
-      row.teacherId,
-      row.roomId,
-      row.branchId,
-      row.weekday,
-      row.beginTime,
-      row.durationMinutes ?? 60,
-    ].join(":"));
+    const keys = rows.map((row) =>
+      [
+        row.teacherId,
+        row.roomId,
+        row.branchId,
+        row.weekday,
+        row.beginTime,
+        row.durationMinutes ?? 60,
+      ].join(":"),
+    );
     if (new Set(keys).size !== keys.length) {
       this.fail("SCHEDULE_PLAN_DUPLICATE_ROW", ["rows"]);
     }
@@ -693,43 +774,56 @@ export class SchedulePlanService {
       occurrences: Array<{ startAt: string; endAt: string }>;
       failures: Array<Record<string, unknown>>;
     }>,
-    studentId: string,
+    studentIds: string[],
   ) {
     for (let leftIndex = 0; leftIndex < rows.length; leftIndex += 1) {
-      for (let rightIndex = leftIndex + 1; rightIndex < rows.length; rightIndex += 1) {
+      for (
+        let rightIndex = leftIndex + 1;
+        rightIndex < rows.length;
+        rightIndex += 1
+      ) {
         const left = rows[leftIndex]!;
         const right = rows[rightIndex]!;
         for (const leftOccurrence of previews[leftIndex]!.occurrences) {
           const rightOccurrence = previews[rightIndex]!.occurrences.find(
             (candidate) =>
-              Date.parse(leftOccurrence.startAt) < Date.parse(candidate.endAt) &&
+              Date.parse(leftOccurrence.startAt) <
+                Date.parse(candidate.endAt) &&
               Date.parse(candidate.startAt) < Date.parse(leftOccurrence.endAt),
           );
           if (!rightOccurrence) continue;
-          const shared = [
-            ...(left.teacherId === right.teacherId
-              ? [{ code: "TEACHER_OVERLAP", type: "teacher", id: left.teacherId }]
-              : []),
-            ...(left.roomId === right.roomId
-              ? [{ code: "ROOM_OVERLAP", type: "room", id: left.roomId }]
-              : []),
-            { code: "CLIENT_OVERLAP", type: "client", id: studentId },
-          ];
           for (const [source, target, occurrence] of [
             [leftIndex, rightIndex, leftOccurrence],
             [rightIndex, leftIndex, rightOccurrence],
           ] as const) {
-            previews[source]!.failures.push({
-              occurrence,
-              studentId,
-              violations: shared.map((violation) => ({
-                code: violation.code,
-                resource: { type: violation.type, id: violation.id },
-                conflictingLessonIds: [],
-                conflictingRowIndexes: [target],
-                ruleIds: ["schedule_plan.rows"],
-              })),
-            });
+            for (const studentId of studentIds) {
+              const shared = [
+                ...(left.teacherId === right.teacherId
+                  ? [
+                      {
+                        code: "TEACHER_OVERLAP",
+                        type: "teacher",
+                        id: left.teacherId,
+                      },
+                    ]
+                  : []),
+                ...(left.roomId === right.roomId
+                  ? [{ code: "ROOM_OVERLAP", type: "room", id: left.roomId }]
+                  : []),
+                { code: "CLIENT_OVERLAP", type: "client", id: studentId },
+              ];
+              previews[source]!.failures.push({
+                occurrence,
+                studentId,
+                violations: shared.map((violation) => ({
+                  code: violation.code,
+                  resource: { type: violation.type, id: violation.id },
+                  conflictingLessonIds: [],
+                  conflictingRowIndexes: [target],
+                  ruleIds: ["schedule_plan.rows"],
+                })),
+              });
+            }
           }
           break;
         }
@@ -738,7 +832,10 @@ export class SchedulePlanService {
   }
 
   private assertParticipants(participants: SchedulePlanParticipantDto[]) {
-    if (new Set(participants.map((item) => item.studentId)).size !== participants.length) {
+    if (
+      new Set(participants.map((item) => item.studentId)).size !==
+      participants.length
+    ) {
       this.fail("SCHEDULE_PLAN_DUPLICATE_PARTICIPANT", ["participants"]);
     }
   }
@@ -759,16 +856,18 @@ export class SchedulePlanService {
     participants: SchedulePlanParticipantDto[],
     rows: SchedulePlanRowDto[],
   ) {
-    const subscriptionIds = kind === "individual"
-      ? [subscriptionId!]
-      : participants.map((participant) => participant.subscriptionId);
-    const studentIds = kind === "individual"
-      ? [studentId!]
-      : participants.map((participant) => participant.studentId);
+    const subscriptionIds =
+      kind === "individual"
+        ? [subscriptionId!]
+        : participants.map((participant) => participant.subscriptionId);
+    const studentIds =
+      kind === "individual"
+        ? [studentId!]
+        : participants.map((participant) => participant.studentId);
     const locks = [
       `plan:${planId}`,
       ...(groupId ? [`group:${groupId}`] : []),
-      ...studentIds.map((id) => `student:${id}`),
+      ...studentIds.map((id) => `client:student:${id}`),
       ...subscriptionIds.map((id) => `subscription:${id}`),
       ...rows.flatMap((row) => [
         `branch:${row.branchId}`,
@@ -777,7 +876,10 @@ export class SchedulePlanService {
       ]),
     ].sort();
     for (const key of new Set(locks)) {
-      await client.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [key]);
+      await client.query(
+        "select pg_advisory_xact_lock(hashtextextended($1, 0))",
+        [key],
+      );
     }
     const subscriptions = await client.query<{
       id: string;
@@ -789,15 +891,24 @@ export class SchedulePlanService {
       [subscriptionIds],
     );
     const owners = new Map(subscriptions.rows.map((row) => [row.id, row]));
-    const assignments = kind === "individual"
-      ? [{ studentId: studentId!, subscriptionId: subscriptionId! }]
-      : participants;
-    if (assignments.some((assignment) => {
-      const subscription = owners.get(assignment.subscriptionId);
-      return !subscription || subscription.status !== "active"
-        || subscription.student_id !== assignment.studentId;
-    })) {
-      this.fail("SCHEDULE_PLAN_SUBSCRIPTION_INVALID", ["subscriptionId", "participants"]);
+    const assignments =
+      kind === "individual"
+        ? [{ studentId: studentId!, subscriptionId: subscriptionId! }]
+        : participants;
+    if (
+      assignments.some((assignment) => {
+        const subscription = owners.get(assignment.subscriptionId);
+        return (
+          !subscription ||
+          subscription.status !== "active" ||
+          subscription.student_id !== assignment.studentId
+        );
+      })
+    ) {
+      this.fail("SCHEDULE_PLAN_SUBSCRIPTION_INVALID", [
+        "subscriptionId",
+        "participants",
+      ]);
     }
     const resources = await client.query<{ valid: boolean }>(
       `select
@@ -831,7 +942,10 @@ export class SchedulePlanService {
         [groupId, studentIds],
       );
       if (Number(group.rows[0]?.member_count ?? -1) !== studentIds.length) {
-        this.fail("SCHEDULE_PLAN_GROUP_PARTICIPANT_INVALID", ["groupId", "participants"]);
+        this.fail("SCHEDULE_PLAN_GROUP_PARTICIPANT_INVALID", [
+          "groupId",
+          "participants",
+        ]);
       }
     }
   }
@@ -927,8 +1041,9 @@ export class SchedulePlanService {
   private sumUnits(values: string[]) {
     const total = values.reduce((sum, value) => {
       const [whole, fraction = ""] = value.split(".");
-      return sum + BigInt(whole) * 100n
-        + BigInt(fraction.padEnd(2, "0").slice(0, 2));
+      return (
+        sum + BigInt(whole) * 100n + BigInt(fraction.padEnd(2, "0").slice(0, 2))
+      );
     }, 0n);
     return `${total / 100n}.${String(total % 100n).padStart(2, "0")}`;
   }
@@ -963,18 +1078,21 @@ export class SchedulePlanService {
       items,
       hasPrevious,
       hasNext,
-      previousCursor: hasPrevious && items[0]
-        ? this.encodeTrayCursor(items[0].scheduledAt, items[0].id)
-        : null,
-      nextCursor: hasNext && items.at(-1)
-        ? this.encodeTrayCursor(items.at(-1)!.scheduledAt, items.at(-1)!.id)
-        : null,
+      previousCursor:
+        hasPrevious && items[0]
+          ? this.encodeTrayCursor(items[0].scheduledAt, items[0].id)
+          : null,
+      nextCursor:
+        hasNext && items.at(-1)
+          ? this.encodeTrayCursor(items.at(-1)!.scheduledAt, items.at(-1)!.id)
+          : null,
     };
   }
 
   private encodeTrayCursor(scheduledAt: string, id: string) {
-    return Buffer.from(JSON.stringify({ scheduledAt, id }), "utf8")
-      .toString("base64url");
+    return Buffer.from(JSON.stringify({ scheduledAt, id }), "utf8").toString(
+      "base64url",
+    );
   }
 
   private decodeTrayCursor(cursor: string): SchedulePlanTrayCursor {
@@ -987,8 +1105,9 @@ export class SchedulePlanService {
         typeof value.scheduledAt !== "string" ||
         !Number.isFinite(new Date(value.scheduledAt).getTime()) ||
         typeof value.id !== "string" ||
-        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-          .test(value.id)
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          value.id,
+        )
       ) {
         throw new Error("invalid");
       }
@@ -1008,7 +1127,9 @@ export class SchedulePlanService {
   }
 
   private seriesId(planId: string, version: number, index: number) {
-    return this.stableId(`schedule.plan.series\0${planId}\0${version}\0${index}`);
+    return this.stableId(
+      `schedule.plan.series\0${planId}\0${version}\0${index}`,
+    );
   }
 
   private stableId(seed: string) {

@@ -20,4 +20,27 @@ describe("SendMessageDto", () => {
 
     expect(await validate(dto)).not.toHaveLength(0);
   });
+
+  it("accepts a bounded persisted voice duration", async () => {
+    const dto = Object.assign(new SendMessageDto(), {
+      messageType: "voice",
+      attachmentFileId: "8c7890ec-e04e-4e4e-9a68-972f852979b3",
+      voiceDurationMs: 1_500,
+    });
+
+    await expect(validate(dto)).resolves.toHaveLength(0);
+  });
+
+  it.each([0, 3_600_001, 1.5])(
+    "rejects invalid voice duration %s",
+    async (voiceDurationMs) => {
+      const dto = Object.assign(new SendMessageDto(), {
+        messageType: "voice",
+        attachmentFileId: "8c7890ec-e04e-4e4e-9a68-972f852979b3",
+        voiceDurationMs,
+      });
+
+      expect(await validate(dto)).not.toHaveLength(0);
+    },
+  );
 });

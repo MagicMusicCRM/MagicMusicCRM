@@ -68,7 +68,13 @@ extension _ClientCardTabsB on _ClientCardState {
           family: _family,
           busy: _familyBusy,
           onRemove: _removeFamilyMember,
+          onSetPrimaryPayer: _setFamilyPrimaryPayer,
+          onOpen: _openFamilyMember,
         ),
+        if (_clientAccessAllowed) ...[
+          const SizedBox(height: AppSpace.lg),
+          _buildClientAccessSection(cs),
+        ],
         // #14: контактные лица живут на одной вкладке с семьёй — из Инфо
         // дубль убран.
         const SizedBox(height: AppSpace.lg),
@@ -108,6 +114,152 @@ extension _ClientCardTabsB on _ClientCardState {
       ),
       icon: const Icon(Icons.add_rounded, size: 16),
       label: const Text('Добавить'),
+    );
+  }
+
+  Widget _buildClientAccessSection(ColorScheme cs) {
+    final linkedIds = _linkedUsers
+        .map((item) => item['userId']?.toString())
+        .whereType<String>()
+        .toSet();
+    final candidates = _clientUserCandidates
+        .where((item) => !linkedIds.contains(item['userId']?.toString()))
+        .toList(growable: false);
+
+    return Container(
+      key: const Key('client-app-access'),
+      padding: const EdgeInsets.all(AppSpace.lg),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        border: Border.all(color: cs.outlineVariant),
+        borderRadius: BorderRadius.circular(AppRadius.control),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final title = Row(
+                children: [
+                  const Icon(
+                    Icons.mobile_friendly_rounded,
+                    color: AppColor.gold,
+                  ),
+                  const SizedBox(width: AppSpace.sm),
+                  const Expanded(
+                    child: Text(
+                      'Доступ в приложение',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ],
+              );
+              final invite = OutlinedButton.icon(
+                key: const Key('client-send-invite'),
+                onPressed: _clientAccessBusy ? null : _inviteClientToApp,
+                icon: const Icon(Icons.mark_email_read_outlined, size: 17),
+                label: const Text('Пригласить'),
+              );
+              if (!_mode.hasStudentHalf) return title;
+              if (constraints.maxWidth < 340) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    title,
+                    const SizedBox(height: AppSpace.sm),
+                    invite,
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: title),
+                  const SizedBox(width: AppSpace.sm),
+                  invite,
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: AppSpace.sm),
+          if (_loadingClientAccess)
+            const LinearProgressIndicator(color: AppColor.gold)
+          else if (_clientAccessError != null)
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Не удалось загрузить связанные аккаунты',
+                    style: TextStyle(color: cs.error),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _fetchClientAccess,
+                  child: const Text('Повторить'),
+                ),
+              ],
+            )
+          else ...[
+            if (_linkedUsers.isEmpty)
+              Text(
+                'Связанных аккаунтов пока нет',
+                style: TextStyle(color: cs.onSurfaceVariant),
+              )
+            else
+              for (final user in _linkedUsers)
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.verified_user_outlined, size: 19),
+                  title: Text(
+                    user['name']?.toString().trim().isNotEmpty == true
+                        ? user['name'].toString()
+                        : 'Пользователь приложения',
+                  ),
+                  subtitle: Text(
+                    user['linkSource'] == 'self'
+                        ? 'Личный аккаунт ученика'
+                        : 'Связанный аккаунт',
+                  ),
+                ),
+            if (candidates.isNotEmpty) ...[
+              const Divider(),
+              Text(
+                'Найдены аккаунты с тем же телефоном',
+                style: TextStyle(
+                  color: cs.onSurfaceVariant,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: AppSpace.xs),
+              for (final candidate in candidates)
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    candidate['name']?.toString().trim().isNotEmpty == true
+                        ? candidate['name'].toString()
+                        : 'Пользователь приложения',
+                  ),
+                  subtitle: Text(
+                    candidate['email']?.toString() ??
+                        candidate['phone']?.toString() ??
+                        '',
+                  ),
+                  trailing: TextButton(
+                    key: Key(
+                      'client-link-user-${candidate['userId']?.toString()}',
+                    ),
+                    onPressed: _clientAccessBusy
+                        ? null
+                        : () => _linkClientUser(candidate),
+                    child: const Text('Связать'),
+                  ),
+                ),
+            ],
+          ],
+        ],
+      ),
     );
   }
 

@@ -45,6 +45,7 @@ export interface LessonConstraintDraft {
   startAt: string | Date;
   endAt: string | Date;
   excludeLessonId?: string;
+  excludeScheduleSeriesIds?: string[];
 }
 
 export interface ConstraintValidationResult {

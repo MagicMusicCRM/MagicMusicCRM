@@ -7,7 +7,6 @@ class _LeadCard extends ConsumerWidget {
   final Color statusColor;
   final List<StatusRecord> allStatuses;
   final Function(String, String) onMove;
-  final Function(String) onDelete;
   final VoidCallback onTap;
   final VoidCallback onRefresh;
   final bool isPending;
@@ -19,7 +18,6 @@ class _LeadCard extends ConsumerWidget {
     required this.statusColor,
     required this.allStatuses,
     required this.onMove,
-    required this.onDelete,
     required this.onTap,
     required this.onRefresh,
     required this.isPending,
@@ -51,6 +49,7 @@ class _LeadCard extends ConsumerWidget {
 
     final discipline = lead.discipline;
     final level = lead.level;
+    final tableFields = lead.tableCustomFields;
 
     // True while THIS card is the one carried by the transfer drag — the card
     // stays mounted (so the Draggable survives) but renders as a faded source
@@ -222,9 +221,7 @@ class _LeadCard extends ConsumerWidget {
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(minWidth: 150),
                         onSelected: (v) {
-                          if (v == 'delete') {
-                            onDelete(id);
-                          } else if (v == 'comment') {
+                          if (v == 'comment') {
                             _addComment(context, ref);
                           } else if (v == 'task') {
                             _addTask(context, ref);
@@ -307,14 +304,6 @@ class _LeadCard extends ConsumerWidget {
                                 ),
                               ),
                             ],
-                            const PopupMenuDivider(),
-                            const PopupMenuItem(
-                              value: 'delete',
-                              child: Text(
-                                'Удалить',
-                                style: TextStyle(color: AppColor.danger),
-                              ),
-                            ),
                           ];
                         },
                       ),
@@ -351,6 +340,27 @@ class _LeadCard extends ConsumerWidget {
                         ),
                     ],
                   ),
+                  if (tableFields.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (final field in tableFields)
+                            KeyedSubtree(
+                              key: ValueKey('lead-table-field-${field['key']}'),
+                              child: _InfoBadge(
+                                text: clientTableFieldText(field),
+                                color: AppColor.gold.withAlpha(32),
+                                textColor: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   if (branchName.isNotEmpty || assignedName.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),

@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -26,8 +27,15 @@ import { UpdateStaffDto } from "./dto/update-staff.dto";
 import { UpdateTeacherDto } from "./dto/update-teacher.dto";
 import { CreateTeacherPayoutDto } from "./dto/create-teacher-payout.dto";
 import { SetTeacherRateDto } from "./dto/set-teacher-rate.dto";
+import {
+  DeleteTeacherPayrollEntryDto,
+  UpdateTeacherPayoutEntryDto,
+  UpdateTeacherRateEntryDto,
+} from "./dto/manage-teacher-payroll-entry.dto";
 import { TeacherStatsQuery } from "./dto/teacher-stats.query";
 import { ProvisionPersonAccessDto } from "./dto/provision-person-access.dto";
+import { PersonLifecycleCommandDto } from "./dto/person-lifecycle.dto";
+import { PersonLifecycleService } from "./person-lifecycle.service";
 
 @UseGuards(JwtAuthGuard)
 @Controller("crm")
@@ -36,6 +44,7 @@ export class CrmPeopleController {
     private readonly payroll: PayrollService,
     private readonly staff: StaffService,
     private readonly teachers: TeachersService,
+    private readonly peopleLifecycle: PersonLifecycleService,
   ) {}
 
   @Get("teachers")
@@ -66,9 +75,14 @@ export class CrmPeopleController {
   updateTeacher(
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
     @Body() dto: UpdateTeacherDto,
   ) {
-    return this.teachers.updateTeacher(actor, id, dto);
+    return this.teachers.updateTeacher(actor, id, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
   }
 
   @Post("teachers/:id/access")
@@ -78,6 +92,50 @@ export class CrmPeopleController {
     @Body() dto: ProvisionPersonAccessDto,
   ) {
     return this.teachers.provisionAccess(actor, id, dto);
+  }
+
+  @Get("teachers/:id/lifecycle-preview")
+  previewTeacherLifecycle(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.peopleLifecycle.preview(actor, "teacher", id);
+  }
+
+  @Get("teachers/:id/lifecycle-history")
+  teacherLifecycleHistory(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.peopleLifecycle.history(actor, "teacher", id);
+  }
+
+  @Post("teachers/:id/offboard")
+  offboardTeacher(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+    @Body() dto: PersonLifecycleCommandDto,
+  ) {
+    return this.peopleLifecycle.offboard(actor, "teacher", id, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
+  }
+
+  @Post("teachers/:id/restore")
+  restoreTeacher(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+    @Body() dto: PersonLifecycleCommandDto,
+  ) {
+    return this.peopleLifecycle.restore(actor, "teacher", id, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
   }
 
   @Get("teachers/:id/payroll")
@@ -92,18 +150,88 @@ export class CrmPeopleController {
   createTeacherPayout(
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
     @Body() dto: CreateTeacherPayoutDto,
   ) {
-    return this.payroll.createTeacherPayout(actor, id, dto);
+    return this.payroll.createTeacherPayout(actor, id, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
   }
 
   @Post("teachers/:id/rates")
   setTeacherRate(
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
     @Body() dto: SetTeacherRateDto,
   ) {
-    return this.payroll.setTeacherRate(actor, id, dto);
+    return this.payroll.setTeacherRate(actor, id, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
+  }
+
+  @Patch("teachers/:id/rates/:entryId")
+  updateTeacherRate(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("entryId", ParseUUIDPipe) entryId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+    @Body() dto: UpdateTeacherRateEntryDto,
+  ) {
+    return this.payroll.updateTeacherRate(actor, id, entryId, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
+  }
+
+  @Delete("teachers/:id/rates/:entryId")
+  deleteTeacherRate(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("entryId", ParseUUIDPipe) entryId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+    @Body() dto: DeleteTeacherPayrollEntryDto,
+  ) {
+    return this.payroll.deleteTeacherRate(actor, id, entryId, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
+  }
+
+  @Patch("teachers/:id/payouts/:entryId")
+  updateTeacherPayout(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("entryId", ParseUUIDPipe) entryId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+    @Body() dto: UpdateTeacherPayoutEntryDto,
+  ) {
+    return this.payroll.updateTeacherPayout(actor, id, entryId, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
+  }
+
+  @Delete("teachers/:id/payouts/:entryId")
+  deleteTeacherPayout(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("entryId", ParseUUIDPipe) entryId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+    @Body() dto: DeleteTeacherPayrollEntryDto,
+  ) {
+    return this.payroll.deleteTeacherPayout(actor, id, entryId, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
   }
 
   @Get("reports/teacher-stats")
@@ -153,6 +281,14 @@ export class CrmPeopleController {
     return this.staff.updateStaff(actor, id, dto);
   }
 
+  @Get("staff/:id")
+  getStaff(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.staff.getStaff(actor, id);
+  }
+
   @Post("staff/:id/access")
   provisionStaffAccess(
     @CurrentActor() actor: ActorContext,
@@ -160,5 +296,49 @@ export class CrmPeopleController {
     @Body() dto: ProvisionPersonAccessDto,
   ) {
     return this.staff.provisionAccess(actor, id, dto);
+  }
+
+  @Get("staff/:id/lifecycle-preview")
+  previewStaffLifecycle(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.peopleLifecycle.preview(actor, "staff", id);
+  }
+
+  @Get("staff/:id/lifecycle-history")
+  staffLifecycleHistory(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.peopleLifecycle.history(actor, "staff", id);
+  }
+
+  @Post("staff/:id/offboard")
+  offboardStaff(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+    @Body() dto: PersonLifecycleCommandDto,
+  ) {
+    return this.peopleLifecycle.offboard(actor, "staff", id, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
+  }
+
+  @Post("staff/:id/restore")
+  restoreStaff(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+    @Body() dto: PersonLifecycleCommandDto,
+  ) {
+    return this.peopleLifecycle.restore(actor, "staff", id, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
   }
 }

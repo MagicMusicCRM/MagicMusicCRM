@@ -1,13 +1,16 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
+  UnprocessableEntityException,
 } from "@nestjs/common";
+import { authorizeCurrentCapability } from "../access-control/capability-request-authorizer";
 import { AuditService } from "../audit/audit.service";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
-import { CrmListQuery } from "./dto/crm-list.query";
 import { RoomAvailabilityQuery } from "./dto/room-availability.query";
+import { RoomListQuery } from "./dto/room-lifecycle.dto";
 import { UpsertRoomDto } from "./dto/upsert-room.dto";
 import { CrmPolicy } from "./crm.policy";
 import { assertSettingsBranchScope } from "./settings-branch-scope";
@@ -18,6 +21,11 @@ interface RoomRow {
   branch_name: string | null;
   name: string;
   capacity: number | null;
+  lifecycle_state?: "active" | "archived";
+  version?: number | string;
+  archived_at?: Date | string | null;
+  archive_reason?: string | null;
+  archive_effective_date?: string | null;
   created_at: Date | string;
 }
 
@@ -53,6 +61,11 @@ export class RoomsService {
       branchName: row.branch_name,
       name: row.name,
       capacity: row.capacity,
+      lifecycleState: row.lifecycle_state ?? "active",
+      version: Number(row.version ?? 1),
+      archivedAt: row.archived_at ?? null,
+      archiveReason: row.archive_reason ?? null,
+      archiveEffectiveDate: row.archive_effective_date ?? null,
       createdAt: row.created_at,
     };
   }
@@ -103,16 +116,31 @@ export class RoomsService {
     };
   }
 
-  async listRooms(actor: ActorContext, query: CrmListQuery) {
+  async listRooms(actor: ActorContext, query: RoomListQuery) {
     this.policy.assertCanReadOperationalData(actor);
+    const includeArchived = query.includeArchived ?? false;
+    if (
+      includeArchived &&
+      actor.role !== "director" &&
+      actor.role !== "system_admin"
+    ) {
+      throw new ForbiddenException(
+        "Архив аудиторий доступен только директору.",
+      );
+    }
+    if (includeArchived) {
+      await authorizeCurrentCapability(this.database, actor, "config.crm.edit");
+    }
     const limit = Math.min(query.limit ?? 100, 100);
     const q = query.q?.trim();
     const result = await this.database.query<RoomRow>(
       `
-        select r.id, r.branch_id, b.name as branch_name, r.name, r.capacity, r.created_at
+        select r.id, r.branch_id, b.name as branch_name, r.name, r.capacity,
+          r.lifecycle_state, r.version, r.archived_at, r.archive_reason,
+          r.archive_effective_date, r.created_at
         from app.rooms r
-        left join app.branches b on b.id = r.branch_id and b.deleted_at is null
-        where r.deleted_at is null
+        left join app.branches b on b.id = r.branch_id
+        where ($6::boolean or r.deleted_at is null)
           and (
             $4::text <> 'manager'
             or exists (
@@ -135,7 +163,14 @@ export class RoomsService {
         order by b.name nulls last, r.name asc, r.id asc
         limit $3
       `,
-      [query.branchId ?? null, q || null, limit, actor.role, actor.userId],
+      [
+        query.branchId ?? null,
+        q || null,
+        limit,
+        actor.role,
+        actor.userId,
+        includeArchived,
+      ],
     );
 
     return { items: result.rows.map((row) => this.toRoomDto(row)) };
@@ -281,9 +316,18 @@ export class RoomsService {
         inserted as (
           insert into app.rooms (branch_id, name, capacity)
           select id, $2, $3 from target_branch
-          returning id, branch_id, name, capacity, created_at
+          returning id, branch_id, name, capacity, lifecycle_state, version,
+            archived_at, archive_reason, archive_effective_date, created_at
+        ), aggregate_seed as (
+          insert into app.aggregate_versions (
+            aggregate_type, aggregate_id, version
+          )
+          select 'organization:room', id::text, version from inserted
+          on conflict (aggregate_type, aggregate_id) do nothing
         )
-        select i.id, i.branch_id, b.name as branch_name, i.name, i.capacity, i.created_at
+        select i.id, i.branch_id, b.name as branch_name, i.name, i.capacity,
+          i.lifecycle_state, i.version, i.archived_at, i.archive_reason,
+          i.archive_effective_date, i.created_at
         from inserted i
         left join app.branches b on b.id = i.branch_id and b.deleted_at is null
       `,
@@ -302,6 +346,16 @@ export class RoomsService {
 
   async updateRoom(actor: ActorContext, roomId: string, dto: UpsertRoomDto) {
     this.policy.assertCanManageSystemSettings(actor);
+    if (dto.branchId) {
+      const currentBranchId = await this.roomBranch(roomId);
+      if (dto.branchId !== currentBranchId) {
+        throw new UnprocessableEntityException({
+          code: "ROOM_BRANCH_TRANSFER_REQUIRES_REMEDIATION",
+          message:
+            "Нельзя перенести действующую аудиторию между филиалами обычным редактированием.",
+        });
+      }
+    }
     if (actor.role === "manager") {
       await assertSettingsBranchScope(
         this.database,
@@ -326,9 +380,12 @@ export class RoomsService {
             capacity = case when $4::boolean then $5::integer else capacity end,
             updated_at = now()
           where id = $1 and deleted_at is null
-          returning id, branch_id, name, capacity, created_at
+          returning id, branch_id, name, capacity, lifecycle_state, version,
+            archived_at, archive_reason, archive_effective_date, created_at
         )
-        select u.id, u.branch_id, b.name as branch_name, u.name, u.capacity, u.created_at
+        select u.id, u.branch_id, b.name as branch_name, u.name, u.capacity,
+          u.lifecycle_state, u.version, u.archived_at, u.archive_reason,
+          u.archive_effective_date, u.created_at
         from updated u
         left join app.branches b on b.id = u.branch_id and b.deleted_at is null
       `,
@@ -353,31 +410,12 @@ export class RoomsService {
 
   async deleteRoom(actor: ActorContext, roomId: string) {
     this.policy.assertCanManageSystemSettings(actor);
-    if (actor.role === "manager") {
-      await assertSettingsBranchScope(
-        this.database,
-        actor,
-        await this.roomBranch(roomId),
-      );
-    }
-    const result = await this.database.query<{ id: string }>(
-      `
-        update app.rooms
-        set deleted_at = now(), updated_at = now()
-        where id = $1 and deleted_at is null
-        returning id
-      `,
-      [roomId],
-    );
-    const room = result.rows[0];
-    if (!room) throw new NotFoundException("Аудитория не найдена.");
-    await this.audit.record({
-      actor,
-      action: "crm.room_deleted",
-      entityType: "room",
-      entityId: room.id,
+    throw new UnprocessableEntityException({
+      code: "ROOM_ARCHIVE_PREVIEW_REQUIRED",
+      message:
+        "Прямое удаление отключено. Сначала откройте проверку связей аудитории.",
+      roomId,
     });
-    return { success: true };
   }
 
   private async roomBranch(roomId: string): Promise<string> {

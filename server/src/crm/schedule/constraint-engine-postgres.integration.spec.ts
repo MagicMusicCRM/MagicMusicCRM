@@ -106,6 +106,100 @@ describe("Schedule constraint engine (PostgreSQL)", () => {
       );
       expect(editingSameLesson).toEqual({ valid: true, violations: [] });
 
+      const series = await client.query<{ id: string }>(
+        `insert into app.schedule_series (
+           student_id, teacher_id, room_id, branch_id, weekday, begin_time,
+           duration_minutes, valid_from
+         ) values ($1,$2,$3,$4,1,'10:00',60,'2026-01-01') returning id`,
+        [
+          fixture.studentId,
+          fixture.teacherId,
+          fixture.roomId,
+          fixture.branchId,
+        ],
+      );
+      const seriesId = series.rows[0]!.id;
+      await client.query(
+        "update app.lessons set series_id = $2 where id = $1",
+        [fixture.lessonId, seriesId],
+      );
+      const replacingPlanSeries = await engine.validate(
+        {
+          ...baseDraft,
+          startAt: "2026-07-27T07:30:00.000Z",
+          endAt: "2026-07-27T08:30:00.000Z",
+          excludeScheduleSeriesIds: [seriesId],
+        },
+        client,
+      );
+      expect(replacingPlanSeries).toEqual({ valid: true, violations: [] });
+
+      const standalone = await client.query<{ id: string }>(
+        `insert into app.lessons (
+           student_id, teacher_id, branch_id, room_id,
+           scheduled_at, duration_minutes
+         ) values ($1,$2,$3,$4,'2026-07-27T07:45:00.000Z',30)
+         returning id`,
+        [
+          fixture.studentId,
+          fixture.teacherId,
+          fixture.branchId,
+          fixture.roomId,
+        ],
+      );
+      const standaloneStillBlocks = await engine.validate(
+        {
+          ...baseDraft,
+          startAt: "2026-07-27T07:30:00.000Z",
+          endAt: "2026-07-27T08:30:00.000Z",
+          excludeScheduleSeriesIds: [seriesId],
+        },
+        client,
+      );
+      expect(standaloneStillBlocks.violations).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: "CLIENT_OVERLAP",
+            conflictingLessonIds: [standalone.rows[0]!.id],
+          }),
+          expect.objectContaining({
+            code: "TEACHER_OVERLAP",
+            conflictingLessonIds: [standalone.rows[0]!.id],
+          }),
+          expect.objectContaining({
+            code: "ROOM_OVERLAP",
+            conflictingLessonIds: [standalone.rows[0]!.id],
+          }),
+        ]),
+      );
+      await client.query("delete from app.lessons where id = $1", [
+        standalone.rows[0]!.id,
+      ]);
+
+      await client.query(
+        `update app.lessons
+         set original_scheduled_at = scheduled_at - interval '1 hour'
+         where id = $1`,
+        [fixture.lessonId],
+      );
+      const preservedRescheduledLesson = await engine.validate(
+        {
+          ...baseDraft,
+          startAt: "2026-07-27T07:30:00.000Z",
+          endAt: "2026-07-27T08:30:00.000Z",
+          excludeScheduleSeriesIds: [seriesId],
+        },
+        client,
+      );
+      expect(preservedRescheduledLesson.violations).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: "CLIENT_OVERLAP",
+            conflictingLessonIds: [fixture.lessonId],
+          }),
+        ]),
+      );
+
       const crossBranch = await engine.validate(
         {
           ...baseDraft,
@@ -236,6 +330,44 @@ describe("Schedule constraint engine (PostgreSQL)", () => {
           conflictingLessonIds: [groupLesson.rows[0]!.id],
         }),
       ]));
+
+      await client.query(
+        `insert into app.lesson_snapshots (
+           lesson_id, group_id, completion_type,
+           client_charge_type, client_charge_value,
+           teacher_compensation_type, teacher_compensation_value,
+           trial, duration_minutes
+         ) values ($1, $2, 'standard.success', 'none', 0, 'none', 0, false, 60)`,
+        [groupLesson.rows[0]!.id, group.rows[0]!.id],
+      );
+      await client.query(
+        `insert into app.lesson_snapshot_participants (
+           lesson_id, student_id, charge_type, charge_value
+         ) values ($1, $2, 'none', 0)`,
+        [groupLesson.rows[0]!.id, fixture.studentId],
+      );
+      await client.query(
+        `update app.group_students set left_at = now()
+         where group_id = $1 and student_id = $2`,
+        [group.rows[0]!.id, fixture.studentId],
+      );
+
+      const snapshotParticipantOverlap = await engine.validate(
+        {
+          ...baseDraft,
+          startAt: "2026-07-27T10:30:00.000Z",
+          endAt: "2026-07-27T11:30:00.000Z",
+        },
+        client,
+      );
+      expect(snapshotParticipantOverlap.violations).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: "CLIENT_OVERLAP",
+            conflictingLessonIds: [groupLesson.rows[0]!.id],
+          }),
+        ]),
+      );
     } finally {
       await client.query("rollback");
       client.release();

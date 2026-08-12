@@ -19,6 +19,7 @@ import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_messenger_shell.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7_nav_shell.dart';
 import 'package:magic_music_crm/core/widgets/v7/dirty_form_exit.dart';
+import 'package:magic_music_crm/core/widgets/v7/magic_page_state.dart';
 import 'package:magic_music_crm/core/widgets/telegram/chat_list_tile.dart';
 import 'package:magic_music_crm/core/widgets/telegram/chat_header.dart';
 import 'package:magic_music_crm/core/widgets/telegram/chat_search_bar.dart';
@@ -26,6 +27,7 @@ import 'package:magic_music_crm/core/widgets/telegram/message_bubble.dart';
 import 'package:magic_music_crm/core/widgets/telegram/message_input.dart';
 import 'package:magic_music_crm/core/widgets/telegram/date_separator.dart';
 import 'package:magic_music_crm/core/widgets/telegram/create_group_dialog.dart';
+import 'package:magic_music_crm/core/widgets/telegram/channel_editor_dialog.dart';
 import 'package:magic_music_crm/core/widgets/telegram/chat_info_dialog.dart';
 import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
 import 'package:magic_music_crm/core/services/notification_service.dart';
@@ -98,6 +100,7 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   String? _selectedChatType; // 'direct', 'group', 'channel'
   String? _selectedChatRawType;
   String? _selectedChatSlug; // 'announcements' for the system Объявления chat
+  bool _selectedChannelCanWrite = false;
   String? _selectedChatName;
   String? _selectedChatAvatarUrl;
   String? _selectedPartnerId;
@@ -114,6 +117,8 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   Set<String> _pinnedChatIds = {};
   bool _loadingChats = true;
   bool _loadingMessages = false;
+  String? _chatListError;
+  String? _messagesLoadError;
   String _searchQuery = '';
   int _selectedCrmTab = 0;
 

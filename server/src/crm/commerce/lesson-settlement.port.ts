@@ -133,6 +133,17 @@ export interface LessonSettlementPort {
       };
     },
   ): Promise<PreparedLessonSettlementPlan>;
+  loadPlan(
+    client: PoolClient,
+    lessonId: string,
+    lock?: boolean,
+  ): Promise<StoredLessonSettlementPlan | null>;
+  markPlanState(
+    client: PoolClient,
+    lessonId: string,
+    state: "settled" | "review_required" | "cancelled",
+    failureCode?: string,
+  ): Promise<void>;
   plannedSubscriptionAllocations(
     client: PoolClient,
     lessonId: string,

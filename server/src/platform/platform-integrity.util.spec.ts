@@ -67,11 +67,15 @@ describe("platform integrity utilities", () => {
         note: "Contact person@example.com",
         nested: { phone: "+79990000000" },
         entityId: "safe-id",
+        action: "rescheduled",
+        successorId: "successor-id",
         changedFields: ["status"],
         accessVersion: 2,
       }),
     ).toEqual({
       entityId: "safe-id",
+      action: "rescheduled",
+      successorId: "successor-id",
       changedFields: ["status"],
       accessVersion: 2,
     });

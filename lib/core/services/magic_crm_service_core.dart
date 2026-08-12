@@ -232,6 +232,10 @@ extension MagicCrmCore on MagicCrmService {
     };
   }
 
+  Future<Map<String, dynamic>> inviteStudent(String studentId) async {
+    return _api.post<Map<String, dynamic>>('/crm/students/$studentId/invite');
+  }
+
   Future<Map<String, dynamic>> createStudent({
     required String firstName,
     String? lastName,
@@ -288,6 +292,9 @@ extension MagicCrmCore on MagicCrmService {
       'subscriptions': _mapList(response['subscriptions'], _legacySubscription),
       'links': _mapList(response['links'], _legacyCrmLink),
       'timeline': _mapList(response['timeline'], _legacyTimelineItem),
+      'custom_field_values': response['customFieldValues'] is Map
+          ? Map<String, dynamic>.from(response['customFieldValues'] as Map)
+          : <String, dynamic>{},
     };
   }
 
@@ -312,6 +319,7 @@ extension MagicCrmCore on MagicCrmService {
     String? sourceId,
     bool clearResponsible = false,
     Map<String, dynamic>? customDataPatch,
+    List<Map<String, dynamic>>? customFields,
   }) async {
     final data = <String, dynamic>{};
     if (firstName != null) data['firstName'] = firstName.trim();
@@ -322,21 +330,13 @@ extension MagicCrmCore on MagicCrmService {
     if (sourceId != null) data['sourceId'] = sourceId;
     if (clearResponsible) data['clearResponsible'] = true;
     if (customDataPatch != null) data['customDataPatch'] = customDataPatch;
+    if (customFields != null) data['customFields'] = customFields;
 
     final response = await _api.patch<Map<String, dynamic>>(
       '/crm/students/$id',
       data: data,
     );
     return _legacyStudent(response);
-  }
-
-  /// Soft-delete a student. Used to truly undo a Лид→Ученик drag conversion.
-  Future<void> deleteStudent(String id) async {
-    await _api.delete<Map<String, dynamic>>('/crm/students/$id');
-  }
-
-  Future<Map<String, dynamic>> returnStudentToLead(String id) async {
-    return _api.post<Map<String, dynamic>>('/crm/students/$id/return-to-lead');
   }
 
   Future<List<Map<String, dynamic>>> listTeachers({
@@ -393,10 +393,10 @@ extension MagicCrmCore on MagicCrmService {
     required String firstName,
     String? lastName,
     String? phone,
-    required String email,
-    required String password,
+    String? email,
+    String? password,
     required List<String> branchIds,
-    required List<String> disciplineIds,
+    List<String> disciplineIds = const [],
     String status = 'active',
     Map<String, dynamic>? customDataPatch,
     num? salary,
@@ -405,12 +405,12 @@ extension MagicCrmCore on MagicCrmService {
   }) async {
     final data = <String, dynamic>{
       'firstName': firstName.trim(),
-      'email': email.trim(),
-      'password': password,
       'branchIds': branchIds,
       'disciplineIds': disciplineIds,
       'status': status,
     };
+    if (email != null && email.trim().isNotEmpty) data['email'] = email.trim();
+    if (password != null && password.isNotEmpty) data['password'] = password;
     if (lastName != null && lastName.trim().isNotEmpty) {
       data['lastName'] = lastName.trim();
     }
@@ -423,7 +423,6 @@ extension MagicCrmCore on MagicCrmService {
     if (rateEffectiveFrom != null && rateEffectiveFrom.isNotEmpty) {
       data['rateEffectiveFrom'] = rateEffectiveFrom;
     }
-
     final response = await _api.post<Map<String, dynamic>>(
       '/crm/teachers',
       data: data,
@@ -433,12 +432,15 @@ extension MagicCrmCore on MagicCrmService {
 
   Future<Map<String, dynamic>> provisionTeacherAccess({
     required String teacherId,
-    required String email,
-    required String password,
+    String? email,
+    String? password,
   }) async {
+    final data = <String, dynamic>{};
+    if (email != null && email.trim().isNotEmpty) data['email'] = email.trim();
+    if (password != null && password.isNotEmpty) data['password'] = password;
     final response = await _api.post<Map<String, dynamic>>(
       '/crm/teachers/$teacherId/access',
-      data: {'email': email.trim(), 'password': password},
+      data: data,
     );
     return _legacyTeacher(response);
   }
@@ -458,6 +460,8 @@ extension MagicCrmCore on MagicCrmService {
     List<String>? branchIds,
     num? rate,
     String? rateEffectiveFrom,
+    int? payrollExpectedVersion,
+    String? payrollReasonText,
   }) async {
     final data = <String, dynamic>{};
     if (firstName != null) data['firstName'] = firstName.trim();
@@ -474,6 +478,12 @@ extension MagicCrmCore on MagicCrmService {
     if (rate != null) data['rate'] = rate;
     if (rateEffectiveFrom != null && rateEffectiveFrom.isNotEmpty) {
       data['rateEffectiveFrom'] = rateEffectiveFrom;
+    }
+    if (payrollExpectedVersion != null) {
+      data['payrollExpectedVersion'] = payrollExpectedVersion;
+    }
+    if (payrollReasonText != null && payrollReasonText.trim().isNotEmpty) {
+      data['payrollReasonText'] = payrollReasonText.trim();
     }
 
     final response = await _api.patch<Map<String, dynamic>>(
@@ -495,9 +505,16 @@ extension MagicCrmCore on MagicCrmService {
     required String teacherId,
     required String kind,
     required num amount,
+    required int expectedVersion,
+    required String reasonText,
     String? comment,
   }) async {
-    final data = <String, dynamic>{'kind': kind, 'amount': amount};
+    final data = <String, dynamic>{
+      'kind': kind,
+      'amount': amount,
+      'expectedVersion': expectedVersion,
+      'reasonText': reasonText.trim(),
+    };
     final trimmed = comment?.trim();
     if (trimmed != null && trimmed.isNotEmpty) data['comment'] = trimmed;
     return _api.post<Map<String, dynamic>>(
@@ -511,13 +528,91 @@ extension MagicCrmCore on MagicCrmService {
   Future<Map<String, dynamic>> setTeacherHourRate({
     required String teacherId,
     required num rate,
+    required int expectedVersion,
+    required String reasonText,
     String? effectiveFrom,
   }) async {
-    final data = <String, dynamic>{'rate': rate};
+    final data = <String, dynamic>{
+      'rate': rate,
+      'expectedVersion': expectedVersion,
+      'reasonText': reasonText.trim(),
+    };
     if (effectiveFrom != null) data['effectiveFrom'] = effectiveFrom;
     return _api.post<Map<String, dynamic>>(
       '/crm/teachers/$teacherId/rates',
       data: data,
+    );
+  }
+
+  Future<Map<String, dynamic>> updateTeacherRateEntry({
+    required String teacherId,
+    required String entryId,
+    required num rate,
+    required String effectiveFrom,
+    required int expectedVersion,
+    required String reasonText,
+  }) {
+    return _api.patch<Map<String, dynamic>>(
+      '/crm/teachers/$teacherId/rates/$entryId',
+      data: {
+        'rate': rate,
+        'effectiveFrom': effectiveFrom,
+        'expectedVersion': expectedVersion,
+        'reasonText': reasonText.trim(),
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> deleteTeacherRateEntry({
+    required String teacherId,
+    required String entryId,
+    required int expectedVersion,
+    required String reasonText,
+  }) {
+    return _api.delete<Map<String, dynamic>>(
+      '/crm/teachers/$teacherId/rates/$entryId',
+      data: {
+        'expectedVersion': expectedVersion,
+        'reasonText': reasonText.trim(),
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> updateTeacherPayoutEntry({
+    required String teacherId,
+    required String entryId,
+    required String kind,
+    required num amount,
+    required String paidAt,
+    required int expectedVersion,
+    required String reasonText,
+    String? comment,
+  }) {
+    return _api.patch<Map<String, dynamic>>(
+      '/crm/teachers/$teacherId/payouts/$entryId',
+      data: {
+        'kind': kind,
+        'amount': amount,
+        'paidAt': paidAt,
+        'comment': comment?.trim(),
+        'expectedVersion': expectedVersion,
+        'reasonText': reasonText.trim(),
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> deleteTeacherPayoutEntry({
+    required String teacherId,
+    required String entryId,
+    required int expectedVersion,
+    required String reasonText,
+  }) {
+    return _api.delete<Map<String, dynamic>>(
+      '/crm/teachers/$teacherId/payouts/$entryId',
+      data: {
+        'expectedVersion': expectedVersion,
+        'reasonText': reasonText.trim(),
+      },
     );
   }
 
@@ -600,20 +695,18 @@ extension MagicCrmCore on MagicCrmService {
   Future<Map<String, dynamic>> createStaff({
     required String firstName,
     required String lastName,
-    required String email,
-    required String password,
+    String? email,
+    String? password,
     String? phone,
-    required String role,
     required List<String> branchIds,
   }) async {
     final data = <String, dynamic>{
       'firstName': firstName.trim(),
       'lastName': lastName.trim(),
-      'email': email.trim(),
-      'password': password,
-      'role': role,
       'branchIds': branchIds,
     };
+    if (email != null && email.trim().isNotEmpty) data['email'] = email.trim();
+    if (password != null && password.isNotEmpty) data['password'] = password;
     if (phone != null && phone.trim().isNotEmpty) data['phone'] = phone.trim();
 
     return _api.post<Map<String, dynamic>>('/crm/staff', data: data);
@@ -621,15 +714,45 @@ extension MagicCrmCore on MagicCrmService {
 
   Future<Map<String, dynamic>> provisionStaffAccess({
     required String staffId,
-    required String email,
-    required String password,
-    required String role,
+    String? email,
+    String? password,
   }) async {
+    final data = <String, dynamic>{};
+    if (email != null && email.trim().isNotEmpty) data['email'] = email.trim();
+    if (password != null && password.isNotEmpty) data['password'] = password;
     final response = await _api.post<Map<String, dynamic>>(
       '/crm/staff/$staffId/access',
-      data: {'email': email.trim(), 'password': password, 'role': role},
+      data: data,
     );
     return _legacyStaff(response);
+  }
+
+  Future<Map<String, dynamic>> previewPersonLifecycle({
+    required String personType,
+    required String personId,
+  }) {
+    final path = personType == 'teacher' ? 'teachers' : 'staff';
+    return _api.get<Map<String, dynamic>>(
+      '/crm/$path/$personId/lifecycle-preview',
+    );
+  }
+
+  Future<Map<String, dynamic>> changePersonLifecycle({
+    required String personType,
+    required String personId,
+    required bool restore,
+    required int expectedVersion,
+    required String reasonText,
+  }) {
+    final path = personType == 'teacher' ? 'teachers' : 'staff';
+    return _api.post<Map<String, dynamic>>(
+      '/crm/$path/$personId/${restore ? 'restore' : 'offboard'}',
+      data: {
+        'expectedVersion': expectedVersion,
+        'reasonText': reasonText.trim(),
+        'confirm': true,
+      },
+    );
   }
 
   Future<Map<String, dynamic>> updateStaff(
@@ -638,7 +761,6 @@ extension MagicCrmCore on MagicCrmService {
     String? lastName,
     String? phone,
     String? email,
-    String? role,
     String? position,
     String? status,
     List<String>? branchIds,
@@ -656,7 +778,6 @@ extension MagicCrmCore on MagicCrmService {
     addString('lastName', lastName);
     addString('phone', phone);
     addString('email', email);
-    addString('role', role);
     addString('position', position);
     addString('status', status);
     if (branchIds != null) data['branchIds'] = branchIds;

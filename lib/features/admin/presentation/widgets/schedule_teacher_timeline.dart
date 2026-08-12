@@ -667,6 +667,22 @@ class _TimelineLessonCardState extends State<_TimelineLessonCard> {
                   final showTrailingMetadata = constraints.maxWidth >= 96;
                   return Row(
                     children: [
+                      if (widget.entry.clientContext ||
+                          widget.entry.searchContext) ...[
+                        Tooltip(
+                          message: widget.entry.relatedClient
+                              ? 'Связанное занятие'
+                              : 'Другое занятие',
+                          child: Icon(
+                            widget.entry.relatedClient
+                                ? Icons.person_pin_circle_outlined
+                                : Icons.people_outline_rounded,
+                            color: accent,
+                            size: 12,
+                          ),
+                        ),
+                        const SizedBox(width: 3),
+                      ],
                       Expanded(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,

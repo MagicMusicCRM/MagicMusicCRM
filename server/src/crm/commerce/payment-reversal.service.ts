@@ -17,6 +17,7 @@ import {
 } from "../dto/payment-lifecycle.dto";
 import { CommerceProjectionRepository } from "./commerce-projection.repository";
 import {
+  AccountAdjustmentReversalTargetRow,
   PaymentReversalRepository,
   PaymentReversalTargetRow,
 } from "./payment-reversal.repository";
@@ -28,6 +29,14 @@ import { SubscriptionReservationService } from "./subscription-reservation.servi
 interface PaymentReversalMutationResult extends Record<string, unknown> {
   entityId: string;
   paymentRecordId: string;
+  version: number;
+}
+
+interface AccountAdjustmentReversalMutationResult
+  extends Record<string, unknown> {
+  entityId: string;
+  adjustmentId: string;
+  counterpartId: string;
   version: number;
 }
 
@@ -315,6 +324,255 @@ export class PaymentReversalService {
     };
   }
 
+  async previewAdjustment(
+    actor: ActorContext,
+    studentId: string,
+    adjustmentId: string,
+    dto: PreviewPaymentReversalDto,
+    now = new Date(),
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    const scope = await this.projections.resolveStudentScope(actor, studentId);
+    const target = await this.repository.findAdjustmentTarget(adjustmentId);
+    if (!target || target.student_id !== studentId) {
+      throw new NotFoundException("Корректировка не найдена.");
+    }
+    this.assertAdjustmentReversible(target, dto.expectedVersion);
+    const [source] = await this.projections.loadProjection(actor, [scope]);
+    const walletBalanceMinor =
+      source?.accounts.find(
+        (account) => account.currencyCode === target.currency_code,
+      )?.balanceMinor ?? "0";
+    const walletDeltaMinor = (-BigInt(target.amount_minor)).toString();
+    const resultingBalanceMinor = (
+      BigInt(walletBalanceMinor) + BigInt(walletDeltaMinor)
+    ).toString();
+    const signed = this.previewTokens.issueAccountAdjustmentReversal(
+      {
+        kind: "account.adjustment.reversal",
+        actorUserId: actor.userId,
+        studentId,
+        adjustmentId,
+        expectedVersion: Number(target.aggregate_version),
+        sourcePaymentId: target.source_payment_id,
+        amountMinor: target.amount_minor,
+        currencyCode: target.currency_code,
+        walletBalanceMinor,
+        resultingBalanceMinor,
+      },
+      now,
+    );
+    return {
+      adjustmentId,
+      kind: target.kind === "refund" ? "refund" : "correction",
+      amountMinor: target.amount_minor,
+      currencyCode: target.currency_code,
+      walletDeltaMinor,
+      walletBalanceMinor,
+      resultingBalanceMinor,
+      negativeBalanceWarning: BigInt(resultingBalanceMinor) < 0n,
+      operation: "adjustment_reversal",
+      previewToken: signed.token,
+      expiresAt: signed.expiresAt,
+    };
+  }
+
+  async reverseAdjustment(
+    actor: ActorContext,
+    studentId: string,
+    adjustmentId: string,
+    dto: ReversePaymentDto,
+    metadata: CommerceMutationMetadata,
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    this.assertMetadata(metadata);
+    if (dto.confirm !== true) {
+      throw new UnprocessableEntityException({
+        code: "PAYMENT_ADJUSTMENT_REVERSAL_CONFIRMATION_REQUIRED",
+        field: "confirm",
+        message: "Подтвердите сторно корректировки личного счёта.",
+      });
+    }
+    const reason = dto.reason.trim();
+    if (!reason || reason.length > 500) {
+      throw new UnprocessableEntityException({
+        code: "PAYMENT_ADJUSTMENT_REVERSAL_REASON_REQUIRED",
+        field: "reason",
+        message: "Укажите причину сторно корректировки.",
+      });
+    }
+    const signed =
+      this.previewTokens.verifyAccountAdjustmentReversal(dto.previewToken);
+    if (
+      signed.actorUserId !== actor.userId ||
+      signed.studentId !== studentId ||
+      signed.adjustmentId !== adjustmentId
+    ) {
+      throw new UnprocessableEntityException({
+        code: "PAYMENT_ADJUSTMENT_REVERSAL_PREVIEW_MISMATCH",
+        message:
+          "Предпросмотр относится к другой корректировке или сотруднику.",
+      });
+    }
+    await this.projections.resolveStudentScope(actor, studentId);
+    const auditId = randomUUID();
+    const counterpartId = randomUUID();
+    const audit: PlatformAuditInput = {
+      id: auditId,
+      action: "crm.payment_adjustment_reversed",
+      entityType: "account_adjustment",
+      entityId: adjustmentId,
+      reason: "payment_adjustment_reversal",
+      reasonText: reason,
+      beforeRef: {
+        amountMinor: signed.amountMinor,
+        currencyCode: signed.currencyCode,
+        walletBalanceMinor: signed.walletBalanceMinor,
+      },
+      metadata: {
+        studentId,
+        sourcePaymentId: signed.sourcePaymentId,
+      },
+    };
+    const result =
+      await this.integrity.executeVersionedMutation<AccountAdjustmentReversalMutationResult>(
+        {
+          actorKey: actor.userId,
+          actorUserId: actor.userId,
+          authorization: {
+            actor,
+            capabilityKey: "commerce.client_finance.write",
+          },
+          operation: "crm.payment-adjustment-reversal.commit",
+          idempotencyKey: metadata.idempotencyKey,
+          requestId: metadata.requestId,
+          aggregateType: "commerce:payment-adjustment",
+          aggregateId: adjustmentId,
+          expectedVersion: signed.expectedVersion,
+          payload: {
+            studentId,
+            adjustmentId,
+            previewToken: dto.previewToken,
+            reason,
+          },
+          audit,
+          outbox: {
+            type: "commerce.payment.adjustment-reversed",
+            payload: {
+              entityId: adjustmentId,
+              studentId,
+              invalidates: ["student-finance", "revenue", "reports"],
+            },
+          },
+          mutate: async (client, nextVersion) => {
+            if (
+              (await this.issueRepository.lockPurchaseStudents(
+                client,
+                actor,
+                [studentId],
+              )).length !== 1
+            ) {
+              throw new NotFoundException("Клиент не найден.");
+            }
+            const target = await this.repository.lockAdjustmentTarget(
+              client,
+              adjustmentId,
+            );
+            if (!target || target.student_id !== studentId) {
+              throw new NotFoundException("Корректировка не найдена.");
+            }
+            this.assertSignedAdjustmentTarget(target, signed);
+            const currentBalance = await this.issueRepository.readAccountBalance(
+              client,
+              studentId,
+              signed.currencyCode,
+            );
+            if (currentBalance !== signed.walletBalanceMinor) {
+              throw new ConflictException({
+                code: "PAYMENT_ADJUSTMENT_REVERSAL_PREVIEW_STALE",
+                message: "Баланс изменился. Обновите предпросмотр сторно.",
+              });
+            }
+            const counterpart =
+              await this.issueRepository.createPaymentAdjustment(client, {
+                id: counterpartId,
+                studentId,
+                sourcePaymentId: target.source_payment_id,
+                kind: "adjustment",
+                amountMinor: (-BigInt(target.amount_minor)).toString(),
+                currencyCode: target.currency_code,
+                occurredAt: new Date(),
+                reason,
+                branchId: target.branch_id,
+                method: target.method,
+                invoiceNumber: target.invoice_number,
+                actorUserId: actor.userId,
+                idempotencyRef:
+                  `${actor.userId}:adjustment-reversal:${metadata.idempotencyKey}`,
+                requestFingerprint: fingerprintPayload({
+                  adjustmentId,
+                  sourcePaymentId: target.source_payment_id,
+                  amountMinor: target.amount_minor,
+                  reason,
+                }),
+              });
+            const exclusionId = await this.repository.createExclusion(client, {
+              sourceKind: "account_adjustment",
+              sourceId: adjustmentId,
+              counterpartId: counterpart.id,
+              reason,
+              actorUserId: actor.userId,
+              auditEventId: auditId,
+            });
+            audit.afterRef = {
+              exclusionId,
+              sourceKind: "account_adjustment",
+              sourceId: adjustmentId,
+              counterpartId: counterpart.id,
+              resultingBalanceMinor: signed.resultingBalanceMinor,
+            };
+            return {
+              entityId: exclusionId,
+              adjustmentId,
+              counterpartId: counterpart.id,
+              version: nextVersion,
+            };
+          },
+        },
+      );
+    const reversal = await this.repository.findAdjustmentResult(adjustmentId);
+    if (!reversal) {
+      throw new ConflictException({
+        code: "PAYMENT_ADJUSTMENT_REVERSAL_RESULT_MISSING",
+        message: "Результат сторно корректировки не найден.",
+      });
+    }
+    if (!result.replayed) {
+      await this.reservations.publishPostCommit({
+        studentId,
+        payerStudentId: studentId,
+        subscriptionId: null,
+      });
+    }
+    return {
+      adjustmentId,
+      operation: "adjustment_reversal",
+      exclusion: {
+        id: reversal.exclusion_id,
+        sourceKind: "account_adjustment",
+        sourceId: reversal.source_id,
+        counterpartKind: "account_adjustment",
+        counterpartId: reversal.counterpart_id,
+        reason: reversal.reason,
+        actorUserId: reversal.actor_user_id,
+        actorName: reversal.actor_name,
+        auditEventId: reversal.audit_event_id,
+        occurredAt: new Date(reversal.occurred_at).toISOString(),
+      },
+      replayed: result.replayed,
+    };
+  }
+
   private async loadScopedTarget(
     actor: ActorContext,
     studentId: string,
@@ -385,6 +643,58 @@ export class PaymentReversalService {
       throw new ConflictException({
         code: "PAYMENT_REVERSAL_PREVIEW_STALE",
         message: "Оплата изменилась. Обновите предпросмотр удаления.",
+      });
+    }
+  }
+
+  private assertAdjustmentReversible(
+    target: AccountAdjustmentReversalTargetRow,
+    expectedVersion: number,
+  ): void {
+    if (target.exclusion_id) {
+      throw new ConflictException({
+        code: "PAYMENT_ADJUSTMENT_ALREADY_REVERSED",
+        message: "Корректировка уже сторнирована.",
+      });
+    }
+    if (Number(target.aggregate_version) !== expectedVersion) {
+      throw new ConflictException({
+        code: "PAYMENT_ADJUSTMENT_REVERSAL_VERSION_STALE",
+        message: "Корректировка изменилась. Обновите карточку.",
+      });
+    }
+  }
+
+  private assertSignedAdjustmentTarget(
+    target: AccountAdjustmentReversalTargetRow,
+    signed: ReturnType<
+      SubscriptionPreviewTokenService["verifyAccountAdjustmentReversal"]
+    >,
+  ): void {
+    if (target.exclusion_id) {
+      throw new ConflictException({
+        code: "PAYMENT_ADJUSTMENT_ALREADY_REVERSED",
+        message: "Корректировка уже сторнирована.",
+      });
+    }
+    // PlatformIntegrity advances the aggregate immediately before mutate().
+    // The locked business row must therefore observe exactly the next version.
+    if (Number(target.aggregate_version) !== signed.expectedVersion + 1) {
+      throw new ConflictException({
+        code: "PAYMENT_ADJUSTMENT_REVERSAL_PREVIEW_STALE",
+        message: "Корректировка изменилась. Обновите предпросмотр сторно.",
+      });
+    }
+    if (
+      target.student_id !== signed.studentId ||
+      target.adjustment_id !== signed.adjustmentId ||
+      target.source_payment_id !== signed.sourcePaymentId ||
+      target.amount_minor !== signed.amountMinor ||
+      target.currency_code !== signed.currencyCode
+    ) {
+      throw new ConflictException({
+        code: "PAYMENT_ADJUSTMENT_REVERSAL_PREVIEW_STALE",
+        message: "Корректировка изменилась. Обновите предпросмотр сторно.",
       });
     }
   }

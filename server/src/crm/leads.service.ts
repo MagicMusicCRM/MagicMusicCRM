@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
@@ -25,8 +26,16 @@ import { CrmListQuery } from "./dto/crm-list.query";
 import { LeadBoardQuery } from "./dto/lead-board.query";
 import { UpsertLeadDto } from "./dto/upsert-lead.dto";
 import { StudentRow } from "./student-read";
-import { ValidatedLeadCreate } from "./clients/client-write.validator";
-import { saveTypedClientValues } from "./clients/client-config.repository";
+import {
+  ValidatedCustomFields,
+  ValidatedLeadCreate,
+} from "./clients/client-write.validator";
+import {
+  readTypedClientValueMap,
+  replaceTypedClientValues,
+  saveTypedClientValues,
+  typedClientTableFieldsSql,
+} from "./clients/client-config.repository";
 import { StudentFunnelService } from "./student-funnel.service";
 import { SharedTaskService } from "./tasks/shared-task.service";
 import {
@@ -88,6 +97,7 @@ interface LeadBoardRow extends LeadRow {
   open_tasks_count: string | number;
   comments_count: string | number;
   trial_lessons_count: string | number;
+  table_custom_fields?: Record<string, unknown>[] | null;
 }
 
 interface LeadBoardCountRow {
@@ -166,6 +176,7 @@ export class LeadsService {
       "lead",
     );
     const limit = Math.min(query.limit ?? 25, 50);
+    const sortDirection = query.sort === "oldest" ? "asc" : "desc";
     const requestedColumnId =
       query.unassigned === true ? "unassigned" : (query.statusId ?? null);
     // Where the «Без статуса» column sits among the real ones. Stored by the
@@ -176,10 +187,13 @@ export class LeadsService {
     );
     const unassignedSort = unassignedSortResult.rows[0]?.value ?? null;
     const filter = this.buildLeadBoardFilter(query, actor.userId);
-    const countFilter = this.buildLeadBoardFilter({
-      ...query,
-      cursor: undefined,
-    }, actor.userId);
+    const countFilter = this.buildLeadBoardFilter(
+      {
+        ...query,
+        cursor: undefined,
+      },
+      actor.userId,
+    );
     const statusResult = await this.database.query<LeadStatusRow>(
       `
         select id, stage_key, name, color, sort_order, created_at, requires_reason, is_terminal
@@ -205,6 +219,7 @@ export class LeadsService {
             ls.name as status_name, ls.color as status_color,
             ls.sort_order as status_sort_order, l.first_name, l.last_name, l.phone,
             l.email, l.source, l.notes, l.assigned_to, l.blacklisted, l.blacklist_reason, l.custom_data,
+            ${typedClientTableFieldsSql("lead", "l.id")} as table_custom_fields,
             assigned_profile.first_name as assigned_first_name,
             assigned_profile.last_name as assigned_last_name,
             ${branchIdExpr("l")} as branch_id,
@@ -256,7 +271,7 @@ export class LeadsService {
             ) as cursor_created_at,
             row_number() over (
               partition by coalesce(l.status_id::text, 'unassigned')
-              order by l.created_at desc, l.id desc
+              order by l.created_at ${sortDirection}, l.id ${sortDirection}
             ) as rn
           from app.leads l
           left join app.lead_statuses ls on ls.id = l.status_id
@@ -273,7 +288,8 @@ export class LeadsService {
         select *
         from filtered
         where rn <= $${filter.params.length + 2}
-        order by status_sort_order nulls last, status_name nulls last, created_at desc, id desc
+        order by status_sort_order nulls last, status_name nulls last,
+          created_at ${sortDirection}, id ${sortDirection}
       `,
       // One look-ahead row per row_number partition proves whether that
       // particular column has another page. It is trimmed before returning.
@@ -289,27 +305,30 @@ export class LeadsService {
     const statusByKey = new Map(
       statusResult.rows.map((status) => [status.stage_key, status]),
     );
-    const configuredStatuses = pipeline.stages.length === 0
-      ? statusResult.rows
-      : pipeline.stages.flatMap((stage, sortOrder) => {
-          const status = statusByKey.get(stage.key);
-          if (!status) return [];
-          if (
-            !stage.active &&
-            (counts.get(status.id) ?? 0) === 0 &&
-            requestedColumnId !== status.id
-          ) {
-            return [];
-          }
-          return [{
-            ...status,
-            name: stage.label,
-            color: stage.style,
-            sort_order: sortOrder,
-            requires_reason: stage.requiresReason,
-            is_terminal: stage.terminal,
-          }];
-        });
+    const configuredStatuses =
+      pipeline.stages.length === 0
+        ? statusResult.rows
+        : pipeline.stages.flatMap((stage, sortOrder) => {
+            const status = statusByKey.get(stage.key);
+            if (!status) return [];
+            if (
+              !stage.active &&
+              (counts.get(status.id) ?? 0) === 0 &&
+              requestedColumnId !== status.id
+            ) {
+              return [];
+            }
+            return [
+              {
+                ...status,
+                name: stage.label,
+                color: stage.style,
+                sort_order: sortOrder,
+                requires_reason: stage.requiresReason,
+                is_terminal: stage.terminal,
+              },
+            ];
+          });
     const columns: LeadBoardColumnDto[] = configuredStatuses
       .filter(
         (status) =>
@@ -505,6 +524,7 @@ export class LeadsService {
       trials,
       chatWork,
       fieldAudit,
+      customFieldValues,
     ] = await Promise.all([
       this.listStudentsLinkedToLead(leadId),
       this.listRelatedLeads(lead),
@@ -523,6 +543,7 @@ export class LeadsService {
       this.timeline
         .listFieldAudit(actor, "lead", leadId, 50)
         .catch(() => ({ items: [] as Record<string, unknown>[] })),
+      readTypedClientValueMap(this.database, "lead", leadId),
     ]);
 
     const timeline = [
@@ -573,6 +594,7 @@ export class LeadsService {
       tasks,
       trials,
       timeline,
+      customFieldValues,
     };
   }
 
@@ -588,6 +610,8 @@ export class LeadsService {
       changed_by_name: string | null;
       changed_at: string;
       reason_id: string | null;
+      reason_name_snapshot: string | null;
+      reason_kind_snapshot: string | null;
       comment: string | null;
     }>(
       // changed_by alone is a raw user id — useless to a human reading the
@@ -596,7 +620,8 @@ export class LeadsService {
               os.name as old_status,
               ns.name as new_status,
               h.old_owner_id, h.new_owner_id, h.changed_by, h.changed_at,
-              h.reason_id, h.comment,
+              h.reason_id, h.reason_name_snapshot, h.reason_kind_snapshot,
+              h.comment,
               nullif(trim(coalesce(cp.first_name, '') || ' ' || coalesce(cp.last_name, '')), '') as changed_by_name
          from app.lead_status_history h
          left join app.lead_statuses os on os.id = h.old_status_id
@@ -618,6 +643,8 @@ export class LeadsService {
         changedByName: row.changed_by_name,
         changedAt: row.changed_at,
         reasonId: row.reason_id,
+        reasonName: row.reason_name_snapshot,
+        reasonKind: row.reason_kind_snapshot,
         comment: row.comment,
       })),
     };
@@ -878,7 +905,12 @@ export class LeadsService {
     };
   }
 
-  async updateLead(actor: ActorContext, leadId: string, dto: UpsertLeadDto) {
+  async updateLead(
+    actor: ActorContext,
+    leadId: string,
+    dto: UpsertLeadDto,
+    customFields?: ValidatedCustomFields,
+  ) {
     this.policy.assertCanWriteCrm(actor);
     const branchId = extractBranchId(dto.customDataPatch);
     const initialCustomData = sanitizeJsonObject(dto.customDataPatch);
@@ -985,6 +1017,14 @@ export class LeadsService {
         ],
       );
       const updatedLead = result.rows[0];
+      if (updatedLead && customFields) {
+        await replaceTypedClientValues(
+          client,
+          "lead",
+          leadId,
+          customFields.values,
+        );
+      }
       if (
         updatedLead &&
         beforeRow &&
@@ -994,8 +1034,14 @@ export class LeadsService {
         await client.query(
           `insert into app.lead_status_history
            (lead_id, old_status_id, new_status_id, old_owner_id, new_owner_id,
-            changed_by, reason_id, comment, branch_id, source_snapshot)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+            changed_by, reason_id, reason_name_snapshot, reason_kind_snapshot,
+            comment, branch_id, source_snapshot)
+         values (
+           $1, $2, $3, $4, $5, $6, $7,
+           (select name from app.lead_loss_reasons where id = $7),
+           (select kind from app.lead_loss_reasons where id = $7),
+           $8, $9, $10
+         )`,
           [
             leadId,
             beforeRow.status_id,
@@ -1033,6 +1079,8 @@ export class LeadsService {
               LEAD_AUDITED_FIELDS,
             )
           : [],
+        customFieldDefinitionIds:
+          customFields?.values.map((value) => value.definitionId) ?? [],
       },
     });
     this.realtime.emitCrmChanged({
@@ -1041,44 +1089,18 @@ export class LeadsService {
       id: lead.id,
       branchId: branchId ?? before?.branch_id ?? null,
     });
-    return this.toLeadDto(lead);
+    return {
+      ...this.toLeadDto(lead),
+      ...(customFields ? { warnings: customFields.warnings } : {}),
+    };
   }
 
   async deleteLead(actor: ActorContext, leadId: string) {
     this.policy.assertCanWriteCrm(actor);
-    const result = await this.database.transaction(async (client) => {
-      const deleted = await client.query<{ id: string }>(
-        `update app.leads
-         set deleted_at = now(), updated_at = now()
-         where id = $1 and deleted_at is null
-         returning id`,
-        [leadId],
-      );
-      if (deleted.rows[0]) {
-        await client.query(
-          `update app.user_crm_links
-           set deleted_at = now()
-           where entity_type = 'lead' and entity_id = $1
-             and deleted_at is null`,
-          [leadId],
-        );
-      }
-      return deleted;
-    });
-    const row = result.rows[0];
-    if (!row) throw new NotFoundException("Лид не найден.");
-    await this.audit.record({
-      actor,
-      action: "crm.lead_deleted",
-      entityType: "lead",
-      entityId: row.id,
-    });
-    this.realtime.emitCrmChanged({
-      entity: "lead",
-      action: "deleted",
-      id: row.id,
-    });
-    return { success: true };
+    void leadId;
+    throw new ConflictException(
+      "Прямое удаление лида отключено. Используйте управляемое архивирование с предварительной проверкой связанных данных.",
+    );
   }
 
   // Auto-create a lead when a non-staff user first writes to the admin chat.
@@ -1221,8 +1243,9 @@ export class LeadsService {
     if (cursor) {
       const createdAt = add(cursor.createdAt);
       const id = add(cursor.id);
+      const comparator = query.sort === "oldest" ? ">" : "<";
       filters.push(
-        `(l.created_at, l.id) < (${createdAt}::timestamptz, ${id}::uuid)`,
+        `(l.created_at, l.id) ${comparator} (${createdAt}::timestamptz, ${id}::uuid)`,
       );
     }
 
@@ -1442,6 +1465,7 @@ export class LeadsService {
       openTasksCount: this.toNumericStat(row.open_tasks_count),
       commentsCount: this.toNumericStat(row.comments_count),
       trialLessonsCount: this.toNumericStat(row.trial_lessons_count),
+      tableFields: row.table_custom_fields ?? [],
     };
   }
 

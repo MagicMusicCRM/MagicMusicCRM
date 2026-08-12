@@ -185,6 +185,7 @@ export class LessonSeriesCommandService {
     validFrom: string,
     validUntil: string | null,
     studentIds: string[],
+    options: { excludeScheduleSeriesIds?: string[] } = {},
   ): Promise<SchedulePlanRowConstraintPreview> {
     const dto = Object.assign(new CreateScheduleSeriesDto(), {
       teacherId: row.teacherId,
@@ -211,6 +212,7 @@ export class LessonSeriesCommandService {
             roomId: row.roomId,
             startAt: occurrence.startAt,
             endAt: occurrence.endAt,
+            excludeScheduleSeriesIds: options.excludeScheduleSeriesIds,
           },
           client,
         );

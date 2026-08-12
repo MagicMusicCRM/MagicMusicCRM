@@ -1,6 +1,5 @@
 import {
   IsEmail,
-  IsIn,
   IsOptional,
   IsString,
   MaxLength,
@@ -8,16 +7,15 @@ import {
 } from "class-validator";
 
 export class ProvisionPersonAccessDto {
+  @IsOptional()
   @IsEmail()
   @MaxLength(255)
-  email!: string;
+  email?: string;
 
+  @IsOptional()
   @IsString()
   @MinLength(10)
   @MaxLength(128)
-  password!: string;
+  password?: string;
 
-  @IsOptional()
-  @IsIn(["teacher", "admin", "manager", "director", "system_admin"])
-  role?: "teacher" | "admin" | "manager" | "director" | "system_admin";
 }

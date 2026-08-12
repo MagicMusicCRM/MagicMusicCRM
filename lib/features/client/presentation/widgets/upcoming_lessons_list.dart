@@ -5,6 +5,7 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
+import 'package:magic_music_crm/core/widgets/v7/magic_page_state.dart';
 import 'package:magic_music_crm/features/client/presentation/widgets/homework_widget.dart';
 
 // Provider for the active tab (0: Upcoming, 1: History)
@@ -101,11 +102,15 @@ class _UpcomingLessonsListState extends ConsumerState<UpcomingLessonsList> {
                     padding: EdgeInsets.all(12),
                     child: ListSkeleton(count: 5),
                   ),
-                  error: (err, _) => Center(
-                    child: Text(
-                      'Ошибка: $err',
-                      style: const TextStyle(color: AppTheme.danger),
-                    ),
+                  error: (_, _) => MagicPageState(
+                    kind: MagicPageStateKind.error,
+                    title: 'Не удалось загрузить занятия',
+                    message: 'Проверьте подключение и повторите загрузку.',
+                    actionLabel: 'Повторить',
+                    onAction: () {
+                      ref.invalidate(upcomingLessonsRichProvider);
+                      ref.invalidate(pastLessonsRichProvider);
+                    },
                   ),
                   data: (lessons) {
                     if (lessons.isEmpty) {

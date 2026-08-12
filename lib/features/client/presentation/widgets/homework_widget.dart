@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
+import 'package:magic_music_crm/core/services/homework_attachment_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/widgets/homework_attachment_widgets.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 
 /// Loads the lesson homeworks for a given student (or, when [studentId] is
@@ -49,8 +51,7 @@ class HomeworkWidget extends ConsumerWidget {
 
     return homeworkAsync.when(
       loading: () => const _HomeworkSkeletonList(),
-      error: (err, _) => _HomeworkError(
-        message: '$err',
+      error: (_, _) => _HomeworkError(
         onRetry: () => ref.invalidate(_studentHomeworksProvider(studentId)),
       ),
       data: (homeworks) {
@@ -103,22 +104,71 @@ class _HomeworkCardState extends ConsumerState<_HomeworkCard> {
 
   bool get _canSubmit => _status == 'assigned';
 
-  /// Attachments are not guaranteed to be inlined by the list endpoint; render
-  /// defensively whatever the map exposes under common keys.
-  List<Map<String, dynamic>> get _attachments {
-    final raw = widget.homework['attachments'];
-    if (raw is List) {
-      return raw.whereType<Map<String, dynamic>>().toList();
+  List<Map<String, dynamic>> get _attachments =>
+      homeworkAttachments(widget.homework['attachments']);
+
+  Future<void> _chooseSubmission() async {
+    if (_submitting) return;
+    final hasSubmission = _attachments.any(
+      (attachment) => attachment['kind']?.toString() == 'submission',
+    );
+    final choice = await showMagicSheet<String>(
+      context,
+      title: 'Сдать домашнее задание',
+      subtitle: hasSubmission
+          ? 'Решение уже прикреплено'
+          : 'Можно приложить файл с решением',
+      icon: Icons.task_alt_rounded,
+      builder: (sheetContext) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            key: const ValueKey('homework-submit-with-file'),
+            leading: const Icon(Icons.attach_file_rounded),
+            title: Text(hasSubmission ? 'Добавить ещё файл' : 'Выбрать файл'),
+            subtitle: const Text(
+              'Фото, PDF, документ, аудио или видео до 25 МБ',
+            ),
+            onTap: () => Navigator.of(sheetContext).pop('file'),
+          ),
+          ListTile(
+            key: const ValueKey('homework-submit-without-file'),
+            leading: const Icon(Icons.send_rounded),
+            title: Text(
+              hasSubmission ? 'Сдать прикреплённое решение' : 'Сдать без файла',
+            ),
+            onTap: () => Navigator.of(sheetContext).pop('plain'),
+          ),
+        ],
+      ),
+    );
+    if (choice == null || !mounted) return;
+    HomeworkPickedFile? file;
+    if (choice == 'file') {
+      file = await pickHomeworkAttachment(context);
+      if (file == null || !mounted) return;
     }
-    return const [];
+    await _submit(file);
   }
 
-  Future<void> _submit() async {
+  Future<void> _submit(HomeworkPickedFile? file) async {
     final id = widget.homework['id']?.toString();
     if (id == null || id.isEmpty || _submitting) return;
 
     setState(() => _submitting = true);
+    var attachmentAdded = false;
     try {
+      if (file != null) {
+        await ref
+            .read(homeworkAttachmentServiceProvider)
+            .uploadAndAttach(
+              homeworkId: id,
+              bytes: file.bytes,
+              fileName: file.name,
+              kind: 'submission',
+            );
+        attachmentAdded = true;
+      }
       await ref.read(magicCrmServiceProvider).submitHomework(id);
       if (!mounted) return;
       MagicToast.show(
@@ -130,10 +180,15 @@ class _HomeworkCardState extends ConsumerState<_HomeworkCard> {
       widget.onSubmitted();
     } catch (err) {
       if (!mounted) return;
+      if (attachmentAdded) widget.onSubmitted();
       MagicToast.show(
         context,
-        'Не удалось сдать задание',
-        detail: '$err',
+        attachmentAdded
+            ? 'Решение прикреплено, но статус не обновлён'
+            : 'Не удалось сдать задание',
+        detail: attachmentAdded
+            ? '$err. Повторите сдачу без повторной загрузки файла.'
+            : '$err',
         type: MagicToastType.danger,
       );
     } finally {
@@ -212,31 +267,15 @@ class _HomeworkCardState extends ConsumerState<_HomeworkCard> {
           ],
           if (attachments.isNotEmpty) ...[
             const SizedBox(height: AppSpace.md),
-            Wrap(
-              spacing: AppSpace.sm,
-              runSpacing: AppSpace.sm,
-              children: [
-                for (final att in attachments)
-                  _AttachmentChip(label: _attachmentLabel(att)),
-              ],
-            ),
+            HomeworkAttachmentList(attachments: attachments),
           ],
           if (_canSubmit) ...[
             const SizedBox(height: AppSpace.lg),
-            _SubmitButton(busy: _submitting, onPressed: _submit),
+            _SubmitButton(busy: _submitting, onPressed: _chooseSubmission),
           ],
         ],
       ),
     );
-  }
-
-  String _attachmentLabel(Map<String, dynamic> att) {
-    return (att['name'] ??
-            att['fileName'] ??
-            att['kind'] ??
-            att['fileId'] ??
-            'Файл')
-        .toString();
   }
 }
 
@@ -322,50 +361,6 @@ class _StatusPill extends StatelessWidget {
   }
 }
 
-/// Attachment chip.
-class _AttachmentChip extends StatelessWidget {
-  const _AttachmentChip({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(AppRadius.chip),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.attach_file_rounded,
-            size: 14,
-            color: scheme.onSurfaceVariant,
-          ),
-          const SizedBox(width: 5),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 160),
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: scheme.onSurface,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 /// v7 skeleton placeholder list shown while homeworks load.
 class _HomeworkSkeletonList extends StatelessWidget {
   const _HomeworkSkeletonList();
@@ -439,9 +434,8 @@ class _HomeworkEmpty extends StatelessWidget {
 
 /// Error state with a retry affordance.
 class _HomeworkError extends StatelessWidget {
-  const _HomeworkError({required this.message, required this.onRetry});
+  const _HomeworkError({required this.onRetry});
 
-  final String message;
   final VoidCallback onRetry;
 
   @override
@@ -456,7 +450,7 @@ class _HomeworkError extends StatelessWidget {
             Icon(Icons.error_outline_rounded, size: 48, color: AppColor.danger),
             const SizedBox(height: AppSpace.md),
             Text(
-              'Ошибка: $message',
+              'Не удалось загрузить домашние задания. Проверьте подключение и повторите попытку.',
               textAlign: TextAlign.center,
               style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
             ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'package:magic_music_crm/core/widgets/telegram/avatar_widget.dart';
+import 'package:magic_music_crm/core/widgets/telegram/channel_editor_dialog.dart';
 import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
 import 'package:magic_music_crm/core/services/magic_messenger_service.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
@@ -22,6 +23,7 @@ class ChatInfoDialog extends ConsumerStatefulWidget {
   final Future<void> Function(bool isMuted)? onMute;
   final Function(Map<String, dynamic> chat)? onNavigateToChat;
   final bool initialIsMuted;
+
   /// Called after the current user successfully leaves a group chat.
   /// The screen should remove the chat from its list and deselect it.
   final VoidCallback? onLeftGroup;
@@ -63,6 +65,11 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
     if (widget.chatType != 'channel') return false;
     return _isManagerOrAdminRole;
   }
+
+  bool get _canManageGroup =>
+      widget.chatType == 'group' &&
+      _isManagerOrAdminRole &&
+      _data?['is_system'] != true;
 
   bool get _hasNotesTab {
     return widget.chatType == 'direct' && _isManagerOrAdminRole;
@@ -312,65 +319,17 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
     }
   }
 
-  Future<void> _editField(
-    String field,
-    String title,
-    String currentValue,
-  ) async {
+  Future<void> _editChannel() async {
     if (!_canEdit) return;
-
-    final controller = TextEditingController(text: currentValue);
-    final newValue = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Изменить $title', style: const TextStyle(fontSize: 18)),
-        content: TextField(
-          controller: controller,
-          decoration: InputDecoration(hintText: 'Введите $title'),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Отмена'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('Сохранить'),
-          ),
-        ],
-      ),
+    final updated = await ChannelEditorDialog.show(
+      context,
+      channelId: widget.chatId,
+      initialTitle: (_data?['name'] ?? _data?['title'] ?? '').toString(),
+      initialDescription: _data?['description']?.toString() ?? '',
     );
-
-    if (newValue != null &&
-        newValue.trim().isNotEmpty &&
-        newValue != currentValue) {
-      setState(() => _isLoading = true);
-      try {
-        final title = field == 'name'
-            ? newValue.trim()
-            : (_data?['name'] ?? _data?['title'] ?? '').toString();
-        final description = field == 'description'
-            ? newValue.trim()
-            : _data?['description']?.toString();
-        final updated = await ref
-            .read(magicMessengerServiceProvider)
-            .updateChannel(
-              widget.chatId,
-              title: title,
-              description: description,
-            );
-        _data = updated;
-
-        if (widget.onUpdate != null) {
-          widget.onUpdate!();
-        }
-      } catch (e) {
-        debugPrint('Edit error: $e');
-      } finally {
-        if (mounted) setState(() => _isLoading = false);
-      }
-    }
+    if (updated == null || !mounted) return;
+    setState(() => _data = updated);
+    widget.onUpdate?.call();
   }
 
   // ── Group actions ──────────────────────────────────────────────────────────
@@ -380,9 +339,7 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Выйти из группы'),
-        content: const Text(
-          'Вы уверены, что хотите выйти из этой группы?',
-        ),
+        content: const Text('Вы уверены, что хотите выйти из этой группы?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -390,10 +347,7 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              'Выйти',
-              style: TextStyle(color: Colors.red),
-            ),
+            child: const Text('Выйти', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -413,9 +367,9 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
       widget.onLeftGroup?.call();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Не удалось выйти из группы: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Не удалось выйти из группы: $e')));
     }
   }
 
@@ -437,15 +391,15 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
       widget.onNavigateToChat?.call(chat);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Не удалось открыть чат: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Не удалось открыть чат: $e')));
       }
     }
   }
 
   Future<void> _addMembers() async {
-    if (!_isManagerOrAdminRole) return;
+    if (!_canManageGroup) return;
 
     final selectedIds = await showDialog<Set<String>>(
       context: context,
@@ -483,6 +437,93 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
     }
   }
 
+  Future<void> _removeMember(Map<String, dynamic> member) async {
+    if (!_canManageGroup || member['is_current_user'] == true) return;
+    final userId = member['user_id']?.toString();
+    if (userId == null || userId.isEmpty) return;
+    final name = member['_display_name']?.toString() ?? 'участника';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Удалить из группы'),
+        content: Text('Удалить $name из группы? История сообщений сохранится.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Удалить', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await ref
+          .read(magicMessengerServiceProvider)
+          .updateGroupMembers(widget.chatId, removeUserIds: [userId]);
+      if (!mounted) return;
+      setState(() => _members.removeWhere((item) => item['user_id'] == userId));
+      widget.onUpdate?.call();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось удалить участника: $error')),
+      );
+    }
+  }
+
+  Future<void> _showAllMembers() async {
+    final selected = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Участники (${_members.length})'),
+        content: SizedBox(
+          width: 480,
+          height: 480,
+          child: ListView.builder(
+            itemCount: _members.length,
+            itemBuilder: (_, index) {
+              final member = _members[index];
+              final name = member['_display_name']?.toString() ?? 'Участник';
+              final canRemove =
+                  _canManageGroup && member['is_current_user'] != true;
+              return ListTile(
+                leading: TelegramAvatar(
+                  name: name,
+                  uniqueId: member['user_id']?.toString() ?? name,
+                  radius: 18,
+                ),
+                title: Text(name),
+                subtitle: Text(
+                  member['role'] == 'admin'
+                      ? 'Администратор группы'
+                      : _roleLabel(member['user_role']?.toString() ?? 'client'),
+                ),
+                trailing: canRemove
+                    ? IconButton(
+                        tooltip: 'Удалить из группы',
+                        icon: const Icon(Icons.person_remove_outlined),
+                        onPressed: () => Navigator.pop(ctx, member),
+                      )
+                    : null,
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Закрыть'),
+          ),
+        ],
+      ),
+    );
+    if (selected != null && mounted) await _removeMember(selected);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -516,7 +557,10 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
       final email = partner?['email']?.toString();
       subtitle = email == null || email.isEmpty ? 'Личный чат' : email;
     } else {
-      name = _data?['name'] ?? 'Без названия';
+      name =
+          (_data?['name'] ?? _data?['title'] ?? _data?['_display_name'])
+              ?.toString() ??
+          'Без названия';
       subtitle = _members.isNotEmpty
           ? '${_members.length} участников'
           : 'Канал';
@@ -562,9 +606,7 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
                       ),
                       const SizedBox(height: 12),
                       GestureDetector(
-                        onTap: _canEdit
-                            ? () => _editField('name', 'название', name)
-                            : null,
+                        onTap: _canEdit ? _editChannel : null,
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -743,13 +785,7 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
                               const SizedBox(height: 16),
                             ],
                             GestureDetector(
-                              onTap: _canEdit
-                                  ? () => _editField(
-                                      'description',
-                                      'описание',
-                                      description,
-                                    )
-                                  : null,
+                              onTap: _canEdit ? _editChannel : null,
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -819,5 +855,4 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
       ),
     );
   }
-
 }

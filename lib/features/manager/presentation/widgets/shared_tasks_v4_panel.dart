@@ -1575,6 +1575,8 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
   final List<Map<String, dynamic>> _audiences = [];
   List<Map<String, dynamic>> _existingReminders = const [];
   bool _reminder = false;
+  DateTime? _reminderAt;
+  bool _reminderCustomized = false;
   Map<String, dynamic>? _preview;
   Object? _previewError;
   bool _previewLoading = false;
@@ -1587,9 +1589,13 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
     _title = TextEditingController(text: task?['title']?.toString() ?? '');
     _body = TextEditingController(text: task?['body']?.toString() ?? '');
     _allDay = task?['allDay'] != false;
-    _start =
-        DateTime.tryParse(task?['startAt']?.toString() ?? '')?.toLocal() ??
-        DateTime.now().add(const Duration(days: 1));
+    final parsedStart = DateTime.tryParse(
+      task?['startAt']?.toString() ?? '',
+    )?.toLocal();
+    final tomorrow = DateTime.now().add(const Duration(days: 1));
+    _start = parsedStart == null
+        ? DateTime(tomorrow.year, tomorrow.month, tomorrow.day)
+        : (_allDay ? _dateOnly(parsedStart) : parsedStart);
     _priority = task?['priority']?.toString() ?? 'medium';
     _end = DateTime.tryParse(task?['endAt']?.toString() ?? '')?.toLocal();
     final existing = task?['audiences'];
@@ -1606,6 +1612,19 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
           .whereType<Map<String, dynamic>>()
           .map((item) => {'dueAt': item['dueAt'], 'channel': item['channel']})
           .toList();
+    }
+    for (final reminder in _existingReminders) {
+      if (reminder['channel'] != 'in_app') continue;
+      _reminderAt = DateTime.tryParse(
+        reminder['dueAt']?.toString() ?? '',
+      )?.toLocal();
+      if (_reminderAt != null) {
+        _reminderCustomized = true;
+        break;
+      }
+    }
+    if (_reminder && _reminderAt == null) {
+      _reminderAt = _defaultReminderAt();
     }
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _refreshAudiencePreview(),
@@ -1662,18 +1681,13 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
               contentPadding: EdgeInsets.zero,
               title: const Text('На весь день'),
               value: _allDay,
-              onChanged: (value) => setState(() {
-                _allDay = value;
-                _end = value
-                    ? null
-                    : (_end ?? _start.add(const Duration(hours: 1)));
-              }),
+              onChanged: _setAllDay,
             ),
             _DateTimeButton(
               label: 'Начало',
               value: _start,
               dateOnly: _allDay,
-              onChanged: (value) => setState(() => _start = value),
+              onChanged: _setStart,
             ),
             if (!_allDay)
               _DateTimeButton(
@@ -1681,6 +1695,14 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
                 value: _end ?? _start.add(const Duration(hours: 1)),
                 onChanged: (value) => setState(() => _end = value),
               ),
+            if (!_hasValidInterval) ...[
+              const SizedBox(height: AppSpace.xs),
+              Text(
+                'Окончание должно быть позже начала.',
+                key: const Key('shared-task-interval-error'),
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ],
             const Divider(height: 28),
             Text('Кому', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 8),
@@ -1740,13 +1762,20 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Напомнить в приложении'),
-              subtitle: const Text('Не блокирует текущую работу'),
+              subtitle: const Text('Можно выбрать точные дату и время'),
               value: _reminder,
-              onChanged: (value) => setState(() {
-                _reminder = value;
-                if (!value) _existingReminders = const [];
-              }),
+              onChanged: _setReminder,
             ),
+            if (_reminder)
+              _DateTimeButton(
+                key: const Key('shared-task-reminder-at'),
+                label: 'Напомнить',
+                value: _reminderAt ?? _defaultReminderAt(),
+                onChanged: (value) => setState(() {
+                  _reminderAt = value;
+                  _reminderCustomized = true;
+                }),
+              ),
           ],
         ),
       ),
@@ -1791,8 +1820,57 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
 
   bool get _canSubmit =>
       _title.text.trim().isNotEmpty &&
+      _hasValidInterval &&
       (widget.audiencePreview == null ||
           (!_previewLoading && _previewError == null && _preview != null));
+
+  bool get _hasValidInterval => _allDay || (_end?.isAfter(_start) ?? false);
+
+  DateTime _dateOnly(DateTime value) =>
+      DateTime(value.year, value.month, value.day);
+
+  DateTime _defaultReminderAt() => _allDay
+      ? DateTime(_start.year, _start.month, _start.day, 9)
+      : _start.subtract(const Duration(hours: 1));
+
+  void _setAllDay(bool value) {
+    setState(() {
+      if (_allDay == value) return;
+      _allDay = value;
+      if (value) {
+        _start = _dateOnly(_start);
+        _end = null;
+      } else {
+        _start = DateTime(_start.year, _start.month, _start.day, 9);
+        _end = _start.add(const Duration(hours: 1));
+      }
+      if (_reminder && !_reminderCustomized) {
+        _reminderAt = _defaultReminderAt();
+      }
+    });
+  }
+
+  void _setStart(DateTime value) {
+    setState(() {
+      _start = _allDay ? _dateOnly(value) : value;
+      if (_reminder && !_reminderCustomized) {
+        _reminderAt = _defaultReminderAt();
+      }
+    });
+  }
+
+  void _setReminder(bool value) {
+    setState(() {
+      _reminder = value;
+      if (value) {
+        _reminderAt ??= _defaultReminderAt();
+      } else {
+        _existingReminders = const [];
+        _reminderAt = null;
+        _reminderCustomized = false;
+      }
+    });
+  }
 
   void _addAudience() {
     final audience = {
@@ -1967,25 +2045,37 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
       if (end != null) 'endAt': end.toUtc().toIso8601String(),
       'audiences': _audiences,
       'linkedEntity': ?linkedEntity,
-      if (_reminder)
-        'reminders': _existingReminders.isNotEmpty
-            ? _existingReminders
-            : [
-                {
-                  'dueAt': _start
-                      .subtract(const Duration(hours: 1))
-                      .toUtc()
-                      .toIso8601String(),
-                  'channel': 'in_app',
-                },
-              ],
+      if (_reminder) 'reminders': _reminderPayload(),
       if (widget.task != null) 'expectedVersion': widget.task!['version'],
     });
+  }
+
+  List<Map<String, dynamic>> _reminderPayload() {
+    final dueAt = (_reminderAt ?? _defaultReminderAt())
+        .toUtc()
+        .toIso8601String();
+    var replacedInApp = false;
+    final result = <Map<String, dynamic>>[];
+    for (final reminder in _existingReminders) {
+      final channel = reminder['channel']?.toString();
+      if (channel == null || channel.isEmpty) continue;
+      if (channel == 'in_app' && !replacedInApp) {
+        result.add({'dueAt': dueAt, 'channel': channel});
+        replacedInApp = true;
+      } else {
+        result.add({'dueAt': reminder['dueAt'], 'channel': channel});
+      }
+    }
+    if (!replacedInApp) {
+      result.add({'dueAt': dueAt, 'channel': 'in_app'});
+    }
+    return result;
   }
 }
 
 class _DateTimeButton extends StatelessWidget {
   const _DateTimeButton({
+    super.key,
     required this.label,
     required this.value,
     required this.onChanged,

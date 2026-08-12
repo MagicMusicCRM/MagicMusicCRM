@@ -26,6 +26,7 @@ class ScheduleFocusState {
   final String? clientType;
   final String? clientId;
   final String? clientName;
+  final String? branchId;
 
   const ScheduleFocusState({
     required this.focusDate,
@@ -36,6 +37,7 @@ class ScheduleFocusState {
     this.clientType,
     this.clientId,
     this.clientName,
+    this.branchId,
   });
 }
 
@@ -66,6 +68,7 @@ class ScheduleFocusNotifier extends Notifier<ScheduleFocusState?> {
     required String clientType,
     required String clientId,
     String? clientName,
+    String? branchId,
   }) {
     state = ScheduleFocusState(
       focusDate: date,
@@ -73,6 +76,7 @@ class ScheduleFocusNotifier extends Notifier<ScheduleFocusState?> {
       clientType: clientType,
       clientId: clientId,
       clientName: clientName,
+      branchId: branchId,
     );
   }
 

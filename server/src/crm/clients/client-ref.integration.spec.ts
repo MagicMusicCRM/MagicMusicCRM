@@ -35,6 +35,7 @@ describe("ClientReferenceService (PostgreSQL)", () => {
   const teachers: string[] = [];
   const students: string[] = [];
   const leads: string[] = [];
+  const branches: string[] = [];
   const lessons: string[] = [];
   const tasks: string[] = [];
   let admin: ActorContext;
@@ -49,6 +50,7 @@ describe("ClientReferenceService (PostgreSQL)", () => {
   let assignedLeadId: string;
   let taskLeadId: string;
   let foreignLeadId: string;
+  let defaultBranchId: string;
 
   async function createActor(
     role: UserRole,
@@ -91,13 +93,14 @@ describe("ClientReferenceService (PostgreSQL)", () => {
       `
         insert into app.students (
           profile_id,
+          branch_id,
           status,
           deleted_at
         )
-        values ($1, 'active', case when $2 then now() else null end)
+        values ($1, $3, 'active', case when $2 then now() else null end)
         returning id
       `,
-      [profileId, archived],
+      [profileId, archived, defaultBranchId],
     );
     const id = created.rows[0]!.id;
     students.push(id);
@@ -112,17 +115,18 @@ describe("ClientReferenceService (PostgreSQL)", () => {
     const created = await database.query<{ id: string }>(
       `
         insert into app.leads (
+          branch_id,
           first_name,
           last_name,
           phone,
           email,
           deleted_at
         )
-        values ($1, $2, '+79991112233', 'private@example.test',
+        values ($4, $1, $2, '+79991112233', 'private@example.test',
           case when $3 then now() else null end)
         returning id
       `,
-      [firstName, lastName, archived],
+      [firstName, lastName, archived, defaultBranchId],
     );
     const id = created.rows[0]!.id;
     leads.push(id);
@@ -178,6 +182,13 @@ describe("ClientReferenceService (PostgreSQL)", () => {
       where email like 'v4-client-ref-%@example.test';
     `);
     service = new ClientReferenceService(database);
+
+    const branch = await database.query<{ id: string }>(
+      `insert into app.branches (name) values ($1) returning id`,
+      [`Client ref ${randomUUID()}`],
+    );
+    defaultBranchId = branch.rows[0]!.id;
+    branches.push(defaultBranchId);
 
     admin = await createActor("admin", "Admin", "Resolver");
     client = await createActor("client", "Клиент", "Свой");
@@ -300,6 +311,10 @@ describe("ClientReferenceService (PostgreSQL)", () => {
       [teachers],
     );
     await database.query(
+      "delete from app.branches where id = any($1::uuid[])",
+      [branches],
+    );
+    await database.query(
       `
         delete from app.aggregate_versions
         where aggregate_type = 'access:user'
@@ -338,6 +353,7 @@ describe("ClientReferenceService (PostgreSQL)", () => {
     ).resolves.toMatchObject({
       ref: { type: "student", id: ownStudentId },
       label: "Клиент Свой",
+      branchId: defaultBranchId,
       lifecycleState: "active",
       tombstone: false,
       archivedAt: null,
@@ -347,6 +363,7 @@ describe("ClientReferenceService (PostgreSQL)", () => {
     ).resolves.toMatchObject({
       ref: { type: "lead", id: linkedLeadId },
       label: "Галина Связанная",
+      branchId: defaultBranchId,
       lifecycleState: "active",
       tombstone: false,
     });

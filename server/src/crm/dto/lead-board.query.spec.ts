@@ -27,6 +27,19 @@ describe("LeadBoardQuery", () => {
     await expect(validate(query)).resolves.toHaveLength(0);
   });
 
+  it("accepts the two deterministic lead-card sort orders", async () => {
+    await expect(
+      validate(plainToInstance(LeadBoardQuery, { sort: "newest" })),
+    ).resolves.toHaveLength(0);
+    await expect(
+      validate(plainToInstance(LeadBoardQuery, { sort: "oldest" })),
+    ).resolves.toHaveLength(0);
+    const errors = await validate(
+      plainToInstance(LeadBoardQuery, { sort: "name" }),
+    );
+    expect(errors.some((error) => error.property === "sort")).toBe(true);
+  });
+
   it("rejects statusId together with unassigned=true", async () => {
     const errors = await validate(
       plainToInstance(LeadBoardQuery, { statusId, unassigned: "true" }),
