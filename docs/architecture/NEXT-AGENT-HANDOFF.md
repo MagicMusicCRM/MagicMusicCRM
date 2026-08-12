@@ -1,10 +1,20 @@
 # MagicMusicCRM — актуальная передача
 
-> Обновлено: 2026-08-12
-> Production: client `1.5.2+182`, server `52b272087`,
-> image `sha256:698db9b4…`, migration `0131`
+> Обновлено: 2026-08-13
+> Production: client `1.5.3+183`, server `c5ad7745`,
+> image `sha256:62473bb4…`, migration `0132`
 > Рабочая ветка: `codex/v7-production-readiness`
-> Статус: production rollout PASS; owner mega-UAT не завершён
+> Статус: rollout и разрешённый clean start PASS; owner mega-UAT не завершён
+
+Release `1.5.3+183` опубликован в обоих update channels и GitHub Release.
+Production очищен до двух сохраняемых аккаунтов, системного чата, источника
+`Приложение`, `10` системных и `40` полезных пользовательских полей; все
+`hollihopId` удалены. Клиенты, остальные люди, организация, расписание,
+коммерция, сообщения, задачи и uploads равны нулю. Full gate: Flutter
+`789/789`, backend `177/177` suites и `1415/1415` tests; exact image,
+backup/off-host restore, rollback compatibility, Windows/Android smoke,
+post-reset DB/runtime gate и reconciliation PASS. Evidence:
+`docs/audits/v7-production-rollout-183-clean-start.md`.
 
 Release `1.5.2+182` доставил в production текущий checkout и миграции
 `0119..0131`, включая Branch/Room/Group lifecycle, optional linked accounts,
