@@ -53,6 +53,8 @@ Assert-Contains $wrapperText 'Reset-StorageAndCache' "Reset must clear non-datab
 Assert-Contains $wrapperText 'Test-CommerceReconciliation' "Reset must reconcile after mutation."
 Assert-Contains $wrapperText 'bash ''$BackupRoot/../infra/scripts/backup-staging.sh''' "Backup must run through bash even without an executable bit."
 Assert-Contains $wrapperText 'set -a' "Restore-check must export the backup environment for openssl."
+Assert-Contains $wrapperText '$verifyTemplate = @''' "Backup verification must use a literal remote-command template."
+Assert-True (-not $wrapperText.Contains('" + ''"$bytes" "$hash"''')) "Backup verification must not concatenate shell arguments at invocation time."
 Assert-Contains $wrapperText 'docker start magicmusiccrm-v3-api-1 magicmusiccrm-v3-caddy-1' "Restart must preserve the exact release containers."
 Assert-True (-not $wrapperText.Contains('docker compose --env-file .env up -d api caddy')) "Reset must not recreate API from the base compose file."
 

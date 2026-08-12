@@ -161,7 +161,17 @@ function New-EncryptedBackup {
     throw "Backup script did not return an allowlisted encrypted backup path."
   }
 
-  $verify = @(Invoke-SshCommand -Command "set -eu; test -s '$backupPath'; sha256sum -c '$backupPath.sha256'; bytes=`$(wc -c < '$backupPath' | tr -d ' '); hash=`$(sha256sum '$backupPath' | awk '{print `$1}'); printf 'BACKUP|%s|%s|%s\n' '$backupPath' " + '"$bytes" "$hash"')
+  $verifyTemplate = @'
+set -eu
+backup='__BACKUP_PATH__'
+test -s "$backup"
+sha256sum -c "$backup.sha256" >/dev/null
+bytes=$(wc -c < "$backup" | tr -d ' ')
+hash=$(sha256sum "$backup" | cut -d ' ' -f1)
+printf 'BACKUP|%s|%s|%s\n' "$backup" "$bytes" "$hash"
+'@
+  $verifyCommand = $verifyTemplate.Replace("__BACKUP_PATH__", $backupPath)
+  $verify = @(Invoke-SshCommand -Command $verifyCommand)
   $record = $verify | Where-Object { $_ -match '^BACKUP\|' } | Select-Object -Last 1
   if (-not $record) {
     throw "Encrypted backup verification record is missing."
