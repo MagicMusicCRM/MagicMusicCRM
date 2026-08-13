@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/security/password_policy.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/widgets/v7/adaptive_surface.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_employment_fields.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/person_access_role_dialog.dart';
 
 Future<bool?> showCreateTeacherSurface(BuildContext context) {
   return showMagicAdaptiveSurface<bool>(
@@ -36,6 +38,7 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
   final _password = TextEditingController();
   final _passwordAgain = TextEditingController();
   String _phone = '';
+  String _accessRole = 'teacher';
   bool _saving = false;
   bool _showPassword = false;
 
@@ -64,6 +67,7 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
             phone: _phone,
             email: _email.text.trim().isEmpty ? null : _email.text,
             password: _password.text.isEmpty ? null : _password.text,
+            accessRole: _accessRole,
             branchIds: employment.branchIds,
             disciplineIds: employment.disciplineIds,
             customDataPatch: employment.customDataPatch,
@@ -92,13 +96,19 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final actorRole =
+        ref.watch(capabilitySnapshotProvider).asData?.value.role ?? '';
+    final accessRoles = personAccessRoleOptions(
+      actorRole: actorRole,
+      teacher: true,
+    );
     return Column(
       key: const ValueKey('create-teacher-form'),
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Text(
-          'Карточку можно создать без аккаунта. Если указать email и пароль, рабочий доступ будет создан и связан с преподавателем одной операцией.',
+          'Карточку можно создать без аккаунта. Если указать email и пароль, рабочий доступ будет создан и связан с преподавателем одной операцией. Роль доступа и несколько филиалов назначаются сразу.',
         ),
         const SizedBox(height: 16),
         Form(
@@ -181,6 +191,31 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
                   return value != _password.text ? 'Пароли не совпадают' : null;
                 },
               ),
+              if (accessRoles.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  menuMaxHeight: 256,
+                  key: const Key('create-teacher-access-role'),
+                  initialValue: accessRoles.contains(_accessRole)
+                      ? _accessRole
+                      : accessRoles.first,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Роль доступа *',
+                  ),
+                  items: [
+                    for (final role in accessRoles)
+                      DropdownMenuItem(
+                        value: role,
+                        child: Text(personAccessRoleLabels[role] ?? role),
+                      ),
+                  ],
+                  onChanged: _saving
+                      ? null
+                      : (value) =>
+                            setState(() => _accessRole = value ?? 'teacher'),
+                ),
+              ],
             ],
           ),
         ),

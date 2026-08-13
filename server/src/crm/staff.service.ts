@@ -247,15 +247,15 @@ export class StaffService {
   }
 
   async createStaff(actor: ActorContext, dto: CreateStaffDto) {
-    const role: UserRole = "admin";
-    // Creation is not an elevation surface. A higher role can be assigned only
-    // later in Settings -> Access through the versioned access command.
-    if (ROLE_LEVEL[role] >= ROLE_LEVEL[actor.role]) {
-      throw new ForbiddenException(
-        "Недостаточно прав для создания карточки сотрудника.",
-      );
-    }
-    const firstName = requiredTrim(dto.firstName, "Имя сотрудника обязательно.");
+    const role = this.accounts.resolveInitialRole(
+      actor,
+      "staff",
+      dto.accessRole,
+    );
+    const firstName = requiredTrim(
+      dto.firstName,
+      "Имя сотрудника обязательно.",
+    );
     const lastName = requiredTrim(
       dto.lastName,
       "Фамилия сотрудника обязательна.",
@@ -592,7 +592,8 @@ export class StaffService {
             on sba.staff_member_id = us.id and sba.deleted_at is null
           left join app.branches b on b.id = sba.branch_id and b.deleted_at is null
           group by us.id, us.role, us.position, us.status, us.custom_data,
-            us.profile_id, us.created_at, p.id, u.id,
+            us.profile_id, us.lifecycle_state, us.version, us.offboarded_at,
+            us.offboard_reason, us.created_at, p.id, u.id,
             up.user_id, up.first_name, up.last_name, up.phone,
             u.email, u.role, u.is_app_account
           limit 1

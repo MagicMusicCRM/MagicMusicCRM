@@ -92,12 +92,15 @@ user/profile/link создаются атомарно вместе с карто
 identity, не создавая дубль. Пароль никогда не читается и не показывается:
 директор видит наличие и время изменения и может задать новый.
 
-DECISION: Роль app user изменяется только versioned-командой
-`Настройки → Доступ`. Staff create всегда создаёт безопасную роль `admin`, а
-Staff/Teacher cards и старый Profile API не являются поверхностью повышения
-ролей. Каноническая команда роли в одной транзакции синхронизирует projection
-`staff_members.role`, сбрасывает overrides, повышает access version и пишет
-audit/outbox.
+DECISION: При создании Teacher/Staff Director/system_admin может выбрать
+допустимую начальную роль ниже собственной; она записывается атомарно вместе с
+единой identity/profile/link. Обычная карточка не создаёт `system_admin`.
+Последующая смена роли доступна из Staff/Teacher card, но использует ровно ту же
+versioned access-команду, что и `Настройки → Доступ`: в одной транзакции она
+синхронизирует projection `staff_members.role`, сбрасывает overrides, повышает
+access version и пишет audit/outbox. Старый Profile API роль не меняет.
+Teacher/Staff create и update принимают непустой набор филиалов и атомарно
+сохраняют несколько назначений.
 
 DECISION: Teacher/Staff offboarding — versioned lifecycle-команда
 `preview → blockers=0 → commit(reason) → archived`. Она атомарно закрывает
@@ -230,6 +233,12 @@ DECISION: Lead loss reason хранит `reason_name_snapshot` и
 DECISION: Приложение имеет единственную тёмную тему Deep Charcoal &
 Sophisticated Gold. Русский — язык UI; desktop и mobile используют общий
 канонический navigation/entity contract.
+
+DECISION: Desktop workspace держит subtree каждой открытой вкладки смонтированным
+под стабильным `tabId`. Переключение только меняет видимую вкладку и не запускает
+dirty-exit; Save/Discard применяется при закрытии вкладки, Back или переходе с
+её текущего экрана. Поэтому локальные контроллеры формы, фильтры и вложенное
+состояние принадлежат вкладке, а не активному viewport.
 
 DECISION: Скрытие forbidden UI не заменяет backend security и не должно
 инициировать запрещённый API request.

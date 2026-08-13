@@ -60,7 +60,7 @@ class ClientFormsApi {
       data: {
         'branchId': ?branchId,
         'baseVersion': baseVersion,
-        'snapshot': snapshot,
+        'snapshot': configurationSnapshotForWire(snapshot),
       },
     );
   }
@@ -75,7 +75,7 @@ class ClientFormsApi {
       data: {
         'branchId': ?branchId,
         'baseVersion': baseVersion,
-        'snapshot': snapshot,
+        'snapshot': configurationSnapshotForWire(snapshot),
       },
     );
   }
@@ -92,7 +92,7 @@ class ClientFormsApi {
         'branchId': ?branchId,
         'baseVersion': baseVersion,
         'reason': reason.trim(),
-        'snapshot': snapshot,
+        'snapshot': configurationSnapshotForWire(snapshot),
       },
     );
   }
@@ -275,4 +275,39 @@ class ClientFormsApi {
     if (raw is! List) return const [];
     return raw.whereType<Map<String, dynamic>>().toList(growable: false);
   }
+}
+
+/// Converts the canonical one-field model to the compatibility wire shape.
+///
+/// Servers through migration 0132 require one `entityType` row per Lead or
+/// Student card. Newer servers merge these rows back into one definition with
+/// visibility flags, so the same payload is safe across a rolling upgrade.
+Map<String, dynamic> configurationSnapshotForWire(
+  Map<String, dynamic> snapshot,
+) {
+  final result = Map<String, dynamic>.from(snapshot);
+  final rawFields = snapshot['fields'];
+  if (rawFields is! List) return result;
+
+  final fields = <Map<String, dynamic>>[];
+  for (final rawField in rawFields.whereType<Map>()) {
+    final field = Map<String, dynamic>.from(rawField);
+    final visibility = field['visibility'];
+    final legacyEntityType = field['entityType']?.toString();
+    final visibleOnLead = visibility is Map
+        ? visibility['lead'] == true
+        : legacyEntityType == null || legacyEntityType == 'lead';
+    final visibleOnStudent = visibility is Map
+        ? visibility['student'] == true
+        : legacyEntityType == null || legacyEntityType == 'student';
+
+    void addLegacyCopy(String entityType) {
+      fields.add({...field, 'entityType': entityType}..remove('visibility'));
+    }
+
+    if (visibleOnLead) addLegacyCopy('lead');
+    if (visibleOnStudent) addLegacyCopy('student');
+  }
+  result['fields'] = fields;
+  return result;
 }

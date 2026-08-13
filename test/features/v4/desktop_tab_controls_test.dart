@@ -6,6 +6,44 @@ import 'package:magic_music_crm/core/workspace/desktop_workspace_shell.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 import 'package:magic_music_crm/core/workspace/workspace_store.dart';
 
+class _TabDraftProbe extends StatefulWidget {
+  const _TabDraftProbe({required this.tabId});
+
+  final String tabId;
+
+  @override
+  State<_TabDraftProbe> createState() => _TabDraftProbeState();
+}
+
+class _TabDraftProbeState extends State<_TabDraftProbe> {
+  final controller = TextEditingController();
+  bool detailsOpen = false;
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        TextField(
+          key: ValueKey('draft-${widget.tabId}'),
+          controller: controller,
+        ),
+        TextButton(
+          key: ValueKey('details-${widget.tabId}'),
+          onPressed: () => setState(() => detailsOpen = !detailsOpen),
+          child: const Text('Вложенное окно'),
+        ),
+        if (detailsOpen) Text('Открыто ${widget.tabId}'),
+      ],
+    );
+  }
+}
+
 void main() {
   EntityLink link(String id) =>
       EntityLink.typed(entityType: EntityLinkType.client, entityId: id);
@@ -158,7 +196,7 @@ void main() {
     expect(scrollController.offset, greaterThan(0));
   });
 
-  testWidgets('dirty tab switch waits for the shared exit decision', (
+  testWidgets('tab switch keeps local draft and nested state mounted', (
     tester,
   ) async {
     final workspace = controller();
@@ -167,36 +205,50 @@ void main() {
     workspace.selectTab(first);
     workspace.registerForm(first, 'editor', draft: const {'name': 'Анна'});
     workspace.updateForm(first, 'editor', dirty: true);
-    var decision = DirtyCloseDecision.cancel;
-    var discarded = 0;
+    var exitRequests = 0;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: DesktopWorkspaceShell(
             controller: workspace,
-            resolveDirty: (_) async => decision,
-            saveDirty: (_) async {},
-            discardDirty: (_) async => discarded++,
-            tabBuilder: (_, tab) => Text(tab.titleHint),
+            resolveDirty: (_) async {
+              exitRequests++;
+              return DirtyCloseDecision.discard;
+            },
+            tabBuilder: (_, tab) => _TabDraftProbe(tabId: tab.tabId),
           ),
         ),
       ),
     );
 
+    await tester.enterText(
+      find.byKey(ValueKey('draft-$first')),
+      'Несохранённый текст',
+    );
+    await tester.tap(find.byKey(ValueKey('details-$first')));
+    await tester.pump();
+    expect(find.text('Открыто $first'), findsOneWidget);
+
     final secondTab = find.byKey(ValueKey('workspace-tab-select-$second'));
     await tester.tap(secondTab);
-    await tester.pumpAndSettle();
-    expect(workspace.state.activeTabId, first);
+    await tester.pump();
+    expect(workspace.state.activeTabId, second);
+    expect(exitRequests, 0);
     expect(workspace.state.tabs.first.forms['editor']!.dirty, isTrue);
 
-    decision = DirtyCloseDecision.discard;
-    await tester.tap(secondTab);
-    await tester.pumpAndSettle();
-    expect(workspace.state.activeTabId, second);
-    expect(discarded, 1);
-    final form = workspace.state.tabs.first.forms['editor']!;
-    expect(form.dirty, isFalse);
-    expect(form.draft, isEmpty);
+    await tester.enterText(
+      find.byKey(ValueKey('draft-$second')),
+      'Текст второй вкладки',
+    );
+    await tester.tap(find.byKey(ValueKey('workspace-tab-select-$first')));
+    await tester.pump();
+
+    final firstDraft = tester.widget<TextField>(
+      find.byKey(ValueKey('draft-$first')),
+    );
+    expect(firstDraft.controller!.text, 'Несохранённый текст');
+    expect(find.text('Открыто $first'), findsOneWidget);
+    expect(exitRequests, 0);
   });
 
   test(

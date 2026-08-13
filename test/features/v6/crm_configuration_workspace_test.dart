@@ -435,6 +435,17 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('configuration-publish')));
     await tester.pumpAndSettle();
     expect(find.text('Предпросмотр публикации'), findsOneWidget);
+    final wireFields = (api.submittedSnapshot!['fields'] as List).cast<Map>();
+    expect(
+      wireFields
+          .where((field) => field['key'] == 'goal')
+          .map((field) => field['entityType']),
+      containsAll(<String>['lead', 'student']),
+    );
+    expect(
+      wireFields.every((field) => !field.containsKey('visibility')),
+      isTrue,
+    );
     await tester.enterText(
       find.widgetWithText(TextField, 'Причина публикации *'),
       'Настроили карточку лида',

@@ -58,6 +58,11 @@ const APP_ROLES = new Set<UserRole>([
   "system_admin",
 ]);
 
+const PERSON_INITIAL_ROLES: Record<PersonAccountType, ReadonlySet<UserRole>> = {
+  teacher: new Set<UserRole>(["teacher", "admin", "manager", "director"]),
+  staff: new Set<UserRole>(["admin", "manager", "director"]),
+};
+
 /**
  * One identity boundary for Teacher/Staff cards. CRM creation may prepare a
  * technical identity without login; later activation and director-managed
@@ -88,6 +93,29 @@ export class PersonAccountService {
       passwordHash: password ? await this.passwords.hash(password) : null,
       isAppAccount: hasEmail,
     };
+  }
+
+  resolveInitialRole(
+    actor: ActorContext,
+    personType: PersonAccountType,
+    requestedRole?: string,
+  ): UserRole {
+    const role = (requestedRole ??
+      (personType === "teacher" ? "teacher" : "admin")) as UserRole;
+    if (!APP_ROLES.has(role) || !PERSON_INITIAL_ROLES[personType].has(role)) {
+      throw new BadRequestException(
+        "Для карточки выбрана недопустимая роль доступа.",
+      );
+    }
+    if (
+      actor.role !== "system_admin" &&
+      ROLE_LEVEL[role] >= ROLE_LEVEL[actor.role]
+    ) {
+      throw new ForbiddenException(
+        "Можно назначить только роль ниже собственной.",
+      );
+    }
+    return role;
   }
 
   async manageAccess(
@@ -214,7 +242,7 @@ export class PersonAccountService {
                coalesce(u.is_app_account, false) as is_app_account,
                coalesce(p.first_name, t.custom_data->>'firstName') as first_name,
                coalesce(p.last_name, t.custom_data->>'lastName') as last_name,
-               p.phone, 'teacher'::text as account_role,
+               p.phone, coalesce(u.role::text, 'teacher') as account_role,
                coalesce(t.lifecycle_state, 'active') as lifecycle_state
              from app.teachers t
              left join app.profiles p
@@ -297,7 +325,8 @@ export class PersonAccountService {
           input.passwordChanged,
         ],
       );
-      if (!updated.rows[0]) throw new NotFoundException("Учётная запись не найдена.");
+      if (!updated.rows[0])
+        throw new NotFoundException("Учётная запись не найдена.");
     } else {
       const inserted = await client.query<{ id: string }>(
         `insert into app.users (
@@ -338,7 +367,8 @@ export class PersonAccountService {
         ],
       );
       profileId = inserted.rows[0]!.id;
-      const table = input.personType === "teacher" ? "teachers" : "staff_members";
+      const table =
+        input.personType === "teacher" ? "teachers" : "staff_members";
       await client.query(
         `update app.${table} set profile_id = $2, updated_at = now() where id = $1`,
         [input.entityId, profileId],

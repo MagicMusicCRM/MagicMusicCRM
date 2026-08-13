@@ -440,6 +440,11 @@ export class TeachersService {
 
   async createTeacher(actor: ActorContext, dto: CreateTeacherDto) {
     this.policy.assertCanManageSystemSettings(actor);
+    const accessRole = this.accounts.resolveInitialRole(
+      actor,
+      "teacher",
+      dto.accessRole,
+    );
     if (dto.salary !== undefined || dto.rate !== undefined) {
       this.policy.assertCanReadPayroll(actor);
     }
@@ -494,7 +499,7 @@ export class TeachersService {
                 $3,
                 'teacher-' || gen_random_uuid()::text || '@local.magicmusiccrm.invalid'
               ),
-              $7, $4, $5, 'teacher'::app.user_role,
+              $7, $4, $5, $16::app.user_role,
               case when $15::boolean then now() else null end,
               true, $15::boolean,
               case when $15::boolean then now() else null end,
@@ -597,6 +602,7 @@ export class TeachersService {
           dto.rate ?? null,
           dto.rateEffectiveFrom ?? null,
           credentials.isAppAccount,
+          accessRole,
         ],
       );
       const teacher = result.rows[0];
@@ -611,6 +617,7 @@ export class TeachersService {
         entityType: "teacher",
         entityId: teacher.id,
         metadata: {
+          accessRole,
           rateConfigured: dto.rate !== undefined,
           salaryConfigured: dto.salary !== undefined,
         },

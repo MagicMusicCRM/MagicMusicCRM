@@ -574,12 +574,16 @@ void main() {
     },
   );
 
-  testWidgets('manager creates staff from the mounted users workspace', (
+  testWidgets('director creates staff with a role and multiple branches', (
     tester,
   ) async {
     final api = SettingsTestApi(
-      role: 'manager',
+      role: 'director',
       capabilities: const ['system.settings.manage', 'crm.client.write'],
+      branches: const [
+        {'id': '20000000-0000-4000-8000-000000000001', 'name': 'Сокол'},
+        {'id': '20000000-0000-4000-8000-000000000002', 'name': 'Спортивная'},
+      ],
     );
     await _pump(tester, api, initialArea: 'users');
 
@@ -589,7 +593,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('create-employee-form')), findsOneWidget);
-    expect(find.text('Управляющий'), findsNothing);
+    expect(
+      find.byKey(const Key('create-employee-access-role')),
+      findsOneWidget,
+    );
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Фамилия *'),
       'Иванов',
@@ -615,56 +622,66 @@ void main() {
       find.widgetWithText(TextFormField, 'Повторите пароль'),
       '12345678',
     );
-    await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+    await tester.tap(find.byKey(const Key('create-employee-access-role')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Сокол').last);
+    await tester.tap(find.text('Управляющий').last);
     await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilterChip, 'Сокол'));
+    await tester.tap(find.widgetWithText(FilterChip, 'Спортивная'));
     await tester.tap(find.widgetWithText(FilledButton, 'Добавить сотрудника'));
     await tester.pumpAndSettle();
 
     expect(api.mutations, contains('/crm/staff'));
     final payload = api.mutations['/crm/staff']! as Map<String, dynamic>;
     expect(payload['password'], '12345678');
+    expect(payload['accessRole'], 'manager');
+    expect(payload['branchIds'], [
+      '20000000-0000-4000-8000-000000000001',
+      '20000000-0000-4000-8000-000000000002',
+    ]);
   });
 
   for (final actorRole in const ['manager', 'director']) {
-    testWidgets(
-      '$actorRole sees staff role read-only outside the Access section',
-      (tester) async {
-        final api = SettingsTestApi(
-          role: actorRole,
-          capabilities: const ['system.settings.manage', 'crm.client.write'],
-          staff: const [
-            {
-              'id': 'staff-read-only-role',
-              'role': 'admin',
-              'status': 'working',
-              'firstName': 'Ольга',
-              'lastName': 'Смирнова',
-              'email': 'staff@example.test',
-              'isAppAccount': true,
-              'appRole': 'admin',
-              'passwordConfigured': true,
-              'branches': [
-                {'id': '20000000-0000-4000-8000-000000000001', 'name': 'Сокол'},
-              ],
-            },
-          ],
-        );
-        await _pump(tester, api, initialArea: 'users');
-        await tester.tap(find.text('Сотрудники').first);
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Смирнова Ольга'));
-        await tester.pumpAndSettle();
+    testWidgets('$actorRole sees the correct staff role action in the card', (
+      tester,
+    ) async {
+      final api = SettingsTestApi(
+        role: actorRole,
+        capabilities: const ['system.settings.manage', 'crm.client.write'],
+        staff: const [
+          {
+            'id': 'staff-read-only-role',
+            'role': 'admin',
+            'status': 'working',
+            'firstName': 'Ольга',
+            'lastName': 'Смирнова',
+            'email': 'staff@example.test',
+            'isAppAccount': true,
+            'appRole': 'admin',
+            'profileUserId': '10000000-0000-4000-8000-000000000099',
+            'passwordConfigured': true,
+            'branches': [
+              {'id': '20000000-0000-4000-8000-000000000001', 'name': 'Сокол'},
+            ],
+          },
+        ],
+      );
+      await _pump(tester, api, initialArea: 'users');
+      await tester.tap(find.text('Сотрудники').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Смирнова Ольга'));
+      await tester.pumpAndSettle();
 
-        expect(find.text('Роль доступа'), findsOneWidget);
-        expect(
-          find.text('Изменяется только в «Настройки → Доступы»'),
-          findsOneWidget,
-        );
-        expect(find.byKey(const Key('access-role-selector')), findsNothing);
-      },
-    );
+      expect(find.text('Роль доступа'), findsOneWidget);
+      expect(
+        find.text('Определяет права пользователя в приложении'),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('staff-change-access-role')),
+        actorRole == 'director' ? findsOneWidget : findsNothing,
+      );
+    });
   }
 
   testWidgets('director creates teacher from the mounted users workspace', (
@@ -673,6 +690,10 @@ void main() {
     final api = SettingsTestApi(
       role: 'director',
       capabilities: const ['system.settings.manage', 'crm.client.write'],
+      branches: const [
+        {'id': '20000000-0000-4000-8000-000000000001', 'name': 'Сокол'},
+        {'id': '20000000-0000-4000-8000-000000000002', 'name': 'Спортивная'},
+      ],
     );
     await _pump(tester, api, initialArea: 'users');
 
@@ -705,15 +726,20 @@ void main() {
       find.widgetWithText(TextFormField, 'Повторите пароль'),
       '12345678',
     );
+    await tester.tap(find.byKey(const Key('create-teacher-access-role')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Управляющий').last);
+    await tester.pumpAndSettle();
     final branchChip = find.widgetWithText(FilterChip, 'Сокол');
     await tester.ensureVisible(branchChip);
     await tester.tap(branchChip);
+    await tester.tap(find.widgetWithText(FilterChip, 'Спортивная'));
     await tester.pumpAndSettle();
     final disciplineChip = find.widgetWithText(FilterChip, 'Вокал');
     await tester.ensureVisible(disciplineChip);
     await tester.tap(disciplineChip);
     await tester.pumpAndSettle();
-    final rateSelector = find.byType(DropdownButtonFormField<String>);
+    final rateSelector = find.byType(DropdownButtonFormField<String>).last;
     await tester.ensureVisible(rateSelector);
     await tester.tap(rateSelector);
     await tester.pumpAndSettle();
@@ -726,9 +752,48 @@ void main() {
 
     expect(api.mutations, contains('/crm/teachers'));
     final payload = api.mutations['/crm/teachers']! as Map<String, dynamic>;
-    expect(payload['branchIds'], ['20000000-0000-4000-8000-000000000001']);
+    expect(payload['accessRole'], 'manager');
+    expect(payload['branchIds'], [
+      '20000000-0000-4000-8000-000000000001',
+      '20000000-0000-4000-8000-000000000002',
+    ]);
     expect(payload['disciplineIds'], ['40000000-0000-4000-8000-000000000001']);
     expect(payload['rate'], 750);
+  });
+
+  testWidgets('director can change access role from the teacher card', (
+    tester,
+  ) async {
+    final api = SettingsTestApi(
+      role: 'director',
+      capabilities: const ['system.settings.manage', 'crm.client.write'],
+      teachers: const [
+        {
+          'id': '30000000-0000-4000-8000-000000000001',
+          'status': 'active',
+          'firstName': 'Мария',
+          'lastName': 'Петрова',
+          'profileUserId': '10000000-0000-4000-8000-000000000099',
+          'appRole': 'teacher',
+          'isAppAccount': true,
+          'assignedBranches': [
+            {'id': '20000000-0000-4000-8000-000000000001', 'name': 'Сокол'},
+          ],
+        },
+      ],
+    );
+    await _pump(tester, api, initialArea: 'users');
+
+    await tester.tap(find.text('Преподаватели').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Мария Петрова'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('teacher-change-access-role')), findsOneWidget);
+    expect(
+      find.text('Определяет права пользователя в приложении'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('manager creates a group from the mounted schedule workspace', (

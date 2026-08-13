@@ -395,6 +395,7 @@ extension MagicCrmCore on MagicCrmService {
     String? phone,
     String? email,
     String? password,
+    String accessRole = 'teacher',
     required List<String> branchIds,
     List<String> disciplineIds = const [],
     String status = 'active',
@@ -408,6 +409,7 @@ extension MagicCrmCore on MagicCrmService {
       'branchIds': branchIds,
       'disciplineIds': disciplineIds,
       'status': status,
+      'accessRole': accessRole,
     };
     if (email != null && email.trim().isNotEmpty) data['email'] = email.trim();
     if (password != null && password.isNotEmpty) data['password'] = password;
@@ -698,11 +700,13 @@ extension MagicCrmCore on MagicCrmService {
     String? email,
     String? password,
     String? phone,
+    String accessRole = 'admin',
     required List<String> branchIds,
   }) async {
     final data = <String, dynamic>{
       'firstName': firstName.trim(),
       'lastName': lastName.trim(),
+      'accessRole': accessRole,
       'branchIds': branchIds,
     };
     if (email != null && email.trim().isNotEmpty) data['email'] = email.trim();

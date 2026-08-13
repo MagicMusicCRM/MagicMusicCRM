@@ -17,6 +17,26 @@ describe("StaffService", () => {
       assertCanManageSystemSettings: jest.fn(),
     };
     const accounts = {
+      resolveInitialRole: jest
+        .fn()
+        .mockImplementation((subject, type, role) => {
+          const selected = role ?? (type === "teacher" ? "teacher" : "admin");
+          const levels: Record<string, number> = {
+            client: 0,
+            teacher: 1,
+            admin: 2,
+            manager: 3,
+            director: 4,
+            system_admin: 5,
+          };
+          if (
+            subject.role !== "system_admin" &&
+            levels[selected] >= levels[subject.role]
+          ) {
+            throw new Error("Можно назначить только роль ниже собственной.");
+          }
+          return selected;
+        }),
       prepareCreate: jest.fn().mockImplementation((email?: string) =>
         Promise.resolve({
           email: email?.trim().toLowerCase() ?? null,
@@ -26,7 +46,9 @@ describe("StaffService", () => {
       ),
       manageAccess: jest.fn().mockImplementation((_actor, _type, _id, dto) => {
         if (dto.role !== undefined) {
-          throw new Error("Роль меняется только в разделе «Настройки → Доступы».");
+          throw new Error(
+            "Роль меняется только в разделе «Настройки → Доступы».",
+          );
         }
         return Promise.resolve({});
       }),
@@ -55,11 +77,10 @@ describe("StaffService", () => {
           branchIds: ["branch-a"],
         },
       ),
-    ).rejects.toThrow("Недостаточно прав");
-
+    ).rejects.toThrow("ниже собственной");
   });
 
-  it("creates only the safe admin role outside Settings -> Access", async () => {
+  it("creates staff with the access role selected by system_admin", async () => {
     const adminActor = { userId: "sys-a", role: "system_admin" as const };
     const { service, query, audit } = createService([
       {
@@ -67,11 +88,11 @@ describe("StaffService", () => {
         profile_id: "profile-a",
         profile_user_id: "user-a",
         email: "staff@example.com",
-        role: "admin",
-        position: "Администратор",
+        role: "manager",
+        position: "Управляющий",
         status: "working",
         custom_data: {},
-        app_role: "admin",
+        app_role: "manager",
         is_app_account: true,
         first_name: "Ольга",
         last_name: "Смирнова",
@@ -88,19 +109,20 @@ describe("StaffService", () => {
         email: "Staff@Example.com",
         password: "password-123",
         phone: "+79992222222",
+        accessRole: "manager",
         branchIds: ["branch-a"],
       }),
     ).resolves.toMatchObject({
       id: "staff-a",
       email: "staff@example.com",
-      role: "admin",
+      role: "manager",
     });
 
     expect(query.mock.calls[0][1]).toEqual([
       "staff@example.com",
       "Ольга Смирнова",
       "+79992222222",
-      "admin",
+      "manager",
       "Ольга",
       "Смирнова",
       "hashed-password",
@@ -245,11 +267,10 @@ describe("StaffService", () => {
     ]);
 
     await expect(
-      service.updateStaff(
-        adminActor,
-        "staff-a",
-        { role: "Ответственный", phone: "+79990000000" } as never,
-      ),
+      service.updateStaff(adminActor, "staff-a", {
+        role: "Ответственный",
+        phone: "+79990000000",
+      } as never),
     ).resolves.toMatchObject({
       id: "staff-a",
       role: "Ответственный",
@@ -392,11 +413,7 @@ describe("StaffService", () => {
     const { service } = createService([{ role: "teacher" }]);
 
     await expect(
-      service.updateStaff(
-        adminActor,
-        "staff-a",
-        { role: "manager" } as never,
-      ),
+      service.updateStaff(adminActor, "staff-a", { role: "manager" } as never),
     ).rejects.toThrow("Настройки → Доступы");
   });
 
@@ -410,9 +427,7 @@ describe("StaffService", () => {
         search: " анна ",
         roles: "admin,system_admin,director",
       }),
-    ).resolves.toEqual([
-      { id: "admin-a", displayName: "Анна", role: "admin" },
-    ]);
+    ).resolves.toEqual([{ id: "admin-a", displayName: "Анна", role: "admin" }]);
 
     expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
     expect(query.mock.calls[0][0]).toContain("join app.profiles p");

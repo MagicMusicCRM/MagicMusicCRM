@@ -8,6 +8,7 @@ import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/widgets/teacher_rate_selector.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/provision_access_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/person_lifecycle_dialog.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/person_access_role_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_employment_fields.dart';
 
 part 'teacher_detail_widgets.dart';
@@ -54,6 +55,8 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
     'director',
     'system_admin',
   }.contains(ref.read(capabilitySnapshotProvider).asData?.value.role);
+  String get _actorRole =>
+      ref.read(capabilitySnapshotProvider).asData?.value.role ?? '';
 
   @override
   void initState() {
@@ -320,6 +323,23 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
       personName: _nameController.text.trim(),
     );
     if (saved == true && mounted) Navigator.pop(context, true);
+  }
+
+  Future<void> _changeAccessRole() async {
+    final userId = _localData['profile_user_id']?.toString() ?? '';
+    if (userId.isEmpty) return;
+    final selectedRole = await showPersonAccessRoleDialog(
+      context,
+      actorRole: _actorRole,
+      userId: userId,
+      personLabel: _nameController.text.trim(),
+      teacher: true,
+    );
+    if (selectedRole == null || !mounted) return;
+    setState(() => _localData = {..._localData, 'app_role': selectedRole});
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Роль доступа обновлена')));
   }
 
   Future<void> _payAllDebt() async {
@@ -735,6 +755,35 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
                   helperText: _credentialHelper(_localData),
                 ),
                 keyboardType: TextInputType.emailAddress,
+              ),
+              const SizedBox(height: 12),
+              InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Роль доступа',
+                  helperText: 'Определяет права пользователя в приложении',
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _roleLabel(
+                          _localData['app_role']?.toString() ?? 'teacher',
+                        ),
+                      ),
+                    ),
+                    if (const {
+                          'director',
+                          'system_admin',
+                        }.contains(_actorRole) &&
+                        (_localData['profile_user_id']?.toString().isNotEmpty ??
+                            false))
+                      TextButton(
+                        key: const Key('teacher-change-access-role'),
+                        onPressed: _saving ? null : _changeAccessRole,
+                        child: const Text('Изменить'),
+                      ),
+                  ],
+                ),
               ),
               const SizedBox(height: 22),
               TeacherEmploymentFields(

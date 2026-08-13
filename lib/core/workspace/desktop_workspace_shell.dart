@@ -43,9 +43,9 @@ class DesktopWorkspaceShell extends StatelessWidget {
               onLimitReached: onLimitReached,
             ),
             Expanded(
-              child: KeyedSubtree(
-                key: ValueKey(state.activeTabId),
-                child: tabBuilder(context, state.activeTab),
+              child: _WorkspaceTabViewport(
+                state: state,
+                tabBuilder: tabBuilder,
               ),
             ),
           ],
@@ -63,15 +63,9 @@ class DesktopWorkspaceShell extends StatelessWidget {
     );
   }
 
-  Future<void> _select(String tabId) async {
+  void _select(String tabId) {
     if (tabId == controller.state.activeTabId) return;
-    final canLeave = await controller.resolveDirtyTab(
-      controller.state.activeTabId,
-      resolveDirty: resolveDirty ?? _cancelDirtyClose,
-      saveDirty: saveDirty ?? _noSave,
-      discardDirty: discardDirty,
-    );
-    if (canLeave) controller.selectTab(tabId);
+    controller.selectTab(tabId);
   }
 
   static Future<DirtyCloseDecision> _cancelDirtyClose(
@@ -79,6 +73,56 @@ class DesktopWorkspaceShell extends StatelessWidget {
   ) async => DirtyCloseDecision.cancel;
 
   static Future<void> _noSave(WorkspaceTabState tab) async {}
+}
+
+class _WorkspaceTabViewport extends StatefulWidget {
+  const _WorkspaceTabViewport({required this.state, required this.tabBuilder});
+
+  final WorkspaceState state;
+  final WorkspaceTabBuilder tabBuilder;
+
+  @override
+  State<_WorkspaceTabViewport> createState() => _WorkspaceTabViewportState();
+}
+
+class _WorkspaceTabViewportState extends State<_WorkspaceTabViewport> {
+  final Set<String> _mountedTabs = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _mountedTabs.add(widget.state.activeTabId);
+  }
+
+  @override
+  void didUpdateWidget(covariant _WorkspaceTabViewport oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final openTabs = widget.state.tabs.map((tab) => tab.tabId).toSet();
+    _mountedTabs
+      ..removeWhere((tabId) => !openTabs.contains(tabId))
+      ..add(widget.state.activeTabId);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IndexedStack(
+      index: widget.state.tabs.indexWhere(
+        (tab) => tab.tabId == widget.state.activeTabId,
+      ),
+      children: [
+        for (final tab in widget.state.tabs)
+          KeyedSubtree(
+            key: ValueKey(tab.tabId),
+            child: TickerMode(
+              enabled: tab.tabId == widget.state.activeTabId,
+              child: _mountedTabs.contains(tab.tabId)
+                  ? widget.tabBuilder(context, tab)
+                  : const SizedBox.shrink(),
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 class _WorkspaceTabStrip extends StatefulWidget {

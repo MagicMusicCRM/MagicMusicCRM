@@ -32,7 +32,9 @@ describe("Teacher and staff app accounts (PostgreSQL)", () => {
   let teachers: TeachersService;
   let passwords: PasswordService;
   let actor: ActorContext;
+  let rootActor: ActorContext;
   let branchId: string;
+  let secondBranchId: string;
   let disciplineId: string;
 
   beforeAll(async () => {
@@ -42,7 +44,9 @@ describe("Teacher and staff app accounts (PostgreSQL)", () => {
     await client.query("begin");
 
     actor = { userId: randomUUID(), role: "director" };
+    rootActor = { userId: randomUUID(), role: "system_admin" };
     branchId = randomUUID();
+    secondBranchId = randomUUID();
     disciplineId = randomUUID();
     await client.query(
       `insert into app.users (id, email, role, profile_completed)
@@ -50,8 +54,17 @@ describe("Teacher and staff app accounts (PostgreSQL)", () => {
       [actor.userId, `${actor.userId}@test.local`],
     );
     await client.query(
+      `insert into app.users (id, email, role, profile_completed)
+       values ($1, $2, 'system_admin', true)`,
+      [rootActor.userId, `${rootActor.userId}@test.local`],
+    );
+    await client.query(
       `insert into app.branches (id, name) values ($1, 'Оборонная')`,
       [branchId],
+    );
+    await client.query(
+      `insert into app.branches (id, name) values ($1, 'Спортивная')`,
+      [secondBranchId],
     );
     await client.query(
       `insert into app.disciplines (id, name) values ($1, 'Вокал')`,
@@ -102,23 +115,25 @@ describe("Teacher and staff app accounts (PostgreSQL)", () => {
     const staffWithoutLogin = await staff.createStaff(actor, {
       firstName: "Технический",
       lastName: "Администратор",
-      branchIds: [branchId],
+      accessRole: "manager",
+      branchIds: [branchId, secondBranchId],
     });
     const teacherWithoutLogin = await teachers.createTeacher(actor, {
       firstName: "Технический",
       lastName: "Преподаватель",
+      accessRole: "manager",
       branchIds: [branchId],
       disciplineIds: [disciplineId],
     });
     expect(staffWithoutLogin).toMatchObject({
       email: null,
-      appRole: "admin",
+      appRole: "manager",
       isAppAccount: false,
       passwordConfigured: false,
     });
     expect(teacherWithoutLogin).toMatchObject({
       email: null,
-      appRole: "teacher",
+      appRole: "manager",
       isAppAccount: false,
       passwordConfigured: false,
     });
@@ -145,6 +160,19 @@ describe("Teacher and staff app accounts (PostgreSQL)", () => {
           row.link_count === "1",
       ),
     ).toBe(true);
+
+    const directorTeacher = await teachers.createTeacher(rootActor, {
+      firstName: "Технический",
+      lastName: "Директор",
+      accessRole: "director",
+      branchIds: [branchId],
+    });
+    await expect(
+      teachers.provisionAccess(actor, String(directorTeacher.id), {
+        email: `director-teacher-${suffix}@test.local`,
+        password: teacherPassword,
+      }),
+    ).rejects.toThrow("более низкой роли");
 
     const createdStaff = await staff.createStaff(actor, {
       firstName: "Анна",
@@ -181,6 +209,21 @@ describe("Teacher and staff app accounts (PostgreSQL)", () => {
       salary: 15000,
       currentRate: 750,
     });
+
+    const updatedStaff = await staff.updateStaff(
+      actor,
+      String(createdStaff.id),
+      {
+        phone: "+79990001122",
+        branchIds: [branchId, secondBranchId],
+      },
+    );
+    expect(updatedStaff).toMatchObject({
+      id: createdStaff.id,
+      phone: "+79990001122",
+      lifecycleState: "active",
+    });
+    expect(updatedStaff.branches).toHaveLength(2);
 
     const teacherUpdateRequestId = `request-teacher-update-${suffix}`;
     const updatedTeacher = await teachers.updateTeacher(

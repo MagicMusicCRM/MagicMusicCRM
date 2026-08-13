@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/security/password_policy.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/widgets/v7/adaptive_surface.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/person_access_role_dialog.dart';
 
 Future<bool?> showCreateEmployeeSurface(BuildContext context) {
   return showMagicAdaptiveSurface<bool>(
@@ -33,7 +35,8 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
   final _passwordController = TextEditingController();
   final _passwordAgainController = TextEditingController();
   String _canonicalPhone = '';
-  String? _branchId;
+  String _accessRole = 'admin';
+  final Set<String> _branchIds = {};
   List<Map<String, dynamic>> _branches = const [];
   bool _loading = true;
   String? _loadError;
@@ -79,6 +82,12 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_branchIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Выберите хотя бы один филиал.')),
+      );
+      return;
+    }
     setState(() => _saving = true);
 
     final firstName = _firstNameController.text.trim();
@@ -96,7 +105,8 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
             password: _passwordController.text.isEmpty
                 ? null
                 : _passwordController.text,
-            branchIds: [_branchId!],
+            accessRole: _accessRole,
+            branchIds: _branchIds.toList()..sort(),
           );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -144,6 +154,12 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
         'Сначала создайте филиал. Без филиала сотрудника создать нельзя.',
       );
     }
+    final actorRole =
+        ref.watch(capabilitySnapshotProvider).asData?.value.role ?? '';
+    final accessRoles = personAccessRoleOptions(
+      actorRole: actorRole,
+      teacher: false,
+    );
     return Form(
       key: _formKey,
       child: Column(
@@ -152,7 +168,7 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Карточку можно создать без аккаунта. Email и пароль можно добавить сейчас или позже в карточке; повышение роли выполняется только в «Доступах».',
+            'Карточку можно создать без аккаунта. Email и пароль можно добавить сейчас или позже в карточке. Роль доступа и филиалы можно назначить сразу.',
             style: TextStyle(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
@@ -242,22 +258,53 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
             },
           ),
           const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            menuMaxHeight: 256,
-            initialValue: _branchId,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Филиал *'),
-            items: [
+          if (accessRoles.isNotEmpty) ...[
+            DropdownButtonFormField<String>(
+              menuMaxHeight: 256,
+              key: const Key('create-employee-access-role'),
+              initialValue: accessRoles.contains(_accessRole)
+                  ? _accessRole
+                  : accessRoles.first,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Роль доступа *'),
+              items: [
+                for (final role in accessRoles)
+                  DropdownMenuItem(
+                    value: role,
+                    child: Text(personAccessRoleLabels[role] ?? role),
+                  ),
+              ],
+              onChanged: _saving
+                  ? null
+                  : (value) => setState(() => _accessRole = value ?? 'admin'),
+            ),
+            const SizedBox(height: 12),
+          ],
+          Text('Филиалы *', style: Theme.of(context).textTheme.labelLarge),
+          const SizedBox(height: 6),
+          Wrap(
+            key: const Key('create-employee-branches'),
+            spacing: 6,
+            runSpacing: 6,
+            children: [
               for (final branch in _branches)
-                DropdownMenuItem(
-                  value: branch['id']?.toString(),
-                  child: Text(branch['name']?.toString() ?? 'Филиал'),
+                FilterChip(
+                  key: ValueKey('create-employee-branch-${branch['id']}'),
+                  label: Text(branch['name']?.toString() ?? 'Филиал'),
+                  selected: _branchIds.contains(branch['id']?.toString()),
+                  onSelected: _saving
+                      ? null
+                      : (selected) {
+                          final id = branch['id']?.toString();
+                          if (id == null) return;
+                          setState(() {
+                            selected
+                                ? _branchIds.add(id)
+                                : _branchIds.remove(id);
+                          });
+                        },
                 ),
             ],
-            onChanged: _saving
-                ? null
-                : (value) => setState(() => _branchId = value),
-            validator: (value) => value == null ? 'Выберите филиал' : null,
           ),
           const SizedBox(height: 20),
           Row(

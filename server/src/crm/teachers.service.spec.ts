@@ -18,6 +18,12 @@ describe("TeachersService", () => {
       assertCanManageSystemSettings: jest.fn(),
     };
     const accounts = {
+      resolveInitialRole: jest
+        .fn()
+        .mockImplementation(
+          (_actor, type, role) =>
+            role ?? (type === "teacher" ? "teacher" : "admin"),
+        ),
       prepareCreate: jest.fn().mockImplementation((email?: string) =>
         Promise.resolve({
           email: email?.trim().toLowerCase() ?? null,
@@ -102,6 +108,7 @@ describe("TeachersService", () => {
           lastName: " Петрова ",
           email: "Teacher@Example.com",
           password: "password-123",
+          accessRole: "admin",
           phone: "+79991111111",
           branchIds: ["branch-a"],
           disciplineIds: ["discipline-a"],
@@ -137,6 +144,7 @@ describe("TeachersService", () => {
       750,
       "2026-08-01",
       true,
+      "admin",
     ]);
     expect(String(query.mock.calls[0][0])).toContain("inserted_rate as");
     expect(String(query.mock.calls[0][0])).toContain("references_valid");
@@ -181,6 +189,7 @@ describe("TeachersService", () => {
     ).resolves.toMatchObject({ id: "teacher-a", specialization: null });
 
     expect(query.mock.calls[0][1][8]).toEqual([]);
+    expect(query.mock.calls[0][1][15]).toBe("teacher");
   });
 
   it("lists teachers for clients through individual or group relationships", async () => {

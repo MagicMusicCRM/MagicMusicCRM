@@ -355,7 +355,9 @@ class _ProductionWorkspaceHostState
           child: DesktopWorkspaceShell(
             controller: _controller,
             tabBuilder: (context, tab) {
-              _syncActiveSection(tab, isDesktop: true);
+              if (tab.tabId == _controller.state.activeTabId) {
+                _syncActiveSection(tab, isDesktop: true);
+              }
               final location = EntityRouteRegistry()
                   .resolve(tab.currentRoute.link, widget.snapshot)
                   .canonicalLocation;

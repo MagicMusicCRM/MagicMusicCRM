@@ -1345,7 +1345,8 @@ void main() {
         adapter.requests[2].body['payrollReasonText'],
         'Плановое изменение условий',
       );
-      expect(adapter.requests[3].body.containsKey('role'), false);
+      expect(adapter.requests[1].body['accessRole'], 'teacher');
+      expect(adapter.requests[3].body['accessRole'], 'admin');
       expect(adapter.requests[3].body['branchIds'], ['branch-a']);
       expect(adapter.requests[3].body['password'], 'password-123');
       expect(adapter.requests[4].body['position'], 'Операционный управляющий');

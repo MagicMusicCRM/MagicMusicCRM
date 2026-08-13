@@ -6,6 +6,7 @@ import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/provision_access_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/person_lifecycle_dialog.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/person_access_role_dialog.dart';
 
 class StaffDetailDialog extends ConsumerStatefulWidget {
   final Map<String, dynamic> staff;
@@ -185,6 +186,27 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
           .trim(),
     );
     if (saved == true && mounted) Navigator.pop(context, true);
+  }
+
+  Future<void> _changeAccessRole() async {
+    final userId = _staff['profile_user_id']?.toString() ?? '';
+    if (userId.isEmpty) return;
+    final selectedRole = await showPersonAccessRoleDialog(
+      context,
+      actorRole: widget.currentRole,
+      userId: userId,
+      personLabel: '${_lastNameController.text} ${_firstNameController.text}'
+          .trim(),
+      teacher: false,
+    );
+    if (selectedRole == null || !mounted) return;
+    setState(() {
+      _role = selectedRole;
+      _staff = {..._staff, 'role': selectedRole, 'app_role': selectedRole};
+    });
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Роль доступа обновлена')));
   }
 
   Future<void> _save() async {
@@ -376,9 +398,30 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
                 InputDecorator(
                   decoration: const InputDecoration(
                     labelText: 'Роль доступа',
-                    helperText: 'Изменяется только в «Настройки → Доступы»',
+                    helperText: 'Определяет права пользователя в приложении',
                   ),
-                  child: Text(_staffRoleLabel(_role)),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _staffRoleLabel(
+                            _staff['app_role']?.toString() ?? _role,
+                          ),
+                        ),
+                      ),
+                      if (const {
+                            'director',
+                            'system_admin',
+                          }.contains(widget.currentRole) &&
+                          (_staff['profile_user_id']?.toString().isNotEmpty ??
+                              false))
+                        TextButton(
+                          key: const Key('staff-change-access-role'),
+                          onPressed: _saving ? null : _changeAccessRole,
+                          child: const Text('Изменить'),
+                        ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 12),
                 const Text('Филиалы *'),

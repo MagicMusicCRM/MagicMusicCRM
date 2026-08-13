@@ -5,6 +5,7 @@ import {
   IsArray,
   IsDateString,
   IsEmail,
+  IsIn,
   IsNumber,
   IsObject,
   IsOptional,
@@ -42,6 +43,10 @@ export class CreateTeacherDto {
   @MinLength(MIN_PASSWORD_LENGTH)
   @MaxLength(128)
   password?: string;
+
+  @IsOptional()
+  @IsIn(["teacher", "admin", "manager", "director"])
+  accessRole?: "teacher" | "admin" | "manager" | "director";
 
   @IsOptional()
   @IsString()
