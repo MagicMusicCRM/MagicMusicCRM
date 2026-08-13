@@ -1,11 +1,24 @@
 # MagicMusicCRM — актуальная передача
 
 > Обновлено: 2026-08-14
-> Production: client `1.5.7+187`, server `2d1c6255`,
-> image `sha256:4967c3d7…`, migration `0135`
+> Production: client `1.5.7+187`, server `23688482`,
+> image `sha256:5b2f5c3b…`, migration `0135`
 > Рабочая ветка: `codex/v7-production-readiness`
 > Статус: production/client rollout `1.5.7+187` PASS;
 > owner mega-UAT не завершён
+
+Server hardening `23688482` закрыл найденные backend/infra источники 500 и
+невидимых фоновых сбоев: UUID валидируются до PostgreSQL, readiness деградирует
+в `503`, async exports восстанавливаются после рестарта, OTP не создаёт
+неиспользуемый challenge при недоставленном письме, а ошибки notification /
+analytics workers журналируются. Production теперь работает с
+`NODE_ENV=production`, все обязательные workers fail-closed включены, Caddy
+пишет JSON access log и минутный monitor установлен в deploy-user cron.
+Backend `182/182` suites и `1439/1439` tests, exact image, Semgrep, Gitleaks,
+Trivy, encrypted off-host backup, alert/recovery drill, readiness и
+reconciliation PASS. Первый cutover безопасно откатился только из-за неверного
+имени таблицы в deploy-only проверке; после исправления повторный cutover PASS.
+Evidence: `docs/audits/v7-production-backend-error-hardening-23688482.md`.
 
 Server hotfix `2d1c6255` восстановил единый справочник уровней и категорий в
 карточке и форме создания преподавателя. Новый unified CRM snapshot больше не
