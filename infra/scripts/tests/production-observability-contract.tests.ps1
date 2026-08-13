@@ -19,6 +19,8 @@ Assert-Contains $monitor '"status":5[0-9][0-9]' "Monitor must detect Caddy 5xx r
 Assert-Contains $monitor "app.email_outbox" "Monitor must inspect exhausted email deliveries."
 Assert-Contains $monitor "app.report_export_jobs" "Monitor must inspect stale exports."
 Assert-Contains $installer "Persistent=true" "The systemd timer must catch up after downtime."
+Assert-Contains $installer "crontab -" "A non-root deploy user must have a cron fallback."
+Assert-Contains $installer '# MagicMusicCRM production monitor' "Cron installation must be idempotently identifiable."
 
 Assert-Contains $compose 'NODE_ENV: ${NODE_ENV:-production}' "Production compose must not run as staging."
 Assert-Contains $compose 'INSTALLMENT_DUE_WORKER_ENABLED: ${INSTALLMENT_DUE_WORKER_ENABLED:-true}' "Installment worker must default on."
