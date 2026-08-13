@@ -16,6 +16,17 @@ backend `177/177` suites и `1415/1415` tests; Windows portable/Setup и Android
 (`2e104f3b`); новый encrypted off-host backup и isolated restore PASS. Evidence:
 `docs/audits/v7-production-rollout-184.md`.
 
+Локальный кандидат после release добавляет миграции `0133`/`0134`: одно
+определение CRM-поля с общей видимостью Lead/Student и стабильный
+`app.clients.id` для обеих lifecycle-проекций. Варианты при legacy-merge
+сохраняют настроенный порядок. `ALWAYS` delete-триггеры пересобирают Client из
+оставшейся проекции либо удаляют последнюю identity вместе с её custom values,
+поэтому обычная и служебная очистка не оставляют сирот. Реальный
+`0133/0134 down -> up`, сохранение порядка и PostgreSQL integrity readback
+PASS; полный gate текущего checkout: Flutter `793/793`, backend `178/178`
+suites и `1418/1418` tests, analyze/typecheck/build/reset-contract PASS.
+Production остаётся на migration `0132`; эти миграции ещё не развёрнуты.
+
 Release `1.5.3+183` опубликован в обоих update channels и GitHub Release.
 Production очищен до двух сохраняемых аккаунтов, системного чата, источника
 `Приложение`, `10` системных и `40` полезных пользовательских полей; все

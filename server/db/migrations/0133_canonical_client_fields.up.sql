@@ -63,7 +63,22 @@ join canonical_client_field_survivors survivor
 where value.definition_id = definition.id
   and value.definition_id <> survivor.survivor_id;
 
-with merged as (
+with ranked_definitions as (
+  select
+    definition.*,
+    row_number() over (
+      partition by definition.field_key
+      order by
+        (definition.id = survivor.survivor_id) desc,
+        definition.is_system desc,
+        (definition.is_active and definition.deleted_at is null) desc,
+        definition.updated_at desc,
+        definition.id
+    ) as merge_rank
+  from app.client_custom_field_definitions definition
+  join canonical_client_field_survivors survivor
+    on survivor.field_key = definition.field_key
+), merged as (
   select
     survivor.survivor_id,
     bool_or(definition.visible_on_lead and definition.is_active
@@ -74,13 +89,26 @@ with merged as (
     bool_or(definition.is_active and definition.deleted_at is null) as is_active,
     bool_or(definition.is_system) as is_system,
     coalesce((
-      select jsonb_agg(option_label order by option_label)
+      select jsonb_agg(
+        option_label order by merge_rank, option_order, option_label
+      )
       from (
-        select distinct option.value #>> '{}' as option_label
-        from app.client_custom_field_definitions option_definition
-        cross join lateral jsonb_array_elements(option_definition.options) option(value)
-        where option_definition.field_key = survivor.field_key
-          and jsonb_typeof(option.value) = 'string'
+        select distinct on (option_label)
+          option_label,
+          merge_rank,
+          option_order
+        from (
+          select
+            option.value #>> '{}' as option_label,
+            option_definition.merge_rank,
+            option.ordinality as option_order
+          from ranked_definitions option_definition
+          cross join lateral jsonb_array_elements(option_definition.options)
+            with ordinality option(value, ordinality)
+          where option_definition.field_key = survivor.field_key
+            and jsonb_typeof(option.value) = 'string'
+        ) candidates
+        order by option_label, merge_rank, option_order
       ) labels
       where nullif(btrim(option_label), '') is not null
     ), '[]'::jsonb) as options

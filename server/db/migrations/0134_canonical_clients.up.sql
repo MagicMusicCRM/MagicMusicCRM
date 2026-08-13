@@ -202,10 +202,12 @@ where duplicate.definition_id = survivor.definition_id
 
 alter table app.client_custom_field_values
   alter column client_id set not null,
-  add constraint client_custom_field_values_client_fk foreign key (client_id)
-    references app.clients(id) on delete restrict,
   add constraint client_custom_field_value_client_unique
     unique (definition_id, client_id);
+
+alter table app.client_custom_field_values
+  add constraint client_custom_field_values_client_fk foreign key (client_id)
+    references app.clients(id) on delete cascade;
 
 drop trigger if exists client_custom_values_ensure_client
   on app.client_custom_field_values;
@@ -288,6 +290,49 @@ begin
 end;
 $$;
 
+create or replace function app.cleanup_canonical_client_identity_trigger()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, app
+as $$
+declare
+  remaining_type text;
+  remaining_id uuid;
+begin
+  select projection.entity_type, projection.entity_id
+  into remaining_type, remaining_id
+  from (
+    select 'student'::text as entity_type, student.id as entity_id, 0 as priority
+    from app.students student
+    where student.client_id = old.client_id
+    union all
+    select 'lead'::text, lead.id, 1
+    from app.leads lead
+    where lead.client_id = old.client_id
+  ) projection
+  order by projection.priority
+  limit 1;
+
+  if remaining_id is null then
+    delete from app.client_custom_field_values value
+    where value.client_id = old.client_id;
+    delete from app.clients client where client.id = old.client_id;
+    return old;
+  end if;
+
+  update app.client_custom_field_values value
+  set entity_type = remaining_type,
+      entity_id = remaining_id,
+      updated_at = now()
+  where value.client_id = old.client_id
+    and (value.entity_type, value.entity_id)
+      is distinct from (remaining_type, remaining_id);
+  perform app.refresh_canonical_client_identity(old.client_id);
+  return old;
+end;
+$$;
+
 create or replace function app.refresh_canonical_client_from_profile_trigger()
 returns trigger language plpgsql as $$
 declare
@@ -339,6 +384,19 @@ create trigger students_refresh_canonical_client
 after insert or update on app.students
 for each row execute function app.refresh_canonical_client_identity_trigger();
 
+drop trigger if exists leads_cleanup_canonical_client on app.leads;
+create trigger leads_cleanup_canonical_client
+after delete on app.leads
+for each row execute function app.cleanup_canonical_client_identity_trigger();
+alter table app.leads
+  enable always trigger leads_cleanup_canonical_client;
+drop trigger if exists students_cleanup_canonical_client on app.students;
+create trigger students_cleanup_canonical_client
+after delete on app.students
+for each row execute function app.cleanup_canonical_client_identity_trigger();
+alter table app.students
+  enable always trigger students_cleanup_canonical_client;
+
 drop trigger if exists profiles_refresh_canonical_client on app.profiles;
 create trigger profiles_refresh_canonical_client
 after update of first_name, last_name, phone, phone_normalized, deleted_at
@@ -359,6 +417,8 @@ begin
     grant execute on function app.resolve_client_id(text, uuid)
       to magiccrm_app;
     grant execute on function app.ensure_client_custom_value_identity()
+      to magiccrm_app;
+    grant execute on function app.cleanup_canonical_client_identity_trigger()
       to magiccrm_app;
     grant execute on function app.refresh_canonical_client_from_profile_trigger()
       to magiccrm_app;

@@ -1,5 +1,7 @@
 drop trigger if exists students_refresh_canonical_client on app.students;
 drop trigger if exists leads_refresh_canonical_client on app.leads;
+drop trigger if exists students_cleanup_canonical_client on app.students;
+drop trigger if exists leads_cleanup_canonical_client on app.leads;
 drop trigger if exists students_ensure_canonical_client on app.students;
 drop trigger if exists leads_ensure_canonical_client on app.leads;
 drop trigger if exists client_custom_values_ensure_client
@@ -10,6 +12,7 @@ drop trigger if exists users_refresh_canonical_client on app.users;
 drop function if exists app.refresh_canonical_client_from_profile_trigger();
 drop function if exists app.refresh_canonical_client_from_user_trigger();
 drop function if exists app.refresh_canonical_client_identity_trigger();
+drop function if exists app.cleanup_canonical_client_identity_trigger();
 drop function if exists app.ensure_client_custom_value_identity();
 drop function if exists app.refresh_canonical_client_identity(uuid);
 drop function if exists app.ensure_canonical_client_identity();

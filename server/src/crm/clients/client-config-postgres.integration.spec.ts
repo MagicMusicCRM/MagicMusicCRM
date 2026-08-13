@@ -190,7 +190,9 @@ describe("Client configuration and strict validators (PostgreSQL)", () => {
   });
 
   it("always exposes the protected application source", async () => {
-    const listed = await config.listSources(director, { includeArchived: true });
+    const listed = await config.listSources(director, {
+      includeArchived: true,
+    });
     const application = listed.items.find(
       (source) => source.canonicalName === "app",
     );
@@ -586,6 +588,172 @@ describe("Client configuration and strict validators (PostgreSQL)", () => {
     await expect(
       readTypedClientValueMap(database, "lead", leadId),
     ).resolves.toEqual({ [second.key]: 30 });
+  });
+
+  it("refreshes or removes the canonical Client when projections are hard-deleted", async () => {
+    const source = await createSource();
+    const field = await config.createField(director, {
+      key: `field_${randomUUID().replace(/-/g, "")}`,
+      label: "Общее проверочное поле",
+      valueType: "text",
+      visibleOnLead: true,
+      visibleOnStudent: true,
+    });
+    definitionIds.push(field.id);
+    const leadId = randomUUID();
+    const studentProjectionId = randomUUID();
+    let userId: string | null = null;
+    let profileId: string | null = null;
+    try {
+      await database.query(
+        `insert into app.leads (
+           id, first_name, last_name, phone, source, source_id
+         ) values ($1, 'Ирина', 'Каноническая', '+79990000003', $2, $3)`,
+        [leadId, source.canonicalName, source.id],
+      );
+      const user = await database.query<{ id: string }>(
+        `insert into app.users (email, role, is_app_account)
+         values ($1, 'client', false)
+         returning id`,
+        [`canonical-delete-${randomUUID()}@example.test`],
+      );
+      userId = user.rows[0]!.id;
+      const profile = await database.query<{ id: string }>(
+        `insert into app.profiles (
+           user_id, first_name, last_name, phone
+         ) values ($1, 'Ирина', 'Каноническая', '+79990000003')
+         returning id`,
+        [userId],
+      );
+      profileId = profile.rows[0]!.id;
+      await database.query(
+        `insert into app.students (
+           id, client_id, profile_id, lead_id, status, branch_id, source_id
+         ) values ($1, $1, $2, $1, 'active', $3, $4)`,
+        [leadId, profileId, branchId, source.id],
+      );
+      const validated = await validator.validateCustomFields("student", [
+        { definitionId: field.id, value: "Общее значение" },
+      ]);
+      await database.transaction((client) =>
+        repository.saveValues(client, "student", leadId, validated.values),
+      );
+
+      await database.transaction(async (client) => {
+        await client.query("set local session_replication_role = replica");
+        await client.query("delete from app.students where id = $1", [leadId]);
+      });
+      const fallback = await database.query<{
+        lifecycle_state: string;
+        entity_type: string;
+        entity_id: string;
+      }>(
+        `select client.lifecycle_state, value.entity_type, value.entity_id
+         from app.clients client
+         join app.client_custom_field_values value
+           on value.client_id = client.id
+         where client.id = $1 and value.definition_id = $2`,
+        [leadId, field.id],
+      );
+      expect(fallback.rows[0]).toEqual({
+        lifecycle_state: "lead",
+        entity_type: "lead",
+        entity_id: leadId,
+      });
+
+      await database.transaction(async (client) => {
+        await client.query("set local session_replication_role = replica");
+        await client.query("delete from app.leads where id = $1", [leadId]);
+      });
+      const removed = await database.query<{
+        clients: string;
+        values: string;
+      }>(
+        `select
+           (select count(*)::text from app.clients where id = $1) as clients,
+           (select count(*)::text from app.client_custom_field_values
+             where client_id = $1) as values`,
+        [leadId],
+      );
+      expect(removed.rows[0]).toEqual({ clients: "0", values: "0" });
+
+      await database.query(
+        `insert into app.leads (
+           id, first_name, last_name, phone, source, source_id
+         ) values ($1, 'Ирина', 'Обратная', '+79990000004', $2, $3)`,
+        [studentProjectionId, source.canonicalName, source.id],
+      );
+      await database.query(
+        `insert into app.students (
+           id, client_id, profile_id, lead_id, status, branch_id, source_id
+         ) values ($1, $1, $2, $1, 'active', $3, $4)`,
+        [studentProjectionId, profileId, branchId, source.id],
+      );
+      const reverseValue = await validator.validateCustomFields("lead", [
+        { definitionId: field.id, value: "Значение ученика" },
+      ]);
+      await database.transaction((client) =>
+        repository.saveValues(
+          client,
+          "lead",
+          studentProjectionId,
+          reverseValue.values,
+        ),
+      );
+      await database.transaction(async (client) => {
+        await client.query("set local session_replication_role = replica");
+        await client.query("delete from app.leads where id = $1", [
+          studentProjectionId,
+        ]);
+      });
+      const studentFallback = await database.query<{
+        lifecycle_state: string;
+        entity_type: string;
+        entity_id: string;
+      }>(
+        `select client.lifecycle_state, value.entity_type, value.entity_id
+         from app.clients client
+         join app.client_custom_field_values value
+           on value.client_id = client.id
+         where client.id = $1 and value.definition_id = $2`,
+        [studentProjectionId, field.id],
+      );
+      expect(studentFallback.rows[0]).toEqual({
+        lifecycle_state: "student",
+        entity_type: "student",
+        entity_id: studentProjectionId,
+      });
+      await database.transaction(async (client) => {
+        await client.query("set local session_replication_role = replica");
+        await client.query("delete from app.students where id = $1", [
+          studentProjectionId,
+        ]);
+      });
+    } finally {
+      await database.query(
+        "delete from app.client_custom_field_values where client_id = any($1::uuid[])",
+        [[leadId, studentProjectionId]],
+      );
+      await database.query(
+        "delete from app.students where id = any($1::uuid[])",
+        [[leadId, studentProjectionId]],
+      );
+      await database.query("delete from app.leads where id = any($1::uuid[])", [
+        [leadId, studentProjectionId],
+      ]);
+      await database.query(
+        "delete from app.clients where id = any($1::uuid[])",
+        [[leadId, studentProjectionId]],
+      );
+      if (profileId !== null) {
+        await database.query("delete from app.profiles where id = $1", [
+          profileId,
+        ]);
+      }
+      if (userId !== null) {
+        await database.query("delete from app.users where id = $1", [userId]);
+      }
+    }
   });
 
   it("projects only active values configured for table placement", async () => {
