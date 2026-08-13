@@ -1,43 +1,24 @@
 # MagicMusicCRM — актуальная передача
 
 > Обновлено: 2026-08-13
-> Production: client `1.5.4+184`, server `11cf8e36`,
-> image `sha256:eee82d6c…`, migration `0132`
+> Production: client `1.5.7+187`, server `0e7411e6`,
+> image `sha256:831ea160…`, migration `0135`
 > Рабочая ветка: `codex/v7-production-readiness`
-> Статус: `1.5.5+185` готов к controlled rollout, но не развёрнут;
-> production `1.5.4+184` PASS; owner mega-UAT не завершён
+> Статус: production/client rollout `1.5.7+187` PASS;
+> owner mega-UAT не завершён
 
-Release candidate `1.5.5+185` зафиксирован на runtime revision `93d66a84`.
-Flutter `793/793`, backend `178/178` suites и `1418/1418` tests,
-production-like runtime/reconciliation, `0134 -> 0132 -> 0134`, exact image
-live/ready/degraded, Trivy, Windows portable/Setup и Android API 35 update
-`184 -> 185` PASS. Четыре client artifacts, оба локальных manifest и exact
-server tar собраны; production read-only preflight healthy на migration `0132`,
-public manifests остаются на build `184`. Перед cutover обязательны новый
-encrypted off-host backup, isolated restore, automatic rollback и отдельная
-явная команда владельца. Evidence:
-`docs/audits/v7-release-candidate-185.md`.
-
-Release `1.5.4+184` опубликован в обоих update channels и GitHub Release.
-Закрыты stale-cache филиалов после внешней очистки, неоднозначность одинаково
-названных Lead/Student option sets и ввод индивидуального процента/фикса/
-почасовой оплаты преподавателю прямо в create/edit занятия. Flutter `793/793`,
-backend `177/177` suites и `1415/1415` tests; Windows portable/Setup и Android
-15/API 35 smoke PASS. Production image `11cf8e36` healthy, reconciliation
-`issues=[]`. Во время rollout исправлен host backup protected storage
-(`2e104f3b`); новый encrypted off-host backup и isolated restore PASS. Evidence:
-`docs/audits/v7-production-rollout-184.md`.
-
-Локальный кандидат после release добавляет миграции `0133`/`0134`: одно
-определение CRM-поля с общей видимостью Lead/Student и стабильный
-`app.clients.id` для обеих lifecycle-проекций. Варианты при legacy-merge
-сохраняют настроенный порядок. `ALWAYS` delete-триггеры пересобирают Client из
-оставшейся проекции либо удаляют последнюю identity вместе с её custom values,
-поэтому обычная и служебная очистка не оставляют сирот. Реальный
-`0133/0134 down -> up`, сохранение порядка и PostgreSQL integrity readback
-PASS; полный gate текущего checkout: Flutter `793/793`, backend `178/178`
-suites и `1418/1418` tests, analyze/typecheck/build/reset-contract PASS.
-Production остаётся на migration `0132`; эти миграции ещё не развёрнуты.
+Release `1.5.7+187` опубликован в обоих update channels и GitHub Release.
+Закрыты Staff/Teacher save `500`, выбор роли и нескольких филиалов при
+создании/редактировании, legacy-совместимость unified CRM publish и потеря
+состояния desktop-вкладок. Дополнительно platform outbox теперь обрабатывает
+organization lifecycle events; `0135` безопасно переиграла ранее
+dead-lettered branch event без изменения append-only факта. Flutter `796/796`,
+backend `180/180` suites и `1424/1424` tests; exact image, Windows
+portable/Setup, Android API 35 update, backup/off-host copy, rollback drill,
+двойной reconciliation и public download verification PASS. Production
+outbox `0 pending / 0 dead`, API restart `0`. Evidence:
+`docs/audits/v7-release-candidate-187.md` и
+`docs/audits/v7-production-rollout-187.md`.
 
 Release `1.5.3+183` опубликован в обоих update channels и GitHub Release.
 Production очищен до двух сохраняемых аккаунтов, системного чата, источника
