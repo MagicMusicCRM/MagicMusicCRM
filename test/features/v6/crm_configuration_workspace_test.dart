@@ -197,7 +197,7 @@ class ConfigurationTestApi extends MagicApiClient {
     'fields': [
       {
         'id': '30000000-0000-4000-8000-000000000000',
-        'entityType': 'lead',
+        'visibility': {'lead': true, 'student': true},
         'key': 'sourceId',
         'label': 'Рекламный источник',
         'valueType': 'select',
@@ -212,7 +212,7 @@ class ConfigurationTestApi extends MagicApiClient {
       },
       {
         'id': '30000000-0000-4000-8000-000000000001',
-        'entityType': 'lead',
+        'visibility': {'lead': true, 'student': true},
         'key': 'goal',
         'label': 'Цель обучения',
         'valueType': 'text',
@@ -331,7 +331,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('director manages sources inside the system source field', (
+  testWidgets('director manages sources only inside field options', (
     tester,
   ) async {
     final api = ConfigurationTestApi(
@@ -353,6 +353,8 @@ void main() {
     await _pump(tester, api, size: const Size(900, 900));
 
     expect(find.text('Источники клиентов'), findsNothing);
+    await tester.tap(find.text('Варианты для полей'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Рекламный источник'));
     await tester.pumpAndSettle();
     expect(find.text('Приложение'), findsOneWidget);
@@ -812,7 +814,7 @@ void main() {
     final submitted = api.submittedSnapshot!;
     final field = (submitted['fields'] as List).single as Map;
     final set = (submitted['optionSets'] as List).single as Map;
-    expect(field['optionSetKey'], 'lead_lesson_format_options');
+    expect(field['optionSetKey'], 'lesson_format_options');
     expect(field['options'], ['Онлайн', 'Офлайн']);
     expect((set['options'] as List).map((item) => (item as Map)['label']), [
       'Онлайн',
@@ -950,7 +952,7 @@ void main() {
     });
   });
 
-  testWidgets('option sets identify lead and student card ownership', (
+  testWidgets('legacy lead and student field copies become one shared field', (
     tester,
   ) async {
     final api = ConfigurationTestApi(
@@ -966,8 +968,8 @@ void main() {
           ...ConfigurationTestApi._defaultSnapshot['fields'] as List,
           const {
             'entityType': 'lead',
-            'key': 'goalLead',
-            'label': 'Цель обучения',
+            'key': 'preferredDirection',
+            'label': 'Направление',
             'valueType': 'select',
             'required': false,
             'active': true,
@@ -977,12 +979,12 @@ void main() {
             'width': 'half',
             'placements': ['card'],
             'options': ['Для себя'],
-            'optionSetKey': 'lead_goals',
+            'optionSetKey': 'lead_preferredDirection_options',
           },
           const {
             'entityType': 'student',
-            'key': 'goalStudent',
-            'label': 'Цель обучения',
+            'key': 'preferredDirection',
+            'label': 'Направление',
             'valueType': 'select',
             'required': false,
             'active': true,
@@ -992,21 +994,21 @@ void main() {
             'width': 'half',
             'placements': ['card'],
             'options': ['Для себя'],
-            'optionSetKey': 'student_goals',
+            'optionSetKey': 'student_preferredDirection_options',
           },
         ],
         'optionSets': const [
           {
-            'key': 'lead_goals',
-            'label': 'Цели обучения',
+            'key': 'lead_preferredDirection_options',
+            'label': 'Направления лида',
             'multiple': false,
             'options': [
               {'key': 'self', 'label': 'Для себя', 'order': 0, 'active': true},
             ],
           },
           {
-            'key': 'student_goals',
-            'label': 'Цели обучения',
+            'key': 'student_preferredDirection_options',
+            'label': 'Направления ученика',
             'multiple': false,
             'options': [
               {'key': 'self', 'label': 'Для себя', 'order': 0, 'active': true},
@@ -1020,9 +1022,10 @@ void main() {
     await tester.tap(find.text('Варианты для полей'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Цели обучения'), findsNWidgets(2));
-    expect(find.text('Карточка лида · 1 вариант'), findsOneWidget);
-    expect(find.text('Карточка ученика · 1 вариант'), findsOneWidget);
+    expect(find.text('Направление: варианты'), findsOneWidget);
+    expect(find.text('Карточки лида и ученика · 1 вариант'), findsOneWidget);
+    final fields = api.submittedSnapshot?['fields'] as List?;
+    expect(fields, isNull, reason: 'Миграция остаётся локальным draft до save');
   });
 }
 

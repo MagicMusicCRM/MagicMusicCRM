@@ -149,27 +149,18 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
       `,
       [linkedUserId, leadId, managerId],
     );
-    const definitions = await database.query<{
-      id: string;
-      entity_type: string;
-    }>(
+    const definitions = await database.query<{ id: string }>(
       `
         insert into app.client_custom_field_definitions (
-          entity_type, field_key, label, value_type
+          field_key, label, value_type, visible_on_lead, visible_on_student
         )
-        values
-          ('lead', $1, 'Общее поле', 'text'),
-          ('student', $1, 'Общее поле', 'text')
-        returning id, entity_type
+        values ($1, 'Общее поле', 'text', true, true)
+        returning id
       `,
       [`shared_${randomUUID().replace(/-/g, "")}`],
     );
-    leadDefinitionId = definitions.rows.find(
-      (row) => row.entity_type === "lead",
-    )!.id;
-    studentDefinitionId = definitions.rows.find(
-      (row) => row.entity_type === "student",
-    )!.id;
+    leadDefinitionId = definitions.rows[0]!.id;
+    studentDefinitionId = leadDefinitionId;
     await database.query(
       `
         insert into app.client_custom_field_values (
@@ -309,6 +300,7 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
     ]);
     studentId = left.studentId;
     expect(left.studentId).toBe(right.studentId);
+    expect(studentId).toBe(leadId);
     expect([left.replayed, right.replayed].sort()).toEqual([false, true]);
 
     const facts = await database.query<{
@@ -318,6 +310,9 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
       copied_value: string;
       legacy_value: string;
       source_id: string;
+      client_count: string;
+      lifecycle_state: string;
+      value_count: string;
     }>(
       `
         select
@@ -334,7 +329,13 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
           (select custom_data->>'legacy' from app.students
             where id = $2) as legacy_value,
           (select source_id::text from app.students
-            where id = $2) as source_id
+            where id = $2) as source_id,
+          (select count(*)::text from app.clients
+            where id = $1) as client_count,
+          (select lifecycle_state from app.clients
+            where id = $1) as lifecycle_state,
+          (select count(*)::text from app.client_custom_field_values
+            where definition_id = $4 and client_id = $1) as value_count
       `,
       [leadId, studentId, linkedUserId, studentDefinitionId],
     );
@@ -345,6 +346,26 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
       copied_value: "перенесено",
       legacy_value: "preserved",
       source_id: sourceId,
+      client_count: "1",
+      lifecycle_state: "student",
+      value_count: "1",
+    });
+
+    await database.query(
+      `update app.profiles
+       set first_name = 'Обновлённое', updated_at = now()
+       where id = (select profile_id from app.students where id = $1)`,
+      [studentId],
+    );
+    await expect(
+      database.query<{ first_name: string; lifecycle_state: string }>(
+        `select first_name, lifecycle_state from app.clients where id = $1`,
+        [leadId],
+      ),
+    ).resolves.toMatchObject({
+      rows: [
+        { first_name: "Обновлённое", lifecycle_state: "student" },
+      ],
     });
 
     const leadNote = await internalContext.getNote(

@@ -2,7 +2,6 @@ import type { ConfigSnapshot } from "./crm-configuration.service";
 
 export interface ClientFieldDefinitionRow {
   id: string;
-  entity_type: "lead" | "student";
   field_key: string;
   label: string;
   value_type: string;
@@ -15,6 +14,8 @@ export interface ClientFieldDefinitionRow {
   width: string;
   placements: string[];
   options: string[];
+  visible_on_lead: boolean;
+  visible_on_student: boolean;
 }
 
 export function buildCrmConfigurationBaseline(
@@ -38,13 +39,11 @@ export function buildCrmConfigurationBaseline(
     fields: [...definitions]
       .sort(
         (left, right) =>
-          left.entity_type.localeCompare(right.entity_type) ||
           left.sort_order - right.sort_order ||
           left.label.localeCompare(right.label),
       )
       .map((definition) => ({
         id: definition.id,
-        entityType: definition.entity_type,
         key: definition.field_key,
         label: definition.label,
         valueType: definition.value_type,
@@ -56,6 +55,10 @@ export function buildCrmConfigurationBaseline(
         width: definition.width,
         placements: definition.placements,
         options: definition.options,
+        visibility: {
+          lead: definition.visible_on_lead,
+          student: definition.visible_on_student,
+        },
       })),
     optionSets: [],
     businessSettings: [

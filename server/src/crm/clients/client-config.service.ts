@@ -166,22 +166,26 @@ export class ClientConfigService {
     this.policy.assertCanManageClientConfiguration(actor);
     const label = this.requiredText(dto.label, "label");
     const options = this.normalizeOptions(dto.valueType, dto.options);
+    const visibility = this.visibility(
+      dto.visibleOnLead,
+      dto.visibleOnStudent,
+    );
     let field: ClientCustomFieldDefinitionRow;
     try {
       field = await this.database.transaction((client) =>
         this.repository.createDefinition(client, {
-          entityType: dto.entityType,
           key: dto.key.trim(),
           label,
           valueType: dto.valueType,
           required: dto.required ?? false,
           options,
+          ...visibility,
         }),
       );
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new ConflictException(
-          "Поле с таким ключом уже существует для этого типа клиента.",
+          "Поле с таким ключом уже существует.",
         );
       }
       throw error;
@@ -192,7 +196,10 @@ export class ClientConfigService {
       entityType: "client_custom_field",
       entityId: field.id,
       metadata: {
-        clientType: field.entity_type,
+        visibility: {
+          lead: field.visible_on_lead,
+          student: field.visible_on_student,
+        },
         key: field.field_key,
         valueType: field.value_type,
         required: field.is_required,
@@ -226,7 +233,9 @@ export class ClientConfigService {
           dto.isActive === false ||
           (dto.valueType !== undefined &&
             dto.valueType !== before.value_type) ||
-          dto.options !== undefined;
+          dto.options !== undefined ||
+          (dto.visibleOnLead === false && before.visible_on_lead) ||
+          (dto.visibleOnStudent === false && before.visible_on_student);
         if (violatesSystemInvariant) {
           throw new UnprocessableEntityException({
             code: "SYSTEM_FIELD_LOCKED",
@@ -255,6 +264,22 @@ export class ClientConfigService {
               dto.valueType ?? before.value_type,
               dto.options,
             );
+      const nextVisibleOnLead =
+        dto.visibleOnLead ?? before.visible_on_lead;
+      const nextVisibleOnStudent =
+        dto.visibleOnStudent ?? before.visible_on_student;
+      if (
+        (dto.isActive ?? before.is_active) &&
+        !nextVisibleOnLead &&
+        !nextVisibleOnStudent
+      ) {
+        throw new UnprocessableEntityException({
+          code: "FIELD_VISIBILITY_REQUIRED",
+          field: "visibility",
+          message:
+            "Активное поле должно быть видно хотя бы в карточке лида или ученика.",
+        });
+      }
       const updated = await this.repository.updateDefinition(
         client,
         definitionId,
@@ -268,6 +293,8 @@ export class ClientConfigService {
           required: dto.required,
           isActive: dto.isActive,
           options,
+          visibleOnLead: dto.visibleOnLead,
+          visibleOnStudent: dto.visibleOnStudent,
         },
       );
       if (!updated) {
@@ -339,6 +366,25 @@ export class ClientConfigService {
     return trimmed;
   }
 
+  private visibility(
+    visibleOnLead: boolean | undefined,
+    visibleOnStudent: boolean | undefined,
+  ): { visibleOnLead: boolean; visibleOnStudent: boolean } {
+    const visibility = {
+      visibleOnLead: visibleOnLead ?? true,
+      visibleOnStudent: visibleOnStudent ?? true,
+    };
+    if (!visibility.visibleOnLead && !visibility.visibleOnStudent) {
+      throw new UnprocessableEntityException({
+        code: "FIELD_VISIBILITY_REQUIRED",
+        field: "visibility",
+        message:
+          "Поле должно быть видно хотя бы в карточке лида или ученика.",
+      });
+    }
+    return visibility;
+  }
+
   private toSourceDto(row: LeadSourceRow) {
     return {
       id: row.id,
@@ -354,7 +400,6 @@ export class ClientConfigService {
   private toFieldDto(row: ClientCustomFieldDefinitionRow) {
     return {
       id: row.id,
-      entityType: row.entity_type,
       key: row.field_key,
       label: row.label,
       valueType: row.value_type,
@@ -371,6 +416,12 @@ export class ClientConfigService {
       placements: Array.isArray(row.placements)
         ? row.placements
         : ["create", "edit", "card"],
+      visibility: {
+        lead: row.visible_on_lead,
+        student: row.visible_on_student,
+      },
+      visibleOnLead: row.visible_on_lead,
+      visibleOnStudent: row.visible_on_student,
     };
   }
 }

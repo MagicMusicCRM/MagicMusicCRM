@@ -83,10 +83,11 @@ export class ClientConversionService {
             returning id
           )
           insert into app.students (
-            profile_id, lead_id, status, custom_data, branch_id, source_id
+            id, client_id, profile_id, lead_id, status, custom_data, branch_id,
+            source_id
           )
-          select id, $5, $6, $7::jsonb, $8, $9 from profile
-          returning id
+          select $5, $5, id, $5, $6, $7::jsonb, $8, $9 from profile
+          returning id, client_id
         `,
         [
           fullName,
@@ -108,29 +109,9 @@ export class ClientConversionService {
         validated.customFields,
       );
       await client.query(
-        `
-          insert into app.client_custom_field_values (
-            definition_id, entity_type, entity_id, value_text, value_number,
-            value_boolean, value_date, value_json, validation_state
-          )
-          select student_definition.id, 'student', $2,
-            lead_value.value_text, lead_value.value_number,
-            lead_value.value_boolean, lead_value.value_date,
-            lead_value.value_json, lead_value.validation_state
-          from app.client_custom_field_values lead_value
-          join app.client_custom_field_definitions lead_definition
-            on lead_definition.id = lead_value.definition_id
-           and lead_definition.entity_type = 'lead'
-          join app.client_custom_field_definitions student_definition
-            on student_definition.entity_type = 'student'
-           and student_definition.field_key = lead_definition.field_key
-           and student_definition.value_type = lead_definition.value_type
-           and student_definition.is_active
-           and student_definition.deleted_at is null
-          where lead_value.entity_type = 'lead'
-            and lead_value.entity_id = $1
-          on conflict (definition_id, entity_type, entity_id) do nothing
-        `,
+        `update app.client_custom_field_values value
+         set entity_type = 'student', entity_id = $2, updated_at = now()
+         where value.client_id = $1`,
         [leadId, studentId],
       );
       await client.query(

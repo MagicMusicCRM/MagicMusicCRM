@@ -434,6 +434,7 @@ export class ClientCardReadService {
 
     return {
       ref: reference.ref,
+      clientId: reference.clientId,
       projection,
       header: row.header,
       lifecycle: {

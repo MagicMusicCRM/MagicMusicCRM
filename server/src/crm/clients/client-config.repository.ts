@@ -20,7 +20,6 @@ export interface LeadSourceRow {
 
 export interface ClientCustomFieldDefinitionRow {
   id: string;
-  entity_type: ClientEntityType;
   field_key: string;
   label: string;
   value_type: ClientCustomValueType;
@@ -37,6 +36,8 @@ export interface ClientCustomFieldDefinitionRow {
   sort_order?: number | string;
   width?: string;
   placements?: unknown;
+  visible_on_lead: boolean;
+  visible_on_student: boolean;
 }
 
 export interface TypedClientCustomValue {
@@ -54,11 +55,18 @@ export async function saveTypedClientValues(
   entityId: string,
   values: TypedClientCustomValue[],
 ): Promise<void> {
+  const resolved = await client.query<{ client_id: string | null }>(
+    `select app.resolve_client_id($1, $2) as client_id`,
+    [entityType, entityId],
+  );
+  const clientId = resolved.rows[0]?.client_id;
+  if (!clientId) throw new Error("Canonical Client identity was not found.");
   for (const value of values) {
     await client.query(
       `
         insert into app.client_custom_field_values (
           definition_id,
+          client_id,
           entity_type,
           entity_id,
           value_text,
@@ -68,9 +76,11 @@ export async function saveTypedClientValues(
           value_json,
           validation_state
         )
-        values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, 'valid')
-        on conflict (definition_id, entity_type, entity_id)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, 'valid')
+        on conflict (definition_id, client_id)
         do update set
+          entity_type = excluded.entity_type,
+          entity_id = excluded.entity_id,
           value_text = excluded.value_text,
           value_number = excluded.value_number,
           value_boolean = excluded.value_boolean,
@@ -81,6 +91,7 @@ export async function saveTypedClientValues(
       `,
       [
         value.definitionId,
+        clientId,
         entityType,
         entityId,
         value.valueText,
@@ -99,17 +110,22 @@ export async function replaceTypedClientValues(
   entityId: string,
   values: TypedClientCustomValue[],
 ): Promise<void> {
+  const resolved = await client.query<{ client_id: string | null }>(
+    `select app.resolve_client_id($1, $2) as client_id`,
+    [entityType, entityId],
+  );
+  const clientId = resolved.rows[0]?.client_id;
+  if (!clientId) throw new Error("Canonical Client identity was not found.");
   const definitionIds = values.map((value) => value.definitionId);
   await client.query(
     `delete from app.client_custom_field_values value
      using app.client_custom_field_definitions definition
      where value.definition_id = definition.id
-       and value.entity_type = definition.entity_type
-       and value.entity_type = $1 and value.entity_id = $2
+       and value.client_id = $1
        and not definition.is_system
        and definition.is_active and definition.deleted_at is null
-       and not (value.definition_id = any($3::uuid[]))`,
-    [entityType, entityId, definitionIds],
+       and not (value.definition_id = any($2::uuid[]))`,
+    [clientId, definitionIds],
   );
   await saveTypedClientValues(client, entityType, entityId, values);
 }
@@ -158,9 +174,9 @@ export function typedClientValueMapSql(
     from app.client_custom_field_values value
     join app.client_custom_field_definitions definition
       on definition.id = value.definition_id
-     and definition.entity_type = value.entity_type
-    where value.entity_type = ${entityTypeExpression}
-      and value.entity_id = ${entityIdExpression}
+    where value.client_id = app.resolve_client_id(
+      ${entityTypeExpression}, ${entityIdExpression}
+    )
       and definition.is_active and definition.deleted_at is null
   )`;
 }
@@ -194,9 +210,9 @@ export function typedClientTableFieldsSql(
     from app.client_custom_field_values value
     join app.client_custom_field_definitions definition
       on definition.id = value.definition_id
-     and definition.entity_type = value.entity_type
-    where value.entity_type = '${entityType}'
-      and value.entity_id = ${entityIdExpression}
+    where value.client_id = app.resolve_client_id(
+      '${entityType}', ${entityIdExpression}
+    )
       and definition.is_active and definition.deleted_at is null
       and definition.placements ? 'table'
   )`;
@@ -304,14 +320,16 @@ export class ClientConfigRepository {
   ): Promise<ClientCustomFieldDefinitionRow[]> {
     const result = await this.database.query<ClientCustomFieldDefinitionRow>(
       `
-          select id, entity_type, field_key, label, value_type, is_required,
+          select id, field_key, label, value_type, is_required,
             is_active, is_system, options, version, created_at, updated_at,
-            deleted_at, category_key, category_label, sort_order, width, placements
+            deleted_at, category_key, category_label, sort_order, width, placements,
+            visible_on_lead, visible_on_student
           from app.client_custom_field_definitions
-          where ($1::text is null or entity_type = $1)
+          where ($1::text is null
+              or ($1 = 'lead' and visible_on_lead)
+              or ($1 = 'student' and visible_on_student))
             and ($2::boolean or (is_active and deleted_at is null))
           order by
-            entity_type asc,
             is_system desc,
             (deleted_at is not null or not is_active) asc,
             sort_order asc,
@@ -330,12 +348,13 @@ export class ClientConfigRepository {
     if (definitionIds.length === 0) return [];
     const result = await this.database.query<ClientCustomFieldDefinitionRow>(
       `
-          select id, entity_type, field_key, label, value_type, is_required,
+          select id, field_key, label, value_type, is_required,
             is_active, is_system, options, version, created_at, updated_at,
-            deleted_at
+            deleted_at, visible_on_lead, visible_on_student
           from app.client_custom_field_definitions
-          where entity_type = $1
-            and id = any($2::uuid[])
+          where id = any($2::uuid[])
+            and (($1 = 'lead' and visible_on_lead)
+              or ($1 = 'student' and visible_on_student))
         `,
       [entityType, definitionIds],
     );
@@ -347,12 +366,13 @@ export class ClientConfigRepository {
   ): Promise<ClientCustomFieldDefinitionRow[]> {
     const result = await this.database.query<ClientCustomFieldDefinitionRow>(
       `
-          select id, entity_type, field_key, label, value_type, is_required,
+          select id, field_key, label, value_type, is_required,
             is_active, is_system, options, version, created_at, updated_at,
-            deleted_at
+            deleted_at, visible_on_lead, visible_on_student
           from app.client_custom_field_definitions
-          where entity_type = $1
-            and is_required
+          where is_required
+            and (($1 = 'lead' and visible_on_lead)
+              or ($1 = 'student' and visible_on_student))
             and not is_system
             and is_active
             and deleted_at is null
@@ -366,36 +386,39 @@ export class ClientConfigRepository {
   async createDefinition(
     client: PoolClient,
     input: {
-      entityType: ClientEntityType;
       key: string;
       label: string;
       valueType: ClientCustomValueType;
       required: boolean;
       options: string[];
+      visibleOnLead: boolean;
+      visibleOnStudent: boolean;
     },
   ): Promise<ClientCustomFieldDefinitionRow> {
     const result = await client.query<ClientCustomFieldDefinitionRow>(
       `
           insert into app.client_custom_field_definitions (
-            entity_type,
             field_key,
             label,
             value_type,
             is_required,
-            options
+            options,
+            visible_on_lead,
+            visible_on_student
           )
-          values ($1, $2, $3, $4, $5, $6::jsonb)
-          returning id, entity_type, field_key, label, value_type,
+          values ($1, $2, $3, $4, $5::jsonb, $6, $7)
+          returning id, field_key, label, value_type,
             is_required, is_active, is_system, options, version, created_at,
-            updated_at, deleted_at
+            updated_at, deleted_at, visible_on_lead, visible_on_student
         `,
       [
-        input.entityType,
         input.key,
         input.label,
         input.valueType,
         input.required,
         JSON.stringify(input.options),
+        input.visibleOnLead,
+        input.visibleOnStudent,
       ],
     );
     return result.rows[0]!;
@@ -407,9 +430,9 @@ export class ClientConfigRepository {
   ): Promise<ClientCustomFieldDefinitionRow | null> {
     const result = await client.query<ClientCustomFieldDefinitionRow>(
       `
-          select id, entity_type, field_key, label, value_type, is_required,
+          select id, field_key, label, value_type, is_required,
             is_active, is_system, options, version, created_at, updated_at,
-            deleted_at
+            deleted_at, visible_on_lead, visible_on_student
           from app.client_custom_field_definitions
           where id = $1
           for update
@@ -444,6 +467,8 @@ export class ClientConfigRepository {
       required?: boolean;
       isActive?: boolean;
       options?: string[];
+      visibleOnLead?: boolean;
+      visibleOnStudent?: boolean;
     },
   ): Promise<ClientCustomFieldDefinitionRow | null> {
     const result = await client.query<ClientCustomFieldDefinitionRow>(
@@ -454,6 +479,8 @@ export class ClientConfigRepository {
             is_required = coalesce($5, is_required),
             is_active = coalesce($6, is_active),
             options = coalesce($7::jsonb, options),
+            visible_on_lead = coalesce($8, visible_on_lead),
+            visible_on_student = coalesce($9, visible_on_student),
             deleted_at = case
               when $6::boolean is true then null
               when $6::boolean is false then coalesce(deleted_at, now())
@@ -463,9 +490,9 @@ export class ClientConfigRepository {
             updated_at = now()
           where id = $1
             and version = $2
-          returning id, entity_type, field_key, label, value_type,
+          returning id, field_key, label, value_type,
             is_required, is_active, is_system, options, version, created_at,
-            updated_at, deleted_at
+            updated_at, deleted_at, visible_on_lead, visible_on_student
         `,
       [
         definitionId,
@@ -475,6 +502,8 @@ export class ClientConfigRepository {
         input.required ?? null,
         input.isActive ?? null,
         input.options === undefined ? null : JSON.stringify(input.options),
+        input.visibleOnLead ?? null,
+        input.visibleOnStudent ?? null,
       ],
     );
     return result.rows[0] ?? null;

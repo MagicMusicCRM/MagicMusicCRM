@@ -90,8 +90,18 @@ export class UpdateLeadSourceDto {
 }
 
 export class CreateClientCustomFieldDto {
+  /** @deprecated Compatibility input. New fields are visible in both cards. */
+  @IsOptional()
   @IsIn(CLIENT_ENTITY_TYPES)
-  entityType!: ClientEntityType;
+  entityType?: ClientEntityType;
+
+  @IsOptional()
+  @IsBoolean()
+  visibleOnLead?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  visibleOnStudent?: boolean;
 
   @IsString()
   @Matches(/^[A-Za-z][A-Za-z0-9_]{0,63}$/)
@@ -138,6 +148,14 @@ export class UpdateClientCustomFieldDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  visibleOnLead?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  visibleOnStudent?: boolean;
 
   @IsOptional()
   @IsArray()

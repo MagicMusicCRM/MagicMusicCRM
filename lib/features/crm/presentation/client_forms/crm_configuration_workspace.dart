@@ -95,6 +95,7 @@ class CrmConfigurationWorkspace extends ConsumerStatefulWidget {
 
 class _CrmConfigurationWorkspaceState
     extends ConsumerState<CrmConfigurationWorkspace> {
+  static const _clientSourcesKey = '__client_sources__';
   static const _commonAreas = <(String, String, IconData)>[
     ('fields', 'Поля и категории', Icons.dynamic_form_outlined),
     ('options', 'Варианты для полей', Icons.list_alt_outlined),
@@ -190,18 +191,22 @@ class _CrmConfigurationWorkspaceState
       final draft = results[0] as Map<String, dynamic>;
       if (!mounted) return;
       final snapshot = _copyMap(draft['snapshot']);
+      final migratedLegacyFields =
+          _branchId == null && _migrateLegacyFieldCopies(snapshot);
       final migratedInlineOptions =
           _branchId == null && _migrateInlineFieldOptions(snapshot);
+      final migratedConfiguration =
+          migratedLegacyFields || migratedInlineOptions;
       setState(() {
         _baseVersion = (draft['baseVersion'] as num?)?.toInt() ?? 0;
         _snapshot = snapshot;
-        _dirty = draft['dirty'] == true || migratedInlineOptions;
+        _dirty = draft['dirty'] == true || migratedConfiguration;
         _revisions = results[1] as List<Map<String, dynamic>>;
         _selectedKey = null;
         _loading = false;
         _busy = false;
       });
-      if (migratedInlineOptions) {
+      if (migratedConfiguration) {
         _exitController.markDirty();
       } else {
         _exitController.markClean();
@@ -621,6 +626,13 @@ class _CrmConfigurationWorkspaceState
       addLabel: 'Добавить поле',
       onAdd: !_canEdit || _branchId != null ? null : () => _editField(null),
       children: [
+        const ListTile(
+          leading: Icon(Icons.info_outline_rounded),
+          title: Text('Здесь — структура и видимость полей'),
+          subtitle: Text(
+            'Название, тип, категория и показ в карточках лида или ученика. Значения списков меняются только в разделе «Варианты для полей».',
+          ),
+        ),
         ListTile(
           leading: const Icon(Icons.folder_outlined),
           title: Text('Категории · ${categories.length}'),
@@ -687,12 +699,12 @@ class _CrmConfigurationWorkspaceState
           ),
         const Divider(),
         ...fields.map((field) {
-          final key = '${field['entityType']}:${field['key']}';
+          final key = field['key']?.toString() ?? '';
           return ListTile(
             selected: _selectedKey == key,
             title: Text(field['label']?.toString() ?? 'Поле'),
             subtitle: Text(
-              '${field['entityType'] == 'lead' ? 'Лид' : 'Ученик'} · '
+              '${_fieldVisibilityLabel(field)} · '
               '${_fieldTypes[field['valueType']] ?? field['valueType']}',
             ),
             trailing: field['system'] == true
@@ -717,10 +729,18 @@ class _CrmConfigurationWorkspaceState
       children: [
         const ListTile(
           leading: Icon(Icons.info_outline_rounded),
-          title: Text('Один список — для нескольких полей'),
+          title: Text('Здесь — все значения списков и справочников'),
           subtitle: Text(
-            'Например, общий набор «Направления» можно использовать в карточках лида и ученика.',
+            'Один набор используется обеими карточками. Здесь же настраивается системный рекламный источник.',
           ),
+        ),
+        ListTile(
+          selected: _selectedKey == _clientSourcesKey,
+          leading: const Icon(Icons.campaign_outlined),
+          title: const Text('Рекламный источник'),
+          subtitle: const Text('Лид и ученик · системный справочник'),
+          trailing: const Icon(Icons.lock_outline),
+          onTap: () => setState(() => _selectedKey = _clientSourcesKey),
         ),
         ...sets.map((set) {
           final key = set['key']?.toString() ?? '';
@@ -1083,14 +1103,48 @@ class _CrmConfigurationWorkspaceState
       );
     }
     if (_area == 'fields') {
-      final field = _items('fields')
-          .where(
-            (item) => '${item['entityType']}:${item['key']}' == _selectedKey,
-          )
-          .firstOrNull;
+      final field = _items(
+        'fields',
+      ).where((item) => item['key']?.toString() == _selectedKey).firstOrNull;
       return field == null ? const SizedBox.shrink() : _fieldPreview(field);
     }
     if (_area == 'options') {
+      if (_selectedKey == _clientSourcesKey) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpace.lg,
+                AppSpace.lg,
+                AppSpace.lg,
+                AppSpace.sm,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Рекламный источник',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: AppSpace.xs),
+                  Text(
+                    'Единый список значений для лидов и учеников. Системный источник «Приложение» защищён.',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.copyWith(color: AppColor.text2),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ClientSourcesEditor(
+                canEdit: _canEdit && _branchId == null,
+              ),
+            ),
+          ],
+        );
+      }
       final set = _items(
         'optionSets',
       ).where((item) => item['key']?.toString() == _selectedKey).firstOrNull;
@@ -1109,40 +1163,6 @@ class _CrmConfigurationWorkspaceState
   }
 
   Widget _fieldPreview(Map<String, dynamic> field) {
-    if (field['key'] == 'sourceId') {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpace.lg,
-              AppSpace.lg,
-              AppSpace.lg,
-              AppSpace.sm,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  field['label']?.toString() ?? 'Источник',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: AppSpace.xs),
-                Text(
-                  'Общий список значений для лидов и учеников. Выбранный источник можно изменить в карточке клиента.',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(color: AppColor.text2),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: ClientSourcesEditor(canEdit: _canEdit && _branchId == null),
-          ),
-        ],
-      );
-    }
     return ListView(
       padding: const EdgeInsets.all(AppSpace.lg),
       children: [
@@ -1154,7 +1174,7 @@ class _CrmConfigurationWorkspaceState
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
             ),
-            if (_canEdit && _branchId == null)
+            if (_canEdit && _branchId == null && field['system'] != true)
               OutlinedButton.icon(
                 onPressed: () => _editField(field),
                 icon: const Icon(Icons.edit_outlined),
@@ -1164,10 +1184,15 @@ class _CrmConfigurationWorkspaceState
         ),
         const SizedBox(height: AppSpace.lg),
         _property('Стабильный ключ', field['key']),
-        _property('Объект', field['entityType'] == 'lead' ? 'Лид' : 'Ученик'),
+        _property('Видимость', _fieldVisibilityLabel(field)),
         _property('Тип', _fieldTypes[field['valueType']] ?? field['valueType']),
         if (_selectionFieldTypes.contains(field['valueType']))
-          _property('Набор вариантов', field['optionSetKey']),
+          _property(
+            'Набор вариантов',
+            field['key'] == 'sourceId'
+                ? 'Рекламный источник · раздел «Варианты для полей»'
+                : field['optionSetKey'],
+          ),
         _property('Категория', field['categoryKey']),
         _property('Ширина', field['width']),
         _property(
@@ -1243,16 +1268,28 @@ class _CrmConfigurationWorkspaceState
           .toList(growable: false);
 
   String _optionSetUsageLabel(List<Map<String, dynamic>> fields) {
-    final entities = fields
-        .map((field) => field['entityType']?.toString())
-        .whereType<String>()
-        .toSet();
-    if (entities.contains('lead') && entities.contains('student')) {
+    final lead = fields.any(
+      (field) => (field['visibility'] as Map?)?['lead'] == true,
+    );
+    final student = fields.any(
+      (field) => (field['visibility'] as Map?)?['student'] == true,
+    );
+    if (lead && student) {
       return 'Карточки лида и ученика';
     }
-    if (entities.contains('lead')) return 'Карточка лида';
-    if (entities.contains('student')) return 'Карточка ученика';
+    if (lead) return 'Карточка лида';
+    if (student) return 'Карточка ученика';
     return 'Не используется в карточках';
+  }
+
+  String _fieldVisibilityLabel(Map<String, dynamic> field) {
+    final visibility = field['visibility'] as Map?;
+    final lead = visibility?['lead'] == true;
+    final student = visibility?['student'] == true;
+    if (lead && student) return 'Лид и ученик';
+    if (lead) return 'Только лид';
+    if (student) return 'Только ученик';
+    return 'Скрыто';
   }
 
   String _optionCountLabel(int count) {
@@ -1333,18 +1370,14 @@ class _CrmConfigurationWorkspaceState
     final fields = _items('fields');
     final index = current == null
         ? -1
-        : fields.indexWhere(
-            (field) =>
-                field['entityType'] == current['entityType'] &&
-                field['key'] == current['key'],
-          );
+        : fields.indexWhere((field) => field['key'] == current['key']);
     if (index < 0) {
       fields.add(draft);
     } else {
       fields[index] = {...?current, ...draft};
     }
     _replaceItems('fields', fields);
-    setState(() => _selectedKey = '${draft['entityType']}:${draft['key']}');
+    setState(() => _selectedKey = draft['key']?.toString());
   }
 
   Future<void> _editCategory([Map<String, dynamic>? current]) async {
@@ -1734,8 +1767,11 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
       .map((set) => Map<String, dynamic>.from(set))
       .toList();
   final List<Map<String, dynamic>> _createdOptionSets = [];
-  late String _entity = widget.field?['entityType']?.toString() ?? 'lead';
   late String _type = widget.field?['valueType']?.toString() ?? 'text';
+  late bool _visibleOnLead =
+      (widget.field?['visibility'] as Map?)?['lead'] != false;
+  late bool _visibleOnStudent =
+      (widget.field?['visibility'] as Map?)?['student'] != false;
   late String _category =
       widget.field?['categoryKey']?.toString() ??
       widget.categories.firstOrNull?['key']?.toString() ??
@@ -1752,6 +1788,7 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
   late String? _optionSetKey = widget.field?['optionSetKey']?.toString();
   String? _optionSetError;
   String? _placementsError;
+  String? _visibilityError;
 
   @override
   void dispose() {
@@ -1785,55 +1822,75 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
                 ),
               ),
               const SizedBox(height: AppSpace.sm),
-              Row(
+              DropdownButtonFormField<String>(
+                menuMaxHeight: 256,
+                key: const ValueKey('field-type'),
+                initialValue: _type,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Тип'),
+                items: widget.fieldTypes.entries
+                    .map(
+                      (entry) => DropdownMenuItem(
+                        value: entry.key,
+                        child: Text(entry.value),
+                      ),
+                    )
+                    .toList(),
+                onChanged: system
+                    ? null
+                    : (v) => setState(() {
+                        _type = v!;
+                        if (!_selectionFieldTypes.contains(_type) ||
+                            !_optionSetMatchesType(_optionSetKey)) {
+                          _optionSetKey = null;
+                          _optionSetError = null;
+                        }
+                      }),
+              ),
+              const SizedBox(height: AppSpace.sm),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Показывать в карточках',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
+              const SizedBox(height: AppSpace.xs),
+              Wrap(
+                spacing: AppSpace.xs,
                 children: [
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      menuMaxHeight: 256,
-                      initialValue: _entity,
-                      decoration: const InputDecoration(labelText: 'Объект'),
-                      items: const [
-                        DropdownMenuItem(value: 'lead', child: Text('Лид')),
-                        DropdownMenuItem(
-                          value: 'student',
-                          child: Text('Ученик'),
-                        ),
-                      ],
-                      onChanged: widget.field == null
-                          ? (v) => setState(() => _entity = v!)
-                          : null,
-                    ),
+                  FilterChip(
+                    key: const ValueKey('field-visible-lead'),
+                    label: const Text('Лид'),
+                    selected: _visibleOnLead,
+                    onSelected: system
+                        ? null
+                        : (value) => setState(() {
+                            _visibleOnLead = value;
+                            _visibilityError = null;
+                          }),
                   ),
-                  const SizedBox(width: AppSpace.sm),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      menuMaxHeight: 256,
-                      key: const ValueKey('field-type'),
-                      initialValue: _type,
-                      isExpanded: true,
-                      decoration: const InputDecoration(labelText: 'Тип'),
-                      items: widget.fieldTypes.entries
-                          .map(
-                            (entry) => DropdownMenuItem(
-                              value: entry.key,
-                              child: Text(entry.value),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: system
-                          ? null
-                          : (v) => setState(() {
-                              _type = v!;
-                              if (!_selectionFieldTypes.contains(_type) ||
-                                  !_optionSetMatchesType(_optionSetKey)) {
-                                _optionSetKey = null;
-                                _optionSetError = null;
-                              }
-                            }),
-                    ),
+                  FilterChip(
+                    key: const ValueKey('field-visible-student'),
+                    label: const Text('Ученик'),
+                    selected: _visibleOnStudent,
+                    onSelected: system
+                        ? null
+                        : (value) => setState(() {
+                            _visibleOnStudent = value;
+                            _visibilityError = null;
+                          }),
                   ),
                 ],
               ),
+              if (_visibilityError != null)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _visibilityError!,
+                    style: const TextStyle(color: AppColor.danger),
+                  ),
+                ),
               const SizedBox(height: AppSpace.sm),
               Row(
                 children: [
@@ -2008,6 +2065,10 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
       setState(() => _optionSetError = 'Выберите или создайте набор');
       return;
     }
+    if (!_visibleOnLead && !_visibleOnStudent) {
+      setState(() => _visibilityError = 'Выберите хотя бы один тип карточки');
+      return;
+    }
     if (_placements.isEmpty) {
       setState(() => _placementsError = 'Выберите хотя бы одно размещение');
       return;
@@ -2029,7 +2090,6 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
           );
     Navigator.pop<_FieldEditorResult>(context, (
       field: <String, dynamic>{
-        'entityType': _entity,
         'key': key,
         'label': label,
         'valueType': _type,
@@ -2045,6 +2105,7 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
         ],
         'options': options.map((option) => option['label']).toList(),
         'optionSetKey': selection ? _optionSetKey : null,
+        'visibility': {'lead': _visibleOnLead, 'student': _visibleOnStudent},
       },
       createdOptionSets: _createdOptionSets,
     ));
@@ -2440,6 +2501,69 @@ Map<String, dynamic> _copyMap(Object? value) {
   return Map<String, dynamic>.from(jsonDecode(jsonEncode(value)) as Map);
 }
 
+bool _migrateLegacyFieldCopies(Map<String, dynamic> snapshot) {
+  final fields = (snapshot['fields'] as List? ?? const [])
+      .whereType<Map>()
+      .map((field) => Map<String, dynamic>.from(field))
+      .toList();
+  final merged = <String, Map<String, dynamic>>{};
+  var changed = false;
+  for (final field in fields) {
+    final legacyEntity = field.remove('entityType')?.toString();
+    var visibility = field['visibility'] is Map
+        ? Map<String, dynamic>.from(field['visibility'] as Map)
+        : <String, dynamic>{
+            'lead': legacyEntity == null || legacyEntity == 'lead',
+            'student': legacyEntity == null || legacyEntity == 'student',
+          };
+    if (legacyEntity != null || field['visibility'] is! Map) changed = true;
+    field['visibility'] = visibility;
+    final key = field['key']?.toString();
+    if (key == null || key.isEmpty) continue;
+    final current = merged[key];
+    if (current == null) {
+      merged[key] = field;
+      continue;
+    }
+    if (current['valueType'] != field['valueType']) {
+      throw FormatException(
+        'Поле «$key» имеет несовместимые типы в карточках лида и ученика.',
+      );
+    }
+    changed = true;
+    final currentVisibility = Map<String, dynamic>.from(
+      current['visibility'] as Map,
+    );
+    visibility = Map<String, dynamic>.from(field['visibility'] as Map);
+    current['visibility'] = {
+      'lead': currentVisibility['lead'] == true || visibility['lead'] == true,
+      'student':
+          currentVisibility['student'] == true || visibility['student'] == true,
+    };
+    current['required'] =
+        current['required'] == true || field['required'] == true;
+    current['active'] = current['active'] == true || field['active'] == true;
+    current['system'] = current['system'] == true || field['system'] == true;
+    current['order'] = [
+      (current['order'] as num?)?.toInt() ?? 0,
+      (field['order'] as num?)?.toInt() ?? 0,
+    ].reduce((left, right) => left < right ? left : right);
+    current['options'] = {
+      ...(current['options'] as List? ?? const []).whereType<String>(),
+      ...(field['options'] as List? ?? const []).whereType<String>(),
+    }.toList();
+    final currentSet = current['optionSetKey']?.toString();
+    final nextSet = field['optionSetKey']?.toString();
+    if (currentSet != null && nextSet != null && currentSet != nextSet) {
+      current.remove('optionSetKey');
+    } else if (currentSet == null && nextSet != null) {
+      current['optionSetKey'] = nextSet;
+    }
+  }
+  if (changed) snapshot['fields'] = merged.values.toList();
+  return changed;
+}
+
 bool _migrateInlineFieldOptions(Map<String, dynamic> snapshot) {
   final fields = (snapshot['fields'] as List? ?? const [])
       .whereType<Map>()
@@ -2464,7 +2588,7 @@ bool _migrateInlineFieldOptions(Map<String, dynamic> snapshot) {
         labels.isEmpty) {
       continue;
     }
-    final base = '${field['entityType']}_${field['key']}_options';
+    final base = '${field['key']}_options';
     var optionSetKey = base.substring(0, base.length.clamp(0, 64));
     for (var suffix = 2; usedKeys.contains(optionSetKey); suffix++) {
       final tail = '_$suffix';
@@ -2494,6 +2618,15 @@ bool _migrateInlineFieldOptions(Map<String, dynamic> snapshot) {
     changed = true;
   }
   if (changed) {
+    final referencedSets = fields
+        .map((field) => field['optionSetKey']?.toString())
+        .whereType<String>()
+        .toSet();
+    optionSets.removeWhere((set) {
+      final key = set['key']?.toString() ?? '';
+      return !referencedSets.contains(key) &&
+          RegExp(r'^(lead|student)_.+_options$').hasMatch(key);
+    });
     snapshot['fields'] = fields;
     snapshot['optionSets'] = optionSets;
   }

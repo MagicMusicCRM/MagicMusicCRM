@@ -10,6 +10,7 @@ import {
 interface ClientReferenceRow {
   type: ClientRefType;
   id: string;
+  client_id: string;
   label: string;
   branch_id: string | null;
   deleted_at: Date | string | null;
@@ -23,6 +24,7 @@ export interface ResolvedClientReference {
     type: ClientRefType;
     id: string;
   };
+  clientId: string;
   label: string;
   branchId: string | null;
   lifecycleState: "active" | "archived";
@@ -56,7 +58,8 @@ export class ClientReferenceService {
     const result = await this.database.query<ClientReferenceRow>(
       `
         ${this.candidatesCte()}
-        select candidate.type, candidate.id, candidate.label, candidate.branch_id,
+        select candidate.type, candidate.id, candidate.client_id,
+          candidate.label, candidate.branch_id,
           candidate.deleted_at, candidate.version,
           candidate.linked_type, candidate.linked_id
         from client_candidates candidate
@@ -81,7 +84,8 @@ export class ClientReferenceService {
     const result = await this.database.query<ClientReferenceRow>(
       `
         ${this.candidatesCte()}
-        select candidate.type, candidate.id, candidate.label, candidate.branch_id,
+        select candidate.type, candidate.id, candidate.client_id,
+          candidate.label, candidate.branch_id,
           candidate.deleted_at, candidate.version,
           candidate.linked_type, candidate.linked_id
         from client_candidates candidate
@@ -117,6 +121,7 @@ export class ClientReferenceService {
         select
           'student'::text as type,
           student.id,
+          student.client_id,
           coalesce(
             nullif(
               btrim(
@@ -144,6 +149,7 @@ export class ClientReferenceService {
         select
           'lead'::text as type,
           lead.id,
+          lead.client_id,
           coalesce(
             nullif(
               btrim(
@@ -259,6 +265,7 @@ export class ClientReferenceService {
     const tombstone = row.deleted_at !== null;
     return {
       ref: { type: row.type, id: row.id },
+      clientId: row.client_id,
       label: row.label,
       branchId: row.branch_id,
       lifecycleState: tombstone ? "archived" : "active",

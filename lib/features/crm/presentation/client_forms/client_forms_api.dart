@@ -212,21 +212,23 @@ class ClientFormsApi {
   }
 
   Future<Map<String, dynamic>> createField({
-    required String entityType,
     required String key,
     required String label,
     required String valueType,
     required bool required,
     required List<String> options,
+    bool visibleOnLead = true,
+    bool visibleOnStudent = true,
   }) {
     return _api.post<Map<String, dynamic>>(
       '/crm/client-config/fields',
       data: {
-        'entityType': entityType,
         'key': key.trim(),
         'label': label.trim(),
         'valueType': valueType,
         'required': required,
+        'visibleOnLead': visibleOnLead,
+        'visibleOnStudent': visibleOnStudent,
         if (valueType == 'select') 'options': options,
       },
     );
@@ -240,6 +242,8 @@ class ClientFormsApi {
     bool? required,
     bool? isActive,
     List<String>? options,
+    bool? visibleOnLead,
+    bool? visibleOnStudent,
   }) {
     return _api.patch<Map<String, dynamic>>(
       '/crm/client-config/fields/$id',
@@ -250,6 +254,8 @@ class ClientFormsApi {
         'required': ?required,
         'isActive': ?isActive,
         'options': ?options,
+        'visibleOnLead': ?visibleOnLead,
+        'visibleOnStudent': ?visibleOnStudent,
       },
     );
   }

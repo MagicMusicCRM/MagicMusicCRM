@@ -65,7 +65,6 @@ export interface ConfigCategory {
 
 export interface ConfigField {
   id?: string;
-  entityType: "lead" | "student";
   key: string;
   label: string;
   valueType: string;
@@ -78,6 +77,10 @@ export interface ConfigField {
   placements: string[];
   options: string[];
   optionSetKey?: string;
+  visibility: {
+    lead: boolean;
+    student: boolean;
+  };
 }
 
 export interface ConfigOptionSet {
@@ -256,7 +259,9 @@ export class CrmConfigurationService {
       return {
         branchId: branchId ?? null,
         baseVersion: Number(existing.base_version),
-        snapshot: existing.snapshot,
+        snapshot: this.normalizeSnapshot(
+          existing.snapshot as unknown as Record<string, unknown>,
+        ),
         dirty: true,
         updatedAt: existing.updated_at,
       };
@@ -563,19 +568,24 @@ export class CrmConfigurationService {
     if (!row) {
       const definitions = await runQuery<ClientFieldDefinitionRow>(
         queryable,
-        `select id, entity_type, field_key, label, value_type, is_required,
+        `select id, field_key, label, value_type, is_required,
            is_active, is_system, category_key, category_label, sort_order, width,
-           placements, options
+           placements, options, visible_on_lead, visible_on_student
          from app.client_custom_field_definitions
          where is_active = true and deleted_at is null
-         order by entity_type, sort_order, label`,
+         order by sort_order, label`,
       );
       return {
         version: 0,
         snapshot: buildCrmConfigurationBaseline(definitions.rows),
       };
     }
-    return { version: Number(row.version), snapshot: row.effective_snapshot };
+    return {
+      version: Number(row.version),
+      snapshot: this.normalizeSnapshot(
+        row.effective_snapshot as unknown as Record<string, unknown>,
+      ),
+    };
   }
 
   private async buildImpact(
@@ -612,10 +622,7 @@ export class CrmConfigurationService {
       }
     }
     const currentFields = new Map(
-      current.fields.map((field) => [
-        `${field.entityType}:${field.key}`,
-        field,
-      ]),
+      current.fields.map((field) => [field.key, field]),
     );
     for (const [field, previous, following] of [
       [
@@ -642,7 +649,7 @@ export class CrmConfigurationService {
       }
     }
     const nextFields = new Map(
-      next.fields.map((field) => [`${field.entityType}:${field.key}`, field]),
+      next.fields.map((field) => [field.key, field]),
     );
     for (const [key, field] of nextFields) {
       const before = currentFields.get(key);
@@ -675,7 +682,7 @@ export class CrmConfigurationService {
     }
     const changed = (field: ConfigField) =>
       JSON.stringify(field) !==
-      JSON.stringify(currentFields.get(`${field.entityType}:${field.key}`));
+      JSON.stringify(currentFields.get(field.key));
     const settings = new Map(
       current.businessSettings.map((setting) => [setting.key, setting.value]),
     );
@@ -704,7 +711,7 @@ export class CrmConfigurationService {
     const fieldChange =
       next.fields.some(changed) ||
       current.fields.some(
-        (field) => !nextFields.has(`${field.entityType}:${field.key}`),
+        (field) => !nextFields.has(field.key),
       );
     return {
       valid: blockingIssues.length === 0,
@@ -721,15 +728,14 @@ export class CrmConfigurationService {
       ],
       changes: {
         fieldsCreated: next.fields.filter(
-          (field) => !currentFields.has(`${field.entityType}:${field.key}`),
+          (field) => !currentFields.has(field.key),
         ).length,
         fieldsUpdated: next.fields.filter(
           (field) =>
-            currentFields.has(`${field.entityType}:${field.key}`) &&
-            changed(field),
+            currentFields.has(field.key) && changed(field),
         ).length,
         fieldsArchived: current.fields.filter(
-          (field) => !nextFields.has(`${field.entityType}:${field.key}`),
+          (field) => !nextFields.has(field.key),
         ).length,
         settingsChanged,
         settlementTypesChanged,
@@ -749,19 +755,19 @@ export class CrmConfigurationService {
   }
 
   private async syncClientFields(client: PoolClient, snapshot: ConfigSnapshot) {
-    const keys = snapshot.fields.map(
-      (field) => `${field.entityType}:${field.key}`,
-    );
+    const keys = snapshot.fields.map((field) => field.key);
     const categoryLabels = new Map(
       snapshot.categories.map((category) => [category.key, category.label]),
     );
     for (const field of snapshot.fields) {
       const result = await client.query<{ id: string }>(
         `insert into app.client_custom_field_definitions (
-           entity_type, field_key, label, value_type, is_required, is_active,
-           is_system, options, category_key, category_label, sort_order, width, placements
-         ) values ($1, $2, $3, $4, $5, $6, false, $7::jsonb, $8, $9, $10, $11, $12::jsonb)
-         on conflict (entity_type, field_key) do update set
+           field_key, label, value_type, is_required, is_active,
+           is_system, options, category_key, category_label, sort_order, width,
+           placements, visible_on_lead, visible_on_student
+         ) values ($1, $2, $3, $4, $5, false, $6::jsonb, $7, $8, $9, $10,
+           $11::jsonb, $12, $13)
+         on conflict (field_key) do update set
            label = excluded.label,
            value_type = case when app.client_custom_field_definitions.is_system
              then app.client_custom_field_definitions.value_type else excluded.value_type end,
@@ -775,11 +781,18 @@ export class CrmConfigurationService {
            sort_order = excluded.sort_order,
            width = excluded.width,
            placements = excluded.placements,
+           visible_on_lead = case
+             when app.client_custom_field_definitions.is_system
+               then app.client_custom_field_definitions.visible_on_lead
+             else excluded.visible_on_lead end,
+           visible_on_student = case
+             when app.client_custom_field_definitions.is_system
+               then app.client_custom_field_definitions.visible_on_student
+             else excluded.visible_on_student end,
            version = app.client_custom_field_definitions.version + 1,
            updated_at = now()
          returning id`,
         [
-          field.entityType,
           field.key,
           field.label,
           field.valueType,
@@ -791,6 +804,8 @@ export class CrmConfigurationService {
           field.order,
           field.width,
           JSON.stringify(field.placements),
+          field.visibility.lead,
+          field.visibility.student,
         ],
       );
       field.id = result.rows[0]!.id;
@@ -800,7 +815,7 @@ export class CrmConfigurationService {
        set is_active = false, deleted_at = coalesce(deleted_at, now()),
          version = version + 1, updated_at = now()
        where not definition.is_system
-         and not ((definition.entity_type || ':' || definition.field_key) = any($1::text[]))
+         and not (definition.field_key = any($1::text[]))
          and definition.is_active`,
       [keys],
     );
@@ -825,16 +840,30 @@ export class CrmConfigurationService {
       "DUPLICATE_CATEGORY",
     );
     const categoryKeys = new Set(categories.map((row) => row.key));
-    const fields = this.array(raw.fields, "fields").map((item, index) => {
+    const parsedFields = this.array(raw.fields, "fields").map((item, index) => {
       const row = this.object(item, `fields.${index}`);
-      const entityType = row.entityType;
-      if (entityType !== "lead" && entityType !== "student") {
-        this.invalid(
-          `fields.${index}.entityType`,
-          "INVALID_ENTITY",
-          "Допустимы lead и student.",
-        );
-      }
+      const legacyEntityType = row.entityType;
+      const visibilityRow =
+        row.visibility === undefined
+          ? null
+          : this.object(row.visibility, `fields.${index}.visibility`);
+      const visibility = visibilityRow
+        ? {
+            lead: this.boolean(
+              visibilityRow.lead,
+              `fields.${index}.visibility.lead`,
+            ),
+            student: this.boolean(
+              visibilityRow.student,
+              `fields.${index}.visibility.student`,
+            ),
+          }
+        : legacyEntityType === "lead" || legacyEntityType === "student"
+          ? {
+              lead: legacyEntityType === "lead",
+              student: legacyEntityType === "student",
+            }
+          : { lead: true, student: true };
       const valueType = this.text(
         row.valueType,
         `fields.${index}.valueType`,
@@ -891,6 +920,14 @@ export class CrmConfigurationService {
         this.text(option, `fields.${index}.options.${optionIndex}`, 160),
       );
       const system = this.boolean(row.system, `fields.${index}.system`);
+      const active = this.boolean(row.active, `fields.${index}.active`);
+      if (active && !visibility.lead && !visibility.student) {
+        this.invalid(
+          `fields.${index}.visibility`,
+          "FIELD_VISIBILITY_REQUIRED",
+          "Активное поле должно быть видно хотя бы в одной карточке.",
+        );
+      }
       if (
         !system &&
         ["select", "radio", "multi_select", "checkbox_group"].includes(
@@ -907,18 +944,18 @@ export class CrmConfigurationService {
       }
       return {
         ...(typeof row.id === "string" ? { id: row.id } : {}),
-        entityType,
         key: this.key(row.key, `fields.${index}.key`),
         label: this.text(row.label, `fields.${index}.label`, 120),
         valueType,
         required: this.boolean(row.required, `fields.${index}.required`),
-        active: this.boolean(row.active, `fields.${index}.active`),
+        active,
         system,
         categoryKey,
         order: this.integer(row.order, `fields.${index}.order`, 0, 10000),
         width,
         placements: [...new Set(placements)],
         options: [...new Set(options)],
+        visibility,
         ...(typeof row.optionSetKey === "string" && row.optionSetKey.trim()
           ? {
               optionSetKey: this.key(
@@ -929,11 +966,40 @@ export class CrmConfigurationService {
           : {}),
       } as ConfigField;
     });
-    this.unique(
-      fields.map((field) => `${field.entityType}:${field.key}`),
-      "fields",
-      "DUPLICATE_FIELD",
-    );
+    const fieldsByKey = new Map<string, ConfigField>();
+    for (const field of parsedFields) {
+      const existing = fieldsByKey.get(field.key);
+      if (!existing) {
+        fieldsByKey.set(field.key, field);
+        continue;
+      }
+      if (existing.valueType !== field.valueType) {
+        this.invalid(
+          `fields.${field.key}.valueType`,
+          "INCOMPATIBLE_DUPLICATE_FIELD",
+          "Старые копии поля Lead/Student имеют разные типы.",
+        );
+      }
+      existing.visibility = {
+        lead: existing.visibility.lead || field.visibility.lead,
+        student: existing.visibility.student || field.visibility.student,
+      };
+      existing.required = existing.required || field.required;
+      existing.active = existing.active || field.active;
+      existing.system = existing.system || field.system;
+      existing.options = [...new Set([...existing.options, ...field.options])];
+      existing.order = Math.min(existing.order, field.order);
+      if (
+        existing.optionSetKey &&
+        field.optionSetKey &&
+        existing.optionSetKey !== field.optionSetKey
+      ) {
+        delete existing.optionSetKey;
+      } else if (!existing.optionSetKey && field.optionSetKey) {
+        existing.optionSetKey = field.optionSetKey;
+      }
+    }
+    const fields = [...fieldsByKey.values()];
     const optionSets = this.array(raw.optionSets ?? [], "optionSets").map(
       (item, index) => {
         const row = this.object(item, `optionSets.${index}`);

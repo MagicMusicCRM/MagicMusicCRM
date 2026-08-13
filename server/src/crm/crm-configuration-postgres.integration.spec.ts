@@ -112,15 +112,16 @@ describe("Unified CRM configuration (PostgreSQL)", () => {
     try {
       await client.query(
         `insert into app.client_custom_field_definitions (
-           entity_type, field_key, label, value_type, is_required,
+           field_key, label, value_type, is_required,
            is_active, is_system, category_key, category_label, sort_order,
-           width, placements, options
+           width, placements, options, visible_on_lead, visible_on_student
          ) values (
-           'lead', 'zeroStateOptionalField', 'Поле чистого старта', 'text',
+           'zeroStateOptionalField', 'Поле чистого старта', 'text',
            false, true, false, 'general', 'Основная информация', 999,
-           'full', '["create","edit","card"]'::jsonb, '[]'::jsonb
+           'full', '["create","edit","card"]'::jsonb, '[]'::jsonb,
+           true, true
          )
-         on conflict (entity_type, field_key) do update
+         on conflict (field_key) do update
          set deleted_at = null, is_active = true, is_system = false`,
       );
       await client.query(
@@ -232,7 +233,6 @@ describe("Unified CRM configuration (PostgreSQL)", () => {
     ];
     for (const [index, valueType] of types.entries()) {
       snapshot.fields.push({
-        entityType: index % 2 === 0 ? "lead" : "student",
         key: `v6_${valueType}`,
         label: `V6 ${valueType}`,
         valueType,
@@ -244,6 +244,7 @@ describe("Unified CRM configuration (PostgreSQL)", () => {
         width: index % 3 === 0 ? "third" : "half",
         placements: ["create", "edit", "card"],
         options: ["Начинающий", "Опытный"],
+        visibility: { lead: true, student: true },
         ...(["select", "radio", "multi_select", "checkbox_group"].includes(
           valueType,
         )

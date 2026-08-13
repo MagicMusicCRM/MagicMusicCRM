@@ -140,12 +140,13 @@ describe("Client configuration and strict validators (PostgreSQL)", () => {
     options?: string[];
   }) {
     const field = await config.createField(director, {
-      entityType: input?.entityType ?? "lead",
       key: `field_${randomUUID().replace(/-/g, "")}`,
       label: "Проверочное поле",
       valueType: input?.valueType ?? "text",
       required: input?.required ?? false,
       options: input?.options,
+      visibleOnLead: input?.entityType !== "student",
+      visibleOnStudent: input?.entityType === "student",
     });
     definitionIds.push(field.id);
     return field;
@@ -169,7 +170,6 @@ describe("Client configuration and strict validators (PostgreSQL)", () => {
 
     const directorSource = await createSource("Director source");
     const rootField = await config.createField(systemAdmin, {
-      entityType: "student",
       key: `root_${randomUUID().replace(/-/g, "")}`,
       label: "Root field",
       valueType: "number",
@@ -182,10 +182,10 @@ describe("Client configuration and strict validators (PostgreSQL)", () => {
       version: 1,
     });
     expect(rootField).toMatchObject({
-      entityType: "student",
       valueType: "number",
       isSystem: false,
       version: 1,
+      visibility: { lead: true, student: true },
     });
   });
 
