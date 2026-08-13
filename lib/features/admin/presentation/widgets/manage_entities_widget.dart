@@ -613,6 +613,18 @@ class _OrganizationSettingsState extends ConsumerState<_OrganizationSettings> {
   bool _showArchived = false;
 
   @override
+  void initState() {
+    super.initState();
+    // This catalog may have been loaded before an external administrative
+    // operation (for example, a controlled prelaunch reset). Always reconcile
+    // the first frame with the authoritative API instead of showing an old
+    // Riverpod family value until the whole application is restarted.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) invalidateBranchCatalog(ref);
+    });
+  }
+
+  @override
   void dispose() {
     _search.dispose();
     super.dispose();
@@ -628,6 +640,8 @@ class _OrganizationSettingsState extends ConsumerState<_OrganizationSettings> {
     }
   }
 
+  void _refreshBranches() => invalidateBranchCatalog(ref);
+
   @override
   Widget build(BuildContext context) {
     final branches = _section == 'branches';
@@ -640,11 +654,25 @@ class _OrganizationSettingsState extends ConsumerState<_OrganizationSettings> {
                     ? 'Филиалы; аудитории и дисциплины настраиваются внутри филиала'
                     : 'Только просмотр назначенных филиалов'
               : 'Дисциплины школы и причины отказа в CRM',
-          action: branches && widget.canCreateBranch
-              ? FilledButton.icon(
-                  onPressed: _create,
-                  icon: const Icon(Icons.add_rounded),
-                  label: const Text('Новый филиал'),
+          action: branches
+              ? Wrap(
+                  spacing: AppSpace.sm,
+                  runSpacing: AppSpace.sm,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    OutlinedButton.icon(
+                      key: const ValueKey('refresh-branch-catalog'),
+                      onPressed: _refreshBranches,
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Обновить'),
+                    ),
+                    if (widget.canCreateBranch)
+                      FilledButton.icon(
+                        onPressed: _create,
+                        icon: const Icon(Icons.add_rounded),
+                        label: const Text('Новый филиал'),
+                      ),
+                  ],
                 )
               : null,
         ),

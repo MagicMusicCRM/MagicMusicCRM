@@ -150,6 +150,9 @@ class LessonDecisionController {
     required this.operation,
     required this.lesson,
     this.successor,
+    this.initialSettlementTypeKey,
+    this.initialCompensationRuleKey,
+    this.initialCompensationValueMinor,
   }) : _api = api,
        _expectedVersion = (lesson['version'] as num?)?.toInt();
 
@@ -157,6 +160,9 @@ class LessonDecisionController {
   final LessonDecisionOperation operation;
   final Map<String, dynamic> lesson;
   final Map<String, dynamic>? successor;
+  final String? initialSettlementTypeKey;
+  final String? initialCompensationRuleKey;
+  final String? initialCompensationValueMinor;
 
   bool get isGroupLesson {
     final groupId = lesson['group_id'] ?? lesson['groupId'];
@@ -335,12 +341,18 @@ Future<bool?> showLessonDecisionFlow(
   required LessonDecisionOperation operation,
   required Map<String, dynamic> lesson,
   Map<String, dynamic>? successor,
+  String? initialSettlementTypeKey,
+  String? initialCompensationRuleKey,
+  String? initialCompensationValueMinor,
 }) {
   final controller = LessonDecisionController(
     api: api,
     operation: operation,
     lesson: lesson,
     successor: successor,
+    initialSettlementTypeKey: initialSettlementTypeKey,
+    initialCompensationRuleKey: initialCompensationRuleKey,
+    initialCompensationValueMinor: initialCompensationValueMinor,
   );
   return showMagicAdaptiveSurface<bool>(
     context,
@@ -424,6 +436,22 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
         if (completedReschedule) {
           _settlementKey = reversalSettlement!.key;
           _compensationKey = reversalCompensation!.key;
+        } else {
+          _settlementKey = _catalogItem(
+            catalog.settlementTypes,
+            widget.controller.initialSettlementTypeKey ?? '',
+          )?.key;
+          final compensation = _catalogItem(
+            catalog.compensationRules,
+            widget.controller.initialCompensationRuleKey ?? '',
+          );
+          _compensationKey = compensation?.key;
+          if (compensation != null) {
+            _compensationValueController.text = _valueInput(
+              compensation,
+              value: widget.controller.initialCompensationValueMinor,
+            );
+          }
         }
         _loading = false;
       });
@@ -456,14 +484,14 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
     });
   }
 
-  String _valueInput(LessonDecisionCatalogItem rule) {
-    final value = BigInt.tryParse(rule.value) ?? BigInt.zero;
+  String _valueInput(LessonDecisionCatalogItem rule, {String? value}) {
+    final parsed = BigInt.tryParse(value ?? rule.value) ?? BigInt.zero;
     if (rule.mode == 'percent') {
-      final whole = value ~/ BigInt.from(100);
-      final fraction = (value % BigInt.from(100)).toString().padLeft(2, '0');
+      final whole = parsed ~/ BigInt.from(100);
+      final fraction = (parsed % BigInt.from(100)).toString().padLeft(2, '0');
       return fraction == '00' ? '$whole' : '$whole,$fraction';
     }
-    return _minorInput(value);
+    return _minorInput(parsed);
   }
 
   String? _compensationValueMinor() {

@@ -28,6 +28,63 @@ const _foreignBranchId = '11111111-1111-4111-8111-111111111112';
 const _conflictId = '44444444-4444-4444-4444-444444444444';
 const _groupId = '88888888-8888-4888-8888-888888888888';
 
+const _manualCompensationCatalog = <String, dynamic>{
+  'settlementTypes': [
+    {
+      'stableKey': 'free_lesson',
+      'label': 'Бесплатное занятие',
+      'colorToken': 'warning',
+      'allowedContexts': ['cancel', 'reschedule', 'settle'],
+      'active': true,
+      'order': 0,
+      'hourShareBasisPoints': 0,
+      'fixedPenaltyMinor': '0',
+    },
+  ],
+  'teacherCompensationRules': [
+    {
+      'stableKey': 'none',
+      'label': 'Не оплачивать',
+      'mode': 'none',
+      'value': '0',
+      'active': true,
+      'order': 0,
+    },
+    {
+      'stableKey': 'standard',
+      'label': 'Стандартная ставка',
+      'mode': 'standard',
+      'value': '0',
+      'active': true,
+      'order': 1,
+    },
+    {
+      'stableKey': 'percent',
+      'label': 'Процент ставки',
+      'mode': 'percent',
+      'value': '1000',
+      'active': true,
+      'order': 2,
+    },
+    {
+      'stableKey': 'fixed',
+      'label': 'Фиксированная сумма',
+      'mode': 'fixed',
+      'value': '90000',
+      'active': true,
+      'order': 3,
+    },
+    {
+      'stableKey': 'hourly',
+      'label': 'Почасовая сумма',
+      'mode': 'hourly',
+      'value': '120000',
+      'active': true,
+      'order': 4,
+    },
+  ],
+};
+
 Map<String, dynamic> _freePreview() => {'valid': true, 'violations': const []};
 
 Map<String, dynamic> _editableLesson({bool group = false}) => {
@@ -55,6 +112,8 @@ Map<String, dynamic> _editableLesson({bool group = false}) => {
   'client_charge_value': group ? 800 : 0,
   'teacher_compensation_type': 'none',
   'teacher_compensation_value': 0,
+  'settlement_type_key': 'free_lesson',
+  'teacher_compensation_rule_key': 'none',
 };
 
 Map<String, dynamic> _busyPreview() => {
@@ -853,6 +912,70 @@ void main() {
     expect(body, isNot(contains('force')));
   });
 
+  testWidgets(
+    'create вводит процент, фиксированную и почасовую оплату в основном окне',
+    (tester) async {
+      final client = _FakeApiClient(
+        decisionCatalog: _manualCompensationCatalog,
+        teacherCurrentRate: 1400,
+      );
+      await _pumpDialog(tester, client);
+      await _selectRequiredResources(tester, clientName: 'Анна Лидова');
+
+      Future<void> selectRule(String label) async {
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('lesson-compensation-rule-field')),
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('lesson-compensation-rule-field')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(label).last);
+        await tester.pumpAndSettle();
+      }
+
+      await selectRule('Процент ставки');
+      expect(find.text('Процент от стандартной ставки, % *'), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const ValueKey('lesson-compensation-value-field')),
+        '12,5',
+      );
+
+      await selectRule('Фиксированная сумма');
+      expect(find.text('Фиксированная сумма за занятие, ₽ *'), findsOneWidget);
+
+      await selectRule('Почасовая сумма');
+      expect(find.text('Почасовая ставка, ₽ *'), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const ValueKey('lesson-compensation-value-field')),
+        '1 250,50',
+      );
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey('lesson-compensation-override-reason-field')),
+        findsOneWidget,
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('lesson-compensation-override-reason-field')),
+        'Индивидуальная ставка согласована директором',
+      );
+
+      await _tapCreate(tester);
+      await tester.pumpAndSettle();
+
+      expect(client.lessonPosts, hasLength(1));
+      expect(client.lessonPosts.single['financialDecision'], {
+        'settlementTypeKey': 'free_lesson',
+        'teacherCompensationRuleKey': 'hourly',
+        'teacherCompensationValueMinor': '125050',
+      });
+      expect(
+        client.lessonPosts.single['plannedSettlementReason'],
+        'Индивидуальная ставка согласована директором',
+      );
+    },
+  );
+
   testWidgets('trial marker does not disable paid subscription funding', (
     tester,
   ) async {
@@ -1411,6 +1534,80 @@ void main() {
   });
 
   testWidgets(
+    'edit позволяет изменить только оплату преподавателю из основного окна',
+    (tester) async {
+      final client = _FakeApiClient(
+        decisionCatalog: _manualCompensationCatalog,
+      );
+      await _pumpDialog(tester, client, lesson: _editableLesson());
+
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('lesson-compensation-rule-field')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('lesson-compensation-rule-field')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Фиксированная сумма').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('lesson-compensation-value-field')),
+        '1500',
+      );
+
+      await tester.ensureVisible(find.text('Перейти к расчёту'));
+      await tester.tap(find.text('Перейти к расчёту'));
+      for (var frame = 0; frame < 6; frame++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+
+      expect(find.text('Изменение расчёта'), findsOneWidget);
+      expect(
+        tester
+            .state<FormFieldState<String>>(
+              find.byKey(const Key('lesson-decision-compensation')),
+            )
+            .value,
+        'fixed',
+      );
+      expect(
+        tester
+            .widget<TextFormField>(
+              find.byKey(const Key('lesson-decision-compensation-value')),
+            )
+            .controller
+            ?.text,
+        '1500',
+      );
+      await tester.enterText(
+        find.byKey(const Key('lesson-decision-reason')),
+        'Исправлена ставка занятия',
+      );
+      await tester.ensureVisible(
+        find.byKey(const Key('lesson-decision-submit')),
+      );
+      await tester.tap(find.byKey(const Key('lesson-decision-submit')));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.ensureVisible(
+        find.byKey(const Key('lesson-decision-submit')),
+      );
+      await tester.tap(find.byKey(const Key('lesson-decision-submit')));
+      await tester.pumpAndSettle();
+
+      expect(client.decisionCommits, hasLength(1));
+      expect(client.decisionCommitMethods, [
+        'PUT /crm/lessons/66666666-6666-6666-6666-666666666666/planned-settlement',
+      ]);
+      expect(client.decisionCommits.single['financialDecision'], {
+        'settlementTypeKey': 'free_lesson',
+        'teacherCompensationRuleKey': 'fixed',
+        'teacherCompensationValueMinor': '150000',
+      });
+      expect(client.decisionCommits.single, isNot(contains('successor')));
+    },
+  );
+
+  testWidgets(
     'подмена показывает только ресурсы филиала и атомарно сохраняет выбор',
     (tester) async {
       final client = _FakeApiClient();
@@ -1518,9 +1715,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text(
-        'Измените дату, время, длительность, филиал, аудиторию или преподавателя',
-      ),
+      find.text('Измените параметры расписания или оплату преподавателю'),
       findsOneWidget,
     );
     expect(find.byKey(const Key('lesson-decision-reason')), findsNothing);

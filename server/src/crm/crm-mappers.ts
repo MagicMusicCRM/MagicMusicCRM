@@ -49,6 +49,9 @@ export interface LessonRow {
   client_charge_value?: string | number | null;
   teacher_compensation_type?: string | null;
   teacher_compensation_value?: string | number | null;
+  settlement_type_key?: string | null;
+  teacher_compensation_rule_key?: string | null;
+  teacher_compensation_value_minor?: string | null;
   subscription_id?: string | null;
   snapshot_trial?: boolean | null;
   snapshot_validation_state?: string | null;
@@ -318,6 +321,9 @@ export function toLessonDto(row: LessonRow) {
       row.teacher_compensation_value === undefined
         ? null
         : Number(row.teacher_compensation_value),
+    settlementTypeKey: row.settlement_type_key ?? null,
+    teacherCompensationRuleKey: row.teacher_compensation_rule_key ?? null,
+    teacherCompensationValueMinor: row.teacher_compensation_value_minor ?? null,
     subscriptionId: row.subscription_id ?? null,
     snapshotTrial: row.snapshot_trial ?? null,
     snapshotValidationState: row.snapshot_validation_state ?? null,

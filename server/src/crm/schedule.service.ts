@@ -156,6 +156,15 @@ export class ScheduleService {
             l.status, l.is_trial, l.notes,
             case when ${managerAdminRolesSql("$10")}
               then plan.failure_code else null end as settlement_failure_code,
+            case when ${managerAdminRolesSql("$10")}
+              then plan.decision ->> 'settlementTypeKey' else null end
+              as settlement_type_key,
+            case when ${managerAdminRolesSql("$10")}
+              then plan.decision ->> 'teacherCompensationRuleKey' else null end
+              as teacher_compensation_rule_key,
+            case when ${managerAdminRolesSql("$10")}
+              then plan.decision ->> 'teacherCompensationValueMinor' else null end
+              as teacher_compensation_value_minor,
             sp.user_id as student_user_id, tp.user_id as teacher_user_id,
             trim(coalesce(sp.first_name, '') || ' ' || coalesce(sp.last_name, '')) as student_name,
             trim(coalesce(ld.first_name, '') || ' ' || coalesce(ld.last_name, '')) as lead_name,
@@ -199,6 +208,8 @@ export class ScheduleService {
           scoped.teacher_name,
           scoped.branch_name, scoped.room_name, scoped.group_name,
           scoped.group_price_per_lesson,
+          scoped.settlement_type_key, scoped.teacher_compensation_rule_key,
+          scoped.teacher_compensation_value_minor,
           coalesce((
             select jsonb_agg(
               jsonb_build_object(
@@ -515,6 +526,15 @@ export class ScheduleService {
     const settlementFailureSql = isManagerOrAdminRole(actor.role)
       ? "plan.failure_code"
       : "null::text";
+    const settlementTypeKeySql = canSeePayments
+      ? "plan.decision ->> 'settlementTypeKey'"
+      : "null::text";
+    const compensationRuleKeySql = canSeeRates
+      ? "plan.decision ->> 'teacherCompensationRuleKey'"
+      : "null::text";
+    const compensationValueMinorSql = canSeeRates
+      ? "plan.decision ->> 'teacherCompensationValueMinor'"
+      : "null::text";
     const result = await this.database.query<LessonRow>(
       `
         select l.id, l.version, l.lifecycle_state,
@@ -526,6 +546,9 @@ export class ScheduleService {
           ${teacherCompensationSnapshotSql} as teacher_compensation_type,
           ${teacherCompensationValueSnapshotSql} as teacher_compensation_value,
           ${subscriptionSnapshotSql} as subscription_id,
+          ${settlementTypeKeySql} as settlement_type_key,
+          ${compensationRuleKeySql} as teacher_compensation_rule_key,
+          ${compensationValueMinorSql} as teacher_compensation_value_minor,
           snapshot.trial as snapshot_trial,
           snapshot.validation_state as snapshot_validation_state,
           reservation.state as reservation_state,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
@@ -111,6 +112,8 @@ class CreateLessonDialog extends ConsumerStatefulWidget {
 
 class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   final _scrollController = ScrollController(keepScrollOffset: false);
+  final _compensationValueController = TextEditingController();
+  final _plannedSettlementReasonController = TextEditingController();
   bool _loading = false;
   bool _saving = false;
   String? _validationMessage;
@@ -137,6 +140,10 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   LessonDecisionCatalog? _decisionCatalog;
   String? _settlementTypeKey;
   String? _compensationRuleKey;
+  String? _initialCompensationValueMinor;
+  String? _financialBaselineRuleKey;
+  String? _financialBaselineValueMinor;
+  bool _financialBaselineCaptured = false;
 
   bool get _isEdit => widget.lesson != null;
   String? get _groupId {
@@ -279,6 +286,17 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
       _clientChargeType =
           lesson['client_charge_type']?.toString() ?? _clientChargeType;
       _selectedSubscriptionId = lesson['subscription_id']?.toString();
+      _settlementTypeKey =
+          (lesson['settlement_type_key'] ?? lesson['settlementTypeKey'])
+              ?.toString();
+      _compensationRuleKey =
+          (lesson['teacher_compensation_rule_key'] ??
+                  lesson['teacherCompensationRuleKey'])
+              ?.toString();
+      _initialCompensationValueMinor =
+          (lesson['teacher_compensation_value_minor'] ??
+                  lesson['teacherCompensationValueMinor'])
+              ?.toString();
     }
     _loadData();
   }
@@ -286,6 +304,8 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   @override
   void dispose() {
     _scrollController.dispose();
+    _compensationValueController.dispose();
+    _plannedSettlementReasonController.dispose();
     super.dispose();
   }
 
@@ -446,7 +466,30 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
       if (!catalog.compensationRules.any(
         (item) => item.key == _compensationRuleKey,
       )) {
-        _compensationRuleKey = catalog.compensationRules.firstOrNull?.key;
+        final legacyMode = widget.lesson?['teacher_compensation_type']
+            ?.toString();
+        _compensationRuleKey = catalog.compensationRules
+            .where((item) => item.mode == legacyMode)
+            .firstOrNull
+            ?.key;
+        _compensationRuleKey ??= catalog.compensationRules.firstOrNull?.key;
+      }
+      final rule = _selectedCompensationRule;
+      if (rule != null) {
+        final initialValue =
+            _initialCompensationValueMinor ??
+            _legacyCompensationValueMinor(rule);
+        _compensationValueController.text = _compensationInput(
+          rule,
+          valueMinor: initialValue,
+        );
+      } else {
+        _compensationValueController.clear();
+      }
+      if (!_financialBaselineCaptured) {
+        _financialBaselineRuleKey = _compensationRuleKey;
+        _financialBaselineValueMinor = _compensationValueMinor();
+        _financialBaselineCaptured = true;
       }
       if (!_isEdit) _applyFundingDefault();
     });
@@ -532,6 +575,17 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         _clientChargeType == 'none' &&
         !_selectedSettlementIsNoCharge;
     final version = (widget.lesson?['version'] as num?)?.toInt();
+    final compensationValueRequired = switch (_selectedCompensationRule?.mode) {
+      'percent' || 'fixed' || 'hourly' => true,
+      _ => false,
+    };
+    final compensationValueMinor = _compensationValueMinor();
+    final missingCompensationValue =
+        compensationValueRequired && compensationValueMinor == null;
+    final missingCompensationReason =
+        !_isEdit &&
+        _compensationNeedsReason &&
+        _plannedSettlementReasonController.text.trim().isEmpty;
 
     final missingClient =
         !_isGroupEdit && (clientId == null || clientType == null);
@@ -543,10 +597,16 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         invalidNoFunding ||
         (!_isEdit && _settlementTypeKey == null) ||
         (!_isEdit && _compensationRuleKey == null) ||
+        missingCompensationValue ||
+        missingCompensationReason ||
         (_isEdit && version == null)) {
       setState(() {
         _validationMessage = _isEdit && version == null
             ? 'Обновите расписание: версия занятия не получена'
+            : missingCompensationValue
+            ? 'Введите корректный процент или сумму оплаты преподавателю'
+            : missingCompensationReason
+            ? 'Укажите причину индивидуального значения оплаты преподавателю'
             : invalidNoFunding
             ? 'Для платного списания выберите абонемент или личный счёт'
             : 'Заполните обязательные поля корректно';
@@ -562,10 +622,12 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
       _selectedTime.minute,
     );
     final payload = _lessonPayload(scheduledAt: startsAt.toIso8601String());
-    if (_isEdit && !_hasSuccessorChanges(payload)) {
+    final scheduleChanged = _isEdit && _hasScheduleChanges(payload);
+    final financialChanged = _isEdit && _hasFinancialDecisionChanges;
+    if (_isEdit && !scheduleChanged && !financialChanged) {
       setState(() {
         _validationMessage =
-            'Измените дату, время, длительность, филиал, аудиторию или преподавателя';
+            'Измените параметры расписания или оплату преподавателю';
       });
       return;
     }
@@ -574,12 +636,18 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     try {
       final api = ref.read(magicApiClientProvider);
       if (_isEdit) {
+        final operation = scheduleChanged
+            ? LessonDecisionOperation.reschedule
+            : _financialEditOperation;
         final changed = await showLessonDecisionFlow(
           context,
           api: api,
-          operation: LessonDecisionOperation.reschedule,
+          operation: operation,
           lesson: widget.lesson!,
-          successor: payload,
+          successor: scheduleChanged ? payload : null,
+          initialSettlementTypeKey: _settlementTypeKey,
+          initialCompensationRuleKey: _compensationRuleKey,
+          initialCompensationValueMinor: compensationValueMinor,
         );
         if (changed != true || !mounted) return;
         Navigator.pop(context, true);
@@ -621,6 +689,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   }
 
   Map<String, dynamic> _lessonPayload({required String scheduledAt}) {
+    final compensationValueMinor = _compensationValueMinor();
     final mutable = <String, dynamic>{
       'teacherId': _selectedTeacherId,
       'branchId': _selectedBranchId,
@@ -643,7 +712,11 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
       'financialDecision': {
         'settlementTypeKey': _settlementTypeKey,
         'teacherCompensationRuleKey': _compensationRuleKey,
+        'teacherCompensationValueMinor': ?compensationValueMinor,
       },
+      if (_compensationNeedsReason)
+        'plannedSettlementReason': _plannedSettlementReasonController.text
+            .trim(),
       if (_clientChargeType == 'subscription')
         'subscriptionId': _selectedSubscriptionId,
       if (_clientType == 'lead' && widget.leadName?.trim().isNotEmpty == true)
@@ -651,7 +724,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     };
   }
 
-  bool _hasSuccessorChanges(Map<String, dynamic> successor) {
+  bool _hasScheduleChanges(Map<String, dynamic> successor) {
     final lesson = widget.lesson;
     if (lesson == null) return true;
     String? value(String snake, String camel) {
@@ -688,6 +761,24 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         durationChanged;
   }
 
+  LessonDecisionOperation get _financialEditOperation {
+    final state =
+        (widget.lesson?['lifecycle_state'] ??
+                widget.lesson?['lifecycleState'] ??
+                widget.lesson?['status'])
+            ?.toString()
+            .toLowerCase();
+    return state == 'successfully_completed' ||
+            state == 'completed' ||
+            state == 'done'
+        ? LessonDecisionOperation.correction
+        : LessonDecisionOperation.plannedSettlement;
+  }
+
+  bool get _hasFinancialDecisionChanges =>
+      _compensationRuleKey != _financialBaselineRuleKey ||
+      _compensationValueMinor() != _financialBaselineValueMinor;
+
   num get _derivedClientChargeValue {
     if (_clientChargeType == 'subscription') {
       return _durationMinutes / 60;
@@ -722,6 +813,67 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
       .where((item) => item.key == _compensationRuleKey)
       .firstOrNull;
 
+  void _selectCompensationRule(String? key) {
+    setState(() {
+      _compensationRuleKey = key;
+      final rule = _selectedCompensationRule;
+      _compensationValueController.text = rule == null
+          ? ''
+          : _compensationInput(rule);
+      _plannedSettlementReasonController.clear();
+    });
+  }
+
+  String? _legacyCompensationValueMinor(LessonDecisionCatalogItem rule) {
+    if (!_isEdit || (rule.mode != 'fixed' && rule.mode != 'hourly')) {
+      return null;
+    }
+    final value = widget.lesson?['teacher_compensation_value'];
+    if (value is! num || value < 0) return null;
+    return (value * 100).round().toString();
+  }
+
+  String _compensationInput(
+    LessonDecisionCatalogItem rule, {
+    String? valueMinor,
+  }) {
+    final value = BigInt.tryParse(valueMinor ?? rule.value) ?? BigInt.zero;
+    if (rule.mode == 'percent') {
+      final whole = value ~/ BigInt.from(100);
+      final fraction = (value % BigInt.from(100)).toString().padLeft(2, '0');
+      return fraction == '00' ? '$whole' : '$whole,$fraction';
+    }
+    final whole = value ~/ BigInt.from(100);
+    final fraction = (value % BigInt.from(100)).toString().padLeft(2, '0');
+    return fraction == '00' ? '$whole' : '$whole,$fraction';
+  }
+
+  String? _compensationValueMinor() {
+    final mode = _selectedCompensationRule?.mode;
+    if (mode == null || mode == 'none' || mode == 'standard') return null;
+    final raw = _compensationValueController.text
+        .trim()
+        .replaceAll(' ', '')
+        .replaceAll(',', '.');
+    final value = double.tryParse(raw);
+    if (value == null || value < 0) return null;
+    if (mode == 'percent') {
+      if (value > 200) return null;
+      return (value * 100).round().toString();
+    }
+    if (!RegExp(r'^\d+(?:\.\d{1,2})?$').hasMatch(raw)) return null;
+    final parts = raw.split('.');
+    return (BigInt.parse(parts.first) * BigInt.from(100) +
+            BigInt.parse(parts.length == 1 ? '0' : parts.last.padRight(2, '0')))
+        .toString();
+  }
+
+  bool get _compensationNeedsReason {
+    final rule = _selectedCompensationRule;
+    final value = _compensationValueMinor();
+    return rule != null && value != null && value != rule.value;
+  }
+
   String _snapshotNumber(num value) =>
       NumberFormat('#,##0.##', 'ru').format(value);
 
@@ -732,8 +884,20 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   };
 
   String get _teacherSnapshotValue {
-    final rate = _derivedTeacherRate;
-    return rate.$1 == 'none' ? '0 ₽' : '${_snapshotNumber(rate.$2)} ₽/ч';
+    final rule = _selectedCompensationRule;
+    if (rule == null) return 'Не выбрано';
+    if (rule.mode == 'none') return '0 ₽';
+    if (rule.mode == 'standard') {
+      final rate = _derivedTeacherRate;
+      return rate.$1 == 'none'
+          ? 'Стандартная ставка преподавателя · 0 ₽'
+          : 'Стандартная ставка преподавателя · '
+                '${_snapshotNumber(rate.$2)} ₽/ч';
+    }
+    final input = _compensationValueController.text.trim();
+    if (rule.mode == 'percent') return '$input% от стандартной ставки';
+    if (rule.mode == 'hourly') return '$input ₽/ч';
+    return '$input ₽ за занятие';
   }
 
   Future<bool> _previewConstraintsBeforeSave(
@@ -1154,7 +1318,8 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                   initialValue: _compensationRuleKey,
                   decoration: const InputDecoration(
                     labelText: 'Правило оплаты преподавателю *',
-                    helperText: 'Не выводится автоматически из списания',
+                    helperText:
+                        'Значение можно задать отдельно для этого занятия',
                   ),
                   items: [
                     for (final item
@@ -1164,11 +1329,53 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                         child: Text(item.label),
                       ),
                   ],
-                  onChanged: _snapshotLocked
-                      ? null
-                      : (value) => setState(() => _compensationRuleKey = value),
+                  onChanged: _saving ? null : _selectCompensationRule,
                 ),
               ),
+              if (_selectedCompensationRule case final rule?
+                  when rule.mode == 'percent' ||
+                      rule.mode == 'fixed' ||
+                      rule.mode == 'hourly') ...[
+                const SizedBox(height: 16),
+                TextFormField(
+                  key: const ValueKey('lesson-compensation-value-field'),
+                  controller: _compensationValueController,
+                  enabled: !_saving,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9,. ]')),
+                  ],
+                  decoration: InputDecoration(
+                    labelText: rule.mode == 'percent'
+                        ? 'Процент от стандартной ставки, % *'
+                        : rule.mode == 'hourly'
+                        ? 'Почасовая ставка, ₽ *'
+                        : 'Фиксированная сумма за занятие, ₽ *',
+                    helperText: 'Действует только для этого занятия',
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+                if (!_isEdit && _compensationNeedsReason) ...[
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    key: const ValueKey(
+                      'lesson-compensation-override-reason-field',
+                    ),
+                    controller: _plannedSettlementReasonController,
+                    enabled: !_saving,
+                    minLines: 2,
+                    maxLines: 4,
+                    maxLength: 500,
+                    decoration: const InputDecoration(
+                      labelText: 'Причина индивидуального значения *',
+                      helperText:
+                          'Сохраняется в истории расчёта и нужна только при отклонении от настройки школы',
+                    ),
+                  ),
+                ],
+              ],
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 menuMaxHeight: 256,
@@ -1236,8 +1443,9 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                 const SizedBox(height: 10),
                 Text(
                   '${_isGroupEdit ? 'Группа, состав участников' : 'Клиент'}, '
-                  'пробный маркер и расчётный snapshot неизменяемы. '
-                  'Для переноса меняются только ресурсы и время.',
+                  'пробный маркер и клиентское списание неизменяемы. '
+                  'Ресурсы, время и оплата преподавателю меняются здесь; '
+                  'перед применением потребуется причина и подтверждение.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],

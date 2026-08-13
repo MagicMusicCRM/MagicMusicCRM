@@ -949,6 +949,81 @@ void main() {
       'active': true,
     });
   });
+
+  testWidgets('option sets identify lead and student card ownership', (
+    tester,
+  ) async {
+    final api = ConfigurationTestApi(
+      role: 'director',
+      capabilities: const [
+        'config.crm.read',
+        'config.crm.edit',
+        'config.crm.publish',
+      ],
+      snapshot: {
+        ...ConfigurationTestApi._defaultSnapshot,
+        'fields': [
+          ...ConfigurationTestApi._defaultSnapshot['fields'] as List,
+          const {
+            'entityType': 'lead',
+            'key': 'goalLead',
+            'label': 'Цель обучения',
+            'valueType': 'select',
+            'required': false,
+            'active': true,
+            'system': false,
+            'categoryKey': 'general',
+            'order': 2,
+            'width': 'half',
+            'placements': ['card'],
+            'options': ['Для себя'],
+            'optionSetKey': 'lead_goals',
+          },
+          const {
+            'entityType': 'student',
+            'key': 'goalStudent',
+            'label': 'Цель обучения',
+            'valueType': 'select',
+            'required': false,
+            'active': true,
+            'system': false,
+            'categoryKey': 'general',
+            'order': 2,
+            'width': 'half',
+            'placements': ['card'],
+            'options': ['Для себя'],
+            'optionSetKey': 'student_goals',
+          },
+        ],
+        'optionSets': const [
+          {
+            'key': 'lead_goals',
+            'label': 'Цели обучения',
+            'multiple': false,
+            'options': [
+              {'key': 'self', 'label': 'Для себя', 'order': 0, 'active': true},
+            ],
+          },
+          {
+            'key': 'student_goals',
+            'label': 'Цели обучения',
+            'multiple': false,
+            'options': [
+              {'key': 'self', 'label': 'Для себя', 'order': 0, 'active': true},
+            ],
+          },
+        ],
+      },
+    );
+    await _pump(tester, api);
+
+    await tester.tap(find.text('Варианты для полей'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Цели обучения'), findsNWidgets(2));
+    expect(find.text('Карточка лида · 1 вариант'), findsOneWidget);
+    expect(find.text('Карточка ученика · 1 вариант'), findsOneWidget);
+  });
 }
 
 Map<String, dynamic> inlineOptionsSnapshot() => {

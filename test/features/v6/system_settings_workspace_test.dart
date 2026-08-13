@@ -12,6 +12,13 @@ class SettingsTestApi extends MagicApiClient {
     required this.capabilities,
     this.groups = const [],
     this.staff = const [],
+    this.branches = const [
+      {
+        'id': '20000000-0000-4000-8000-000000000001',
+        'name': 'Сокол',
+        'address': 'Ленинградский проспект',
+      },
+    ],
     this.teachers = const [
       {
         'id': '30000000-0000-4000-8000-000000000001',
@@ -29,8 +36,10 @@ class SettingsTestApi extends MagicApiClient {
   final List<String> capabilities;
   final List<Map<String, dynamic>> groups;
   final List<Map<String, dynamic>> staff;
+  final List<Map<String, dynamic>> branches;
   final List<Map<String, dynamic>> teachers;
   final mutations = <String, Object?>{};
+  int branchReads = 0;
 
   @override
   Future<T> get<T>(
@@ -49,16 +58,8 @@ class SettingsTestApi extends MagicApiClient {
           as T;
     }
     if (path == '/crm/branches') {
-      return <String, dynamic>{
-            'items': const [
-              {
-                'id': '20000000-0000-4000-8000-000000000001',
-                'name': 'Сокол',
-                'address': 'Ленинградский проспект',
-              },
-            ],
-          }
-          as T;
+      branchReads++;
+      return <String, dynamic>{'items': branches} as T;
     }
     if (path == '/crm/teachers') {
       return <String, dynamic>{'items': teachers} as T;
@@ -322,6 +323,37 @@ void main() {
 
     expect(find.text('Новый филиал'), findsOneWidget);
     expect(find.byIcon(Icons.edit_rounded), findsOneWidget);
+  });
+
+  testWidgets('organization refresh replaces a stale branch catalog', (
+    tester,
+  ) async {
+    final api = SettingsTestApi(
+      role: 'director',
+      capabilities: const [
+        'system.settings.manage',
+        'config.crm.read',
+        'config.crm.edit',
+      ],
+      branches: [
+        {
+          'id': '20000000-0000-4000-8000-000000000001',
+          'name': 'Старый филиал',
+          'address': 'До очистки',
+        },
+      ],
+    );
+    await _pump(tester, api);
+
+    expect(find.text('Старый филиал'), findsOneWidget);
+    final readsBeforeRefresh = api.branchReads;
+    api.branches.clear();
+    await tester.tap(find.byKey(const ValueKey('refresh-branch-catalog')));
+    await tester.pumpAndSettle();
+
+    expect(api.branchReads, greaterThan(readsBeforeRefresh));
+    expect(find.text('Старый филиал'), findsNothing);
+    expect(find.text('Нет филиалов'), findsOneWidget);
   });
 
   testWidgets('director can manage organization reference catalogs', (

@@ -724,11 +724,14 @@ class _CrmConfigurationWorkspaceState
         ),
         ...sets.map((set) {
           final key = set['key']?.toString() ?? '';
+          final usage = _optionSetUsage(key);
+          final optionCount = (set['options'] as List? ?? const []).length;
           return ListTile(
             selected: _selectedKey == key,
             title: Text(set['label']?.toString() ?? key),
             subtitle: Text(
-              '${(set['options'] as List? ?? const []).length} вариантов',
+              '${_optionSetUsageLabel(usage)} · '
+              '${_optionCountLabel(optionCount)}',
             ),
             onTap: () => setState(() => _selectedKey = key),
           );
@@ -1187,6 +1190,7 @@ class _CrmConfigurationWorkspaceState
   }
 
   Widget _optionSetPreview(Map<String, dynamic> set) {
+    final usage = _optionSetUsage(set['key']?.toString() ?? '');
     return ListView(
       padding: const EdgeInsets.all(AppSpace.lg),
       children: [
@@ -1207,6 +1211,16 @@ class _CrmConfigurationWorkspaceState
           ],
         ),
         const SizedBox(height: AppSpace.md),
+        _property('Используется в', _optionSetUsageLabel(usage)),
+        if (usage.isNotEmpty)
+          _property(
+            'Поля',
+            usage
+                .map((field) => field['label']?.toString() ?? 'Поле')
+                .toSet()
+                .join(', '),
+          ),
+        const SizedBox(height: AppSpace.sm),
         for (final option in (set['options'] as List? ?? const []))
           ListTile(
             leading: const Icon(Icons.drag_indicator_rounded),
@@ -1221,6 +1235,37 @@ class _CrmConfigurationWorkspaceState
           ),
       ],
     );
+  }
+
+  List<Map<String, dynamic>> _optionSetUsage(String optionSetKey) =>
+      _items('fields')
+          .where((field) => field['optionSetKey']?.toString() == optionSetKey)
+          .toList(growable: false);
+
+  String _optionSetUsageLabel(List<Map<String, dynamic>> fields) {
+    final entities = fields
+        .map((field) => field['entityType']?.toString())
+        .whereType<String>()
+        .toSet();
+    if (entities.contains('lead') && entities.contains('student')) {
+      return 'Карточки лида и ученика';
+    }
+    if (entities.contains('lead')) return 'Карточка лида';
+    if (entities.contains('student')) return 'Карточка ученика';
+    return 'Не используется в карточках';
+  }
+
+  String _optionCountLabel(int count) {
+    final lastTwo = count % 100;
+    final last = count % 10;
+    final noun = lastTwo >= 11 && lastTwo <= 14
+        ? 'вариантов'
+        : last == 1
+        ? 'вариант'
+        : last >= 2 && last <= 4
+        ? 'варианта'
+        : 'вариантов';
+    return '$count $noun';
   }
 
   Widget _settingEditor(Map<String, dynamic> setting) {

@@ -227,6 +227,8 @@ describe("ScheduleService", () => {
       // listLessons serves clients too, so the rate must not merely be hidden
       // in the UI — it must never leave the database.
       expect(sql).toContain("null::numeric as applied_teacher_rate");
+      expect(sql).toContain("null::text as teacher_compensation_rule_key");
+      expect(sql).toContain("null::text as teacher_compensation_value_minor");
       expect(sql).not.toContain("app.teacher_rates");
     });
 
@@ -243,6 +245,12 @@ describe("ScheduleService", () => {
       // Same precedence as computeLessonAccrual in payroll.service.ts.
       expect(sql).toMatch(
         /coalesce\(\s*l\.teacher_rate,\s*g\.teacher_rate,[\s\S]*app\.teacher_rates[\s\S]*0\s*\)\s*as applied_teacher_rate/,
+      );
+      expect(sql).toContain(
+        "plan.decision ->> 'teacherCompensationRuleKey' as teacher_compensation_rule_key",
+      );
+      expect(sql).toContain(
+        "plan.decision ->> 'teacherCompensationValueMinor' as teacher_compensation_value_minor",
       );
     });
 
@@ -428,6 +436,9 @@ describe("ScheduleService", () => {
         version: 2,
         lifecycle_state: "settlement_pending",
         settlement_failure_code: "ConflictException",
+        settlement_type_key: "free_lesson",
+        teacher_compensation_rule_key: "fixed",
+        teacher_compensation_value_minor: "150000",
         student_id: "student-a",
         group_id: null,
         lead_id: null,
@@ -493,6 +504,9 @@ describe("ScheduleService", () => {
       version: 2,
       lifecycleState: "settlement_pending",
       settlementFailureCode: "ConflictException",
+      settlementTypeKey: "free_lesson",
+      teacherCompensationRuleKey: "fixed",
+      teacherCompensationValueMinor: "150000",
       groupParticipants: [
         { clientId: "student-a", clientName: "Анна Иванова" },
       ],
