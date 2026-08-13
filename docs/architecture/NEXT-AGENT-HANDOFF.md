@@ -1,10 +1,20 @@
 # MagicMusicCRM — актуальная передача
 
 > Обновлено: 2026-08-13
-> Production: client `1.5.3+183`, server `c5ad7745`,
-> image `sha256:62473bb4…`, migration `0132`
+> Production: client `1.5.4+184`, server `11cf8e36`,
+> image `sha256:eee82d6c…`, migration `0132`
 > Рабочая ветка: `codex/v7-production-readiness`
-> Статус: rollout и разрешённый clean start PASS; owner mega-UAT не завершён
+> Статус: rollout `1.5.4+184` PASS; owner mega-UAT не завершён
+
+Release `1.5.4+184` опубликован в обоих update channels и GitHub Release.
+Закрыты stale-cache филиалов после внешней очистки, неоднозначность одинаково
+названных Lead/Student option sets и ввод индивидуального процента/фикса/
+почасовой оплаты преподавателю прямо в create/edit занятия. Flutter `793/793`,
+backend `177/177` suites и `1415/1415` tests; Windows portable/Setup и Android
+15/API 35 smoke PASS. Production image `11cf8e36` healthy, reconciliation
+`issues=[]`. Во время rollout исправлен host backup protected storage
+(`2e104f3b`); новый encrypted off-host backup и isolated restore PASS. Evidence:
+`docs/audits/v7-production-rollout-184.md`.
 
 Release `1.5.3+183` опубликован в обоих update channels и GitHub Release.
 Production очищен до двух сохраняемых аккаунтов, системного чата, источника
