@@ -471,6 +471,36 @@ describe("AuthService", () => {
     });
   });
 
+  it("issues a session after forced OTP for a privileged role", async () => {
+    query
+      .mockResolvedValueOnce({ rows: [{ count: "0" }] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "system-admin-a",
+            email: "system-admin@example.com",
+            password_hash: "hash",
+            role: "system_admin",
+            email_verified_at: new Date(),
+            email_otp_2fa_enabled: false,
+          },
+        ],
+      });
+
+    const result = await service.verifyOtp(
+      "system-admin@example.com",
+      "123456",
+    );
+
+    expect(result.user.emailVerified).toBe(true);
+    expect(result.session?.accessToken).toBe("access-token");
+    expect(sessions.issueForUser).toHaveBeenCalledWith({
+      id: "system-admin-a",
+      email: "system-admin@example.com",
+      role: "system_admin",
+    });
+  });
+
   it("records invalid OTP attempts and rate limits verification", async () => {
     query
       .mockResolvedValueOnce({ rows: [{ count: "0" }] })

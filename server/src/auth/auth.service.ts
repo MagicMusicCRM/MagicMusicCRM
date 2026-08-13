@@ -396,7 +396,14 @@ export class AuthService {
       metadata: { emailHash },
     });
 
-    if (user.email_otp_2fa_enabled) {
+    // Keep the completion rule symmetric with login(): privileged roles are
+    // forced through email OTP even when their personal 2FA flag is false.
+    // Without this branch they can consume a valid code but receive no
+    // session, which sends the client back into the password/OTP loop.
+    if (
+      Boolean(user.email_otp_2fa_enabled) ||
+      isManagerOrAdminRole(user.role)
+    ) {
       return {
         user: this.toResponse(user),
         session: await this.sessions.issueForUser({

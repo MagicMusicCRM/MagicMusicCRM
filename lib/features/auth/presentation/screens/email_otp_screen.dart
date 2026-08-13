@@ -103,14 +103,18 @@ class _EmailOtpScreenState extends ConsumerState<EmailOtpScreen> {
       final service = ref.read(magicAuthServiceProvider);
       if (widget.data.purpose == EmailOtpPurpose.signup) {
         await service.verifySignupOtp(email: widget.data.email, token: code);
+        if (mounted) context.go('/login');
       } else {
-        await service.verifyEmailOtp(email: widget.data.email, token: code);
-      }
-      if (mounted) {
-        if (widget.data.purpose == EmailOtpPurpose.signup) {
-          context.go('/login');
-        } else {
-          context.go('/');
+        final response = await service.verifyEmailOtp(
+          email: widget.data.email,
+          token: code,
+        );
+        if (mounted) {
+          if (!response.hasSession) {
+            _showError('Не удалось завершить вход. Запросите новый код.');
+          } else {
+            context.go('/');
+          }
         }
       }
     } on MagicApiException catch (error) {
