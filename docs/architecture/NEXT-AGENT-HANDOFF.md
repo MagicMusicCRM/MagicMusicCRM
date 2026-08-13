@@ -4,7 +4,19 @@
 > Production: client `1.5.4+184`, server `11cf8e36`,
 > image `sha256:eee82d6c…`, migration `0132`
 > Рабочая ветка: `codex/v7-production-readiness`
-> Статус: rollout `1.5.4+184` PASS; owner mega-UAT не завершён
+> Статус: `1.5.5+185` готов к controlled rollout, но не развёрнут;
+> production `1.5.4+184` PASS; owner mega-UAT не завершён
+
+Release candidate `1.5.5+185` зафиксирован на runtime revision `93d66a84`.
+Flutter `793/793`, backend `178/178` suites и `1418/1418` tests,
+production-like runtime/reconciliation, `0134 -> 0132 -> 0134`, exact image
+live/ready/degraded, Trivy, Windows portable/Setup и Android API 35 update
+`184 -> 185` PASS. Четыре client artifacts, оба локальных manifest и exact
+server tar собраны; production read-only preflight healthy на migration `0132`,
+public manifests остаются на build `184`. Перед cutover обязательны новый
+encrypted off-host backup, isolated restore, automatic rollback и отдельная
+явная команда владельца. Evidence:
+`docs/audits/v7-release-candidate-185.md`.
 
 Release `1.5.4+184` опубликован в обоих update channels и GitHub Release.
 Закрыты stale-cache филиалов после внешней очистки, неоднозначность одинаково
