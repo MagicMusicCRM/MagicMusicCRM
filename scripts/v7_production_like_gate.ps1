@@ -2,7 +2,7 @@
 param(
   [string]$DatabaseName = "magiccrm_v7_prodlike_gate",
   [int]$Port = 3107,
-  [string]$ExpectedMigrationId = "0131_installment_payment_reminders"
+  [string]$ExpectedMigrationId = "0134_canonical_clients"
 )
 
 $ErrorActionPreference = "Stop"
