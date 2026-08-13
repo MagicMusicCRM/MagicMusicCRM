@@ -840,9 +840,10 @@ export class SettingsService {
       if (field.active === false) continue;
       const entity =
         typeof field.entityType === "string"
-          ? field.entityType.toLowerCase()
+          ? field.entityType.trim().toLowerCase()
           : "";
       if (
+        entity.length > 0 &&
         ![
           "lead",
           "leads",
@@ -874,7 +875,7 @@ export class SettingsService {
       }
     }
 
-    return fields.map((value) => {
+    const projectedFields = fields.map((value) => {
       if (value === null || typeof value !== "object" || Array.isArray(value)) {
         return value;
       }
@@ -889,6 +890,49 @@ export class SettingsService {
       if (target === null || canonical[target].length === 0) return field;
       return { ...field, type: "select", options: canonical[target] };
     });
+
+    const teacherKeys = new Set(
+      projectedFields.flatMap((value) => {
+        if (
+          value === null ||
+          typeof value !== "object" ||
+          Array.isArray(value)
+        ) {
+          return [];
+        }
+        const field = value as Record<string, unknown>;
+        return field.entity === "teachers" && typeof field.key === "string"
+          ? [field.key]
+          : [];
+      }),
+    );
+    const teacherProjections = [
+      {
+        key: "levels",
+        label: "Уровни обучения",
+        options: canonical.levels,
+      },
+      {
+        key: "categories",
+        label: "Категории",
+        options: canonical.categories,
+      },
+    ];
+    for (const projection of teacherProjections) {
+      if (projection.options.length === 0 || teacherKeys.has(projection.key)) {
+        continue;
+      }
+      projectedFields.push({
+        entity: "teachers",
+        key: projection.key,
+        label: projection.label,
+        type: "select",
+        required: false,
+        options: projection.options,
+      });
+    }
+
+    return projectedFields;
   }
 
   private configuredOptionLabels(value: unknown): string[] {

@@ -238,6 +238,65 @@ describe("SettingsService", () => {
     expect(categories?.options).toEqual(["Взрослые", "Дети"]);
   });
 
+  it("projects unified CRM level and category options into teacher fields", async () => {
+    const { service } = createService([
+      {
+        key: "crm_custom_fields",
+        value: [],
+        updated_at: "2026-08-13T00:00:00.000Z",
+        configuration_snapshot: {
+          fields: [
+            {
+              key: "level",
+              valueType: "select",
+              optionSetKey: "level_options",
+              visibility: { lead: true, student: true },
+              active: true,
+            },
+            {
+              key: "category",
+              valueType: "select",
+              optionSetKey: "category_options",
+              visibility: { lead: true, student: true },
+              active: true,
+            },
+          ],
+          optionSets: [
+            {
+              key: "level_options",
+              options: ["Без опыта", "Начальный", "Средний"],
+            },
+            {
+              key: "category_options",
+              options: ["Взрослые", "Дети"],
+            },
+          ],
+        },
+      },
+    ]);
+
+    const result = await service.getCrmCustomFields(admin);
+
+    expect(result.fields).toEqual([
+      {
+        entity: "teachers",
+        key: "levels",
+        label: "Уровни обучения",
+        type: "select",
+        required: false,
+        options: ["Без опыта", "Начальный", "Средний"],
+      },
+      {
+        entity: "teachers",
+        key: "categories",
+        label: "Категории",
+        type: "select",
+        required: false,
+        options: ["Взрослые", "Дети"],
+      },
+    ]);
+  });
+
   it("updates CRM custom field schema only for admins and records audit", async () => {
     const savedFields: CrmCustomFieldDefinitionDto[] = [
       {
