@@ -1,11 +1,20 @@
 # MagicMusicCRM — актуальная передача
 
 > Обновлено: 2026-08-13
-> Production: client `1.5.7+187`, server `0e7411e6`,
-> image `sha256:831ea160…`, migration `0135`
+> Production: client `1.5.7+187`, server `5f7bce2b`,
+> image `sha256:f6c44405…`, migration `0135`
 > Рабочая ветка: `codex/v7-production-readiness`
 > Статус: production/client rollout `1.5.7+187` PASS;
 > owner mega-UAT не завершён
+
+Server hotfix `5f7bce2b` исправил production OTP-loop привилегированных ролей:
+`login()` требовал forced OTP, но `verifyOtp()` без персонального 2FA-флага не
+выдавал session даже после валидного кода. Теперь оба этапа используют одно
+правило; клиент дополнительно не уходит с OTP-экрана без session. Backend
+`1425/1425`, Flutter auth `16/16`, exact image/security gates, encrypted
+off-host backup, readiness `5/5` и reconciliation PASS. Клиентские manifests
+не менялись; build `187` получает исправление с сервера. Evidence:
+`docs/audits/v7-production-otp-hotfix-5f7bce2b.md`.
 
 Release `1.5.7+187` опубликован в обоих update channels и GitHub Release.
 Закрыты Staff/Teacher save `500`, выбор роли и нескольких филиалов при
