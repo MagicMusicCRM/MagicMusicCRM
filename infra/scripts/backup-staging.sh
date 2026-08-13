@@ -57,7 +57,18 @@ postgres_app_user="$("${compose[@]}" exec -T postgres \
 install -m 600 "${ENV_FILE}" "${payload_dir}/staging.env"
 
 if [ -d "${STORAGE_DIR}" ]; then
-  tar -C "${STORAGE_DIR}" -czf "${payload_dir}/storage.tgz" .
+  # The API bind mount is intentionally 0700 and owned by the non-host
+  # runtime uid (10001). A host-side tar therefore cannot read it after a
+  # clean start. Snapshot through a network-isolated read-only helper while
+  # exposing only the storage source and this backup's temporary payload.
+  docker run --rm \
+    --network none \
+    --read-only \
+    --security-opt no-new-privileges:true \
+    --mount "type=bind,src=${STORAGE_DIR},dst=/storage,readonly" \
+    --mount "type=bind,src=${payload_dir},dst=/payload" \
+    alpine:3.20 \
+    sh -ceu 'tar -C /storage -czf /payload/storage.tgz .'
 else
   printf 'storage directory not present: %s\n' "${STORAGE_DIR}" > "${payload_dir}/storage-not-present.txt"
 fi

@@ -30,6 +30,15 @@ Assert-Contains `
 Assert-Contains `
   'sha256sum "${out_file}" > "${out_file}.sha256"' `
   "Encrypted backups must retain a sidecar checksum."
+Assert-Contains `
+  '--mount "type=bind,src=${STORAGE_DIR},dst=/storage,readonly"' `
+  "Storage backup must read the protected runtime mount without changing its permissions."
+Assert-Contains `
+  '--network none' `
+  "The storage snapshot helper must remain network-isolated."
+Assert-Contains `
+  '--read-only' `
+  "The storage snapshot helper filesystem must remain read-only."
 
 if ($scriptText -match '(?m)^\s*\.\s+"\$\{ENV_FILE\}"\s*$') {
   throw "Docker dotenv must never be executed as a Bash program."
