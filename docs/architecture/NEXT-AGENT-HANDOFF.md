@@ -1,11 +1,22 @@
 # MagicMusicCRM — актуальная передача
 
-> Обновлено: 2026-08-13
-> Production: client `1.5.7+187`, server `5f7bce2b`,
-> image `sha256:f6c44405…`, migration `0135`
+> Обновлено: 2026-08-14
+> Production: client `1.5.7+187`, server `2d1c6255`,
+> image `sha256:4967c3d7…`, migration `0135`
 > Рабочая ветка: `codex/v7-production-readiness`
 > Статус: production/client rollout `1.5.7+187` PASS;
 > owner mega-UAT не завершён
+
+Server hotfix `2d1c6255` восстановил единый справочник уровней и категорий в
+карточке и форме создания преподавателя. Новый unified CRM snapshot больше не
+содержит старый `entityType`, а после clean-start отсутствуют отдельные
+teacher-поля; read-adapter теперь принимает unified shape и формирует
+неpersisted teacher projection из тех же option sets. Production readback
+вернул уровни `Без опыта / Начальный / Средний` и категории `Взрослые / Дети`.
+Backend `1426/1426`, Flutter targeted `2/2`, exact image/security gates,
+encrypted off-host backup, readiness `10/10` и reconciliation PASS. Клиентские
+manifests не менялись; build `187` получает исправление с сервера. Evidence:
+`docs/audits/v7-production-teacher-options-hotfix-2d1c6255.md`.
 
 Server hotfix `5f7bce2b` исправил production OTP-loop привилегированных ролей:
 `login()` требовал forced OTP, но `verifyOtp()` без персонального 2FA-флага не
