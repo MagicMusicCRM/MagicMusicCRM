@@ -131,6 +131,66 @@ describe("PlatformOutboxWorker", () => {
     ).toBeLessThan(integrity.markOutboxPublished.mock.invocationCallOrder[0]);
   });
 
+  it("publishes organization lifecycle invalidations", async () => {
+    const events = [
+      [
+        "organization.branch.changed",
+        "organization:branch",
+        "branch",
+        "branch-a",
+      ],
+      ["organization.room.changed", "organization:room", "room", "room-a"],
+      ["organization.group.changed", "organization:group", "group", "group-a"],
+      [
+        "organization.person.changed",
+        "organization:teacher",
+        "user",
+        "teacher-a",
+      ],
+    ].map(([type, aggregateType, _entity, aggregateId], index) => ({
+      eventId: `event-organization-${index}`,
+      type,
+      occurredAt: new Date(),
+      aggregateType,
+      aggregateId,
+      aggregateVersion: 2,
+      requestId: `request-organization-${index}`,
+      payload: { entityId: aggregateId, action: "archived" },
+      attempts: 1,
+    }));
+    const integrity = {
+      claimOutbox: jest.fn().mockResolvedValue(events),
+      markOutboxPublished: jest.fn().mockResolvedValue(true),
+      markOutboxFailed: jest.fn(),
+    };
+    const realtime = {
+      isReady: jest.fn().mockReturnValue(true),
+      emitCrmChanged: jest.fn(),
+    };
+    const worker = new PlatformOutboxWorker(
+      integrity as never,
+      realtime as never,
+      { notifyInboundLead: jest.fn() } as never,
+      emptyDatabase() as never,
+    );
+
+    await expect(worker.runOnce("worker-a")).resolves.toEqual({
+      claimed: 4,
+      published: 4,
+      retry: 0,
+      deadLetter: 0,
+    });
+    expect(
+      realtime.emitCrmChanged.mock.calls.map(([payload]) => payload),
+    ).toEqual([
+      expect.objectContaining({ entity: "branch", id: "branch-a" }),
+      expect.objectContaining({ entity: "room", id: "room-a" }),
+      expect.objectContaining({ entity: "group", id: "group-a" }),
+      expect.objectContaining({ entity: "user", id: "teacher-a" }),
+    ]);
+    expect(integrity.markOutboxFailed).not.toHaveBeenCalled();
+  });
+
   it("materializes a durable lesson reschedule before publishing its event", async () => {
     const event = {
       eventId: "11111111-1111-4111-8111-111111111111",

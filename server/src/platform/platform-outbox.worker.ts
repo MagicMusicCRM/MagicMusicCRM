@@ -253,6 +253,10 @@ export class PlatformOutboxWorker implements OnModuleInit, OnModuleDestroy {
 }
 
 function entityFor(event: ClaimedOutboxEvent): CrmEntity {
+  if (event.type === "organization.branch.changed") return "branch";
+  if (event.type === "organization.room.changed") return "room";
+  if (event.type === "organization.group.changed") return "group";
+  if (event.type === "organization.person.changed") return "user";
   if (event.type.startsWith("commerce.payment")) return "payment";
   if (
     event.type.startsWith("commerce.subscription") ||

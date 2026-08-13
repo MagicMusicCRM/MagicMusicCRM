@@ -5,7 +5,7 @@ param(
   [int]$HealthyPort = 3108,
   [int]$DegradedPort = 3109,
   [Parameter(Mandatory)][string]$ExpectedRevision,
-  [string]$ExpectedMigrationId = "0134_canonical_clients"
+  [string]$ExpectedMigrationId = "0135_requeue_organization_outbox"
 )
 
 $ErrorActionPreference = "Stop"

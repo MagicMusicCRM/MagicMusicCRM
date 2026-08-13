@@ -5,6 +5,8 @@ export type CrmEntity =
   | 'lesson'
   | 'lead'
   | 'student'
+  | 'branch'
+  | 'room'
   | 'payment'
   | 'subscription'
   | 'group'
