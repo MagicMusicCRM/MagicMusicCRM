@@ -51,11 +51,6 @@ const _fieldPlacementLabels = <String, String>{
   'table': 'Таблица',
 };
 
-typedef _FieldEditorResult = ({
-  Map<String, dynamic> field,
-  List<Map<String, dynamic>> createdOptionSets,
-});
-
 class CrmConfigurationRouteScreen extends ConsumerWidget {
   const CrmConfigurationRouteScreen({super.key});
 
@@ -1350,7 +1345,7 @@ class _CrmConfigurationWorkspaceState
 
   Future<void> _editField(Map<String, dynamic>? current) async {
     final categories = _items('categories');
-    final result = await showDialog<_FieldEditorResult>(
+    final draft = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (_) => _FieldEditorDialog(
         field: current,
@@ -1359,14 +1354,7 @@ class _CrmConfigurationWorkspaceState
         fieldTypes: _fieldTypes,
       ),
     );
-    if (result == null) return;
-    if (result.createdOptionSets.isNotEmpty) {
-      _replaceItems('optionSets', [
-        ..._items('optionSets'),
-        ...result.createdOptionSets,
-      ]);
-    }
-    final draft = result.field;
+    if (draft == null) return;
     final fields = _items('fields');
     final index = current == null
         ? -1
@@ -1766,7 +1754,6 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
   late final List<Map<String, dynamic>> _optionSets = widget.optionSets
       .map((set) => Map<String, dynamic>.from(set))
       .toList();
-  final List<Map<String, dynamic>> _createdOptionSets = [];
   late String _type = widget.field?['valueType']?.toString() ?? 'text';
   late bool _visibleOnLead =
       (widget.field?['visibility'] as Map?)?['lead'] != false;
@@ -1801,6 +1788,13 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
   Widget build(BuildContext context) {
     final system = widget.field?['system'] == true;
     final selection = _selectionFieldTypes.contains(_type);
+    final compatibleOptionSets = _optionSets
+        .where(
+          (set) =>
+              set['key']?.toString() == _optionSetKey ||
+              _optionSetMatchesCurrentType(set),
+        )
+        .toList(growable: false);
     return AlertDialog(
       title: Text(widget.field == null ? 'Новое поле' : 'Настройка поля'),
       content: SizedBox(
@@ -1950,8 +1944,9 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
                   isExpanded: true,
                   decoration: InputDecoration(
                     labelText: 'Набор вариантов *',
-                    helperText:
-                        'Состав набора меняется в разделе «Варианты для полей»',
+                    helperText: compatibleOptionSets.isEmpty
+                        ? 'Сначала добавьте подходящий набор в разделе «Варианты для полей»'
+                        : 'Состав набора меняется только в разделе «Варианты для полей»',
                     errorText: _optionSetError,
                   ),
                   items: [
@@ -1959,32 +1954,17 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
                       value: null,
                       child: Text('Выберите набор'),
                     ),
-                    ..._optionSets
-                        .where(
-                          (set) =>
-                              set['key']?.toString() == _optionSetKey ||
-                              _optionSetMatchesCurrentType(set),
-                        )
-                        .map(
-                          (set) => DropdownMenuItem<String?>(
-                            value: set['key']?.toString(),
-                            child: Text(set['label']?.toString() ?? ''),
-                          ),
-                        ),
+                    ...compatibleOptionSets.map(
+                      (set) => DropdownMenuItem<String?>(
+                        value: set['key']?.toString(),
+                        child: Text(set['label']?.toString() ?? ''),
+                      ),
+                    ),
                   ],
                   onChanged: (value) => setState(() {
                     _optionSetKey = value;
                     _optionSetError = null;
                   }),
-                ),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    key: const ValueKey('field-create-option-set'),
-                    onPressed: _createOptionSet,
-                    icon: const Icon(Icons.add_rounded),
-                    label: const Text('Создать новый набор'),
-                  ),
                 ),
               ],
               CheckboxListTile(
@@ -2062,7 +2042,10 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
     }
     final selection = _selectionFieldTypes.contains(_type);
     if (selection && _optionSetKey == null) {
-      setState(() => _optionSetError = 'Выберите или создайте набор');
+      setState(
+        () => _optionSetError =
+            'Сначала создайте подходящий набор в разделе «Варианты для полей»',
+      );
       return;
     }
     if (!_visibleOnLead && !_visibleOnStudent) {
@@ -2088,46 +2071,23 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
               (right['order'] as num?)?.toInt() ?? 0,
             ),
           );
-    Navigator.pop<_FieldEditorResult>(context, (
-      field: <String, dynamic>{
-        'key': key,
-        'label': label,
-        'valueType': _type,
-        'required': _required,
-        'active': _active,
-        'system': widget.field?['system'] == true,
-        'categoryKey': _category,
-        'order': widget.field?['order'] ?? 0,
-        'width': _width,
-        'placements': [
-          for (final key in _fieldPlacementLabels.keys)
-            if (_placements.contains(key)) key,
-        ],
-        'options': options.map((option) => option['label']).toList(),
-        'optionSetKey': selection ? _optionSetKey : null,
-        'visibility': {'lead': _visibleOnLead, 'student': _visibleOnStudent},
-      },
-      createdOptionSets: _createdOptionSets,
-    ));
-  }
-
-  Future<void> _createOptionSet() async {
-    final draft = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (_) => _OptionSetEditorDialog(
-        optionSet: null,
-        initialMultiple: const {
-          'multi_select',
-          'checkbox_group',
-        }.contains(_type),
-      ),
-    );
-    if (draft == null || !mounted) return;
-    setState(() {
-      _optionSets.add(draft);
-      _createdOptionSets.add(draft);
-      _optionSetKey = draft['key']?.toString();
-      _optionSetError = null;
+    Navigator.pop<Map<String, dynamic>>(context, <String, dynamic>{
+      'key': key,
+      'label': label,
+      'valueType': _type,
+      'required': _required,
+      'active': _active,
+      'system': widget.field?['system'] == true,
+      'categoryKey': _category,
+      'order': widget.field?['order'] ?? 0,
+      'width': _width,
+      'placements': [
+        for (final key in _fieldPlacementLabels.keys)
+          if (_placements.contains(key)) key,
+      ],
+      'options': options.map((option) => option['label']).toList(),
+      'optionSetKey': selection ? _optionSetKey : null,
+      'visibility': {'lead': _visibleOnLead, 'student': _visibleOnStudent},
     });
   }
 
@@ -2228,13 +2188,9 @@ class _CategoryEditorDialogState extends State<_CategoryEditorDialog> {
 }
 
 class _OptionSetEditorDialog extends StatefulWidget {
-  const _OptionSetEditorDialog({
-    required this.optionSet,
-    this.initialMultiple = false,
-  });
+  const _OptionSetEditorDialog({required this.optionSet});
 
   final Map<String, dynamic>? optionSet;
-  final bool initialMultiple;
 
   @override
   State<_OptionSetEditorDialog> createState() => _OptionSetEditorDialogState();
@@ -2248,9 +2204,7 @@ class _OptionSetEditorDialogState extends State<_OptionSetEditorDialog> {
     text: widget.optionSet?['label']?.toString() ?? '',
   );
   late final List<_OptionDraft> _options;
-  late bool _multiple = widget.optionSet == null
-      ? widget.initialMultiple
-      : widget.optionSet?['multiple'] == true;
+  late bool _multiple = widget.optionSet?['multiple'] == true;
   String? _error;
 
   @override

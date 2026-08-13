@@ -822,7 +822,7 @@ void main() {
     ]);
   });
 
-  testWidgets('field editor creates and selects a central option set', (
+  testWidgets('field editor only attaches prepared option sets', (
     tester,
   ) async {
     final api = ConfigurationTestApi(
@@ -840,49 +840,34 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Изменить'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('field-create-option-set')));
-    await tester.pumpAndSettle();
 
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Название *').last,
-      'Направления',
+    expect(find.byKey(const ValueKey('field-create-option-set')), findsNothing);
+    expect(
+      find.text('Состав набора меняется только в разделе «Варианты для полей»'),
+      findsOneWidget,
     );
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Стабильный ключ *').last,
-      'directions',
-    );
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Вариант 1 *'),
-      'Вокал',
-    );
-    await tester.tap(find.byKey(const ValueKey('option-set-add-option')));
+    tester
+        .widget<DropdownButtonFormField<String>>(
+          find.byKey(const ValueKey('field-type')),
+        )
+        .onChanged!('multi_select');
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Вариант 2 *'),
-      'Гитара',
+    expect(
+      find.text(
+        'Сначала добавьте подходящий набор в разделе «Варианты для полей»',
+      ),
+      findsOneWidget,
     );
-    await tester.tap(find.text('Сохранить').last);
-    await tester.pumpAndSettle();
-
-    expect(find.text('Направления'), findsOneWidget);
-    expect(find.text('Варианты через запятую *'), findsNothing);
     await tester.tap(find.text('Сохранить'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('configuration-publish')));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Причина публикации *'),
-      'Выбрали общий набор',
+    expect(
+      find.text(
+        'Сначала создайте подходящий набор в разделе «Варианты для полей»',
+      ),
+      findsOneWidget,
     );
-    await tester.tap(find.text('Опубликовать'));
-    await tester.pumpAndSettle();
-
-    final submitted = api.submittedSnapshot!;
-    final field = (submitted['fields'] as List).single as Map;
-    final sets = submitted['optionSets'] as List;
-    expect(field['optionSetKey'], 'directions');
-    expect(field['options'], ['Вокал', 'Гитара']);
-    expect(sets, hasLength(2));
+    expect(find.text('Настройка поля'), findsOneWidget);
+    expect(api.submittedSnapshot, isNull);
   });
 
   testWidgets('option editor preserves keys while reordering and archiving', (
