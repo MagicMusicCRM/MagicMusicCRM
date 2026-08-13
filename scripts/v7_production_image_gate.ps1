@@ -104,8 +104,12 @@ function New-EnvironmentArguments {
     "-e", "V4_SCHEDULE_MODE=$ScheduleMode",
     "-e", "V4_SCHEDULE_KILL_SWITCH=false",
     "-e", "V4_PARITY_UNEXPLAINED_DIFFS=0",
-    "-e", "PLATFORM_OUTBOX_WORKER_ENABLED=false",
-    "-e", "LESSON_COMPLETION_WORKER_ENABLED=false"
+    "-e", "PLATFORM_OUTBOX_WORKER_ENABLED=true",
+    "-e", "LESSON_COMPLETION_WORKER_ENABLED=true",
+    "-e", "INSTALLMENT_DUE_WORKER_ENABLED=true",
+    "-e", "LESSON_REMINDERS_ENABLED=true",
+    "-e", "TASK_REMINDERS_ENABLED=true",
+    "-e", "SCHEDULE_SERIES_AUTOEXTEND=true"
   )
 }
 

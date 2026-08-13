@@ -2,7 +2,11 @@
 
 ## Purpose
 
-Sentry is optional client-side observability for Flutter release builds. It captures unhandled Flutter errors plus explicit auth/API failures around login, signup and Google OAuth.
+Sentry is optional remote observability for Flutter release builds and the
+NestJS backend. Flutter captures unhandled client errors plus explicit auth/API
+failures. The backend captures unexpected HTTP 5xx when `SENTRY_DSN` is
+configured. Production must still run the local systemd monitor because Sentry
+credentials or network delivery can fail independently.
 
 ## Privacy Rules
 
@@ -13,7 +17,7 @@ Sentry is optional client-side observability for Flutter release builds. It capt
 
 ## Build Flags
 
-Sentry is disabled unless `SENTRY_DSN` is provided at build time.
+Flutter Sentry is disabled unless `SENTRY_DSN` is provided at build time.
 
 ```powershell
 flutter build appbundle --release --build-name=1.1.7 --build-number=117 `
@@ -24,7 +28,11 @@ flutter build appbundle --release --build-name=1.1.7 --build-number=117 `
   --dart-define=SENTRY_TRACES_SAMPLE_RATE=0
 ```
 
-For staging diagnostics:
+For the backend set `SENTRY_DSN` and `SENTRY_RELEASE` only in the server's
+ignored `.env`; never commit the values. After deploy, verify that the variable
+is configured without printing the DSN itself.
+
+For Flutter staging diagnostics:
 
 ```powershell
 flutter run --release `

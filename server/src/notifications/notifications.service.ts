@@ -72,7 +72,7 @@ interface LessonNotificationContext {
 @Injectable()
 export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   private reminderTimer?: NodeJS.Timeout;
-  private readonly logger = new Logger('LessonReminders');
+  private readonly logger = new Logger(NotificationsService.name);
 
   constructor(
     private readonly database: DatabaseService,
@@ -763,19 +763,44 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     template: string;
     title: string;
     body: string;
-  }): Promise<{ queued: true }> {
+    deliveryMode?: 'queued' | 'required';
+  }): Promise<{ queued: boolean; delivered: boolean }> {
     const user = await this.database.query<{ email: string }>(
       'select email from app.users where id = $1 and deleted_at is null limit 1',
       [input.userId]
     );
     const email = user.rows[0]?.email;
-    if (!email) return { queued: true };
-    await this.enqueueEmail(input.userId, email, input.template, {
+    if (!email) return { queued: false, delivered: false };
+    const outboxId = await this.enqueueEmail(input.userId, email, input.template, {
       title: input.title,
       body: input.body
     });
+    if (input.deliveryMode === 'required') {
+      try {
+        const dispatch = await this.worker.dispatchEmailById(outboxId);
+        if (dispatch.status === 'sent') {
+          return { queued: true, delivered: true };
+        }
+        await this.worker.exhaustEmail(outboxId, 'required_delivery_failed');
+        this.logger.error(
+          `Required email delivery failed: template=${input.template}; status=${dispatch.status}`
+        );
+      } catch (error) {
+        await this.worker
+          .exhaustEmail(outboxId, 'required_delivery_error')
+          .catch((persistError: unknown) => {
+            this.logger.error(
+              `Required email failure state was not persisted: ${this.errorName(persistError)}`
+            );
+          });
+        this.logger.error(
+          `Required email delivery failed: template=${input.template}; error=${this.errorName(error)}`
+        );
+      }
+      return { queued: true, delivered: false };
+    }
     this.scheduleEmailDispatch();
-    return { queued: true };
+    return { queued: true, delivered: false };
   }
 
   private async createNotification(input: {
@@ -878,14 +903,16 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     email: string,
     template: string,
     payload: Record<string, unknown>
-  ): Promise<void> {
-    await this.database.query(
+  ): Promise<string> {
+    const result = await this.database.query<{ id: string }>(
       `
         insert into app.email_outbox (user_id, to_email_hash, template, payload)
         values ($1, $2, $3, $4::jsonb)
+        returning id
       `,
       [userId, this.sha256(email.toLowerCase()), template, JSON.stringify(payload)]
     );
+    return result.rows[0].id;
   }
 
   private async requireRecipient(
@@ -1009,6 +1036,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
 
   private scheduleEmailDispatch(): void {
     void this.worker.dispatchPendingEmails().catch((error: unknown) => {
+      this.logger.error(`Immediate email dispatch failed: ${this.errorName(error)}`);
       void this.audit
         .record({
           action: 'notifications.email_dispatch_failed',
@@ -1021,6 +1049,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
 
   private schedulePushDispatch(): void {
     void this.worker.dispatchPendingPush().catch((error: unknown) => {
+      this.logger.error(`Immediate push dispatch failed: ${this.errorName(error)}`);
       void this.audit
         .record({
           action: 'notifications.push_dispatch_failed',

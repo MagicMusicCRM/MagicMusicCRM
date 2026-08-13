@@ -1,6 +1,7 @@
 import {
   ConflictException,
   HttpException,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
 import { AuthService } from "./auth.service";
@@ -41,7 +42,7 @@ describe("AuthService", () => {
       revokeAll: jest.fn().mockResolvedValue(undefined),
     };
     notifications = {
-      sendEmail: jest.fn().mockResolvedValue({ queued: true }),
+      sendEmail: jest.fn().mockResolvedValue({ queued: true, delivered: true }),
     };
     service = new AuthService(
       { query } as unknown as DatabaseService,
@@ -246,6 +247,43 @@ describe("AuthService", () => {
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({ action: "auth.login_email_otp_required" }),
     );
+  });
+
+  it("returns a retryable server error instead of entering an unusable OTP loop", async () => {
+    const passwordHash = await passwordService.hash("strong-password-123");
+    notifications.sendEmail.mockResolvedValueOnce({
+      queued: true,
+      delivered: false,
+    });
+    query
+      .mockResolvedValueOnce({ rows: [{ count: "0" }] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "admin-a",
+            email: "admin@example.com",
+            password_hash: passwordHash,
+            role: "admin",
+            email_verified_at: new Date(),
+            email_otp_2fa_enabled: false,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [{ id: "challenge-a" }] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    await expect(
+      service.login({
+        email: "admin@example.com",
+        password: "strong-password-123",
+      }),
+    ).rejects.toMatchObject({
+      constructor: ServiceUnavailableException,
+      response: expect.objectContaining({ code: "OTP_DELIVERY_UNAVAILABLE" }),
+    });
+
+    expect(query.mock.calls[3][0]).toContain("set consumed_at = now()");
+    expect(sessions.issueForUser).not.toHaveBeenCalled();
   });
 
   it("bypasses the forced OTP for allow-listed test accounts", async () => {

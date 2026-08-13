@@ -20,6 +20,11 @@ services:
       - ../../downloads:/srv/downloads:ro
       - caddy_data:/data
       - caddy_config:/config
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "10"
     networks:
       - public
 
@@ -51,7 +56,7 @@ services:
       - path: ./.env
         required: false
     environment:
-      NODE_ENV: staging
+      NODE_ENV: ${NODE_ENV:-production}
       PORT: 3000
       DATABASE_URL: postgresql://${POSTGRES_APP_USER}:${POSTGRES_APP_PASSWORD}@postgres:5432/${POSTGRES_DB}
       MIGRATION_DATABASE_URL: postgresql://${POSTGRES_OWNER_USER}:${POSTGRES_OWNER_PASSWORD}@postgres:5432/${POSTGRES_DB}
@@ -80,6 +85,11 @@ services:
       SENTRY_DSN: ${SENTRY_DSN:-}
       SENTRY_RELEASE: ${SENTRY_RELEASE:-}
       LESSON_COMPLETION_WORKER_ENABLED: ${LESSON_COMPLETION_WORKER_ENABLED:-true}
+      PLATFORM_OUTBOX_WORKER_ENABLED: ${PLATFORM_OUTBOX_WORKER_ENABLED:-true}
+      INSTALLMENT_DUE_WORKER_ENABLED: ${INSTALLMENT_DUE_WORKER_ENABLED:-true}
+      LESSON_REMINDERS_ENABLED: ${LESSON_REMINDERS_ENABLED:-true}
+      TASK_REMINDERS_ENABLED: ${TASK_REMINDERS_ENABLED:-true}
+      SCHEDULE_SERIES_AUTOEXTEND: ${SCHEDULE_SERIES_AUTOEXTEND:-true}
     volumes:
       - ../../storage:/opt/magicmusiccrm/storage
     command: sh -c "node dist/db/migrate.js up && node dist/main.js"
@@ -96,6 +106,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "10"
     networks:
       - public
       - private

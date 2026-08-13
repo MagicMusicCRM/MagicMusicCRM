@@ -1,5 +1,5 @@
 // server/src/analytics/analytics-refresh.worker.ts
-import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { DatabaseService } from "../db/database.service";
 
 const CHECK_INTERVAL_MS = 5 * 60_000;
@@ -7,13 +7,18 @@ const MATVIEWS = ["mv_finance_monthly", "mv_teacher_performance", "mv_room_load"
 
 @Injectable()
 export class AnalyticsRefreshWorker implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(AnalyticsRefreshWorker.name);
   private timer: ReturnType<typeof setInterval> | null = null;
 
   constructor(private readonly database: DatabaseService) {}
 
   onModuleInit(): void {
     this.timer = setInterval(() => {
-      void this.refreshNow().catch(() => undefined);
+      void this.refreshNow().catch((error: unknown) => {
+        this.logger.error(
+          `Analytics refresh failed: ${failureName(error)}`,
+        );
+      });
     }, CHECK_INTERVAL_MS);
     this.timer.unref?.();
   }
@@ -57,4 +62,11 @@ export class AnalyticsRefreshWorker implements OnModuleInit, OnModuleDestroy {
       throw error;
     }
   }
+}
+
+function failureName(error: unknown): string {
+  if (!(error instanceof Error)) return "unknown";
+  return `${error.constructor.name}:${error.message}`
+    .replace(/[\r\n\0]/g, " ")
+    .slice(0, 200);
 }

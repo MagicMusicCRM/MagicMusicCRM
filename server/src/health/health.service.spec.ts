@@ -152,6 +152,48 @@ describe('HealthService', () => {
     });
   });
 
+  it('returns degraded readiness instead of throwing when PostgreSQL is unavailable', async () => {
+    const service = new HealthService({
+      query: jest.fn().mockRejectedValue(new Error('connection refused'))
+    } as never, worker as never, flags as never, outboxWorker as never);
+
+    await expect(service.ready()).resolves.toMatchObject({
+      status: 'degraded',
+      checks: {
+        database: 'error',
+        migrations: 'error',
+        lessonCompletionWorker: 'ok',
+        platformOutbox: 'ok',
+        v4Rollout: 'ok'
+      },
+      latestMigrationId: null
+    });
+  });
+
+  it('returns degraded readiness when worker health probes fail', async () => {
+    const failedWorker = {
+      health: jest.fn().mockRejectedValue(new Error('worker metrics unavailable'))
+    };
+    const failedOutbox = {
+      health: jest.fn().mockRejectedValue(new Error('outbox metrics unavailable'))
+    };
+    const service = new HealthService({
+      query: jest.fn().mockResolvedValue({ rows: [{ id: '0135' }] })
+    } as never, failedWorker as never, flags as never, failedOutbox as never);
+
+    await expect(service.ready()).resolves.toMatchObject({
+      status: 'degraded',
+      checks: {
+        database: 'ok',
+        migrations: 'ok',
+        lessonCompletionWorker: 'degraded',
+        platformOutbox: 'degraded'
+      },
+      lessonCompletionWorker: { due: 0, poison: 0 },
+      platformOutbox: { pending: 0, deadLetter: 0 }
+    });
+  });
+
   it('degrades readiness when the platform outbox is stuck', async () => {
     const degradedOutbox = {
       health: jest.fn().mockResolvedValue({

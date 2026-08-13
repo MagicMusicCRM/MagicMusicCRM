@@ -216,6 +216,7 @@ function walk(root: string): string[] {
     ".dart_tool",
     ".git",
     ".idea",
+    ".tmp",
     ".vscode",
     "build",
     "dist",

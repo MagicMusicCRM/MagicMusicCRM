@@ -37,8 +37,12 @@ export const envValidationSchema = Joi.object({
   FIREBASE_PRIVATE_KEY: Joi.string().allow('').default(''),
   FIREBASE_TIMEOUT_MS: Joi.number().integer().min(100).max(30000).default(5000),
   NOTIFICATION_TOKEN_ENCRYPTION_KEY: Joi.string().allow('').default(''),
-  LESSON_REMINDERS_ENABLED: Joi.boolean().default(false),
-  TASK_REMINDERS_ENABLED: Joi.boolean().default(false),
+  LESSON_COMPLETION_WORKER_ENABLED: productionWorkerFlag(),
+  PLATFORM_OUTBOX_WORKER_ENABLED: productionWorkerFlag(),
+  INSTALLMENT_DUE_WORKER_ENABLED: productionWorkerFlag(),
+  LESSON_REMINDERS_ENABLED: productionWorkerFlag(false),
+  TASK_REMINDERS_ENABLED: productionWorkerFlag(false),
+  SCHEDULE_SERIES_AUTOEXTEND: productionWorkerFlag(),
   V4_ACCESS_MODE: Joi.when('NODE_ENV', {
     is: 'production',
     then: Joi.string().valid('v4').required(),
@@ -69,3 +73,11 @@ export const envValidationSchema = Joi.object({
   HOLLIHOP_AUTH_KEY: Joi.string().allow('').default(''),
   HOLLIHOP_TIMEOUT_MS: Joi.number().integer().min(100).max(30000).default(5000)
 });
+
+function productionWorkerFlag(nonProductionDefault = true) {
+  return Joi.when('NODE_ENV', {
+    is: 'production',
+    then: Joi.boolean().valid(true).required(),
+    otherwise: Joi.boolean().default(nonProductionDefault)
+  });
+}

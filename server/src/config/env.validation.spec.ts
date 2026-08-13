@@ -12,6 +12,12 @@ const productionV4 = {
   V4_SCHEDULE_MODE: 'v4',
   V4_SCHEDULE_KILL_SWITCH: false,
   V4_PARITY_UNEXPLAINED_DIFFS: 0,
+  LESSON_COMPLETION_WORKER_ENABLED: true,
+  PLATFORM_OUTBOX_WORKER_ENABLED: true,
+  INSTALLMENT_DUE_WORKER_ENABLED: true,
+  LESSON_REMINDERS_ENABLED: true,
+  TASK_REMINDERS_ENABLED: true,
+  SCHEDULE_SERIES_AUTOEXTEND: true,
 };
 
 describe('envValidationSchema — JWT_ACCESS_SECRET', () => {
@@ -59,6 +65,17 @@ describe('envValidationSchema — JWT_ACCESS_SECRET', () => {
         JWT_ACCESS_SECRET: STRONG_SECRET,
         ...productionV4,
         V4_SCHEDULE_MODE: 'shadow',
+      });
+      expect(error).toBeDefined();
+    });
+
+    it('не запускается с отключённым обязательным production worker', () => {
+      const { error } = envValidationSchema.validate({
+        ...baseEnv,
+        NODE_ENV: 'production',
+        JWT_ACCESS_SECRET: STRONG_SECRET,
+        ...productionV4,
+        INSTALLMENT_DUE_WORKER_ENABLED: false,
       });
       expect(error).toBeDefined();
     });

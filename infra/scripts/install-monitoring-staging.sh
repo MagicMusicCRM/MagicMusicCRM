@@ -25,7 +25,7 @@ fi
 
 cat >/etc/systemd/system/magicmusiccrm-monitor.service <<EOF
 [Unit]
-Description=MagicMusicCRM staging health monitor
+Description=MagicMusicCRM production health monitor
 After=docker.service network-online.target
 Wants=network-online.target
 
@@ -37,12 +37,13 @@ EOF
 
 cat >/etc/systemd/system/magicmusiccrm-monitor.timer <<'EOF'
 [Unit]
-Description=Run MagicMusicCRM staging health monitor every minute
+Description=Run MagicMusicCRM production health monitor every minute
 
 [Timer]
 OnBootSec=2min
 OnUnitActiveSec=1min
 AccuracySec=10s
+Persistent=true
 Unit=magicmusiccrm-monitor.service
 
 [Install]

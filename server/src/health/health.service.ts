@@ -54,7 +54,7 @@ export class HealthService {
   }
 
   async ready(): Promise<ReadinessResponse> {
-    const [result, workerHealth, outboxHealth] = await Promise.all([
+    const [databaseResult, workerResult, outboxResult] = await Promise.allSettled([
       this.database.query<{ id: string | null }>(
         `
           select id
@@ -66,15 +66,32 @@ export class HealthService {
       this.lessonCompletionWorker.health(),
       this.platformOutboxWorker.health()
     ]);
-    const latestMigrationId = result.rows[0]?.id ?? null;
+    const latestMigrationId = databaseResult.status === 'fulfilled'
+      ? databaseResult.value.rows[0]?.id ?? null
+      : null;
+    const workerHealth = workerResult.status === 'fulfilled'
+      ? workerResult.value
+      : {
+          status: 'degraded' as const,
+          metrics: emptyLessonCompletionMetrics()
+        };
+    const outboxHealth = outboxResult.status === 'fulfilled'
+      ? outboxResult.value
+      : {
+          status: 'degraded' as const,
+          metrics: emptyPlatformOutboxMetrics()
+        };
     const v4Rollout = this.v4DomainFlags.snapshot();
     const v4Blocked = v4Rollout.some(
       domain => domain.configuredMode === 'v4' && !domain.enableAllowed
     );
 
     const checks: ReadinessResponse['checks'] = {
-      database: 'ok',
-      migrations: latestMigrationId === null ? 'error' : 'ok',
+      database: databaseResult.status === 'fulfilled' ? 'ok' : 'error',
+      migrations:
+        databaseResult.status === 'fulfilled' && latestMigrationId !== null
+          ? 'ok'
+          : 'error',
       lessonCompletionWorker: workerHealth.status,
       platformOutbox: outboxHealth.status,
       v4Rollout: v4Blocked ? 'blocked' : 'ok'
@@ -91,4 +108,25 @@ export class HealthService {
       v4Rollout
     };
   }
+}
+
+function emptyLessonCompletionMetrics(): LessonCompletionWorkerMetrics {
+  return {
+    due: 0,
+    claimed: 0,
+    retry: 0,
+    poison: 0,
+    completed: 0,
+    oldestDueSeconds: null,
+    maxAttempts: 0
+  };
+}
+
+function emptyPlatformOutboxMetrics(): PlatformOutboxMetrics {
+  return {
+    pending: 0,
+    deadLetter: 0,
+    oldestDueSeconds: null,
+    maxAttempts: 0
+  };
 }

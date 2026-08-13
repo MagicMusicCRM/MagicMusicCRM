@@ -128,15 +128,19 @@ chmod 600 .monitor.env
 /opt/magicmusiccrm/infra/scripts/install-monitoring-staging.sh
 ```
 
-The monitor checks public API health, required Docker Compose services and disk
-usage. Alerts are written to:
+The monitor checks `/api/health/ready`, required Docker Compose services, disk
+usage, recent API exceptions and Caddy 5xx responses. It also checks exhausted
+email deliveries, stale report exports, failed analytics refreshes and poison
+task/installment reminders. Repeated identical failures are deduplicated.
+Alerts and preserved backend error lines are written to:
 
 ```text
 /opt/magicmusiccrm/monitoring/alerts.log
+/opt/magicmusiccrm/monitoring/backend-errors.log
 ```
 
-For staging without Telegram credentials, keep `ALERT_DRY_RUN=1` and run an
-alert drill:
+Without Telegram credentials, keep `ALERT_DRY_RUN=1`; local persistent alert
+and backend-error logs still work. Run an alert drill:
 
 ```bash
 ALERT_DRY_RUN=1 FORCE_MONITOR_FAIL=1 \

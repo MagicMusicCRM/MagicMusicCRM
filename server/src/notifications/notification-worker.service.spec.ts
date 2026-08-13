@@ -109,7 +109,7 @@ describe('NotificationWorker', () => {
 
     expect(query).toHaveBeenCalledWith(expect.stringContaining('update app.email_outbox'), [
       'outbox-a',
-      'smtp_timeout',
+      'resend:timeout|smtp_fallback:smtp_timeout',
       null
     ]);
     expect(audit.record).toHaveBeenCalledWith(
@@ -171,7 +171,7 @@ describe('NotificationWorker', () => {
     expect(query).toHaveBeenCalledWith(expect.stringContaining('eo.attempt_count < $2'), [20, 5]);
     expect(query).toHaveBeenCalledWith(expect.stringContaining('update app.email_outbox'), [
       'outbox-a',
-      'smtp_timeout',
+      'resend:timeout|smtp_fallback:smtp_timeout',
       '2 minutes'
     ]);
     expect(audit.record).not.toHaveBeenCalledWith(

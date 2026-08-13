@@ -3,6 +3,7 @@ import {
   BadRequestException,
   HttpException,
   HttpStatus,
+  ServiceUnavailableException,
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common";
@@ -237,7 +238,7 @@ export class AuthService {
     const otpRequired =
       Boolean(user.email_otp_2fa_enabled) || isManagerOrAdminRole(user.role);
     if (otpRequired && !this.isOtpBypassed(email)) {
-      await this.createOtpChallenge(user, email);
+      await this.createOtpChallenge(user, email, { requireDelivery: true });
       await this.audit.record({
         actor: { userId: user.id, role: user.role },
         action: "auth.login_email_otp_required",
@@ -760,10 +761,11 @@ export class AuthService {
   private async createOtpChallenge(
     user: UserRecord,
     email: string,
+    options: { requireDelivery?: boolean } = {},
   ): Promise<void> {
     const code = this.createOtpCode();
     const emailHash = this.emailHash(email);
-    await this.database.query(
+    const challenge = await this.database.query<{ id: string }>(
       `
         insert into app.otp_challenges (
           user_id,
@@ -773,15 +775,31 @@ export class AuthService {
           expires_at
         )
         values ($1, $2, 'email_verification', $3, now() + interval '10 minutes')
+        returning id
       `,
       [user.id, emailHash, this.otpHash(email, code)],
     );
-    await this.safeEmail(
+    const delivered = await this.safeEmail(
       user.id,
       "auth_otp",
       "Код подтверждения Magic Music",
       `Ваш код подтверждения: ${code}`,
+      options.requireDelivery === true,
     );
+    if (options.requireDelivery && !delivered) {
+      const challengeId = challenge.rows[0]?.id;
+      if (challengeId) {
+        await this.database.query(
+          `update app.otp_challenges set consumed_at = now() where id = $1`,
+          [challengeId],
+        );
+      }
+      throw new ServiceUnavailableException({
+        code: "OTP_DELIVERY_UNAVAILABLE",
+        message:
+          "Не удалось отправить код подтверждения. Попробуйте ещё раз через несколько минут.",
+      });
+    }
   }
 
   private async findUserByEmail(
@@ -918,9 +936,17 @@ export class AuthService {
     template: string,
     title: string,
     body: string,
-  ): Promise<void> {
+    requireDelivery = false,
+  ): Promise<boolean> {
     try {
-      await this.notifications.sendEmail({ userId, template, title, body });
+      const result = await this.notifications.sendEmail({
+        userId,
+        template,
+        title,
+        body,
+        deliveryMode: requireDelivery ? "required" : "queued",
+      });
+      return result.queued && (!requireDelivery || result.delivered);
     } catch {
       await this.audit.record({
         actor: { userId, role: "client" },
@@ -929,6 +955,7 @@ export class AuthService {
         entityId: userId,
         metadata: { template },
       });
+      return false;
     }
   }
 }

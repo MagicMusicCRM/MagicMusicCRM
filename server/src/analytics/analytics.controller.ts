@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Post,
   Query,
   Res,
@@ -86,7 +87,7 @@ export class AnalyticsController {
   @Get("v4/exports/:jobId")
   exportJob(
     @CurrentActor() actor: ActorContext,
-    @Param("jobId") jobId: string,
+    @Param("jobId", ParseUUIDPipe) jobId: string,
   ) {
     return this.exports.getJob(actor, jobId);
   }
@@ -94,7 +95,7 @@ export class AnalyticsController {
   @Get("v4/exports/:jobId/download")
   async downloadExport(
     @CurrentActor() actor: ActorContext,
-    @Param("jobId") jobId: string,
+    @Param("jobId", ParseUUIDPipe) jobId: string,
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.exports.download(actor, jobId);

@@ -1,4 +1,4 @@
-import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import { DatabaseService } from '../db/database.service';
 import { ResendEmailProvider, SmtpFallbackEmailProvider } from './notification-email.provider';
@@ -33,9 +33,15 @@ interface DeviceTokenRow {
   encrypted_token: string | null;
 }
 
+export interface EmailDispatchResult {
+  processed: boolean;
+  status: 'sent' | 'retry' | 'failed' | 'busy';
+}
+
 @Injectable()
 export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
   private static readonly emailRetryLimit = 5;
+  private readonly logger = new Logger(NotificationWorker.name);
   private emailTimer?: NodeJS.Timeout;
   private pushTimer?: NodeJS.Timeout;
 
@@ -50,14 +56,18 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit(): void {
     this.emailTimer = setInterval(() => {
-      void this.dispatchPendingEmails().catch(() => undefined);
+      void this.dispatchPendingEmails().catch((error: unknown) => {
+        this.logger.error(`Email outbox tick failed: ${this.errorSummary(error)}`);
+      });
     }, 30_000);
     this.emailTimer.unref?.();
     // Push deliveries also need a periodic drain — otherwise anything enqueued
     // (e.g. lesson reminders) sits in 'queued' forever until an unrelated send
     // happens to flush the queue.
     this.pushTimer = setInterval(() => {
-      void this.dispatchPendingPush().catch(() => undefined);
+      void this.dispatchPendingPush().catch((error: unknown) => {
+        this.logger.error(`Push outbox tick failed: ${this.errorSummary(error)}`);
+      });
     }, 30_000);
     this.pushTimer.unref?.();
   }
@@ -85,36 +95,53 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
     let processed = 0;
     let failed = 0;
     for (const candidate of candidates.rows) {
-      // Atomically claim the row by pushing next_attempt_at into the future —
-      // overlapping drains (30s timer + on-enqueue trigger) then can't pick
-      // the same row, so an OTP/reset email is never sent twice. If the
-      // process dies mid-send the claim expires and the row retries.
-      const claimed = await this.database.query<OutboxRow>(
-        `
-          update app.email_outbox eo
-          set next_attempt_at = now() + interval '5 minutes', updated_at = now()
-          from app.users u
-          where eo.id = $1
-            and u.id = eo.user_id and u.deleted_at is null
-            and eo.status in ('queued', 'failed')
-            and eo.next_attempt_at <= now()
-          returning eo.id, eo.user_id, u.email, eo.template, eo.payload, eo.attempt_count
-        `,
-        [candidate.id]
-      );
-      const item = claimed.rows[0];
-      if (!item) continue;
+      const result = await this.dispatchEmailById(candidate.id);
+      if (!result.processed) continue;
       processed += 1;
-      try {
-        const delivered = await this.dispatchEmail(item);
-        if (!delivered) failed += 1;
-      } catch (error) {
-        failed += 1;
-        await this.markOutboxFailure(item, this.errorName(error));
-        await this.recordDispatchFailure(item, error);
-      }
+      if (result.status !== 'sent') failed += 1;
+    }
+    if (failed > 0) {
+      this.logger.warn(`Email outbox attempts failed: ${failed}/${processed}`);
     }
     return { processed, failed };
+  }
+
+  async dispatchEmailById(id: string): Promise<EmailDispatchResult> {
+    const item = await this.claimEmail(id);
+    if (!item) return { processed: false, status: 'busy' };
+    try {
+      const delivered = await this.dispatchEmail(item);
+      return {
+        processed: true,
+        status: delivered
+          ? 'sent'
+          : this.canRetryEmail(item)
+            ? 'retry'
+            : 'failed'
+      };
+    } catch (error) {
+      await this.markOutboxFailure(item, this.errorSummary(error));
+      await this.recordDispatchFailure(item, error);
+      return {
+        processed: true,
+        status: this.canRetryEmail(item) ? 'retry' : 'failed'
+      };
+    }
+  }
+
+  async exhaustEmail(id: string, reason: string): Promise<void> {
+    await this.database.query(
+      `
+        update app.email_outbox
+        set status = 'failed',
+            attempt_count = greatest(attempt_count, $2),
+            last_error = $3,
+            next_attempt_at = now(),
+            updated_at = now()
+        where id = $1 and status <> 'sent'
+      `,
+      [id, NotificationWorker.emailRetryLimit, reason.slice(0, 160)]
+    );
   }
 
   async dispatchPendingPush(limit = 50): Promise<{ processed: number; failed: number }> {
@@ -168,7 +195,30 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
         await this.recordPushFailure(delivery, error);
       }
     }
+    if (failed > 0) {
+      this.logger.warn(`Push outbox attempts failed: ${failed}/${processed}`);
+    }
     return { processed, failed };
+  }
+
+  private async claimEmail(id: string): Promise<OutboxRow | undefined> {
+    // Atomically claim the row by pushing next_attempt_at into the future —
+    // overlapping drains (periodic loop + immediate auth delivery) cannot send
+    // the same OTP twice. If the process dies mid-send the lease expires.
+    const claimed = await this.database.query<OutboxRow>(
+      `
+        update app.email_outbox eo
+        set next_attempt_at = now() + interval '5 minutes', updated_at = now()
+        from app.users u
+        where eo.id = $1
+          and u.id = eo.user_id and u.deleted_at is null
+          and eo.status in ('queued', 'failed')
+          and eo.next_attempt_at <= now()
+        returning eo.id, eo.user_id, u.email, eo.template, eo.payload, eo.attempt_count
+      `,
+      [id]
+    );
+    return claimed.rows[0];
   }
 
   private async dispatchEmail(item: OutboxRow): Promise<boolean> {
@@ -197,7 +247,12 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
       return true;
     }
 
-    const lastError = fallback.error ?? primary.error ?? 'provider_failed';
+    const lastError = [primary, fallback]
+      .map((result) =>
+        `${result.provider}:${result.error ?? result.status}`
+      )
+      .join('|')
+      .slice(0, 160);
     await this.markOutboxFailure(item, lastError);
     if (!this.canRetryEmail(item)) {
       await this.audit.record({
@@ -460,6 +515,13 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
 
   private errorName(error: unknown): string {
     return error instanceof Error && error.name ? error.name.slice(0, 80) : 'dispatch_failed';
+  }
+
+  private errorSummary(error: unknown): string {
+    if (!(error instanceof Error)) return 'dispatch_failed';
+    return `${error.constructor.name}:${error.message}`
+      .replace(/[\r\n\0]/g, ' ')
+      .slice(0, 160);
   }
 
   private canRetryEmail(item: OutboxRow): boolean {

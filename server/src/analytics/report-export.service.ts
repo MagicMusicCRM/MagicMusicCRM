@@ -1,6 +1,12 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleDestroy,
+  OnModuleInit,
+} from "@nestjs/common";
 import { randomUUID } from "crypto";
-import { ActorContext } from "../common/security/actor-context";
+import { ActorContext, UserRole } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 import { AuditService } from "../audit/audit.service";
 import {
@@ -59,7 +65,12 @@ export type ReportExportRequestResult =
     };
 
 @Injectable()
-export class ReportExportService {
+export class ReportExportService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(ReportExportService.name);
+  private workerTimer?: ReturnType<typeof setInterval>;
+  private startupTimer?: ReturnType<typeof setTimeout>;
+  private workerRunning = false;
+
   constructor(
     private readonly database: DatabaseService,
     private readonly clientStatus: ClientStatusReadService,
@@ -67,6 +78,25 @@ export class ReportExportService {
     private readonly workbook: OoxmlWorkbookBuilder,
     private readonly audit: AuditService,
   ) {}
+
+  onModuleInit(): void {
+    const tick = () => {
+      void this.drainQueuedJobs().catch((error: unknown) => {
+        this.logger.error(
+          `Report export worker tick failed: ${failureName(error)}`,
+        );
+      });
+    };
+    this.startupTimer = setTimeout(tick, 1_000);
+    this.startupTimer.unref?.();
+    this.workerTimer = setInterval(tick, 5_000);
+    this.workerTimer.unref?.();
+  }
+
+  onModuleDestroy(): void {
+    if (this.startupTimer) clearTimeout(this.startupTimer);
+    if (this.workerTimer) clearInterval(this.workerTimer);
+  }
 
   async request(
     actor: ActorContext,
@@ -104,7 +134,11 @@ export class ReportExportService {
       ],
     );
     setImmediate(() => {
-      void this.processJob(id, actor, dto, rowCount);
+      void this.processJob(id, actor, dto, rowCount).catch((error: unknown) => {
+        this.logger.error(
+          `Report export ${id} could not be claimed: ${failureName(error)}`,
+        );
+      });
     });
     return {
       mode,
@@ -180,7 +214,10 @@ export class ReportExportService {
            set status = 'processing',
                started_at = now()
          where id = $1
-           and status = 'queued'
+           and (
+             status = 'queued'
+             or (status = 'processing' and started_at < now() - interval '15 minutes')
+           )
          returning id
       `,
       [jobId],
@@ -201,17 +238,72 @@ export class ReportExportService {
         [jobId, built.filename, built.mimeType, built.content],
       );
       await this.recordAudit(actor, dto, rowCount, "async");
-    } catch {
-      await this.database.query(
-        `
-          update app.report_export_jobs
-             set status = 'failed',
-                 error_code = 'REPORT_EXPORT_BUILD_FAILED',
-                 completed_at = now()
-           where id = $1
-        `,
-        [jobId],
+    } catch (error) {
+      this.logger.error(
+        `Report export ${jobId} failed: ${failureName(error)}`,
       );
+      try {
+        await this.database.query(
+          `
+            update app.report_export_jobs
+               set status = 'failed',
+                   error_code = 'REPORT_EXPORT_BUILD_FAILED',
+                   completed_at = now()
+             where id = $1
+          `,
+          [jobId],
+        );
+      } catch (persistError) {
+        this.logger.error(
+          `Report export ${jobId} failure state was not persisted: ${failureName(persistError)}`,
+        );
+      }
+    }
+  }
+
+  private async drainQueuedJobs(): Promise<void> {
+    if (this.workerRunning) return;
+    this.workerRunning = true;
+    try {
+      const queued = await this.database.query<{
+        id: string;
+        actor_user_id: string;
+        role: UserRole;
+        filter_spec: ReportExportRequestDto;
+        row_count: number;
+      }>(
+        `
+          select job.id, job.actor_user_id, app_user.role,
+                 job.filter_spec, job.row_count
+          from app.report_export_jobs job
+          join app.users app_user
+            on app_user.id = job.actor_user_id
+           and app_user.deleted_at is null
+          where job.status = 'queued'
+             or (
+               job.status = 'processing'
+               and job.started_at < now() - interval '15 minutes'
+             )
+          order by job.created_at asc
+          limit 5
+        `,
+      );
+      for (const job of queued.rows) {
+        try {
+          await this.processJob(
+            job.id,
+            { userId: job.actor_user_id, role: job.role },
+            job.filter_spec,
+            Number(job.row_count),
+          );
+        } catch (error) {
+          this.logger.error(
+            `Report export ${job.id} claim failed: ${failureName(error)}`,
+          );
+        }
+      }
+    } finally {
+      this.workerRunning = false;
     }
   }
 
@@ -414,4 +506,9 @@ export class ReportExportService {
       },
     });
   }
+}
+
+function failureName(error: unknown): string {
+  if (!(error instanceof Error)) return "unknown";
+  return `${error.constructor.name}:${error.message}`.slice(0, 240);
 }

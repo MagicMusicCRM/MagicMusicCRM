@@ -20,8 +20,13 @@ describe('NotificationsService', () => {
     } as unknown as jest.Mocked<Pick<AuditService, 'record'>>;
     const worker = {
       dispatchPendingEmails: jest.fn().mockResolvedValue({ processed: 0, failed: 0 }),
-      dispatchPendingPush: jest.fn().mockResolvedValue({ processed: 0, failed: 0 })
-    } as unknown as jest.Mocked<Pick<NotificationWorker, 'dispatchPendingEmails' | 'dispatchPendingPush'>>;
+      dispatchPendingPush: jest.fn().mockResolvedValue({ processed: 0, failed: 0 }),
+      dispatchEmailById: jest.fn().mockResolvedValue({ processed: true, status: 'sent' }),
+      exhaustEmail: jest.fn().mockResolvedValue(undefined)
+    } as unknown as jest.Mocked<Pick<
+      NotificationWorker,
+      'dispatchPendingEmails' | 'dispatchPendingPush' | 'dispatchEmailById' | 'exhaustEmail'
+    >>;
     const tokenCrypto = {
       hash: jest.fn((token: string) => `hash-${token}`),
       encrypt: jest.fn((token: string) => `encrypted-${token}`)
@@ -36,6 +41,75 @@ describe('NotificationsService', () => {
     );
     return { service, database, audit, worker, tokenCrypto };
   }
+
+  it('waits for required OTP delivery and reports success only after a provider sends it', async () => {
+    const { service, database, worker } = createService();
+    database.query
+      .mockResolvedValueOnce({ rows: [{ email: 'user@example.com' }] } as never)
+      .mockResolvedValueOnce({ rows: [{ id: 'outbox-a' }] } as never);
+
+    await expect(
+      service.sendEmail({
+        userId: 'user-a',
+        template: 'auth_otp',
+        title: 'Код',
+        body: '123456',
+        deliveryMode: 'required'
+      })
+    ).resolves.toEqual({ queued: true, delivered: true });
+
+    expect(worker.dispatchEmailById).toHaveBeenCalledWith('outbox-a');
+    expect(worker.exhaustEmail).not.toHaveBeenCalled();
+  });
+
+  it('stops retries when required OTP delivery fails', async () => {
+    const { service, database, worker } = createService();
+    database.query
+      .mockResolvedValueOnce({ rows: [{ email: 'user@example.com' }] } as never)
+      .mockResolvedValueOnce({ rows: [{ id: 'outbox-a' }] } as never);
+    worker.dispatchEmailById.mockResolvedValueOnce({
+      processed: true,
+      status: 'retry'
+    });
+
+    await expect(
+      service.sendEmail({
+        userId: 'user-a',
+        template: 'auth_otp',
+        title: 'Код',
+        body: '123456',
+        deliveryMode: 'required'
+      })
+    ).resolves.toEqual({ queued: true, delivered: false });
+
+    expect(worker.exhaustEmail).toHaveBeenCalledWith(
+      'outbox-a',
+      'required_delivery_failed'
+    );
+  });
+
+  it('contains an immediate OTP worker error and exhausts the exact outbox row', async () => {
+    const { service, database, worker } = createService();
+    database.query
+      .mockResolvedValueOnce({ rows: [{ email: 'user@example.com' }] } as never)
+      .mockResolvedValueOnce({ rows: [{ id: 'outbox-a' }] } as never);
+    worker.dispatchEmailById.mockRejectedValueOnce(new Error('provider timeout'));
+
+    await expect(
+      service.sendEmail({
+        userId: 'user-a',
+        template: 'auth_otp',
+        title: 'Код',
+        body: '123456',
+        deliveryMode: 'required'
+      })
+    ).resolves.toEqual({ queued: true, delivered: false });
+
+    expect(worker.exhaustEmail).toHaveBeenCalledWith(
+      'outbox-a',
+      'required_delivery_error'
+    );
+  });
 
   it('marks only current actor notification recipient as read', async () => {
     const { service, database } = createService();

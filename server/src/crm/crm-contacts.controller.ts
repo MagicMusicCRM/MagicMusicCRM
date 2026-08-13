@@ -19,6 +19,7 @@ import { LeadIntakeService } from "./lead-intake.service";
 import { SaveContactFromChatDto } from "./dto/save-contact-from-chat.dto";
 import { CreateFamilyDto } from "./dto/create-family.dto";
 import { AddFamilyMemberDto } from "./dto/add-family-member.dto";
+import { LinkUserToClientDto } from "./dto/link-user-to-client.dto";
 
 @UseGuards(JwtAuthGuard)
 @Controller("crm")
@@ -121,7 +122,7 @@ export class CrmContactsController {
     @CurrentActor() actor: ActorContext,
     @Param("entityType") entityType: string,
     @Param("entityId", ParseUUIDPipe) entityId: string,
-    @Body() dto: { userId: string },
+    @Body() dto: LinkUserToClientDto,
   ) {
     return this.clientLinking.linkUserToClient(actor, entityType, entityId, dto.userId);
   }
