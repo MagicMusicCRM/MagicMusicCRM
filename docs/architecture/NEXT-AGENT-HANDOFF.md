@@ -1,11 +1,23 @@
 # MagicMusicCRM — актуальная передача
 
 > Обновлено: 2026-08-14
-> Production: client `1.5.10+190`, server `765a10a9`,
-> image `sha256:5590b6c5…`, migration `0136`
+> Production: client `1.5.11+191`, server `bcb26f36`,
+> image `sha256:3e07755c…`, migration `0137`
 > Рабочая ветка: `codex/v7-production-readiness`
-> Статус: production rollout `1.5.10+190` PASS;
+> Статус: production rollout `1.5.11+191` PASS;
 > owner mega-UAT не завершён
+
+Release `1.5.11+191` доставил единый Schedule Analyzer для постоянных планов и
+одиночных занятий: проверки teacher/room/student/group/branch, группировку
+конфликтов, ранжированные room/time/teacher/combined предложения и Conflict
+Inspector в форме. Отдельный редактор предпочтений убран, «План постоянного
+расписания» сохранён и доработан. Миграция `0137` добавила PostgreSQL exclusion
+защиту бронирований teacher/room/student/group. Flutter `805/805`, backend
+`185/185` suites / `1452/1452`, exact image/security, pre/post encrypted
+off-host restore, rollback compatibility, readiness, двойной reconciliation и
+public downloads PASS. Оба manifest переключены на build `191`, GitHub Release
+`v1.5.11` опубликован. Evidence:
+`docs/audits/v7-production-schedule-analyzer-191.md`.
 
 Release `1.5.10+190` выпустил управляемое чтение актуальных login email и
 пароля Staff/Teacher только для Director/system_admin. Вход остаётся на
@@ -420,12 +432,12 @@ guard `132/132`. Unknown capability и resource mismatch fail-closed; evidence:
 `docs/audits/v7-owner-mega-uat-evidence/UAT-133.md`. Остался production owner
 negative-request trace.
 
-`UAT-070` локально переведён из `PENDING` в `PARTIAL`: предпочтительное
-расписание проходит typed save и обязательный read-after-write, а фактическое
-занятие видно как при пустых предпочтениях/Plan, так и после сохранения новой
-series. Widget `28/28`, backend schedule/controller `60/60`, тёмный Windows
-device `1/1`; два локальных evidence-кадра сохранены. Production UI/API/DB-
-подтверждение ещё не выполнялось.
+Прежний сценарий `UAT-070` для сохранения `preferredSchedule` superseded прямым
+решением владельца от `2026-08-14`: отдельный редактор предпочтений больше не
+является продуктовой поверхностью. Его совместимый read/history-контракт не
+удалён, но новый owner-UAT должен проверять отсутствие legacy-редактора,
+Schedule Plan как единственный путь постоянного расписания и независимую
+видимость фактических Lesson.
 
 `UAT-071` локально переведён из `PENDING` в `PARTIAL`: один индивидуальный Plan
 атомарно создаёт три series, где два дня используют общих преподавателя и
@@ -751,8 +763,9 @@ Windows/PostgreSQL тестами. Production не изменялся; `UAT-111`
    доказательствами и проверкой отсутствия новых occurrence после последней даты.
 7. Пройти production owner-UAT `UAT-075` для cursor tray и authoritative
    markers с UI/API/DB-доказательствами.
-8. Пройти production owner-UAT `UAT-070` для save/readback предпочтений и
-   независимой видимости фактических Lesson с UI/API/DB-доказательствами.
+8. Обновить и пройти production owner-UAT `UAT-070`: legacy-редактор
+   предпочтений не монтируется, Schedule Plan создаётся через единый analyzer,
+   а фактические Lesson независимо видны; собрать UI/API/DB-доказательства.
 9. Пройти production owner-UAT `UAT-071` для многодневного индивидуального
    Plan с общими и разными teacher/room строками и UI/API/DB-доказательствами.
 10. Пройти production owner-UAT `UAT-076` для Month/Week/Day client-target
