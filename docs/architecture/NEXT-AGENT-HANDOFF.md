@@ -1,11 +1,21 @@
 # MagicMusicCRM — актуальная передача
 
 > Обновлено: 2026-08-14
-> Production: client `1.5.7+187`, server `23688482`,
+> Production: client `1.5.8+188`, server `23688482`,
 > image `sha256:5b2f5c3b…`, migration `0135`
 > Рабочая ветка: `codex/v7-production-readiness`
-> Статус: production/client rollout `1.5.7+187` PASS;
+> Статус: production/client rollout `1.5.8+188` PASS;
 > owner mega-UAT не завершён
+
+Client-only release `1.5.8+188` исправил сохранение карточек Staff/Teacher без
+созданного доступа: обычное изменение данных больше не требует email/пароль и
+не пытается неявно создать аккаунт. Full Flutter gate `799/799`, analyze,
+Windows portable/Setup, Android API 35 update/cold launch, подписи и публичные
+SHA-256 прошли PASS. Оба update manifest переключены на build `188`, GitHub
+Release `v1.5.8` опубликован; production server остался на healthy revision
+`23688482`, reconciliation вернула `0` issues. До публикации создан encrypted
+off-host backup и snapshot manifests для rollback. Evidence:
+`docs/audits/v7-production-client-rollout-188.md`.
 
 Server hardening `23688482` закрыл найденные backend/infra источники 500 и
 невидимых фоновых сбоев: UUID валидируются до PostgreSQL, readiness деградирует
