@@ -2,7 +2,7 @@
 param(
   [string]$DatabaseName = "magiccrm_v7_prodlike_gate",
   [int]$Port = 3107,
-  [string]$ExpectedMigrationId = "0136_managed_password_recovery"
+  [string]$ExpectedMigrationId = "0137_lesson_resource_bookings"
 )
 
 $ErrorActionPreference = "Stop"

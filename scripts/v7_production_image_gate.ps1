@@ -5,7 +5,7 @@ param(
   [int]$HealthyPort = 3108,
   [int]$DegradedPort = 3109,
   [Parameter(Mandatory)][string]$ExpectedRevision,
-  [string]$ExpectedMigrationId = "0136_managed_password_recovery"
+  [string]$ExpectedMigrationId = "0137_lesson_resource_bookings"
 )
 
 $ErrorActionPreference = "Stop"
