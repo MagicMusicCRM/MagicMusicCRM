@@ -236,7 +236,6 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
             firstName: _firstNameController.text,
             lastName: _lastNameController.text,
             phone: _canonicalPhone,
-            email: _emailController.text,
             position: _positionController.text,
             status: _status,
             branchIds: _branchIds.toList(),
@@ -540,7 +539,9 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
       if (passwordChanged != null && passwordChanged.isNotEmpty)
         'пароль обновлён ${_shortDate(passwordChanged)}',
     ];
-    return parts.isEmpty ? 'Доступ ещё не создан' : parts.join(' · ');
+    return parts.isEmpty
+        ? 'Доступ не создан — карточку можно сохранять без него'
+        : parts.join(' · ');
   }
 
   String _shortDate(String value) {

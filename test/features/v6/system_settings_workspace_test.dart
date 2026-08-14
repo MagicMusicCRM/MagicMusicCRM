@@ -233,6 +233,24 @@ class SettingsTestApi extends MagicApiClient {
     }
     throw StateError('Unexpected PUT $path');
   }
+
+  @override
+  Future<T> patch<T>(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) async {
+    if (path.startsWith('/crm/staff/') || path.startsWith('/crm/teachers/')) {
+      mutations[path] = data;
+      return <String, dynamic>{
+            'id': path.split('/').last,
+            ...Map<String, dynamic>.from(data! as Map),
+          }
+          as T;
+    }
+    throw StateError('Unexpected PATCH $path');
+  }
 }
 
 Future<void> _pump(
@@ -937,4 +955,107 @@ void main() {
 
     expect(api.mutations, contains('/crm/staff/legacy-staff/access'));
   });
+
+  testWidgets(
+    'staff card without access saves profile data without credentials',
+    (tester) async {
+      final api = SettingsTestApi(
+        role: 'director',
+        capabilities: const ['system.settings.manage', 'crm.client.write'],
+        staff: const [
+          {
+            'id': 'staff-without-access',
+            'role': 'admin',
+            'status': 'working',
+            'firstName': 'Ольга',
+            'lastName': 'Смирнова',
+            'email': null,
+            'isAppAccount': false,
+            'branches': [
+              {'id': '20000000-0000-4000-8000-000000000001', 'name': 'Сокол'},
+            ],
+          },
+        ],
+      );
+      await _pump(tester, api, initialArea: 'users');
+      await tester.tap(find.text('Сотрудники').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Смирнова Ольга'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Доступ не создан — карточку можно сохранять без него'),
+        findsOneWidget,
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Должность'),
+        'Старший администратор',
+      );
+      final save = find.widgetWithText(FilledButton, 'Сохранить');
+      await tester.ensureVisible(save);
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+
+      final payload = Map<String, dynamic>.from(
+        api.mutations['/crm/staff/staff-without-access']! as Map,
+      );
+      expect(payload['position'], 'Старший администратор');
+      expect(payload, isNot(contains('email')));
+      expect(
+        api.mutations,
+        isNot(contains('/crm/staff/staff-without-access/access')),
+      );
+    },
+  );
+
+  testWidgets(
+    'teacher card without access saves profile data without credentials',
+    (tester) async {
+      final api = SettingsTestApi(
+        role: 'director',
+        capabilities: const ['system.settings.manage', 'crm.client.write'],
+        teachers: const [
+          {
+            'id': 'teacher-without-access',
+            'status': 'active',
+            'firstName': 'Мария',
+            'lastName': 'Петрова',
+            'email': null,
+            'isAppAccount': false,
+            'assignedBranches': [
+              {'id': '20000000-0000-4000-8000-000000000001', 'name': 'Сокол'},
+            ],
+          },
+        ],
+      );
+      await _pump(tester, api, initialArea: 'users');
+      await tester.tap(find.text('Преподаватели').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Мария Петрова'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Доступ не создан — карточку можно сохранять без него'),
+        findsOneWidget,
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Имя Фамилия'),
+        'Марина Петрова',
+      );
+      final save = find.widgetWithText(FilledButton, 'Сохранить').last;
+      await tester.ensureVisible(save);
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+
+      final payload = Map<String, dynamic>.from(
+        api.mutations['/crm/teachers/teacher-without-access']! as Map,
+      );
+      expect(payload['firstName'], 'Марина');
+      expect(payload, isNot(contains('email')));
+      expect(
+        api.mutations,
+        isNot(contains('/crm/teachers/teacher-without-access/access')),
+      );
+    },
+  );
 }

@@ -256,7 +256,6 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
         firstName: fn,
         lastName: ln,
         phone: _canonicalPhone,
-        email: _emailController.text,
         customDataPatch: employment.customDataPatch,
         salary: employment.salaryChanged ? employment.salary : null,
         disciplineIds: employment.disciplineIds,
@@ -1138,7 +1137,9 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
       if (passwordChanged != null && passwordChanged.isNotEmpty)
         'пароль обновлён ${_shortDate(passwordChanged)}',
     ];
-    return parts.isEmpty ? 'Доступ ещё не создан' : parts.join(' · ');
+    return parts.isEmpty
+        ? 'Доступ не создан — карточку можно сохранять без него'
+        : parts.join(' · ');
   }
 
   String _shortDate(String value) {
