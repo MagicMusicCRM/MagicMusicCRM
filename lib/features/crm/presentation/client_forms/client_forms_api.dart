@@ -32,7 +32,19 @@ class ClientFormsApi {
         'includeArchived': includeArchived,
       },
     );
-    return _items(response);
+    // The canonical backend stores one field definition with lead/student
+    // visibility flags, so current responses no longer carry the legacy
+    // `entityType` discriminator. The caller still requests one projection at
+    // a time; preserve that projection on the client boundary so card code can
+    // distinguish lead and student copies while remaining compatible with an
+    // older server that still returns `entityType` explicitly.
+    return [
+      for (final item in _items(response))
+        if (item['entityType'] == null)
+          {...item, 'entityType': entityType}
+        else
+          item,
+    ];
   }
 
   Future<List<Map<String, dynamic>>> listBranches() async {
