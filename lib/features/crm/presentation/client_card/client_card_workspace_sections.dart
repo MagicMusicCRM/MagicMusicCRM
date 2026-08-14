@@ -453,9 +453,6 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
             lessons: const [],
             branches: _branches,
             defaultBranchId: _clientBranchId,
-            legacyPreference: _customDataForEntity(
-              'leads',
-            )['preferredSchedule']?.toString(),
             canWrite: canWriteSchedule,
             onChanged: () {},
           ),

@@ -80,7 +80,7 @@ export class LessonCommandService {
     this.policy.assertCanWriteCrm(actor);
     const startAt = new Date(dto.scheduledAt);
     const endAt = new Date(startAt.getTime() + dto.durationMinutes * 60_000);
-    return this.constraints.validate({
+    return this.constraints.analyze({
       clientRef: dto.clientRef,
       teacherId: dto.teacherId,
       branchId: dto.branchId,

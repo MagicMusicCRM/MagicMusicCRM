@@ -15,6 +15,7 @@ import { UpsertLessonDto } from "../dto/upsert-lesson.dto";
 import { ScheduleConstraintEngine } from "./constraint-engine.service";
 import { ConstraintViolation } from "./constraint-engine.types";
 import type { LessonCommandMetadata } from "./lesson-command.service";
+import type { ScheduleSuggestion } from "./schedule-analyzer";
 import { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
 import {
   CompleteLessonDraft,
@@ -44,6 +45,7 @@ export interface SchedulePlanRowConstraintPreview {
     studentId: string;
     violations: ConstraintViolation[];
   }>;
+  suggestions: ScheduleSuggestion[];
 }
 
 @Injectable()
@@ -185,7 +187,10 @@ export class LessonSeriesCommandService {
     validFrom: string,
     validUntil: string | null,
     studentIds: string[],
-    options: { excludeScheduleSeriesIds?: string[] } = {},
+    options: {
+      excludeScheduleSeriesIds?: string[];
+      includeSuggestions?: boolean;
+    } = {},
   ): Promise<SchedulePlanRowConstraintPreview> {
     const dto = Object.assign(new CreateScheduleSeriesDto(), {
       teacherId: row.teacherId,
@@ -225,7 +230,23 @@ export class LessonSeriesCommandService {
         }
       }
     }
-    return { occurrences: validationOccurrences, failures };
+    const suggestions = options.includeSuggestions && failures[0]
+      ? await this.constraints
+          .analyze(
+            {
+              clientRef: { type: "student", id: failures[0].studentId },
+              teacherId: row.teacherId,
+              branchId: row.branchId,
+              roomId: row.roomId,
+              startAt: failures[0].occurrence.startAt,
+              endAt: failures[0].occurrence.endAt,
+              excludeScheduleSeriesIds: options.excludeScheduleSeriesIds,
+            },
+            client,
+          )
+          .then((analysis) => analysis.suggestions)
+      : [];
+    return { occurrences: validationOccurrences, failures, suggestions };
   }
 
   private async firstPlanOccurrence(

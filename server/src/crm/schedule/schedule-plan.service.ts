@@ -27,6 +27,7 @@ import {
 import { ScheduleService } from "../schedule.service";
 import type { LessonCommandMetadata } from "./lesson-command.service";
 import { LessonSeriesCommandService } from "./lesson-series-command.service";
+import { groupScheduleConflicts } from "./schedule-analyzer";
 import { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
 import {
   LockedSchedulePlan,
@@ -90,17 +91,34 @@ export class SchedulePlanService {
             normalized.activeFrom,
             normalized.activeUntil,
             studentIds,
+            { includeSuggestions: true },
           )),
         });
       }
       this.addCrossRowViolations(normalized.rows, rows, studentIds);
+      const conflicts = groupScheduleConflicts(
+        rows.flatMap((row) =>
+          row.failures.flatMap((failure) =>
+            failure.violations.map((violation) => ({
+              violation,
+              scope: {
+                rowIndex: row.index,
+                studentId: failure.studentId,
+                localDate: failure.occurrence.localDate,
+              },
+            })),
+          ),
+        ),
+      );
       return {
         valid: rows.every((row) => row.failures.length === 0),
+        conflicts,
         rows: rows.map((row) => ({
           index: row.index,
           valid: row.failures.length === 0,
           occurrencesChecked: row.occurrences.length,
           failures: row.failures,
+          suggestions: row.suggestions,
         })),
       };
     });
@@ -133,18 +151,34 @@ export class SchedulePlanService {
             prepared.effectiveFrom,
             prepared.activeUntil,
             prepared.studentIds,
-            { excludeScheduleSeriesIds },
+            { excludeScheduleSeriesIds, includeSuggestions: true },
           )),
         });
       }
       this.addCrossRowViolations(dto.rows, rows, prepared.studentIds);
+      const conflicts = groupScheduleConflicts(
+        rows.flatMap((row) =>
+          row.failures.flatMap((failure) =>
+            failure.violations.map((violation) => ({
+              violation,
+              scope: {
+                rowIndex: row.index,
+                studentId: failure.studentId,
+                localDate: failure.occurrence.localDate,
+              },
+            })),
+          ),
+        ),
+      );
       return {
         valid: rows.every((row) => row.failures.length === 0),
+        conflicts,
         rows: rows.map((row) => ({
           index: row.index,
           valid: row.failures.length === 0,
           occurrencesChecked: row.occurrences.length,
           failures: row.failures,
+          suggestions: row.suggestions,
         })),
       };
     });

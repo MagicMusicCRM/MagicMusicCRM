@@ -988,8 +988,9 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       await pool.query(
         `update app.lessons
             set scheduled_at = date_trunc('minute', now()) + interval '1 day'
+              + case when id = $2 then interval '1 hour' else interval '0' end
           where id = any($1::uuid[])`,
-        [[sourceLessonId, successorLessonId]],
+        [[sourceLessonId, successorLessonId], successorLessonId],
       );
       await pool.query(
         "update app.lessons set successor_id = $2 where id = $1",

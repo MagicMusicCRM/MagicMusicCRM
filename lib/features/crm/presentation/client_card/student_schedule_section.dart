@@ -1,26 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
-import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 
-import 'preferred_schedule_editor.dart';
 import 'recurring_schedule_plan_section.dart';
 
-/// KVA-236: «График занятий» в карточке ученика — серии постоянного
-/// расписания (UX HolliHop image2/3: строка «день · время · педагог ·
-/// аудитория · период» с карандашом) + лента дат-квадратиков (прошедшие
-/// серые, будущие зелёные, пропуски тёмные с красным уголком; tooltip со
-/// статусом и заметкой).
-class StudentScheduleSection extends ConsumerStatefulWidget {
+/// Canonical schedule surface in the client card.
+///
+/// Students use atomic recurring Schedule Plans. Leads only retain the lesson
+/// date tray; the legacy preference-series editor is intentionally not mounted.
+class StudentScheduleSection extends StatefulWidget {
   final String clientType;
   final String clientId;
   final List<Map<String, dynamic>> lessons;
   final List<Map<String, dynamic>> branches;
   final String? defaultBranchId;
-  final String? legacyPreference;
   final List<Map<String, dynamic>> subscriptions;
   final bool canWrite;
   final VoidCallback onChanged;
@@ -34,167 +28,34 @@ class StudentScheduleSection extends ConsumerStatefulWidget {
     required this.branches,
     required this.defaultBranchId,
     required this.canWrite,
-    this.legacyPreference,
     this.subscriptions = const [],
     required this.onChanged,
     this.onOpenLesson,
   });
 
   @override
-  ConsumerState<StudentScheduleSection> createState() =>
-      _StudentScheduleSectionState();
+  State<StudentScheduleSection> createState() => _StudentScheduleSectionState();
 }
 
-class _StudentScheduleSectionState
-    extends ConsumerState<StudentScheduleSection> {
-  static const _weekdays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
-  int _refreshKey = 0;
-  // Cached so parent rebuilds don't re-fire the API call: a FutureBuilder
-  // given a fresh future instance restarts on every build.
-  late Future<List<Map<String, dynamic>>> _seriesFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _seriesFuture = _loadSeries();
-  }
-
-  @override
-  void didUpdateWidget(covariant StudentScheduleSection oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.clientType != widget.clientType ||
-        oldWidget.clientId != widget.clientId) {
-      _seriesFuture = _loadSeries();
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> _loadSeries() {
-    return ref
-        .read(magicCrmServiceProvider)
-        .listScheduleSeries(
-          clientType: widget.clientType,
-          clientId: widget.clientId,
-        );
-  }
-
-  void _reloadSeries() {
-    setState(() {
-      _refreshKey++;
-      _seriesFuture = _loadSeries();
-    });
-  }
-
+class _StudentScheduleSectionState extends State<StudentScheduleSection> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    if (widget.clientType == 'student') {
+      return RecurringSchedulePlanSection(
+        studentId: widget.clientId,
+        fallbackLessons: widget.lessons,
+        branches: widget.branches,
+        defaultBranchId: widget.defaultBranchId,
+        subscriptions: widget.subscriptions,
+        canWrite: widget.canWrite,
+        onChanged: widget.onChanged,
+        onOpenLesson: widget.onOpenLesson,
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Expanded(
-              child: Text(
-                'Предпочтительное расписание',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-              ),
-            ),
-            if (widget.canWrite)
-              TextButton.icon(
-                onPressed: () => _openEditor(),
-                style: TextButton.styleFrom(
-                  foregroundColor: AppColor.gold,
-                  visualDensity: VisualDensity.compact,
-                  textStyle: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                  ),
-                ),
-                icon: const Icon(Icons.add_rounded, size: 15),
-                label: const Text('Добавить предпочтение'),
-              ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        if ((widget.legacyPreference ?? '').trim().isNotEmpty) ...[
-          Container(
-            width: double.infinity,
-            margin: const EdgeInsets.only(bottom: AppSpace.sm),
-            padding: const EdgeInsets.all(AppSpace.sm),
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(AppRadius.control),
-              border: Border.all(color: cs.outlineVariant),
-            ),
-            child: Text(
-              'Ранее записанное пожелание: ${widget.legacyPreference!.trim()}',
-              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-            ),
-          ),
-        ],
-        FutureBuilder<List<Map<String, dynamic>>>(
-          key: ValueKey('series-$_refreshKey'),
-          future: _seriesFuture,
-          builder: (context, snap) {
-            if (snap.connectionState != ConnectionState.done) {
-              return const Padding(
-                padding: EdgeInsets.symmetric(vertical: AppSpace.sm),
-                child: LinearProgressIndicator(color: AppColor.gold),
-              );
-            }
-            if (snap.hasError) {
-              // A failed load must not look like "no schedule configured".
-              return Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Не удалось загрузить график занятий',
-                      style: TextStyle(color: cs.error, fontSize: 12),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: _reloadSeries,
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColor.gold,
-                      visualDensity: VisualDensity.compact,
-                      textStyle: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
-                      ),
-                    ),
-                    child: const Text('Повторить'),
-                  ),
-                ],
-              );
-            }
-            final series = snap.data ?? const [];
-            if (series.isEmpty) {
-              return Text(
-                'Постоянное расписание не задано',
-                style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
-              );
-            }
-            return Column(
-              children: [for (final s in series) _seriesRow(cs, s)],
-            );
-          },
-        ),
-        const SizedBox(height: AppSpace.md),
-        if (widget.clientType == 'student')
-          RecurringSchedulePlanSection(
-            studentId: widget.clientId,
-            fallbackLessons: widget.lessons,
-            branches: widget.branches,
-            defaultBranchId: widget.defaultBranchId,
-            subscriptions: widget.subscriptions,
-            canWrite: widget.canWrite,
-            onChanged: widget.onChanged,
-            onOpenLesson: widget.onOpenLesson,
-          )
-        else ...[
-          _lessonStrip(cs),
-          _paidLegend(cs),
-        ],
-      ],
+      children: [_lessonStrip(cs), _paidLegend(cs)],
     );
   }
 
@@ -237,70 +98,6 @@ class _StudentScheduleSectionState
               style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _seriesRow(ColorScheme cs, Map<String, dynamic> s) {
-    final weekday = (s['weekday'] is num)
-        ? (s['weekday'] as num).toInt()
-        : int.tryParse('${s['weekday']}') ?? 1;
-    final day = _weekdays[(weekday - 1).clamp(0, 6)];
-    final time = (s['begin_time'] ?? '').toString();
-    final duration = s['duration_minutes'] ?? 60;
-    final until = s['valid_until'];
-    final untilLabel = until == null ? 'до ∞' : 'по ${_formatDate(until)}';
-    final meta = [
-      s['teacher_name'],
-      s['room_name'],
-      'с ${_formatDate(s['valid_from'])} $untilLabel',
-    ].where((v) => v != null && '$v'.trim().isNotEmpty).join(' · ');
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppColor.goldSoft,
-              borderRadius: BorderRadius.circular(AppRadius.chip),
-              border: Border.all(color: AppColor.goldLine),
-            ),
-            child: Text(
-              '$day $time',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: AppColor.gold,
-              ),
-            ),
-          ),
-          const SizedBox(width: AppSpace.sm),
-          Expanded(
-            child: Text(
-              '$duration мин · $meta',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-            ),
-          ),
-          if (widget.canWrite) ...[
-            IconButton(
-              onPressed: () => _openEditor(series: s),
-              icon: const Icon(Icons.edit_outlined, size: 16),
-              color: AppColor.gold,
-              visualDensity: VisualDensity.compact,
-              tooltip: 'Изменить (со следующей даты)',
-            ),
-            IconButton(
-              onPressed: () => _stopSeries(s),
-              icon: const Icon(Icons.stop_circle_outlined, size: 16),
-              color: cs.error,
-              visualDensity: VisualDensity.compact,
-              tooltip: 'Остановить серию',
-            ),
-          ],
         ],
       ),
     );
@@ -451,178 +248,5 @@ class _StudentScheduleSectionState
   String _money(double value) {
     final rounded = value.roundToDouble() == value ? value.round() : value;
     return NumberFormat.decimalPattern('ru').format(rounded);
-  }
-
-  String _formatDate(Object? value) {
-    final dt = DateTime.tryParse(value?.toString() ?? '');
-    return dt == null ? '—' : DateFormat('dd.MM.yyyy').format(dt);
-  }
-
-  // ── Редактор серии («карандаш», HolliHop image3) ──────────────────────────
-  Future<void> _openEditor({Map<String, dynamic>? series}) async {
-    final crm = ref.read(magicCrmServiceProvider);
-    List<Map<String, dynamic>> teachers;
-    List<Map<String, dynamic>> rooms;
-    try {
-      final [teacherRows, roomRows] = await Future.wait([
-        crm.listTeachers(limit: 100),
-        crm.listRooms(limit: 100),
-      ]);
-      teachers = List<Map<String, dynamic>>.from(teacherRows);
-      rooms = List<Map<String, dynamic>>.from(roomRows);
-    } catch (error) {
-      if (mounted) {
-        MagicToast.show(
-          context,
-          'Не удалось загрузить справочники расписания',
-          detail: '$error',
-          type: MagicToastType.danger,
-        );
-      }
-      return;
-    }
-    if (!mounted) return;
-
-    final isEdit = series != null;
-    final draft = await showMagicSheet<PreferredScheduleDraft>(
-      context,
-      title: isEdit
-          ? 'Изменить предпочтительное расписание'
-          : 'Добавить предпочтение',
-      subtitle: isEdit
-          ? 'Изменения применятся с выбранной даты'
-          : 'План хранится отдельно от списка фактических занятий',
-      icon: Icons.event_repeat_rounded,
-      builder: (_) => PreferredScheduleEditor(
-        branches: widget.branches,
-        teachers: teachers,
-        rooms: rooms,
-        defaultBranchId: widget.defaultBranchId,
-        series: series,
-      ),
-    );
-    if (draft == null || !mounted) return;
-
-    String slotTime(int index) {
-      final parts = draft.beginTime.split(':');
-      final totalMinutes =
-          (int.tryParse(parts.first) ?? 0) * 60 +
-          (int.tryParse(parts.last) ?? 0) +
-          draft.durationMinutes * index;
-      return '${(totalMinutes ~/ 60).toString().padLeft(2, '0')}:${(totalMinutes % 60).toString().padLeft(2, '0')}';
-    }
-
-    var saved = 0;
-    try {
-      final validFrom = DateFormat('yyyy-MM-dd').format(draft.validFrom);
-      final validUntil = DateFormat('yyyy-MM-dd').format(draft.validUntil);
-      if (isEdit) {
-        await crm.updateScheduleSeries(
-          series['id'].toString(),
-          teacherId: draft.teacherId,
-          roomId: draft.roomId,
-          weekday: draft.weekdays.first,
-          beginTime: draft.beginTime,
-          durationMinutes: draft.durationMinutes,
-          validUntil: validUntil,
-          effectiveFrom: validFrom,
-          notes: draft.notes,
-        );
-        saved = 1;
-      } else {
-        final weekdays = draft.weekdays.toList()..sort();
-        for (final weekday in weekdays) {
-          for (var slot = 0; slot < draft.lessonsPerDay; slot++) {
-            await crm.createScheduleSeries(
-              clientType: widget.clientType,
-              clientId: widget.clientId,
-              branchId: draft.branchId,
-              teacherId: draft.teacherId,
-              roomId: draft.roomId,
-              weekday: weekday,
-              beginTime: slotTime(slot),
-              durationMinutes: draft.durationMinutes,
-              validFrom: validFrom,
-              validUntil: validUntil,
-              notes: draft.notes,
-            );
-            saved++;
-          }
-        }
-      }
-      if (mounted) {
-        _reloadSeries();
-        widget.onChanged();
-        MagicToast.show(
-          context,
-          isEdit ? 'Предпочтение обновлено' : 'Создано предпочтений: $saved',
-          type: MagicToastType.success,
-        );
-      }
-    } catch (error) {
-      if (mounted) {
-        _reloadSeries();
-        widget.onChanged();
-        MagicToast.show(
-          context,
-          saved == 0
-              ? 'Не удалось сохранить предпочтение'
-              : 'Сохранено $saved; остальные не созданы',
-          detail: saved == 0
-              ? '$error'
-              : 'Обновите список перед повторной попыткой. $error',
-          type: MagicToastType.danger,
-        );
-      }
-    }
-  }
-
-  Future<void> _stopSeries(Map<String, dynamic> series) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Остановить серию?'),
-        content: const Text(
-          'Будущие занятия этой серии будут сняты. Прошедшие не изменятся.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(ctx).colorScheme.error,
-            ),
-            child: const Text('Остановить'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    try {
-      await ref
-          .read(magicCrmServiceProvider)
-          .deleteScheduleSeries(series['id'].toString());
-      if (mounted) {
-        _reloadSeries();
-        widget.onChanged();
-        MagicToast.show(
-          context,
-          'Серия остановлена',
-          type: MagicToastType.success,
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        MagicToast.show(
-          context,
-          'Ошибка',
-          detail: '$e',
-          type: MagicToastType.danger,
-        );
-      }
-    }
   }
 }

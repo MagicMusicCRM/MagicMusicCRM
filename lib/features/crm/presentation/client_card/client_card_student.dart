@@ -98,9 +98,6 @@ extension _ClientCardStudent on _ClientCardState {
               lessons: _lessons.map((lesson) => lesson.raw).toList(),
               branches: _branches,
               defaultBranchId: _clientBranchId,
-              legacyPreference: _customDataForEntity(
-                'students',
-              )['preferredSchedule']?.toString(),
               subscriptions: [
                 for (final subscription in _subscriptions)
                   if (subscription.isActive && subscription.id != null)

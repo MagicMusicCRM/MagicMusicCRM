@@ -38,22 +38,6 @@ Widget _app(FakeCardApiClient api, Widget child) {
   );
 }
 
-Future<void> _chooseSearchable(
-  WidgetTester tester,
-  Key field,
-  String option,
-) async {
-  await tester.tap(find.byKey(field));
-  await tester.pumpAndSettle();
-  await tester.tap(
-    find.descendant(
-      of: find.byType(Scrollbar).last,
-      matching: find.text(option),
-    ),
-  );
-  await tester.pumpAndSettle();
-}
-
 void main() {
   setUpAll(() => initializeDateFormatting('ru'));
 
@@ -318,7 +302,7 @@ void main() {
       await tester.pageBack();
       await tester.pumpAndSettle();
       expect(
-        tester.getTopLeft(find.text('Предпочтительное расписание')).dy,
+        tester.getTopLeft(find.text('Постоянные расписания')).dy,
         lessThan(
           tester
               .getTopLeft(find.byKey(const Key('client-calendar-expansion')))
@@ -363,7 +347,7 @@ void main() {
     expect(api.getRequests, isEmpty);
   });
 
-  testWidgets('lead preferred schedule lives only in canonical Lessons', (
+  testWidgets('lead lessons do not mount the legacy preference editor', (
     tester,
   ) async {
     const lead = {
@@ -399,59 +383,25 @@ void main() {
     expect(find.text('Предпочтительное расписание'), findsNothing);
     await tester.tap(find.text('Занятия'));
     await tester.pumpAndSettle();
-    expect(find.text('Предпочтительное расписание'), findsOneWidget);
-    expect(find.textContaining('Вечером по будням'), findsOneWidget);
-    final call = api.getCalls.singleWhere(
-      (request) => request.path == '/crm/schedule-series',
+    expect(find.text('Предпочтительное расписание'), findsNothing);
+    expect(find.text('Добавить предпочтение'), findsNothing);
+    expect(find.textContaining('Вечером по будням'), findsNothing);
+    expect(
+      api.getCalls.where((request) => request.path == '/crm/schedule-series'),
+      isEmpty,
     );
-    expect(call.query, {'clientType': 'lead', 'clientId': 'lead-1'});
   });
 
-  testWidgets('preferred schedule creates branch-scoped weekday slots', (
+  testWidgets('student schedule uses Plan without the legacy series API', (
     tester,
   ) async {
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(1200, 900);
-    addTearDown(tester.view.reset);
-    const lead = {
-      'id': 'lead-1',
-      'firstName': 'Пётр',
-      'branchId': 'branch-a',
-      'customData': <String, dynamic>{},
-    };
-    final api = FakeCardApiClient(
-      role: 'admin',
-      lead: lead,
-      branches: const [
-        {'id': 'branch-a', 'name': 'Сокол'},
-      ],
-      teachers: const [
-        {
-          'id': 'teacher-a',
-          'status': 'active',
-          'firstName': 'Мария',
-          'lastName': 'Иванова',
-          'assignedBranches': [
-            {'id': 'branch-a', 'name': 'Сокол'},
-          ],
-        },
-      ],
-      rooms: const [
-        {
-          'id': 'room-a',
-          'branchId': 'branch-a',
-          'branchName': 'Сокол',
-          'name': 'Класс 1',
-        },
-      ],
-      mutateScheduleSeriesOnCreate: true,
-    );
+    final api = FakeCardApiClient(role: 'admin', student: _student);
     await tester.pumpWidget(
       _app(
         api,
         const ClientCard(
-          lead: {'id': 'lead-1'},
-          entityType: 'lead',
+          lead: {'id': 'student-1'},
+          entityType: 'student',
           routed: true,
           initialSection: 'lessons',
           capabilitySnapshot: CapabilitySnapshot(
@@ -470,62 +420,21 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.text('Добавить предпочтение'));
-    await tester.tap(find.text('Добавить предпочтение'));
-    await tester.pumpAndSettle();
-    final initialDay = DateTime.now().weekday;
-    final addedDay = initialDay == DateTime.monday
-        ? DateTime.tuesday
-        : DateTime.monday;
-    await tester.tap(
-      find.byKey(ValueKey('preferred-schedule-weekday-$addedDay')),
-    );
-    await _chooseSearchable(
-      tester,
-      const ValueKey('preferred-schedule-teacher'),
-      'Мария Иванова',
-    );
-    await _chooseSearchable(
-      tester,
-      const ValueKey('preferred-schedule-room'),
-      'Класс 1',
-    );
-    await tester.tap(
-      find.byKey(const ValueKey('preferred-schedule-lessons-per-day')),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('2').last);
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('preferred-schedule-save')),
-    );
-    await tester.tap(find.byKey(const ValueKey('preferred-schedule-save')));
-    await tester.pumpAndSettle();
-
-    final creates = api.postRequests
-        .where((request) => request.path == '/crm/schedule-series')
-        .toList();
-    expect(creates, hasLength(4));
-    for (final request in creates) {
-      expect(request.data['clientRef'], {'type': 'lead', 'id': 'lead-1'});
-      expect(request.data['branchId'], 'branch-a');
-      expect(request.data['validUntil'], isNotNull);
-    }
-    expect(creates.map((request) => request.data['beginTime']).toSet(), {
-      '15:00',
-      '16:00',
-    });
+    expect(find.text('Постоянные расписания'), findsOneWidget);
+    expect(find.text('Предпочтительное расписание'), findsNothing);
+    expect(find.text('Добавить предпочтение'), findsNothing);
     expect(
       api.getCalls
           .where((request) => request.path == '/crm/schedule-series')
-          .length,
-      greaterThanOrEqualTo(2),
+          .toList(),
+      isEmpty,
     );
     expect(
-      find.textContaining('60 мин · Мария Иванова · Класс 1'),
-      findsNWidgets(4),
+      api.postRequests.where(
+        (request) => request.path == '/crm/schedule-series',
+      ),
+      isEmpty,
     );
-    await tester.pump(const Duration(seconds: 4));
   });
 
   testWidgets('production desktop host mounts the routed client workspace', (

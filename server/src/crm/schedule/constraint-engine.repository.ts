@@ -14,6 +14,17 @@ interface ConflictRow {
   lesson_id: string;
 }
 
+export interface AlternativeRoom {
+  id: string;
+  name: string;
+}
+
+export interface AlternativeTeacher {
+  id: string;
+  name: string;
+  sharedDisciplineCount: number;
+}
+
 @Injectable()
 export class ConstraintEngineRepository {
   constructor(
@@ -55,6 +66,89 @@ export class ConstraintEngineRepository {
       [roomId, branchId],
     );
     return result.rows[0]?.matches ?? false;
+  }
+
+  async listAlternativeRooms(
+    branchId: string,
+    currentRoomId: string,
+    client?: PoolClient,
+  ): Promise<AlternativeRoom[]> {
+    const query = client
+      ? client.query.bind(client)
+      : this.database.query.bind(this.database);
+    const result = await query<{ id: string; name: string }>(
+      `select room.id, room.name
+       from app.rooms room
+       where room.branch_id = $1
+         and room.id <> $2
+         and room.deleted_at is null
+         and room.lifecycle_state = 'active'
+       order by room.name, room.id
+       limit 6`,
+      [branchId, currentRoomId],
+    );
+    return result.rows;
+  }
+
+  async listAlternativeTeachers(
+    currentTeacherId: string,
+    branchId: string,
+    startsAt: Date,
+    client?: PoolClient,
+  ): Promise<AlternativeTeacher[]> {
+    const query = client
+      ? client.query.bind(client)
+      : this.database.query.bind(this.database);
+    const result = await query<{
+      id: string;
+      name: string;
+      shared_discipline_count: number | string;
+    }>(
+      `select candidate.id,
+          coalesce(
+            nullif(trim(concat_ws(' ', profile.first_name, profile.last_name)), ''),
+            nullif(trim(concat_ws(
+              ' ',
+              candidate.custom_data->>'firstName',
+              candidate.custom_data->>'lastName'
+            )), ''),
+            candidate.id::text
+          ) as name,
+          count(distinct candidate_discipline.discipline_id) as shared_discipline_count
+       from app.teachers candidate
+       join app.teacher_branches assignment
+         on assignment.teacher_id = candidate.id
+        and assignment.branch_id = $2
+       join app.branches branch
+         on branch.id = assignment.branch_id
+        and branch.deleted_at is null
+       join app.teacher_disciplines candidate_discipline
+         on candidate_discipline.teacher_id = candidate.id
+       join app.teacher_disciplines current_discipline
+         on current_discipline.teacher_id = $1
+        and current_discipline.discipline_id = candidate_discipline.discipline_id
+       left join app.profiles profile
+         on profile.id = candidate.profile_id
+        and profile.deleted_at is null
+       where candidate.id <> $1
+         and candidate.deleted_at is null
+         and candidate.lifecycle_state = 'active'
+         and candidate.status = 'active'
+         and assignment.active_from <= ($3::timestamptz at time zone branch.timezone_name)::date
+         and (
+           assignment.active_until is null
+           or assignment.active_until >= ($3::timestamptz at time zone branch.timezone_name)::date
+         )
+       group by candidate.id, profile.first_name, profile.last_name
+       order by shared_discipline_count desc, name, candidate.id
+       limit 6`,
+      [currentTeacherId, branchId, startsAt],
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      sharedDisciplineCount: Number(row.shared_discipline_count),
+    }));
   }
 
   async findConflicts(

@@ -116,7 +116,10 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   final _plannedSettlementReasonController = TextEditingController();
   bool _loading = false;
   bool _saving = false;
+  bool _analyzingSchedule = false;
   String? _validationMessage;
+  String? _scheduleAnalysisError;
+  LessonScheduleAnalysis? _scheduleAnalysis;
 
   List<Map<String, dynamic>> _teachers = [];
   List<Map<String, dynamic>> _clients = [];
@@ -668,7 +671,14 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
       } on MagicApiException catch (error) {
         final violations = lessonConstraintViolations(error);
         if (violations == null || violations.isEmpty) rethrow;
-        if (mounted) await _showConstraintViolations(violations);
+        if (mounted) {
+          setState(() {
+            _scheduleAnalysis = LessonScheduleAnalysis.fromViolations(
+              violations,
+            );
+          });
+          await _showConstraintViolations(violations);
+        }
         return;
       }
 
@@ -906,9 +916,9 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     String clientId,
   ) async {
     try {
-      final violations = await ref
+      final analysis = await ref
           .read(magicApiClientProvider)
-          .previewLessonConstraints(
+          .analyzeLessonSchedule(
             clientType: clientType,
             clientId: clientId,
             teacherId: _selectedTeacherId!,
@@ -918,9 +928,15 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
             durationMinutes: _durationMinutes,
             excludeLessonId: _isEdit ? widget.lesson!['id']?.toString() : null,
           );
-      if (violations.isEmpty) return true;
+      if (mounted) {
+        setState(() {
+          _scheduleAnalysis = analysis;
+          _scheduleAnalysisError = null;
+        });
+      }
+      if (analysis.valid) return true;
       if (!mounted) return false;
-      await _showConstraintViolations(violations);
+      await _showConstraintViolations(analysis.violations);
       return false;
     } catch (error) {
       // The write repeats the same engine inside its transaction and still
@@ -928,6 +944,151 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
       debugPrint('Schedule constraints preview failed: $error');
       return true;
     }
+  }
+
+  Future<void> _analyzeCurrentSchedule() async {
+    final clientType = _clientType;
+    final clientId = _clientId;
+    if (clientType == null ||
+        clientId == null ||
+        _selectedTeacherId == null ||
+        _selectedBranchId == null ||
+        _selectedRoomId == null) {
+      setState(() {
+        _scheduleAnalysisError =
+            'Выберите клиента, филиал, преподавателя и аудиторию.';
+      });
+      return;
+    }
+    final startsAt = DateTime.utc(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      _selectedTime.hour - 3,
+      _selectedTime.minute,
+    );
+    setState(() {
+      _analyzingSchedule = true;
+      _scheduleAnalysisError = null;
+    });
+    try {
+      final analysis = await ref
+          .read(magicApiClientProvider)
+          .analyzeLessonSchedule(
+            clientType: clientType,
+            clientId: clientId,
+            teacherId: _selectedTeacherId!,
+            branchId: _selectedBranchId!,
+            roomId: _selectedRoomId!,
+            scheduledAt: startsAt.toIso8601String(),
+            durationMinutes: _durationMinutes,
+            excludeLessonId: _isEdit ? widget.lesson!['id']?.toString() : null,
+          );
+      if (mounted) setState(() => _scheduleAnalysis = analysis);
+    } catch (error) {
+      if (mounted) setState(() => _scheduleAnalysisError = '$error');
+    } finally {
+      if (mounted) setState(() => _analyzingSchedule = false);
+    }
+  }
+
+  Future<void> _applyScheduleSuggestion(ScheduleSuggestion suggestion) async {
+    setState(() {
+      if (suggestion.roomId != null) _selectedRoomId = suggestion.roomId;
+      if (suggestion.teacherId != null) {
+        _selectedTeacherId = suggestion.teacherId;
+      }
+      if (suggestion.startAt != null) {
+        final start = suggestion.startAt!;
+        _selectedDate = DateTime(start.year, start.month, start.day);
+        _selectedTime = TimeOfDay(hour: start.hour, minute: start.minute);
+      }
+      _scheduleAnalysis = null;
+      _scheduleAnalysisError = null;
+    });
+    await _analyzeCurrentSchedule();
+  }
+
+  Widget _scheduleConflictInspector() {
+    final analysis = _scheduleAnalysis;
+    final cs = Theme.of(context).colorScheme;
+    if (analysis == null && _scheduleAnalysisError == null) {
+      return const SizedBox.shrink();
+    }
+    final valid = analysis?.valid == true;
+    return Container(
+      key: const ValueKey('lesson-conflict-inspector'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpace.md),
+      decoration: BoxDecoration(
+        color: valid
+            ? AppColor.success.withValues(alpha: 0.10)
+            : AppColor.dangerSoft,
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        border: Border.all(
+          color: (valid ? AppColor.success : AppColor.danger).withValues(
+            alpha: 0.35,
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            valid
+                ? 'Schedule Analyzer: конфликтов нет'
+                : 'Schedule Analyzer: найдены конфликты',
+            style: TextStyle(
+              color: valid ? AppColor.success : cs.error,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          if (_scheduleAnalysisError != null) ...[
+            const SizedBox(height: AppSpace.sm),
+            Text('Не удалось выполнить проверку: $_scheduleAnalysisError'),
+          ],
+          for (final violation in analysis?.violations ?? const [])
+            _violationCard(
+              title: violation.title,
+              resource: '${violation.resourceLabel}: ${violation.resourceId}',
+              lessonIds: violation.conflictingLessonIds,
+            ),
+          if ((analysis?.suggestions ?? const []).isNotEmpty) ...[
+            const SizedBox(height: AppSpace.md),
+            const Text(
+              'Подходящие варианты',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: AppSpace.sm),
+            for (final suggestion in analysis!.suggestions)
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppSpace.sm),
+                child: OutlinedButton(
+                  key: ValueKey('lesson-suggestion-${suggestion.rank}'),
+                  onPressed: _analyzingSchedule
+                      ? null
+                      : () => _applyScheduleSuggestion(suggestion),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(_scheduleSuggestionLabel(suggestion)),
+                  ),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _scheduleSuggestionLabel(ScheduleSuggestion suggestion) {
+    final details = <String>[
+      if (suggestion.roomName != null) suggestion.roomName!,
+      if (suggestion.teacherName != null) suggestion.teacherName!,
+      if (suggestion.startAt != null)
+        DateFormat('dd.MM · HH:mm', 'ru').format(suggestion.startAt!),
+    ];
+    return '№${suggestion.rank} · ${suggestion.title}'
+        '${details.isEmpty ? '' : ' · ${details.join(' · ')}'}';
   }
 
   Future<void> _showConstraintViolations(
@@ -972,7 +1133,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     required String title,
     required String resource,
     required List<String> lessonIds,
-    required BuildContext dialogContext,
+    BuildContext? dialogContext,
   }) {
     return Container(
       width: double.infinity,
@@ -1000,7 +1161,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                       ref
                           .read(scheduleNavigationProvider.notifier)
                           .focus(_selectedDate, lessonId);
-                      Navigator.pop(dialogContext);
+                      if (dialogContext != null) Navigator.pop(dialogContext);
                       Navigator.pop(context);
                     },
                     text:
@@ -1231,6 +1392,28 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                       setState(() => _durationMinutes = value ?? 60),
                 ),
               ),
+              const SizedBox(height: AppSpace.sm),
+              OutlinedButton.icon(
+                key: const ValueKey('lesson-run-schedule-analyzer'),
+                onPressed: _analyzingSchedule ? null : _analyzeCurrentSchedule,
+                icon: _analyzingSchedule
+                    ? const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.rule_rounded),
+                label: Text(
+                  _analyzingSchedule
+                      ? 'Проверяем расписание…'
+                      : 'Проверить конфликты и варианты',
+                ),
+              ),
+              if (!_saving &&
+                  (_scheduleAnalysis != null ||
+                      _scheduleAnalysisError != null)) ...[
+                const SizedBox(height: AppSpace.md),
+                _scheduleConflictInspector(),
+              ],
               const SizedBox(height: 8),
               SwitchListTile(
                 key: const ValueKey('lesson-trial-toggle'),

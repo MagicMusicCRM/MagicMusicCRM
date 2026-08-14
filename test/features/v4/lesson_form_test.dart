@@ -694,6 +694,29 @@ void main() {
     }
   });
 
+  test('Schedule Analyzer parses ranked replacement variants', () {
+    final analysis = LessonScheduleAnalysis.fromJson({
+      'valid': false,
+      'violations': _busyPreview()['violations'],
+      'suggestions': [
+        {
+          'kind': 'SAME_TIME_ROOM',
+          'rank': 1,
+          'score': 1000,
+          'changes': {'roomId': _replacementRoomId, 'roomName': 'Зал 2'},
+        },
+      ],
+    });
+
+    expect(analysis.valid, isFalse);
+    expect(analysis.violations, hasLength(3));
+    expect(
+      analysis.suggestions.single.title,
+      'Свободная аудитория в то же время',
+    );
+    expect(analysis.suggestions.single.roomId, _replacementRoomId);
+  });
+
   testWidgets('new lesson always opens at the required client field', (
     tester,
   ) async {
@@ -1295,6 +1318,38 @@ void main() {
     expect(find.text('Всё равно назначить'), findsNothing);
     expect(client.lessonPosts, isEmpty);
   });
+
+  testWidgets(
+    'inline Schedule Analyzer applies and rechecks a ranked variant',
+    (tester) async {
+      final preview = _busyPreview()
+        ..['suggestions'] = [
+          {
+            'kind': 'SAME_TIME_ROOM',
+            'rank': 1,
+            'score': 1000,
+            'changes': {'roomId': _replacementRoomId, 'roomName': 'Зал 2'},
+          },
+        ];
+      final client = _FakeApiClient(preview: preview);
+      await _pumpDialog(tester, client);
+      await _selectRequiredResources(tester, clientName: 'Иван Прилежный');
+
+      final run = find.byKey(const ValueKey('lesson-run-schedule-analyzer'));
+      await tester.ensureVisible(run);
+      await tester.tap(run);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Schedule Analyzer: найдены конфликты'), findsOneWidget);
+      final suggestion = find.byKey(const ValueKey('lesson-suggestion-1'));
+      await tester.ensureVisible(suggestion);
+      await tester.tap(suggestion);
+      await tester.pumpAndSettle();
+
+      expect(client.constraintPreviews, hasLength(2));
+      expect(client.constraintPreviews.last['roomId'], _replacementRoomId);
+    },
+  );
 
   testWidgets('double click creates exactly one lesson mutation', (
     tester,

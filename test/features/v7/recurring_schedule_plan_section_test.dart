@@ -916,6 +916,14 @@ void main() {
                     ],
                   },
                 ],
+                'suggestions': [
+                  {
+                    'kind': 'SAME_TIME_ROOM',
+                    'rank': 1,
+                    'score': 1000,
+                    'changes': {'roomId': 'room-2', 'roomName': 'Класс 2'},
+                  },
+                ],
               },
             ],
           },
@@ -960,6 +968,10 @@ void main() {
         expect(find.textContaining(label), findsOneWidget);
       }
       expect(find.text('Участник: Борис Петров'), findsOneWidget);
+      expect(
+        find.textContaining('Свободная аудитория в то же время'),
+        findsOneWidget,
+      );
       expect(find.textContaining('Пересечение со строками: 2'), findsOneWidget);
       expect(find.textContaining('Занятие lesson-c'), findsWidgets);
       expect(

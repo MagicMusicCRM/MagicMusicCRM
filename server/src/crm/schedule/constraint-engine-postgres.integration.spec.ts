@@ -134,47 +134,22 @@ describe("Schedule constraint engine (PostgreSQL)", () => {
       );
       expect(replacingPlanSeries).toEqual({ valid: true, violations: [] });
 
-      const standalone = await client.query<{ id: string }>(
-        `insert into app.lessons (
-           student_id, teacher_id, branch_id, room_id,
-           scheduled_at, duration_minutes
-         ) values ($1,$2,$3,$4,'2026-07-27T07:45:00.000Z',30)
-         returning id`,
-        [
-          fixture.studentId,
-          fixture.teacherId,
-          fixture.branchId,
-          fixture.roomId,
-        ],
-      );
-      const standaloneStillBlocks = await engine.validate(
-        {
-          ...baseDraft,
-          startAt: "2026-07-27T07:30:00.000Z",
-          endAt: "2026-07-27T08:30:00.000Z",
-          excludeScheduleSeriesIds: [seriesId],
-        },
-        client,
-      );
-      expect(standaloneStillBlocks.violations).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            code: "CLIENT_OVERLAP",
-            conflictingLessonIds: [standalone.rows[0]!.id],
-          }),
-          expect.objectContaining({
-            code: "TEACHER_OVERLAP",
-            conflictingLessonIds: [standalone.rows[0]!.id],
-          }),
-          expect.objectContaining({
-            code: "ROOM_OVERLAP",
-            conflictingLessonIds: [standalone.rows[0]!.id],
-          }),
-        ]),
-      );
-      await client.query("delete from app.lessons where id = $1", [
-        standalone.rows[0]!.id,
-      ]);
+      await client.query("savepoint hard_overlap_guard");
+      await expect(
+        client.query(
+          `insert into app.lessons (
+             student_id, teacher_id, branch_id, room_id,
+             scheduled_at, duration_minutes
+           ) values ($1,$2,$3,$4,'2026-07-27T07:45:00.000Z',30)`,
+          [
+            fixture.studentId,
+            fixture.teacherId,
+            fixture.branchId,
+            fixture.roomId,
+          ],
+        ),
+      ).rejects.toMatchObject({ constraint: "lesson_resource_bookings_no_overlap" });
+      await client.query("rollback to savepoint hard_overlap_guard");
 
       await client.query(
         `update app.lessons

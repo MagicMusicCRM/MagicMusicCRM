@@ -42,6 +42,43 @@ class PreferredScheduleDraft {
   final String settlementTypeKey;
   final String teacherCompensationRuleKey;
   final bool openEnded;
+
+  PreferredScheduleDraft copyWith({
+    String? branchId,
+    Set<int>? weekdays,
+    String? beginTime,
+    int? durationMinutes,
+    int? lessonsPerDay,
+    DateTime? validFrom,
+    DateTime? validUntil,
+    String? teacherId,
+    String? roomId,
+    String? notes,
+    String? seriesId,
+    String? title,
+    String? subscriptionId,
+    String? settlementTypeKey,
+    String? teacherCompensationRuleKey,
+    bool? openEnded,
+  }) => PreferredScheduleDraft(
+    branchId: branchId ?? this.branchId,
+    weekdays: weekdays ?? this.weekdays,
+    beginTime: beginTime ?? this.beginTime,
+    durationMinutes: durationMinutes ?? this.durationMinutes,
+    lessonsPerDay: lessonsPerDay ?? this.lessonsPerDay,
+    validFrom: validFrom ?? this.validFrom,
+    validUntil: validUntil ?? this.validUntil,
+    teacherId: teacherId ?? this.teacherId,
+    roomId: roomId ?? this.roomId,
+    notes: notes ?? this.notes,
+    seriesId: seriesId ?? this.seriesId,
+    title: title ?? this.title,
+    subscriptionId: subscriptionId ?? this.subscriptionId,
+    settlementTypeKey: settlementTypeKey ?? this.settlementTypeKey,
+    teacherCompensationRuleKey:
+        teacherCompensationRuleKey ?? this.teacherCompensationRuleKey,
+    openEnded: openEnded ?? this.openEnded,
+  );
 }
 
 class PreferredScheduleEditor extends StatefulWidget {

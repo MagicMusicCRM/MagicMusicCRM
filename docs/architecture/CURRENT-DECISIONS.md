@@ -209,10 +209,29 @@ direction. Settlement и predecessor/successor markers вычисляет backen
 authoritative facts; UI сохраняет последнюю успешную страницу при ошибке и
 повторяет точный неуспешный запрос.
 
-DECISION: Предпочтительное расписание (`schedule-series`) и фактические Lesson
-являются независимыми проекциями. UI подтверждает mutation повторным чтением
-series; пустая или только что созданная preference-проекция не может скрыть,
-удалить либо подменить уже существующие Lesson в карточке клиента.
+DECISION (owner, 2026-08-14): Schedule Plan — единственный пользовательский
+редактор постоянного расписания. Legacy `schedule-series` и строковое поле
+`preferredSchedule` остаются совместимым read/history-контрактом до отдельной
+миграции, но больше не монтируются и не изменяются из карточки клиента. Это
+устраняет неатомарный цикл частичного создания нескольких series и оставляет
+один путь preview → atomic commit → read-after-write. Уже созданные Lesson,
+series и audit/history не удаляются и не переписываются.
+
+DECISION (owner, 2026-08-14): Разовые Lesson и постоянные Schedule Plan
+используют общий Schedule Analyzer поверх authoritative constraint engine.
+Analyzer объединяет одинаковые нарушения по `code + resource type + resource
+id`, сохраняет scope строк/дат/участников и ранжирует только те альтернативы,
+которые прошли тот же engine для проверяемого occurrence. Для Plan применение
+альтернативы всегда возвращает черновик на полный preview периода; commit по-
+прежнему повторяет проверки внутри versioned transaction.
+
+DECISION (owner, 2026-08-14): Advisory locks остаются удобной сериализацией
+команд, но последний барьер пересечений принадлежит PostgreSQL. Проекция
+`lesson_resource_bookings` резервирует teacher, room, direct/frozen student и
+group через полуоткрытый `tstzrange`; GiST `EXCLUDE` отклоняет конкурентное
+пересечение. Branch не является эксклюзивным ресурсом и остаётся проверкой
+рабочих часов/назначений Analyzer. Backfill fail-closed: обнаруженный legacy-
+конфликт блокирует миграцию до явного reconciliation, не переписывая историю.
 
 DECISION: Календарь внутри staff-карточки клиента загружает разрешённую actor-
 scope branch matrix, скрывает чужие Lesson локально по умолчанию и не делает

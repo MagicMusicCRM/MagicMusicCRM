@@ -13,6 +13,7 @@ import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/create_lesson_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision_flow.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_conflicts_api.dart';
 
 import 'preferred_schedule_editor.dart';
 import 'group_schedule_participants_editor.dart';
@@ -1105,6 +1106,7 @@ class _SchedulePlanRowsReviewState
   @override
   Widget build(BuildContext context) {
     final issues = _constraintIssues(_preview);
+    final suggestions = _scheduleSuggestions(_preview);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1120,7 +1122,7 @@ class _SchedulePlanRowsReviewState
         ),
         if (issues.isNotEmpty) ...[
           const SizedBox(height: AppSpace.md),
-          _constraintPanel(issues),
+          _constraintPanel(issues, suggestions),
         ],
         if (_error != null) ...[
           const SizedBox(height: AppSpace.md),
@@ -1219,7 +1221,10 @@ class _SchedulePlanRowsReviewState
     );
   }
 
-  Widget _constraintPanel(List<_PlanConstraintIssue> issues) {
+  Widget _constraintPanel(
+    List<_PlanConstraintIssue> issues,
+    List<_PlanScheduleSuggestion> suggestions,
+  ) {
     final cs = Theme.of(context).colorScheme;
     return Container(
       key: const Key('schedule-plan-constraint-errors'),
@@ -1236,15 +1241,21 @@ class _SchedulePlanRowsReviewState
             'Найдены ограничения расписания',
             style: TextStyle(color: cs.error, fontWeight: FontWeight.w800),
           ),
+          Text(
+            'Schedule Analyzer сгруппировал одинаковые конфликты и проверил '
+            'кандидаты для ближайшего проблемного занятия.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
           const SizedBox(height: AppSpace.sm),
           for (final issue in issues) ...[
             Text(
-              'Строка ${issue.rowIndex + 1}: ${issue.label} · ${issue.dates.take(3).join(', ')}'
+              '${issue.rowLabel}: ${issue.label} · ${issue.dates.take(3).join(', ')}'
               '${issue.dates.length > 3 ? ' и ещё ${issue.dates.length - 3}' : ''}',
             ),
-            if (issue.participantLabel != null)
+            if (issue.participantLabels.isNotEmpty)
               Text(
-                'Участник: ${issue.participantLabel}',
+                '${issue.participantLabels.length == 1 ? 'Участник' : 'Участники'}: '
+                '${issue.participantLabels.join(', ')}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             if (issue.rowIndexes.isNotEmpty)
@@ -1272,26 +1283,142 @@ class _SchedulePlanRowsReviewState
                     ),
                 ],
               ),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                key: ValueKey(
-                  'schedule-plan-fix-row-${issue.rowIndex}-${issue.label}-${issue.participantLabel ?? 'all'}',
+            if (issue.analyzerGrouped)
+              Wrap(
+                children: [
+                  for (final draftIndex in issue.affectedDraftIndexes)
+                    TextButton.icon(
+                      key: ValueKey(
+                        'schedule-plan-fix-group-${issue.fingerprint}-$draftIndex',
+                      ),
+                      onPressed: _loading ? null : () => _edit(draftIndex),
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                      label: Text('Исправить набор ${draftIndex + 1}'),
+                    ),
+                ],
+              )
+            else
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  key: ValueKey(
+                    'schedule-plan-fix-row-${issue.rowIndex}-${issue.label}-${issue.participantLabel ?? 'all'}',
+                  ),
+                  onPressed: _loading ? null : () => _edit(issue.draftIndex),
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  label: Text('Исправить строку ${issue.rowIndex + 1}'),
                 ),
-                onPressed: _loading ? null : () => _edit(issue.draftIndex),
-                icon: const Icon(Icons.edit_outlined, size: 18),
-                label: Text('Исправить строку ${issue.rowIndex + 1}'),
               ),
+            const SizedBox(height: AppSpace.sm),
+          ],
+          if (suggestions.isNotEmpty) ...[
+            const Divider(),
+            const Text(
+              'Предлагаемые варианты',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: AppSpace.xs),
+            Text(
+              'После применения нажмите «${widget.submitLabel}»: весь период '
+              'будет проверен заново до сохранения.',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: AppSpace.sm),
+            for (final item in suggestions)
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppSpace.sm),
+                child: OutlinedButton(
+                  key: ValueKey(
+                    'schedule-plan-suggestion-${item.previewRowIndex}-${item.suggestion.rank}',
+                  ),
+                  onPressed: _loading ? null : () => _applySuggestion(item),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(_planSuggestionLabel(item)),
+                  ),
+                ),
+              ),
           ],
         ],
       ),
     );
   }
 
+  List<_PlanScheduleSuggestion> _scheduleSuggestions(
+    Map<String, dynamic>? preview,
+  ) {
+    if (preview == null) return const [];
+    final suggestions = <_PlanScheduleSuggestion>[];
+    for (final rawRow in (preview['rows'] as List? ?? const [])) {
+      if (rawRow is! Map) continue;
+      final rowIndex = (rawRow['index'] as num?)?.toInt() ?? 0;
+      for (final rawSuggestion
+          in (rawRow['suggestions'] as List? ?? const [])) {
+        if (rawSuggestion is! Map) continue;
+        suggestions.add(
+          _PlanScheduleSuggestion(
+            previewRowIndex: rowIndex,
+            draftIndex: _draftIndexForPreviewRow(rowIndex),
+            suggestion: ScheduleSuggestion.fromJson(
+              Map<String, dynamic>.from(rawSuggestion),
+            ),
+          ),
+        );
+      }
+    }
+    suggestions.sort((left, right) {
+      final byScore = right.suggestion.score.compareTo(left.suggestion.score);
+      if (byScore != 0) return byScore;
+      return left.previewRowIndex.compareTo(right.previewRowIndex);
+    });
+    return suggestions.take(8).toList(growable: false);
+  }
+
+  void _applySuggestion(_PlanScheduleSuggestion item) {
+    final current = _rows[item.draftIndex];
+    final offset = item.suggestion.startOffsetMinutes ?? 0;
+    setState(() {
+      _rows[item.draftIndex] = current.copyWith(
+        teacherId: item.suggestion.teacherId,
+        roomId: item.suggestion.roomId,
+        beginTime: offset == 0
+            ? current.beginTime
+            : _offsetTime(current.beginTime, offset),
+      );
+      _preview = null;
+      _error = null;
+    });
+  }
+
+  String _offsetTime(String value, int offsetMinutes) {
+    final parts = value.split(':');
+    final minutes =
+        (int.tryParse(parts.first) ?? 0) * 60 +
+        (int.tryParse(parts.last) ?? 0) +
+        offsetMinutes;
+    final normalized = (minutes % (24 * 60) + 24 * 60) % (24 * 60);
+    return '${(normalized ~/ 60).toString().padLeft(2, '0')}:'
+        '${(normalized % 60).toString().padLeft(2, '0')}';
+  }
+
+  String _planSuggestionLabel(_PlanScheduleSuggestion item) {
+    final suggestion = item.suggestion;
+    final details = <String>[
+      if (suggestion.roomName != null) suggestion.roomName!,
+      if (suggestion.teacherName != null) suggestion.teacherName!,
+      if (suggestion.startOffsetMinutes case final offset?)
+        '${offset > 0 ? '+' : ''}$offset мин',
+    ];
+    return 'Строка ${item.previewRowIndex + 1} · №${suggestion.rank} · '
+        '${suggestion.title}${details.isEmpty ? '' : ' · ${details.join(' · ')}'}';
+  }
+
   List<_PlanConstraintIssue> _constraintIssues(Map<String, dynamic>? preview) {
     if (preview == null) return const [];
+    final analyzerConflicts = preview['conflicts'];
+    if (analyzerConflicts is List && analyzerConflicts.isNotEmpty) {
+      return _analyzerConstraintIssues(analyzerConflicts);
+    }
     final issues = <String, _PlanConstraintIssue>{};
     for (final rawRow in (preview['rows'] as List? ?? const [])) {
       if (rawRow is! Map) continue;
@@ -1343,6 +1470,60 @@ class _SchedulePlanRowsReviewState
     return issues.values.toList(growable: false);
   }
 
+  List<_PlanConstraintIssue> _analyzerConstraintIssues(List<dynamic> rawItems) {
+    final issues = <_PlanConstraintIssue>[];
+    for (final rawItem in rawItems) {
+      if (rawItem is! Map) continue;
+      final code = rawItem['code']?.toString() ?? 'UNKNOWN';
+      final fingerprint = rawItem['fingerprint']?.toString() ?? code;
+      final rawScopes = rawItem['scopes'] as List? ?? const [];
+      final rowIndexes = <int>{};
+      final dates = <String>{};
+      final participantLabels = <String>{};
+      for (final rawScope in rawScopes) {
+        if (rawScope is! Map) continue;
+        final rowIndex = (rawScope['rowIndex'] as num?)?.toInt();
+        if (rowIndex != null) rowIndexes.add(rowIndex);
+        final date = rawScope['localDate']?.toString() ?? '';
+        if (date.isNotEmpty) dates.add(date);
+        final studentId = rawScope['studentId']?.toString() ?? '';
+        if (code == 'CLIENT_OVERLAP' && studentId.isNotEmpty) {
+          participantLabels.add(
+            widget.participantLabels[studentId] ??
+                'Ученик ${studentId.length <= 8 ? studentId : studentId.substring(0, 8)}',
+          );
+        }
+      }
+      if (rowIndexes.isEmpty) rowIndexes.add(0);
+      final firstRow = rowIndexes.reduce(
+        (left, right) => left < right ? left : right,
+      );
+      final issue = _PlanConstraintIssue(
+        firstRow,
+        _draftIndexForPreviewRow(firstRow),
+        _constraintLabel(code),
+        participantLabel: participantLabels.length == 1
+            ? participantLabels.single
+            : null,
+        analyzerGrouped: true,
+        fingerprint: fingerprint,
+      );
+      issue.affectedRowIndexes.addAll(rowIndexes);
+      issue.affectedDraftIndexes.addAll(
+        rowIndexes.map(_draftIndexForPreviewRow),
+      );
+      issue.participantLabels.addAll(participantLabels);
+      issue.dates.addAll(dates);
+      issue.lessonIds.addAll(
+        (rawItem['conflictingLessonIds'] as List? ?? const []).map(
+          (id) => id.toString(),
+        ),
+      );
+      issues.add(issue);
+    }
+    return issues;
+  }
+
   int _draftIndexForPreviewRow(int previewRowIndex) {
     var firstRowIndex = 0;
     for (var draftIndex = 0; draftIndex < _rows.length; draftIndex++) {
@@ -1373,15 +1554,45 @@ class _PlanConstraintIssue {
     this.draftIndex,
     this.label, {
     required this.participantLabel,
-  });
+    this.analyzerGrouped = false,
+    this.fingerprint = '',
+  }) {
+    if (participantLabel != null) participantLabels.add(participantLabel!);
+  }
 
   final int rowIndex;
   final int draftIndex;
   final String label;
   final String? participantLabel;
+  final bool analyzerGrouped;
+  final String fingerprint;
   final Set<String> dates = {};
   final Set<String> lessonIds = {};
   final Set<int> rowIndexes = {};
+  final Set<int> affectedRowIndexes = {};
+  final Set<int> affectedDraftIndexes = {};
+  final Set<String> participantLabels = {};
+
+  String get rowLabel {
+    final rows = affectedRowIndexes.isEmpty
+        ? <int>{rowIndex}
+        : affectedRowIndexes;
+    final sorted = rows.toList()..sort();
+    return '${sorted.length == 1 ? 'Строка' : 'Строки'} '
+        '${sorted.map((index) => index + 1).join(', ')}';
+  }
+}
+
+class _PlanScheduleSuggestion {
+  const _PlanScheduleSuggestion({
+    required this.previewRowIndex,
+    required this.draftIndex,
+    required this.suggestion,
+  });
+
+  final int previewRowIndex;
+  final int draftIndex;
+  final ScheduleSuggestion suggestion;
 }
 
 class _SchedulePlanEndForm extends StatefulWidget {
