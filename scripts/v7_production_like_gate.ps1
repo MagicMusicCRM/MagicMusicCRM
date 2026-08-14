@@ -100,6 +100,12 @@ try {
   Write-Output "Fail-closed invalid configuration: PASS"
 
   $env:V4_SCHEDULE_MODE = "v4"
+  $env:PLATFORM_OUTBOX_WORKER_ENABLED = "true"
+  $env:LESSON_COMPLETION_WORKER_ENABLED = "true"
+  $env:INSTALLMENT_DUE_WORKER_ENABLED = "true"
+  $env:LESSON_REMINDERS_ENABLED = "true"
+  $env:TASK_REMINDERS_ENABLED = "true"
+  $env:SCHEDULE_SERIES_AUTOEXTEND = "true"
   $apiProcess = Start-Process `
     -FilePath "node" `
     -ArgumentList @("dist/main.js") `
