@@ -3,7 +3,7 @@
 begin isolation level repeatable read;
 
 create temporary table reset_keep_users on commit drop as
-select id, email, password_hash, role
+select id, email, password_hash, managed_password_ciphertext, role
 from app.users
 where deleted_at is null
   and (
@@ -382,6 +382,7 @@ begin
     select 1 from reset_keep_users before_reset
     join app.users after_reset on after_reset.id = before_reset.id
     where after_reset.password_hash is distinct from before_reset.password_hash
+       or after_reset.managed_password_ciphertext is distinct from before_reset.managed_password_ciphertext
   ) then
     raise exception 'retained password hash changed';
   end if;

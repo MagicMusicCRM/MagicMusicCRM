@@ -10,6 +10,43 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 
 void main() {
   group('MagicCrmService', () {
+    test(
+      'reads managed credentials through dedicated access endpoints',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/crm/teachers/teacher-a/access',
+            statusCode: 200,
+            body: {
+              'email': 'teacher@example.com',
+              'password': 'teacher-password-123',
+              'passwordRecoverable': true,
+            },
+          ),
+          _FakeResponse(
+            path: '/crm/staff/staff-a/access',
+            statusCode: 200,
+            body: {
+              'email': 'staff@example.com',
+              'password': 'staff-password-123',
+              'passwordRecoverable': true,
+            },
+          ),
+        ]);
+        final service = MagicCrmService(_client(adapter));
+
+        final teacher = await service.getTeacherAccess('teacher-a');
+        final staff = await service.getStaffAccess('staff-a');
+
+        expect(teacher['password'], 'teacher-password-123');
+        expect(staff['email'], 'staff@example.com');
+        expect(adapter.requests.map((request) => request.method), [
+          'GET',
+          'GET',
+        ]);
+      },
+    );
+
     test('maps overview stats to legacy dashboard keys', () async {
       final adapter = _FakeAdapter([
         _FakeResponse(

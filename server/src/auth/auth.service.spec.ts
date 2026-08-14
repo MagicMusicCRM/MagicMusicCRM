@@ -730,6 +730,32 @@ describe("AuthService", () => {
     );
   });
 
+  it("refreshes the recoverable copy when a managed user changes password", async () => {
+    const encrypt = jest
+      .spyOn(passwordService, "encryptForManagedAccess")
+      .mockReturnValueOnce("v1:encrypted-password");
+    query.mockResolvedValueOnce({
+      rows: [
+        {
+          id: "teacher-a",
+          email: "teacher@example.com",
+          password_hash: "new-hash",
+          role: "teacher",
+          email_verified_at: new Date(),
+        },
+      ],
+    });
+
+    await service.setPassword(
+      { userId: "teacher-a", role: "teacher" },
+      "new-strong-password-123",
+    );
+
+    expect(query.mock.calls[0][0]).toContain("managed_password_ciphertext = $3");
+    expect(query.mock.calls[0][1][2]).toBe("v1:encrypted-password");
+    encrypt.mockRestore();
+  });
+
   it("never lets public signup claim a linked staff or teacher identity", async () => {
     query
       .mockResolvedValueOnce({ rows: [{ count: "0" }] })

@@ -9,6 +9,7 @@ Future<bool?> showProvisionAccessDialog(
   required String personLabel,
   required ProvisionAccessSubmit onSubmit,
   String initialEmail = '',
+  String? currentPassword,
   bool accessExists = false,
 }) {
   return showDialog<bool>(
@@ -16,6 +17,7 @@ Future<bool?> showProvisionAccessDialog(
     builder: (_) => _ProvisionAccessDialog(
       personLabel: personLabel,
       initialEmail: initialEmail,
+      currentPassword: currentPassword,
       accessExists: accessExists,
       onSubmit: onSubmit,
     ),
@@ -26,12 +28,14 @@ class _ProvisionAccessDialog extends StatefulWidget {
   const _ProvisionAccessDialog({
     required this.personLabel,
     required this.initialEmail,
+    required this.currentPassword,
     required this.accessExists,
     required this.onSubmit,
   });
 
   final String personLabel;
   final String initialEmail;
+  final String? currentPassword;
   final bool accessExists;
   final ProvisionAccessSubmit onSubmit;
 
@@ -46,6 +50,7 @@ class _ProvisionAccessDialogState extends State<_ProvisionAccessDialog> {
   final _passwordAgain = TextEditingController();
   bool _saving = false;
   bool _showPassword = false;
+  bool _showCurrentPassword = false;
 
   @override
   void initState() {
@@ -129,6 +134,40 @@ class _ProvisionAccessDialogState extends State<_ProvisionAccessDialog> {
                       : 'Введите корректный email';
                 },
               ),
+              if (widget.accessExists) ...[
+                const SizedBox(height: 12),
+                TextFormField(
+                  initialValue: widget.currentPassword ?? '',
+                  readOnly: true,
+                  enableInteractiveSelection:
+                      widget.currentPassword?.isNotEmpty == true,
+                  obscureText:
+                      widget.currentPassword?.isNotEmpty == true &&
+                      !_showCurrentPassword,
+                  decoration: InputDecoration(
+                    labelText: 'Актуальный пароль',
+                    helperText: widget.currentPassword?.isNotEmpty == true
+                        ? 'Доступен только директору и администратору системы'
+                        : 'Старый пароль нельзя восстановить. Задайте новый — после этого он будет доступен здесь.',
+                    suffixIcon: widget.currentPassword?.isNotEmpty == true
+                        ? IconButton(
+                            tooltip: _showCurrentPassword
+                                ? 'Скрыть пароль'
+                                : 'Показать пароль',
+                            onPressed: () => setState(
+                              () =>
+                                  _showCurrentPassword = !_showCurrentPassword,
+                            ),
+                            icon: Icon(
+                              _showCurrentPassword
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
+                            ),
+                          )
+                        : null,
+                  ),
+                ),
+              ],
               const SizedBox(height: 12),
               TextFormField(
                 controller: _password,

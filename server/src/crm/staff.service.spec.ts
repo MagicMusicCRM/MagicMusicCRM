@@ -41,6 +41,7 @@ describe("StaffService", () => {
         Promise.resolve({
           email: email?.trim().toLowerCase() ?? null,
           passwordHash: email ? "hashed-password" : null,
+          passwordCiphertext: email ? "encrypted-password" : null,
           isAppAccount: Boolean(email),
         }),
       ),
@@ -129,6 +130,7 @@ describe("StaffService", () => {
       ["branch-a"],
       "sys-a",
       true,
+      "encrypted-password",
     ]);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -137,6 +139,29 @@ describe("StaffService", () => {
         entityId: "staff-a",
       }),
     );
+  });
+
+  it("redacts login email and password metadata outside Director/system_admin", async () => {
+    const row = {
+      id: "staff-a",
+      role: "admin",
+      position: "Администратор",
+      status: "working",
+      custom_data: {},
+      email: "staff@example.com",
+      password_configured: true,
+      password_changed_at: "2026-08-14T10:00:00.000Z",
+      email_changed_at: "2026-08-14T09:00:00.000Z",
+      branches: [],
+      created_at: "2026-08-14T08:00:00.000Z",
+    };
+    const { service } = createService([row]);
+
+    const result = await service.listStaff(actor, { limit: 1 });
+
+    expect(result.items[0]).not.toHaveProperty("email");
+    expect(result.items[0]).not.toHaveProperty("passwordConfigured");
+    expect(result.items[0]).not.toHaveProperty("passwordChangedAt");
   });
 
   it("rejects staff edits from roles below admin", async () => {
@@ -488,7 +513,6 @@ describe("StaffService", () => {
           isAppAccount: true,
           firstName: "Ольга",
           lastName: "Смирнова",
-          email: "staff@example.com",
           phone: "+79992222222",
           branches: [{ id: "branch-a", name: "Центр" }],
           createdAt: "2026-06-13T00:00:00.000Z",
@@ -553,7 +577,10 @@ describe("StaffService", () => {
       },
     ]);
 
-    const result = await service.listStaff(actor, {});
+    const result = await service.listStaff(
+      { userId: "director-a", role: "director" },
+      {},
+    );
     expect(result.items[0]?.email).toBeNull();
   });
 });

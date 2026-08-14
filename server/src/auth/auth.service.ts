@@ -107,6 +107,7 @@ export class AuthService {
           `
             update app.users
             set password_hash = $2,
+                managed_password_ciphertext = null,
                 password_changed_at = now(),
                 full_name = $3,
                 role = 'client'::app.user_role,
@@ -482,6 +483,8 @@ export class AuthService {
     await this.assertResetConfirmAllowed(ipHash);
 
     const passwordHash = await this.passwordService.hash(password);
+    const passwordCiphertext =
+      this.passwordService.encryptForManagedAccess(password);
     const result = await this.database.query<UserRecord>(
       `
         with reset_token as (
@@ -494,6 +497,9 @@ export class AuthService {
         )
         update app.users
         set password_hash = $2,
+            managed_password_ciphertext = case
+              when app.users.role <> 'client'::app.user_role then $3
+              else null end,
             password_changed_at = now(),
             updated_at = now()
         from reset_token
@@ -506,7 +512,7 @@ export class AuthService {
                   app.users.role,
                   app.users.email_verified_at
       `,
-      [this.tokenHash(token), passwordHash],
+      [this.tokenHash(token), passwordHash, passwordCiphertext],
     );
 
     const user = result.rows[0];
@@ -538,10 +544,15 @@ export class AuthService {
     password: string,
   ): Promise<{ user: AuthUserResponse }> {
     const passwordHash = await this.passwordService.hash(password);
+    const passwordCiphertext =
+      actor.role === "client"
+        ? null
+        : this.passwordService.encryptForManagedAccess(password);
     const result = await this.database.query<UserRecord>(
       `
         update app.users
         set password_hash = $2,
+            managed_password_ciphertext = $3,
             password_changed_at = now(),
             updated_at = now()
         where id = $1
@@ -549,7 +560,7 @@ export class AuthService {
           and is_app_account = true
         returning id, email, password_hash, role, email_verified_at
       `,
-      [actor.userId, passwordHash],
+      [actor.userId, passwordHash, passwordCiphertext],
     );
 
     const user = result.rows[0];

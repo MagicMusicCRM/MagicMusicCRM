@@ -364,6 +364,7 @@ export class LegalService {
                 full_name = null,
                 phone = null,
                 password_hash = null,
+                managed_password_ciphertext = null,
                 deleted_at = coalesce(deleted_at, now()),
                 updated_at = now()
             where id = $1

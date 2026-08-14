@@ -30,6 +30,7 @@ class SettingsTestApi extends MagicApiClient {
         ],
       },
     ],
+    this.managedCredentials = const {},
   }) : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   final String role;
@@ -38,6 +39,7 @@ class SettingsTestApi extends MagicApiClient {
   final List<Map<String, dynamic>> staff;
   final List<Map<String, dynamic>> branches;
   final List<Map<String, dynamic>> teachers;
+  final Map<String, Map<String, dynamic>> managedCredentials;
   final mutations = <String, Object?>{};
   int branchReads = 0;
 
@@ -113,6 +115,9 @@ class SettingsTestApi extends MagicApiClient {
           as T;
     }
     if (path == '/crm/staff') return <String, dynamic>{'items': staff} as T;
+    if (managedCredentials.containsKey(path)) {
+      return managedCredentials[path]! as T;
+    }
     if (path == '/crm/groups') return <String, dynamic>{'items': groups} as T;
     if (path == '/crm/rooms') {
       return <String, dynamic>{
@@ -954,6 +959,59 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(api.mutations, contains('/crm/staff/legacy-staff/access'));
+  });
+
+  testWidgets('director reveals the current managed staff password', (
+    tester,
+  ) async {
+    final api = SettingsTestApi(
+      role: 'director',
+      capabilities: const ['system.settings.manage', 'crm.client.write'],
+      staff: const [
+        {
+          'id': 'staff-with-access',
+          'role': 'admin',
+          'status': 'working',
+          'firstName': 'Ольга',
+          'lastName': 'Смирнова',
+          'email': 'staff@example.test',
+          'isAppAccount': true,
+          'passwordConfigured': true,
+          'branches': [
+            {'id': '20000000-0000-4000-8000-000000000001', 'name': 'Сокол'},
+          ],
+        },
+      ],
+      managedCredentials: const {
+        '/crm/staff/staff-with-access/access': {
+          'email': 'staff@example.test',
+          'password': 'current-password-123',
+          'passwordRecoverable': true,
+        },
+      },
+    );
+    await _pump(tester, api, initialArea: 'users');
+    await tester.tap(find.text('Сотрудники').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Смирнова Ольга'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Данные для входа'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Актуальный пароль'), findsOneWidget);
+    expect(
+      find.text('Доступен только директору и администратору системы'),
+      findsOneWidget,
+    );
+    final currentPasswordField = find.descendant(
+      of: find.widgetWithText(TextFormField, 'Актуальный пароль'),
+      matching: find.byType(TextField),
+    );
+    expect(
+      tester.widget<TextField>(currentPasswordField).controller!.text,
+      'current-password-123',
+    );
+    expect(tester.widget<TextField>(currentPasswordField).obscureText, isTrue);
   });
 
   testWidgets(

@@ -5,7 +5,7 @@ param(
   [int]$HealthyPort = 3108,
   [int]$DegradedPort = 3109,
   [Parameter(Mandatory)][string]$ExpectedRevision,
-  [string]$ExpectedMigrationId = "0135_requeue_organization_outbox"
+  [string]$ExpectedMigrationId = "0136_managed_password_recovery"
 )
 
 $ErrorActionPreference = "Stop"
@@ -93,12 +93,15 @@ function New-EnvironmentArguments {
   )
 
   $jwtSecret = [guid]::NewGuid().ToString("N") + [guid]::NewGuid().ToString("N")
+  $managedPasswordSecret =
+    [guid]::NewGuid().ToString("N") + [guid]::NewGuid().ToString("N")
   return @(
     "-e", "NODE_ENV=production",
     "-e", "PORT=3000",
     "-e", "DATABASE_URL=$Url",
     "-e", "MIGRATION_DATABASE_URL=$Url",
     "-e", "JWT_ACCESS_SECRET=$jwtSecret",
+    "-e", "MANAGED_PASSWORD_ENCRYPTION_KEY=$managedPasswordSecret",
     "-e", "V4_ACCESS_MODE=v4",
     "-e", "V4_ACCESS_KILL_SWITCH=false",
     "-e", "V4_SCHEDULE_MODE=$ScheduleMode",

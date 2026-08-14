@@ -102,7 +102,9 @@ export class StaffService {
     private readonly accounts: PersonAccountService,
   ) {}
 
-  private toStaffDto(row: StaffRow) {
+  private toStaffDto(row: StaffRow, actor: ActorContext) {
+    const canReadCredentials =
+      actor.role === "director" || actor.role === "system_admin";
     return {
       id: row.id,
       role: row.role,
@@ -113,16 +115,20 @@ export class StaffService {
       profileUserId: row.profile_user_id,
       appRole: row.app_role,
       isAppAccount: row.is_app_account ?? false,
-      passwordConfigured: row.password_configured ?? false,
-      passwordChangedAt: row.password_changed_at ?? null,
-      emailChangedAt: row.email_changed_at ?? null,
+      ...(canReadCredentials
+        ? {
+            passwordConfigured: row.password_configured ?? false,
+            passwordChangedAt: row.password_changed_at ?? null,
+            emailChangedAt: row.email_changed_at ?? null,
+            email: presentableEmail(row.email),
+          }
+        : {}),
       lifecycleState: row.lifecycle_state ?? "active",
       version: Number(row.version ?? 1),
       offboardedAt: row.offboarded_at ?? null,
       offboardReason: row.offboard_reason ?? null,
       firstName: row.first_name,
       lastName: row.last_name,
-      email: presentableEmail(row.email),
       phone: row.phone,
       branches: row.branches ?? [],
       createdAt: row.created_at,
@@ -171,7 +177,8 @@ export class StaffService {
             or lower(
               coalesce(p.first_name, '') || ' ' ||
               coalesce(p.last_name, '') || ' ' ||
-              coalesce(u.email, '') || ' ' ||
+              case when $9::text in ('director', 'system_admin')
+                then coalesce(u.email, '') else '' end || ' ' ||
               coalesce(p.phone, '') || ' ' ||
               coalesce(sm.role, '') || ' ' ||
               coalesce(sm.position, '')
@@ -236,7 +243,7 @@ export class StaffService {
       ],
     );
 
-    return { items: result.rows.map((row) => this.toStaffDto(row)) };
+    return { items: result.rows.map((row) => this.toStaffDto(row, actor)) };
   }
 
   async getStaff(actor: ActorContext, staffId: string) {
@@ -280,7 +287,8 @@ export class StaffService {
           ),
           inserted_user as (
             insert into app.users (
-              email, password_hash, full_name, phone, role,
+              email, password_hash, managed_password_ciphertext,
+              full_name, phone, role,
               email_verified_at, profile_completed, is_app_account,
               email_changed_at, password_changed_at
             )
@@ -288,7 +296,7 @@ export class StaffService {
                 $1,
                 'staff-' || gen_random_uuid()::text || '@local.magicmusiccrm.invalid'
               ),
-              $7, $2, $3, $4::app.user_role,
+              $7, $11, $2, $3, $4::app.user_role,
               case when $10::boolean then now() else null end,
               true, $10::boolean,
               case when $10::boolean then now() else null end,
@@ -374,6 +382,7 @@ export class StaffService {
           dto.branchIds,
           actor.userId,
           credentials.isAppAccount,
+          credentials.passwordCiphertext,
         ],
       );
       const staff = result.rows[0];
@@ -388,7 +397,7 @@ export class StaffService {
         entityType: "staff",
         entityId: staff.id,
       });
-      return this.toStaffDto(staff);
+      return this.toStaffDto(staff, actor);
     } catch (error) {
       rethrowCreatePersonError(error);
     }
@@ -401,6 +410,10 @@ export class StaffService {
   ) {
     await this.accounts.manageAccess(actor, "staff", staffId, dto);
     return this.getStaff(actor, staffId);
+  }
+
+  readAccess(actor: ActorContext, staffId: string) {
+    return this.accounts.readAccess(actor, "staff", staffId);
   }
 
   async updateStaff(actor: ActorContext, staffId: string, dto: UpdateStaffDto) {
@@ -617,7 +630,7 @@ export class StaffService {
         entityType: "staff",
         entityId: staff.id,
       });
-      return this.toStaffDto(staff);
+      return this.toStaffDto(staff, actor);
     } catch (error) {
       rethrowCreatePersonError(error);
     }

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { ConfigService } from "@nestjs/config";
 import { Pool, PoolClient } from "pg";
 import { AuditService } from "../audit/audit.service";
 import { PasswordService } from "../auth/password.service";
@@ -84,7 +85,9 @@ describe("Teacher and staff app accounts (PostgreSQL)", () => {
     const audit = {
       record: jest.fn().mockResolvedValue(undefined),
     } as unknown as AuditService;
-    passwords = new PasswordService();
+    passwords = new PasswordService({
+      get: jest.fn().mockReturnValue("test-managed-password-key-at-least-32-bytes"),
+    } as unknown as ConfigService);
     const policy = new CrmPolicy();
     const accounts = new PersonAccountService(database, passwords, audit);
     staff = new StaffService(database, audit, policy, accounts);
@@ -452,5 +455,17 @@ describe("Teacher and staff app accounts (PostgreSQL)", () => {
         changedTeacher?.password_hash ?? "",
       ),
     ).toBe(true);
+    await expect(staff.readAccess(actor, legacyStaffId)).resolves.toMatchObject({
+      email: changedStaffEmail,
+      password: staffPassword,
+      passwordRecoverable: true,
+    });
+    await expect(
+      teachers.readAccess(actor, legacyTeacherId),
+    ).resolves.toMatchObject({
+      email: legacyTeacherEmail,
+      password: changedTeacherPassword,
+      passwordRecoverable: true,
+    });
   });
 });

@@ -38,8 +38,9 @@
 -- (`where deleted_at is null`) — предикат обязателен, иначе Postgres не выведет
 -- нужный индекс.
 select format(
-  'insert into app.users (id, email, password_hash, full_name, phone, role, email_verified_at, profile_completed, created_at, updated_at, is_app_account, phone_verified_at, phone_normalized) values (%L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L) on conflict (lower(email)) where deleted_at is null do update set password_hash = excluded.password_hash, full_name = excluded.full_name, role = excluded.role, is_app_account = excluded.is_app_account, email_verified_at = excluded.email_verified_at, phone_verified_at = excluded.phone_verified_at;',
-  u.id, u.email, u.password_hash, u.full_name, u.phone, u.role,
+  'insert into app.users (id, email, password_hash, managed_password_ciphertext, full_name, phone, role, email_verified_at, profile_completed, created_at, updated_at, is_app_account, phone_verified_at, phone_normalized) values (%L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L) on conflict (lower(email)) where deleted_at is null do update set password_hash = excluded.password_hash, managed_password_ciphertext = excluded.managed_password_ciphertext, full_name = excluded.full_name, role = excluded.role, is_app_account = excluded.is_app_account, email_verified_at = excluded.email_verified_at, phone_verified_at = excluded.phone_verified_at;',
+  u.id, u.email, u.password_hash, u.managed_password_ciphertext,
+  u.full_name, u.phone, u.role,
   u.email_verified_at, u.profile_completed, u.created_at, u.updated_at,
   u.is_app_account, u.phone_verified_at, u.phone_normalized
 )

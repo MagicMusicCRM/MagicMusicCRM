@@ -447,6 +447,10 @@ extension MagicCrmCore on MagicCrmService {
     return _legacyTeacher(response);
   }
 
+  Future<Map<String, dynamic>> getTeacherAccess(String teacherId) {
+    return _api.get<Map<String, dynamic>>('/crm/teachers/$teacherId/access');
+  }
+
   Future<Map<String, dynamic>> updateTeacher(
     String id, {
     String? firstName,
@@ -729,6 +733,10 @@ extension MagicCrmCore on MagicCrmService {
       data: data,
     );
     return _legacyStaff(response);
+  }
+
+  Future<Map<String, dynamic>> getStaffAccess(String staffId) {
+    return _api.get<Map<String, dynamic>>('/crm/staff/$staffId/access');
   }
 
   Future<Map<String, dynamic>> previewPersonLifecycle({

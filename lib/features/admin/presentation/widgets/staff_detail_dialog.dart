@@ -147,13 +147,33 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
   Future<void> _provisionAccess() async {
     final id = _staff['id']?.toString();
     if (id == null || id.isEmpty) return;
+    final accessExists = _staff['is_app_account'] == true;
+    Map<String, dynamic>? credentials;
+    if (accessExists) {
+      try {
+        credentials = await ref
+            .read(magicCrmServiceProvider)
+            .getStaffAccess(id);
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Не удалось получить данные для входа: $error'),
+            ),
+          );
+        }
+        return;
+      }
+    }
+    if (!mounted) return;
     Map<String, dynamic>? updated;
     final saved = await showProvisionAccessDialog(
       context,
       personLabel: '${_lastNameController.text} ${_firstNameController.text}'
           .trim(),
-      initialEmail: _emailController.text,
-      accessExists: _staff['is_app_account'] == true,
+      initialEmail: credentials?['email']?.toString() ?? _emailController.text,
+      currentPassword: credentials?['password']?.toString(),
+      accessExists: accessExists,
       onSubmit: (email, password) async {
         updated = await ref
             .read(magicCrmServiceProvider)
@@ -264,6 +284,10 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
     final branches = _branchesText(_staff['branches']);
     final isAppAccount = _staff['is_app_account'] == true;
     final appRole = _staff['app_role']?.toString() ?? '';
+    final canManageCredentials = const {
+      'director',
+      'system_admin',
+    }.contains(widget.currentRole);
 
     return AlertDialog(
       title: const Text('Карточка сотрудника'),
@@ -296,18 +320,19 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
                           ? AppTheme.success
                           : Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
-                    _SummaryChip(
-                      icon: _staff['password_configured'] == true
-                          ? Icons.password_rounded
-                          : Icons.no_encryption_gmailerrorred_rounded,
-                      label: 'Пароль',
-                      value: _staff['password_configured'] == true
-                          ? 'Настроен'
-                          : 'Не задан',
-                      color: _staff['password_configured'] == true
-                          ? AppTheme.success
-                          : Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                    if (canManageCredentials)
+                      _SummaryChip(
+                        icon: _staff['password_configured'] == true
+                            ? Icons.password_rounded
+                            : Icons.no_encryption_gmailerrorred_rounded,
+                        label: 'Пароль',
+                        value: _staff['password_configured'] == true
+                            ? 'Настроен'
+                            : 'Не задан',
+                        color: _staff['password_configured'] == true
+                            ? AppTheme.success
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     if (branches.isNotEmpty)
                       _SummaryChip(
                         icon: Icons.location_on_outlined,
@@ -383,17 +408,19 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
                       setState(() => _canonicalPhone = c),
                 ),
                 const SizedBox(height: 12),
-                TextFormField(
-                  controller: _emailController,
-                  readOnly: true,
-                  decoration: InputDecoration(
-                    labelText: 'Email для входа',
-                    helperText: _credentialHelper(_staff),
+                if (canManageCredentials) ...[
+                  TextFormField(
+                    controller: _emailController,
+                    readOnly: true,
+                    decoration: InputDecoration(
+                      labelText: 'Email для входа',
+                      helperText: _credentialHelper(_staff),
+                    ),
+                    keyboardType: TextInputType.emailAddress,
+                    validator: _emailValidator,
                   ),
-                  keyboardType: TextInputType.emailAddress,
-                  validator: _emailValidator,
-                ),
-                const SizedBox(height: 12),
+                  const SizedBox(height: 12),
+                ],
                 InputDecorator(
                   decoration: const InputDecoration(
                     labelText: 'Роль доступа',

@@ -95,7 +95,9 @@ export class TeachersService {
     return Number.isFinite(numeric) ? numeric : 0;
   }
 
-  private toTeacherDto(row: TeacherRow) {
+  private toTeacherDto(row: TeacherRow, actor: ActorContext) {
+    const canReadCredentials =
+      actor.role === "director" || actor.role === "system_admin";
     const teacher: Record<string, unknown> = {
       id: row.id,
       status: row.status,
@@ -104,9 +106,14 @@ export class TeachersService {
       profileUserId: row.profile_user_id,
       firstName: row.first_name,
       lastName: row.last_name,
-      email: presentableEmail(row.email),
       phone: row.phone,
     };
+    if (canReadCredentials) {
+      teacher.email = presentableEmail(row.email);
+      teacher.passwordConfigured = row.password_configured ?? false;
+      teacher.passwordChangedAt = row.password_changed_at ?? null;
+      teacher.emailChangedAt = row.email_changed_at ?? null;
+    }
     if (row.custom_data !== undefined) {
       teacher.customData = row.custom_data ?? {};
     }
@@ -116,9 +123,6 @@ export class TeachersService {
     if (row.is_app_account !== undefined) {
       teacher.isAppAccount = row.is_app_account ?? false;
     }
-    teacher.passwordConfigured = row.password_configured ?? false;
-    teacher.passwordChangedAt = row.password_changed_at ?? null;
-    teacher.emailChangedAt = row.email_changed_at ?? null;
     teacher.lifecycleState = row.lifecycle_state ?? "active";
     teacher.version = Number(row.version ?? 1);
     teacher.offboardedAt = row.offboarded_at ?? null;
@@ -295,7 +299,8 @@ export class TeachersService {
             or lower(
               coalesce(p.first_name, '') || ' ' ||
               coalesce(p.last_name, '') || ' ' ||
-              coalesce(u.email, '') || ' ' ||
+              case when $1::text in ('director', 'system_admin')
+                then coalesce(u.email, '') else '' end || ' ' ||
               coalesce(p.phone, '') || ' ' ||
               coalesce(t.specialization, '') || ' ' ||
               coalesce(t.custom_data::text, '')
@@ -419,7 +424,7 @@ export class TeachersService {
       ],
     );
 
-    return { items: result.rows.map((row) => this.toTeacherDto(row)) };
+    return { items: result.rows.map((row) => this.toTeacherDto(row, actor)) };
   }
 
   // Single teacher by id. Deliberately routed through listTeachers so the
@@ -491,7 +496,8 @@ export class TeachersService {
           ),
           inserted_user as (
             insert into app.users (
-              email, password_hash, full_name, phone, role,
+              email, password_hash, managed_password_ciphertext,
+              full_name, phone, role,
               email_verified_at, profile_completed, is_app_account,
               email_changed_at, password_changed_at
             )
@@ -499,7 +505,7 @@ export class TeachersService {
                 $3,
                 'teacher-' || gen_random_uuid()::text || '@local.magicmusiccrm.invalid'
               ),
-              $7, $4, $5, $16::app.user_role,
+              $7, $17, $4, $5, $16::app.user_role,
               case when $15::boolean then now() else null end,
               true, $15::boolean,
               case when $15::boolean then now() else null end,
@@ -603,6 +609,7 @@ export class TeachersService {
           dto.rateEffectiveFrom ?? null,
           credentials.isAppAccount,
           accessRole,
+          credentials.passwordCiphertext,
         ],
       );
       const teacher = result.rows[0];
@@ -622,7 +629,7 @@ export class TeachersService {
           salaryConfigured: dto.salary !== undefined,
         },
       });
-      return this.toTeacherDto(teacher);
+      return this.toTeacherDto(teacher, actor);
     } catch (error) {
       rethrowCreatePersonError(error);
     }
@@ -635,6 +642,10 @@ export class TeachersService {
   ) {
     await this.accounts.manageAccess(actor, "teacher", teacherId, dto);
     return this.getTeacher(actor, teacherId);
+  }
+
+  readAccess(actor: ActorContext, teacherId: string) {
+    return this.accounts.readAccess(actor, "teacher", teacherId);
   }
 
   async updateTeacher(
@@ -912,7 +923,7 @@ export class TeachersService {
       });
       if (updatedTeacher) {
         return {
-          ...this.toTeacherDto(updatedTeacher),
+          ...this.toTeacherDto(updatedTeacher, actor),
           payrollVersion: mutation.version,
         };
       }
@@ -934,6 +945,6 @@ export class TeachersService {
         salaryChanged: false,
       },
     });
-    return this.toTeacherDto(teacher);
+    return this.toTeacherDto(teacher, actor);
   }
 }

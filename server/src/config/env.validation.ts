@@ -37,6 +37,11 @@ export const envValidationSchema = Joi.object({
   FIREBASE_PRIVATE_KEY: Joi.string().allow('').default(''),
   FIREBASE_TIMEOUT_MS: Joi.number().integer().min(100).max(30000).default(5000),
   NOTIFICATION_TOKEN_ENCRYPTION_KEY: Joi.string().allow('').default(''),
+  MANAGED_PASSWORD_ENCRYPTION_KEY: Joi.string().when('NODE_ENV', {
+    is: 'production',
+    then: Joi.string().min(32).required(),
+    otherwise: Joi.string().allow('').default('')
+  }),
   LESSON_COMPLETION_WORKER_ENABLED: productionWorkerFlag(),
   PLATFORM_OUTBOX_WORKER_ENABLED: productionWorkerFlag(),
   INSTALLMENT_DUE_WORKER_ENABLED: productionWorkerFlag(),

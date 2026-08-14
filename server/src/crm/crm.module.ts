@@ -5,6 +5,7 @@ import { AuthModule } from "../auth/auth.module";
 import { AccessControlModule } from "../access-control/access-control.module";
 import { LEAD_INTAKE_PORT } from "../common/lead-intake.port";
 import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
+import { RolesGuard } from "../common/security/roles.guard";
 import { DatabaseModule } from "../db/database.module";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { ChatWorkTimelineModule } from "../messenger/chat-work-timeline.module";
@@ -232,6 +233,7 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
       useExisting: LessonSettlementService,
     },
     JwtAuthGuard,
+    RolesGuard,
     // Lead intake (chat/app/site → lead) lives in LeadIntakeService, the port
     // implementer. The messenger depends only on LEAD_INTAKE_PORT, so this
     // binding is the single point that moves — messenger stays untouched.

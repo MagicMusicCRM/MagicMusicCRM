@@ -2,7 +2,7 @@
 param(
   [string]$DatabaseName = "magiccrm_v7_prodlike_gate",
   [int]$Port = 3107,
-  [string]$ExpectedMigrationId = "0135_requeue_organization_outbox"
+  [string]$ExpectedMigrationId = "0136_managed_password_recovery"
 )
 
 $ErrorActionPreference = "Stop"
@@ -73,6 +73,8 @@ try {
   $env:NODE_ENV = "production"
   $env:PORT = $Port.ToString()
   $env:JWT_ACCESS_SECRET =
+    [guid]::NewGuid().ToString("N") + [guid]::NewGuid().ToString("N")
+  $env:MANAGED_PASSWORD_ENCRYPTION_KEY =
     [guid]::NewGuid().ToString("N") + [guid]::NewGuid().ToString("N")
   $env:V4_ACCESS_MODE = "v4"
   $env:V4_ACCESS_KILL_SWITCH = "false"

@@ -7,6 +7,7 @@ const baseEnv = {
   DATABASE_URL: 'postgres://user:pass@localhost:5432/db',
 };
 const productionV4 = {
+  MANAGED_PASSWORD_ENCRYPTION_KEY: STRONG_SECRET,
   V4_ACCESS_MODE: 'v4',
   V4_ACCESS_KILL_SWITCH: false,
   V4_SCHEDULE_MODE: 'v4',
@@ -56,6 +57,20 @@ describe('envValidationSchema — JWT_ACCESS_SECRET', () => {
         ...productionV4,
       });
       expect(error).toBeUndefined();
+    });
+
+    it('требует отдельный ключ управляемых паролей', () => {
+      const { MANAGED_PASSWORD_ENCRYPTION_KEY: _, ...withoutManagedKey } =
+        productionV4;
+      const { error } = envValidationSchema.validate({
+        ...baseEnv,
+        NODE_ENV: 'production',
+        JWT_ACCESS_SECRET: STRONG_SECRET,
+        ...withoutManagedKey,
+      });
+      expect(error?.details[0]?.path).toContain(
+        'MANAGED_PASSWORD_ENCRYPTION_KEY',
+      );
     });
 
     it('не запускается на legacy/shadow маршрутах', () => {

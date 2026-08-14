@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   Headers,
   Param,
   ParseUUIDPipe,
@@ -16,6 +17,8 @@ import { Response } from "express";
 import { ActorContext } from "../common/security/actor-context";
 import { CurrentActor } from "../common/security/current-actor.decorator";
 import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
+import { Roles } from "../common/security/roles.decorator";
+import { RolesGuard } from "../common/security/roles.guard";
 import { StaffService } from "./staff.service";
 import { TeachersService } from "./teachers.service";
 import { PayrollService } from "./payroll.service";
@@ -92,6 +95,18 @@ export class CrmPeopleController {
     @Body() dto: ProvisionPersonAccessDto,
   ) {
     return this.teachers.provisionAccess(actor, id, dto);
+  }
+
+  @Get("teachers/:id/access")
+  @UseGuards(RolesGuard)
+  @Roles("director", "system_admin")
+  @Header("Cache-Control", "no-store")
+  @Header("Pragma", "no-cache")
+  readTeacherAccess(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.teachers.readAccess(actor, id);
   }
 
   @Get("teachers/:id/lifecycle-preview")
@@ -296,6 +311,18 @@ export class CrmPeopleController {
     @Body() dto: ProvisionPersonAccessDto,
   ) {
     return this.staff.provisionAccess(actor, id, dto);
+  }
+
+  @Get("staff/:id/access")
+  @UseGuards(RolesGuard)
+  @Roles("director", "system_admin")
+  @Header("Cache-Control", "no-store")
+  @Header("Pragma", "no-cache")
+  readStaffAccess(
+    @CurrentActor() actor: ActorContext,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.staff.readAccess(actor, id);
   }
 
   @Get("staff/:id/lifecycle-preview")

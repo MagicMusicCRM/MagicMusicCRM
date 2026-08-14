@@ -28,6 +28,7 @@ describe("TeachersService", () => {
         Promise.resolve({
           email: email?.trim().toLowerCase() ?? null,
           passwordHash: email ? "hashed-password" : null,
+          passwordCiphertext: email ? "encrypted-password" : null,
           isAppAccount: Boolean(email),
         }),
       ),
@@ -145,6 +146,7 @@ describe("TeachersService", () => {
       "2026-08-01",
       true,
       "admin",
+      "encrypted-password",
     ]);
     expect(String(query.mock.calls[0][0])).toContain("inserted_rate as");
     expect(String(query.mock.calls[0][0])).toContain("references_valid");
@@ -162,6 +164,28 @@ describe("TeachersService", () => {
         entityId: "teacher-a",
       }),
     );
+  });
+
+  it("redacts login email and password metadata outside Director/system_admin", async () => {
+    const { service } = createService([
+      {
+        id: "teacher-a",
+        status: "active",
+        specialization: "Вокал",
+        first_name: "Иван",
+        last_name: "Петров",
+        email: "teacher@example.com",
+        password_configured: true,
+        password_changed_at: "2026-08-14T10:00:00.000Z",
+        email_changed_at: "2026-08-14T09:00:00.000Z",
+      },
+    ]);
+
+    const teacher = await service.getTeacher(actor, "teacher-a");
+
+    expect(teacher).not.toHaveProperty("email");
+    expect(teacher).not.toHaveProperty("passwordConfigured");
+    expect(teacher).not.toHaveProperty("passwordChangedAt");
   });
 
   it("creates a teacher without informational disciplines", async () => {
@@ -220,7 +244,6 @@ describe("TeachersService", () => {
           profileUserId: "teacher-user-a",
           firstName: "Мария",
           lastName: "Петрова",
-          email: "teacher@example.com",
           phone: "+79991111111",
         },
       ],
@@ -312,7 +335,6 @@ describe("TeachersService", () => {
           isAppAccount: false,
           firstName: "Мария",
           lastName: "Петрова",
-          email: "teacher@example.com",
           phone: "+79991111111",
           branches: [{ id: "branch-a", name: "Центр" }],
           studentsCount: 12,

@@ -231,7 +231,14 @@ suites / `1397/1397`, analyze/typecheck/build PASS. Evidence:
 `175/175` suites / `1401/1401`, analyze/typecheck/build/diff-check PASS.
 
 Teacher/Staff optional account, credential management и атомарный person
-lifecycle локально реализованы миграциями `0122`/`0123`. Старый Profile role
+lifecycle локально реализованы миграциями `0122`/`0123`. Миграция `0136`
+добавляет отдельный AES-256-GCM envelope управляемого пароля: обычный вход
+остаётся на `scrypt`, а явное чтение доступно только Director/system_admin,
+проверяет иерархию target и пишет audit. Обычные Teacher/Staff DTO исключают
+login email/password metadata для остальных ролей. Старые пароли становятся
+доступны только после следующей смены; production до запуска требует отдельный
+`MANAGED_PASSWORD_ENCRYPTION_KEY`, который нельзя терять или менять без плана
+ротации. Старый Profile role
 endpoint удалён; повышение роли осталось только в `Настройки → Доступ`, а
 каноническая access-команда синхронизирует Staff projection. Эти изменения ещё
 не выпускались и не проходили owner-UAT.

@@ -287,12 +287,32 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
   }
 
   Future<void> _provisionAccess() async {
+    final accessExists = _localData['is_app_account'] == true;
+    Map<String, dynamic>? credentials;
+    if (accessExists) {
+      try {
+        credentials = await ref
+            .read(magicCrmServiceProvider)
+            .getTeacherAccess(_teacherId);
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Не удалось получить данные для входа: $error'),
+            ),
+          );
+        }
+        return;
+      }
+    }
+    if (!mounted) return;
     Map<String, dynamic>? updated;
     final saved = await showProvisionAccessDialog(
       context,
       personLabel: _nameController.text.trim(),
-      initialEmail: _emailController.text,
-      accessExists: _localData['is_app_account'] == true,
+      initialEmail: credentials?['email']?.toString() ?? _emailController.text,
+      currentPassword: credentials?['password']?.toString(),
+      accessExists: accessExists,
       onSubmit: (email, password) async {
         updated = await ref
             .read(magicCrmServiceProvider)
@@ -685,6 +705,10 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final canManageCredentials = const {
+      'director',
+      'system_admin',
+    }.contains(ref.watch(capabilitySnapshotProvider).asData?.value.role);
     return AlertDialog(
       title: const Text('Карточка преподавателя'),
       content: SizedBox(
@@ -694,10 +718,8 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _buildSummary(context),
-              if (const {'director', 'system_admin'}.contains(
-                ref.watch(capabilitySnapshotProvider).asData?.value.role,
-              )) ...[
+              _buildSummary(context, canManageCredentials),
+              if (canManageCredentials) ...[
                 const SizedBox(height: 8),
                 Align(
                   alignment: Alignment.centerLeft,
@@ -746,16 +768,18 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
                 onCanonicalChanged: (c) => _canonicalPhone = c,
               ),
               const SizedBox(height: 12),
-              TextField(
-                controller: _emailController,
-                readOnly: true,
-                decoration: InputDecoration(
-                  labelText: 'Email для входа',
-                  helperText: _credentialHelper(_localData),
+              if (canManageCredentials) ...[
+                TextField(
+                  controller: _emailController,
+                  readOnly: true,
+                  decoration: InputDecoration(
+                    labelText: 'Email для входа',
+                    helperText: _credentialHelper(_localData),
+                  ),
+                  keyboardType: TextInputType.emailAddress,
                 ),
-                keyboardType: TextInputType.emailAddress,
-              ),
-              const SizedBox(height: 12),
+                const SizedBox(height: 12),
+              ],
               InputDecorator(
                 decoration: const InputDecoration(
                   labelText: 'Роль доступа',
@@ -1047,7 +1071,7 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
     );
   }
 
-  Widget _buildSummary(BuildContext context) {
+  Widget _buildSummary(BuildContext context, bool canManageCredentials) {
     final branches = _branchesText(_localData['branches']);
     final students = _asInt(_localData['students_count']);
     final lessons = _asInt(_localData['lessons_count']);
@@ -1074,18 +1098,19 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
             value: students.toString(),
             color: AppTheme.primaryGold,
           ),
-          _TeacherMetric(
-            icon: _localData['password_configured'] == true
-                ? Icons.password_rounded
-                : Icons.no_encryption_gmailerrorred_rounded,
-            label: 'Пароль',
-            value: _localData['password_configured'] == true
-                ? 'Настроен'
-                : 'Не задан',
-            color: _localData['password_configured'] == true
-                ? AppTheme.success
-                : Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
+          if (canManageCredentials)
+            _TeacherMetric(
+              icon: _localData['password_configured'] == true
+                  ? Icons.password_rounded
+                  : Icons.no_encryption_gmailerrorred_rounded,
+              label: 'Пароль',
+              value: _localData['password_configured'] == true
+                  ? 'Настроен'
+                  : 'Не задан',
+              color: _localData['password_configured'] == true
+                  ? AppTheme.success
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           _TeacherMetric(
             icon: Icons.event_available_rounded,
             label: 'Занятия',

@@ -21,6 +21,7 @@ export type PersonAccountType = "teacher" | "staff";
 export interface PreparedPersonCredentials {
   email: string | null;
   passwordHash: string | null;
+  passwordCiphertext: string | null;
   isAppAccount: boolean;
 }
 
@@ -30,6 +31,7 @@ interface PersonAccountTarget {
   user_id: string | null;
   current_email: string | null;
   current_password_hash: string | null;
+  current_password_ciphertext: string | null;
   current_role: string | null;
   is_app_account: boolean;
   first_name: string | null;
@@ -45,6 +47,14 @@ interface ManagedAccountResult {
   role: UserRole;
   isAppAccount: true;
   passwordConfigured: boolean;
+  passwordChangedAt: Date | string | null;
+  emailChangedAt: Date | string | null;
+}
+
+export interface ManagedCredentialsResult {
+  email: string;
+  password: string | null;
+  passwordRecoverable: boolean;
   passwordChangedAt: Date | string | null;
   emailChangedAt: Date | string | null;
 }
@@ -91,6 +101,9 @@ export class PersonAccountService {
     return {
       email,
       passwordHash: password ? await this.passwords.hash(password) : null,
+      passwordCiphertext: password
+        ? this.passwords.encryptForManagedAccess(password)
+        : null,
       isAppAccount: hasEmail,
     };
   }
@@ -138,6 +151,9 @@ export class PersonAccountService {
     const passwordHash = requestedPassword
       ? await this.passwords.hash(requestedPassword)
       : null;
+    const passwordCiphertext = requestedPassword
+      ? this.passwords.encryptForManagedAccess(requestedPassword)
+      : null;
 
     try {
       const result = await this.database.transaction(async (client) => {
@@ -180,6 +196,10 @@ export class PersonAccountService {
           role,
           email: requestedEmail ?? target.current_email,
           passwordHash: passwordHash ?? target.current_password_hash,
+          passwordCiphertext:
+            passwordHash !== null
+              ? passwordCiphertext
+              : target.current_password_ciphertext,
           emailChanged: requestedEmail !== null,
           passwordChanged: passwordHash !== null,
           actorUserId: actor.userId,
@@ -228,6 +248,85 @@ export class PersonAccountService {
     }
   }
 
+  async readAccess(
+    actor: ActorContext,
+    personType: PersonAccountType,
+    entityId: string,
+  ): Promise<ManagedCredentialsResult> {
+    this.assertCanManage(actor);
+    const result = await this.database.query<PersonAccountTarget & {
+      password_changed_at: Date | string | null;
+      email_changed_at: Date | string | null;
+    }>(
+      personType === "teacher"
+        ? `select t.id as entity_id, t.profile_id, p.user_id,
+             u.email as current_email, u.password_hash as current_password_hash,
+             u.managed_password_ciphertext as current_password_ciphertext,
+             u.role::text as current_role,
+             coalesce(u.is_app_account, false) as is_app_account,
+             coalesce(p.first_name, t.custom_data->>'firstName') as first_name,
+             coalesce(p.last_name, t.custom_data->>'lastName') as last_name,
+             p.phone, coalesce(u.role::text, 'teacher') as account_role,
+             coalesce(t.lifecycle_state, 'active') as lifecycle_state,
+             u.password_changed_at, u.email_changed_at
+           from app.teachers t
+           left join app.profiles p
+             on p.id = t.profile_id and p.deleted_at is null
+           left join app.users u
+             on u.id = p.user_id and u.deleted_at is null
+           where t.id = $1 and t.deleted_at is null`
+        : `select sm.id as entity_id, sm.profile_id, p.user_id,
+             u.email as current_email, u.password_hash as current_password_hash,
+             u.managed_password_ciphertext as current_password_ciphertext,
+             u.role::text as current_role,
+             coalesce(u.is_app_account, false) as is_app_account,
+             p.first_name, p.last_name, p.phone,
+             coalesce(u.role::text, sm.role) as account_role,
+             coalesce(sm.lifecycle_state, 'active') as lifecycle_state,
+             u.password_changed_at, u.email_changed_at
+           from app.staff_members sm
+           left join app.profiles p
+             on p.id = sm.profile_id and p.deleted_at is null
+           left join app.users u
+             on u.id = p.user_id and u.deleted_at is null
+           where sm.id = $1 and sm.deleted_at is null`,
+      [entityId],
+    );
+    const target = result.rows[0];
+    if (!target) {
+      throw new NotFoundException(
+        personType === "teacher"
+          ? "Преподаватель не найден."
+          : "Сотрудник не найден.",
+      );
+    }
+    if (target.lifecycle_state !== "active" || !target.is_app_account) {
+      throw new BadRequestException("У сотрудника нет активного доступа.");
+    }
+    this.assertCanManageTarget(actor, target);
+    if (!target.current_email || !target.current_password_hash) {
+      throw new BadRequestException("Данные для входа не настроены.");
+    }
+
+    const password = this.passwords.decryptForManagedAccess(
+      target.current_password_ciphertext,
+    );
+    await this.audit.record({
+      actor,
+      action: `crm.${personType}_credentials_viewed`,
+      entityType: personType,
+      entityId,
+      metadata: { passwordRecoverable: password !== null },
+    });
+    return {
+      email: target.current_email,
+      password,
+      passwordRecoverable: password !== null,
+      passwordChangedAt: target.password_changed_at,
+      emailChangedAt: target.email_changed_at,
+    };
+  }
+
   private async lockTarget(
     client: PoolClient,
     personType: PersonAccountType,
@@ -238,6 +337,7 @@ export class PersonAccountService {
         ? await client.query<PersonAccountTarget>(
             `select t.id as entity_id, t.profile_id, p.user_id,
                u.email as current_email, u.password_hash as current_password_hash,
+               u.managed_password_ciphertext as current_password_ciphertext,
                u.role::text as current_role,
                coalesce(u.is_app_account, false) as is_app_account,
                coalesce(p.first_name, t.custom_data->>'firstName') as first_name,
@@ -256,6 +356,7 @@ export class PersonAccountService {
         : await client.query<PersonAccountTarget>(
             `select sm.id as entity_id, sm.profile_id, p.user_id,
                u.email as current_email, u.password_hash as current_password_hash,
+               u.managed_password_ciphertext as current_password_ciphertext,
                u.role::text as current_role,
                coalesce(u.is_app_account, false) as is_app_account,
                p.first_name, p.last_name, p.phone,
@@ -290,6 +391,7 @@ export class PersonAccountService {
       role: UserRole;
       email: string | null;
       passwordHash: string | null;
+      passwordCiphertext: string | null;
       emailChanged: boolean;
       passwordChanged: boolean;
       actorUserId: string;
@@ -308,11 +410,13 @@ export class PersonAccountService {
         `update app.users
          set email = $2,
              password_hash = $3,
+             managed_password_ciphertext = case
+               when $6 then $4 else managed_password_ciphertext end,
              is_app_account = true,
-             email_verified_at = case when $4 then now()
+             email_verified_at = case when $5 then now()
                else coalesce(email_verified_at, now()) end,
-             email_changed_at = case when $4 then now() else email_changed_at end,
-             password_changed_at = case when $5 then now() else password_changed_at end,
+             email_changed_at = case when $5 then now() else email_changed_at end,
+             password_changed_at = case when $6 then now() else password_changed_at end,
              profile_completed = true,
              updated_at = now()
          where id = $1 and deleted_at is null
@@ -321,6 +425,7 @@ export class PersonAccountService {
           userId,
           input.email,
           input.passwordHash,
+          input.passwordCiphertext,
           input.emailChanged,
           input.passwordChanged,
         ],
@@ -330,19 +435,21 @@ export class PersonAccountService {
     } else {
       const inserted = await client.query<{ id: string }>(
         `insert into app.users (
-           email, password_hash, full_name, phone, role, email_verified_at,
+           email, password_hash, managed_password_ciphertext,
+           full_name, phone, role, email_verified_at,
            profile_completed, is_app_account, email_changed_at,
            password_changed_at
          ) values (
-           $1, $2,
-           nullif(btrim(concat_ws(' ', $3::text, $4::text)), ''), $5::text,
-           $6::app.user_role, now(), true, true,
-           case when $7 then now() else null end,
-           case when $8 then now() else null end
+           $1, $2, $3,
+           nullif(btrim(concat_ws(' ', $4::text, $5::text)), ''), $6::text,
+           $7::app.user_role, now(), true, true,
+           case when $8 then now() else null end,
+           case when $9 then now() else null end
          ) returning id`,
         [
           input.email,
           input.passwordHash,
+          input.passwordCiphertext,
           input.target.first_name,
           input.target.last_name,
           input.target.phone,
@@ -420,5 +527,30 @@ export class PersonAccountService {
     throw new ForbiddenException(
       "Данные для входа доступны только директору в настройках системы.",
     );
+  }
+
+  private assertCanManageTarget(
+    actor: ActorContext,
+    target: PersonAccountTarget,
+  ): void {
+    if (target.user_id === actor.userId) {
+      throw new ForbiddenException(
+        "Собственные данные для входа меняются в настройках профиля.",
+      );
+    }
+    const role = target.account_role as UserRole;
+    if (!APP_ROLES.has(role) || role === "client") {
+      throw new BadRequestException(
+        "Для карточки не определена допустимая роль доступа.",
+      );
+    }
+    if (
+      actor.role !== "system_admin" &&
+      ROLE_LEVEL[role] >= ROLE_LEVEL[actor.role]
+    ) {
+      throw new ForbiddenException(
+        "Директор может управлять доступом только более низкой роли.",
+      );
+    }
   }
 }
