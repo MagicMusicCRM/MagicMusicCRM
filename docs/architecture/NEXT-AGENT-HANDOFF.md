@@ -1,11 +1,24 @@
 # MagicMusicCRM — актуальная передача
 
 > Обновлено: 2026-08-14
-> Production: client `1.5.9+189`, server `23688482`,
-> image `sha256:5b2f5c3b…`, migration `0135`
+> Production: client `1.5.10+190`, server `765a10a9`,
+> image `sha256:5590b6c5…`, migration `0136`
 > Рабочая ветка: `codex/v7-production-readiness`
-> Статус: production/client rollout `1.5.9+189` PASS;
+> Статус: production rollout `1.5.10+190` PASS;
 > owner mega-UAT не завершён
+
+Release `1.5.10+190` выпустил управляемое чтение актуальных login email и
+пароля Staff/Teacher только для Director/system_admin. Вход остаётся на
+`scrypt`, отдельная копия защищена AES-256-GCM, reveal endpoint проверяет
+иерархию, запрещает cache и пишет audit; обычные DTO больше не раскрывают
+credential metadata прочим ролям. Production получил обязательный независимый
+`MANAGED_PASSWORD_ENCRYPTION_KEY` и миграцию `0136`; прежние односторонние
+хэши становятся читаемыми только после следующей смены/сброса пароля. Flutter
+`803/803`, backend `182/182` suites / `1447/1447`, exact image, security,
+encrypted pre/post backup, rollback, readiness, нулевые очереди и reconciliation
+PASS. Оба manifest переключены на build `190`, GitHub Release `v1.5.10`
+опубликован. Evidence:
+`docs/audits/v7-production-managed-credentials-190.md`.
 
 Client-only release `1.5.9+189` восстановил варианты опубликованного CRM-поля
 `Кем приходится` при создании и редактировании контактного лица. Клиентская
@@ -231,17 +244,17 @@ suites / `1397/1397`, analyze/typecheck/build PASS. Evidence:
 `175/175` suites / `1401/1401`, analyze/typecheck/build/diff-check PASS.
 
 Teacher/Staff optional account, credential management и атомарный person
-lifecycle локально реализованы миграциями `0122`/`0123`. Миграция `0136`
+lifecycle выпущены в production миграциями `0122`/`0123`. Миграция `0136`
 добавляет отдельный AES-256-GCM envelope управляемого пароля: обычный вход
 остаётся на `scrypt`, а явное чтение доступно только Director/system_admin,
 проверяет иерархию target и пишет audit. Обычные Teacher/Staff DTO исключают
 login email/password metadata для остальных ролей. Старые пароли становятся
-доступны только после следующей смены; production до запуска требует отдельный
+доступны только после следующей смены. Production использует отдельный
 `MANAGED_PASSWORD_ENCRYPTION_KEY`, который нельзя терять или менять без плана
 ротации. Старый Profile role
 endpoint удалён; повышение роли осталось только в `Настройки → Доступ`, а
-каноническая access-команда синхронизирует Staff projection. Эти изменения ещё
-не выпускались и не проходили owner-UAT.
+каноническая access-команда синхронизирует Staff projection. Технический
+rollout PASS; отдельная предметная owner-UAT остаётся незавершённой.
 
 Reference catalog lifecycle локально реализован миграцией `0124`: Discipline и
 Lead loss reason получили rename/archive/restore, Branch discipline — явные
