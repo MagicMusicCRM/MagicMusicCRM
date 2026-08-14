@@ -150,12 +150,12 @@ describe("ClientReferenceService (PostgreSQL)", () => {
           case when $2 = 'student' then $3::uuid else null end,
           case when $2 = 'lead' then $3::uuid else null end,
           $1,
-          now(),
+          now() + make_interval(hours => $5::integer),
           $4
         )
         returning id
       `,
-      [teacherId, ref.type, ref.id, admin.userId],
+      [teacherId, ref.type, ref.id, admin.userId, lessons.length],
     );
     lessons.push(created.rows[0]!.id);
   }

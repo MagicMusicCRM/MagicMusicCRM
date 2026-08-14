@@ -806,7 +806,15 @@ async function seedFutureLessons(
         )
         values (
           $1,
-          now() + make_interval(days => $2::integer),
+          coalesce(
+            (
+              select max(existing.scheduled_at)
+              from app.lessons existing
+              where existing.student_id = $1
+                and existing.scheduled_at > now()
+            ),
+            now()
+          ) + make_interval(days => $2::integer),
           60,
           'scheduled'
         )
