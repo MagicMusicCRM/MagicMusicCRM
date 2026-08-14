@@ -1,11 +1,22 @@
 # MagicMusicCRM — актуальная передача
 
 > Обновлено: 2026-08-14
-> Production: client `1.5.8+188`, server `23688482`,
+> Production: client `1.5.9+189`, server `23688482`,
 > image `sha256:5b2f5c3b…`, migration `0135`
 > Рабочая ветка: `codex/v7-production-readiness`
-> Статус: production/client rollout `1.5.8+188` PASS;
+> Статус: production/client rollout `1.5.9+189` PASS;
 > owner mega-UAT не завершён
+
+Client-only release `1.5.9+189` восстановил варианты опубликованного CRM-поля
+`Кем приходится` при создании и редактировании контактного лица. Клиентская
+граница API теперь сохраняет запрошенную Lead/Student-проекцию unified-поля,
+если актуальный backend не возвращает legacy `entityType`. Full Flutter gate
+`801/801`, analyze, Windows portable/Setup, Android API 35 update/cold launch,
+подписи и публичные SHA-256 прошли PASS. Оба update manifest переключены на
+build `189`, GitHub Release `v1.5.9` опубликован; production server остался на
+healthy revision `23688482`, restart `0`, reconciliation `0`. До публикации
+создан encrypted off-host backup и snapshot manifests build `188` для
+rollback. Evidence: `docs/audits/v7-production-client-rollout-189.md`.
 
 Client-only release `1.5.8+188` исправил сохранение карточек Staff/Teacher без
 созданного доступа: обычное изменение данных больше не требует email/пароль и
