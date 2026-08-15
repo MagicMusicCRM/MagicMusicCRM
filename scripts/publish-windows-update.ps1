@@ -46,7 +46,12 @@ $releaseHistoryDocument = $releaseHistoryJson | ConvertFrom-Json
 $releaseEntries = @($releaseHistoryDocument.releases)
 $matchingEntries = @(
   $releaseEntries | Where-Object {
-    [int]$_.buildNumber -eq $BuildNumber -and [string]$_.version -eq $Version
+    $buildNumberProperty = $_.PSObject.Properties['buildNumber']
+    $versionProperty = $_.PSObject.Properties['version']
+    $null -ne $buildNumberProperty -and
+      $null -ne $versionProperty -and
+      [int]$buildNumberProperty.Value -eq $BuildNumber -and
+      [string]$versionProperty.Value -eq $Version
   }
 )
 if ($matchingEntries.Count -ne 1) {
