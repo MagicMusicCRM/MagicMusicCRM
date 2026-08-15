@@ -1,11 +1,20 @@
 # MagicMusicCRM — актуальная передача
 
 > Обновлено: 2026-08-14
-> Production: client `1.5.11+191`, server `bcb26f36`,
+> Production: client `1.5.12+192`, server `bcb26f36`,
 > image `sha256:3e07755c…`, migration `0137`
 > Рабочая ветка: `codex/v7-production-readiness`
-> Статус: production rollout `1.5.11+191` PASS;
+> Статус: production rollout `1.5.12+192` PASS;
 > owner mega-UAT не завершён
+
+Client-only release `1.5.12+192` очистил пользовательский интерфейс от
+английских и технических подписей, сократил подсказки и добавил общий
+русскоязычный sanitizer ошибок API/transport. Сервер и БД не менялись. Flutter
+analyze/full suite, Windows portable/Setup, Android API 35 update/cold launch,
+подписи, Gitleaks, encrypted off-host backup/restore, rollback manifests,
+двойной reconciliation и public download verification PASS. Оба manifest
+переключены на build `192`, GitHub Release `v1.5.12` опубликован. Evidence:
+`docs/audits/v7-production-client-rollout-192.md`.
 
 Release `1.5.11+191` доставил единый Schedule Analyzer для постоянных планов и
 одиночных занятий: проверки teacher/room/student/group/branch, группировку
