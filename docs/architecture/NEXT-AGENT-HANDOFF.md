@@ -1,11 +1,25 @@
 # MagicMusicCRM — актуальная передача
 
 > Обновлено: 2026-08-15
-> Production: client `1.5.13+193`, server `bcb26f36`,
-> image `sha256:3e07755c…`, migration `0137`
+> Production: client `1.5.14+194`, server `be9b19e0`,
+> image `sha256:97f2620b…`, migration `0138`
 > Рабочая ветка: `codex/v7-production-readiness`
-> Статус: production rollout `1.5.13+193` PASS;
+> Статус: production rollout `1.5.14+194` PASS;
 > owner mega-UAT не завершён
+
+Release `1.5.14+194` добавил безопасный пересчёт уже назначенных и оплаченных
+платежей через signed preview и append-only замену со сторно. Редактирование
+выданного абонемента использует существующую versioned replacement-команду и
+показывает долг, переплату, использованные занятия и перенос резервов до
+подтверждения. Старый путь выдачи абонемента из лида теперь сразу создаёт
+канонические payment record, status event, lifecycle event и aggregate
+versions. Миграция `0138_payment_record_corrections` хранит неизменяемую связь
+исходной и новой оплаты. Flutter `827/827`, backend `186/186` suites и
+`1455/1455` tests, exact image/security, pre/post encrypted off-host restore,
+rollback compatibility, двойной reconciliation и public downloads PASS. Оба
+manifest переключены на build `194`, GitHub Release `v1.5.14` опубликован.
+Evidence:
+`docs/audits/v7-production-payment-subscription-recalculation-194.md`.
 
 Client-only release `1.5.13+193` выпустил новый контур обновлений Windows.
 Версия всегда видна слева внизу; по нажатию открывается русский раздел
@@ -32,9 +46,9 @@ Post-publish reconciliation build `193` обнаружила две связан
 funding metadata и payment без двусторонней client-payment связи. Штатный
 транзакционный `backfill_v7_commerce()` добавил один subscription/payment
 backfill и append-only payment event; затем reconciliation дважды вернула
-`issues=[]`. Причина в legacy `SubscriptionsService`, который всё ещё создаёт
-payment/subscription без полей V7. Текущие данные выровнены, но server path
-нужно исправить отдельным backend-релизом, не переписывая историю вручную.
+`issues=[]`. Причина в legacy `SubscriptionsService` устранена release
+`1.5.14+194`; финальная production-проверка вернула `legacy gaps=0/0/0` и две
+пустые reconciliation без ручного переписывания истории.
 
 Release `1.5.11+191` доставил единый Schedule Analyzer для постоянных планов и
 одиночных занятий: проверки teacher/room/student/group/branch, группировку
