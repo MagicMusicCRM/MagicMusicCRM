@@ -97,6 +97,7 @@ void main() {
 
       await tester.tap(find.text('Проверить'));
       await tester.pumpAndSettle();
+      expect(find.text('Скачать вручную'), findsNothing);
       await tester.tap(find.text('Обновить и перезапустить'));
       await tester.pumpAndSettle();
 

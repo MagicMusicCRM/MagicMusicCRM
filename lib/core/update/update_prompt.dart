@@ -39,8 +39,7 @@ Future<void> checkAndPromptWindowsUpdate({
 }
 
 /// Shows the «Доступно обновление» dialog for [manifest]: install now
-/// («Обновить и перезапустить»), download the zip in the browser («Скачать
-/// вручную» — fallback for when the helper cannot run), or dismiss («Позже»).
+/// («Обновить и перезапустить») or dismiss («Позже»).
 ///
 /// Reused by both the startup check and the persistent global button.
 Future<void> showWindowsUpdateDialog(
@@ -93,19 +92,6 @@ Future<void> _showWindowsUpdateDialog(
           TextButton(
             onPressed: () => Navigator.of(dialogCtx).pop(false),
             child: const Text('Позже'),
-          ),
-          // Fallback: fetch the zip in the browser and replace files by hand —
-          // for machines where the detached helper cannot run (AV/policy).
-          TextButton(
-            onPressed: () {
-              unawaited(
-                launchUrl(
-                  Uri.parse(manifest.url),
-                  mode: LaunchMode.externalApplication,
-                ).catchError((_) => false),
-              );
-            },
-            child: const Text('Скачать вручную'),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
