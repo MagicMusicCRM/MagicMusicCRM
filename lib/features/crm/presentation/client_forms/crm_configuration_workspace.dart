@@ -60,7 +60,7 @@ class CrmConfigurationRouteScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         leading: const BackButton(),
-        title: const Text('Настройки / Конфигурация CRM'),
+        title: const Text('Настройки системы'),
       ),
       body: access.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -69,7 +69,7 @@ class CrmConfigurationRouteScreen extends ConsumerWidget {
         data: (snapshot) => snapshot.allows('config.crm.read')
             ? const CrmConfigurationWorkspace()
             : const Center(
-                child: Text('Недостаточно прав для конфигурации CRM.'),
+                child: Text('Недостаточно прав для изменения настроек.'),
               ),
       ),
     );
@@ -111,7 +111,7 @@ class _CrmConfigurationWorkspaceState
     'radio': 'Радиокнопки',
     'multi_select': 'Несколько вариантов',
     'checkbox_group': 'Группа флажков',
-    'email': 'Email',
+    'email': 'Почта',
     'phone': 'Телефон',
     'url': 'Ссылка',
   };
@@ -623,7 +623,7 @@ class _CrmConfigurationWorkspaceState
       children: [
         const ListTile(
           leading: Icon(Icons.info_outline_rounded),
-          title: Text('Здесь — структура и видимость полей'),
+          title: Text('Структура и видимость полей'),
           subtitle: Text(
             'Название, тип, категория и показ в карточках лида или ученика. Значения списков меняются только в разделе «Варианты для полей».',
           ),
@@ -724,7 +724,7 @@ class _CrmConfigurationWorkspaceState
       children: [
         const ListTile(
           leading: Icon(Icons.info_outline_rounded),
-          title: Text('Здесь — все значения списков и справочников'),
+          title: Text('Значения списков и справочников'),
           subtitle: Text(
             'Один набор используется обеими карточками. Здесь же настраивается системный рекламный источник.',
           ),
@@ -1315,7 +1315,7 @@ class _CrmConfigurationWorkspaceState
           keyboardType: TextInputType.number,
           decoration: InputDecoration(
             labelText: 'Значение, ${setting['unit']}',
-            helperText: 'Допустимо ${setting['min']}–${setting['max']}',
+            helperText: 'Допустимо: ${setting['min']}-${setting['max']}',
           ),
           onChanged: (value) {
             final number = num.tryParse(value);
@@ -1445,7 +1445,7 @@ class _CrmConfigurationWorkspaceState
           width: 150,
           child: Text(label, style: const TextStyle(color: AppColor.text2)),
         ),
-        Expanded(child: Text(value?.toString() ?? '—')),
+        Expanded(child: Text(value?.toString() ?? 'Не указано')),
       ],
     ),
   );
@@ -1691,7 +1691,7 @@ class _CommerceCatalogEditorDialogState
           _contexts.isEmpty) {
         setState(() {
           _error =
-              'Укажите долю 0–200%, корректное дополнительное списание и хотя бы один сценарий.';
+              'Укажите долю от 0 до 200%, дополнительное списание и сценарий.';
         });
         return;
       }
@@ -2643,5 +2643,5 @@ String _message(Object error) {
   if (error is MagicApiException && error.statusCode == 409) {
     return 'Конфигурация изменилась в другой вкладке. Обновите данные.';
   }
-  return 'Не удалось выполнить операцию: $error';
+  return userErrorMessage(error);
 }

@@ -59,7 +59,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(SendFileDialog), findsOneWidget);
-    expect(find.textContaining('upload failed'), findsOneWidget);
+    expect(find.text('Не удалось отправить файл.'), findsOneWidget);
   });
 }
 

@@ -699,7 +699,7 @@ class _HomeworkProgressListState extends ConsumerState<_HomeworkProgressList> {
       MagicToast.show(
         context,
         'Не удалось прикрепить файл',
-        detail: '$error',
+        detail: userErrorMessage(error),
         type: MagicToastType.danger,
       );
     } finally {

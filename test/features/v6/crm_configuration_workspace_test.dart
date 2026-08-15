@@ -544,7 +544,7 @@ void main() {
       'radio': 'Радиокнопки',
       'multi_select': 'Несколько вариантов',
       'checkbox_group': 'Группа флажков',
-      'email': 'Email',
+      'email': 'Почта',
       'phone': 'Телефон',
       'url': 'Ссылка',
     }.entries) {
@@ -778,7 +778,7 @@ void main() {
         await _pump(tester, api);
 
         expect(
-          find.text('Недостаточно прав для конфигурации CRM.'),
+          find.text('Недостаточно прав для изменения настроек.'),
           findsOneWidget,
         );
         expect(find.text('Занятия и оплата'), findsNothing);

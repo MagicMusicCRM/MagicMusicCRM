@@ -103,7 +103,14 @@ extension _MessengerMessaging on _MessengerScreenState {
         _removeMessageById(optimistic['id'].toString());
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Не удалось опубликовать сообщение: $e')),
+            SnackBar(
+              content: Text(
+                userErrorMessage(
+                  e,
+                  fallback: 'Не удалось опубликовать сообщение.',
+                ),
+              ),
+            ),
           );
         }
       }
@@ -130,7 +137,11 @@ extension _MessengerMessaging on _MessengerScreenState {
         if (mounted) {
           _emitState(() => _editingMessage = null);
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Не удалось изменить сообщение: $e')),
+            SnackBar(
+              content: Text(
+                userErrorMessage(e, fallback: 'Не удалось изменить сообщение.'),
+              ),
+            ),
           );
         }
       }
@@ -154,7 +165,11 @@ extension _MessengerMessaging on _MessengerScreenState {
       _removeMessageById(optimistic['id'].toString());
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Не удалось отправить сообщение: $e')),
+          SnackBar(
+            content: Text(
+              userErrorMessage(e, fallback: 'Не удалось отправить сообщение.'),
+            ),
+          ),
         );
       }
     }
@@ -213,7 +228,11 @@ extension _MessengerMessaging on _MessengerScreenState {
         _logMessenger('Error deleting message: $e');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Не удалось удалить сообщение: $e')),
+            SnackBar(
+              content: Text(
+                userErrorMessage(e, fallback: 'Не удалось удалить сообщение.'),
+              ),
+            ),
           );
         }
       }

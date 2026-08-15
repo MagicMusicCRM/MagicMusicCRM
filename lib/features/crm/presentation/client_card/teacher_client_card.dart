@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
 import 'client_card_v4_api.dart';
@@ -227,7 +228,7 @@ String _teacherCardStatusLabel(Object? raw) {
     'pending' => 'Ожидает',
     'overdue' => 'Просрочено',
     'draft' => 'Черновик',
-    _ => status.isEmpty ? '—' : status,
+    _ => status.isEmpty ? 'Не указано' : status,
   };
 }
 
@@ -254,7 +255,10 @@ class _TeacherCardError extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Карточка недоступна: $error', textAlign: TextAlign.center),
+            Text(
+              userErrorMessage(error, fallback: 'Карточка недоступна.'),
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: AppSpace.md),
             OutlinedButton(onPressed: onRetry, child: const Text('Повторить')),
           ],

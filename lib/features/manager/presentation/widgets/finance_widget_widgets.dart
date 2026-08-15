@@ -26,7 +26,10 @@ class _FinanceError extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              '$error',
+              userErrorMessage(
+                error,
+                fallback: 'Не удалось загрузить платежи.',
+              ),
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,

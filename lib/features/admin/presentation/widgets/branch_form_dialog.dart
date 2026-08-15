@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/create_room_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/room_lifecycle_dialog.dart';
@@ -10,15 +11,13 @@ String _utcOffsetLabel(int minutes) {
   final abs = minutes.abs();
   final h = abs ~/ 60;
   final m = abs % 60;
-  final timeStr = m == 0
-      ? 'UTC$sign$h'
-      : 'UTC$sign$h:${m.toString().padLeft(2, '0')}';
+  final offset = m == 0 ? '$sign$h ч' : '$sign$h ч $m мин';
   return switch (minutes) {
-    180 => 'МСК ($timeStr)',
-    120 => 'EET ($timeStr)',
-    60 => 'CET ($timeStr)',
-    0 => 'UTC',
-    _ => timeStr,
+    180 => 'Москва ($offset)',
+    120 => 'Калининград ($offset)',
+    60 => 'Центральная Европа ($offset)',
+    0 => 'Всемирное время',
+    _ => 'Смещение $offset',
   };
 }
 
@@ -94,7 +93,10 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
       if (!mounted) return;
       setState(() {
         _loadingRooms = false;
-        _roomsError = '$error';
+        _roomsError = userErrorMessage(
+          error,
+          fallback: 'Не удалось загрузить аудитории.',
+        );
       });
     }
   }
@@ -144,7 +146,10 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
       if (!mounted) return;
       setState(() {
         _loadingDisciplines = false;
-        _disciplinesError = '$error';
+        _disciplinesError = userErrorMessage(
+          error,
+          fallback: 'Не удалось загрузить дисциплины.',
+        );
       });
     }
   }
@@ -173,7 +178,7 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
             SimpleDialogOption(
               onPressed: () =>
                   Navigator.pop(context, discipline['id']?.toString()),
-              child: Text(discipline['name']?.toString() ?? '—'),
+              child: Text(discipline['name']?.toString() ?? 'Не указано'),
             ),
         ],
       ),
@@ -187,7 +192,14 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Не удалось добавить дисциплину: $error')),
+        SnackBar(
+          content: Text(
+            userErrorMessage(
+              error,
+              fallback: 'Не удалось добавить дисциплину.',
+            ),
+          ),
+        ),
       );
     }
   }
@@ -276,7 +288,11 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Не удалось сохранить филиал: $e')),
+          SnackBar(
+            content: Text(
+              userErrorMessage(e, fallback: 'Не удалось сохранить филиал.'),
+            ),
+          ),
         );
       }
     } finally {
@@ -346,7 +362,7 @@ class _BranchFormDialogState extends ConsumerState<BranchFormDialog> {
                   },
                   child: Text(hours['open']?.toString() ?? '09:00'),
                 ),
-                const Text('—'),
+                const Text('Не указано'),
                 TextButton(
                   onPressed: () async {
                     final value = await _pickTime(

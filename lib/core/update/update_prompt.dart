@@ -78,7 +78,7 @@ Future<void> _showWindowsUpdateDialog(
             ],
             const SizedBox(height: AppSpace.md),
             Text(
-              'Приложение закроется, обновится и запустится снова — это займёт '
+              'Приложение закроется, обновится и запустится снова. Это займёт '
               'несколько секунд.',
               style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
             ),

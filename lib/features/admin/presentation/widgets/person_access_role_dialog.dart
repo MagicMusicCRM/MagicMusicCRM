@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/security/access_management.dart';
 
 const personAccessRoleLabels = <String, String>{
@@ -206,7 +207,10 @@ class _PersonAccessRoleDialogState
                   if (_error != null) ...[
                     const SizedBox(height: 8),
                     Text(
-                      'Не удалось изменить роль: $_error',
+                      userErrorMessage(
+                        _error,
+                        fallback: 'Не удалось изменить роль.',
+                      ),
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.error,
                       ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/telegram/avatar_widget.dart';
@@ -217,7 +218,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Ошибка сохранения: $e'),
+            content: Text(
+              userErrorMessage(e, fallback: 'Не удалось сохранить профиль.'),
+            ),
             backgroundColor: AppTheme.danger,
           ),
         );
@@ -480,7 +483,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   right: 16,
                 ),
                 child: Text(
-                  'Ваш номер телефона и роль внутри платформы CRM.',
+                  'Ваш номер телефона и роль в системе.',
                   style: TextStyle(fontSize: 12, color: secondaryTextColor),
                 ),
               ),

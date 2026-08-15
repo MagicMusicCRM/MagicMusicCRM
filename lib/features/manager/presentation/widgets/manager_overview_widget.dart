@@ -308,7 +308,7 @@ class _ManagerOverviewWidgetState extends ConsumerState<ManagerOverviewWidget> {
         label: 'Активные ученики',
         icon: Icons.school_rounded,
         accent: AppTheme.primaryGold,
-        sourceLabel: 'CRM',
+        sourceLabel: 'Система',
         format: _count,
         onTap: () => widget.onTabChange?.call(3, null),
       ),

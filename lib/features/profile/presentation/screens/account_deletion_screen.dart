@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 
@@ -39,7 +40,9 @@ class _AccountDeletionScreenState extends ConsumerState<AccountDeletionScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Не удалось отправить запрос: $e'),
+            content: Text(
+              userErrorMessage(e, fallback: 'Не удалось отправить запрос.'),
+            ),
             backgroundColor: AppTheme.danger,
           ),
         );

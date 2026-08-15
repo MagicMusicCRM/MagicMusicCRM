@@ -48,9 +48,13 @@ class _BonusDeductionDialogState extends ConsumerState<_BonusDeductionDialog> {
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userErrorMessage(e, fallback: 'Не удалось сохранить изменение.'),
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _saving = false);

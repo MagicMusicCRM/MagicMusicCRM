@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 
@@ -71,7 +72,10 @@ class _RoomLifecycleDialogState extends ConsumerState<RoomLifecycleDialog> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = '$error';
+        _error = userErrorMessage(
+          error,
+          fallback: 'Не удалось проверить аудиторию.',
+        );
         _loading = false;
       });
     }
@@ -109,9 +113,17 @@ class _RoomLifecycleDialogState extends ConsumerState<RoomLifecycleDialog> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error = '$error';
+        _error = userErrorMessage(
+          error,
+          fallback: 'Не удалось изменить аудиторию.',
+        );
       });
-      await _load(errorAfterLoad: '$error');
+      await _load(
+        errorAfterLoad: userErrorMessage(
+          error,
+          fallback: 'Не удалось изменить аудиторию.',
+        ),
+      );
     }
   }
 
@@ -213,8 +225,8 @@ class _RoomLifecycleDialogState extends ConsumerState<RoomLifecycleDialog> {
                           Expanded(
                             child: Text(
                               _archived
-                                  ? 'Филиал активен — аудиторию можно восстановить.'
-                                  : 'Активных связей нет — аудиторию можно безопасно архивировать.',
+                                  ? 'Филиал активен. Аудиторию можно восстановить.'
+                                  : 'Активных связей нет. Аудиторию можно архивировать.',
                             ),
                           ),
                         ],
@@ -275,7 +287,7 @@ class _RoomLifecycleDialogState extends ConsumerState<RoomLifecycleDialog> {
                                     : 'Аудитория восстановлена',
                               ),
                               subtitle: Text(
-                                '${item['reasonText']?.toString() ?? '—'}'
+                                '${item['reasonText']?.toString() ?? 'Не указано'}'
                                 '${item['effectiveDate'] == null ? '' : ' • ${item['effectiveDate']}'}',
                               ),
                             ),

@@ -44,7 +44,7 @@ final leadNotificationListenerProvider = Provider<void>((ref) {
     }
     LocalNotification(
       title: 'Новая заявка',
-      body: 'Поступил новый лид — откройте раздел «Лиды».',
+      body: 'Поступил новый лид. Откройте раздел «Лиды».',
     ).show();
   });
 });
@@ -70,7 +70,7 @@ final taskNotificationListenerProvider = Provider<void>((ref) {
     }
     LocalNotification(
       title: 'У вас новая задача',
-      body: 'Вам назначена задача — откройте раздел «Задачи».',
+      body: 'Вам назначена задача. Откройте раздел «Задачи».',
     ).show();
   });
 });

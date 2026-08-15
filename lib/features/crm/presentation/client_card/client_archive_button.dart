@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
 import 'client_card_v4_api.dart';
@@ -57,7 +58,14 @@ class _ClientArchiveButtonState extends ConsumerState<ClientArchiveButton> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Не удалось архивировать: $error')),
+        SnackBar(
+          content: Text(
+            userErrorMessage(
+              error,
+              fallback: 'Не удалось архивировать карточку.',
+            ),
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -125,7 +133,12 @@ class _ArchivePreviewDialogState extends State<_ArchivePreviewDialog> {
                       Icons.warning_amber_rounded,
                       color: AppColor.warning,
                     ),
-                    title: Text(warning['message']?.toString() ?? '—'),
+                    title: Text(
+                      userErrorText(
+                        warning['message']?.toString() ?? '',
+                        fallback: 'Есть связанная запись.',
+                      ),
+                    ),
                     trailing: Text('${warning['count'] ?? 0}'),
                   ),
               ],

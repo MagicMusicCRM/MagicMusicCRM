@@ -162,7 +162,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         // Email field
                         _V7Field(
                           controller: _emailController,
-                          label: 'Телефон или email',
+                          label: 'Телефон или почта',
                           hint: 'user@example.com',
                           keyboardType: TextInputType.emailAddress,
                           textInputAction: TextInputAction.next,
@@ -198,8 +198,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               () => _obscurePassword = !_obscurePassword,
                             ),
                           ),
-                          validator: (value) =>
-                              (value == null || value.isEmpty)
+                          validator: (value) => (value == null || value.isEmpty)
                               ? 'Введите пароль'
                               : null,
                         ),
@@ -235,8 +234,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ),
                             decoration: BoxDecoration(
                               color: AppColor.dangerSoft,
-                              border: Border.all(color: const Color(0x52E53935)),
-                              borderRadius: BorderRadius.circular(AppRadius.chip),
+                              border: Border.all(
+                                color: const Color(0x52E53935),
+                              ),
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.chip,
+                              ),
                             ),
                             child: Text(
                               _errorMessage!,

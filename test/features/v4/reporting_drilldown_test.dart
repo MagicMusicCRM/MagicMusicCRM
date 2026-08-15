@@ -160,7 +160,7 @@ void main() {
       find.byKey(const ValueKey('report-export-error')),
       300,
     );
-    expect(find.textContaining('повреждённый XLSX-файл'), findsOneWidget);
+    expect(find.textContaining('повреждённый файл отчёта'), findsOneWidget);
   });
 
   testWidgets('reports the saved path when no desktop handler opens the file', (

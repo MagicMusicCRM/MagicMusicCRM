@@ -101,7 +101,7 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
     } on MagicApiException catch (error) {
       if (mounted) _showError(_mapAuthError(error.message));
     } catch (_) {
-      if (mounted) _showError('Не удалось изменить email.');
+      if (mounted) _showError('Не удалось изменить почту.');
     } finally {
       if (mounted) setState(() => _isChangingEmail = false);
     }
@@ -277,7 +277,7 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Text(
-                          'Изменить email для входа',
+                          'Изменить почту для входа',
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                         const SizedBox(height: AppSpace.sm),
@@ -291,14 +291,14 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
                           keyboardType: TextInputType.emailAddress,
                           decoration: _v7FieldDecoration(
                             context,
-                            labelText: 'Новый email',
+                            labelText: 'Новая почта',
                             prefixIcon: const Icon(Icons.alternate_email),
                           ),
                           validator: (value) {
                             final email = value?.trim() ?? '';
-                            if (email.isEmpty) return 'Укажите новый email';
+                            if (email.isEmpty) return 'Укажите новую почту';
                             if (!email.contains('@')) {
-                              return 'Некорректный email';
+                              return 'Некорректный адрес почты';
                             }
                             if (email.toLowerCase() ==
                                 userEmail.toLowerCase()) {
@@ -326,7 +326,7 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
                           loading: _isChangingEmail,
                           onPressed: _isChangingEmail ? null : _changeEmail,
                           icon: Icons.mark_email_read_outlined,
-                          label: 'Изменить email и выйти',
+                          label: 'Изменить почту и выйти',
                         ),
                       ],
                     ),

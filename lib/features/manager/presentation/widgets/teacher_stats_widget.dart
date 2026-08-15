@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
@@ -283,9 +284,13 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
       await _loadReport();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Не удалось сохранить: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            userErrorMessage(e, fallback: 'Не удалось сохранить ставку.'),
+          ),
+        ),
+      );
     }
   }
 
@@ -373,7 +378,9 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Не удалось применить ставку: $e'),
+          content: Text(
+            userErrorMessage(e, fallback: 'Не удалось применить ставку.'),
+          ),
           backgroundColor: AppColor.danger,
         ),
       );
@@ -467,7 +474,7 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
             onPressed: _pickPeriod,
             icon: const Icon(Icons.date_range_rounded, size: 18),
             label: Text(
-              '${_dayFmt.format(_from)} – '
+              '${_dayFmt.format(_from)} - '
               '${_dayFmt.format(_to.subtract(const Duration(days: 1)))}',
             ),
           ),
@@ -573,11 +580,11 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
               // под теми, кто на него смотрит.
               DropdownMenuItem<String?>(
                 value: 'individual_trial',
-                child: Text('— индивидуальные'),
+                child: Text('Индивидуальные'),
               ),
               DropdownMenuItem<String?>(
                 value: 'group_trial',
-                child: Text('— групповые'),
+                child: Text('Групповые'),
               ),
             ],
             onChanged: (value) {
@@ -634,7 +641,7 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
               for (final discipline in _disciplines)
                 DropdownMenuItem<String?>(
                   value: discipline['name']?.toString(),
-                  child: Text(discipline['name']?.toString() ?? '—'),
+                  child: Text(discipline['name']?.toString() ?? 'Не указано'),
                 ),
             ],
             onChanged: (value) {
@@ -721,9 +728,13 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
       ).showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Не удалось выгрузить: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            userErrorMessage(e, fallback: 'Не удалось выгрузить отчёт.'),
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _exporting = false);
     }
@@ -941,7 +952,7 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    unit['unitName']?.toString() ?? '—',
+                    unit['unitName']?.toString() ?? 'Не указано',
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                   if (days.isNotEmpty)
@@ -1111,9 +1122,13 @@ class _GroupRateDialogState extends ConsumerState<_GroupRateDialog> {
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userErrorMessage(e, fallback: 'Не удалось сохранить изменение.'),
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _saving = false);

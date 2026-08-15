@@ -596,7 +596,7 @@ class HomeworkTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final title = homework['title']?.toString() ?? '—';
+    final title = homework['title']?.toString() ?? 'Не указано';
     final status = homework['status']?.toString();
     final dueRaw = homework['due_at'] ?? homework['dueAt'];
     final due = DateTime.tryParse(dueRaw?.toString() ?? '');

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
@@ -40,7 +41,11 @@ class _CommentShareButtonState extends ConsumerState<CommentShareButton> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Не удалось изменить видимость: $error')),
+        SnackBar(
+          content: Text(
+            userErrorMessage(error, fallback: 'Не удалось изменить видимость.'),
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _busy = false);

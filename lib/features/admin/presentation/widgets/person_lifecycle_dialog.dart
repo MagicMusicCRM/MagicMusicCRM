@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
@@ -73,7 +74,10 @@ class _PersonLifecycleDialogState
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = '$error';
+        _error = userErrorMessage(
+          error,
+          fallback: 'Не удалось проверить сотрудника.',
+        );
       });
     }
   }
@@ -107,7 +111,14 @@ class _PersonLifecycleDialogState
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Не удалось выполнить действие: $error')),
+          SnackBar(
+            content: Text(
+              userErrorMessage(
+                error,
+                fallback: 'Не удалось изменить сотрудника.',
+              ),
+            ),
+          ),
         );
       }
     } finally {
@@ -143,7 +154,12 @@ class _PersonLifecycleDialogState
             ? Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('Не удалось загрузить последствия: $_error'),
+                  Text(
+                    userErrorMessage(
+                      _error,
+                      fallback: 'Не удалось загрузить последствия.',
+                    ),
+                  ),
                   const SizedBox(height: AppSpace.md),
                   TextButton(onPressed: _load, child: const Text('Повторить')),
                 ],

@@ -219,7 +219,6 @@ void main() {
 
       final reason = find.byKey(const Key('subscription-cancel-reason'));
       await tester.ensureVisible(reason);
-      await tester.enterText(reason, 'client.requested_cancel');
       await _tapVisible(
         tester,
         find.byKey(const Key('subscription-cancel-confirmation')),
@@ -231,7 +230,7 @@ void main() {
       await _pumpFrames(tester);
       expect(find.text('Отменить абонемент'), findsOneWidget);
       expect(
-        tester.widget<TextFormField>(reason).controller!.text,
+        tester.widget<DropdownButtonFormField<String>>(reason).initialValue,
         'client.requested_cancel',
       );
       await _tapVisible(
@@ -246,7 +245,10 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Повторить'), findsOneWidget);
-      expect(tester.widget<TextFormField>(reason).enabled, isFalse);
+      expect(
+        tester.widget<DropdownButtonFormField<String>>(reason).onChanged,
+        isNull,
+      );
 
       await _tapVisible(
         tester,

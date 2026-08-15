@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/providers/crm_navigation_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -58,7 +59,7 @@ class _ClientAppUserPanelState extends ConsumerState<ClientAppUserPanel> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '$e';
+        _error = userErrorMessage(e, fallback: 'Не удалось загрузить связи.');
         _loading = false;
       });
     }
@@ -85,7 +86,7 @@ class _ClientAppUserPanelState extends ConsumerState<ClientAppUserPanel> {
       MagicToast.show(
         context,
         'Не удалось загрузить пользователей',
-        detail: '$e',
+        detail: userErrorMessage(e),
         type: MagicToastType.danger,
       );
       return;
@@ -152,7 +153,7 @@ class _ClientAppUserPanelState extends ConsumerState<ClientAppUserPanel> {
       MagicToast.show(
         context,
         'Не удалось привязать пользователя',
-        detail: '$e',
+        detail: userErrorMessage(e),
         type: MagicToastType.danger,
       );
     }

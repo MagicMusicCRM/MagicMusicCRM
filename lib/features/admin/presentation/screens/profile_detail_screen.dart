@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
@@ -58,7 +59,10 @@ class _ProfileDetailScreenState extends ConsumerState<ProfileDetailScreen> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = '$err';
+        _error = userErrorMessage(
+          err,
+          fallback: 'Не удалось загрузить профиль.',
+        );
       });
       return;
     }
@@ -69,7 +73,10 @@ class _ProfileDetailScreenState extends ConsumerState<ProfileDetailScreen> {
       links = await service.getProfileLinks(widget.profileId);
     } catch (error) {
       links = const [];
-      _linksError = '$error';
+      _linksError = userErrorMessage(
+        error,
+        fallback: 'Не удалось загрузить связи профиля.',
+      );
     }
 
     if (!mounted) return;
@@ -124,7 +131,7 @@ class _ProfileDetailScreenState extends ConsumerState<ProfileDetailScreen> {
         MagicToast.show(
           context,
           'Не удалось обновить связи',
-          detail: '$error',
+          detail: userErrorMessage(error),
           type: MagicToastType.danger,
         );
       }

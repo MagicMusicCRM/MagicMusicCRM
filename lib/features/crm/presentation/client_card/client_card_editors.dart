@@ -243,7 +243,7 @@ extension _ClientCardEditors on _ClientCardState {
         key: ValueKey('custom-field-readonly-${field.key}'),
         decoration: _inputDecoration(cs, label: field.label, isDense: true),
         child: Text(
-          value.trim().isEmpty ? '—' : value,
+          value.trim().isEmpty ? 'Не указано' : value,
           style: TextStyle(
             color: value.trim().isEmpty ? cs.onSurfaceVariant : cs.onSurface,
           ),
@@ -513,7 +513,7 @@ extension _ClientCardEditors on _ClientCardState {
         MagicToast.show(
           context,
           'Не удалось изменить чёрный список',
-          detail: '$e',
+          detail: userErrorMessage(e),
           type: MagicToastType.danger,
         );
       }
@@ -895,7 +895,7 @@ extension _ClientCardEditors on _ClientCardState {
             .map(
               (branch) => SearchableSelectItem(
                 id: branch['id'].toString(),
-                label: branch['name']?.toString() ?? '—',
+                label: branch['name']?.toString() ?? 'Не указано',
               ),
             )
             .toList(growable: false),
@@ -927,7 +927,7 @@ extension _ClientCardEditors on _ClientCardState {
               return SearchableSelectItem(
                 id: id,
                 label:
-                    '${active ? '' : 'Архив · '}${source['displayName'] ?? '—'}',
+                    '${active ? '' : 'Архив · '}${source['displayName'] ?? 'Не указано'}',
               );
             })
             .toList(growable: false),
@@ -1256,7 +1256,7 @@ extension _ClientCardEditors on _ClientCardState {
         MagicToast.show(
           context,
           'Ошибка добавления',
-          detail: '$e',
+          detail: userErrorMessage(e),
           type: MagicToastType.danger,
         );
       }
@@ -1305,7 +1305,7 @@ extension _ClientCardEditors on _ClientCardState {
         MagicToast.show(
           context,
           'Ошибка удаления',
-          detail: '$e',
+          detail: userErrorMessage(e),
           type: MagicToastType.danger,
         );
       }
@@ -1338,7 +1338,7 @@ extension _ClientCardEditors on _ClientCardState {
         MagicToast.show(
           context,
           'Не удалось назначить плательщика',
-          detail: '$error',
+          detail: userErrorMessage(error),
           type: MagicToastType.danger,
         );
       }
@@ -1386,7 +1386,7 @@ extension _ClientCardEditors on _ClientCardState {
         MagicToast.show(
           context,
           'Не удалось связать аккаунт',
-          detail: '$error',
+          detail: userErrorMessage(error),
           type: MagicToastType.danger,
         );
       }
@@ -1416,7 +1416,7 @@ extension _ClientCardEditors on _ClientCardState {
         MagicToast.show(
           context,
           'Не удалось отправить приглашение',
-          detail: '$error',
+          detail: userErrorMessage(error),
           type: MagicToastType.danger,
         );
       }
@@ -1488,9 +1488,13 @@ extension _ClientCardEditors on _ClientCardState {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userErrorMessage(e, fallback: 'Не удалось сохранить изменение.'),
+            ),
+          ),
+        );
       }
     }
   }

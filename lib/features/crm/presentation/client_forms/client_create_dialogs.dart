@@ -297,7 +297,7 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
                         .map(
                           (branch) => SearchableSelectItem(
                             id: branch['id']?.toString() ?? '',
-                            label: branch['name']?.toString() ?? '—',
+                            label: branch['name']?.toString() ?? 'Не указано',
                           ),
                         )
                         .toList(growable: false),
@@ -353,7 +353,9 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
                         .map(
                           (source) => SearchableSelectItem(
                             id: source['id']?.toString() ?? '',
-                            label: source['displayName']?.toString() ?? '—',
+                            label:
+                                source['displayName']?.toString() ??
+                                'Не указано',
                           ),
                         )
                         .toList(growable: false),
@@ -649,7 +651,7 @@ class _StudentCreateDialogV4State extends ConsumerState<StudentCreateDialogV4> {
                         .map(
                           (branch) => SearchableSelectItem(
                             id: branch['id']?.toString() ?? '',
-                            label: branch['name']?.toString() ?? '—',
+                            label: branch['name']?.toString() ?? 'Не указано',
                           ),
                         )
                         .toList(growable: false),
@@ -675,7 +677,9 @@ class _StudentCreateDialogV4State extends ConsumerState<StudentCreateDialogV4> {
                         .map(
                           (source) => SearchableSelectItem(
                             id: source['id']?.toString() ?? '',
-                            label: source['displayName']?.toString() ?? '—',
+                            label:
+                                source['displayName']?.toString() ??
+                                'Не указано',
                           ),
                         )
                         .toList(growable: false),

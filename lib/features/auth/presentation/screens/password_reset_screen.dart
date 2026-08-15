@@ -168,7 +168,7 @@ class _PasswordResetScreenState extends ConsumerState<PasswordResetScreen> {
                       ],
                       _V7Field(
                         controller: _emailController,
-                        label: 'Email или телефон',
+                        label: 'Почта или телефон',
                         keyboardType: TextInputType.emailAddress,
                         enabled: !_emailSent && !_isLoading,
                         autocorrect: false,

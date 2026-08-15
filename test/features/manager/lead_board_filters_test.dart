@@ -87,7 +87,7 @@ void main() {
       expect(find.text('Есть задачи'), findsOneWidget);
       expect(find.text('Скрыть ставших учениками'), findsOneWidget);
       expect(find.text('Сначала старые'), findsOneWidget);
-      expect(find.text('01.06.2026 — 30.06.2026'), findsOneWidget);
+      expect(find.text('01.06.2026 - 30.06.2026'), findsOneWidget);
       expect(find.byKey(const ValueKey('lead-filter-period')), findsOneWidget);
 
       await tester.tap(find.byKey(const ValueKey('lead-filter-period-clear')));

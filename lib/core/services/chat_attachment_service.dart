@@ -174,7 +174,9 @@ class ChatAttachmentService {
     );
     final id = response['id']?.toString();
     if (id == null || id.isEmpty) {
-      throw const MagicApiException(message: 'Сервер не вернул id файла.');
+      throw const MagicApiException(
+        message: 'Сервер не подтвердил загрузку файла.',
+      );
     }
     return id;
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
@@ -135,9 +136,13 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
       await _loadData();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userErrorMessage(e, fallback: 'Не удалось сохранить группу.'),
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -182,9 +187,13 @@ class _GroupDetailDialogState extends ConsumerState<GroupDetailDialog> {
       await _loadData();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userErrorMessage(e, fallback: 'Не удалось сохранить группу.'),
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _saving = false);

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 
@@ -96,7 +97,10 @@ class _ReferenceCatalogLifecycleDialogState
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = '$error';
+        _error = userErrorMessage(
+          error,
+          fallback: 'Не удалось проверить запись.',
+        );
         _loading = false;
       });
     }
@@ -141,9 +145,17 @@ class _ReferenceCatalogLifecycleDialogState
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error = '$error';
+        _error = userErrorMessage(
+          error,
+          fallback: 'Не удалось изменить запись.',
+        );
       });
-      await _load(errorAfterLoad: '$error');
+      await _load(
+        errorAfterLoad: userErrorMessage(
+          error,
+          fallback: 'Не удалось изменить запись.',
+        ),
+      );
     }
   }
 
@@ -176,9 +188,17 @@ class _ReferenceCatalogLifecycleDialogState
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error = '$error';
+        _error = userErrorMessage(
+          error,
+          fallback: 'Не удалось загрузить историю.',
+        );
       });
-      await _load(errorAfterLoad: '$error');
+      await _load(
+        errorAfterLoad: userErrorMessage(
+          error,
+          fallback: 'Не удалось изменить запись.',
+        ),
+      );
     }
   }
 
@@ -276,7 +296,7 @@ class _ReferenceCatalogLifecycleDialogState
                           Expanded(
                             child: Text(
                               _archived
-                                  ? 'Родительские записи активны — восстановление доступно.'
+                                  ? 'Родительские записи активны. Восстановление доступно.'
                                   : 'Активных блокирующих связей нет.',
                             ),
                           ),
@@ -329,7 +349,7 @@ class _ReferenceCatalogLifecycleDialogState
                               leading: const Icon(Icons.history_rounded),
                               title: Text(_historyTitle(item)),
                               subtitle: Text(
-                                item['reasonText']?.toString() ?? '—',
+                                item['reasonText']?.toString() ?? 'Не указано',
                               ),
                             ),
                         ],

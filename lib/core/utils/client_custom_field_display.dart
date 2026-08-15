@@ -10,11 +10,11 @@ String clientTableFieldText(Map<String, dynamic> field) {
 }
 
 String clientCustomFieldDisplayValue(Object? value, String valueType) {
-  if (value == null) return '—';
+  if (value == null) return 'Не указано';
   if (value is bool) return value ? 'Да' : 'Нет';
   if (value is Iterable) {
     final joined = value.map((item) => item.toString()).join(', ');
-    return joined.isEmpty ? '—' : joined;
+    return joined.isEmpty ? 'Не указано' : joined;
   }
   if (valueType == 'date' || valueType == 'datetime') {
     final parsed = DateTime.tryParse(value.toString())?.toLocal();

@@ -189,7 +189,9 @@ class _ClientSourcesEditorState extends ConsumerState<ClientSourcesEditor> {
                             ? Icons.campaign_outlined
                             : Icons.inventory_2_outlined,
                       ),
-                      title: Text(source['displayName']?.toString() ?? '—'),
+                      title: Text(
+                        source['displayName']?.toString() ?? 'Не указано',
+                      ),
                       subtitle: Text(
                         system
                             ? 'Системный · назначается клиентам из приложения'
@@ -355,5 +357,5 @@ String _sourceError(Object error) {
   if (error is MagicApiException && error.statusCode == 409) {
     return 'Источник уже изменён в другой вкладке. Обновите список.';
   }
-  return 'Не удалось выполнить операцию: $error';
+  return userErrorMessage(error);
 }

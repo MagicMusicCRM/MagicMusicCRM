@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/models/notification_preference.dart';
 import 'package:magic_music_crm/core/services/magic_notifications_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
@@ -74,7 +75,9 @@ class _NotificationPreferencesDialogState
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Не удалось сохранить: $e'),
+          content: Text(
+            userErrorMessage(e, fallback: 'Не удалось сохранить настройки.'),
+          ),
           backgroundColor: AppColor.danger,
         ),
       );
@@ -113,7 +116,7 @@ class _NotificationPreferencesDialogState
               ),
               Text(
                 'Кому уходят рассылки. Исполнитель всегда получает уведомления '
-                'по своей задаче — это не настраивается.',
+                'по своей задаче. Это правило не настраивается.',
                 style: TextStyle(
                   fontSize: 12,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -131,7 +134,10 @@ class _NotificationPreferencesDialogState
                       return MagicPageState(
                         kind: MagicPageStateKind.error,
                         title: 'Не удалось загрузить настройки',
-                        message: snapshot.error.toString(),
+                        message: userErrorMessage(
+                          snapshot.error,
+                          fallback: 'Не удалось загрузить настройки.',
+                        ),
                         actionLabel: 'Повторить',
                         onAction: () => setState(() => _future = _fetch()),
                       );

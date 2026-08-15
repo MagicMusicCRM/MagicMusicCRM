@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/security/password_policy.dart';
 
 typedef ProvisionAccessSubmit =
@@ -84,7 +85,7 @@ class _ProvisionAccessDialogState extends State<_ProvisionAccessDialog> {
     if (widget.accessExists && !emailChanged && !passwordChanged) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Измените email или укажите новый пароль'),
+          content: Text('Измените почту или укажите новый пароль'),
         ),
       );
       return;
@@ -99,7 +100,11 @@ class _ProvisionAccessDialogState extends State<_ProvisionAccessDialog> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Не удалось сохранить доступ: $error')),
+          SnackBar(
+            content: Text(
+              userErrorMessage(error, fallback: 'Не удалось сохранить доступ.'),
+            ),
+          ),
         );
       }
     } finally {
@@ -124,14 +129,14 @@ class _ProvisionAccessDialogState extends State<_ProvisionAccessDialog> {
                 controller: _email,
                 keyboardType: TextInputType.emailAddress,
                 decoration: const InputDecoration(
-                  labelText: 'Email для входа *',
+                  labelText: 'Почта для входа *',
                 ),
                 validator: (value) {
                   final email = value?.trim() ?? '';
-                  if (email.isEmpty) return 'Укажите email для входа';
+                  if (email.isEmpty) return 'Укажите почту для входа';
                   return email.contains('@')
                       ? null
-                      : 'Введите корректный email';
+                      : 'Введите корректный адрес почты';
                 },
               ),
               if (widget.accessExists) ...[
@@ -148,7 +153,7 @@ class _ProvisionAccessDialogState extends State<_ProvisionAccessDialog> {
                     labelText: 'Актуальный пароль',
                     helperText: widget.currentPassword?.isNotEmpty == true
                         ? 'Доступен только директору и администратору системы'
-                        : 'Старый пароль нельзя восстановить. Задайте новый — после этого он будет доступен здесь.',
+                        : 'Старый пароль нельзя восстановить. Задайте новый, чтобы видеть его здесь.',
                     suffixIcon: widget.currentPassword?.isNotEmpty == true
                         ? IconButton(
                             tooltip: _showCurrentPassword

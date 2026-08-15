@@ -82,7 +82,7 @@ extension _ClientCardTabsB on _ClientCardState {
         // #9: строка «Контакты» из выгрузки HolliHop (custom_data.contacts) —
         // только чтение, показывается когда заполнена.
         if (_hhField('contacts') != null)
-          _buildInfoCard('Контакты из HolliHop', [
+          _buildInfoCard('Контакты из прежней системы', [
             _InfoRow(
               icon: Icons.family_restroom_outlined,
               label: 'Контактные лица',
@@ -311,13 +311,13 @@ extension _ClientCardTabsB on _ClientCardState {
                 ? s['phone']
                 : profile?['phone'])
             ?.toString() ??
-        '—';
+        'Не указано';
     final email =
         (s['email']?.toString().trim().isNotEmpty == true
                 ? s['email']
                 : profile?['email'])
             ?.toString() ??
-        '—';
+        'Не указано';
     return (
       name: name.isEmpty ? 'Без имени' : name,
       phone: phone,
@@ -327,7 +327,7 @@ extension _ClientCardTabsB on _ClientCardState {
 
   String? _nonEmpty(dynamic value) {
     final text = value?.toString().trim();
-    return text == null || text.isEmpty || text == '—' ? null : text;
+    return text == null || text.isEmpty || text == 'Не указано' ? null : text;
   }
 
   String? get _clientFirstName => _isStudent
@@ -490,7 +490,7 @@ extension _ClientCardTabsB on _ClientCardState {
   /// одинаково достоверно.
   String? _appealAtSourceLabel(Map<String, dynamic> data) {
     return switch (data['appeal_at_source']?.toString()) {
-      'hollihop' => 'из HolliHop',
+      'hollihop' => 'из прежней системы',
       'app' => 'дата появления в приложении',
       _ => null,
     };

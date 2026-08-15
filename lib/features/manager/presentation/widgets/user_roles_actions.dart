@@ -36,7 +36,9 @@ extension _UserRolesActions on _UserRolesWidgetState {
       if (mounted && sequence == _profileLoadSequence) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Ошибка загрузки: $e'),
+            content: Text(
+              userErrorMessage(e, fallback: 'Не удалось загрузить профили.'),
+            ),
             backgroundColor: AppColor.danger,
           ),
         );
@@ -73,7 +75,9 @@ extension _UserRolesActions on _UserRolesWidgetState {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Ошибка связи: $e'),
+            content: Text(
+              userErrorMessage(e, fallback: 'Не удалось изменить связь.'),
+            ),
             backgroundColor: AppColor.danger,
           ),
         );
@@ -112,7 +116,9 @@ extension _UserRolesActions on _UserRolesWidgetState {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Ошибка связи: $e'),
+            content: Text(
+              userErrorMessage(e, fallback: 'Не удалось изменить связь.'),
+            ),
             backgroundColor: AppColor.danger,
           ),
         );
@@ -178,7 +184,9 @@ extension _UserRolesActions on _UserRolesWidgetState {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Ошибка загрузки связей: $e'),
+            content: Text(
+              userErrorMessage(e, fallback: 'Не удалось загрузить связи.'),
+            ),
             backgroundColor: AppColor.danger,
           ),
         );

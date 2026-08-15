@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
@@ -58,32 +59,38 @@ class _VoicePlayerWidgetState extends ConsumerState<VoicePlayerWidget> {
       _duration = Duration(milliseconds: widget.durationMs!);
     }
 
-    _subscriptions.add(_player.positionStream.listen((pos) {
-      if (mounted) setState(() => _position = pos);
-    }));
+    _subscriptions.add(
+      _player.positionStream.listen((pos) {
+        if (mounted) setState(() => _position = pos);
+      }),
+    );
 
-    _subscriptions.add(_player.durationStream.listen((dur) {
-      if (mounted && dur != null) setState(() => _duration = dur);
-    }));
+    _subscriptions.add(
+      _player.durationStream.listen((dur) {
+        if (mounted && dur != null) setState(() => _duration = dur);
+      }),
+    );
 
-    _subscriptions.add(_player.playerStateStream.listen((state) {
-      if (mounted) {
-        setState(() {
-          _isPlaying = state.playing;
-          _isLoading =
-              state.processingState == ProcessingState.loading ||
-              state.processingState == ProcessingState.buffering;
+    _subscriptions.add(
+      _player.playerStateStream.listen((state) {
+        if (mounted) {
+          setState(() {
+            _isPlaying = state.playing;
+            _isLoading =
+                state.processingState == ProcessingState.loading ||
+                state.processingState == ProcessingState.buffering;
 
-          // When the audio completes
-          if (state.processingState == ProcessingState.completed) {
-            _isPlaying = false;
-            _position = Duration.zero;
-            _player.seek(Duration.zero);
-            _player.pause();
-          }
-        });
-      }
-    }));
+            // When the audio completes
+            if (state.processingState == ProcessingState.completed) {
+              _isPlaying = false;
+              _position = Duration.zero;
+              _player.seek(Duration.zero);
+              _player.pause();
+            }
+          });
+        }
+      }),
+    );
   }
 
   /// Resolve a short-lived download URL (POST /files/:id/download-token) and
@@ -135,7 +142,7 @@ class _VoicePlayerWidgetState extends ConsumerState<VoicePlayerWidget> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Ошибка воспроизведения: $e',
+              userErrorMessage(e, fallback: 'Не удалось воспроизвести запись.'),
               style: const TextStyle(color: Colors.white),
             ),
             backgroundColor: AppTheme.danger,

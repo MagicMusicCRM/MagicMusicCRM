@@ -317,7 +317,7 @@ void main() {
     for (final label in const [
       'Организация',
       'Расписание',
-      'CRM',
+      'Клиенты',
       'Продажи и оплаты',
       'Пользователи и доступы',
       'Данные и обслуживание',
@@ -730,7 +730,7 @@ void main() {
       'Мария',
     );
     expect(
-      find.widgetWithText(TextFormField, 'Email для входа (необязательно)'),
+      find.widgetWithText(TextFormField, 'Почта для входа (необязательно)'),
       findsOneWidget,
     );
     expect(
@@ -738,7 +738,7 @@ void main() {
       findsOneWidget,
     );
     await tester.enterText(
-      find.widgetWithText(TextFormField, 'Email для входа (необязательно)'),
+      find.widgetWithText(TextFormField, 'Почта для входа (необязательно)'),
       'teacher@example.test',
     );
     await tester.enterText(
@@ -929,7 +929,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final emailField = tester.widget<TextFormField>(
-      find.widgetWithText(TextFormField, 'Email для входа *'),
+      find.widgetWithText(TextFormField, 'Почта для входа *'),
     );
     expect(emailField.controller!.text, isEmpty);
     final accessDialog = find.widgetWithText(
@@ -944,7 +944,7 @@ void main() {
       findsNothing,
     );
     await tester.enterText(
-      find.widgetWithText(TextFormField, 'Email для входа *'),
+      find.widgetWithText(TextFormField, 'Почта для входа *'),
       'legacy.staff@example.test',
     );
     await tester.enterText(
@@ -1042,7 +1042,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text('Доступ не создан — карточку можно сохранять без него'),
+        find.text('Доступ не создан. Карточку можно сохранить без него'),
         findsOneWidget,
       );
       await tester.enterText(
@@ -1093,7 +1093,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text('Доступ не создан — карточку можно сохранять без него'),
+        find.text('Доступ не создан. Карточку можно сохранить без него'),
         findsOneWidget,
       );
       await tester.enterText(

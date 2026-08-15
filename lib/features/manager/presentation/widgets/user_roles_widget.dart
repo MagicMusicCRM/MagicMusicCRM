@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
@@ -244,8 +245,7 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          'Показаны первые 100 — уточните поиск, чтобы найти '
-                          'остальных',
+                          'Показаны первые 100. Уточните поиск для остальных.',
                           style: TextStyle(
                             color: Theme.of(
                               context,

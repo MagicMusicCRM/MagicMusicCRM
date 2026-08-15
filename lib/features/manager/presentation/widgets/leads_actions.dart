@@ -281,7 +281,9 @@ extension _LeadsActions on _LeadsWidgetState {
     } catch (e) {
       if (!mounted) return;
       _emitState(() => _loadingMoreStatuses.remove(statusId));
-      _showError('Не удалось загрузить ещё лидов: $e');
+      _showError(
+        userErrorMessage(e, fallback: 'Не удалось загрузить ещё лидов.'),
+      );
     }
   }
 
@@ -341,7 +343,9 @@ extension _LeadsActions on _LeadsWidgetState {
         }
         _pendingLeadIds.remove(id);
       });
-      _showError('Не удалось изменить статус лида: $e');
+      _showError(
+        userErrorMessage(e, fallback: 'Не удалось изменить статус лида.'),
+      );
     }
   }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -77,7 +78,10 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _loadError = '$e';
+        _loadError = userErrorMessage(
+          e,
+          fallback: 'Не удалось загрузить данные для группы.',
+        );
       });
     }
   }
@@ -109,9 +113,13 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userErrorMessage(e, fallback: 'Не удалось создать группу.'),
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -236,7 +244,7 @@ class _CreateGroupDialogState extends ConsumerState<CreateGroupDialog> {
             placeholder: _branchId == null
                 ? 'Сначала выберите филиал'
                 : visibleRooms.isEmpty
-                ? 'Нет аудиторий — добавьте их в филиале'
+                ? 'Нет аудиторий. Добавьте их в филиале'
                 : 'Выберите аудиторию',
             selectedId: _roomId,
             items: [

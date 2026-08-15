@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/providers/crm_navigation_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -100,7 +101,10 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
       if (!mounted) return;
       setState(() {
         _loadingBranches = false;
-        _branchesError = '$error';
+        _branchesError = userErrorMessage(
+          error,
+          fallback: 'Не удалось загрузить филиалы.',
+        );
       });
     }
   }
@@ -158,7 +162,12 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Не удалось получить данные для входа: $error'),
+              content: Text(
+                userErrorMessage(
+                  error,
+                  fallback: 'Не удалось получить данные для входа.',
+                ),
+              ),
             ),
           );
         }
@@ -271,7 +280,11 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Не удалось сохранить сотрудника: $e')),
+        SnackBar(
+          content: Text(
+            userErrorMessage(e, fallback: 'Не удалось сохранить сотрудника.'),
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -306,7 +319,7 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
                   children: [
                     _SummaryChip(
                       icon: Icons.badge_outlined,
-                      label: 'CRM роль',
+                      label: 'Роль в системе',
                       value: _staffRoleLabel(_role),
                       color: AppTheme.primaryGold,
                     ),
@@ -413,7 +426,7 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
                     controller: _emailController,
                     readOnly: true,
                     decoration: InputDecoration(
-                      labelText: 'Email для входа',
+                      labelText: 'Почта для входа',
                       helperText: _credentialHelper(_staff),
                     ),
                     keyboardType: TextInputType.emailAddress,
@@ -562,12 +575,12 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
     final parts = <String>[
       if (data['password_configured'] == true) 'Пароль настроен',
       if (emailChanged != null && emailChanged.isNotEmpty)
-        'email обновлён ${_shortDate(emailChanged)}',
+        'почта обновлена ${_shortDate(emailChanged)}',
       if (passwordChanged != null && passwordChanged.isNotEmpty)
         'пароль обновлён ${_shortDate(passwordChanged)}',
     ];
     return parts.isEmpty
-        ? 'Доступ не создан — карточку можно сохранять без него'
+        ? 'Доступ не создан. Карточку можно сохранить без него'
         : parts.join(' · ');
   }
 

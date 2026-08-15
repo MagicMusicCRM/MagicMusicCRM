@@ -529,7 +529,12 @@ class _LeadCard extends ConsumerWidget {
         draft = content;
         messenger.showSnackBar(
           SnackBar(
-            content: Text('Не удалось сохранить комментарий: $e'),
+            content: Text(
+              userErrorMessage(
+                e,
+                fallback: 'Не удалось сохранить комментарий.',
+              ),
+            ),
             backgroundColor: AppColor.danger,
           ),
         );

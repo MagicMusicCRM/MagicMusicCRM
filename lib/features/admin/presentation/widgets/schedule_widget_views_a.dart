@@ -409,7 +409,9 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
       if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(
-          content: Text('Не удалось обновить пояс: $e'),
+          content: Text(
+            userErrorMessage(e, fallback: 'Не удалось обновить часовой пояс.'),
+          ),
           backgroundColor: AppColor.danger,
         ),
       );
@@ -482,7 +484,7 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
         Duration(days: _selectedDate.weekday - 1),
       );
       final sunday = monday.add(const Duration(days: 6));
-      return '${monday.day} ${monthNamesGenitive[monday.month]} — '
+      return '${monday.day} ${monthNamesGenitive[monday.month]} - '
           '${sunday.day} ${monthNamesGenitive[sunday.month]} ${sunday.year}';
     }
     const weekDayNames = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
@@ -748,7 +750,7 @@ extension _ScheduleViewsA on _ScheduleWidgetState {
             ),
             if (availability.isEmpty && !_availabilityLoading)
               Text(
-                'Занятость аудиторий появится после расчета backend.',
+                'Занятость аудиторий появится после расчёта.',
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                   fontSize: 12,

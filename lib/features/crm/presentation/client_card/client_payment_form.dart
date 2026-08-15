@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
@@ -182,7 +183,10 @@ class _ClientPaymentFormState extends State<ClientPaymentForm> {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = '$error';
+        _error = userErrorMessage(
+          error,
+          fallback: 'Не удалось проверить оплату.',
+        );
       });
     }
   }
@@ -650,7 +654,10 @@ class _ClientPaymentTransitionFormState
       if (mounted) {
         setState(() {
           _busy = false;
-          _error = '$error';
+          _error = userErrorMessage(
+            error,
+            fallback: 'Не удалось проверить изменение.',
+          );
         });
       }
     }
@@ -829,7 +836,10 @@ class _ClientPaymentReversalFormState
       if (mounted) {
         setState(() {
           _busy = false;
-          _error = '$error';
+          _error = userErrorMessage(
+            error,
+            fallback: 'Не удалось проверить исправление.',
+          );
         });
       }
     }
@@ -971,7 +981,10 @@ class _ClientAccountAdjustmentReversalFormState
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = '$error';
+        _error = userErrorMessage(
+          error,
+          fallback: 'Не удалось проверить отмену.',
+        );
       });
     }
   }
@@ -1121,7 +1134,10 @@ class _ClientPaymentAdjustmentFormState
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = '$error';
+        _error = userErrorMessage(
+          error,
+          fallback: 'Не удалось сохранить исправление.',
+        );
       });
     }
   }

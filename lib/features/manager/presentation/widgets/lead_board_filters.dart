@@ -110,7 +110,7 @@ Widget filterDateRangeButton({
   final range = _dateRangeOf(filters);
   final label = range == null
       ? 'Период обращения'
-      : '${_shortDate(range.start)} — ${_shortDate(range.end)}';
+      : '${_shortDate(range.start)} - ${_shortDate(range.end)}';
   return SizedBox(
     width: 260,
     child: Row(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'package:magic_music_crm/core/widgets/telegram/avatar_widget.dart';
 import 'package:magic_music_crm/core/widgets/telegram/channel_editor_dialog.dart';
@@ -367,9 +368,13 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
       widget.onLeftGroup?.call();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Не удалось выйти из группы: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            userErrorMessage(e, fallback: 'Не удалось выйти из группы.'),
+          ),
+        ),
+      );
     }
   }
 
@@ -391,9 +396,13 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
       widget.onNavigateToChat?.call(chat);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Не удалось открыть чат: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userErrorMessage(e, fallback: 'Не удалось открыть чат.'),
+            ),
+          ),
+        );
       }
     }
   }
@@ -432,7 +441,11 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Не удалось добавить участников: $e')),
+        SnackBar(
+          content: Text(
+            userErrorMessage(e, fallback: 'Не удалось добавить участников.'),
+          ),
+        ),
       );
     }
   }
@@ -470,7 +483,11 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Не удалось удалить участника: $error')),
+        SnackBar(
+          content: Text(
+            userErrorMessage(error, fallback: 'Не удалось удалить участника.'),
+          ),
+        ),
       );
     }
   }

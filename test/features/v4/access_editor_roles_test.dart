@@ -121,10 +121,6 @@ Future<void> _selectRole(WidgetTester tester, String label) async {
 }
 
 Future<void> _confirmRoleChange(WidgetTester tester) async {
-  await tester.enterText(
-    find.byKey(const Key('access-reason')),
-    'access.review',
-  );
   await tester.tap(find.byKey(const Key('access-reset-confirmation')));
   await tester.tap(find.byKey(const Key('access-save-role')));
   await tester.pumpAndSettle();
@@ -175,14 +171,10 @@ void main() {
       await tester.pumpWidget(_host('director', source));
       await tester.pumpAndSettle();
 
-      expect(find.text('Пакет роли · версия 4'), findsOneWidget);
-      expect(find.textContaining('Пакет: включено'), findsOneWidget);
+      expect(find.text('Версия набора прав: 4'), findsOneWidget);
+      expect(find.textContaining('По роли: включено'), findsOneWidget);
       expect(find.text('Администратор системы'), findsNothing);
 
-      await tester.enterText(
-        find.byKey(const Key('access-reason')),
-        'access.review',
-      );
       await tester.tap(
         find.byKey(const Key('access-capability-crm.client.read.basic')),
       );

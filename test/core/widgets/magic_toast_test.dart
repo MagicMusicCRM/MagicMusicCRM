@@ -113,4 +113,30 @@ void main() {
     expect(undone, isTrue);
     expect(find.text('Лид конвертирован в ученика'), findsNothing);
   });
+
+  testWidgets('danger toast does not expose technical English text', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      host(
+        onShow: (context) => MagicToast.show(
+          context,
+          'Schedule Analyzer failed: PostgreSQL constraint',
+          detail: 'SocketException: connection reset',
+          type: MagicToastType.danger,
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('go'));
+    await tester.pump();
+
+    expect(find.text('Не удалось выполнить действие.'), findsOneWidget);
+    expect(find.text('Попробуйте снова.'), findsOneWidget);
+    expect(find.textContaining('Schedule Analyzer'), findsNothing);
+    expect(find.textContaining('SocketException'), findsNothing);
+
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
+  });
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/models/schedule_plan.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
@@ -251,7 +252,7 @@ class _RecurringSchedulePlanSectionState
           ],
         ),
         subtitle: Text(
-          '${_date(plan.activeFrom)} — ${plan.activeUntil == null ? 'без срока' : _date(plan.activeUntil!)}',
+          '${_date(plan.activeFrom)} - ${plan.activeUntil == null ? 'без срока' : _date(plan.activeUntil!)}',
           style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
         ),
         childrenPadding: const EdgeInsets.fromLTRB(
@@ -339,7 +340,7 @@ class _RecurringSchedulePlanSectionState
   Widget _planRow(SchedulePlan plan, SchedulePlanRow row) {
     final cs = Theme.of(context).colorScheme;
     final period =
-        '${_date(row.validFrom)} — '
+        '${_date(row.validFrom)} - '
         '${row.validUntil == null ? 'без срока' : _date(row.validUntil!)}';
     final values = [
       (Icons.person_outline_rounded, row.teacherName ?? 'Педагог не указан'),
@@ -440,7 +441,7 @@ class _RecurringSchedulePlanSectionState
         ? null
         : firstItem.id == lastItem?.id
         ? '${_date(firstItem.localDate)} · ${firstItem.localTime}'
-        : '${_date(firstItem.localDate)} — ${_date(lastItem!.localDate)} · ${page.items.length}';
+        : '${_date(firstItem.localDate)} - ${_date(lastItem!.localDate)} · ${page.items.length}';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1008,7 +1009,7 @@ class _RecurringSchedulePlanSectionState
     MagicToast.show(
       context,
       message,
-      detail: '$error',
+      detail: userErrorMessage(error, fallback: '$message.'),
       type: MagicToastType.danger,
     );
   }
@@ -1097,7 +1098,14 @@ class _SchedulePlanRowsReviewState
       }
       setState(() => _preview = preview);
     } catch (error) {
-      if (mounted) setState(() => _error = '$error');
+      if (mounted) {
+        setState(
+          () => _error = userErrorMessage(
+            error,
+            fallback: 'Не удалось проверить расписание.',
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -1127,7 +1135,7 @@ class _SchedulePlanRowsReviewState
         if (_error != null) ...[
           const SizedBox(height: AppSpace.md),
           Text(
-            'Не удалось проверить расписание: $_error',
+            _error!,
             style: TextStyle(color: Theme.of(context).colorScheme.error),
           ),
         ],
@@ -1242,8 +1250,7 @@ class _SchedulePlanRowsReviewState
             style: TextStyle(color: cs.error, fontWeight: FontWeight.w800),
           ),
           Text(
-            'Schedule Analyzer сгруппировал одинаковые конфликты и проверил '
-            'кандидаты для ближайшего проблемного занятия.',
+            'Похожие конфликты объединены. Сначала показан ближайший.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: AppSpace.sm),
@@ -1268,10 +1275,9 @@ class _SchedulePlanRowsReviewState
                 spacing: AppSpace.sm,
                 runSpacing: 2,
                 children: [
-                  for (final id in issue.lessonIds)
+                  for (final (index, id) in issue.lessonIds.indexed)
                     EntityLinkText(
-                      text:
-                          'Занятие ${id.length <= 8 ? id : id.substring(0, 8)}',
+                      text: 'Открыть занятие ${index + 1}',
                       onPressed: () => openEntityLink(
                         context,
                         ref,
@@ -1319,8 +1325,7 @@ class _SchedulePlanRowsReviewState
             ),
             const SizedBox(height: AppSpace.xs),
             Text(
-              'После применения нажмите «${widget.submitLabel}»: весь период '
-              'будет проверен заново до сохранения.',
+              'Примените вариант и снова сохраните расписание.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: AppSpace.sm),
@@ -1448,8 +1453,7 @@ class _SchedulePlanRowsReviewState
               participantLabel:
                   code == 'CLIENT_OVERLAP' &&
                       widget.participantLabels.isNotEmpty
-                  ? widget.participantLabels[studentId] ??
-                        'Ученик ${studentId.length <= 8 ? studentId : studentId.substring(0, 8)}'
+                  ? widget.participantLabels[studentId] ?? 'Ученик'
                   : null,
             ),
           );
@@ -1489,8 +1493,7 @@ class _SchedulePlanRowsReviewState
         final studentId = rawScope['studentId']?.toString() ?? '';
         if (code == 'CLIENT_OVERLAP' && studentId.isNotEmpty) {
           participantLabels.add(
-            widget.participantLabels[studentId] ??
-                'Ученик ${studentId.length <= 8 ? studentId : studentId.substring(0, 8)}',
+            widget.participantLabels[studentId] ?? 'Ученик',
           );
         }
       }
@@ -1670,7 +1673,14 @@ class _SchedulePlanEndFormState extends State<_SchedulePlanEndForm> {
       );
       if (mounted) setState(() => _preview = preview);
     } catch (error) {
-      if (mounted) setState(() => _error = '$error');
+      if (mounted) {
+        setState(
+          () => _error = userErrorMessage(
+            error,
+            fallback: 'Не удалось рассчитать завершение расписания.',
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -1696,7 +1706,14 @@ class _SchedulePlanEndFormState extends State<_SchedulePlanEndForm> {
       );
       if (mounted) Navigator.of(context).pop(true);
     } catch (error) {
-      if (mounted) setState(() => _error = '$error');
+      if (mounted) {
+        setState(
+          () => _error = userErrorMessage(
+            error,
+            fallback: 'Не удалось завершить расписание.',
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }

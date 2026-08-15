@@ -64,7 +64,9 @@ Future<(String?, String?)?> pickLossReason(
                               : cs.outline,
                         ),
                         const SizedBox(width: AppSpace.sm),
-                        Expanded(child: Text(r['name']?.toString() ?? '—')),
+                        Expanded(
+                          child: Text(r['name']?.toString() ?? 'Не указано'),
+                        ),
                       ],
                     ),
                   ),

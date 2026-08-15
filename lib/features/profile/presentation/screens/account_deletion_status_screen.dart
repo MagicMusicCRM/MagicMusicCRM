@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/widgets/v7/magic_page_state.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
@@ -50,7 +51,11 @@ class _AccountDeletionStatusScreenState
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Не удалось отозвать запрос: $error')),
+          SnackBar(
+            content: Text(
+              userErrorMessage(error, fallback: 'Не удалось отозвать запрос.'),
+            ),
+          ),
         );
       }
     } finally {
@@ -72,7 +77,10 @@ class _AccountDeletionStatusScreenState
             error: (error, _) => MagicPageState(
               kind: MagicPageStateKind.error,
               title: 'Не удалось загрузить статус',
-              message: error.toString(),
+              message: userErrorMessage(
+                error,
+                fallback: 'Не удалось загрузить статус удаления.',
+              ),
               actionLabel: 'Повторить',
               onAction: () => ref.invalidate(pendingDeletionRequestProvider),
             ),
@@ -112,7 +120,7 @@ class _AccountDeletionStatusScreenState
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Администрация проверит запрос и завершит удаление аккаунта. До завершения обработки доступ к CRM ограничен.',
+                      'Администрация проверит запрос. До завершения обработки доступ к системе ограничен.',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
@@ -360,7 +361,10 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
       if (!mounted) return false;
       setState(() {
         _busy = false;
-        _error = '$error';
+        _error = userErrorMessage(
+          error,
+          fallback: 'Не удалось оформить абонемент.',
+        );
       });
       _exitController.setBusy(false);
       return false;
@@ -758,13 +762,13 @@ class _PriceSummary extends StatelessWidget {
           _PriceLine(
             label: 'Скидка',
             value: discountMinor == null
-                ? '—'
+                ? 'Не указано'
                 : '−${_formatMinor(discountMinor!, currencyCode)}',
           ),
           _PriceLine(
             label: 'Доплата',
             value: surchargeMinor == null || surchargeMinor == BigInt.zero
-                ? '—'
+                ? 'Не указано'
                 : '+${_formatMinor(surchargeMinor!, currencyCode)}',
           ),
           const Divider(height: AppSpace.lg, color: AppColor.divider),
@@ -772,7 +776,7 @@ class _PriceSummary extends StatelessWidget {
             key: const Key('subscription-issue-final'),
             label: 'Итого',
             value: finalPriceMinor == null
-                ? '—'
+                ? 'Не указано'
                 : _formatMinor(finalPriceMinor!, currencyCode),
             emphasized: true,
           ),

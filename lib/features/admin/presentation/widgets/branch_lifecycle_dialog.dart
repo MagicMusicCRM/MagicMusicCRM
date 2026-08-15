@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 
@@ -71,7 +72,10 @@ class _BranchLifecycleDialogState extends ConsumerState<BranchLifecycleDialog> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = '$error';
+        _error = userErrorMessage(
+          error,
+          fallback: 'Не удалось проверить филиал.',
+        );
         _loading = false;
       });
     }
@@ -109,9 +113,17 @@ class _BranchLifecycleDialogState extends ConsumerState<BranchLifecycleDialog> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error = '$error';
+        _error = userErrorMessage(
+          error,
+          fallback: 'Не удалось изменить филиал.',
+        );
       });
-      await _load(errorAfterLoad: '$error');
+      await _load(
+        errorAfterLoad: userErrorMessage(
+          error,
+          fallback: 'Не удалось изменить филиал.',
+        ),
+      );
     }
   }
 
@@ -210,7 +222,7 @@ class _BranchLifecycleDialogState extends ConsumerState<BranchLifecycleDialog> {
                           const SizedBox(width: 8),
                           const Expanded(
                             child: Text(
-                              'Активных связей нет — филиал можно безопасно закрыть.',
+                              'Активных связей нет. Филиал можно закрыть.',
                             ),
                           ),
                         ],
@@ -271,7 +283,7 @@ class _BranchLifecycleDialogState extends ConsumerState<BranchLifecycleDialog> {
                                     : 'Филиал восстановлен',
                               ),
                               subtitle: Text(
-                                '${item['reasonText']?.toString() ?? '—'}'
+                                '${item['reasonText']?.toString() ?? 'Не указано'}'
                                 '${item['effectiveDate'] == null ? '' : ' • ${item['effectiveDate']}'}',
                               ),
                             ),

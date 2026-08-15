@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
@@ -65,7 +66,10 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _loadError = '$error';
+        _loadError = userErrorMessage(
+          error,
+          fallback: 'Не удалось загрузить данные для сотрудника.',
+        );
       });
     }
   }
@@ -116,9 +120,13 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userErrorMessage(e, fallback: 'Не удалось создать сотрудника.'),
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -168,7 +176,7 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Карточку можно создать без аккаунта. Email и пароль можно добавить сейчас или позже в карточке. Роль доступа и филиалы можно назначить сразу.',
+            'Карточку можно создать без доступа. Почту и пароль можно добавить сейчас или позже.',
             style: TextStyle(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
@@ -206,9 +214,11 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
               if (email.isEmpty) {
                 return _passwordController.text.isEmpty
                     ? null
-                    : 'Укажите email вместе с паролем';
+                    : 'Укажите почту вместе с паролем';
               }
-              return email.contains('@') ? null : 'Введите корректный email';
+              return email.contains('@')
+                  ? null
+                  : 'Введите корректный адрес почты';
             },
           ),
           const SizedBox(height: 12),
@@ -217,7 +227,7 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
             obscureText: !_showPassword,
             decoration: InputDecoration(
               labelText: 'Пароль (необязательно)',
-              helperText: 'Для доступа — $passwordMinimumHint',
+              helperText: 'Для доступа: $passwordMinimumHint',
               prefixIcon: const Icon(Icons.lock_outline_rounded),
               suffixIcon: IconButton(
                 tooltip: _showPassword ? 'Скрыть пароль' : 'Показать пароль',
@@ -232,7 +242,7 @@ class _CreateEmployeeDialogState extends ConsumerState<CreateEmployeeDialog> {
               if (password.isEmpty) {
                 return _emailController.text.trim().isEmpty
                     ? null
-                    : 'Укажите пароль вместе с email';
+                    : 'Укажите пароль вместе с почтой';
               }
               return password.length < minPasswordLength
                   ? passwordMinimumError

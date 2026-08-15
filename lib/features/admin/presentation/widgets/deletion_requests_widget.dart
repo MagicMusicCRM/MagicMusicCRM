@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/services/magic_profile_admin_service.dart';
@@ -120,7 +121,7 @@ class _DeletionRequestsWidgetState
       MagicToast.show(
         context,
         'Не удалось обновить запрос',
-        detail: '$e',
+        detail: userErrorMessage(e),
         type: MagicToastType.danger,
       );
     }

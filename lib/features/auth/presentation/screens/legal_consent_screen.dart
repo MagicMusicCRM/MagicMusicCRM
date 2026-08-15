@@ -188,7 +188,7 @@ class _LegalConsentScreenState extends ConsumerState<LegalConsentScreen> {
         Text(
           widget.requireAcceptance
               ? 'Чтобы продолжить, подтвердите согласие с документами.'
-              : 'Актуальные документы MagicMusicCRM.',
+              : 'Актуальные документы Magic Music.',
           textAlign: TextAlign.center,
           style: const TextStyle(
             color: AppColor.text2,

@@ -4,12 +4,14 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 
 /// Widget for recording voice messages.
 /// Calls [onVoiceRecorded] with the recorded bytes and duration when done.
 class VoiceRecorderWidget extends StatefulWidget {
-  final Future<void> Function(Uint8List bytes, int durationMs, String extension) onVoiceRecorded;
+  final Future<void> Function(Uint8List bytes, int durationMs, String extension)
+  onVoiceRecorded;
   final VoidCallback onCancel;
 
   const VoiceRecorderWidget({
@@ -46,7 +48,8 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
     try {
       if (await _recorder.hasPermission()) {
         final dir = await getTemporaryDirectory();
-        _recordPath = '${dir.path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+        _recordPath =
+            '${dir.path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
 
         const config = RecordConfig(
           encoder: AudioEncoder.aacLc,
@@ -66,7 +69,10 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Нет разрешения на запись аудио', style: TextStyle(color: Colors.white)),
+              content: Text(
+                'Нет разрешения на запись аудио',
+                style: TextStyle(color: Colors.white),
+              ),
               backgroundColor: AppTheme.danger,
             ),
           );
@@ -78,7 +84,10 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Ошибка записи: $e', style: const TextStyle(color: Colors.white)),
+            content: Text(
+              userErrorMessage(e, fallback: 'Не удалось начать запись.'),
+              style: const TextStyle(color: Colors.white),
+            ),
             backgroundColor: AppTheme.danger,
           ),
         );
@@ -106,7 +115,9 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
             );
           }
           // Clean up temp file
-          try { await file.delete(); } catch (_) {}
+          try {
+            await file.delete();
+          } catch (_) {}
         }
       }
     } catch (e) {
@@ -114,7 +125,10 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Ошибка: $e', style: const TextStyle(color: Colors.white)),
+            content: Text(
+              userErrorMessage(e, fallback: 'Не удалось сохранить запись.'),
+              style: const TextStyle(color: Colors.white),
+            ),
             backgroundColor: AppTheme.danger,
           ),
         );
@@ -129,7 +143,9 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
     try {
       final path = await _recorder.stop();
       if (path != null) {
-        try { await File(path).delete(); } catch (_) {}
+        try {
+          await File(path).delete();
+        } catch (_) {}
       }
     } catch (_) {}
     if (mounted) widget.onCancel();
@@ -162,7 +178,10 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
           children: [
             // Cancel button
             IconButton(
-              icon: const Icon(Icons.delete_outline_rounded, color: AppTheme.danger),
+              icon: const Icon(
+                Icons.delete_outline_rounded,
+                color: AppTheme.danger,
+              ),
               tooltip: 'Отменить',
               onPressed: _cancel,
             ),
@@ -206,7 +225,10 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
               const SizedBox(
                 width: 24,
                 height: 24,
-                child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryGold),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppTheme.primaryGold,
+                ),
               )
             else
               Container(

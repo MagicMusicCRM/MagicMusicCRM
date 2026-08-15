@@ -973,7 +973,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.textContaining('Пересечение со строками: 2'), findsOneWidget);
-      expect(find.textContaining('Занятие lesson-c'), findsWidgets);
+      expect(find.textContaining('Открыть занятие 1'), findsWidgets);
       expect(
         api.idempotentRequests.where(
           (request) => request.path == '/crm/schedule-plans',

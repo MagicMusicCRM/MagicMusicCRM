@@ -29,7 +29,10 @@ class _ScheduleError extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              '$error',
+              userErrorMessage(
+                error,
+                fallback: 'Не удалось загрузить расписание.',
+              ),
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,

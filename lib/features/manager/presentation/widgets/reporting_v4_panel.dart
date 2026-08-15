@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
@@ -37,7 +38,7 @@ void validateReportExportBytes(List<int> bytes, String format) {
         bytes[2] == 0x03 &&
         bytes[3] == 0x04;
     if (!isZip) {
-      throw const FormatException('Сервер вернул повреждённый XLSX-файл.');
+      throw const FormatException('Сервер вернул повреждённый файл отчёта.');
     }
     return;
   }
@@ -49,7 +50,7 @@ void validateReportExportBytes(List<int> bytes, String format) {
         bytes[2] == 0xbf;
     if (!hasUtf8Bom) {
       throw const FormatException(
-        'CSV должен быть в UTF-8 с BOM для корректного открытия в Excel.',
+        'Не удалось подготовить таблицу в выбранном формате.',
       );
     }
     utf8.decode(bytes.sublist(3));
@@ -575,7 +576,10 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
             if (_exportError != null) ...[
               const SizedBox(height: 12),
               Text(
-                'Ошибка экспорта: $_exportError',
+                userErrorMessage(
+                  _exportError!,
+                  fallback: 'Не удалось подготовить файл.',
+                ),
                 key: const ValueKey('report-export-error'),
                 style: const TextStyle(color: AppColor.danger),
               ),
@@ -734,10 +738,7 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
       runSpacing: 8,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        Text(
-          'Единый dashboard',
-          style: Theme.of(context).textTheme.headlineSmall,
-        ),
+        Text('Единая сводка', style: Theme.of(context).textTheme.headlineSmall),
         OutlinedButton.icon(
           onPressed: _exporting
               ? null
@@ -933,7 +934,10 @@ class _ReportingError extends StatelessWidget {
         children: [
           const Icon(Icons.error_outline, size: 36),
           const SizedBox(height: 8),
-          Text('$error', textAlign: TextAlign.center),
+          Text(
+            userErrorMessage(error, fallback: 'Не удалось загрузить отчёт.'),
+            textAlign: TextAlign.center,
+          ),
           const SizedBox(height: 12),
           OutlinedButton(onPressed: onRetry, child: const Text('Повторить')),
         ],

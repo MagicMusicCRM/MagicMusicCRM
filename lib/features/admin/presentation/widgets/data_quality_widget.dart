@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 
 import '../../../../core/theme/design_tokens.dart';
@@ -136,7 +137,7 @@ class _DataQualityWidgetState extends ConsumerState<DataQualityWidget> {
     if (_phoneItems.isEmpty) {
       return const _EmptyState(
         icon: Icons.check_circle_outline_rounded,
-        message: 'Очередь пуста — все номера в порядке',
+        message: 'Очередь пуста. Все номера в порядке',
       );
     }
     return Column(
@@ -196,7 +197,7 @@ class _DataQualityWidgetState extends ConsumerState<DataQualityWidget> {
       MagicToast.show(
         context,
         'Не удалось разобрать номер',
-        detail: '$e',
+        detail: userErrorMessage(e),
         type: MagicToastType.danger,
       );
     }
@@ -323,7 +324,7 @@ class _DataQualityWidgetState extends ConsumerState<DataQualityWidget> {
       MagicToast.show(
         context,
         'Не удалось объединить',
-        detail: '$e',
+        detail: userErrorMessage(e),
         type: MagicToastType.danger,
       );
     }
@@ -344,7 +345,7 @@ class _DataQualityWidgetState extends ConsumerState<DataQualityWidget> {
       MagicToast.show(
         context,
         'Не удалось отменить объединение',
-        detail: '$e',
+        detail: userErrorMessage(e),
         type: MagicToastType.danger,
       );
     }

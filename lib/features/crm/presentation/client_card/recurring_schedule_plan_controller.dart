@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/models/schedule_plan.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 
@@ -41,7 +42,10 @@ class RecurringSchedulePlanController extends ChangeNotifier {
       );
       await Future.wait(plans.where((plan) => plan.isActive).map(ensureTray));
     } catch (exception) {
-      error = '$exception';
+      error = userErrorMessage(
+        exception,
+        fallback: 'Не удалось загрузить постоянное расписание.',
+      );
     } finally {
       loading = false;
       _notify();
@@ -88,7 +92,10 @@ class RecurringSchedulePlanController extends ChangeNotifier {
       );
       trayRetryRequests.remove(planId);
     } catch (exception) {
-      trayErrors[planId] = '$exception';
+      trayErrors[planId] = userErrorMessage(
+        exception,
+        fallback: 'Не удалось загрузить занятия по этому расписанию.',
+      );
       trayRetryRequests[planId] = (cursor: cursor, direction: direction);
     } finally {
       loadingTrays.remove(planId);

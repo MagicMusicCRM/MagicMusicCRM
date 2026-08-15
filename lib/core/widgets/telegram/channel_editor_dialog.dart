@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/services/magic_messenger_service.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
@@ -208,7 +209,9 @@ class _ChannelEditorDialogState extends ConsumerState<ChannelEditorDialog> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Не удалось сохранить канал: $error'),
+          content: Text(
+            userErrorMessage(error, fallback: 'Не удалось сохранить канал.'),
+          ),
           backgroundColor: TelegramColors.danger,
         ),
       );
@@ -299,7 +302,10 @@ class _ChannelEditorDialogState extends ConsumerState<ChannelEditorDialog> {
                       child: Padding(
                         padding: const EdgeInsets.all(24),
                         child: Text(
-                          'Не удалось загрузить права доступа\n$_loadError',
+                          userErrorText(
+                            _loadError ?? '',
+                            fallback: 'Не удалось загрузить права доступа.',
+                          ),
                           textAlign: TextAlign.center,
                         ),
                       ),

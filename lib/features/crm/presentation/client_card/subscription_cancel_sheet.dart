@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
@@ -54,7 +54,9 @@ class SubscriptionCancellationForm extends StatefulWidget {
 class _SubscriptionCancellationFormState
     extends State<SubscriptionCancellationForm> {
   final _formKey = GlobalKey<FormState>();
-  final _reasonController = TextEditingController();
+  final _reasonController = TextEditingController(
+    text: 'client.requested_cancel',
+  );
   late final MagicMutationIdentity _identity;
   late final DirtyFormExitController _exitController;
 
@@ -83,9 +85,9 @@ class _SubscriptionCancellationFormState
 
   String? _validateReason(String? raw) {
     final value = (raw ?? '').trim();
-    if (value.isEmpty) return 'Укажите код причины';
+    if (value.isEmpty) return 'Выберите причину';
     if (value.length > 120 || !RegExp(r'^[A-Za-z0-9._:-]+$').hasMatch(value)) {
-      return 'Разрешены латиница, цифры и символы . _ : -';
+      return 'Выберите причину из списка';
     }
     return null;
   }
@@ -123,7 +125,10 @@ class _SubscriptionCancellationFormState
       if (!mounted) return false;
       setState(() {
         _busy = false;
-        _error = '$error';
+        _error = userErrorMessage(
+          error,
+          fallback: 'Не удалось отменить абонемент.',
+        );
       });
       _exitController.setBusy(false);
       return false;
@@ -167,25 +172,37 @@ class _SubscriptionCancellationFormState
               style: const TextStyle(color: AppColor.text2, fontSize: 11.5),
             ),
             const SizedBox(height: AppSpace.lg),
-            TextFormField(
+            DropdownButtonFormField<String>(
+              menuMaxHeight: 256,
               key: const Key('subscription-cancel-reason'),
-              controller: _reasonController,
-              enabled: _fieldsEnabled,
-              maxLength: 120,
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9._:-]')),
-              ],
+              initialValue: _reasonController.text,
+              isExpanded: true,
               decoration: clientCardInputDecoration(
                 Theme.of(context).colorScheme,
-                label: 'Код причины',
-                hint: 'Например: client.requested_cancel',
-                helperText: 'Код попадёт в журнал действий',
+                label: 'Причина отмены',
                 isDense: true,
               ),
+              items: const [
+                DropdownMenuItem(
+                  value: 'client.requested_cancel',
+                  child: Text('По просьбе клиента'),
+                ),
+                DropdownMenuItem(
+                  value: 'package.incorrect',
+                  child: Text('Ошибочно оформлен'),
+                ),
+                DropdownMenuItem(
+                  value: 'schedule.changed',
+                  child: Text('Изменилось расписание'),
+                ),
+              ],
               validator: _validateReason,
-              onChanged: (_) {
-                if (_error != null) setState(() => _error = null);
-              },
+              onChanged: _fieldsEnabled
+                  ? (value) {
+                      if (value != null) _reasonController.text = value;
+                      if (_error != null) setState(() => _error = null);
+                    }
+                  : null,
             ),
             const SizedBox(height: AppSpace.sm),
             Container(

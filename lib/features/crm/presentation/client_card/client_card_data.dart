@@ -53,7 +53,10 @@ extension _ClientCardData on _ClientCardState {
     } catch (error) {
       if (!mounted) return;
       _emitState(() {
-        _internalContextError = '$error';
+        _internalContextError = userErrorMessage(
+          error,
+          fallback: 'Не удалось загрузить внутреннюю заметку.',
+        );
         _internalContextLoading = false;
       });
     }
@@ -200,9 +203,9 @@ extension _ClientCardData on _ClientCardState {
           final from = h['old_status']?.toString();
           final to = h['new_status']?.toString();
           final transition = [
-            if (from != null && from.isNotEmpty) from else '—',
+            if (from != null && from.isNotEmpty) from else 'Не указано',
             '→',
-            if (to != null && to.isNotEmpty) to else '—',
+            if (to != null && to.isNotEmpty) to else 'Не указано',
           ].join(' ');
           final comment = h['comment']?.toString().trim() ?? '';
           return {
@@ -316,7 +319,10 @@ extension _ClientCardData on _ClientCardState {
           branchId: student['branch_id']?.toString(),
         );
       } catch (error) {
-        funnelError = 'Не удалось загрузить воронку: $error';
+        funnelError = userErrorMessage(
+          error,
+          fallback: 'Не удалось загрузить воронку.',
+        );
       }
       _emitState(() {
         _student = student;
@@ -350,7 +356,10 @@ extension _ClientCardData on _ClientCardState {
       debugPrint('Error loading student card: $e');
       if (mounted) {
         _emitState(() {
-          _studentError = '$e';
+          _studentError = userErrorMessage(
+            e,
+            fallback: 'Не удалось загрузить карточку ученика.',
+          );
           _loadingStudent = false;
         });
       }
@@ -503,7 +512,10 @@ extension _ClientCardData on _ClientCardState {
     } catch (error) {
       if (!mounted) return;
       _emitState(() {
-        _clientAccessError = '$error';
+        _clientAccessError = userErrorMessage(
+          error,
+          fallback: 'Не удалось загрузить доступ клиента.',
+        );
         _loadingClientAccess = false;
       });
     }
@@ -687,9 +699,13 @@ extension _ClientCardData on _ClientCardState {
       return true;
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Ошибка сохранения: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userErrorMessage(e, fallback: 'Не удалось сохранить карточку.'),
+            ),
+          ),
+        );
       }
       return false;
     } finally {
@@ -748,7 +764,9 @@ extension _ClientCardData on _ClientCardState {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Не удалось прикрепить: $e'),
+              content: Text(
+                userErrorMessage(e, fallback: 'Не удалось прикрепить файл.'),
+              ),
               backgroundColor: AppTheme.danger,
             ),
           );
@@ -832,9 +850,13 @@ extension _ClientCardData on _ClientCardState {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Ошибка связи: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            userErrorMessage(e, fallback: 'Не удалось изменить связь.'),
+          ),
+        ),
+      );
     } finally {
       if (mounted) _emitState(() => _duplicateDecisionId = null);
     }

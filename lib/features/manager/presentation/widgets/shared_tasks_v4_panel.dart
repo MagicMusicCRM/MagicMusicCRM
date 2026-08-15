@@ -1999,7 +1999,7 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
                     const SizedBox(width: AppSpace.sm),
                     Expanded(
                       child: Text(
-                        '${selector['label'] ?? 'Получатель'} — '
+                        '${selector['label'] ?? 'Получатель'}: '
                         '${selector['mode'] == 'fixed' ? 'лично' : 'динамический состав'}; '
                         'сейчас ${selector['currentRecipientCount'] ?? 0}',
                       ),

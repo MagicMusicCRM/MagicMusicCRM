@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:io' show File, Platform;
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
@@ -10,9 +11,21 @@ import 'package:file_picker/file_picker.dart';
 
 /// Telegram-style message input bar with text field, attachment, and voice recording.
 class MessageInput extends StatefulWidget {
-  final Future<void> Function(String text, {String? replyToId, String? editingMessageId}) onSendText;
-  final Future<void> Function(Uint8List bytes, int durationMs, String ext)? onSendVoice;
-  final Future<void> Function(Uint8List bytes, String fileName, int fileSize, {String? caption})? onSendFile;
+  final Future<void> Function(
+    String text, {
+    String? replyToId,
+    String? editingMessageId,
+  })
+  onSendText;
+  final Future<void> Function(Uint8List bytes, int durationMs, String ext)?
+  onSendVoice;
+  final Future<void> Function(
+    Uint8List bytes,
+    String fileName,
+    int fileSize, {
+    String? caption,
+  })?
+  onSendFile;
   final void Function(bool isTyping)? onTyping;
   final bool enabled;
   final Map<String, dynamic>? replyingTo;
@@ -91,11 +104,13 @@ class _MessageInputState extends State<MessageInput> {
   @override
   void didUpdateWidget(MessageInput oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.editingMessage != oldWidget.editingMessage && widget.editingMessage != null) {
+    if (widget.editingMessage != oldWidget.editingMessage &&
+        widget.editingMessage != null) {
       _controller.text = widget.editingMessage!['content'] ?? '';
       _focusNode.requestFocus();
     }
-    if (widget.replyingTo != oldWidget.replyingTo && widget.replyingTo != null) {
+    if (widget.replyingTo != oldWidget.replyingTo &&
+        widget.replyingTo != null) {
       _focusNode.requestFocus();
     }
   }
@@ -145,15 +160,13 @@ class _MessageInputState extends State<MessageInput> {
           _AttachOption(
             icon: Icons.image_rounded,
             label: 'Фото из галереи',
-            onTap: () =>
-                Navigator.of(sheetContext).pop(_AttachSource.image),
+            onTap: () => Navigator.of(sheetContext).pop(_AttachSource.image),
           ),
           const SizedBox(height: AppSpace.sm),
           _AttachOption(
             icon: Icons.insert_drive_file_rounded,
             label: 'Файл',
-            onTap: () =>
-                Navigator.of(sheetContext).pop(_AttachSource.file),
+            onTap: () => Navigator.of(sheetContext).pop(_AttachSource.file),
           ),
         ],
       ),
@@ -193,7 +206,9 @@ class _MessageInputState extends State<MessageInput> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Ошибка: $e'),
+            content: Text(
+              userErrorMessage(e, fallback: 'Не удалось добавить файл.'),
+            ),
             backgroundColor: AppColor.danger,
           ),
         );
@@ -246,7 +261,8 @@ class _MessageInputState extends State<MessageInput> {
       );
     }
 
-    final isModeActive = widget.replyingTo != null || widget.editingMessage != null;
+    final isModeActive =
+        widget.replyingTo != null || widget.editingMessage != null;
 
     return Container(
       decoration: BoxDecoration(
@@ -267,11 +283,16 @@ class _MessageInputState extends State<MessageInput> {
           children: [
             if (isModeActive)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   border: Border(
                     bottom: BorderSide(
-                      color: isDark ? AppColor.divider : TelegramColors.lightDivider,
+                      color: isDark
+                          ? AppColor.divider
+                          : TelegramColors.lightDivider,
                       width: 0.5,
                     ),
                   ),
@@ -279,7 +300,9 @@ class _MessageInputState extends State<MessageInput> {
                 child: Row(
                   children: [
                     Icon(
-                      widget.replyingTo != null ? Icons.reply_rounded : Icons.edit_rounded,
+                      widget.replyingTo != null
+                          ? Icons.reply_rounded
+                          : Icons.edit_rounded,
                       size: 20,
                       color: AppColor.gold,
                     ),
@@ -289,7 +312,9 @@ class _MessageInputState extends State<MessageInput> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            widget.replyingTo != null ? 'Ответ пользователю' : 'Редактирование',
+                            widget.replyingTo != null
+                                ? 'Ответ пользователю'
+                                : 'Редактирование',
                             style: const TextStyle(
                               color: AppColor.gold,
                               fontWeight: FontWeight.bold,
@@ -297,11 +322,16 @@ class _MessageInputState extends State<MessageInput> {
                             ),
                           ),
                           Text(
-                            (widget.replyingTo?['content'] ?? widget.editingMessage?['content'] ?? '').toString(),
+                            (widget.replyingTo?['content'] ??
+                                    widget.editingMessage?['content'] ??
+                                    '')
+                                .toString(),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: isDark ? AppColor.text2 : TelegramColors.lightTextSecondary,
+                              color: isDark
+                                  ? AppColor.text2
+                                  : TelegramColors.lightTextSecondary,
                               fontSize: 13,
                             ),
                           ),
@@ -335,15 +365,16 @@ class _MessageInputState extends State<MessageInput> {
                       color: _showEmojiPicker
                           ? AppColor.gold
                           : isDark
-                              ? AppColor.text2
-                              : TelegramColors.lightTextSecondary,
+                          ? AppColor.text2
+                          : TelegramColors.lightTextSecondary,
                     ),
                     onPressed: widget.enabled ? _toggleEmojiPicker : null,
                     splashRadius: 20,
                     tooltip: _showEmojiPicker ? 'Клавиатура' : 'Эмодзи',
                   ),
                   // Attach button
-                  if (widget.onSendFile != null && widget.editingMessage == null)
+                  if (widget.onSendFile != null &&
+                      widget.editingMessage == null)
                     IconButton(
                       icon: _isSendingFile
                           ? SizedBox(
@@ -362,7 +393,9 @@ class _MessageInputState extends State<MessageInput> {
                                   ? AppColor.text2
                                   : TelegramColors.lightTextSecondary,
                             ),
-                      onPressed: _isSendingFile || !widget.enabled ? null : _openAttachMenu,
+                      onPressed: _isSendingFile || !widget.enabled
+                          ? null
+                          : _openAttachMenu,
                       splashRadius: 20,
                       tooltip: 'Прикрепить файл',
                     ),
@@ -376,7 +409,9 @@ class _MessageInputState extends State<MessageInput> {
                         enabled: widget.enabled,
                         maxLines: 6,
                         minLines: 1,
-                        textInputAction: _isDesktop ? TextInputAction.newline : TextInputAction.send,
+                        textInputAction: _isDesktop
+                            ? TextInputAction.newline
+                            : TextInputAction.send,
                         onSubmitted: _isDesktop ? null : (_) => _sendMessage(),
                         decoration: InputDecoration(
                           hintText: 'Сообщение...',
@@ -406,35 +441,39 @@ class _MessageInputState extends State<MessageInput> {
                     child: _hasText || widget.editingMessage != null
                         ? IconButton(
                             key: const ValueKey('send'),
-                            icon: Icon(widget.editingMessage != null ? Icons.check_rounded : Icons.send_rounded),
+                            icon: Icon(
+                              widget.editingMessage != null
+                                  ? Icons.check_rounded
+                                  : Icons.send_rounded,
+                            ),
                             color: AppColor.gold,
                             onPressed: widget.enabled ? _sendMessage : null,
                             splashRadius: 20,
                             tooltip: 'Отправить',
                           )
                         : widget.onSendVoice != null
-                            ? IconButton(
-                                key: const ValueKey('mic'),
-                                icon: const Icon(Icons.mic_rounded),
-                                color: isDark
-                                    ? AppColor.text2
-                                    : TelegramColors.lightTextSecondary,
-                                onPressed: widget.enabled
-                                    ? () => setState(() => _isRecording = true)
-                                    : null,
-                                splashRadius: 20,
-                                tooltip: 'Голосовое сообщение',
-                              )
-                            : IconButton(
-                                key: const ValueKey('send_disabled'),
-                                icon: const Icon(Icons.send_rounded),
-                                color: isDark
-                                    ? AppColor.text2
-                                    : TelegramColors.lightTextSecondary,
-                                onPressed: null,
-                                splashRadius: 20,
-                                tooltip: 'Отправить',
-                              ),
+                        ? IconButton(
+                            key: const ValueKey('mic'),
+                            icon: const Icon(Icons.mic_rounded),
+                            color: isDark
+                                ? AppColor.text2
+                                : TelegramColors.lightTextSecondary,
+                            onPressed: widget.enabled
+                                ? () => setState(() => _isRecording = true)
+                                : null,
+                            splashRadius: 20,
+                            tooltip: 'Голосовое сообщение',
+                          )
+                        : IconButton(
+                            key: const ValueKey('send_disabled'),
+                            icon: const Icon(Icons.send_rounded),
+                            color: isDark
+                                ? AppColor.text2
+                                : TelegramColors.lightTextSecondary,
+                            onPressed: null,
+                            splashRadius: 20,
+                            tooltip: 'Отправить',
+                          ),
                   ),
                 ],
               ),
@@ -478,10 +517,7 @@ class _MessageInputState extends State<MessageInput> {
       top: false,
       child: SizedBox(
         height: maxPanelHeight < 250 ? maxPanelHeight : 250,
-        child: _EmojiGrid(
-          onEmojiSelected: _insertEmoji,
-          isDark: isDark,
-        ),
+        child: _EmojiGrid(onEmojiSelected: _insertEmoji, isDark: isDark),
       ),
     );
   }
@@ -557,51 +593,240 @@ const _emojiCategories = <({String label, IconData icon, List<String> emojis})>[
     label: 'Смайлы',
     icon: Icons.emoji_emotions_outlined,
     emojis: [
-      '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂',
-      '🙂', '😊', '😇', '🥰', '😍', '🤩', '😘', '😗',
-      '😚', '😙', '🥲', '😋', '😛', '😜', '🤪', '😝',
-      '🤑', '🤗', '🤭', '🤫', '🤔', '🫡', '🤐', '🤨',
-      '😐', '😑', '😶', '🫥', '😏', '😒', '🙄', '😬',
-      '😮‍💨', '🤥', '🫠', '😌', '😔', '😪', '🤤', '😴',
-      '😷', '🤒', '🤕', '🤢', '🤮', '🥵', '🥶', '🥴',
-      '😵', '🤯', '🤠', '🥳', '🥸', '😎', '🤓', '🧐',
-      '😕', '🫤', '😟', '🙁', '😮', '😯', '😲', '😳',
-      '🥺', '🥹', '😦', '😧', '😨', '😰', '😥', '😢',
-      '😭', '😱', '😖', '😣', '😞', '😓', '😩', '😫',
-      '🥱', '😤', '😡', '😠', '🤬', '😈', '👿', '💀',
+      '😀',
+      '😃',
+      '😄',
+      '😁',
+      '😆',
+      '😅',
+      '🤣',
+      '😂',
+      '🙂',
+      '😊',
+      '😇',
+      '🥰',
+      '😍',
+      '🤩',
+      '😘',
+      '😗',
+      '😚',
+      '😙',
+      '🥲',
+      '😋',
+      '😛',
+      '😜',
+      '🤪',
+      '😝',
+      '🤑',
+      '🤗',
+      '🤭',
+      '🤫',
+      '🤔',
+      '🫡',
+      '🤐',
+      '🤨',
+      '😐',
+      '😑',
+      '😶',
+      '🫥',
+      '😏',
+      '😒',
+      '🙄',
+      '😬',
+      '😮‍💨',
+      '🤥',
+      '🫠',
+      '😌',
+      '😔',
+      '😪',
+      '🤤',
+      '😴',
+      '😷',
+      '🤒',
+      '🤕',
+      '🤢',
+      '🤮',
+      '🥵',
+      '🥶',
+      '🥴',
+      '😵',
+      '🤯',
+      '🤠',
+      '🥳',
+      '🥸',
+      '😎',
+      '🤓',
+      '🧐',
+      '😕',
+      '🫤',
+      '😟',
+      '🙁',
+      '😮',
+      '😯',
+      '😲',
+      '😳',
+      '🥺',
+      '🥹',
+      '😦',
+      '😧',
+      '😨',
+      '😰',
+      '😥',
+      '😢',
+      '😭',
+      '😱',
+      '😖',
+      '😣',
+      '😞',
+      '😓',
+      '😩',
+      '😫',
+      '🥱',
+      '😤',
+      '😡',
+      '😠',
+      '🤬',
+      '😈',
+      '👿',
+      '💀',
     ],
   ),
   (
     label: 'Жесты',
     icon: Icons.waving_hand_outlined,
     emojis: [
-      '👋', '🤚', '🖐️', '✋', '🖖', '🫱', '🫲', '🫳',
-      '🫴', '👌', '🤌', '🤏', '✌️', '🤞', '🫰', '🤟',
-      '🤘', '🤙', '👈', '👉', '👆', '🖕', '👇', '☝️',
-      '🫵', '👍', '👎', '✊', '👊', '🤛', '🤜', '👏',
-      '🙌', '🫶', '👐', '🤲', '🤝', '🙏', '✍️', '💅',
-      '🤳', '💪', '🦾', '🦿', '🦵', '🦶', '👂', '🦻',
+      '👋',
+      '🤚',
+      '🖐️',
+      '✋',
+      '🖖',
+      '🫱',
+      '🫲',
+      '🫳',
+      '🫴',
+      '👌',
+      '🤌',
+      '🤏',
+      '✌️',
+      '🤞',
+      '🫰',
+      '🤟',
+      '🤘',
+      '🤙',
+      '👈',
+      '👉',
+      '👆',
+      '🖕',
+      '👇',
+      '☝️',
+      '🫵',
+      '👍',
+      '👎',
+      '✊',
+      '👊',
+      '🤛',
+      '🤜',
+      '👏',
+      '🙌',
+      '🫶',
+      '👐',
+      '🤲',
+      '🤝',
+      '🙏',
+      '✍️',
+      '💅',
+      '🤳',
+      '💪',
+      '🦾',
+      '🦿',
+      '🦵',
+      '🦶',
+      '👂',
+      '🦻',
     ],
   ),
   (
     label: 'Сердца',
     icon: Icons.favorite_border,
     emojis: [
-      '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍',
-      '🤎', '💔', '❤️‍🔥', '❤️‍🩹', '❣️', '💕', '💞', '💓',
-      '💗', '💖', '💘', '💝', '💟', '♥️', '🫀', '💋',
+      '❤️',
+      '🧡',
+      '💛',
+      '💚',
+      '💙',
+      '💜',
+      '🖤',
+      '🤍',
+      '🤎',
+      '💔',
+      '❤️‍🔥',
+      '❤️‍🩹',
+      '❣️',
+      '💕',
+      '💞',
+      '💓',
+      '💗',
+      '💖',
+      '💘',
+      '💝',
+      '💟',
+      '♥️',
+      '🫀',
+      '💋',
     ],
   ),
   (
     label: 'Объекты',
     icon: Icons.lightbulb_outline,
     emojis: [
-      '🎵', '🎶', '🎤', '🎧', '🎸', '🎹', '🎺', '🎻',
-      '🥁', '🪘', '🎼', '🎷', '🪗', '💡', '🔥', '⭐',
-      '🌟', '✨', '💫', '🎉', '🎊', '🎈', '🎁', '🏆',
-      '🥇', '🥈', '🥉', '🏅', '📚', '📖', '✏️', '📝',
-      '💰', '💵', '💳', '📱', '💻', '⏰', '📅', '📌',
-      '🔔', '✅', '❌', '❓', '❗', '💯', '🆗', '🆕',
+      '🎵',
+      '🎶',
+      '🎤',
+      '🎧',
+      '🎸',
+      '🎹',
+      '🎺',
+      '🎻',
+      '🥁',
+      '🪘',
+      '🎼',
+      '🎷',
+      '🪗',
+      '💡',
+      '🔥',
+      '⭐',
+      '🌟',
+      '✨',
+      '💫',
+      '🎉',
+      '🎊',
+      '🎈',
+      '🎁',
+      '🏆',
+      '🥇',
+      '🥈',
+      '🥉',
+      '🏅',
+      '📚',
+      '📖',
+      '✏️',
+      '📝',
+      '💰',
+      '💵',
+      '💳',
+      '📱',
+      '💻',
+      '⏰',
+      '📅',
+      '📌',
+      '🔔',
+      '✅',
+      '❌',
+      '❓',
+      '❗',
+      '💯',
+      '🆗',
+      '🆕',
     ],
   ),
 ];
@@ -642,8 +867,8 @@ class _EmojiGridState extends State<_EmojiGrid> {
                         color: selected
                             ? AppColor.gold
                             : widget.isDark
-                                ? AppColor.text2
-                                : TelegramColors.lightTextSecondary,
+                            ? AppColor.text2
+                            : TelegramColors.lightTextSecondary,
                       ),
                       if (selected)
                         Container(

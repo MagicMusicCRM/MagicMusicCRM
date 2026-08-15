@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/utils/ru_phone.dart';
@@ -38,8 +39,7 @@ const List<_ObSlide> _obSlides = [
   _ObSlide(
     icon: Icons.insights_outlined,
     title: 'Аналитика и финансы',
-    text:
-        'Воронка, выручка, должники и аудит действий команды — на одном экране.',
+    text: 'Воронка, выручка, должники и действия команды на одном экране.',
   ),
 ];
 
@@ -98,7 +98,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Не удалось сохранить данные: $e'),
+            content: Text(
+              userErrorMessage(e, fallback: 'Не удалось сохранить данные.'),
+            ),
             backgroundColor: AppTheme.danger,
           ),
         );
@@ -273,7 +275,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           ),
           const SizedBox(height: AppSpace.xl),
           const Text(
-            'Эти данные нужны школе для связи и корректной работы CRM.',
+            'Эти данные нужны школе для связи и работы системы.',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: AppColor.text2,
@@ -326,10 +328,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 const SizedBox(height: AppSpace.xs),
                 Text(
                   _phoneError!,
-                  style: const TextStyle(
-                    color: AppColor.danger,
-                    fontSize: 12,
-                  ),
+                  style: const TextStyle(color: AppColor.danger, fontSize: 12),
                 ),
               ],
             ],

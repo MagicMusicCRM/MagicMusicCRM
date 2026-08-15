@@ -217,13 +217,16 @@ extension _MessengerActions on _MessengerScreenState {
       } else {
         if (!mounted) return;
         _showChatSnack(
-          'Этот контакт ещё не сохранён в CRM. '
+          'Этот контакт ещё не сохранён в системе. '
           'Сохраните его как лид или ученик.',
         );
       }
     } catch (e) {
       if (!mounted) return;
-      _showChatSnack('Не удалось открыть карточку: $e', bg: AppColor.danger);
+      _showChatSnack(
+        userErrorMessage(e, fallback: 'Не удалось открыть карточку.'),
+        bg: AppColor.danger,
+      );
     }
   }
 
@@ -261,7 +264,10 @@ extension _MessengerActions on _MessengerScreenState {
       if (!mounted) return;
       // Roll back optimistic update.
       _patchOpenChatAssignment(chatId, null);
-      _showChatSnack('Не удалось взять в работу: $e', bg: AppColor.danger);
+      _showChatSnack(
+        userErrorMessage(e, fallback: 'Не удалось взять чат в работу.'),
+        bg: AppColor.danger,
+      );
     }
   }
 
@@ -281,7 +287,10 @@ extension _MessengerActions on _MessengerScreenState {
       if (!mounted) return;
       // Roll back to the captured value.
       _patchOpenChatAssignment(chatId, previousAssignedTo);
-      _showChatSnack('Не удалось снять с работы: $e', bg: AppColor.danger);
+      _showChatSnack(
+        userErrorMessage(e, fallback: 'Не удалось снять чат с работы.'),
+        bg: AppColor.danger,
+      );
     }
   }
 
@@ -309,7 +318,10 @@ extension _MessengerActions on _MessengerScreenState {
           'archived': false,
         }),
       );
-      _showChatSnack('Не удалось архивировать чат: $e', bg: AppColor.danger);
+      _showChatSnack(
+        userErrorMessage(e, fallback: 'Не удалось архивировать чат.'),
+        bg: AppColor.danger,
+      );
     }
   }
 
@@ -333,7 +345,7 @@ extension _MessengerActions on _MessengerScreenState {
         }),
       );
       _showChatSnack(
-        'Не удалось вернуть чат из архива: $e',
+        userErrorMessage(e, fallback: 'Не удалось вернуть чат из архива.'),
         bg: AppColor.danger,
       );
     }

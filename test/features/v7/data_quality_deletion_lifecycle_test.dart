@@ -167,7 +167,7 @@ void main() {
       'phone': '8 (999) 123-45-67',
       'resolutionNote': 'Подтверждено по карточке клиента',
     });
-    expect(find.text('Очередь пуста — все номера в порядке'), findsOneWidget);
+    expect(find.text('Очередь пуста. Все номера в порядке'), findsOneWidget);
     await tester.pump(const Duration(seconds: 4));
   });
 

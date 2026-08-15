@@ -68,7 +68,9 @@ class HomeworkAttachmentService {
     );
     final fileId = uploaded['id']?.toString();
     if (fileId == null || fileId.isEmpty) {
-      throw const MagicApiException(message: 'Сервер не вернул id файла.');
+      throw const MagicApiException(
+        message: 'Сервер не подтвердил загрузку файла.',
+      );
     }
 
     try {

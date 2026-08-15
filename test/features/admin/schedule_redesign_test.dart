@@ -288,7 +288,7 @@ void main() {
 
       expect(find.byType(ScheduleTeacherTimeline), findsOneWidget);
       expect(find.text('Преподаватель'), findsOneWidget);
-      expect(find.text('08:00–10:00'), findsOneWidget);
+      expect(find.text('08:00-10:00'), findsOneWidget);
       expect(find.text('Анна Сусарина'), findsOneWidget);
       expect(find.text('1 занятие · 2 ч'), findsOneWidget);
       expect(find.text('Ольга Ученик'), findsOneWidget);

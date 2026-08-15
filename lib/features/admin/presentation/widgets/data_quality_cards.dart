@@ -447,13 +447,13 @@ class _MergeCandidateCard extends StatelessWidget {
             ),
             const SizedBox(height: AppSpace.md),
             _LeadRow(
-              label: 'Запись A',
+              label: 'Запись 1',
               detail: _candidateDetail(first, firstId),
               color: cs.onSurfaceVariant,
             ),
             const SizedBox(height: 6),
             _LeadRow(
-              label: 'Запись B',
+              label: 'Запись 2',
               detail: _candidateDetail(second, secondId),
               color: cs.onSurfaceVariant,
             ),
@@ -518,7 +518,7 @@ class _LeadRow extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: Text(
-            '$label — $detail',
+            '$label: $detail',
             style: TextStyle(
               color: cs.onSurfaceVariant,
               fontSize: 12,
@@ -578,14 +578,14 @@ class _MergeConfirmDialogState extends State<_MergeConfirmDialog> {
           const SizedBox(height: AppSpace.md),
           _WinnerOption(
             selected: _winnerId == widget.firstId,
-            label: 'Запись A',
+            label: 'Запись 1',
             detail: _candidateDetail(widget.first, widget.firstId),
             onTap: () => setState(() => _winnerId = widget.firstId),
           ),
           const SizedBox(height: 8),
           _WinnerOption(
             selected: _winnerId == widget.secondId,
-            label: 'Запись B',
+            label: 'Запись 2',
             detail: _candidateDetail(widget.second, widget.secondId),
             onTap: () => setState(() => _winnerId = widget.secondId),
           ),
@@ -808,7 +808,10 @@ class _ErrorRetry extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              '$error',
+              userErrorMessage(
+                error,
+                fallback: 'Не удалось загрузить проверку данных.',
+              ),
               textAlign: TextAlign.center,
               maxLines: 3,
               overflow: TextOverflow.ellipsis,

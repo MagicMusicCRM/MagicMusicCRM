@@ -329,8 +329,8 @@ class _SettlementHistoryEntry extends StatelessWidget {
           ),
           const SizedBox(height: AppSpace.xs),
           Text(
-            'Списание: ${decision['settlementTypeKey'] ?? '—'} · '
-            'преподаватель: ${decision['teacherCompensationRuleKey'] ?? '—'}',
+            'Списание: ${decision['settlementTypeKey'] ?? 'Не указано'} · '
+            'преподаватель: ${decision['teacherCompensationRuleKey'] ?? 'Не указано'}',
             style: const TextStyle(fontSize: 12),
           ),
           if (reason?.isNotEmpty == true)
@@ -350,7 +350,7 @@ class _SettlementHistoryEntry extends StatelessWidget {
 
 String _historyDate(Object? raw) {
   final date = DateTime.tryParse(raw?.toString() ?? '')?.toLocal();
-  if (date == null) return '—';
+  if (date == null) return 'Не указано';
   String two(int value) => value.toString().padLeft(2, '0');
   return '${two(date.day)}.${two(date.month)}.${date.year} '
       '${two(date.hour)}:${two(date.minute)}';

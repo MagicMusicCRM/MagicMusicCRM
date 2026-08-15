@@ -135,7 +135,7 @@ void main() {
     await pumpLifecycleDialog(tester, api);
 
     expect(
-      find.text('Активных связей нет — филиал можно безопасно закрыть.'),
+      find.text('Активных связей нет. Филиал можно закрыть.'),
       findsOneWidget,
     );
     await tester.enterText(

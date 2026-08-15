@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/services/magic_messenger_service.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
@@ -91,7 +92,9 @@ class _CreateGroupChatDialogState extends ConsumerState<CreateGroupChatDialog> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Ошибка создания группы: $e'),
+            content: Text(
+              userErrorMessage(e, fallback: 'Не удалось создать группу.'),
+            ),
             backgroundColor: TelegramColors.danger,
           ),
         );

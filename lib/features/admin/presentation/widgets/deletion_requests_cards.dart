@@ -714,7 +714,10 @@ class _ErrorRetry extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              '$error',
+              userErrorMessage(
+                error,
+                fallback: 'Не удалось загрузить запросы.',
+              ),
               textAlign: TextAlign.center,
               maxLines: 3,
               overflow: TextOverflow.ellipsis,

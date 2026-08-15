@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:typed_data';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
@@ -89,7 +90,10 @@ class _SendFileDialogState extends State<SendFileDialog> {
       if (!mounted) return;
       setState(() {
         _isSending = false;
-        _errorMessage = error.toString().replaceFirst('Exception: ', '');
+        _errorMessage = userErrorMessage(
+          error,
+          fallback: 'Не удалось отправить файл.',
+        );
       });
     }
   }

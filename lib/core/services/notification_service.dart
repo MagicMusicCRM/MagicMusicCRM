@@ -52,7 +52,7 @@ Future<void> _showBackgroundNotification({
   const channel = AndroidNotificationChannel(
     'high_importance_channel',
     'Важные уведомления',
-    description: 'Важные уведомления Magic Music CRM.',
+    description: 'Важные уведомления Magic Music.',
     importance: Importance.max,
     playSound: true,
   );
@@ -121,7 +121,7 @@ class NotificationService {
   static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
     'high_importance_channel',
     'Важные уведомления',
-    description: 'Важные уведомления Magic Music CRM.',
+    description: 'Важные уведомления Magic Music.',
     importance: Importance.max,
     playSound: true,
   );
@@ -131,7 +131,7 @@ class NotificationService {
     if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
       try {
         await localNotifier.setup(
-          appName: 'Magic Music CRM',
+          appName: 'Magic Music',
           shortcutPolicy: ShortcutPolicy.requireCreate,
         );
         _listenToDesktopMessages();

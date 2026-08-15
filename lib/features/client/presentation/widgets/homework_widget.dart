@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/homework_attachment_service.dart';
@@ -126,9 +127,7 @@ class _HomeworkCardState extends ConsumerState<_HomeworkCard> {
             key: const ValueKey('homework-submit-with-file'),
             leading: const Icon(Icons.attach_file_rounded),
             title: Text(hasSubmission ? 'Добавить ещё файл' : 'Выбрать файл'),
-            subtitle: const Text(
-              'Фото, PDF, документ, аудио или видео до 25 МБ',
-            ),
+            subtitle: const Text('Фото, документ, аудио или видео до 25 МБ'),
             onTap: () => Navigator.of(sheetContext).pop('file'),
           ),
           ListTile(
@@ -187,8 +186,8 @@ class _HomeworkCardState extends ConsumerState<_HomeworkCard> {
             ? 'Решение прикреплено, но статус не обновлён'
             : 'Не удалось сдать задание',
         detail: attachmentAdded
-            ? '$err. Повторите сдачу без повторной загрузки файла.'
-            : '$err',
+            ? 'Повторите отправку. Файл уже загружен.'
+            : userErrorMessage(err, fallback: 'Не удалось отправить работу.'),
         type: MagicToastType.danger,
       );
     } finally {

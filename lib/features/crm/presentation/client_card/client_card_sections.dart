@@ -43,7 +43,7 @@ Widget _studentGroupsInfoCard({required List<Map<String, dynamic>> groups}) {
     else
       ...groups.map((g) {
         final teacher = g['teachers'];
-        var teacherName = '—';
+        var teacherName = 'Не указано';
         if (teacher is Map<String, dynamic>) {
           final firstName = teacher['first_name']?.toString() ?? '';
           final lastName = teacher['last_name']?.toString() ?? '';
@@ -52,7 +52,7 @@ Widget _studentGroupsInfoCard({required List<Map<String, dynamic>> groups}) {
         return _InfoRow(
           icon: Icons.groups_rounded,
           label: g['name']?.toString() ?? 'Группа',
-          value: teacherName.isEmpty || teacherName == '—'
+          value: teacherName.isEmpty || teacherName == 'Не указано'
               ? 'Без преподавателя'
               : 'Преподаватель: $teacherName',
         );

@@ -352,7 +352,7 @@ class _BranchStrip extends StatelessWidget {
       for (final b in branches)
         _branchChip(
           id: b['id']?.toString() ?? '',
-          name: b['name']?.toString() ?? '—',
+          name: b['name']?.toString() ?? 'Не указано',
         ),
       _branchChip(id: kNoBranchValue, name: 'Без филиала', isNone: true),
     ];

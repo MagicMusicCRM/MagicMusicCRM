@@ -270,7 +270,6 @@ void main() {
 
       final reason = find.byKey(const Key('subscription-replace-reason'));
       await tester.ensureVisible(reason);
-      await tester.enterText(reason, 'client.requested_change');
       await _tapVisible(
         tester,
         find.byKey(const Key('subscription-replace-confirmation')),
@@ -282,7 +281,7 @@ void main() {
       await _pumpFrames(tester);
       expect(find.text('Подтвердите замену'), findsOneWidget);
       expect(
-        tester.widget<TextFormField>(reason).controller!.text,
+        tester.widget<DropdownButtonFormField<String>>(reason).initialValue,
         'client.requested_change',
       );
       await _tapVisible(
@@ -297,7 +296,10 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Повторить'), findsOneWidget);
-      expect(tester.widget<TextFormField>(reason).enabled, isFalse);
+      expect(
+        tester.widget<DropdownButtonFormField<String>>(reason).onChanged,
+        isNull,
+      );
 
       await _tapVisible(
         tester,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/models/client_internal_context.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7.dart';
@@ -65,7 +66,14 @@ class _ClientInternalNoteCardState extends State<ClientInternalNoteCard> {
       _controller.text = note.body;
       setState(() => _dirty = false);
     } catch (error) {
-      if (mounted) setState(() => _saveError = '$error');
+      if (mounted) {
+        setState(
+          () => _saveError = userErrorMessage(
+            error,
+            fallback: 'Не удалось сохранить заметку.',
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }

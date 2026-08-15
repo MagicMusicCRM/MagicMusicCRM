@@ -657,7 +657,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Сейчас получат: 8'), findsOneWidget);
     expect(
-      find.textContaining('Вся школа — динамический состав'),
+      find.textContaining('Вся школа: динамический состав'),
       findsOneWidget,
     );
 
@@ -670,11 +670,8 @@ void main() {
     await tester.tap(find.text('Добавить получателя'));
     await tester.pumpAndSettle();
     expect(find.text('Сейчас получат: 1'), findsOneWidget);
-    expect(find.textContaining('Анна Петрова — лично'), findsOneWidget);
-    expect(
-      find.textContaining('Вся школа — динамический состав'),
-      findsNothing,
-    );
+    expect(find.textContaining('Анна Петрова: лично'), findsOneWidget);
+    expect(find.textContaining('Вся школа: динамический состав'), findsNothing);
 
     await tester.tap(find.byKey(const Key('shared-task-audience-target')));
     await tester.pumpAndSettle();
@@ -694,7 +691,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Сейчас получат: 5'), findsOneWidget);
     expect(
-      find.textContaining('Центральный — динамический состав'),
+      find.textContaining('Центральный: динамический состав'),
       findsOneWidget,
     );
 
@@ -703,9 +700,9 @@ void main() {
     await tester.tap(find.text('Добавить получателя'));
     await tester.pumpAndSettle();
     expect(find.text('Сейчас получат: 8'), findsOneWidget);
-    expect(find.textContaining('Анна Петрова — лично'), findsNothing);
+    expect(find.textContaining('Анна Петрова: лично'), findsNothing);
     expect(
-      find.textContaining('Центральный — динамический состав'),
+      find.textContaining('Центральный: динамический состав'),
       findsNothing,
     );
   });

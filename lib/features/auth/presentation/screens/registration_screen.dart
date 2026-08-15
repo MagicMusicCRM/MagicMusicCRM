@@ -74,7 +74,11 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
         );
       }
     } on MagicApiException catch (e) {
-      if (mounted) _showError(e.message);
+      if (mounted) {
+        _showError(
+          e.toUserMessage(fallback: 'Не удалось завершить регистрацию.'),
+        );
+      }
     } catch (e) {
       if (mounted) _showError('Произошла ошибка при регистрации');
     } finally {
@@ -91,162 +95,170 @@ class _RegistrationScreenState extends ConsumerState<RegistrationScreen> {
     return Scaffold(
       backgroundColor: AppColor.bg,
       body: SafeArea(
-          child: ResponsiveConstraint(
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 400),
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpace.xxl,
-                    vertical: 30,
-                  ),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const _AuthBrand(subtitle: 'Создание аккаунта'),
-                        const SizedBox(height: AppSpace.xxl),
-                        if (_errorMessage != null) ...[
-                          _AuthErrorPill(message: _errorMessage!),
-                          const SizedBox(height: AppSpace.lg),
-                        ],
-                        _V7Field(
-                          controller: _nameController,
-                          label: 'Имя',
-                          textInputAction: TextInputAction.next,
-                          autocorrect: false,
-                          autofillHints: const [AutofillHints.name],
-                          validator: (v) =>
-                              (v == null || v.isEmpty) ? 'Введите имя' : null,
-                        ),
+        child: ResponsiveConstraint(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpace.xxl,
+                  vertical: 30,
+                ),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const _AuthBrand(subtitle: 'Создание аккаунта'),
+                      const SizedBox(height: AppSpace.xxl),
+                      if (_errorMessage != null) ...[
+                        _AuthErrorPill(message: _errorMessage!),
                         const SizedBox(height: AppSpace.lg),
-                        _V7Field(
-                          controller: _emailController,
-                          label: 'Электронная почта',
-                          keyboardType: TextInputType.emailAddress,
-                          textInputAction: TextInputAction.next,
-                          autocorrect: false,
-                          autofillHints: const [AutofillHints.email],
-                          validator: (v) => (v == null || !v.contains('@'))
-                              ? 'Некорректная почта'
-                              : null,
-                        ),
-                        const SizedBox(height: AppSpace.lg),
-                        RuPhoneField(
-                          labelText: 'Номер телефона',
-                          onCanonicalChanged: (v) => _canonicalPhone = v,
-                          decoration: InputDecoration(
-                            hintStyle: const TextStyle(color: AppColor.text2),
-                            filled: true,
-                            fillColor: AppColor.input,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 13,
-                              vertical: 12,
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius:
-                                  BorderRadius.circular(AppRadius.control),
-                              borderSide:
-                                  const BorderSide(color: AppColor.divider),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius:
-                                  BorderRadius.circular(AppRadius.control),
-                              borderSide: const BorderSide(
-                                color: AppColor.goldLine,
-                                width: 2,
-                              ),
-                            ),
-                            disabledBorder: OutlineInputBorder(
-                              borderRadius:
-                                  BorderRadius.circular(AppRadius.control),
-                              borderSide:
-                                  const BorderSide(color: AppColor.divider),
-                            ),
-                            errorBorder: OutlineInputBorder(
-                              borderRadius:
-                                  BorderRadius.circular(AppRadius.control),
-                              borderSide:
-                                  const BorderSide(color: AppColor.danger),
-                            ),
-                            focusedErrorBorder: OutlineInputBorder(
-                              borderRadius:
-                                  BorderRadius.circular(AppRadius.control),
-                              borderSide: const BorderSide(
-                                color: AppColor.danger,
-                                width: 2,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: AppSpace.lg),
-                        _V7Field(
-                          controller: _passwordController,
-                          label: 'Пароль',
-                          obscureText: _obscurePassword,
-                          textInputAction: TextInputAction.next,
-                          autocorrect: false,
-                          autofillHints: const [AutofillHints.newPassword],
-                          suffix: IconButton(
-                            tooltip: _obscurePassword
-                                ? 'Показать пароль'
-                                : 'Скрыть пароль',
-                            icon: Icon(
-                              _obscurePassword
-                                  ? Icons.visibility_outlined
-                                  : Icons.visibility_off_outlined,
-                              color: AppColor.text2,
-                            ),
-                            onPressed: () => setState(
-                              () => _obscurePassword = !_obscurePassword,
-                            ),
-                          ),
-                          validator: (v) => (v == null || v.length < 6)
-                              ? 'Минимум 6 символов'
-                              : null,
-                        ),
-                        const SizedBox(height: AppSpace.lg),
-                        _V7Field(
-                          controller: _confirmPasswordController,
-                          label: 'Повторите пароль',
-                          obscureText: _obscurePassword,
-                          textInputAction: TextInputAction.done,
-                          autocorrect: false,
-                          autofillHints: const [AutofillHints.newPassword],
-                          onSubmitted: (_) => _register(),
-                          validator: (v) => v != _passwordController.text
-                              ? 'Пароли не совпадают'
-                              : null,
-                        ),
-                        const SizedBox(height: AppSpace.xl),
-                        _V7PrimaryButton(
-                          label: 'Зарегистрироваться',
-                          loading: _isLoading,
-                          onPressed: _isLoading ? null : _register,
-                        ),
-                        const SizedBox(height: AppSpace.sm),
-                        TextButton(
-                          onPressed: () => context.go('/login'),
-                          style: TextButton.styleFrom(
-                            foregroundColor: AppColor.gold,
-                            textStyle: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            padding: const EdgeInsets.all(AppSpace.sm),
-                            minimumSize: const Size(0, 0),
-                          ),
-                          child: const Text('Уже есть аккаунт? Войти'),
-                        ),
                       ],
-                    ),
+                      _V7Field(
+                        controller: _nameController,
+                        label: 'Имя',
+                        textInputAction: TextInputAction.next,
+                        autocorrect: false,
+                        autofillHints: const [AutofillHints.name],
+                        validator: (v) =>
+                            (v == null || v.isEmpty) ? 'Введите имя' : null,
+                      ),
+                      const SizedBox(height: AppSpace.lg),
+                      _V7Field(
+                        controller: _emailController,
+                        label: 'Электронная почта',
+                        keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
+                        autocorrect: false,
+                        autofillHints: const [AutofillHints.email],
+                        validator: (v) => (v == null || !v.contains('@'))
+                            ? 'Некорректная почта'
+                            : null,
+                      ),
+                      const SizedBox(height: AppSpace.lg),
+                      RuPhoneField(
+                        labelText: 'Номер телефона',
+                        onCanonicalChanged: (v) => _canonicalPhone = v,
+                        decoration: InputDecoration(
+                          hintStyle: const TextStyle(color: AppColor.text2),
+                          filled: true,
+                          fillColor: AppColor.input,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 13,
+                            vertical: 12,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.control,
+                            ),
+                            borderSide: const BorderSide(
+                              color: AppColor.divider,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.control,
+                            ),
+                            borderSide: const BorderSide(
+                              color: AppColor.goldLine,
+                              width: 2,
+                            ),
+                          ),
+                          disabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.control,
+                            ),
+                            borderSide: const BorderSide(
+                              color: AppColor.divider,
+                            ),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.control,
+                            ),
+                            borderSide: const BorderSide(
+                              color: AppColor.danger,
+                            ),
+                          ),
+                          focusedErrorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.control,
+                            ),
+                            borderSide: const BorderSide(
+                              color: AppColor.danger,
+                              width: 2,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: AppSpace.lg),
+                      _V7Field(
+                        controller: _passwordController,
+                        label: 'Пароль',
+                        obscureText: _obscurePassword,
+                        textInputAction: TextInputAction.next,
+                        autocorrect: false,
+                        autofillHints: const [AutofillHints.newPassword],
+                        suffix: IconButton(
+                          tooltip: _obscurePassword
+                              ? 'Показать пароль'
+                              : 'Скрыть пароль',
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                            color: AppColor.text2,
+                          ),
+                          onPressed: () => setState(
+                            () => _obscurePassword = !_obscurePassword,
+                          ),
+                        ),
+                        validator: (v) => (v == null || v.length < 6)
+                            ? 'Минимум 6 символов'
+                            : null,
+                      ),
+                      const SizedBox(height: AppSpace.lg),
+                      _V7Field(
+                        controller: _confirmPasswordController,
+                        label: 'Повторите пароль',
+                        obscureText: _obscurePassword,
+                        textInputAction: TextInputAction.done,
+                        autocorrect: false,
+                        autofillHints: const [AutofillHints.newPassword],
+                        onSubmitted: (_) => _register(),
+                        validator: (v) => v != _passwordController.text
+                            ? 'Пароли не совпадают'
+                            : null,
+                      ),
+                      const SizedBox(height: AppSpace.xl),
+                      _V7PrimaryButton(
+                        label: 'Зарегистрироваться',
+                        loading: _isLoading,
+                        onPressed: _isLoading ? null : _register,
+                      ),
+                      const SizedBox(height: AppSpace.sm),
+                      TextButton(
+                        onPressed: () => context.go('/login'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColor.gold,
+                          textStyle: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          padding: const EdgeInsets.all(AppSpace.sm),
+                          minimumSize: const Size(0, 0),
+                        ),
+                        child: const Text('Уже есть аккаунт? Войти'),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
           ),
         ),
+      ),
     );
   }
 }
@@ -281,7 +293,10 @@ class _AuthErrorPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: AppSpace.sm),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 11,
+        vertical: AppSpace.sm,
+      ),
       decoration: BoxDecoration(
         color: AppColor.dangerSoft,
         border: Border.all(color: const Color(0x52E53935)),

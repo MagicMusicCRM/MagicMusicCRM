@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -277,9 +278,16 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userErrorMessage(
+                e,
+                fallback: 'Не удалось сохранить преподавателя.',
+              ),
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -298,7 +306,12 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Не удалось получить данные для входа: $error'),
+              content: Text(
+                userErrorMessage(
+                  error,
+                  fallback: 'Не удалось получить данные для входа.',
+                ),
+              ),
             ),
           );
         }
@@ -397,9 +410,13 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
       await _loadPayroll();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userErrorMessage(e, fallback: 'Не удалось сохранить изменение.'),
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _payrollMutating = false);
@@ -694,9 +711,13 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
       await _loadPayroll();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userErrorMessage(e, fallback: 'Не удалось сохранить изменение.'),
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _payrollMutating = false);
@@ -773,7 +794,7 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
                   controller: _emailController,
                   readOnly: true,
                   decoration: InputDecoration(
-                    labelText: 'Email для входа',
+                    labelText: 'Почта для входа',
                     helperText: _credentialHelper(_localData),
                   ),
                   keyboardType: TextInputType.emailAddress,
@@ -1158,12 +1179,12 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
     final parts = <String>[
       if (data['password_configured'] == true) 'Пароль настроен',
       if (emailChanged != null && emailChanged.isNotEmpty)
-        'email обновлён ${_shortDate(emailChanged)}',
+        'почта обновлена ${_shortDate(emailChanged)}',
       if (passwordChanged != null && passwordChanged.isNotEmpty)
         'пароль обновлён ${_shortDate(passwordChanged)}',
     ];
     return parts.isEmpty
-        ? 'Доступ не создан — карточку можно сохранять без него'
+        ? 'Доступ не создан. Карточку можно сохранить без него'
         : parts.join(' · ');
   }
 

@@ -185,7 +185,7 @@ class _UpcomingLessonsListState extends ConsumerState<UpcomingLessonsList> {
                               ? DateFormat('EEEE, d MMMM · HH:mm', 'ru').format(
                                   dt.toUtc().add(const Duration(hours: 3)),
                                 )
-                              : '—';
+                              : 'Не указано';
                           final duration =
                               lesson['duration_minutes'] as int? ?? 60;
 

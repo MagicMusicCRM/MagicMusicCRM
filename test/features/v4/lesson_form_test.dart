@@ -1340,7 +1340,7 @@ void main() {
       await tester.tap(run);
       await tester.pumpAndSettle();
 
-      expect(find.text('Schedule Analyzer: найдены конфликты'), findsOneWidget);
+      expect(find.text('Найдены конфликты'), findsOneWidget);
       final suggestion = find.byKey(const ValueKey('lesson-suggestion-1'));
       await tester.ensureVisible(suggestion);
       await tester.tap(suggestion);

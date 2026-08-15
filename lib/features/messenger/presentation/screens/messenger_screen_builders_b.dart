@@ -721,9 +721,13 @@ extension _MessengerBuildersB on _MessengerScreenState {
       await _fetchPinnedMessages();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Ошибка при закреплении: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userErrorMessage(e, fallback: 'Не удалось закрепить сообщение.'),
+            ),
+          ),
+        );
       }
     }
   }

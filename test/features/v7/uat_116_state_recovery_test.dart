@@ -344,7 +344,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(attempts, 2);
-    expect(find.text('Актуальные документы MagicMusicCRM.'), findsOneWidget);
+    expect(find.text('Актуальные документы Magic Music.'), findsOneWidget);
   });
 
   testWidgets('список чатов отличает сетевую ошибку от пустого результата', (

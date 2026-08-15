@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 
@@ -71,7 +72,10 @@ class _GroupLifecycleDialogState extends ConsumerState<GroupLifecycleDialog> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = '$error';
+        _error = userErrorMessage(
+          error,
+          fallback: 'Не удалось проверить группу.',
+        );
         _loading = false;
       });
     }
@@ -109,9 +113,17 @@ class _GroupLifecycleDialogState extends ConsumerState<GroupLifecycleDialog> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error = '$error';
+        _error = userErrorMessage(
+          error,
+          fallback: 'Не удалось изменить группу.',
+        );
       });
-      await _load(errorAfterLoad: '$error');
+      await _load(
+        errorAfterLoad: userErrorMessage(
+          error,
+          fallback: 'Не удалось изменить группу.',
+        ),
+      );
     }
   }
 
@@ -216,8 +228,8 @@ class _GroupLifecycleDialogState extends ConsumerState<GroupLifecycleDialog> {
                           Expanded(
                             child: Text(
                               _archived
-                                  ? 'Филиал, аудитория и преподаватель активны — группу можно восстановить.'
-                                  : 'Будущих занятий и активных планов нет — группу можно безопасно завершить.',
+                                  ? 'Филиал, аудитория и преподаватель активны. Группу можно восстановить.'
+                                  : 'Будущих занятий и активных планов нет. Группу можно завершить.',
                             ),
                           ),
                         ],
@@ -278,7 +290,7 @@ class _GroupLifecycleDialogState extends ConsumerState<GroupLifecycleDialog> {
                                     : 'Группа восстановлена',
                               ),
                               subtitle: Text(
-                                '${item['reasonText']?.toString() ?? '—'}'
+                                '${item['reasonText']?.toString() ?? 'Не указано'}'
                                 '${item['effectiveDate'] == null ? '' : ' • ${item['effectiveDate']}'}',
                               ),
                             ),

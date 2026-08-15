@@ -135,9 +135,7 @@ void main() {
     await pumpRoomLifecycleDialog(tester, api);
 
     expect(
-      find.text(
-        'Активных связей нет — аудиторию можно безопасно архивировать.',
-      ),
+      find.text('Активных связей нет. Аудиторию можно архивировать.'),
       findsOneWidget,
     );
     await tester.enterText(

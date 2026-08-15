@@ -387,9 +387,16 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
       await _loadSubscriptions();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Ошибка загрузки данных: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            userErrorMessage(
+              error,
+              fallback: 'Не удалось загрузить данные занятия.',
+            ),
+          ),
+        ),
+      );
       Navigator.pop(context);
     }
   }
@@ -689,9 +696,16 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
       ).showSnackBar(SnackBar(content: Text(_savedMessage)));
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Ошибка сохранения: $error')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userErrorMessage(
+                error,
+                fallback: 'Не удалось сохранить занятие.',
+              ),
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -986,7 +1000,14 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
           );
       if (mounted) setState(() => _scheduleAnalysis = analysis);
     } catch (error) {
-      if (mounted) setState(() => _scheduleAnalysisError = '$error');
+      if (mounted) {
+        setState(
+          () => _scheduleAnalysisError = userErrorMessage(
+            error,
+            fallback: 'Не удалось проверить расписание.',
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _analyzingSchedule = false);
     }
@@ -1035,9 +1056,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            valid
-                ? 'Schedule Analyzer: конфликтов нет'
-                : 'Schedule Analyzer: найдены конфликты',
+            valid ? 'Конфликтов нет' : 'Найдены конфликты',
             style: TextStyle(
               color: valid ? AppColor.success : cs.error,
               fontWeight: FontWeight.w800,
@@ -1045,12 +1064,12 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
           ),
           if (_scheduleAnalysisError != null) ...[
             const SizedBox(height: AppSpace.sm),
-            Text('Не удалось выполнить проверку: $_scheduleAnalysisError'),
+            Text(_scheduleAnalysisError!),
           ],
           for (final violation in analysis?.violations ?? const [])
             _violationCard(
               title: violation.title,
-              resource: '${violation.resourceLabel}: ${violation.resourceId}',
+              resource: violation.resourceLabel,
               lessonIds: violation.conflictingLessonIds,
             ),
           if ((analysis?.suggestions ?? const []).isNotEmpty) ...[
@@ -1111,8 +1130,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
               for (final violation in violations)
                 _violationCard(
                   title: violation.title,
-                  resource:
-                      '${violation.resourceLabel}: ${violation.resourceId}',
+                  resource: violation.resourceLabel,
                   lessonIds: violation.conflictingLessonIds,
                   dialogContext: ctx,
                 ),
@@ -1154,7 +1172,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
             Wrap(
               spacing: 4,
               children: [
-                for (final lessonId in lessonIds)
+                for (final (index, lessonId) in lessonIds.indexed)
                   EntityLinkText(
                     key: ValueKey('conflict-lesson-$lessonId'),
                     onPressed: () {
@@ -1164,8 +1182,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                       if (dialogContext != null) Navigator.pop(dialogContext);
                       Navigator.pop(context);
                     },
-                    text:
-                        'Занятие ${lessonId.length <= 8 ? lessonId : lessonId.substring(0, 8)}',
+                    text: 'Открыть занятие ${index + 1}',
                   ),
               ],
             ),
@@ -1278,7 +1295,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                     for (final branch in _branches)
                       DropdownMenuItem(
                         value: branch['id'].toString(),
-                        child: Text(branch['name']?.toString() ?? '—'),
+                        child: Text(branch['name']?.toString() ?? 'Не указано'),
                       ),
                   ],
                   onChanged: (value) {
@@ -1314,7 +1331,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                     for (final room in _eligibleRooms)
                       SearchableSelectItem(
                         id: room['id'].toString(),
-                        label: room['name']?.toString() ?? '—',
+                        label: room['name']?.toString() ?? 'Не указано',
                         subtitle: 'Аудитория выбранного филиала',
                       ),
                   ],
@@ -1360,10 +1377,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                 const SizedBox(height: 8),
                 Text(
                   key: const ValueKey('lesson-replacement-availability-hint'),
-                  'Показаны только активные преподаватели и аудитории '
-                  'выбранного филиала. Занятость на выбранное время '
-                  'проверяется перед сохранением; конфликт будет показан '
-                  'с причиной.',
+                  'Занятость проверим перед сохранением.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
@@ -1553,8 +1567,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
                     maxLength: 500,
                     decoration: const InputDecoration(
                       labelText: 'Причина индивидуального значения *',
-                      helperText:
-                          'Сохраняется в истории расчёта и нужна только при отклонении от настройки школы',
+                      helperText: 'Причина сохранится в истории расчёта',
                     ),
                   ),
                 ],
@@ -1625,10 +1638,8 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
               if (_snapshotLocked) ...[
                 const SizedBox(height: 10),
                 Text(
-                  '${_isGroupEdit ? 'Группа, состав участников' : 'Клиент'}, '
-                  'пробный маркер и клиентское списание неизменяемы. '
-                  'Ресурсы, время и оплата преподавателю меняются здесь; '
-                  'перед применением потребуется причина и подтверждение.',
+                  'Клиент и списание уже зафиксированы. Остальные данные '
+                  'можно изменить после подтверждения.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
@@ -1692,13 +1703,12 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Расчётный snapshot перед созданием',
+            'Расчёты перед созданием',
             style: Theme.of(context).textTheme.titleSmall,
           ),
           const SizedBox(height: AppSpace.sm),
           Text(
-            'Проверьте значения: после создания они сохранятся вместе с '
-            'занятием и не изменятся при переносе.',
+            'Проверьте расчёты. При переносе они не изменятся.',
             style: Theme.of(
               context,
             ).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),

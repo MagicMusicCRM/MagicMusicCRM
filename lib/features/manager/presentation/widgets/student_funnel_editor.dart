@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/models/student_funnel.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -111,7 +112,10 @@ class _StudentFunnelEditorState extends ConsumerState<_StudentFunnelEditor> {
       setState(() {
         _loading = false;
         _saving = false;
-        _error = 'Не удалось загрузить воронку: $error';
+        _error = userErrorMessage(
+          error,
+          fallback: 'Не удалось загрузить воронку.',
+        );
       });
     }
   }
@@ -211,7 +215,10 @@ class _StudentFunnelEditorState extends ConsumerState<_StudentFunnelEditor> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error = 'Не удалось опубликовать: $error';
+        _error = userErrorMessage(
+          error,
+          fallback: 'Не удалось опубликовать воронку.',
+        );
       });
     }
   }
@@ -240,7 +247,10 @@ class _StudentFunnelEditorState extends ConsumerState<_StudentFunnelEditor> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error = 'Не удалось откатить версию: $error';
+        _error = userErrorMessage(
+          error,
+          fallback: 'Не удалось вернуть версию.',
+        );
       });
     }
   }
@@ -494,7 +504,7 @@ class _StudentFunnelEditorState extends ConsumerState<_StudentFunnelEditor> {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: Text('Версия ${revision['version']}'),
-                subtitle: Text(revision['reason']?.toString() ?? '—'),
+                subtitle: Text(revision['reason']?.toString() ?? 'Не указано'),
                 trailing: TextButton(
                   onPressed: _saving
                       ? null

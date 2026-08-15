@@ -130,7 +130,7 @@ Future<Map<String, dynamic>?> showEditContactPersonDialog(
               keyboardType: TextInputType.emailAddress,
               decoration: clientCardInputDecoration(
                 cs,
-                label: 'Email',
+                label: 'Почта',
                 isDense: true,
               ),
             ),
@@ -316,7 +316,7 @@ Future<FamilyMemberInput?> showAddFamilyMemberSheet(
                   SearchableSelect.show(
                     context: context,
                     title: 'Выберите запись',
-                    hintText: 'Поиск по имени, email или телефону...',
+                    hintText: 'Поиск по имени, почте или телефону...',
                     items: items,
                     selectedId: entityId,
                     isNullable: false,

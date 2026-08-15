@@ -422,7 +422,7 @@ extension _ScheduleViewsB on _ScheduleWidgetState {
     ];
 
     final timeRange =
-        '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')} – '
+        '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')} - '
         '${end.hour.toString().padLeft(2, '0')}:${end.minute.toString().padLeft(2, '0')}';
     await showLessonDetailsSheet(
       context,

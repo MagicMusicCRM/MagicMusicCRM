@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/context_transition_registry.dart';
@@ -270,7 +271,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
               onPressed: _pickDashboardPeriod,
               icon: const Icon(Icons.calendar_today_outlined, size: 18),
               label: Text(
-                '${dateFormat.format(_dashboardFilter.from)} — '
+                '${dateFormat.format(_dashboardFilter.from)} - '
                 '${dateFormat.format(_dashboardFilter.to)}',
               ),
             ),

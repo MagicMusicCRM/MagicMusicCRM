@@ -244,7 +244,7 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
         MagicToast.show(
           context,
           'Не удалось добавить расход',
-          detail: '$e',
+          detail: userErrorMessage(e),
           type: MagicToastType.danger,
         );
       }
@@ -294,7 +294,7 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
         MagicToast.show(
           context,
           'Не удалось изменить расход',
-          detail: '$e',
+          detail: userErrorMessage(e),
           type: MagicToastType.danger,
         );
       }
@@ -343,7 +343,7 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
         MagicToast.show(
           context,
           'Не удалось удалить расход',
-          detail: '$e',
+          detail: userErrorMessage(e),
           type: MagicToastType.danger,
         );
       }
@@ -395,7 +395,7 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
         MagicToast.show(
           context,
           'Ошибка экспорта',
-          detail: e.message,
+          detail: e.toUserMessage(fallback: 'Не удалось выгрузить отчёт.'),
           type: MagicToastType.danger,
         );
       }
@@ -509,7 +509,7 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
                         ),
                         if (_customRange != null && widget.filterRange == null)
                           Text(
-                            '${DateFormat('d MMM yyyy', 'ru').format(_customRange!.start)} — '
+                            '${DateFormat('d MMM yyyy', 'ru').format(_customRange!.start)} - '
                             '${DateFormat('d MMM yyyy', 'ru').format(_customRange!.end)}',
                             style: TextStyle(
                               color: colors.onSurfaceVariant,

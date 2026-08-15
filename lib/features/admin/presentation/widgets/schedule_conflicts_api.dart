@@ -49,7 +49,7 @@ class LessonConstraintViolation {
     'TEACHER_OVERLAP' => 'У преподавателя уже есть занятие',
     'CLIENT_OVERLAP' => 'У клиента уже есть занятие',
     'ROOM_OVERLAP' => 'Аудитория уже занята',
-    _ => 'Ограничение расписания: $code',
+    _ => 'Не удалось проверить одно из ограничений расписания',
   };
 
   String get resourceLabel => switch (resourceType) {
@@ -107,7 +107,7 @@ class ScheduleSuggestion {
     'SAME_TIME_ROOM' => 'Свободная аудитория в то же время',
     'NEAREST_TIME' => 'Ближайшее свободное время',
     'SAME_SPECIALIZATION_TEACHER' =>
-      'Свободный преподаватель той же специализации',
+      'Свободный преподаватель по этому предмету',
     _ => 'Комбинированный вариант',
   };
 }

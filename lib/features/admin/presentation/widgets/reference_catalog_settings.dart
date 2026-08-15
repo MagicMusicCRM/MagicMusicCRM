@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/reference_catalog_lifecycle_dialog.dart';
@@ -57,7 +58,10 @@ class _ReferenceCatalogSettingsState
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = '$error';
+        _error = userErrorMessage(
+          error,
+          fallback: 'Не удалось загрузить записи.',
+        );
         _loading = false;
       });
     }
@@ -82,7 +86,11 @@ class _ReferenceCatalogSettingsState
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Не удалось создать запись: $error')),
+        SnackBar(
+          content: Text(
+            userErrorMessage(error, fallback: 'Не удалось создать запись.'),
+          ),
+        ),
       );
     }
   }

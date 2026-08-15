@@ -173,7 +173,7 @@ class _SystemSettingsWorkspaceState
   static const _areas = <(String, String, IconData)>[
     ('organization', 'Организация', Icons.apartment_rounded),
     ('schedule', 'Расписание', Icons.calendar_month_rounded),
-    ('crm', 'CRM', Icons.view_kanban_rounded),
+    ('crm', 'Клиенты', Icons.view_kanban_rounded),
     ('sales', 'Продажи и оплаты', Icons.payments_rounded),
     ('users', 'Пользователи и доступы', Icons.manage_accounts_rounded),
     ('data', 'Данные и обслуживание', Icons.storage_rounded),
@@ -294,8 +294,7 @@ class _SystemSettingsWorkspaceState
         snapshot.allows('config.crm.read')
             ? const CrmConfigurationWorkspace()
             : const _SettingsDenied(
-                text:
-                    'Директор может открыть CRM-настройки после выдачи права.',
+                text: 'Директор сможет открыть настройки после выдачи права.',
               ),
       'sales' => _SalesSettings(
         canEdit: snapshot.allows('commerce.package.manage'),
@@ -653,7 +652,7 @@ class _OrganizationSettingsState extends ConsumerState<_OrganizationSettings> {
               ? widget.canEdit
                     ? 'Филиалы; аудитории и дисциплины настраиваются внутри филиала'
                     : 'Только просмотр назначенных филиалов'
-              : 'Дисциплины школы и причины отказа в CRM',
+              : 'Дисциплины школы и причины отказа',
           action: branches
               ? Wrap(
                   spacing: AppSpace.sm,

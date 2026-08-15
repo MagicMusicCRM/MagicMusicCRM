@@ -93,8 +93,7 @@ class _StudentScheduleSectionState extends State<StudentScheduleSection> {
           const SizedBox(width: 6),
           Expanded(
             child: Text(
-              '— за день есть платёж. Без метки — платёж к этому дню не '
-              'привязан (это не значит «не оплачено»).',
+              'Метка означает платёж за день. Без метки платёж не привязан.',
               style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
             ),
           ),

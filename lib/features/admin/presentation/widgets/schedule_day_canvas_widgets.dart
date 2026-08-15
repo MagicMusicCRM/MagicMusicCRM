@@ -86,7 +86,7 @@ class _LessonCard extends StatelessWidget {
     final end = start.add(Duration(minutes: entry.durationMinutes));
     String hm(DateTime d) =>
         '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
-    final timeStr = '${hm(start)}–${hm(end)}';
+    final timeStr = '${hm(start)}-${hm(end)}';
 
     return Container(
       key: ValueKey('schedule-lesson-${entry.id}'),

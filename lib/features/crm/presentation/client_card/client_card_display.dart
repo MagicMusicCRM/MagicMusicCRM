@@ -101,7 +101,7 @@ Widget _studentTimelineView(
       final dt = DateTime.tryParse(item['date'] as String? ?? '');
       final dateStr = dt != null
           ? DateFormat('d MMM HH:mm', 'ru').format(dt.toLocal())
-          : '—';
+          : 'Не указано';
       return Card(
         margin: const EdgeInsets.only(bottom: 12),
         child: Padding(
@@ -192,7 +192,7 @@ Widget _mergedHistoryView(
       final dt = DateTime.tryParse(item['_date']?.toString() ?? '');
       final dateStr = dt != null
           ? DateFormat('d MMM HH:mm', 'ru').format(dt.toLocal())
-          : '—';
+          : 'Не указано';
       final subtitle = item['_subtitle']?.toString() ?? '';
       return Card(
         margin: const EdgeInsets.only(bottom: 12),
@@ -280,9 +280,9 @@ Widget _statusHistorySection(
       final from = h['old_status']?.toString();
       final to = h['new_status']?.toString();
       final transition = [
-        if (from != null && from.isNotEmpty) from else '—',
+        if (from != null && from.isNotEmpty) from else 'Не указано',
         '→',
-        if (to != null && to.isNotEmpty) to else '—',
+        if (to != null && to.isNotEmpty) to else 'Не указано',
       ].join(' ');
       final comment = h['comment']?.toString().trim() ?? '';
       // Who made the change: stored all along, but the card only ever showed

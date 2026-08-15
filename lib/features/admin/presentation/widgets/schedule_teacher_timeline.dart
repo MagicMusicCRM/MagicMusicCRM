@@ -395,7 +395,7 @@ class _TimeBandHeader extends StatelessWidget {
         ),
       ),
       child: Text(
-        '${hh(startHour)}:00–${hh(endHour)}:00',
+        '${hh(startHour)}:00-${hh(endHour)}:00',
         style: TextStyle(
           color: cs.onSurfaceVariant,
           fontSize: 12,
@@ -639,7 +639,7 @@ class _TimelineLessonCardState extends State<_TimelineLessonCard> {
     final end = widget.entry.startLocal.add(
       Duration(minutes: widget.entry.durationMinutes),
     );
-    final time = '${_hm(widget.entry.startLocal)}–${_hm(end)}';
+    final time = '${_hm(widget.entry.startLocal)}-${_hm(end)}';
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),

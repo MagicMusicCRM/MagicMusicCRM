@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -262,7 +263,7 @@ class _ScheduleReferenceSettingsState
         MagicToast.show(
           context,
           'Не удалось сохранить',
-          detail: '$error',
+          detail: userErrorMessage(error),
           type: MagicToastType.danger,
         );
       }
@@ -445,7 +446,7 @@ class _ScheduleReferenceSettingsState
             subtitle: Text(
               row['closed'] == true
                   ? 'Закрыто${_reason(row)}'
-                  : '${row['open']}–${row['close']}${_reason(row)}',
+                  : '${row['open']}-${row['close']}${_reason(row)}',
             ),
             trailing: widget.canEdit
                 ? IconButton(
@@ -590,7 +591,7 @@ class _ScheduleReferenceSettingsState
     final format = DateFormat('dd.MM.yyyy HH:mm');
     return end == null
         ? 'с ${format.format(start)}'
-        : '${format.format(start)} — ${format.format(end)}';
+        : '${format.format(start)} - ${format.format(end)}';
   }
 
   Widget _timeRow({
@@ -629,7 +630,7 @@ class _ScheduleReferenceSettingsState
                   },
             child: Text(value[startKey]?.toString() ?? '09:00'),
           ),
-          const Text('—'),
+          const Text('Не указано'),
           TextButton(
             onPressed: !canEdit
                 ? null

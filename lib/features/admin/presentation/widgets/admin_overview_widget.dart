@@ -258,7 +258,7 @@ class _UpcomingTaskTile extends StatelessWidget {
         : null;
     final isOverdue = task['isOverdue'] == true;
     final due = dueAt == null
-        ? '—'
+        ? 'Не указано'
         : DateFormat('d MMM, HH:mm', 'ru').format(dueAt);
 
     return Card(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
@@ -82,9 +83,16 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
       if (mounted) Navigator.pop(context, true);
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Ошибка: $error')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userErrorMessage(
+                error,
+                fallback: 'Не удалось создать преподавателя.',
+              ),
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -108,7 +116,7 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Text(
-          'Карточку можно создать без аккаунта. Если указать email и пароль, рабочий доступ будет создан и связан с преподавателем одной операцией. Роль доступа и несколько филиалов назначаются сразу.',
+          'Карточку можно создать без доступа. Почту и пароль можно добавить сейчас или позже.',
         ),
         const SizedBox(height: 16),
         Form(
@@ -133,18 +141,18 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
                 controller: _email,
                 keyboardType: TextInputType.emailAddress,
                 decoration: const InputDecoration(
-                  labelText: 'Email для входа (необязательно)',
+                  labelText: 'Почта для входа (необязательно)',
                 ),
                 validator: (value) {
                   final email = value?.trim() ?? '';
                   if (email.isEmpty) {
                     return _password.text.isEmpty
                         ? null
-                        : 'Укажите email вместе с паролем';
+                        : 'Укажите почту вместе с паролем';
                   }
                   return email.contains('@')
                       ? null
-                      : 'Введите корректный email';
+                      : 'Введите корректный адрес почты';
                 },
               ),
               const SizedBox(height: 12),
@@ -153,7 +161,7 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
                 obscureText: !_showPassword,
                 decoration: InputDecoration(
                   labelText: 'Пароль (необязательно)',
-                  helperText: 'Для доступа — $passwordMinimumHint',
+                  helperText: 'Для доступа: $passwordMinimumHint',
                   suffixIcon: IconButton(
                     tooltip: _showPassword
                         ? 'Скрыть пароль'
@@ -170,7 +178,7 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
                   if (password.isEmpty) {
                     return _email.text.trim().isEmpty
                         ? null
-                        : 'Укажите пароль вместе с email';
+                        : 'Укажите пароль вместе с почтой';
                   }
                   return password.length < minPasswordLength
                       ? passwordMinimumError

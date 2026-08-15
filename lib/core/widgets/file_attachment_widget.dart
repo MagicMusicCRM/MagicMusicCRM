@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
@@ -135,7 +136,7 @@ class _FileAttachmentWidgetState extends ConsumerState<FileAttachmentWidget> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Ошибка скачивания: $e',
+              userErrorMessage(e, fallback: 'Не удалось скачать файл.'),
               style: const TextStyle(color: Colors.white),
             ),
             backgroundColor: AppTheme.danger,
@@ -287,8 +288,9 @@ class _FileAttachmentWidgetState extends ConsumerState<FileAttachmentWidget> {
                   width: 200,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: (widget.isMe ? AppColor.onGold : AppTheme.primaryGold)
-                        .withAlpha(15),
+                    color:
+                        (widget.isMe ? AppColor.onGold : AppTheme.primaryGold)
+                            .withAlpha(15),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: CircularProgressIndicator(

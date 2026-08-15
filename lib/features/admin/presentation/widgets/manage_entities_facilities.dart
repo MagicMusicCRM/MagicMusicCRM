@@ -18,15 +18,13 @@ class _BranchesList extends ConsumerWidget {
     final abs = minutes.abs();
     final h = abs ~/ 60;
     final m = abs % 60;
-    final timeStr = m == 0
-        ? 'UTC$sign$h'
-        : 'UTC$sign$h:${m.toString().padLeft(2, '0')}';
+    final offset = m == 0 ? '$sign$h ч' : '$sign$h ч $m мин';
     return switch (minutes) {
-      180 => 'МСК ($timeStr)',
-      120 => 'EET ($timeStr)',
-      60 => 'CET ($timeStr)',
-      0 => 'UTC',
-      _ => timeStr,
+      180 => 'Москва ($offset)',
+      120 => 'Калининград ($offset)',
+      60 => 'Центральная Европа ($offset)',
+      0 => 'Всемирное время',
+      _ => 'Смещение $offset',
     };
   }
 
@@ -427,7 +425,7 @@ Future<void> _confirmArchivePackage(
       MagicToast.show(
         context,
         'Не удалось архивировать',
-        detail: '$e',
+        detail: userErrorMessage(e),
         type: MagicToastType.danger,
       );
     }
@@ -482,7 +480,7 @@ Future<void> _confirmRestorePackage(
       MagicToast.show(
         context,
         'Не удалось восстановить',
-        detail: '$e',
+        detail: userErrorMessage(e),
         type: MagicToastType.danger,
       );
     }
@@ -648,7 +646,7 @@ class _PackageFormState extends State<_PackageForm> {
         detail: stale
             ? 'Сохранение остановлено. Загрузите актуальную версию и '
                   'проверьте поля.'
-            : '$e',
+            : userErrorMessage(e),
         type: MagicToastType.danger,
       );
     }
@@ -713,7 +711,7 @@ class _PackageFormState extends State<_PackageForm> {
       MagicToast.show(
         context,
         'Не удалось обновить редактор',
-        detail: '$error',
+        detail: userErrorMessage(error),
         type: MagicToastType.danger,
       );
     }

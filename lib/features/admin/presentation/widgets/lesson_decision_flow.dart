@@ -247,8 +247,8 @@ class LessonDecisionController {
       statusCode: error.statusCode,
       details: details,
       message: code == 'STALE_LESSON_VERSION'
-          ? 'Занятие уже изменил другой сотрудник. Версия обновлена — '
-                'проверьте параметры и нажмите «Рассчитать» ещё раз.'
+          ? 'Версия обновлена другим сотрудником. Проверьте параметры и '
+                'нажмите «Рассчитать» ещё раз.'
           : 'Условия расчёта изменились после предварительного просмотра. '
                 'Проверьте параметры и нажмите «Рассчитать» ещё раз.',
     );
@@ -965,14 +965,14 @@ class _PreviewCard extends StatelessWidget {
             const SizedBox(height: AppSpace.sm),
             Text(
               '${participantNames[fact['clientId']?.toString() ?? fact['client_id']?.toString()] ?? 'Клиент'}: '
-              '${fact['settlementLabel'] ?? fact['settlementTypeKey'] ?? '—'} · '
+              '${fact['settlementLabel'] ?? fact['settlementTypeKey'] ?? 'Не указано'} · '
               '${fact['units'] ?? '0'} ч · ${_formatMinor(fact['amountMinor'])}',
             ),
           ],
           if (teacherFact.isNotEmpty) ...[
             const SizedBox(height: AppSpace.sm),
             Text(
-              'Преподаватель: ${teacherFact['compensationRuleLabel'] ?? teacherFact['compensationRuleKey'] ?? '—'} · '
+              'Преподаватель: ${teacherFact['compensationRuleLabel'] ?? teacherFact['compensationRuleKey'] ?? 'Не указано'} · '
               '${_formatMinor(teacherFact['amountMinor'])}',
             ),
           ],
@@ -1013,8 +1013,7 @@ class _DecisionError extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.control),
       ),
       child: Text(
-        'Не удалось выполнить действие. Введённые данные сохранены; '
-        'повторите расчёт или подтверждение.\n$error',
+        userErrorMessage(error, fallback: 'Не удалось обновить расчёт.'),
       ),
     );
   }
@@ -1050,7 +1049,7 @@ List<Map<String, dynamic>> _maps(Object? value) => [
 String _lessonTime(Object? value) {
   final date = DateTime.tryParse(value?.toString() ?? '');
   return date == null
-      ? '—'
+      ? 'Не указано'
       : DateFormat('dd.MM.yyyy HH:mm', 'ru').format(date.toLocal());
 }
 

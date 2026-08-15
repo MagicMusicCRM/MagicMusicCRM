@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -178,7 +179,10 @@ class TeacherEmploymentFieldsState
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _loadError = '$error';
+        _loadError = userErrorMessage(
+          error,
+          fallback: 'Не удалось загрузить условия работы.',
+        );
       });
     }
   }
@@ -307,7 +311,7 @@ class TeacherEmploymentFieldsState
           ),
           const SizedBox(height: 6),
           Text(
-            'Ставка — сумма, которую школа должна преподавателю за астрономический час. '
+            'Ставка: оплата преподавателю за астрономический час. '
             'Она не списывается со счёта или абонемента ученика.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
@@ -386,14 +390,14 @@ class TeacherEmploymentFieldsState
               title: 'Уровни обучения',
               options: _levelOptions,
               selected: _levels,
-              emptyText: 'Добавьте варианты уровней в настройках CRM.',
+              emptyText: 'Добавьте варианты уровней в настройках.',
             )
           else
             _stringChips(
               title: 'Категории учеников',
               options: _categoryOptions,
               selected: _categories,
-              emptyText: 'Добавьте варианты категорий в настройках CRM.',
+              emptyText: 'Добавьте варианты категорий в настройках.',
             ),
           if (_selectionError != null) ...[
             const SizedBox(height: 8),
@@ -470,7 +474,7 @@ class TeacherEmploymentFieldsState
             for (final option in options)
               FilterChip(
                 label: Text(
-                  '${option['name']?.toString() ?? '—'}'
+                  '${option['name']?.toString() ?? 'Не указано'}'
                   '${lockArchived && (option['lifecycleState'] == 'archived' || option['lifecycle_state'] == 'archived') ? ' (в архиве)' : ''}',
                 ),
                 selected: selected.contains(option['id']?.toString()),

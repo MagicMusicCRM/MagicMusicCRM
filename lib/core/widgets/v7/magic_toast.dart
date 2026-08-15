@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 
 import '../../theme/design_tokens.dart';
 
@@ -48,10 +49,16 @@ class MagicToast {
 
     dismiss();
 
+    final safeMessage = type == MagicToastType.danger
+        ? userErrorText(message)
+        : message;
+    final safeDetail = type == MagicToastType.danger && detail != null
+        ? userErrorText(detail, fallback: 'Попробуйте снова.')
+        : detail;
     final entry = OverlayEntry(
       builder: (context) => _ToastHost(
-        message: message,
-        detail: detail,
+        message: safeMessage,
+        detail: safeDetail,
         type: type,
         actionLabel: actionLabel,
         onAction: onAction == null

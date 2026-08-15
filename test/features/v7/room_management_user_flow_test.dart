@@ -85,8 +85,7 @@ class _RoomManagementApi extends MagicApiClient {
                       'code': 'FUTURE_LESSONS',
                       'label': 'Будущие занятия',
                       'count': 2,
-                      'remediation':
-                          'Перенесите или отмените будущие занятия.',
+                      'remediation': 'Перенесите или отмените будущие занятия.',
                     },
                   ]
                 : <Map<String, dynamic>>[],
@@ -136,15 +135,11 @@ class _RoomManagementApi extends MagicApiClient {
       rooms.singleWhere((room) => room['id'] == id);
 }
 
-Finder _roomTile(String name) => find.ancestor(
-  of: find.text(name),
-  matching: find.byType(ListTile),
-);
+Finder _roomTile(String name) =>
+    find.ancestor(of: find.text(name), matching: find.byType(ListTile));
 
-Finder _roomAction(String name, String tooltip) => find.descendant(
-  of: _roomTile(name),
-  matching: find.byTooltip(tooltip),
-);
+Finder _roomAction(String name, String tooltip) =>
+    find.descendant(of: _roomTile(name), matching: find.byTooltip(tooltip));
 
 Future<void> _createRoom(
   WidgetTester tester, {
@@ -152,10 +147,7 @@ Future<void> _createRoom(
   required int capacity,
 }) async {
   final roomHeader = find
-      .ancestor(
-        of: find.text('Аудитории филиала'),
-        matching: find.byType(Row),
-      )
+      .ancestor(of: find.text('Аудитории филиала'), matching: find.byType(Row))
       .first;
   await tester.tap(
     find.descendant(
@@ -270,7 +262,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(
-        find.text('Активных связей нет — аудиторию можно безопасно архивировать.'),
+        find.text('Активных связей нет. Аудиторию можно архивировать.'),
         findsOneWidget,
       );
       expect(find.text('Все занятия: 5'), findsOneWidget);

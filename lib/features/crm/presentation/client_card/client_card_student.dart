@@ -301,7 +301,7 @@ extension _ClientCardStudent on _ClientCardState {
       MagicToast.show(
         context,
         'Не удалось подготовить удаление оплаты',
-        detail: '$error',
+        detail: userErrorMessage(error),
         type: MagicToastType.danger,
       );
     }
@@ -342,7 +342,7 @@ extension _ClientCardStudent on _ClientCardState {
       MagicToast.show(
         context,
         'Не удалось подготовить сторно корректировки',
-        detail: '$error',
+        detail: userErrorMessage(error),
         type: MagicToastType.danger,
       );
     }
@@ -573,7 +573,7 @@ extension _ClientCardStudent on _ClientCardState {
       MagicToast.show(
         context,
         'Не удалось загрузить абонементы',
-        detail: '$e',
+        detail: userErrorMessage(e),
         type: MagicToastType.danger,
       );
       return;
@@ -664,7 +664,7 @@ extension _ClientCardStudent on _ClientCardState {
       _dirty = true;
       MagicToast.show(
         context,
-        'Абонемент выдан — лид стал учеником',
+        'Абонемент выдан. Лид стал учеником',
         detail: selected['name']?.toString(),
         type: MagicToastType.success,
       );
@@ -676,7 +676,7 @@ extension _ClientCardStudent on _ClientCardState {
       MagicToast.show(
         context,
         'Не удалось выдать абонемент',
-        detail: '$e',
+        detail: userErrorMessage(e),
         type: MagicToastType.danger,
       );
     } finally {
@@ -758,7 +758,7 @@ extension _ClientCardStudent on _ClientCardState {
       MagicToast.show(
         context,
         'Не удалось заменить абонемент',
-        detail: '$error',
+        detail: userErrorMessage(error),
         type: MagicToastType.danger,
       );
     } finally {
@@ -815,7 +815,7 @@ extension _ClientCardStudent on _ClientCardState {
       MagicToast.show(
         context,
         'Не удалось отменить абонемент',
-        detail: '$error',
+        detail: userErrorMessage(error),
         type: MagicToastType.danger,
       );
     } finally {
@@ -902,7 +902,10 @@ extension _ClientCardStudent on _ClientCardState {
           MagicToast.show(
             context,
             'ДЗ создано, но файл не прикреплён',
-            detail: '$error. Файл можно добавить из карточки задания.',
+            detail: userErrorMessage(
+              error,
+              fallback: 'Файл можно добавить из карточки задания.',
+            ),
             type: MagicToastType.info,
           );
           return;
@@ -923,7 +926,7 @@ extension _ClientCardStudent on _ClientCardState {
       MagicToast.show(
         context,
         'Не удалось создать ДЗ',
-        detail: '$e',
+        detail: userErrorMessage(e),
         type: MagicToastType.danger,
       );
     }
@@ -953,7 +956,7 @@ extension _ClientCardStudent on _ClientCardState {
   /// строкой в «Дополнительно»: это одно и то же поле в двух системах.
   String? get _hhStatusHelper {
     final name = _hhField('statusName');
-    return name == null ? null : 'Статус в HolliHop: $name';
+    return name == null ? null : 'Статус в прежней системе: $name';
   }
 
   Widget _buildStatusPicker(ColorScheme cs, StatusRecord current) {

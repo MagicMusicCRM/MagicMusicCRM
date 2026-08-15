@@ -50,7 +50,7 @@ class AccessEditorSheet extends ConsumerStatefulWidget {
 }
 
 class _AccessEditorSheetState extends ConsumerState<AccessEditorSheet> {
-  final _reasonController = TextEditingController();
+  final _reasonController = TextEditingController(text: 'access.review');
   ManagedUserAccess? _access;
   Object? _loadError;
   String? _message;
@@ -94,9 +94,9 @@ class _AccessEditorSheetState extends ConsumerState<AccessEditorSheet> {
     'workflow.task.write': 'Изменение задач',
     'report.status.read': 'Управленческие отчёты',
     'report.export.xlsx': 'Экспорт отчётов',
-    'config.crm.read': 'Просмотр конфигурации CRM',
-    'config.crm.edit': 'Редактирование черновиков CRM',
-    'config.crm.publish': 'Публикация конфигурации CRM',
+    'config.crm.read': 'Просмотр настроек системы',
+    'config.crm.edit': 'Редактирование настроек системы',
+    'config.crm.publish': 'Публикация настроек системы',
     'system.settings.manage': 'Системные настройки',
   };
 
@@ -150,10 +150,7 @@ class _AccessEditorSheetState extends ConsumerState<AccessEditorSheet> {
   String? _validatedReason() {
     final value = _reasonController.text.trim();
     if (!RegExp(r'^[A-Za-z0-9._:-]{1,120}$').hasMatch(value)) {
-      setState(
-        () =>
-            _message = 'Укажите код причины латиницей: например access.review.',
-      );
+      setState(() => _message = 'Выберите причину изменения.');
       return null;
     }
     return value;
@@ -242,7 +239,12 @@ class _AccessEditorSheetState extends ConsumerState<AccessEditorSheet> {
           );
         }
       } else {
-        setState(() => _message = 'Изменения не сохранены: $error');
+        setState(
+          () => _message = userErrorMessage(
+            error,
+            fallback: 'Не удалось сохранить изменения.',
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _pending = false);
@@ -321,7 +323,7 @@ class _AccessEditorSheetState extends ConsumerState<AccessEditorSheet> {
                             for (final role in _assignableRoles(access))
                               DropdownMenuItem(
                                 value: role,
-                                child: Text(_roleLabels[role] ?? role),
+                                child: Text(_roleLabels[role] ?? 'Другая роль'),
                               ),
                           ],
                           onChanged: _pending
@@ -349,14 +351,35 @@ class _AccessEditorSheetState extends ConsumerState<AccessEditorSheet> {
                           ),
                         ],
                         const SizedBox(height: AppSpace.md),
-                        TextField(
+                        DropdownButtonFormField<String>(
+                          menuMaxHeight: 256,
                           key: const Key('access-reason'),
-                          controller: _reasonController,
-                          enabled: !_pending,
+                          initialValue: _reasonController.text,
+                          isExpanded: true,
                           decoration: const InputDecoration(
-                            labelText: 'Код причины',
-                            hintText: 'access.review',
+                            labelText: 'Причина изменения',
                           ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'access.review',
+                              child: Text('Плановая проверка'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'access.role_change',
+                              child: Text('Изменение обязанностей'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'access.correction',
+                              child: Text('Исправление ошибки'),
+                            ),
+                          ],
+                          onChanged: _pending
+                              ? null
+                              : (value) {
+                                  if (value != null) {
+                                    _reasonController.text = value;
+                                  }
+                                },
                         ),
                         const SizedBox(height: AppSpace.md),
                         FilledButton(
@@ -368,7 +391,7 @@ class _AccessEditorSheetState extends ConsumerState<AccessEditorSheet> {
                         ),
                         const SizedBox(height: AppSpace.xl),
                         Text(
-                          'Пакет роли · версия ${access.packageVersion}',
+                          'Версия набора прав: ${access.packageVersion}',
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                         const SizedBox(height: AppSpace.sm),
@@ -378,11 +401,11 @@ class _AccessEditorSheetState extends ConsumerState<AccessEditorSheet> {
                             contentPadding: EdgeInsets.zero,
                             title: Text(
                               _capabilityLabels[capability.key] ??
-                                  capability.key,
+                                  'Неизвестное право',
                             ),
                             subtitle: Text(
-                              'Пакет: ${capability.packageEffect == 'allow' ? 'включено' : 'выключено'}'
-                              '${capability.overrideEffect == null ? '' : ' · Персонально: ${capability.overrideEffect == 'allow' ? 'включено' : 'выключено'}'}',
+                              'По роли: ${capability.packageEffect == 'allow' ? 'включено' : 'выключено'}'
+                              '${capability.overrideEffect == null ? '' : '. Лично: ${capability.overrideEffect == 'allow' ? 'включено' : 'выключено'}'}',
                             ),
                             value: capability.effectiveAllowed,
                             onChanged:

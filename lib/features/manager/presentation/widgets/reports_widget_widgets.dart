@@ -26,7 +26,7 @@ class _ReportsError extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              '$error',
+              userErrorMessage(error, fallback: 'Не удалось загрузить отчёт.'),
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -159,9 +159,13 @@ class _ActivityLogTabState extends ConsumerState<_ActivityLogTab> {
       await openEntityLink(context, ref, transition.target);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Не удалось открыть: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            userErrorMessage(e, fallback: 'Не удалось открыть запись.'),
+          ),
+        ),
+      );
     }
   }
 
