@@ -54,6 +54,7 @@ import 'subscription_issue_sheet.dart';
 import 'subscription_replace_sheet.dart';
 import 'student_schedule_section.dart';
 import 'client_payment_form.dart';
+import 'client_payment_correction_sheet.dart';
 import 'client_internal_context_widgets.dart';
 
 part 'client_card_widgets.dart';

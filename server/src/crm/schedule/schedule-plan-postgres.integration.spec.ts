@@ -58,7 +58,10 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
     reservations = new SubscriptionReservationService(database, realtime);
     lifecycle = new LessonLifecycleRepository(database);
     constraints = new ScheduleConstraintEngine(
-      new ConstraintEngineRepository(database, new AvailabilityRepository(database)),
+      new ConstraintEngineRepository(
+        database,
+        new AvailabilityRepository(database),
+      ),
     );
     schedule = new ScheduleService(
       database,
@@ -108,8 +111,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
     const actor = { userId: fixture.managerId, role: "manager" as const };
     const key = `plan-individual-${randomUUID()}`;
     let additional:
-      | Awaited<ReturnType<typeof createAdditionalPlanResource>>
-      | undefined;
+      Awaited<ReturnType<typeof createAdditionalPlanResource>> | undefined;
     try {
       additional = await createAdditionalPlanResource(pool, fixture.branchId);
       const dto = {
@@ -182,7 +184,9 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         studentId: fixture.studentIds[0],
         includeEnded: true,
       });
-      const readbackPlan = readback.items.find((item) => item.id === created.id);
+      const readbackPlan = readback.items.find(
+        (item) => item.id === created.id,
+      );
       expect(readbackPlan?.rows).toHaveLength(3);
       expect(readbackPlan?.rows).toEqual(
         expect.arrayContaining([
@@ -987,7 +991,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       const successorLessonId = linkedLessons.rows[1]!.id;
       await pool.query(
         `update app.lessons
-            set scheduled_at = date_trunc('minute', now()) + interval '1 day'
+            set scheduled_at = date_trunc('day', now()) + interval '1 day 5 hours'
               + case when id = $2 then interval '1 hour' else interval '0' end
           where id = any($1::uuid[])`,
         [[sourceLessonId, successorLessonId], successorLessonId],

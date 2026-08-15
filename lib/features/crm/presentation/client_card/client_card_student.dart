@@ -172,6 +172,7 @@ extension _ClientCardStudent on _ClientCardState {
         onSubmit: _recordClientPayment,
         onAdjust: (payment) => _emitState(() => _adjustingPayment = payment),
         onTransition: _showPaymentTransitionFlow,
+        onCorrect: _showPaymentCorrectionFlow,
         onReverse: _showPaymentReversalFlow,
         onReverseAdjustment: _showAdjustmentReversalFlow,
         onCancelAdjustment: () => _emitState(() => _adjustingPayment = null),
@@ -301,6 +302,54 @@ extension _ClientCardStudent on _ClientCardState {
       MagicToast.show(
         context,
         'Не удалось подготовить удаление оплаты',
+        detail: userErrorMessage(error),
+        type: MagicToastType.danger,
+      );
+    }
+  }
+
+  Future<void> _showPaymentCorrectionFlow(CommerceMovement payment) async {
+    final version = payment.paymentRecordVersion;
+    if (version == null) return;
+    final draft = await showClientPaymentCorrectionEditor(
+      context,
+      payment: payment,
+      branchId: _clientBranchId,
+    );
+    if (draft == null || !mounted) return;
+    final crm = ref.read(magicCrmServiceProvider);
+    try {
+      final preview = await crm.previewClientPaymentCorrection(
+        _studentId,
+        paymentRecordId: payment.id,
+        input: draft.input,
+      );
+      if (!mounted) return;
+      final changed = await showClientPaymentCorrectionConfirmation(
+        context,
+        preview: preview,
+        reason: draft.reason,
+        onConfirm: (identity) => crm.correctClientPayment(
+          _studentId,
+          paymentRecordId: payment.id,
+          preview: preview,
+          reason: draft.reason,
+          identity: identity,
+        ),
+      );
+      if (changed != true || !mounted) return;
+      MagicToast.show(
+        context,
+        'Оплата исправлена и пересчитана',
+        detail: 'Предыдущая запись сохранена в технической истории',
+        type: MagicToastType.success,
+      );
+      _refreshLedger();
+    } catch (error) {
+      if (!mounted) return;
+      MagicToast.show(
+        context,
+        'Не удалось рассчитать исправление оплаты',
         detail: userErrorMessage(error),
         type: MagicToastType.danger,
       );
@@ -715,8 +764,8 @@ extension _ClientCardStudent on _ClientCardState {
       final selected = await showIssueSubscriptionSheet(
         context,
         packages: packages,
-        title: 'Новый абонемент',
-        subtitle: 'Выберите активный пакет для замены',
+        title: 'Пересчёт абонемента',
+        subtitle: 'Выберите пакет с нужными условиями',
       );
       if (selected == null || !mounted) return;
       final newPackageId = selected['id']?.toString();
@@ -749,7 +798,7 @@ extension _ClientCardStudent on _ClientCardState {
       if (!mounted) return;
       MagicToast.show(
         context,
-        'Абонемент заменён',
+        'Абонемент изменён и пересчитан',
         detail: preview.newPackage.name,
         type: MagicToastType.success,
       );
@@ -757,7 +806,7 @@ extension _ClientCardStudent on _ClientCardState {
       if (!mounted) return;
       MagicToast.show(
         context,
-        'Не удалось заменить абонемент',
+        'Не удалось пересчитать абонемент',
         detail: userErrorMessage(error),
         type: MagicToastType.danger,
       );

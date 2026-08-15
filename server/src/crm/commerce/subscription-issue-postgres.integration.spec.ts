@@ -7,10 +7,7 @@ import {
 import { ConfigService } from "@nestjs/config";
 import { randomUUID } from "node:crypto";
 import { Pool, PoolClient } from "pg";
-import {
-  ActorContext,
-  UserRole,
-} from "../../common/security/actor-context";
+import { ActorContext, UserRole } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
 import { MigrationRunner } from "../../db/migration-runner";
 import { PlatformIntegrityRepository } from "../../platform/platform-integrity.repository";
@@ -23,6 +20,7 @@ import { CommerceProjectionRepository } from "./commerce-projection.repository";
 import { InstallmentDueWorker } from "./installment-due.worker";
 import { PaymentLifecycleRepository } from "./payment-lifecycle.repository";
 import { PaymentLifecycleService } from "./payment-lifecycle.service";
+import { PaymentCorrectionService } from "./payment-correction.service";
 import { PaymentReversalRepository } from "./payment-reversal.repository";
 import { PaymentReversalService } from "./payment-reversal.service";
 import { SubscriptionIssueRepository } from "./subscription-issue.repository";
@@ -67,6 +65,7 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
   let issueService: SubscriptionIssueService;
   let paymentService: ActualPaymentService;
   let paymentLifecycle: PaymentLifecycleService;
+  let paymentCorrection: PaymentCorrectionService;
   let paymentReversal: PaymentReversalService;
   let dueWorker: InstallmentDueWorker;
   let commerceRepository: CommerceProjectionRepository;
@@ -93,13 +92,10 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       database,
       new PlatformIntegrityRepository(),
     );
-    const reservations = new SubscriptionReservationService(
-      database,
-      {
-        emitCrmChanged: jest.fn(),
-        emitFinanceChanged: jest.fn(),
-      } as unknown as RealtimeBus,
-    );
+    const reservations = new SubscriptionReservationService(database, {
+      emitCrmChanged: jest.fn(),
+      emitFinanceChanged: jest.fn(),
+    } as unknown as RealtimeBus);
     const previewTokens = new SubscriptionPreviewTokenService({
       get: (key: string, fallback?: string) =>
         key === "COMMERCE_PREVIEW_SECRET" ? previewSecret : fallback,
@@ -124,8 +120,9 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       commerceRepository,
       reservations,
     );
+    const paymentReversalRepository = new PaymentReversalRepository(database);
     paymentReversal = new PaymentReversalService(
-      new PaymentReversalRepository(database),
+      paymentReversalRepository,
       issueRepository,
       commerceRepository,
       policy,
@@ -133,13 +130,19 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       previewTokens,
       reservations,
     );
-    dueWorker = new InstallmentDueWorker(
+    paymentCorrection = new PaymentCorrectionService(
+      paymentReversalRepository,
       paymentRepository,
+      issueRepository,
+      commerceRepository,
+      policy,
+      integrity,
+      previewTokens,
       reservations,
-      {
-        notifyUser: jest.fn().mockResolvedValue({ notificationId: "test" }),
-      } as unknown as NotificationsService,
     );
+    dueWorker = new InstallmentDueWorker(paymentRepository, reservations, {
+      notifyUser: jest.fn().mockResolvedValue({ notificationId: "test" }),
+    } as unknown as NotificationsService);
     paymentService = new ActualPaymentService(
       issueRepository,
       policy,
@@ -275,9 +278,7 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       [scope],
     );
     expect(
-      projection[0]!.subscriptions[0]!.installments.map(
-        (item) => item.status,
-      ),
+      projection[0]!.subscriptions[0]!.installments.map((item) => item.status),
     ).toEqual(["paid", "scheduled"]);
     expect(projection[0]!.subscriptions[0]).toMatchObject({
       units: {
@@ -454,8 +455,12 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
         mutationMetadata("payment-verify-manager"),
       ),
     ]);
-    expect(transitions.filter((item) => item.status === "fulfilled")).toHaveLength(1);
-    expect(transitions.filter((item) => item.status === "rejected")).toHaveLength(1);
+    expect(
+      transitions.filter((item) => item.status === "fulfilled"),
+    ).toHaveLength(1);
+    expect(
+      transitions.filter((item) => item.status === "rejected"),
+    ).toHaveLength(1);
     const paid = await pool.query<{
       status: string;
       actual_payment_id: string;
@@ -631,10 +636,9 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       replayed: false,
       exclusion: { counterpartId: null },
     });
-    const after = (await commerceRepository.loadProjection(
-      actors.director,
-      [scope],
-    ))[0]!;
+    const after = (
+      await commerceRepository.loadProjection(actors.director, [scope])
+    )[0]!;
     const rubAccount = after.accounts.find(
       (account) => account.currencyCode === "RUB",
     );
@@ -698,9 +702,15 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
         ),
       ),
     );
-    expect(attempts.filter((item) => item.status === "fulfilled")).toHaveLength(1);
-    expect(attempts.filter((item) => item.status === "rejected")).toHaveLength(1);
-    const winnerIndex = attempts.findIndex((item) => item.status === "fulfilled");
+    expect(attempts.filter((item) => item.status === "fulfilled")).toHaveLength(
+      1,
+    );
+    expect(attempts.filter((item) => item.status === "rejected")).toHaveLength(
+      1,
+    );
+    const winnerIndex = attempts.findIndex(
+      (item) => item.status === "fulfilled",
+    );
     const winner = attempts[winnerIndex] as PromiseFulfilledResult<{
       exclusion: { id: string; auditEventId: string };
     }>;
@@ -896,12 +906,7 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       metadata,
     );
     expect(
-      await issueService.purchase(
-        actors.admin,
-        studentId,
-        command,
-        metadata,
-      ),
+      await issueService.purchase(actors.admin, studentId, command, metadata),
     ).toEqual(first);
     expect(first.subscription).toMatchObject({
       studentId,
@@ -940,10 +945,9 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       actors.admin,
       studentId,
     );
-    const [projection] = await commerceRepository.loadProjection(
-      actors.admin,
-      [scope],
-    );
+    const [projection] = await commerceRepository.loadProjection(actors.admin, [
+      scope,
+    ]);
     expect(
       projection!.subscriptions.find(
         (subscription) => subscription.id === first.subscription.id,
@@ -972,6 +976,133 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
         },
       ],
     });
+  });
+
+  it("corrects a paid record atomically and keeps the source in technical history", async () => {
+    const scope = await commerceRepository.resolveStudentScope(
+      actors.director,
+      studentId,
+    );
+    const created = await paymentLifecycle.create(
+      actors.director,
+      studentId,
+      {
+        amountMinor: "10000",
+        currencyCode: "RUB",
+        status: "paid",
+        method: "cashless",
+        externalIdentifier: `${marker}-correction-source`,
+        occurredAt: "2026-08-12T12:00:00.000Z",
+        branchId: scope.branchId!,
+        verificationNote: "Исходная сумма",
+        reason: "Оплата до исправления",
+      },
+      mutationMetadata("correction-paid-source"),
+    );
+    const before = (
+      await commerceRepository.loadProjection(actors.director, [scope])
+    )[0]!.accounts.find((account) => account.currencyCode === "RUB")!;
+    const preview = await paymentCorrection.preview(
+      actors.director,
+      studentId,
+      created.paymentRecord.id,
+      {
+        expectedVersion: 1,
+        amountMinor: "12500",
+        status: "paid",
+        method: "cash",
+        externalIdentifier: `${marker}-correction-replacement`,
+        occurredAt: "2026-08-13T12:00:00.000Z",
+        branchId: scope.branchId!,
+        verificationNote: "Исправленная сумма",
+      },
+    );
+    expect(preview).toMatchObject({
+      walletDeltaMinor: "2500",
+      walletBalanceMinor: before.balanceMinor,
+      before: { amountMinor: "10000", status: "paid" },
+      after: { amountMinor: "12500", status: "paid" },
+    });
+    const metadata = mutationMetadata("correction-paid-commit");
+    const corrected = await paymentCorrection.correct(
+      actors.director,
+      studentId,
+      created.paymentRecord.id,
+      {
+        previewToken: preview.previewToken,
+        confirm: true,
+        reason: "Исправлена сумма по банковской выписке",
+      },
+      metadata,
+    );
+    expect(corrected).toMatchObject({
+      replayed: false,
+      replacement: { amountMinor: "12500", status: "paid", version: 1 },
+      resultingBalanceMinor: (BigInt(before.balanceMinor) + 2500n).toString(),
+    });
+    expect(
+      await paymentCorrection.correct(
+        actors.director,
+        studentId,
+        created.paymentRecord.id,
+        {
+          previewToken: preview.previewToken,
+          confirm: true,
+          reason: "Исправлена сумма по банковской выписке",
+        },
+        metadata,
+      ),
+    ).toEqual({ ...corrected, replayed: true });
+
+    const facts = await pool.query<{
+      corrections: string;
+      source_ordinary: string;
+      replacement_ordinary: string;
+      reversal_minor: string;
+    }>(
+      `
+        select
+          (select count(*)::text from app.payment_record_corrections
+            where source_payment_record_id = $1) as corrections,
+          (select count(*)::text from app.commerce_ordinary_payment_records
+            where id = $1) as source_ordinary,
+          (select count(*)::text from app.commerce_ordinary_payment_records
+            where id = $2) as replacement_ordinary,
+          (select adjustment.amount_minor::text
+             from app.payment_record_corrections correction
+             join app.account_adjustments adjustment
+               on adjustment.id = correction.reversal_adjustment_id
+            where correction.source_payment_record_id = $1) as reversal_minor
+      `,
+      [created.paymentRecord.id, corrected.replacement.id],
+    );
+    expect(facts.rows[0]).toEqual({
+      corrections: "1",
+      source_ordinary: "0",
+      replacement_ordinary: "1",
+      reversal_minor: "-10000",
+    });
+    const after = (
+      await commerceRepository.loadProjection(actors.director, [scope])
+    )[0]!;
+    expect(after.movements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: corrected.replacement.id,
+          amountMinor: "12500",
+          status: "paid",
+        }),
+      ]),
+    );
+    expect(after.technicalHistory).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          paymentRecordId: created.paymentRecord.id,
+          previousStatus: "paid",
+          reason: "Исправлена сумма по банковской выписке",
+        }),
+      ]),
+    );
   });
 
   it("purchases from the own wallet with none, percent and fixed immutable discounts", async () => {
@@ -1582,10 +1713,9 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       actors.manager,
       studentId,
     );
-    const before = (await commerceRepository.loadProjection(
-      actors.manager,
-      [scope],
-    ))[0]!;
+    const before = (
+      await commerceRepository.loadProjection(actors.manager, [scope])
+    )[0]!;
     const beforeBalance = BigInt(before.accounts[0]!.balanceMinor);
     const preview = await paymentReversal.previewAdjustment(
       actors.manager,
@@ -1624,11 +1754,12 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
     );
     expect(replay).toEqual({ ...first, replayed: true });
 
-    const after = (await commerceRepository.loadProjection(
-      actors.manager,
-      [scope],
-    ))[0]!;
-    expect(BigInt(after.accounts[0]!.balanceMinor)).toBe(beforeBalance + 30000n);
+    const after = (
+      await commerceRepository.loadProjection(actors.manager, [scope])
+    )[0]!;
+    expect(BigInt(after.accounts[0]!.balanceMinor)).toBe(
+      beforeBalance + 30000n,
+    );
     expect(
       after.movements.some((item) => item.id === adjustment.adjustment.id),
     ).toBe(false);
@@ -1666,7 +1797,10 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
              and aggregate_id = $2::text
              and event_type = 'commerce.payment.adjustment-reversed') as outbox
       `,
-      [[adjustment.adjustment.id, first.exclusion.counterpartId], adjustment.adjustment.id],
+      [
+        [adjustment.adjustment.id, first.exclusion.counterpartId],
+        adjustment.adjustment.id,
+      ],
     );
     expect(persisted.rows[0]).toEqual({
       physical: "2",
@@ -2027,34 +2161,39 @@ async function cleanupFixture(
             [packageIds],
           );
     const subscriptionIds = subscriptions.rows.map((row) => row.id);
-    const studentIds = [input.studentId, ...(input.extraStudentIds ?? [])]
-      .filter((id): id is string => Boolean(id));
-    const payments = studentIds.length > 0
-      ? await client.query<{ id: string }>(
-          `
+    const studentIds = [
+      input.studentId,
+      ...(input.extraStudentIds ?? []),
+    ].filter((id): id is string => Boolean(id));
+    const payments =
+      studentIds.length > 0
+        ? await client.query<{ id: string }>(
+            `
             select id
             from app.payments
             where student_id = any($1::uuid[]) and idempotency_ref is not null
           `,
-          [studentIds],
-        )
-      : { rows: [] as { id: string }[] };
+            [studentIds],
+          )
+        : { rows: [] as { id: string }[] };
     const paymentIds = payments.rows.map((row) => row.id);
-    const adjustments = studentIds.length > 0
-      ? await client.query<{ id: string }>(
-          `select id from app.account_adjustments
+    const adjustments =
+      studentIds.length > 0
+        ? await client.query<{ id: string }>(
+            `select id from app.account_adjustments
            where student_id = any($1::uuid[]) and idempotency_ref is not null`,
-          [studentIds],
-        )
-      : { rows: [] as { id: string }[] };
+            [studentIds],
+          )
+        : { rows: [] as { id: string }[] };
     const adjustmentIds = adjustments.rows.map((row) => row.id);
-    const paymentRecords = studentIds.length > 0
-      ? await client.query<{ id: string }>(
-          `select id from app.client_payment_records
+    const paymentRecords =
+      studentIds.length > 0
+        ? await client.query<{ id: string }>(
+            `select id from app.client_payment_records
            where student_id = any($1::uuid[])`,
-          [studentIds],
-        )
-      : { rows: [] as { id: string }[] };
+            [studentIds],
+          )
+        : { rows: [] as { id: string }[] };
     const paymentRecordIds = paymentRecords.rows.map((row) => row.id);
     const aggregateIds = [
       ...subscriptionIds,
@@ -2062,6 +2201,14 @@ async function cleanupFixture(
       ...adjustmentIds,
       ...paymentRecordIds,
     ];
+
+    await client.query(
+      `delete from app.payment_record_corrections
+       where source_payment_record_id = any($1::uuid[])
+          or replacement_payment_record_id = any($1::uuid[])
+          or actor_user_id = any($2::uuid[])`,
+      [paymentRecordIds, input.actorUserIds],
+    );
 
     await client.query(
       `delete from app.commerce_reporting_exclusions
@@ -2140,13 +2287,7 @@ async function cleanupFixture(
       adjustmentIds,
       "uuid",
     );
-    await deleteByIds(
-      client,
-      "app.payments",
-      "id",
-      paymentIds,
-      "uuid",
-    );
+    await deleteByIds(client, "app.payments", "id", paymentIds, "uuid");
     await deleteByIds(
       client,
       "app.subscriptions",
@@ -2169,16 +2310,20 @@ async function cleanupFixture(
       "uuid",
     );
     if (studentIds.length > 0) {
-      await client.query("delete from app.students where id = any($1::uuid[])", [
-        studentIds,
-      ]);
+      await client.query(
+        "delete from app.students where id = any($1::uuid[])",
+        [studentIds],
+      );
     }
-    const profileIds = [input.profileId, ...(input.extraProfileIds ?? [])]
-      .filter((id): id is string => Boolean(id));
+    const profileIds = [
+      input.profileId,
+      ...(input.extraProfileIds ?? []),
+    ].filter((id): id is string => Boolean(id));
     if (profileIds.length > 0) {
-      await client.query("delete from app.profiles where id = any($1::uuid[])", [
-        profileIds,
-      ]);
+      await client.query(
+        "delete from app.profiles where id = any($1::uuid[])",
+        [profileIds],
+      );
     }
     await client.query(
       `delete from app.staff_branch_assignments
@@ -2200,13 +2345,7 @@ async function cleanupFixture(
       `delete from app.profiles where user_id = any($1::uuid[])`,
       [input.actorUserIds],
     );
-    await deleteByIds(
-      client,
-      "app.users",
-      "id",
-      input.actorUserIds,
-      "uuid",
-    );
+    await deleteByIds(client, "app.users", "id", input.actorUserIds, "uuid");
     await client.query("delete from app.branches where name = $1", [
       `${marker}-branch`,
     ]);

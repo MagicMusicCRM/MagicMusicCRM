@@ -403,6 +403,25 @@ export class PaymentLifecycleRepository {
     return result.rows[0]!;
   }
 
+  async initializeRecordAggregate(
+    client: PoolClient,
+    paymentRecordId: string,
+    version = 1,
+  ): Promise<void> {
+    await client.query(
+      `
+        insert into app.aggregate_versions (
+          aggregate_type, aggregate_id, version
+        ) values ('commerce:client-payment', $1, $2)
+        on conflict (aggregate_type, aggregate_id)
+        do update set
+          version = greatest(app.aggregate_versions.version, excluded.version),
+          updated_at = now()
+      `,
+      [paymentRecordId, version],
+    );
+  }
+
   async findRecord(paymentRecordId: string): Promise<PaymentRecordRow | null> {
     const result = await this.database.query<PaymentRecordRow>(
       `

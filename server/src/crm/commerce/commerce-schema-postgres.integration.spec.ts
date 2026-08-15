@@ -202,7 +202,9 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
         ),
       );
       await expectRejectedFactMutation(client, () =>
-        client.query("delete from app.subscriptions where id = $1", [issued.id]),
+        client.query("delete from app.subscriptions where id = $1", [
+          issued.id,
+        ]),
       );
     } finally {
       await client.query("rollback");
@@ -408,7 +410,9 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
           app.commerce_ordinary_payment_records
       `);
       const fixture = await createClientFixture(client);
-      await client.query("drop trigger if exists payments_immutable on app.payments");
+      await client.query(
+        "drop trigger if exists payments_immutable on app.payments",
+      );
       await client.query(
         "alter table app.payments drop constraint if exists payments_amount_minor_nonnegative",
       );
@@ -520,19 +524,34 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
       `);
       await client.query(
         readFileSync(
+          resolve(migrationRoot, "0138_payment_record_corrections.down.sql"),
+          "utf8",
+        ),
+      );
+      await client.query(
+        readFileSync(
           resolve(migrationRoot, "0103_v7_client_commerce.down.sql"),
           "utf8",
         ),
       );
       expect(await hasColumn(client, "payer_student_id")).toBe(false);
       expect(
-        (await client.query("select to_regclass('app.client_payment_records') as value"))
-          .rows[0]?.value,
+        (
+          await client.query(
+            "select to_regclass('app.client_payment_records') as value",
+          )
+        ).rows[0]?.value,
       ).toBeNull();
 
       await client.query(
         readFileSync(
           resolve(migrationRoot, "0103_v7_client_commerce.up.sql"),
+          "utf8",
+        ),
+      );
+      await client.query(
+        readFileSync(
+          resolve(migrationRoot, "0138_payment_record_corrections.up.sql"),
           "utf8",
         ),
       );
@@ -709,18 +728,22 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
         `,
       );
       expect(
-        roleMatrix.rows.filter(
-          (row) =>
-            row.capability_key === "commerce.client_finance.write" &&
-            row.effect === "allow",
-        ).map((row) => row.role),
+        roleMatrix.rows
+          .filter(
+            (row) =>
+              row.capability_key === "commerce.client_finance.write" &&
+              row.effect === "allow",
+          )
+          .map((row) => row.role),
       ).toEqual(["admin", "director", "manager", "system_admin"]);
       expect(
-        roleMatrix.rows.filter(
-          (row) =>
-            row.capability_key === "config.commerce.manage" &&
-            row.effect === "allow",
-        ).map((row) => row.role),
+        roleMatrix.rows
+          .filter(
+            (row) =>
+              row.capability_key === "config.commerce.manage" &&
+              row.effect === "allow",
+          )
+          .map((row) => row.role),
       ).toEqual(["director", "system_admin"]);
     } finally {
       await client.query("rollback");

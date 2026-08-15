@@ -13,6 +13,10 @@ export interface PaymentReversalTargetRow {
   currency_code: string;
   status: ClientPaymentStatus;
   record_version: number | string;
+  record_due_at: Date | string | null;
+  record_method: string | null;
+  record_external_identifier: string | null;
+  record_verification_note: string | null;
   actual_payment_id: string | null;
   payment_student_id: string | null;
   payment_amount_minor: string | null;
@@ -39,6 +43,17 @@ export interface PaymentReversalResultRow {
   reason: string;
   actor_user_id: string;
   actor_name: string | null;
+  audit_event_id: string | null;
+  occurred_at: Date | string;
+}
+
+export interface PaymentCorrectionResultRow {
+  correction_id: string;
+  source_payment_record_id: string;
+  replacement_payment_record_id: string;
+  reversal_adjustment_id: string | null;
+  reason: string;
+  actor_user_id: string;
   audit_event_id: string | null;
   occurred_at: Date | string;
 }
@@ -93,9 +108,10 @@ export class PaymentReversalRepository {
     );
     const target = record.rows[0] ?? null;
     if (target?.actual_payment_id) {
-      await client.query("select id from app.payments where id = $1 for update", [
-        target.actual_payment_id,
-      ]);
+      await client.query(
+        "select id from app.payments where id = $1 for update",
+        [target.actual_payment_id],
+      );
     }
     return target;
   }
@@ -103,10 +119,11 @@ export class PaymentReversalRepository {
   async findAdjustmentTarget(
     adjustmentId: string,
   ): Promise<AccountAdjustmentReversalTargetRow | null> {
-    const result = await this.database.query<AccountAdjustmentReversalTargetRow>(
-      adjustmentTargetSql,
-      [adjustmentId],
-    );
+    const result =
+      await this.database.query<AccountAdjustmentReversalTargetRow>(
+        adjustmentTargetSql,
+        [adjustmentId],
+      );
     return result.rows[0] ?? null;
   }
 
@@ -120,9 +137,10 @@ export class PaymentReversalRepository {
     );
     const target = result.rows[0] ?? null;
     if (target) {
-      await client.query("select id from app.payments where id = $1 for update", [
-        target.source_payment_id,
-      ]);
+      await client.query(
+        "select id from app.payments where id = $1 for update",
+        [target.source_payment_id],
+      );
     }
     return target;
   }
@@ -203,6 +221,53 @@ export class PaymentReversalRepository {
     return result.rows[0] ?? null;
   }
 
+  async createCorrection(
+    client: PoolClient,
+    input: {
+      id: string;
+      sourcePaymentRecordId: string;
+      replacementPaymentRecordId: string;
+      reversalAdjustmentId: string | null;
+      reason: string;
+      actorUserId: string;
+      auditEventId: string;
+    },
+  ): Promise<PaymentCorrectionResultRow> {
+    const result = await client.query<PaymentCorrectionResultRow>(
+      `
+        insert into app.payment_record_corrections (
+          id, source_payment_record_id, replacement_payment_record_id,
+          reversal_adjustment_id, reason, actor_user_id, audit_event_id
+        ) values ($1, $2, $3, $4, $5, $6, $7)
+        returning *
+      `,
+      [
+        input.id,
+        input.sourcePaymentRecordId,
+        input.replacementPaymentRecordId,
+        input.reversalAdjustmentId,
+        input.reason,
+        input.actorUserId,
+        input.auditEventId,
+      ],
+    );
+    return result.rows[0]!;
+  }
+
+  async findCorrection(
+    sourcePaymentRecordId: string,
+  ): Promise<PaymentCorrectionResultRow | null> {
+    const result = await this.database.query<PaymentCorrectionResultRow>(
+      `
+        select *
+        from app.payment_record_corrections
+        where source_payment_record_id = $1
+      `,
+      [sourcePaymentRecordId],
+    );
+    return result.rows[0] ?? null;
+  }
+
   async findAdjustmentResult(
     adjustmentId: string,
   ): Promise<AccountAdjustmentReversalResultRow | null> {
@@ -245,6 +310,10 @@ const targetSql = `
     record.currency_code,
     record.status,
     record.version as record_version,
+    record.due_at as record_due_at,
+    record.method as record_method,
+    record.external_identifier as record_external_identifier,
+    record.verification_note as record_verification_note,
     record.actual_payment_id,
     payment.student_id as payment_student_id,
     payment.amount_minor::text as payment_amount_minor,

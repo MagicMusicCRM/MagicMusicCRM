@@ -61,6 +61,7 @@ class FakeCardApiClient extends MagicApiClient {
     this.cancellationResult,
     this.cancellationFailures = 0,
     this.paymentReversalPreview,
+    this.paymentCorrectionPreview,
     this.adjustmentReversalPreview,
   }) : family = family == null ? null : Map<String, dynamic>.from(family),
        linkedUsers = [
@@ -127,6 +128,7 @@ class FakeCardApiClient extends MagicApiClient {
   final Map<String, dynamic>? cancellationResult;
   int cancellationFailures;
   final Map<String, dynamic>? paymentReversalPreview;
+  final Map<String, dynamic>? paymentCorrectionPreview;
   final Map<String, dynamic>? adjustmentReversalPreview;
 
   Map<String, dynamic>? updateLeadBody;
@@ -655,6 +657,10 @@ class FakeCardApiClient extends MagicApiClient {
     }
     if (paymentReversalPreview != null && path.endsWith('/reversal/preview')) {
       return Map<String, dynamic>.from(paymentReversalPreview!) as T;
+    }
+    if (paymentCorrectionPreview != null &&
+        path.endsWith('/correction/preview')) {
+      return Map<String, dynamic>.from(paymentCorrectionPreview!) as T;
     }
     if (path.endsWith('/end/preview')) {
       return <String, dynamic>{

@@ -1,5 +1,6 @@
 import { Type } from "class-transformer";
 import {
+  Equals,
   IsDateString,
   IsBoolean,
   IsIn,
@@ -114,6 +115,60 @@ export class ReversePaymentDto {
 
   @IsBoolean()
   confirm: boolean;
+
+  @IsString()
+  @MaxLength(500)
+  reason: string;
+}
+
+export class PreviewPaymentCorrectionDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion: number;
+
+  @IsString()
+  @Matches(/^[1-9]\d*$/)
+  amountMinor: string;
+
+  @IsIn(["unpaid", "posted_pending", "paid"])
+  status: "unpaid" | "posted_pending" | "paid";
+
+  @IsOptional()
+  @IsDateString()
+  dueAt?: string;
+
+  @IsOptional()
+  @IsIn(["cash", "cashless"])
+  method?: "cash" | "cashless";
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  externalIdentifier?: string;
+
+  @IsOptional()
+  @IsDateString()
+  occurredAt?: string;
+
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  verificationNote?: string;
+}
+
+export class CorrectPaymentDto {
+  @IsString()
+  @MaxLength(16384)
+  previewToken: string;
+
+  @IsBoolean()
+  @Equals(true)
+  confirm: true;
 
   @IsString()
   @MaxLength(500)

@@ -241,7 +241,7 @@ void main() {
       await _tapVisible(tester, replaceAction);
       await _pumpFrames(tester);
 
-      expect(find.text('Новый абонемент'), findsOneWidget);
+      expect(find.text('Пересчёт абонемента'), findsOneWidget);
       expect(find.text('Вокал — 12 часов'), findsOneWidget);
       expect(find.text('Архивный пакет'), findsNothing);
       await _tapVisible(
@@ -254,7 +254,7 @@ void main() {
       expect(find.byKey(const Key('subscription-replace-new')), findsOneWidget);
       expect(find.text('Использовано'), findsOneWidget);
       expect(find.text('Будущие занятия'), findsOneWidget);
-      expect(find.text('Долг после замены'), findsOneWidget);
+      expect(find.text('Долг после пересчёта'), findsOneWidget);
       expect(
         _normalizedTexts(
           tester,
@@ -279,7 +279,7 @@ void main() {
       expect(find.text('Сохранить изменения?'), findsOneWidget);
       await tester.tap(find.text('Остаться'));
       await _pumpFrames(tester);
-      expect(find.text('Подтвердите замену'), findsOneWidget);
+      expect(find.text('Подтвердите пересчёт'), findsOneWidget);
       expect(
         tester.widget<DropdownButtonFormField<String>>(reason).initialValue,
         'client.requested_change',
@@ -320,7 +320,7 @@ void main() {
         'reason': 'client.requested_change',
       });
       expect(api.studentCardLoadCount, 2);
-      expect(find.text('Абонемент заменён'), findsOneWidget);
+      expect(find.text('Абонемент изменён и пересчитан'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pump(const Duration(seconds: 4));
     },

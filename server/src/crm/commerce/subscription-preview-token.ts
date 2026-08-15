@@ -1,14 +1,13 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 const TOKEN_VERSION = "v1";
-const REPLACE_TOKEN_DOMAIN =
-  "magicmusiccrm:subscription-replace-preview:v1";
-const CANCEL_TOKEN_DOMAIN =
-  "magicmusiccrm:subscription-cancel-preview:v1";
-const PURCHASE_TOKEN_DOMAIN =
-  "magicmusiccrm:subscription-purchase-preview:v1";
+const REPLACE_TOKEN_DOMAIN = "magicmusiccrm:subscription-replace-preview:v1";
+const CANCEL_TOKEN_DOMAIN = "magicmusiccrm:subscription-cancel-preview:v1";
+const PURCHASE_TOKEN_DOMAIN = "magicmusiccrm:subscription-purchase-preview:v1";
 const PAYMENT_REVERSAL_TOKEN_DOMAIN =
   "magicmusiccrm:payment-reversal-preview:v1";
+const PAYMENT_CORRECTION_TOKEN_DOMAIN =
+  "magicmusiccrm:payment-correction-preview:v1";
 const ACCOUNT_ADJUSTMENT_REVERSAL_TOKEN_DOMAIN =
   "magicmusiccrm:account-adjustment-reversal-preview:v1";
 const LESSON_TRANSITION_TOKEN_DOMAIN =
@@ -29,8 +28,13 @@ export interface SchedulePlanEndPreviewTokenPayload {
 
 export interface LessonTransitionPreviewTokenPayload {
   kind: "lesson.transition";
-  operation: "reschedule" | "cancel" | "settle" | "bulk" | "correct" |
-    "planned-settlement";
+  operation:
+    | "reschedule"
+    | "cancel"
+    | "settle"
+    | "bulk"
+    | "correct"
+    | "planned-settlement";
   actorUserId: string;
   lessonId: string;
   expectedVersion: number;
@@ -51,6 +55,33 @@ export interface PaymentReversalPreviewTokenPayload {
   issuedSubscriptionId: string | null;
   amountMinor: string;
   currencyCode: string;
+  walletBalanceMinor: string;
+  resultingBalanceMinor: string;
+  issuedAtSeconds: number;
+  expiresAtSeconds: number;
+}
+
+export interface PaymentCorrectionPreviewTokenPayload {
+  kind: "payment.correction";
+  actorUserId: string;
+  studentId: string;
+  recipientStudentId: string;
+  paymentRecordId: string;
+  expectedVersion: number;
+  oldStatus: "unpaid" | "posted_pending" | "paid";
+  oldActualPaymentId: string | null;
+  issuedSubscriptionId: string | null;
+  installmentId: string | null;
+  oldAmountMinor: string;
+  currencyCode: string;
+  amountMinor: string;
+  status: "unpaid" | "posted_pending" | "paid";
+  dueAt: string | null;
+  method: "cash" | "cashless" | null;
+  externalIdentifier: string | null;
+  occurredAt: string | null;
+  branchId: string | null;
+  verificationNote: string | null;
   walletBalanceMinor: string;
   resultingBalanceMinor: string;
   issuedAtSeconds: number;
@@ -151,8 +182,7 @@ export interface SubscriptionCancelPreviewTokenPayload {
 }
 
 export type SubscriptionPreviewTokenErrorCode =
-  | "PREVIEW_TOKEN_INVALID"
-  | "PREVIEW_TOKEN_EXPIRED";
+  "PREVIEW_TOKEN_INVALID" | "PREVIEW_TOKEN_EXPIRED";
 
 export class SubscriptionPreviewTokenError extends Error {
   constructor(readonly code: SubscriptionPreviewTokenErrorCode) {
@@ -191,12 +221,7 @@ export function signSubscriptionCancelPreview(
   secret: string,
   payload: SubscriptionCancelPreviewTokenPayload,
 ): string {
-  return signPayload(
-    secret,
-    CANCEL_TOKEN_DOMAIN,
-    payload,
-    assertCancelPayload,
-  );
+  return signPayload(secret, CANCEL_TOKEN_DOMAIN, payload, assertCancelPayload);
 }
 
 export function verifySubscriptionCancelPreview(
@@ -262,6 +287,32 @@ export function verifyPaymentReversalPreview(
     token,
     nowSeconds,
     assertPaymentReversalPayload,
+  );
+}
+
+export function signPaymentCorrectionPreview(
+  secret: string,
+  payload: PaymentCorrectionPreviewTokenPayload,
+): string {
+  return signPayload(
+    secret,
+    PAYMENT_CORRECTION_TOKEN_DOMAIN,
+    payload,
+    assertPaymentCorrectionPayload,
+  );
+}
+
+export function verifyPaymentCorrectionPreview(
+  secret: string,
+  token: string,
+  nowSeconds: number,
+): PaymentCorrectionPreviewTokenPayload {
+  return verifyPayload(
+    secret,
+    PAYMENT_CORRECTION_TOKEN_DOMAIN,
+    token,
+    nowSeconds,
+    assertPaymentCorrectionPayload,
   );
 }
 
@@ -437,9 +488,7 @@ function verifyPayload<T>(
 }
 
 function signature(secret: string, domain: string, body: string): Buffer {
-  return createHmac("sha256", secret)
-    .update(`${domain}.${body}`)
-    .digest();
+  return createHmac("sha256", secret).update(`${domain}.${body}`).digest();
 }
 
 function decodeBase64Url(value: string): Buffer {
@@ -451,7 +500,9 @@ function decodeBase64Url(value: string): Buffer {
 
 function assertSecret(secret: string): void {
   if (Buffer.byteLength(secret, "utf8") < 32) {
-    throw new Error("Subscription preview token secret must be at least 32 bytes.");
+    throw new Error(
+      "Subscription preview token secret must be at least 32 bytes.",
+    );
   }
 }
 
@@ -711,6 +762,82 @@ function assertPaymentReversalPayload(
   }
 }
 
+function assertPaymentCorrectionPayload(
+  value: unknown,
+): asserts value is PaymentCorrectionPreviewTokenPayload {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
+  }
+  const payload = value as Record<string, unknown>;
+  const exactKeys = [
+    "kind",
+    "actorUserId",
+    "studentId",
+    "recipientStudentId",
+    "paymentRecordId",
+    "expectedVersion",
+    "oldStatus",
+    "oldActualPaymentId",
+    "issuedSubscriptionId",
+    "installmentId",
+    "oldAmountMinor",
+    "currencyCode",
+    "amountMinor",
+    "status",
+    "dueAt",
+    "method",
+    "externalIdentifier",
+    "occurredAt",
+    "branchId",
+    "verificationNote",
+    "walletBalanceMinor",
+    "resultingBalanceMinor",
+    "issuedAtSeconds",
+    "expiresAtSeconds",
+  ];
+  if (
+    Object.keys(payload).length !== exactKeys.length ||
+    exactKeys.some((key) => !(key in payload)) ||
+    payload.kind !== "payment.correction" ||
+    !isUuid(payload.actorUserId) ||
+    !isUuid(payload.studentId) ||
+    !isUuid(payload.recipientStudentId) ||
+    !isUuid(payload.paymentRecordId) ||
+    !isPositiveInteger(payload.expectedVersion) ||
+    !["unpaid", "posted_pending", "paid"].includes(
+      payload.oldStatus as string,
+    ) ||
+    (payload.oldActualPaymentId !== null &&
+      !isUuid(payload.oldActualPaymentId)) ||
+    (payload.issuedSubscriptionId !== null &&
+      !isUuid(payload.issuedSubscriptionId)) ||
+    (payload.installmentId !== null && !isUuid(payload.installmentId)) ||
+    !isMinor(payload.oldAmountMinor) ||
+    payload.oldAmountMinor === "0" ||
+    typeof payload.currencyCode !== "string" ||
+    !/^[A-Z]{3}$/.test(payload.currencyCode) ||
+    !isMinor(payload.amountMinor) ||
+    payload.amountMinor === "0" ||
+    !["unpaid", "posted_pending", "paid"].includes(payload.status as string) ||
+    (payload.dueAt !== null && typeof payload.dueAt !== "string") ||
+    (payload.method !== null &&
+      !["cash", "cashless"].includes(payload.method as string)) ||
+    (payload.externalIdentifier !== null &&
+      typeof payload.externalIdentifier !== "string") ||
+    (payload.occurredAt !== null && typeof payload.occurredAt !== "string") ||
+    (payload.branchId !== null && !isUuid(payload.branchId)) ||
+    (payload.verificationNote !== null &&
+      typeof payload.verificationNote !== "string") ||
+    !isSignedMinor(payload.walletBalanceMinor) ||
+    !isSignedMinor(payload.resultingBalanceMinor) ||
+    !isPositiveInteger(payload.issuedAtSeconds) ||
+    !isPositiveInteger(payload.expiresAtSeconds) ||
+    payload.expiresAtSeconds < payload.issuedAtSeconds
+  ) {
+    throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
+  }
+}
+
 function assertAccountAdjustmentReversalPayload(
   value: unknown,
 ): asserts value is AccountAdjustmentReversalPreviewTokenPayload {
@@ -783,9 +910,7 @@ function assertLessonTransitionPayload(
       "bulk",
       "correct",
       "planned-settlement",
-    ].includes(
-      payload.operation as string,
-    ) ||
+    ].includes(payload.operation as string) ||
     !isUuid(payload.actorUserId) ||
     !isUuid(payload.lessonId) ||
     !isPositiveInteger(payload.expectedVersion) ||
@@ -825,8 +950,5 @@ function isSignedMinor(value: unknown): value is string {
 }
 
 function isUnits(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    /^(0|[1-9]\d*)(\.\d{1,2})?$/.test(value)
-  );
+  return typeof value === "string" && /^(0|[1-9]\d*)(\.\d{1,2})?$/.test(value);
 }

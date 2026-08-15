@@ -9,9 +9,11 @@ import {
   LessonTransitionPreviewTokenPayload,
   SchedulePlanEndPreviewTokenPayload,
   PaymentReversalPreviewTokenPayload,
+  PaymentCorrectionPreviewTokenPayload,
   signAccountAdjustmentReversalPreview,
   signLessonTransitionPreview,
   signPaymentReversalPreview,
+  signPaymentCorrectionPreview,
   signSchedulePlanEndPreview,
   signSubscriptionCancelPreview,
   signSubscriptionPurchasePreview,
@@ -21,6 +23,7 @@ import {
   SubscriptionPreviewTokenError,
   SubscriptionReplacePreviewTokenPayload,
   verifyPaymentReversalPreview,
+  verifyPaymentCorrectionPreview,
   verifyAccountAdjustmentReversalPreview,
   verifySchedulePlanEndPreview,
   verifyLessonTransitionPreview,
@@ -50,8 +53,7 @@ export class SubscriptionPreviewTokenService {
     const complete: SubscriptionReplacePreviewTokenPayload = {
       ...payload,
       issuedAtSeconds,
-      expiresAtSeconds:
-        issuedAtSeconds + SUBSCRIPTION_PREVIEW_TTL_SECONDS,
+      expiresAtSeconds: issuedAtSeconds + SUBSCRIPTION_PREVIEW_TTL_SECONDS,
     };
     return {
       token: signSubscriptionReplacePreview(this.secret(), complete),
@@ -97,8 +99,7 @@ export class SubscriptionPreviewTokenService {
     const complete: SubscriptionCancelPreviewTokenPayload = {
       ...payload,
       issuedAtSeconds,
-      expiresAtSeconds:
-        issuedAtSeconds + SUBSCRIPTION_PREVIEW_TTL_SECONDS,
+      expiresAtSeconds: issuedAtSeconds + SUBSCRIPTION_PREVIEW_TTL_SECONDS,
     };
     return {
       token: signSubscriptionCancelPreview(this.secret(), complete),
@@ -144,8 +145,7 @@ export class SubscriptionPreviewTokenService {
     const complete: SubscriptionPurchasePreviewTokenPayload = {
       ...payload,
       issuedAtSeconds,
-      expiresAtSeconds:
-        issuedAtSeconds + SUBSCRIPTION_PREVIEW_TTL_SECONDS,
+      expiresAtSeconds: issuedAtSeconds + SUBSCRIPTION_PREVIEW_TTL_SECONDS,
     };
     return {
       token: signSubscriptionPurchasePreview(this.secret(), complete),
@@ -191,8 +191,7 @@ export class SubscriptionPreviewTokenService {
     const complete: PaymentReversalPreviewTokenPayload = {
       ...payload,
       issuedAtSeconds,
-      expiresAtSeconds:
-        issuedAtSeconds + SUBSCRIPTION_PREVIEW_TTL_SECONDS,
+      expiresAtSeconds: issuedAtSeconds + SUBSCRIPTION_PREVIEW_TTL_SECONDS,
     };
     return {
       token: signPaymentReversalPreview(this.secret(), complete),
@@ -223,6 +222,52 @@ export class SubscriptionPreviewTokenService {
     }
   }
 
+  issuePaymentCorrection(
+    payload: Omit<
+      PaymentCorrectionPreviewTokenPayload,
+      "issuedAtSeconds" | "expiresAtSeconds"
+    >,
+    now = new Date(),
+  ): {
+    token: string;
+    expiresAt: string;
+    payload: PaymentCorrectionPreviewTokenPayload;
+  } {
+    const issuedAtSeconds = Math.floor(now.getTime() / 1000);
+    const complete: PaymentCorrectionPreviewTokenPayload = {
+      ...payload,
+      issuedAtSeconds,
+      expiresAtSeconds: issuedAtSeconds + SUBSCRIPTION_PREVIEW_TTL_SECONDS,
+    };
+    return {
+      token: signPaymentCorrectionPreview(this.secret(), complete),
+      expiresAt: new Date(complete.expiresAtSeconds * 1000).toISOString(),
+      payload: complete,
+    };
+  }
+
+  verifyPaymentCorrection(
+    token: string,
+    now = new Date(),
+  ): PaymentCorrectionPreviewTokenPayload {
+    try {
+      return verifyPaymentCorrectionPreview(
+        this.secret(),
+        token,
+        Math.floor(now.getTime() / 1000),
+      );
+    } catch (error) {
+      if (!(error instanceof SubscriptionPreviewTokenError)) throw error;
+      throw new UnprocessableEntityException({
+        code: error.code,
+        message:
+          error.code === "PREVIEW_TOKEN_EXPIRED"
+            ? "Предпросмотр исправления оплаты устарел. Обновите расчёт."
+            : "Подписанный предпросмотр исправления оплаты недействителен.",
+      });
+    }
+  }
+
   issueAccountAdjustmentReversal(
     payload: Omit<
       AccountAdjustmentReversalPreviewTokenPayload,
@@ -238,8 +283,7 @@ export class SubscriptionPreviewTokenService {
     const complete: AccountAdjustmentReversalPreviewTokenPayload = {
       ...payload,
       issuedAtSeconds,
-      expiresAtSeconds:
-        issuedAtSeconds + SUBSCRIPTION_PREVIEW_TTL_SECONDS,
+      expiresAtSeconds: issuedAtSeconds + SUBSCRIPTION_PREVIEW_TTL_SECONDS,
     };
     return {
       token: signAccountAdjustmentReversalPreview(this.secret(), complete),
@@ -347,9 +391,10 @@ export class SubscriptionPreviewTokenService {
       if (!(error instanceof SubscriptionPreviewTokenError)) throw error;
       throw new UnprocessableEntityException({
         code: error.code,
-        message: error.code === "PREVIEW_TOKEN_EXPIRED"
-          ? "Предпросмотр завершения расписания устарел. Обновите расчёт."
-          : "Подписанный предпросмотр завершения расписания недействителен.",
+        message:
+          error.code === "PREVIEW_TOKEN_EXPIRED"
+            ? "Предпросмотр завершения расписания устарел. Обновите расчёт."
+            : "Подписанный предпросмотр завершения расписания недействителен.",
       });
     }
   }

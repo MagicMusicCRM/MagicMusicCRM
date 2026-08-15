@@ -167,7 +167,8 @@ export class SubscriptionsService {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       packageName: row.package_name ?? null,
-      packagePrice: row.package_price != null ? Number(row.package_price) : null,
+      packagePrice:
+        row.package_price != null ? Number(row.package_price) : null,
       // «Оплачено» — не отдельная сущность, а приход личного счёта: выдача
       // абонемента кладёт его стоимость на счёт клиента (см. issueSubscription),
       // и здесь мы читаем именно этот приход. ✔ Решение владельца 16.07:
@@ -273,7 +274,7 @@ export class SubscriptionsService {
       const studentRow = student.rows[0];
       if (!studentRow) throw new NotFoundException("Ученик не найден.");
       return client.query<IssuedSubscriptionRow>(
-      `
+        `
         with pkg as (
           select id, name, branch_id, lessons_total, base_price_minor,
             currency_code, validity_days, version
@@ -323,8 +324,8 @@ export class SubscriptionsService {
           status, package_id, payment_id
         from sub
       `,
-      [studentId, dto.packageId, actor.userId],
-    );
+        [studentId, dto.packageId, actor.userId],
+      );
     });
     const sub = result.rows[0];
     if (!sub) throw new NotFoundException("Абонемент не найден или неактивен.");
@@ -688,7 +689,8 @@ export class SubscriptionsService {
               student_id, lessons_total, lessons_used, starts_at, expires_at,
               status, package_id, payment_id, conversion_lead_id,
               commercial_snapshot, snapshot_version, package_version,
-              base_price_minor, currency_code, final_price_minor
+              base_price_minor, currency_code, final_price_minor,
+              payer_student_id, funding_mode, purchase_reason
             )
             values (
               $1, $2, 0, current_date,
@@ -696,7 +698,7 @@ export class SubscriptionsService {
                 then (current_date + ($3::text || ' days')::interval)::date
                 else null end,
               'active', $4, $5, $6, $7::jsonb, 1, $8, $9::bigint, $10,
-              $9::bigint
+              $9::bigint, $1, 'legacy', 'lead_conversion'
             )
             returning id, student_id, lessons_total, lessons_used, starts_at,
               expires_at, status, package_id, payment_id
@@ -714,12 +716,91 @@ export class SubscriptionsService {
             subscriptionPackage.currency_code,
           ],
         );
+      const subscription = subscriptionResult.rows[0];
+      await client.query(
+        `
+          insert into app.client_payment_records (
+            id, student_id, issued_subscription_id, amount_minor,
+            currency_code, status, method, external_identifier,
+            verification_note, actual_payment_id, version, created_by,
+            verified_by, verified_at, created_at, updated_at
+          )
+          select
+            payment.id,
+            payment.student_id,
+            $2,
+            payment.amount_minor,
+            upper(coalesce(nullif(btrim(payment.currency), ''), 'RUB')),
+            'paid',
+            coalesce(nullif(btrim(payment.method), ''), 'legacy_unknown'),
+            coalesce(
+              nullif(btrim(payment.external_id), ''),
+              nullif(btrim(payment.invoice_number), ''),
+              'lead-conversion:' || payment.id::text
+            ),
+            'lead_conversion',
+            payment.id,
+            1,
+            $3,
+            $3,
+            coalesce(payment.payment_date, payment.created_at),
+            payment.created_at,
+            payment.created_at
+          from app.payments payment
+          where payment.id = $1
+        `,
+        [payment.id, subscription.id, actor.userId],
+      );
+      await client.query(
+        `
+          update app.payments
+          set payment_record_id = $1
+          where id = $1 and payment_record_id is null
+        `,
+        [payment.id],
+      );
+      await client.query(
+        `
+          insert into app.client_payment_status_events (
+            payment_record_id, before_status, after_status, reason,
+            actor_user_id, aggregate_version, actual_payment_id, occurred_at
+          )
+          values ($1, null, 'paid', 'Выдача абонемента при переводе лида',
+            $2, 1, $1, now())
+        `,
+        [payment.id, actor.userId],
+      );
+      await client.query(
+        `
+          insert into app.aggregate_versions (
+            aggregate_type, aggregate_id, version
+          ) values
+            ('commerce:client-payment', $1, 1),
+            ('commerce:issued-subscription', $2, 1)
+          on conflict (aggregate_type, aggregate_id)
+          do update set
+            version = greatest(app.aggregate_versions.version, 1),
+            updated_at = now()
+        `,
+        [payment.id, subscription.id],
+      );
+      await client.query(
+        `
+          insert into app.subscription_lifecycle_events (
+            issued_subscription_id, event_type,
+            before_issued_subscription_id, after_issued_subscription_id,
+            actor_user_id, reason, aggregate_version
+          ) values ($1, 'issue', null, $1, $2,
+            'Выдача при переводе лида', 1)
+        `,
+        [subscription.id, actor.userId],
+      );
       const student = await this.loadConversionStudent(client, studentId);
       if (!student) throw new NotFoundException("Ученик не найден.");
 
       return {
         student,
-        subscription: subscriptionResult.rows[0],
+        subscription,
         payment,
         converted,
         issued: true,
@@ -767,10 +848,7 @@ export class SubscriptionsService {
         affectedUserIds,
       });
       for (const lesson of outcome.lessons) {
-        const lessonAudience = await audienceForLesson(
-          this.database,
-          lesson,
-        );
+        const lessonAudience = await audienceForLesson(this.database, lesson);
         this.realtime.emitCrmChanged({
           entity: "lesson",
           action: "updated",

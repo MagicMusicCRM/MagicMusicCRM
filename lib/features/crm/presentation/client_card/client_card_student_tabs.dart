@@ -121,6 +121,7 @@ Widget _paymentsView(
   required ClientPaymentSubmit onSubmit,
   required ValueChanged<CommerceMovement> onAdjust,
   required void Function(CommerceMovement, ClientPaymentStatus) onTransition,
+  required ValueChanged<CommerceMovement> onCorrect,
   required ValueChanged<CommerceMovement> onReverse,
   required ValueChanged<CommerceMovement> onReverseAdjustment,
   required VoidCallback onCancelAdjustment,
@@ -309,6 +310,11 @@ Widget _paymentsView(
                 onTransition:
                     movement.kind == CommerceMovementKind.paymentRecord
                     ? (status) => onTransition(movement, status)
+                    : null,
+                onCorrect:
+                    movement.kind == CommerceMovementKind.paymentRecord &&
+                        movement.paymentRecordVersion != null
+                    ? () => onCorrect(movement)
                     : null,
                 onReverse:
                     movement.kind == CommerceMovementKind.paymentRecord &&
@@ -537,6 +543,7 @@ class _PaymentMovementRow extends StatelessWidget {
     required this.onOpen,
     this.onAdjust,
     this.onTransition,
+    this.onCorrect,
     this.onReverse,
     this.onReverseAdjustment,
     this.highlighted = false,
@@ -547,6 +554,7 @@ class _PaymentMovementRow extends StatelessWidget {
   final bool highlighted;
   final VoidCallback? onAdjust;
   final ValueChanged<ClientPaymentStatus>? onTransition;
+  final VoidCallback? onCorrect;
   final VoidCallback? onReverse;
   final VoidCallback? onReverseAdjustment;
 
@@ -640,6 +648,13 @@ class _PaymentMovementRow extends StatelessWidget {
               ),
           ],
           icon: const Icon(Icons.sync_alt_rounded),
+        ),
+      if (onCorrect != null)
+        IconButton(
+          key: ValueKey('correct-payment-${movement.id}'),
+          tooltip: 'Изменить и пересчитать оплату',
+          onPressed: onCorrect,
+          icon: const Icon(Icons.edit_note_rounded, color: AppColor.gold),
         ),
       if (onReverse != null)
         IconButton(

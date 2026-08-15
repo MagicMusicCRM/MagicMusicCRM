@@ -109,6 +109,7 @@ import { PaymentLifecycleRepository } from "./commerce/payment-lifecycle.reposit
 import { PaymentLifecycleService } from "./commerce/payment-lifecycle.service";
 import { PaymentReversalRepository } from "./commerce/payment-reversal.repository";
 import { PaymentReversalService } from "./commerce/payment-reversal.service";
+import { PaymentCorrectionService } from "./commerce/payment-correction.service";
 import { SchedulePlanRepository } from "./schedule/schedule-plan.repository";
 import { SchedulePlanService } from "./schedule/schedule-plan.service";
 import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-correction.service";
@@ -222,6 +223,7 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     PaymentLifecycleService,
     PaymentReversalRepository,
     PaymentReversalService,
+    PaymentCorrectionService,
     InstallmentDueWorker,
     SharedTaskRepository,
     SharedTaskService,

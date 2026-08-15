@@ -42,9 +42,11 @@ describe("SubscriptionsService", () => {
     results: { rows: Record<string, unknown>[] }[],
   ) => {
     const queued = [...results];
-    const query = jest.fn().mockImplementation(() =>
-      Promise.resolve(queued.shift() ?? { rows: [] }),
-    );
+    const query = jest
+      .fn()
+      .mockImplementation(() =>
+        Promise.resolve(queued.shift() ?? { rows: [] }),
+      );
     const transaction = jest.fn(
       async (work: (client: { query: typeof query }) => Promise<unknown>) =>
         work({ query }),
@@ -137,19 +139,23 @@ describe("SubscriptionsService", () => {
   it("issues a subscription from a package atomically with audit (P5b)", async () => {
     const { service, query, transaction, audit, policy, realtime } =
       createServiceWithQueryResults([
-      { rows: [{ id: "student-a" }] },
-      { rows: [{
-          id: "sub-a",
-          lessons_total: 8,
-          lessons_used: 0,
-          starts_at: "2026-06-22",
-          expires_at: "2026-08-21",
-          status: "active",
-          package_id: "pkg-a",
-          payment_id: "pay-a",
-        }] },
-      { rows: [{ user_id: "client-a" }] }, // active Client finance audience
-    ]);
+        { rows: [{ id: "student-a" }] },
+        {
+          rows: [
+            {
+              id: "sub-a",
+              lessons_total: 8,
+              lessons_used: 0,
+              starts_at: "2026-06-22",
+              expires_at: "2026-08-21",
+              status: "active",
+              package_id: "pkg-a",
+              payment_id: "pay-a",
+            },
+          ],
+        },
+        { rows: [{ user_id: "client-a" }] }, // active Client finance audience
+      ]);
 
     await expect(
       service.issueSubscription(actor, "student-a", { packageId: "pkg-a" }),
@@ -211,11 +217,11 @@ describe("SubscriptionsService", () => {
               name: "8 занятий",
               discipline_id: "discipline-a",
               branch_id: "branch-a",
-               lessons_total: "8",
-               price: "8000.00",
-               base_price_minor: "800000",
-               currency_code: "RUB",
-               version: "1",
+              lessons_total: "8",
+              price: "8000.00",
+              base_price_minor: "800000",
+              currency_code: "RUB",
+              version: "1",
               validity_days: 60,
               is_active: true,
               sort_order: 0,
@@ -271,6 +277,11 @@ describe("SubscriptionsService", () => {
             },
           ],
         },
+        { rows: [] }, // create canonical payment record
+        { rows: [] }, // link actual payment to canonical record
+        { rows: [] }, // append payment status event
+        { rows: [] }, // initialize payment and subscription aggregates
+        { rows: [] }, // append subscription lifecycle event
         {
           rows: [
             {
@@ -293,16 +304,10 @@ describe("SubscriptionsService", () => {
         },
         { rows: [{ user_id: "client-a" }] }, // student realtime audience
         {
-          rows: [
-            { user_id: "client-a" },
-            { user_id: "teacher-user" },
-          ],
+          rows: [{ user_id: "client-a" }, { user_id: "teacher-user" }],
         }, // converted lesson audience
         {
-          rows: [
-            { user_id: "client-a" },
-            { user_id: "teacher-user" },
-          ],
+          rows: [{ user_id: "client-a" }, { user_id: "teacher-user" }],
         }, // converted homework audience
         {
           rows: [{ user_id: "client-a" }],
@@ -348,6 +353,21 @@ describe("SubscriptionsService", () => {
     expect(
       query.mock.calls.some((call) =>
         String(call[0]).includes("conversion_lead_id"),
+      ),
+    ).toBe(true);
+    const subscriptionInsert = query.mock.calls.find((call) =>
+      String(call[0]).includes("insert into app.subscriptions"),
+    );
+    expect(String(subscriptionInsert?.[0])).toContain("payer_student_id");
+    expect(String(subscriptionInsert?.[0])).toContain("funding_mode");
+    expect(
+      query.mock.calls.some((call) =>
+        String(call[0]).includes("insert into app.client_payment_records"),
+      ),
+    ).toBe(true);
+    expect(
+      query.mock.calls.some((call) =>
+        String(call[0]).includes("commerce:issued-subscription"),
       ),
     ).toBe(true);
     expect(String(query.mock.calls[6][0])).toContain("updated_profile as");
@@ -402,37 +422,45 @@ describe("SubscriptionsService", () => {
           rows: [{ id: "student-a", lead_id: "lead-a" }],
         },
         {
-          rows: [{
-            id: "sub-a",
-            lessons_total: 8,
-            lessons_used: 0,
-            starts_at: "2026-07-18",
-            expires_at: "2026-09-16",
-            status: "active",
-            package_id: "pkg-a",
-            payment_id: "pay-a",
-          }],
+          rows: [
+            {
+              id: "sub-a",
+              lessons_total: 8,
+              lessons_used: 0,
+              starts_at: "2026-07-18",
+              expires_at: "2026-09-16",
+              status: "active",
+              package_id: "pkg-a",
+              payment_id: "pay-a",
+            },
+          ],
         },
         { rows: [] },
       ]);
 
     await expect(
       service.issueSubscription(actor, "student-a", { packageId: "pkg-a" }),
-    ).resolves.toEqual(expect.objectContaining({
-      id: "sub-a",
-      studentId: "student-a",
-      packageId: "pkg-a",
-      paymentId: "pay-a",
-    }));
+    ).resolves.toEqual(
+      expect.objectContaining({
+        id: "sub-a",
+        studentId: "student-a",
+        packageId: "pkg-a",
+        paymentId: "pay-a",
+      }),
+    );
     expect(transaction).toHaveBeenCalledTimes(1);
     expect(String(query.mock.calls[0][0])).toContain("select student.id");
     expect(String(query.mock.calls[0][0])).not.toContain("conversion_lead_id");
-    expect(String(query.mock.calls[1][0])).toContain("insert into app.payments");
-    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({
-      action: "crm.subscription_issued",
-      entityId: "student-a",
-      metadata: expect.objectContaining({ subscriptionId: "sub-a" }),
-    }));
+    expect(String(query.mock.calls[1][0])).toContain(
+      "insert into app.payments",
+    );
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "crm.subscription_issued",
+        entityId: "student-a",
+        metadata: expect.objectContaining({ subscriptionId: "sub-a" }),
+      }),
+    );
   });
 
   it("returns the original lead issuance on retry and rejects a different package", async () => {
@@ -564,5 +592,4 @@ describe("SubscriptionsService", () => {
       expect(sql).toContain("pay.deleted_at is null");
     });
   });
-
 });

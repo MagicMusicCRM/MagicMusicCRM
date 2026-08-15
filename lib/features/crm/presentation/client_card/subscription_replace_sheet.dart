@@ -30,8 +30,8 @@ Future<bool?> showSubscriptionReplacementSheet(
 }) {
   return showMagicSheet<bool>(
     context,
-    title: 'Подтвердите замену',
-    subtitle: 'Проверьте использование, будущие занятия и новый расчёт',
+    title: 'Подтвердите пересчёт',
+    subtitle: 'Проверьте занятия и финансовый результат',
     icon: Icons.swap_horiz_rounded,
     builder: (_) => SubscriptionReplacementForm(
       oldSubscription: oldSubscription,
@@ -104,7 +104,7 @@ class _SubscriptionReplacementFormState
     FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return false;
     if (!_confirmed) {
-      setState(() => _error = 'Подтвердите последствия замены.');
+      setState(() => _error = 'Подтвердите пересчёт абонемента.');
       return false;
     }
 
@@ -134,7 +134,7 @@ class _SubscriptionReplacementFormState
         _busy = false;
         _error = userErrorMessage(
           error,
-          fallback: 'Не удалось заменить абонемент.',
+          fallback: 'Не удалось пересчитать абонемент.',
         );
       });
       _exitController.setBusy(false);
@@ -191,7 +191,7 @@ class _SubscriptionReplacementFormState
               isExpanded: true,
               decoration: clientCardInputDecoration(
                 Theme.of(context).colorScheme,
-                label: 'Причина замены',
+                label: 'Причина пересчёта',
                 isDense: true,
               ),
               items: const [
@@ -235,7 +235,7 @@ class _SubscriptionReplacementFormState
                 activeColor: AppColor.gold,
                 checkColor: AppColor.onGold,
                 title: const Text(
-                  'Подтверждаю замену',
+                  'Подтверждаю изменение и пересчёт',
                   style: TextStyle(
                     color: AppColor.text,
                     fontSize: 13,
@@ -477,15 +477,15 @@ class _FinancialSummary extends StatelessWidget {
     final position = financial.resultingPosition;
     final (positionLabel, positionColor) = switch (position.kind) {
       SubscriptionFinancialPositionKind.debt => (
-        'Долг после замены',
+        'Долг после пересчёта',
         AppColor.danger,
       ),
       SubscriptionFinancialPositionKind.overpayment => (
-        'Переплата после замены',
+        'Переплата после пересчёта',
         AppColor.success,
       ),
       SubscriptionFinancialPositionKind.settled => (
-        'После замены',
+        'После пересчёта',
         AppColor.success,
       ),
     };
@@ -657,7 +657,7 @@ class _StableRetryNotice extends StatelessWidget {
       ),
       child: const Text(
         'Расчёт, причина и ключ операции зафиксированы. Повтор не создаст '
-        'вторую замену.',
+        'повторное изменение.',
         style: TextStyle(color: AppColor.text2, fontSize: 12),
       ),
     );

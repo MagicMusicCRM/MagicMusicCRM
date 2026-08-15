@@ -13,6 +13,7 @@ import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
 import { ActualPaymentService } from "./commerce/actual-payment.service";
 import { PaymentLifecycleService } from "./commerce/payment-lifecycle.service";
 import { PaymentReversalService } from "./commerce/payment-reversal.service";
+import { PaymentCorrectionService } from "./commerce/payment-correction.service";
 import { SubscriptionLifecycleService } from "./commerce/subscription-lifecycle.service";
 import { SubscriptionIssueService } from "./commerce/subscription-issue.service";
 import {
@@ -23,6 +24,8 @@ import {
 import { RecordActualPaymentDto } from "./dto/record-actual-payment.dto";
 import {
   CreatePaymentRecordDto,
+  CorrectPaymentDto,
+  PreviewPaymentCorrectionDto,
   PreviewPaymentReversalDto,
   ReversePaymentDto,
   TransitionPaymentRecordDto,
@@ -45,6 +48,7 @@ export class SubscriptionCommerceController {
     private readonly lifecycleService: SubscriptionLifecycleService,
     private readonly paymentLifecycle: PaymentLifecycleService,
     private readonly paymentReversal: PaymentReversalService,
+    private readonly paymentCorrection: PaymentCorrectionService,
   ) {}
 
   @Post(":studentId/subscriptions/issue")
@@ -68,12 +72,7 @@ export class SubscriptionCommerceController {
     @Param("paymentRecordId", ParseUUIDPipe) paymentRecordId: string,
     @Body() dto: PreviewPaymentReversalDto,
   ) {
-    return this.paymentReversal.preview(
-      actor,
-      studentId,
-      paymentRecordId,
-      dto,
-    );
+    return this.paymentReversal.preview(actor, studentId, paymentRecordId, dto);
   }
 
   @Post(":studentId/payment-records/:paymentRecordId/reversal")
@@ -86,6 +85,42 @@ export class SubscriptionCommerceController {
     @Body() dto: ReversePaymentDto,
   ) {
     return this.paymentReversal.reverse(
+      actor,
+      studentId,
+      paymentRecordId,
+      dto,
+      {
+        idempotencyKey: idempotencyKey ?? "",
+        requestId: requestId ?? "",
+      },
+    );
+  }
+
+  @Post(":studentId/payment-records/:paymentRecordId/correction/preview")
+  previewPaymentCorrection(
+    @CurrentActor() actor: ActorContext,
+    @Param("studentId", ParseUUIDPipe) studentId: string,
+    @Param("paymentRecordId", ParseUUIDPipe) paymentRecordId: string,
+    @Body() dto: PreviewPaymentCorrectionDto,
+  ) {
+    return this.paymentCorrection.preview(
+      actor,
+      studentId,
+      paymentRecordId,
+      dto,
+    );
+  }
+
+  @Post(":studentId/payment-records/:paymentRecordId/correction")
+  correctPayment(
+    @CurrentActor() actor: ActorContext,
+    @Param("studentId", ParseUUIDPipe) studentId: string,
+    @Param("paymentRecordId", ParseUUIDPipe) paymentRecordId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+    @Body() dto: CorrectPaymentDto,
+  ) {
+    return this.paymentCorrection.correct(
       actor,
       studentId,
       paymentRecordId,

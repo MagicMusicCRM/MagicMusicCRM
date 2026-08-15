@@ -705,7 +705,7 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
                               key: Key(
                                 'subscription-replace-${subscription.id}',
                               ),
-                              tooltip: 'Заменить абонемент',
+                              tooltip: 'Изменить и пересчитать абонемент',
                               onPressed:
                                   _replacingSubscription ||
                                       _cancellingSubscription

@@ -316,6 +316,15 @@ void main() {
       await tester.tap(find.text('Поступления и списания'));
       await tester.pumpAndSettle();
       expect(find.text('Проведён, ожидает подтверждения'), findsWidgets);
+      final reverseAction = tester
+          .widget<IconButton>(
+            find.byKey(
+              const ValueKey(
+                'reverse-payment-eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+              ),
+            ),
+          )
+          .onPressed!;
 
       await tester.tap(
         find.byKey(
@@ -337,13 +346,7 @@ void main() {
       expect(transition.data, containsPair('targetStatus', 'unpaid'));
       expect(transition.data, containsPair('reason', 'Банк отклонил перевод'));
 
-      await tester.tap(
-        find.byKey(
-          const ValueKey(
-            'reverse-payment-eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
-          ),
-        ),
-      );
+      reverseAction();
       await tester.pumpAndSettle();
       await tester.enterText(
         find.byKey(const Key('payment-reversal-reason')),
@@ -502,6 +505,153 @@ void main() {
         'confirm': true,
         'reason': 'Возврат оформлен ошибочно',
       });
+      await tester.pump(const Duration(seconds: 4));
+    },
+  );
+
+  testWidgets(
+    'assigned payment can be edited through preview and recalculation',
+    (tester) async {
+      tester.view.physicalSize = const Size(800, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      const paymentRecordId = '44444444-4444-4444-8444-444444444444';
+      final api = FakeCardApiClient(
+        role: 'admin',
+        student: _student,
+        studentAccounts: const [
+          {
+            'currencyCode': 'RUB',
+            'actualPaymentsMinor': '100000',
+            'adjustmentsMinor': '0',
+            'obligationDebitsMinor': '0',
+            'obligationCreditsMinor': '0',
+            'writeOffsMinor': '0',
+            'balanceMinor': '100000',
+            'debtMinor': '0',
+          },
+        ],
+        studentMovements: const [
+          {
+            'id': paymentRecordId,
+            'kind': 'payment_record',
+            'direction': 'credit',
+            'amountMinor': '100000',
+            'currencyCode': 'RUB',
+            'occurredAt': '2026-08-10T09:00:00.000Z',
+            'dueAt': '2026-08-10T09:00:00.000Z',
+            'method': 'cashless',
+            'branchId': 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            'branchName': 'Сокол',
+            'comment': 'Исходная запись',
+            'invoiceIdentifier': 'ЧЕК-1',
+            'status': 'paid',
+            'paymentRecordVersion': 2,
+          },
+        ],
+        paymentCorrectionPreview: const {
+          'paymentRecordId': paymentRecordId,
+          'expectedVersion': 2,
+          'currencyCode': 'RUB',
+          'before': {
+            'amountMinor': '100000',
+            'status': 'paid',
+            'dueAt': '2026-08-10T09:00:00.000Z',
+            'method': 'cashless',
+            'externalIdentifier': 'ЧЕК-1',
+            'occurredAt': '2026-08-10T09:00:00.000Z',
+            'branchId': 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            'verificationNote': 'Исходная запись',
+          },
+          'after': {
+            'amountMinor': '125000',
+            'status': 'paid',
+            'dueAt': '2026-08-15T09:00:00.000Z',
+            'method': 'cashless',
+            'externalIdentifier': 'ЧЕК-2',
+            'occurredAt': '2026-08-15T09:00:00.000Z',
+            'branchId': 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            'verificationNote': 'Исправленная запись',
+          },
+          'walletDeltaMinor': '25000',
+          'walletBalanceMinor': '100000',
+          'resultingBalanceMinor': '125000',
+          'negativeBalanceWarning': false,
+          'previewToken': 'payment-correction-preview',
+          'expiresAt': '2026-08-15T12:05:00.000Z',
+        },
+      );
+      await pumpClientCard(
+        tester,
+        api: api,
+        seed: _student,
+        entityType: 'student',
+      );
+
+      await tester.tap(find.text('Оплаты'));
+      await tester.pumpAndSettle();
+      final scrollable = tester.state<ScrollableState>(
+        find.descendant(
+          of: find.byKey(const Key('client-payments-tab')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      scrollable.position.jumpTo(scrollable.position.maxScrollExtent);
+      await tester.pump();
+      await tester.tap(find.text('Поступления и списания'));
+      await tester.pumpAndSettle();
+      tester
+          .widget<IconButton>(
+            find.byKey(ValueKey('correct-payment-$paymentRecordId')),
+          )
+          .onPressed!();
+      await tester.pumpAndSettle();
+      expect(find.text('Изменить оплату'), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const Key('payment-correction-amount')),
+        '1250',
+      );
+      await tester.enterText(
+        find.byKey(const Key('payment-correction-invoice')),
+        'ЧЕК-2',
+      );
+      await tester.enterText(
+        find.byKey(const Key('payment-correction-comment')),
+        'Исправленная запись',
+      );
+      tester
+          .widget<FilledButton>(
+            find.byKey(const Key('payment-correction-preview')),
+          )
+          .onPressed!();
+      await tester.pumpAndSettle();
+
+      final previewCall = api.postRequests.singleWhere(
+        (item) => item.path.endsWith('/correction/preview'),
+      );
+      expect(previewCall.data['expectedVersion'], 2);
+      expect(previewCall.data['amountMinor'], '125000');
+      expect(find.text('Подтвердите исправление'), findsOneWidget);
+      tester
+          .widget<CheckboxListTile>(
+            find.byKey(const Key('payment-correction-confirm')),
+          )
+          .onChanged!(true);
+      await tester.pump();
+      tester
+          .widget<FilledButton>(
+            find.byKey(const Key('payment-correction-commit')),
+          )
+          .onPressed!();
+      await tester.pumpAndSettle();
+
+      final commit = api.idempotentRequests.singleWhere(
+        (item) => item.path.endsWith('/correction'),
+      );
+      expect(commit.data['previewToken'], 'payment-correction-preview');
+      expect(commit.data['confirm'], true);
+      expect(commit.data['reason'], 'Исправление данных оплаты');
       await tester.pump(const Duration(seconds: 4));
     },
   );

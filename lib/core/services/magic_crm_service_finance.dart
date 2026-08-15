@@ -330,6 +330,137 @@ class PaymentReversalPreview {
   }
 }
 
+class PaymentCorrectionInput {
+  const PaymentCorrectionInput({
+    required this.expectedVersion,
+    required this.amountMinor,
+    required this.status,
+    this.dueAt,
+    this.method,
+    this.externalIdentifier,
+    this.occurredAt,
+    this.branchId,
+    this.verificationNote,
+  });
+
+  final int expectedVersion;
+  final BigInt amountMinor;
+  final ClientPaymentStatus status;
+  final DateTime? dueAt;
+  final SubscriptionPaymentMethod? method;
+  final String? externalIdentifier;
+  final DateTime? occurredAt;
+  final String? branchId;
+  final String? verificationNote;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'expectedVersion': expectedVersion,
+    'amountMinor': amountMinor.toString(),
+    'status': status.apiValue,
+    if (dueAt != null) 'dueAt': dueAt!.toUtc().toIso8601String(),
+    if (method != null) 'method': method!.apiValue,
+    if (externalIdentifier?.trim().isNotEmpty == true)
+      'externalIdentifier': externalIdentifier!.trim(),
+    if (occurredAt != null) 'occurredAt': occurredAt!.toUtc().toIso8601String(),
+    if (branchId != null) 'branchId': branchId,
+    if (verificationNote?.trim().isNotEmpty == true)
+      'verificationNote': verificationNote!.trim(),
+  };
+}
+
+class PaymentCorrectionValues {
+  const PaymentCorrectionValues({
+    required this.amountMinor,
+    required this.status,
+    required this.dueAt,
+    required this.method,
+    required this.externalIdentifier,
+    required this.occurredAt,
+    required this.branchId,
+    required this.verificationNote,
+  });
+
+  final BigInt amountMinor;
+  final ClientPaymentStatus status;
+  final DateTime? dueAt;
+  final SubscriptionPaymentMethod? method;
+  final String? externalIdentifier;
+  final DateTime? occurredAt;
+  final String? branchId;
+  final String? verificationNote;
+
+  factory PaymentCorrectionValues.fromJson(Map<String, dynamic> json) {
+    return PaymentCorrectionValues(
+      amountMinor: _replacementMinor(json['amountMinor']),
+      status: ClientPaymentStatus.values.firstWhere(
+        (item) => item.apiValue == json['status'],
+      ),
+      dueAt: json['dueAt'] == null
+          ? null
+          : DateTime.parse(json['dueAt'].toString()),
+      method: json['method'] == null
+          ? null
+          : SubscriptionPaymentMethod.values.firstWhere(
+              (item) => item.apiValue == json['method'],
+            ),
+      externalIdentifier: json['externalIdentifier']?.toString(),
+      occurredAt: json['occurredAt'] == null
+          ? null
+          : DateTime.parse(json['occurredAt'].toString()),
+      branchId: json['branchId']?.toString(),
+      verificationNote: json['verificationNote']?.toString(),
+    );
+  }
+}
+
+class PaymentCorrectionPreview {
+  const PaymentCorrectionPreview({
+    required this.paymentRecordId,
+    required this.expectedVersion,
+    required this.currencyCode,
+    required this.before,
+    required this.after,
+    required this.walletDeltaMinor,
+    required this.walletBalanceMinor,
+    required this.resultingBalanceMinor,
+    required this.negativeBalanceWarning,
+    required this.previewToken,
+    required this.expiresAt,
+  });
+
+  final String paymentRecordId;
+  final int expectedVersion;
+  final String currencyCode;
+  final PaymentCorrectionValues before;
+  final PaymentCorrectionValues after;
+  final BigInt walletDeltaMinor;
+  final BigInt walletBalanceMinor;
+  final BigInt resultingBalanceMinor;
+  final bool negativeBalanceWarning;
+  final String previewToken;
+  final DateTime expiresAt;
+
+  factory PaymentCorrectionPreview.fromJson(Map<String, dynamic> json) {
+    return PaymentCorrectionPreview(
+      paymentRecordId: json['paymentRecordId'].toString(),
+      expectedVersion: _replacementInt(json['expectedVersion']),
+      currencyCode: json['currencyCode'].toString(),
+      before: PaymentCorrectionValues.fromJson(
+        Map<String, dynamic>.from(json['before'] as Map),
+      ),
+      after: PaymentCorrectionValues.fromJson(
+        Map<String, dynamic>.from(json['after'] as Map),
+      ),
+      walletDeltaMinor: _replacementMinor(json['walletDeltaMinor']),
+      walletBalanceMinor: _replacementMinor(json['walletBalanceMinor']),
+      resultingBalanceMinor: _replacementMinor(json['resultingBalanceMinor']),
+      negativeBalanceWarning: json['negativeBalanceWarning'] == true,
+      previewToken: json['previewToken'].toString(),
+      expiresAt: DateTime.parse(json['expiresAt'].toString()),
+    );
+  }
+}
+
 class AccountAdjustmentReversalPreview {
   const AccountAdjustmentReversalPreview({
     required this.adjustmentId,
@@ -1502,6 +1633,37 @@ extension MagicCrmFinance on MagicCrmService {
       data: <String, dynamic>{'expectedVersion': expectedVersion},
     );
     return PaymentReversalPreview.fromJson(response);
+  }
+
+  Future<PaymentCorrectionPreview> previewClientPaymentCorrection(
+    String studentId, {
+    required String paymentRecordId,
+    required PaymentCorrectionInput input,
+  }) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/crm/students/$studentId/payment-records/'
+      '$paymentRecordId/correction/preview',
+      data: input.toJson(),
+    );
+    return PaymentCorrectionPreview.fromJson(response);
+  }
+
+  Future<Map<String, dynamic>> correctClientPayment(
+    String studentId, {
+    required String paymentRecordId,
+    required PaymentCorrectionPreview preview,
+    required String reason,
+    required MagicMutationIdentity identity,
+  }) {
+    return _api.postIdempotent<Map<String, dynamic>>(
+      '/crm/students/$studentId/payment-records/$paymentRecordId/correction',
+      identity: identity,
+      data: <String, dynamic>{
+        'previewToken': preview.previewToken,
+        'confirm': true,
+        'reason': reason.trim(),
+      },
+    );
   }
 
   Future<Map<String, dynamic>> reverseClientPayment(
