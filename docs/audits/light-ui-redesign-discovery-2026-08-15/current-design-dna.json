@@ -1,0 +1,376 @@
+{
+  "meta": {
+    "name": "MagicMusicCRM Current Dark UI",
+    "description": "Текущая дизайн-ДНК рабочего Flutter-интерфейса до проектирования светлой темы.",
+    "source_references": [
+      "lib/core/theme/design_tokens.dart",
+      "lib/core/theme/app_theme.dart",
+      "lib/core/widgets/v7/",
+      "lib/core/workspace/production_workspace_host.dart",
+      "screenshots/client-android-persona-subscription.png",
+      "screenshots/teacher-android-persona-schedule.png",
+      "screenshots/admin-windows-persona-tasks.png",
+      "screenshots/director-windows-persona-analytics.png",
+      "screenshots/director-windows-persona-settings.png"
+    ],
+    "created_at": "2026-08-15"
+  },
+  "design_system": {
+    "color": {
+      "palette_type": "нейтральная тёмная палитра с золотым брендом и холодными рабочими акцентами",
+      "primary": {
+        "hex": "#C9A85E",
+        "role": "бренд, выбранная навигация, редкие акценты и действия"
+      },
+      "secondary": {
+        "hex": "#3B82F6",
+        "role": "основные рабочие действия, ссылки и фокус полей"
+      },
+      "accent": {
+        "hex": "#14B8A6",
+        "role": "перевод лида, синхронизация и служебные процессы"
+      },
+      "neutral": {
+        "scale": [
+          "#F1F3F5",
+          "#E8EAED",
+          "#AAB2BF",
+          "#3A414C",
+          "#313741",
+          "#20242B",
+          "#181B20",
+          "#14161A",
+          "#101114"
+        ],
+        "usage": "светлые значения для текста, средние для границ и приглушённых состояний, тёмные для фона и поверхностей"
+      },
+      "semantic": {
+        "success": "#22C55E",
+        "warning": "#F59E0B",
+        "error": "#EF4444",
+        "info": "#8B5CF6"
+      },
+      "surface": {
+        "background": "#101114",
+        "card": "#181B20",
+        "elevated": "#20242B"
+      },
+      "contrast_strategy": "светлый текст на глубоких нейтральных поверхностях, цвет используется для статуса и выбранного состояния"
+    },
+    "typography": {
+      "type_scale": {
+        "display": {
+          "size": "32px",
+          "weight": "700",
+          "line_height": "40px",
+          "tracking": "-0.4px"
+        },
+        "heading_1": {
+          "size": "28px",
+          "weight": "700",
+          "line_height": "34px",
+          "tracking": "-0.3px"
+        },
+        "heading_2": {
+          "size": "24px",
+          "weight": "700",
+          "line_height": "30px",
+          "tracking": "-0.2px"
+        },
+        "heading_3": {
+          "size": "20px",
+          "weight": "600",
+          "line_height": "26px",
+          "tracking": "-0.1px"
+        },
+        "body": {
+          "size": "16px",
+          "weight": "400",
+          "line_height": "22px",
+          "tracking": "0px"
+        },
+        "body_small": {
+          "size": "14px",
+          "weight": "400",
+          "line_height": "20px",
+          "tracking": "0px"
+        },
+        "caption": {
+          "size": "12px",
+          "weight": "500",
+          "line_height": "16px",
+          "tracking": "0px"
+        },
+        "overline": {
+          "size": "11px",
+          "weight": "600",
+          "line_height": "14px",
+          "tracking": "0.2px"
+        }
+      },
+      "font_families": {
+        "heading": "Inter",
+        "body": "Inter",
+        "mono": "платформенный моноширинный шрифт"
+      },
+      "font_style_notes": "геометрический нейтральный гротеск; много локальных размеров и жирностей поверх Material 3"
+    },
+    "spacing": {
+      "base_unit": "4px",
+      "scale": ["4px", "8px", "12px", "16px", "20px", "24px"],
+      "content_density": "смешанная: компактная навигация и таблицы, комфортные карточки и формы",
+      "section_rhythm": "обычно 12-24px, но длинные рабочие поверхности используют локальные значения"
+    },
+    "layout": {
+      "grid_system": "адаптивная ролевая оболочка, левый rail, верхние рабочие вкладки и контентные сетки",
+      "max_content_width": "1440px в карточке клиента, 760-900px в клиентских и формовых поверхностях",
+      "columns": "от одной колонки на телефоне до боковой навигации и 2-3 контентных колонок на компьютере",
+      "gutter": "16-24px",
+      "breakpoints": ["840px для основной оболочки", "900px для настроек", "локальные пороги контентных сеток"],
+      "alignment_tendency": "строгая левая сетка с локально центрированными пустыми состояниями"
+    },
+    "shape": {
+      "border_radius": {
+        "small": "6px",
+        "medium": "10px",
+        "large": "14px",
+        "pill": "999px"
+      },
+      "border_usage": "тонкие нейтральные границы у таблиц, карточек, сегментов и навигации",
+      "divider_style": "1px #313741 или outlineVariant"
+    },
+    "elevation": {
+      "shadow_style": "почти плоский интерфейс, мягкие тени только у плавающих элементов",
+      "levels": {
+        "low": "0 1px 2px rgba(0,0,0,0.4)",
+        "medium": "0 8px 24px rgba(0,0,0,0.45)",
+        "high": "0 18px 44px rgba(0,0,0,0.55)"
+      },
+      "depth_cues": "разница нейтральных поверхностей, границы и редкие тени"
+    },
+    "iconography": {
+      "style": "Material Rounded и Outlined",
+      "stroke_weight": "примерно 1.5-2px",
+      "size_scale": ["16px", "18px", "20px", "24px", "64px для пустых состояний"],
+      "preferred_set": "Flutter Material Icons"
+    },
+    "motion": {
+      "easing": "cubic-bezier(0.22, 1, 0.36, 1)",
+      "duration_scale": {
+        "micro": "160ms",
+        "normal": "240ms",
+        "macro": "300ms"
+      },
+      "entrance_pattern": "короткое появление меню, листов и плавающих уведомлений",
+      "exit_pattern": "симметричное затухание или платформенный переход Material",
+      "philosophy": "минимальная функциональная анимация с отключением через системную настройку"
+    },
+    "components": {
+      "button_style": "FilledButton преимущественно синий, TextButton синий, выбранные и брендовые действия иногда золотые",
+      "input_style": "заполненный тёмный фон, радиус 22px в общей теме, синий контур фокуса",
+      "card_style": "плоская тёмная поверхность, радиус 14px, иногда тонкая граница",
+      "navigation_pattern": "левый rail на компьютере, нижняя панель на телефоне, верхние рабочие вкладки и вложенные TabBar или SegmentedButton",
+      "modal_style": "диалог 16px или адаптивный нижний лист 18px, затемнение #990A0B0D",
+      "list_style": "ListTile, карточки строк, канбан-колонки и таблицы с тонкими разделителями",
+      "component_notes": "есть зрелая библиотека v7, но Telegram, профиль и ряд функциональных модулей сохраняют локальные решения"
+    }
+  },
+  "design_style": {
+    "aesthetic": {
+      "mood": ["сдержанный", "операционный", "профессиональный", "тёмный", "премиальный"],
+      "visual_metaphor": "настольная рабочая консоль музыкальной школы",
+      "era_influence": "современный Material 3 и Telegram-подобные коммуникации",
+      "genre": "тёмная корпоративная SaaS CRM",
+      "personality_traits": ["серьёзный", "функциональный", "надёжный", "плотный"],
+      "adjectives": ["графитовый", "золотой", "плоский", "модульный", "адаптивный"]
+    },
+    "visual_language": {
+      "complexity": "богатая",
+      "ornamentation": "минимальная с золотыми акцентами",
+      "whitespace_usage": "неравномерное: плотные панели управления и большие пустые области",
+      "visual_weight_distribution": "высокий вес у навигации, заголовков и одинаково тёмных секционных карточек",
+      "focal_strategy": "распределённый интерес между навигацией, фильтрами и рабочим содержимым",
+      "contrast_level": "высокий для основного текста, средний для вторичных подписей и границ",
+      "texture_usage": "без текстур"
+    },
+    "composition": {
+      "hierarchy_method": "типографика, цвет выбранного состояния, секционные карточки и вложенные панели",
+      "balance_type": "асимметричная рабочая сетка",
+      "flow_direction": "слева направо через навигацию, затем сверху вниз по рабочему содержимому",
+      "grouping_strategy": "контейнеры, карточки, сегменты, вкладки и тонкие разделители",
+      "negative_space_role": "разделяет крупные зоны, но в пустых состояниях иногда становится избыточным"
+    },
+    "imagery": {
+      "photo_treatment": "фото профиля в круглой маске",
+      "illustration_style": "иллюстрации почти не используются",
+      "graphic_elements": "Material-иконки, аватары с инициалами, статусные точки и небольшие логотипы",
+      "pattern_usage": "отсутствует",
+      "image_shape": "круглые аватары и прямоугольные вложения с радиусом"
+    },
+    "interaction_feel": {
+      "feedback_style": "снэкбары, цвет выбранного состояния, счётчики и диалоги подтверждения",
+      "hover_behavior": "сдержанная подсветка строк, меню и кнопок",
+      "transition_personality": "быстрая и спокойная",
+      "loading_style": "скелетоны, shimmer и круговые индикаторы",
+      "microinteraction_density": "средняя"
+    },
+    "brand_voice_in_ui": {
+      "tone": "прямой и понятный русский",
+      "formality": "деловой без канцелярита",
+      "cta_style": "короткий глагол действия",
+      "empty_state_approach": "иконка, короткий заголовок, пояснение и иногда повтор или создание",
+      "error_tone": "спокойное объяснение и понятное восстановление"
+    }
+  },
+  "visual_effects": {
+    "overview": {
+      "effect_intensity": "subtle-accent",
+      "performance_tier": "lightweight",
+      "fallback_strategy": "нулевая длительность при отключённых системных анимациях",
+      "primary_technology": "Flutter Material animation"
+    },
+    "background_effects": {
+      "type": "none",
+      "description": "однотонные нейтральные фоны",
+      "technology": "Flutter BoxDecoration",
+      "params": {
+        "color_palette": ["#101114", "#181B20", "#20242B"],
+        "speed": "0",
+        "density": "0",
+        "opacity": "1",
+        "blend_mode": "normal"
+      }
+    },
+    "particle_systems": {
+      "enabled": false,
+      "type": "none",
+      "description": "частицы отсутствуют",
+      "technology": "none",
+      "params": {
+        "count": "0",
+        "shape": "none",
+        "size_range": "0",
+        "movement_pattern": "none",
+        "color_behavior": "none",
+        "interaction": "none",
+        "spawn_area": "none"
+      }
+    },
+    "3d_elements": {
+      "enabled": false,
+      "type": "none",
+      "description": "трёхмерные элементы отсутствуют",
+      "technology": "none",
+      "params": {
+        "renderer": "none",
+        "lighting": "none",
+        "camera": "none",
+        "materials": "none",
+        "geometry": "none",
+        "post_processing": [],
+        "interaction_model": "none"
+      }
+    },
+    "shader_effects": {
+      "enabled": false,
+      "type": "none",
+      "description": "пользовательские шейдеры отсутствуют",
+      "technology": "none",
+      "params": {
+        "uniforms": {},
+        "vertex_manipulation": "none",
+        "fragment_output": "none",
+        "noise_type": "none",
+        "distortion": "none"
+      }
+    },
+    "scroll_effects": {
+      "parallax": {
+        "enabled": false,
+        "layers": "0",
+        "depth_range": "0",
+        "speed_curve": "none"
+      },
+      "scroll_triggered_animations": {
+        "enabled": false,
+        "trigger_points": [],
+        "animation_type": "none",
+        "scrub_behavior": "none"
+      },
+      "scroll_morphing": {
+        "enabled": false,
+        "description": "морфинг при прокрутке отсутствует"
+      }
+    },
+    "text_effects": {
+      "type": "none",
+      "description": "текст статичен",
+      "technology": "Flutter Text",
+      "params": {
+        "split_strategy": "none",
+        "animation_per_unit": "none",
+        "stagger": "0",
+        "effect_style": "none"
+      }
+    },
+    "cursor_effects": {
+      "enabled": false,
+      "type": "none",
+      "description": "кастомный курсор отсутствует",
+      "params": {
+        "shape": "system",
+        "size": "system",
+        "blend_mode": "normal",
+        "trail": "none",
+        "interaction_zone": "none"
+      }
+    },
+    "image_effects": {
+      "type": "none",
+      "description": "фото и вложения используют обычное масштабирование и обрезку",
+      "technology": "Flutter Image",
+      "params": {
+        "filter_pipeline": [],
+        "hover_transform": "none",
+        "reveal_animation": "none",
+        "distortion_type": "none"
+      }
+    },
+    "glassmorphism_neumorphism": {
+      "enabled": false,
+      "style": "none",
+      "params": {
+        "blur_radius": "0",
+        "transparency": "0",
+        "border_treatment": "solid neutral hairline",
+        "shadow_type": "soft floating chrome only",
+        "light_source_angle": "none"
+      }
+    },
+    "canvas_drawings": {
+      "enabled": false,
+      "type": "none",
+      "description": "процедурные рисунки отсутствуют",
+      "technology": "none",
+      "params": {
+        "draw_method": "none",
+        "animation_loop": "none",
+        "color_scheme": [],
+        "responsiveness": "none",
+        "interaction": "none"
+      }
+    },
+    "svg_animations": {
+      "enabled": false,
+      "type": "none",
+      "description": "анимированные SVG отсутствуют",
+      "params": {
+        "animation_method": "none",
+        "path_morphing": "none",
+        "stroke_animation": "none",
+        "filter_effects": "none"
+      }
+    },
+    "composite_notes": "Интерфейс намеренно избегает тяжёлых декоративных эффектов. Визуальная сложность возникает из вложенных рабочих поверхностей, а не из рендеринга."
+  }
+}
