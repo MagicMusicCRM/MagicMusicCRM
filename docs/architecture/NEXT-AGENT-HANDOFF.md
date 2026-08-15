@@ -16,6 +16,21 @@ analyze/full suite, Windows portable/Setup, Android API 35 update/cold launch,
 переключены на build `192`, GitHub Release `v1.5.12` опубликован. Evidence:
 `docs/audits/v7-production-client-rollout-192.md`.
 
+После build `192` локально доработан Windows-контур обновлений, но production
+ещё не менялся. Корневая причина задержки подтверждена: клиент проверял
+манифест только один раз через четыре секунды после запуска. Теперь локальный
+кандидат дополнительно проверяет его при возврате в приложение и каждые 15
+минут, не открывает повторно один и тот же prompt и поддерживает ручную
+проверку. На desktop глобально видна версия; по нажатию открывается русский
+раздел «Обновления» с 32 опубликованными версиями и offline fallback. При
+доступной новой сборке на версии появляется золотая точка; отдельного
+индикатора справа сверху нет. Release
+publisher требует текущую запись в `assets/release_history.json`, публикует
+`release-history.json` до manifests и не допускает пустые notes. Targeted
+Flutter, полный suite `826/826`, analyze и PowerShell syntax PASS. Следующий
+release должен получить новый version/build; build `192` повторно публиковать
+нельзя.
+
 Release `1.5.11+191` доставил единый Schedule Analyzer для постоянных планов и
 одиночных занятий: проверки teacher/room/student/group/branch, группировку
 конфликтов, ранжированные room/time/teacher/combined предложения и Conflict

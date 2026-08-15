@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'update_center.dart';
 import 'windows_update_coordinator.dart';
 import 'windows_update_service.dart';
 
@@ -16,6 +18,7 @@ Future<void> checkAndPromptWindowsUpdate({
   required String manifestUrl,
   WindowsUpdateService? service,
   void Function(UpdateManifest manifest)? onUpdateAvailable,
+  bool Function(UpdateManifest manifest)? shouldPrompt,
 }) async {
   final svc = service ?? WindowsUpdateService(manifestUrl: manifestUrl);
   if (!svc.isSupported) return;
@@ -26,6 +29,8 @@ Future<void> checkAndPromptWindowsUpdate({
   // Keep the update reachable even when the dialog below is dismissed —
   // the app overlay shows a persistent «Обновить» button off this hook.
   onUpdateAvailable?.call(manifest);
+
+  if (shouldPrompt != null && !shouldPrompt(manifest)) return;
 
   final ctx = navigatorKey.currentContext;
   if (ctx == null || !ctx.mounted) return;
@@ -183,49 +188,112 @@ Future<void> _showWindowsUpdateDialog(
 /// Global, route-independent update affordance. It wraps the MaterialApp's
 /// routed child, so it remains visible on login, client, teacher and CRM screens
 /// instead of being tied to one desktop navigation rail.
-class WindowsUpdateOverlay extends StatelessWidget {
+class WindowsUpdateOverlay extends StatefulWidget {
   const WindowsUpdateOverlay({
     super.key,
     required this.child,
     required this.manifest,
-    required this.onPressed,
-    this.flowActive = false,
+    required this.onVersionPressed,
+    required this.navigatorKey,
   });
 
   final Widget child;
   final UpdateManifest? manifest;
-  final VoidCallback onPressed;
-  final bool flowActive;
+  final VoidCallback onVersionPressed;
+  final GlobalKey<NavigatorState> navigatorKey;
 
   @override
-  Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        child,
-        if (manifest != null && !flowActive)
-          Positioned(
-            top: 0,
-            right: 0,
-            child: SafeArea(
-              minimum: const EdgeInsets.all(AppSpace.md),
-              child: Material(
-                color: Colors.transparent,
-                child: FilledButton.icon(
-                  key: const ValueKey('windows-update-indicator'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColor.gold,
-                    foregroundColor: AppColor.onGold,
-                    elevation: 4,
+  State<WindowsUpdateOverlay> createState() => _WindowsUpdateOverlayState();
+}
+
+class _WindowsUpdateOverlayState extends State<WindowsUpdateOverlay> {
+  OverlayEntry? _entry;
+  OverlayState? _overlay;
+  bool _syncScheduled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleOverlaySync();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _scheduleOverlaySync();
+  }
+
+  @override
+  void didUpdateWidget(covariant WindowsUpdateOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _scheduleOverlaySync();
+  }
+
+  void _scheduleOverlaySync() {
+    if (_syncScheduled) return;
+    _syncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _syncScheduled = false;
+      if (!mounted) return;
+      final nextOverlay = widget.navigatorKey.currentState?.overlay;
+      if (nextOverlay == null) {
+        Future<void>.delayed(const Duration(milliseconds: 100), () {
+          if (mounted) _scheduleOverlaySync();
+        });
+        return;
+      }
+      if (!identical(_overlay, nextOverlay)) {
+        _removeEntry();
+        _entry = OverlayEntry(builder: _buildOverlay);
+        _overlay = nextOverlay;
+        nextOverlay.insert(_entry!);
+      } else {
+        _entry?.markNeedsBuild();
+      }
+    });
+  }
+
+  Widget _buildOverlay(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final showVersion = Platform.isWindows && constraints.maxWidth >= 840;
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            if (showVersion)
+              Positioned(
+                left: 7,
+                bottom: 7,
+                child: SafeArea(
+                  minimum: const EdgeInsets.all(AppSpace.xs),
+                  child: AppVersionButton(
+                    hasUpdate: widget.manifest != null,
+                    onPressed: widget.onVersionPressed,
                   ),
-                  onPressed: onPressed,
-                  icon: const Icon(Icons.system_update_alt_rounded, size: 18),
-                  label: Text('Обновить ${manifest!.version}'),
                 ),
               ),
-            ),
-          ),
-      ],
+          ],
+        );
+      },
     );
   }
+
+  void _removeEntry() {
+    final entry = _entry;
+    if (entry != null) {
+      entry.remove();
+      entry.dispose();
+    }
+    _entry = null;
+    _overlay = null;
+  }
+
+  @override
+  void dispose() {
+    _removeEntry();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

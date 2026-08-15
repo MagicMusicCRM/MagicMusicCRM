@@ -64,28 +64,34 @@ class V7NavShell extends StatelessWidget {
       ),
       child: SafeArea(
         right: false,
-        child: SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 0),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              child: Column(
-                children: [
-                  _brand(),
-                  const SizedBox(height: 8),
-                  for (var i = 0; i < destinations.length; i++) ...[
-                    if (i > 0) const SizedBox(height: 6),
-                    _RailItem(
-                      destination: destinations[i],
-                      selected: i == selectedIndex,
-                      isDark: isDark,
-                      onTap: () => onSelected(i),
-                    ),
-                  ],
-                ],
+        child: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  child: Column(
+                    children: [
+                      _brand(),
+                      const SizedBox(height: 8),
+                      for (var i = 0; i < destinations.length; i++) ...[
+                        if (i > 0) const SizedBox(height: 6),
+                        _RailItem(
+                          destination: destinations[i],
+                          selected: i == selectedIndex,
+                          isDark: isDark,
+                          onTap: () => onSelected(i),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               ),
             ),
-          ),
+            // Reserved for the global version action rendered above the root
+            // Navigator overlay, so it never covers the last destination.
+            const SizedBox(height: 52),
+          ],
         ),
       ),
     );
@@ -104,8 +110,7 @@ class V7NavShell extends StatelessWidget {
     // v7 tabbar(): >5 destinations → 4 primary + «Ещё»; otherwise show all.
     final hasOverflow = destinations.length > 5;
     final primaryCount = hasOverflow ? 4 : destinations.length;
-    final overflowActive =
-        hasOverflow && selectedIndex >= primaryCount;
+    final overflowActive = hasOverflow && selectedIndex >= primaryCount;
 
     return Container(
       decoration: BoxDecoration(
@@ -223,13 +228,14 @@ class _RailItem extends StatelessWidget {
                   textAlign: TextAlign.center,
                   // Clamp scaling so big system fonts don't blow up the tiny
                   // 9.5px label out of the fixed-height rail item.
-                  textScaler: MediaQuery.textScalerOf(context)
-                      .clamp(maxScaleFactor: 1.2),
+                  textScaler: MediaQuery.textScalerOf(
+                    context,
+                  ).clamp(maxScaleFactor: 1.2),
                   style: TextStyle(
                     color: selected
                         ? (isDark
-                            ? AppColor.text
-                            : TelegramColors.lightTextPrimary)
+                              ? AppColor.text
+                              : TelegramColors.lightTextPrimary)
                         : idle,
                     fontSize: 9.5,
                     fontWeight: FontWeight.w600,
@@ -289,8 +295,9 @@ class _BarTab extends StatelessWidget {
                 textAlign: TextAlign.center,
                 // Clamp scaling so big system fonts don't overflow the fixed
                 // 62px bottom-bar height.
-                textScaler:
-                    MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.2),
+                textScaler: MediaQuery.textScalerOf(
+                  context,
+                ).clamp(maxScaleFactor: 1.2),
                 style: TextStyle(
                   color: fg,
                   fontSize: 10,

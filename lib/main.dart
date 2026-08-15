@@ -9,6 +9,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:magic_music_crm/core/constants/env.dart';
 import 'package:magic_music_crm/core/router/app_router.dart';
+import 'package:magic_music_crm/core/update/update_check_gate.dart';
+import 'package:magic_music_crm/core/update/update_center.dart';
 import 'package:magic_music_crm/core/update/update_prompt.dart';
 import 'package:magic_music_crm/core/update/update_provider.dart';
 import 'package:magic_music_crm/core/update/windows_update_service.dart';
@@ -87,13 +89,7 @@ Future<void> warmApiConnection([Future<void> Function()? probe]) async {
 /// install safely; build 144 is the one-time manual bridge to this v2 channel.
 /// served as static files by the same Caddy that fronts the API.
 String _windowsUpdateManifestUrl() {
-  final base = Uri.parse(Env.magicApiBaseUrl);
-  return Uri(
-    scheme: base.scheme.isEmpty ? 'https' : base.scheme,
-    host: base.host,
-    port: base.hasPort ? base.port : null,
-    path: windowsUpdateManifestPath,
-  ).toString();
+  return windowsUpdateManifestUrlForApi(Env.magicApiBaseUrl);
 }
 
 Future<void> _initializeFirebase() async {
@@ -120,6 +116,13 @@ class MagicMusicApp extends ConsumerStatefulWidget {
 
 class _MagicMusicAppState extends ConsumerState<MagicMusicApp>
     with WidgetsBindingObserver {
+  static const _updatePollingInterval = Duration(minutes: 15);
+
+  final WindowsUpdateCheckGate _updateCheckGate = WindowsUpdateCheckGate();
+  Timer? _initialUpdateTimer;
+  Timer? _periodicUpdateTimer;
+  int? _lastPromptedUpdateBuild;
+
   @override
   void initState() {
     super.initState();
@@ -143,24 +146,41 @@ class _MagicMusicAppState extends ConsumerState<MagicMusicApp>
           (e) => debugPrint('Notification service init error: $e'),
         ),
       );
-      // Windows self-update: a few seconds after launch, check our manifest and
-      // offer to install a newer build (no store on Windows). No-op elsewhere.
-      // The found manifest also lands in [availableUpdateProvider], which backs
-      // the global persistent «Обновить» overlay on every role/route — so a
-      // dismissed dialog does not bury the update until the next app start.
-      Future<void>.delayed(const Duration(seconds: 4), () {
-        unawaited(
-          checkAndPromptWindowsUpdate(
-            navigatorKey: rootNavigatorKey,
-            manifestUrl: _windowsUpdateManifestUrl(),
-            onUpdateAvailable: (manifest) {
-              if (!mounted) return;
-              ref.read(availableUpdateProvider.notifier).set(manifest);
-            },
-          ).catchError((_) {}),
-        );
+      // Check shortly after launch. Further checks run while the app remains
+      // open, so a release published during the workday does not require a
+      // restart before it becomes visible.
+      _initialUpdateTimer = Timer(const Duration(seconds: 4), () {
+        unawaited(_checkWindowsUpdate(force: true));
+      });
+      _periodicUpdateTimer = Timer.periodic(_updatePollingInterval, (_) {
+        unawaited(_checkWindowsUpdate());
       });
     });
+  }
+
+  Future<void> _checkWindowsUpdate({bool force = false}) async {
+    await _updateCheckGate.run(() async {
+      await checkAndPromptWindowsUpdate(
+        navigatorKey: rootNavigatorKey,
+        manifestUrl: _windowsUpdateManifestUrl(),
+        onUpdateAvailable: (manifest) {
+          if (!mounted) return;
+          ref.read(availableUpdateProvider.notifier).set(manifest);
+        },
+        shouldPrompt: (manifest) {
+          if (_lastPromptedUpdateBuild == manifest.buildNumber) return false;
+          _lastPromptedUpdateBuild = manifest.buildNumber;
+          return true;
+        },
+      );
+    }, force: force);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_checkWindowsUpdate());
+    }
   }
 
   Future<void> _initializeRuntimeServices() async {
@@ -171,6 +191,8 @@ class _MagicMusicAppState extends ConsumerState<MagicMusicApp>
 
   @override
   void dispose() {
+    _initialUpdateTimer?.cancel();
+    _periodicUpdateTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -199,7 +221,6 @@ class _MagicMusicAppState extends ConsumerState<MagicMusicApp>
 
     final router = ref.watch(routerProvider);
     final availableUpdate = ref.watch(availableUpdateProvider);
-    final updateFlowActive = ref.watch(windowsUpdateFlowActiveProvider);
 
     return ScrollConfiguration(
       behavior: NoGlowScrollBehavior(),
@@ -216,12 +237,16 @@ class _MagicMusicAppState extends ConsumerState<MagicMusicApp>
         builder: (context, child) => AutoDismissScaffoldMessenger(
           child: WindowsUpdateOverlay(
             manifest: availableUpdate,
-            flowActive: updateFlowActive,
-            onPressed: () {
+            navigatorKey: rootNavigatorKey,
+            onVersionPressed: () {
               final updateContext = rootNavigatorKey.currentContext;
-              if (updateContext == null || availableUpdate == null) return;
+              if (updateContext == null) return;
               unawaited(
-                showWindowsUpdateDialog(updateContext, availableUpdate),
+                showUpdatesCenter(
+                  updateContext,
+                  onInstall: (update) =>
+                      showWindowsUpdateDialog(updateContext, update),
+                ),
               );
             },
             child: child ?? const SizedBox.shrink(),

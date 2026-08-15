@@ -13,24 +13,68 @@ const _manifest = UpdateManifest(
 );
 
 void main() {
-  testWidgets('global indicator overlays any routed child', (tester) async {
+  testWidgets('available update marks the global version action', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1280, 720);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final navigatorKey = GlobalKey<NavigatorState>();
     await tester.pumpWidget(
-      const MaterialApp(
+      MaterialApp(
+        navigatorKey: navigatorKey,
         home: WindowsUpdateOverlay(
+          navigatorKey: navigatorKey,
           manifest: _manifest,
-          onPressed: _noop,
-          child: Scaffold(body: Text('Экран входа')),
+          onVersionPressed: _noop,
+          child: const Scaffold(body: Text('Экран входа')),
         ),
       ),
     );
+    await tester.pump();
 
     expect(find.text('Экран входа'), findsOneWidget);
     expect(
-      find.byKey(const ValueKey('windows-update-indicator')),
+      find.byKey(const ValueKey('app-version-update-dot')),
       findsOneWidget,
     );
-    expect(find.text('Обновить 1.2.2+143'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('windows-update-indicator')),
+      findsNothing,
+    );
   });
+
+  testWidgets(
+    'version action renders from MaterialApp builder and remains clickable',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(1280, 720);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      var opens = 0;
+      final navigatorKey = GlobalKey<NavigatorState>();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorKey: navigatorKey,
+          builder: (context, child) => WindowsUpdateOverlay(
+            navigatorKey: navigatorKey,
+            manifest: null,
+            onVersionPressed: () => opens++,
+            child: child ?? const SizedBox.shrink(),
+          ),
+          home: const Scaffold(body: Text('CRM')),
+        ),
+      );
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const ValueKey('app-version-button')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('app-version-button')));
+      expect(opens, 1);
+    },
+  );
 
   testWidgets(
     'helper launch failure closes progress and shows recoverable error',
@@ -68,8 +112,12 @@ void main() {
   );
 
   testWidgets(
-    'startup prompt and rapid overlay triggers create one delayed launch',
+    'startup prompt and repeated launches create one delayed update',
     (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(1280, 720);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
       expect(windowsUpdateCoordinator.isBusy, isFalse);
       final navigatorKey = GlobalKey<NavigatorState>();
       final service = _DelayedUpdateService();
@@ -83,27 +131,16 @@ void main() {
           home: StatefulBuilder(
             builder: (context, setState) {
               setHostState = setState;
-              return StreamBuilder<bool>(
-                stream: windowsUpdateCoordinator.activity,
-                initialData: windowsUpdateCoordinator.isBusy,
-                builder: (context, activity) {
-                  triggerOverlay = () {
-                    unawaited(
-                      showWindowsUpdateDialog(
-                        context,
-                        _manifest,
-                        service: service,
-                      ),
-                    );
-                  };
-                  return WindowsUpdateOverlay(
-                    manifest: available,
-                    flowActive:
-                        activity.data ?? windowsUpdateCoordinator.isBusy,
-                    onPressed: triggerOverlay,
-                    child: const Scaffold(body: Text('CRM')),
-                  );
-                },
+              triggerOverlay = () {
+                unawaited(
+                  showWindowsUpdateDialog(context, _manifest, service: service),
+                );
+              };
+              return WindowsUpdateOverlay(
+                navigatorKey: navigatorKey,
+                manifest: available,
+                onVersionPressed: _noop,
+                child: const Scaffold(body: Text('CRM')),
               );
             },
           ),
@@ -123,8 +160,8 @@ void main() {
       expect(service.checkCalls, 1);
       expect(windowsUpdateCoordinator.isBusy, isTrue);
       expect(
-        find.byKey(const ValueKey('windows-update-indicator')),
-        findsNothing,
+        find.byKey(const ValueKey('app-version-update-dot')),
+        findsOneWidget,
       );
 
       triggerOverlay();
@@ -143,8 +180,8 @@ void main() {
       await tester.pump();
       expect(service.applyCalls, 1);
       expect(
-        find.byKey(const ValueKey('windows-update-indicator')),
-        findsNothing,
+        find.byKey(const ValueKey('app-version-update-dot')),
+        findsOneWidget,
       );
 
       service.release();
@@ -159,11 +196,40 @@ void main() {
       expect(service.applyCalls, 1);
       expect(windowsUpdateCoordinator.isBusy, isFalse);
       expect(
-        find.byKey(const ValueKey('windows-update-indicator')),
+        find.byKey(const ValueKey('app-version-update-dot')),
         findsOneWidget,
       );
     },
   );
+
+  testWidgets('repeated discovery updates state without reopening the dialog', (
+    tester,
+  ) async {
+    final navigatorKey = GlobalKey<NavigatorState>();
+    final service = _DelayedUpdateService();
+    UpdateManifest? available;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: navigatorKey,
+        home: const Scaffold(body: Text('CRM')),
+      ),
+    );
+
+    await checkAndPromptWindowsUpdate(
+      navigatorKey: navigatorKey,
+      manifestUrl: 'https://example.test/latest.json',
+      service: service,
+      onUpdateAvailable: (manifest) => available = manifest,
+      shouldPrompt: (_) => false,
+    );
+    await tester.pumpAndSettle();
+
+    expect(service.checkCalls, 1);
+    expect(available, same(_manifest));
+    expect(find.text('Доступно обновление'), findsNothing);
+    expect(windowsUpdateCoordinator.isBusy, isFalse);
+  });
 }
 
 void _noop() {}

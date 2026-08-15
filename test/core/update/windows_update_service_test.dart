@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/update/windows_update_coordinator.dart';
 import 'package:magic_music_crm/core/update/windows_update_service.dart';
@@ -42,6 +44,34 @@ void main() {
       expect(shouldOfferUpdate(142, manifest(141)), isFalse);
       expect(shouldOfferUpdate(141, manifest(142, url: '')), isFalse);
       expect(shouldOfferUpdate(141, null), isFalse);
+    });
+  });
+
+  group('detailed update check', () {
+    test('distinguishes an available build from the current build', () async {
+      final availableService = _DetailedCheckService(
+        _ManifestAdapter(_manifestJson(192)),
+      );
+      final currentService = _DetailedCheckService(
+        _ManifestAdapter(_manifestJson(191)),
+      );
+
+      final available = await availableService.checkDetailed();
+      final current = await currentService.checkDetailed();
+
+      expect(available.status, WindowsUpdateCheckStatus.available);
+      expect(available.manifest?.buildNumber, 192);
+      expect(current.status, WindowsUpdateCheckStatus.upToDate);
+      expect(current.manifest?.buildNumber, 191);
+    });
+
+    test('reports invalid manifest data separately from no update', () async {
+      final service = _DetailedCheckService(_ManifestAdapter('{broken'));
+
+      final result = await service.checkDetailed();
+
+      expect(result.status, WindowsUpdateCheckStatus.invalidResponse);
+      expect(result.manifest, isNull);
     });
   });
 
@@ -154,7 +184,11 @@ void main() {
     expect(windowsUpdateManifestPath, '/downloads/latest-v2.json');
 
     final mainSource = File('lib/main.dart').readAsStringSync();
-    expect(mainSource, contains('path: windowsUpdateManifestPath'));
+    final serviceSource = File(
+      'lib/core/update/windows_update_service.dart',
+    ).readAsStringSync();
+    expect(mainSource, contains('windowsUpdateManifestUrlForApi'));
+    expect(serviceSource, contains('path: windowsUpdateManifestPath'));
     expect(mainSource, isNot(contains("path: '/downloads/latest.json'")));
 
     final publisher = File(
@@ -167,6 +201,11 @@ void main() {
     expect(publisher, contains('MagicMusicCRM-\$verDash-Setup.exe'));
     expect(publisher, contains('MagicMusicCRM-\$verDash.apk'));
     expect(publisher, contains('MagicMusicCRM-\$verDash.aab'));
+    expect(publisher, contains("'release-history.json'"));
+    expect(
+      publisher,
+      contains('Release history must start with the version being published'),
+    );
     expect(
       publisher,
       contains(
@@ -649,4 +688,50 @@ WARNING: transient provider output
       expect(updaterScript.toLowerCase(), isNot(contains('/c start')));
     });
   });
+}
+
+String _manifestJson(int buildNumber) => jsonEncode({
+  'buildNumber': buildNumber,
+  'version': '1.5.12+$buildNumber',
+  'url': 'https://api.magicmusiccrm.ru/downloads/app.zip',
+  'sha256': _validSha,
+  'notes': 'Исправления',
+});
+
+class _DetailedCheckService extends WindowsUpdateService {
+  _DetailedCheckService(HttpClientAdapter adapter)
+    : super(
+        manifestUrl: 'https://api.magicmusiccrm.ru/downloads/latest-v2.json',
+        dio: Dio()..httpClientAdapter = adapter,
+      );
+
+  @override
+  bool get isSupported => true;
+
+  @override
+  int get installedBuild => 191;
+}
+
+class _ManifestAdapter implements HttpClientAdapter {
+  _ManifestAdapter(this.body);
+
+  final String body;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    return ResponseBody.fromString(
+      body,
+      200,
+      headers: {
+        Headers.contentTypeHeader: ['application/json'],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
 }

@@ -23,6 +23,7 @@ param(
   [Parameter(Mandatory = $true)][int]$BuildNumber,
   [Parameter(Mandatory = $true)][string]$Version,   # e.g. 1.2.2+144
   [string]$Notes = "",
+  [string]$ReleaseHistory = (Join-Path (Split-Path -Parent $PSScriptRoot) 'assets\release_history.json'),
   [string]$Dist = (Join-Path (Split-Path -Parent $PSScriptRoot) 'dist'),
   [string]$SshKey = "C:\Users\potyl\.ssh\mmcrm_proxy_ed25519",
   [string]$Remote = "magicdeploy@161.104.49.153",
@@ -35,6 +36,40 @@ function Assert-NativeSuccess([string]$Operation) {
   if ($LASTEXITCODE -ne 0) {
     throw "$Operation failed with exit code $LASTEXITCODE"
   }
+}
+
+if (-not (Test-Path -LiteralPath $ReleaseHistory)) {
+  throw "Release history not found: $ReleaseHistory"
+}
+$releaseHistoryJson = Get-Content -LiteralPath $ReleaseHistory -Raw
+$releaseHistoryDocument = $releaseHistoryJson | ConvertFrom-Json
+$releaseEntries = @($releaseHistoryDocument.releases)
+$matchingEntries = @(
+  $releaseEntries | Where-Object {
+    [int]$_.buildNumber -eq $BuildNumber -and [string]$_.version -eq $Version
+  }
+)
+if ($matchingEntries.Count -ne 1) {
+  throw "Release history must contain exactly one entry for $Version build $BuildNumber"
+}
+if ($releaseEntries.Count -eq 0 -or
+    [int]$releaseEntries[0].buildNumber -ne $BuildNumber -or
+    [string]$releaseEntries[0].version -ne $Version) {
+  throw "Release history must start with the version being published: $Version"
+}
+if ([string]::IsNullOrWhiteSpace($Notes)) {
+  $Notes = [string]$matchingEntries[0].summary
+}
+if ([string]::IsNullOrWhiteSpace($Notes)) {
+  throw "Release notes must not be empty"
+}
+
+$pubspecPath = Join-Path (Split-Path -Parent $PSScriptRoot) 'pubspec.yaml'
+$pubspecVersionLine = Get-Content -LiteralPath $pubspecPath |
+  Where-Object { $_ -match '^version:\s*' } |
+  Select-Object -First 1
+if ($pubspecVersionLine -notmatch ('^version:\s*' + [regex]::Escape($Version) + '\s*$')) {
+  throw "pubspec.yaml version does not match the release: $Version"
 }
 
 $verDash = $Version.Replace('+', '-')
@@ -53,11 +88,19 @@ $manifest = [ordered]@{
 # UTF-8 without BOM so Cyrillic notes render correctly in the app.
 $json = $manifest | ConvertTo-Json -Depth 4
 $manifestNames = @('latest.json', 'latest-v2.json')
+$releaseHistoryName = 'release-history.json'
+$releaseHistoryOutputPath = Join-Path $Dist $releaseHistoryName
+[System.IO.File]::WriteAllText(
+  $releaseHistoryOutputPath,
+  $releaseHistoryJson,
+  (New-Object System.Text.UTF8Encoding($false))
+)
 $releaseArtifactNames = @(
   $zipName,
   "MagicMusicCRM-$verDash-Setup.exe",
   "MagicMusicCRM-$verDash.apk",
-  "MagicMusicCRM-$verDash.aab"
+  "MagicMusicCRM-$verDash.aab",
+  $releaseHistoryName
 )
 
 foreach ($artifactName in $releaseArtifactNames) {
@@ -95,4 +138,4 @@ foreach ($manifestName in $manifestNames) {
   & ssh -i $SshKey $Remote "mv -- '$RemoteDir/$remoteTemp' '$RemoteDir/$manifestName'"
   Assert-NativeSuccess "Atomic manifest publish: $manifestName"
 }
-Write-Host "Done. Clients below build $BuildNumber will be offered $Version on next launch."
+Write-Host "Done. Clients below build $BuildNumber will see $Version after launch, resume, or the next background check."

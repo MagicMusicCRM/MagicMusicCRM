@@ -10,11 +10,19 @@ import 'windows_update_coordinator.dart';
 const int updaterProtocolVersion = 1;
 const Duration defaultWindowsUpdaterHandshakeTimeout = Duration(minutes: 10);
 const String windowsUpdateManifestPath = '/downloads/latest-v2.json';
-const Set<String> trustedWindowsUpdateHosts = <String>{
-  'api.magicmusiccrm.ru',
-};
+const Set<String> trustedWindowsUpdateHosts = <String>{'api.magicmusiccrm.ru'};
 
 final RegExp _sha256Pattern = RegExp(r'^[A-Fa-f0-9]{64}$');
+
+String windowsUpdateManifestUrlForApi(String apiBaseUrl) {
+  final base = Uri.parse(apiBaseUrl);
+  return Uri(
+    scheme: base.scheme.isEmpty ? 'https' : base.scheme,
+    host: base.host,
+    port: base.hasPort ? base.port : null,
+    path: windowsUpdateManifestPath,
+  ).toString();
+}
 
 /// One entry from `downloads/latest-v2.json` describing the newest Windows build.
 class UpdateManifest {
@@ -41,6 +49,24 @@ class UpdateManifest {
         : j['sha256'].toString().trim(),
     notes: j['notes']?.toString(),
   );
+}
+
+enum WindowsUpdateCheckStatus {
+  available,
+  upToDate,
+  unsupported,
+  unavailable,
+  invalidResponse,
+  invalidConfiguration,
+}
+
+class WindowsUpdateCheckResult {
+  const WindowsUpdateCheckResult(this.status, {this.manifest});
+
+  final WindowsUpdateCheckStatus status;
+  final UpdateManifest? manifest;
+
+  bool get hasUpdate => status == WindowsUpdateCheckStatus.available;
 }
 
 /// Pure decision: is [manifest] a newer build than what is running, and usable?
@@ -177,36 +203,76 @@ class WindowsUpdateService {
   WindowsUpdateService({required this.manifestUrl, Dio? dio})
     : _dio = dio ?? Dio();
 
-  bool get isSupported => Platform.isWindows && currentBuild > 0;
+  int get installedBuild => currentBuild;
+
+  bool get isSupported => Platform.isWindows && installedBuild > 0;
 
   Future<UpdateManifest?> check() async {
-    if (!isSupported) return null;
-    if (!isTrustedWindowsManifestEndpoint(manifestUrl)) return null;
+    final result = await checkDetailed();
+    return result.hasUpdate ? result.manifest : null;
+  }
+
+  Future<WindowsUpdateCheckResult> checkDetailed() async {
+    if (!isSupported) {
+      return const WindowsUpdateCheckResult(
+        WindowsUpdateCheckStatus.unsupported,
+      );
+    }
+    if (!isTrustedWindowsManifestEndpoint(manifestUrl)) {
+      return const WindowsUpdateCheckResult(
+        WindowsUpdateCheckStatus.invalidConfiguration,
+      );
+    }
+
+    Response<dynamic> response;
     try {
-      final res = await _dio.get<dynamic>(
+      response = await _dio.get<dynamic>(
         manifestUrl,
         options: Options(
           responseType: ResponseType.plain,
           followRedirects: false,
           validateStatus: (status) => status == 200,
-          headers: const {'Cache-Control': 'no-cache'},
+          headers: const {
+            'Cache-Control': 'no-cache, no-store',
+            'Pragma': 'no-cache',
+          },
           receiveTimeout: const Duration(seconds: 10),
           sendTimeout: const Duration(seconds: 10),
         ),
       );
-      final raw = res.data;
+    } catch (_) {
+      return const WindowsUpdateCheckResult(
+        WindowsUpdateCheckStatus.unavailable,
+      );
+    }
+
+    try {
+      final raw = response.data;
       final decoded = raw is String ? jsonDecode(raw) : raw;
-      if (decoded is! Map) return null;
+      if (decoded is! Map) {
+        return const WindowsUpdateCheckResult(
+          WindowsUpdateCheckStatus.invalidResponse,
+        );
+      }
       final manifest = UpdateManifest.fromJson(
         Map<String, dynamic>.from(decoded),
       );
       final trustedHost = Uri.parse(manifestUrl).host;
       if (!isTrustedWindowsUpdateManifest(manifest, trustedHost: trustedHost)) {
-        return null;
+        return const WindowsUpdateCheckResult(
+          WindowsUpdateCheckStatus.invalidResponse,
+        );
       }
-      return shouldOfferUpdate(currentBuild, manifest) ? manifest : null;
+      return WindowsUpdateCheckResult(
+        shouldOfferUpdate(installedBuild, manifest)
+            ? WindowsUpdateCheckStatus.available
+            : WindowsUpdateCheckStatus.upToDate,
+        manifest: manifest,
+      );
     } catch (_) {
-      return null;
+      return const WindowsUpdateCheckResult(
+        WindowsUpdateCheckStatus.invalidResponse,
+      );
     }
   }
 

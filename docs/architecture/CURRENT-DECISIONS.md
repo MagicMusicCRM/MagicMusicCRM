@@ -278,3 +278,9 @@ build автоматически.
 
 DECISION: Production mutation/deploy требует явного разрешения владельца,
 нового backup, проверенного restore/rollback и post-deploy reconciliation.
+
+DECISION: `assets/release_history.json` является версионируемым источником
+пользовательской истории выпусков. Publish-скрипт обязан проверить совпадение
+верхней записи с `pubspec.yaml` и публикуемым build, затем атомарно разместить
+`release-history.json` до переключения update manifests. Клиент использует
+серверную историю с bundled fallback.
