@@ -875,6 +875,8 @@ class SubscriptionCancellationFinancial {
     required this.actualPaidMinor,
     required this.writeoffMinor,
     required this.balanceMinor,
+    required this.recommendedRefundMinor,
+    required this.maximumRefundMinor,
   });
 
   final String currencyCode;
@@ -882,6 +884,8 @@ class SubscriptionCancellationFinancial {
   final BigInt actualPaidMinor;
   final BigInt writeoffMinor;
   final BigInt balanceMinor;
+  final BigInt recommendedRefundMinor;
+  final BigInt maximumRefundMinor;
 
   factory SubscriptionCancellationFinancial.fromJson(
     Map<String, dynamic> json,
@@ -892,6 +896,8 @@ class SubscriptionCancellationFinancial {
       actualPaidMinor: _replacementMinor(json['actualPaidMinor']),
       writeoffMinor: _replacementMinor(json['writeoffMinor']),
       balanceMinor: _replacementMinor(json['balanceMinor']),
+      recommendedRefundMinor: _replacementMinor(json['recommendedRefundMinor']),
+      maximumRefundMinor: _replacementMinor(json['maximumRefundMinor']),
     );
   }
 }
@@ -1035,17 +1041,20 @@ class CancelSubscriptionInput {
     required this.expectedVersion,
     required this.previewToken,
     required this.reason,
+    required this.refundMinor,
   });
 
   final int expectedVersion;
   final String previewToken;
   final String reason;
+  final BigInt refundMinor;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'expectedVersion': expectedVersion,
     'previewToken': previewToken,
     'confirm': true,
     'reason': reason.trim(),
+    'refundMinor': refundMinor.toString(),
   };
 }
 

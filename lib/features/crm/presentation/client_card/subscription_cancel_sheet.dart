@@ -106,6 +106,7 @@ class _SubscriptionCancellationFormState
         expectedVersion: widget.preview.expectedVersion,
         previewToken: widget.preview.previewToken,
         reason: _reasonController.text,
+        refundMinor: widget.preview.financial.recommendedRefundMinor,
       ),
       identity: _identity,
     );
@@ -231,8 +232,8 @@ class _SubscriptionCancellationFormState
                   ),
                 ),
                 subtitle: const Text(
-                  'Абонемент исчезнет из активных. Платежи, списания, баланс '
-                  'и сами занятия не изменятся.',
+                  'Абонемент исчезнет из активных. Платежи, списания и занятия '
+                  'останутся в истории. Возврат получит плательщик.',
                   style: TextStyle(color: AppColor.text2, fontSize: 11.5),
                 ),
                 onChanged: _fieldsEnabled
@@ -375,6 +376,13 @@ class _CancellationFinancialSummary extends StatelessWidget {
           'Текущий баланс',
           _formatCancellationMinor(
             financial.balanceMinor,
+            financial.currencyCode,
+          ),
+        ),
+        (
+          'Возврат на личный счёт',
+          _formatCancellationMinor(
+            financial.recommendedRefundMinor,
             financial.currencyCode,
           ),
         ),

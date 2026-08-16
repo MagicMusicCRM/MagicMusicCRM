@@ -24,6 +24,8 @@ const _previewResponse = <String, dynamic>{
     'actualPaidMinor': '500000',
     'writeoffMinor': '160000',
     'balanceMinor': '-140000',
+    'recommendedRefundMinor': '187500',
+    'maximumRefundMinor': '187500',
   },
   'future': {
     'lessonCount': 2,
@@ -123,6 +125,7 @@ void main() {
           expectedVersion: preview.expectedVersion,
           previewToken: preview.previewToken,
           reason: 'client.requested_cancel',
+          refundMinor: preview.financial.recommendedRefundMinor,
         ),
         identity: identity,
       );
@@ -143,6 +146,7 @@ void main() {
         'previewToken': 'signed-cancel-preview',
         'confirm': true,
         'reason': 'client.requested_cancel',
+        'refundMinor': '187500',
       });
       expect(result.cancellation.status, 'cancelled');
       expect(result.cancellation.releasedReservationCount, 2);
@@ -206,12 +210,13 @@ void main() {
       expect(find.text('Фактически оплачено'), findsOneWidget);
       expect(find.text('Списано за занятия'), findsOneWidget);
       expect(find.text('Текущий баланс'), findsOneWidget);
+      expect(find.text('Возврат на личный счёт'), findsOneWidget);
       expect(
         _normalizedTexts(
           tester,
           find.byKey(const Key('subscription-cancel-financial')),
         ),
-        containsAll(<String>['5 000 ₽', '1 600 ₽', '-1 400 ₽']),
+        containsAll(<String>['5 000 ₽', '1 600 ₽', '-1 400 ₽', '1 875 ₽']),
       );
       expect(find.text('Будущие занятия сохранятся'), findsWidgets);
       expect(find.textContaining('Покрытие будущих резервов'), findsOneWidget);
@@ -267,6 +272,7 @@ void main() {
         'previewToken': 'signed-cancel-preview',
         'confirm': true,
         'reason': 'client.requested_cancel',
+        'refundMinor': '187500',
       });
       expect(api.studentCardLoadCount, 2);
       expect(find.text('Абонемент отменён'), findsOneWidget);
