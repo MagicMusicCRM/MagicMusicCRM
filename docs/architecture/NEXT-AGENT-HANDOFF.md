@@ -1,11 +1,23 @@
 # MagicMusicCRM — актуальная передача
 
 > Обновлено: 2026-08-16
-> Production: client `1.5.15+195`, server `be9b19e0`,
-> image `sha256:97f2620b…`, migration `0138`
+> Production: client `1.5.15+195`, server `f030a583`,
+> image `sha256:c0d272e7…`, migration `0139`
 > Рабочая ветка: `codex/v7-production-readiness`
-> Статус: production client hotfix `1.5.15+195` PASS;
+> Статус: production subscription aggregate hotfix `f030a583` PASS;
 > owner mega-UAT не завершён
+
+Server hotfix `f030a583` устранил второй источник ошибки отмены абонемента.
+Один snapshot-backed абонемент, созданный старым путём после migration `0091`,
+имел `subscriptions.version=1`, но не имел пары в `aggregate_versions`; preview
+работал, а cancel отклонялся как `STALE_VERSION`. Миграция
+`0139_repair_issued_subscription_aggregate_versions` восстановила ровно одну
+пару и записала repair ledger. Общие preflight и v7 reconciliation теперь
+блокируют такой drift. Backend `186/186` suites и `1456/1456` tests,
+typecheck/build, exact image, security, encrypted off-host backup/restore,
+rollback image и двойной reconciliation PASS. Production drift `0`, outbox
+`0/0`, API restart `0`; клиент остаётся `1.5.15+195`. Evidence:
+`docs/audits/v7-production-subscription-aggregate-hotfix-f030a583.md`.
 
 Client-only hotfix `1.5.15+195` восстановил отмену уже выданного клиенту
 абонемента. Flutter теперь берёт рекомендованный сервером возврат из preview,
