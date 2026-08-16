@@ -1,11 +1,22 @@
 # MagicMusicCRM — актуальная передача
 
 > Обновлено: 2026-08-16
-> Production: client `1.5.16+196`, server `29428568`,
+> Production: client `1.5.17+197`, server `29428568`,
 > image `sha256:08fdc30a…`, migration `0140`
 > Рабочая ветка: `codex/v7-production-readiness`
-> Статус: production subscription finance control `1.5.16+196` PASS;
+> Статус: production subscription section hotfix `1.5.17+197` PASS;
 > owner mega-UAT не завершён
+
+Client-only hotfix `1.5.17+197` восстановил доступ к разделу после отмены
+выданного абонемента. Отменённая запись остаётся вне списка активных, но её
+историческая ссылка больше не заменяет весь раздел заглушкой; кнопку «Добавить
+абонемент» можно использовать сразу. Flutter `829/829`, targeted `6/6`,
+analyze, Windows portable/Setup, APK/AAB, подписи, Gitleaks, encrypted off-host
+backup/isolated restore, rollback manifests, public downloads и двойной
+reconciliation PASS. Оба manifest переключены на build `197`, GitHub Release
+`v1.5.17` опубликован; production server остался на healthy revision
+`29428568`, restart `0`, outbox `0/0`. Evidence:
+`docs/audits/v7-production-subscription-section-hotfix-197.md`.
 
 Release `1.5.16+196` восстановил полный контроль финансов после отмены
 абонемента. Отменённая запись больше не остаётся среди выданных и не
