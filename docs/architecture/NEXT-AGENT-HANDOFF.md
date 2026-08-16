@@ -1,11 +1,24 @@
 # MagicMusicCRM — актуальная передача
 
 > Обновлено: 2026-08-16
-> Production: client `1.5.15+195`, server `f030a583`,
-> image `sha256:c0d272e7…`, migration `0139`
+> Production: client `1.5.16+196`, server `29428568`,
+> image `sha256:08fdc30a…`, migration `0140`
 > Рабочая ветка: `codex/v7-production-readiness`
-> Статус: production subscription aggregate hotfix `f030a583` PASS;
+> Статус: production subscription finance control `1.5.16+196` PASS;
 > owner mega-UAT не завершён
+
+Release `1.5.16+196` восстановил полный контроль финансов после отмены
+абонемента. Отменённая запись больше не остаётся среди выданных и не
+предлагается для новой оплаты; ранее связанную оплату можно исправить или
+сторнировать. Миграция `0140_repair_legacy_subscription_finance` append-only
+восстановила связи одной legacy-оплаты, добавила отсутствовавший исходный debit
+и скорректировала личный счёт с `48 000 ₽` до `24 000 ₽`, сохранив оплату и
+возврат. V4 reconciliation clean, V7 дважды `issues=[]`, outbox `0/0`, API
+healthy/restart `0`; pre/post encrypted off-host backup прошли изолированное
+восстановление. Оба manifest переключены на build `196`, четыре public
+артефакта и GitHub Release `v1.5.16` опубликованы. В окне обновления удалена
+кнопка ручного скачивания. Evidence:
+`docs/audits/v7-production-subscription-finance-control-196.md`.
 
 Server hotfix `f030a583` устранил второй источник ошибки отмены абонемента.
 Один snapshot-backed абонемент, созданный старым путём после migration `0091`,
