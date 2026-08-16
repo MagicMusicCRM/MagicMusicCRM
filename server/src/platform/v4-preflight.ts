@@ -624,6 +624,27 @@ function commerceChecks(): CheckDefinition[] {
         order by payment.id`,
     },
     {
+      id: "commerce.v7-subscription-version-drift",
+      owner: "SYS-COMMERCE",
+      severity: "blocker",
+      description: "Subscription and aggregate versions agree.",
+      requires: {
+        subscriptions: ["id", "version", "commercial_snapshot"],
+        aggregate_versions: ["aggregate_type", "aggregate_id", "version"],
+      },
+      sql: `
+        select subscription.id::text as entity_id,
+               aggregate.aggregate_id as related_id,
+               'subscription_aggregate_version_mismatch'::text as detail
+        from app.subscriptions subscription
+        left join app.aggregate_versions aggregate
+          on aggregate.aggregate_type = 'commerce:issued-subscription'
+         and aggregate.aggregate_id = subscription.id::text
+        where subscription.commercial_snapshot is not null
+          and aggregate.version is distinct from subscription.version
+        order by subscription.id`,
+    },
+    {
       id: "commerce.v7-payment-version-drift",
       owner: "SYS-COMMERCE",
       severity: "blocker",

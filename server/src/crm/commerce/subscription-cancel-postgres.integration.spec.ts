@@ -4,12 +4,16 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { randomUUID } from "node:crypto";
+import { promises as fs } from "node:fs";
+import { resolve } from "node:path";
 import { Pool, PoolClient } from "pg";
 import { ActorContext } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
 import { MigrationRunner } from "../../db/migration-runner";
 import { PlatformIntegrityRepository } from "../../platform/platform-integrity.repository";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
+import { runPreflight } from "../../platform/v4-preflight";
+import { reconcileV7Commerce } from "../../platform/v7-commerce-data";
 import { RealtimeBus } from "../../realtime/realtime-bus";
 import { CrmPolicy } from "../crm.policy";
 import { ActualPaymentService } from "./actual-payment.service";
@@ -732,6 +736,83 @@ describe("Subscription cancellation preview/confirm", () => {
     });
   });
 
+  it("repairs a late legacy aggregate before cancellation", async () => {
+    const issued = await issue("late-legacy-aggregate");
+    await pool.query(
+      `delete from app.aggregate_versions
+       where aggregate_type = 'commerce:issued-subscription'
+         and aggregate_id = $1::text`,
+      [issued.subscription.id],
+    );
+    const driftBeforeRepair = (await runPreflight(pool)).checks.find(
+      (check) => check.id === "commerce.v7-subscription-version-drift",
+    );
+    expect(driftBeforeRepair?.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ entityId: issued.subscription.id }),
+      ]),
+    );
+    expect(await reconcile()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          issueCode: "subscription_aggregate_version_mismatch",
+          entityId: issued.subscription.id,
+        }),
+      ]),
+    );
+    const repairSql = await fs
+      .readFile(
+        resolve(
+          process.cwd(),
+          "db/migrations/0139_repair_issued_subscription_aggregate_versions.up.sql",
+        ),
+        "utf8",
+      )
+      .catch(() => "select 1;");
+    await pool.query(repairSql);
+    const driftAfterRepair = (await runPreflight(pool)).checks.find(
+      (check) => check.id === "commerce.v7-subscription-version-drift",
+    );
+    expect(driftAfterRepair?.rows).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ entityId: issued.subscription.id }),
+      ]),
+    );
+    expect(await reconcile()).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          issueCode: "subscription_aggregate_version_mismatch",
+          entityId: issued.subscription.id,
+        }),
+      ]),
+    );
+
+    const preview = await lifecycleService.previewCancellation(
+      actor,
+      fixture.studentId,
+      issued.subscription.id,
+    );
+    const result = await lifecycleService.cancel(
+      actor,
+      fixture.studentId,
+      issued.subscription.id,
+      {
+        expectedVersion: preview.expectedVersion,
+        previewToken: preview.previewToken,
+        confirm: true,
+        reason: "legacy.aggregate.repaired",
+        refundMinor: "0",
+      },
+      metadata("late-legacy-aggregate-cancel"),
+    );
+
+    expect(result.cancellation).toMatchObject({
+      issuedSubscriptionId: issued.subscription.id,
+      status: "cancelled",
+      version: 2,
+    });
+  });
+
   async function issue(suffix: string) {
     return issueService.issue(
       actor,
@@ -739,6 +820,15 @@ describe("Subscription cancellation preview/confirm", () => {
       { packageId: fixture.sourcePackageId },
       metadata(suffix),
     );
+  }
+
+  async function reconcile() {
+    const client = await pool.connect();
+    try {
+      return await reconcileV7Commerce(client);
+    } finally {
+      client.release();
+    }
   }
 
   function metadata(suffix: string) {
@@ -1155,6 +1245,13 @@ async function cleanupFixture(
       [fixture.packageIds],
     );
     const subscriptionIds = subscriptions.rows.map((row) => row.id);
+    await deleteByIds(
+      client,
+      "app.issued_subscription_aggregate_version_repair",
+      "subscription_id",
+      subscriptionIds,
+      "uuid",
+    );
     const lessons = await client.query<{ id: string }>(
       "select id from app.lessons where student_id = any($1::uuid[])",
       [[fixture.studentId, fixture.otherStudentId]],

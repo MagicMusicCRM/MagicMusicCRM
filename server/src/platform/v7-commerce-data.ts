@@ -30,7 +30,27 @@ export async function reconcileV7Commerce(client: PoolClient) {
     entity_id: string;
     detail: string;
   }>("select * from app.reconcile_v7_commerce()");
-  return result.rows.map((row) => ({
+  const subscriptionVersions = await client.query<{
+    issue_code: string;
+    entity_id: string;
+    detail: string;
+  }>(`
+    select
+      'subscription_aggregate_version_mismatch'::text as issue_code,
+      subscription.id::text as entity_id,
+      concat(
+        'subscription=', subscription.version::text,
+        ', aggregate=', coalesce(aggregate.version::text, 'missing')
+      ) as detail
+    from app.subscriptions subscription
+    left join app.aggregate_versions aggregate
+      on aggregate.aggregate_type = 'commerce:issued-subscription'
+     and aggregate.aggregate_id = subscription.id::text
+    where subscription.commercial_snapshot is not null
+      and aggregate.version is distinct from subscription.version
+    order by subscription.id
+  `);
+  return [...result.rows, ...subscriptionVersions.rows].map((row) => ({
     issueCode: row.issue_code,
     entityId: row.entity_id,
     detail: row.detail,
