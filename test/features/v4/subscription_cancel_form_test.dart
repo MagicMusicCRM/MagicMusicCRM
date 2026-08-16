@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
+import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 
 import '../crm/client_card/card_fake_api.dart';
@@ -191,6 +192,9 @@ void main() {
         seed: const {'id': _studentId, 'custom_data': <String, dynamic>{}},
         entityType: 'student',
         statuses: const [],
+        initialViewState: ContextViewState(
+          filters: {'section': 'subscriptions', 'subscriptionId': _issuedId},
+        ),
       );
 
       await _tapVisible(tester, find.text('Абонементы'));
@@ -280,6 +284,8 @@ void main() {
         find.byKey(const Key('subscription-cancel-$_issuedId')),
         findsNothing,
       );
+      expect(find.byKey(const Key('subscription-add')), findsOneWidget);
+      expect(find.text('Связанная запись недоступна'), findsNothing);
       expect(find.text('Абонементов пока нет'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pump(const Duration(seconds: 4));

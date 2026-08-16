@@ -614,7 +614,10 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
       final focusedId = widget.initialViewState?.filters['subscriptionId']
           ?.toString();
       if (focusedId != null &&
-          !_subscriptions.any((subscription) => subscription.id == focusedId)) {
+          !(_commerceStudent?.subscriptions.any(
+                (subscription) => subscription.id == focusedId,
+              ) ??
+              false)) {
         return const MagicPageState(
           kind: MagicPageStateKind.empty,
           title: 'Связанная запись недоступна',

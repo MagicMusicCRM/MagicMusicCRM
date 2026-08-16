@@ -6,6 +6,7 @@ import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/models/types.dart';
+import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/client_card.dart';
 
@@ -901,6 +902,7 @@ Future<void> pumpClientCard(
   List<StatusRecord>? statuses,
   bool settle = true,
   bool routed = false,
+  ContextViewState? initialViewState,
   ProviderContainer? container,
 }) async {
   final app = MaterialApp(
@@ -916,6 +918,7 @@ Future<void> pumpClientCard(
                   entityType: entityType,
                   allStatuses: statuses,
                   routed: routed,
+                  initialViewState: initialViewState,
                 );
                 return routed ? Material(child: card) : card;
               },
