@@ -91,19 +91,18 @@ class _ClientPaymentFormState extends State<ClientPaymentForm> {
   bool _attempted = false;
   String? _error;
 
+  List<CommerceSubscription> get _activeSubscriptions => widget.subscriptions
+      .where((subscription) => subscription.status == 'active')
+      .toList(growable: false);
+
   @override
   void initState() {
     super.initState();
     final now = widget.now ?? DateTime.now();
     _date = DateTime(now.year, now.month, now.day);
     _identity = MagicMutationIdentity.create('client-payment');
-    if (widget.subscriptions.isNotEmpty) {
-      _subscriptionId = widget.subscriptions
-          .firstWhere(
-            (item) => item.status == 'active',
-            orElse: () => widget.subscriptions.first,
-          )
-          .id;
+    if (_activeSubscriptions.isNotEmpty) {
+      _subscriptionId = _activeSubscriptions.first.id;
     }
   }
 
@@ -371,7 +370,7 @@ class _ClientPaymentFormState extends State<ClientPaymentForm> {
                     value: null,
                     child: Text('Без привязки к абонементу'),
                   ),
-                  ...widget.subscriptions.map(
+                  ..._activeSubscriptions.map(
                     (subscription) => DropdownMenuItem<String>(
                       value: subscription.id,
                       child: Text(subscription.terms.displayName),

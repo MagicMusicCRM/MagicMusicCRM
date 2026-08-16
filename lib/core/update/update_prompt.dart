@@ -1,8 +1,6 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'update_center.dart';
@@ -146,21 +144,9 @@ Future<void> _showWindowsUpdateDialog(
         icon: const Icon(Icons.error_outline_rounded, color: AppColor.danger),
         title: const Text('Не удалось запустить обновление'),
         content: const Text(
-          'Приложение продолжит работать. Попробуйте ещё раз или скачайте '
-          'обновление вручную.',
+          'Приложение продолжит работать. Закройте окно и повторите попытку позже.',
         ),
         actions: [
-          TextButton(
-            onPressed: () {
-              unawaited(
-                launchUrl(
-                  Uri.parse(manifest.url),
-                  mode: LaunchMode.externalApplication,
-                ).catchError((_) => false),
-              );
-            },
-            child: const Text('Скачать вручную'),
-          ),
           FilledButton(
             onPressed: () => Navigator.of(errorContext).pop(),
             child: const Text('Закрыть'),

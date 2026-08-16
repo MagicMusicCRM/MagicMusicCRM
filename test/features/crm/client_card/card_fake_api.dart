@@ -30,7 +30,7 @@ class FakeCardApiClient extends MagicApiClient {
     this.sharedTasks = const [],
     this.sharedTaskHistory = const [],
     this.subscriptionPackages = const [],
-    this.studentSubscriptions = const [],
+    List<Map<String, dynamic>> studentSubscriptions = const [],
     this.studentAccounts = const [],
     this.studentMovements = const [],
     this.studentTechnicalHistory = const [],
@@ -63,7 +63,11 @@ class FakeCardApiClient extends MagicApiClient {
     this.paymentReversalPreview,
     this.paymentCorrectionPreview,
     this.adjustmentReversalPreview,
-  }) : family = family == null ? null : Map<String, dynamic>.from(family),
+  }) : studentSubscriptions = [
+         for (final subscription in studentSubscriptions)
+           Map<String, dynamic>.from(subscription),
+       ],
+       family = family == null ? null : Map<String, dynamic>.from(family),
        linkedUsers = [
          for (final item in linkedUsers) Map<String, dynamic>.from(item),
        ],
@@ -772,10 +776,23 @@ class FakeCardApiClient extends MagicApiClient {
           message: 'Соединение прервано после отправки.',
         );
       }
-      return Map<String, dynamic>.from(
-            cancellationResult ?? const <String, dynamic>{},
-          )
-          as T;
+      final result = Map<String, dynamic>.from(
+        cancellationResult ?? const <String, dynamic>{},
+      );
+      final cancellation = result['cancellation'];
+      final match = RegExp(
+        r'^/crm/students/[^/]+/subscriptions/([^/]+)/cancel$',
+      ).firstMatch(path);
+      if (cancellation is Map && match != null) {
+        final issuedSubscriptionId = match.group(1);
+        for (final subscription in studentSubscriptions) {
+          if (subscription['id']?.toString() != issuedSubscriptionId) continue;
+          subscription
+            ..['status'] = cancellation['status']
+            ..['version'] = cancellation['version'];
+        }
+      }
+      return result as T;
     }
     if (path.endsWith('/end')) {
       if (mutateSchedulePlanOnEnd) {

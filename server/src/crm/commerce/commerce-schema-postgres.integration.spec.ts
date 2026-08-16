@@ -512,6 +512,15 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
         readFileSync(
           resolve(
             migrationRoot,
+            "0140_repair_legacy_subscription_finance.down.sql",
+          ),
+          "utf8",
+        ),
+      );
+      await client.query(
+        readFileSync(
+          resolve(
+            migrationRoot,
             "0116_v7_canonical_commerce_projections.down.sql",
           ),
           "utf8",
@@ -552,6 +561,15 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
       await client.query(
         readFileSync(
           resolve(migrationRoot, "0138_payment_record_corrections.up.sql"),
+          "utf8",
+        ),
+      );
+      await client.query(
+        readFileSync(
+          resolve(
+            migrationRoot,
+            "0140_repair_legacy_subscription_finance.up.sql",
+          ),
           "utf8",
         ),
       );
@@ -833,6 +851,129 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
           entityId: record.rows[0]!.id,
         }),
       ]);
+    } finally {
+      await client.query("rollback");
+      client.release();
+    }
+  });
+
+  it("repairs an orphaned legacy subscription payment without deleting history", async () => {
+    const client = await pool.connect();
+    await client.query("begin");
+    try {
+      const fixture = await createClientFixture(client);
+      const subscriptionPackage = await client.query<{ id: string }>(
+        `
+          insert into app.subscription_packages (
+            name, branch_id, lessons_total, price, base_price_minor,
+            currency_code, validity_days
+          ) values ($1, $2, 12, 24000, 2400000, 'RUB', 90)
+          returning id
+        `,
+        [`Legacy repair ${randomUUID()}`, fixture.branchId],
+      );
+      const payment = await client.query<{ id: string }>(
+        `
+          insert into app.payments (
+            student_id, amount_minor, currency, method, payment_date,
+            external_id, created_by
+          ) values (
+            $1, 2400000, 'RUB', 'cashless',
+            '2026-08-15T10:00:00Z', $2, $3
+          ) returning id
+        `,
+        [fixture.studentId, `legacy-orphan-${randomUUID()}`, fixture.managerId],
+      );
+      const subscription = await client.query<{ id: string }>(
+        `
+          insert into app.subscriptions (
+            student_id, lessons_total, lessons_used, status, payment_id,
+            package_id,
+            commercial_snapshot, snapshot_version, package_version,
+            base_price_minor, currency_code, final_price_minor
+          ) values (
+            $1, 12, 0, 'cancelled', $2, $3,
+            jsonb_build_object(
+              'snapshotVersion', 1,
+              'packageVersion', 1,
+              'displayName', 'Абонемент 12 уроков «УТРО»',
+              'unitCount', '12',
+              'validityDays', 90,
+              'basePriceMinor', '2400000',
+              'currencyCode', 'RUB',
+              'discount', jsonb_build_object('type', 'none'),
+              'finalPriceMinor', '2400000',
+              'commercialRules', '{}'::jsonb
+            ),
+            1, 1, 2400000, 'RUB', 2400000
+          ) returning id
+        `,
+        [
+          fixture.studentId,
+          payment.rows[0]!.id,
+          subscriptionPackage.rows[0]!.id,
+        ],
+      );
+      await client.query(
+        `
+          insert into app.subscription_obligation_facts (
+            student_id, issued_subscription_id, fact_type, direction,
+            amount_minor, currency_code, source_type, source_ref
+          ) values ($1, $2::uuid, 'adjustment', 'credit', 2400000, 'RUB',
+            'subscription.cancel', $2::text)
+        `,
+        [fixture.studentId, subscription.rows[0]!.id],
+      );
+
+      await backfillV7Commerce(client);
+
+      const repaired = await client.query<{
+        payment_subscription_id: string | null;
+        record_subscription_id: string | null;
+        debit_count: string;
+        repair_count: string;
+        balance_minor: string;
+      }>(
+        `
+          select
+            payment.issued_subscription_id as payment_subscription_id,
+            record.issued_subscription_id as record_subscription_id,
+            (select count(*)::text
+             from app.subscription_obligation_facts obligation
+             where obligation.issued_subscription_id = subscription.id
+               and obligation.direction = 'debit') as debit_count,
+            (select count(*)::text
+             from app.legacy_subscription_finance_repairs repair
+             where repair.subscription_id = subscription.id) as repair_count,
+            account.balance_minor::text
+          from app.subscriptions subscription
+          join app.payments payment on payment.id = subscription.payment_id
+          join app.client_payment_records record
+            on record.actual_payment_id = payment.id
+          join app.commerce_student_account_projection account
+            on account.student_id = subscription.student_id
+           and account.currency_code = 'RUB'
+          where subscription.id = $1
+        `,
+        [subscription.rows[0]!.id],
+      );
+      expect(repaired.rows[0]).toEqual({
+        payment_subscription_id: subscription.rows[0]!.id,
+        record_subscription_id: subscription.rows[0]!.id,
+        debit_count: "1",
+        repair_count: "1",
+        balance_minor: "2400000",
+      });
+      expect(await reconcileV7Commerce(client)).toEqual([]);
+
+      await backfillV7Commerce(client);
+      const repeated = await client.query<{ count: string }>(
+        `select count(*)::text as count
+         from app.legacy_subscription_finance_repairs
+         where subscription_id = $1`,
+        [subscription.rows[0]!.id],
+      );
+      expect(repeated.rows[0]!.count).toBe("1");
     } finally {
       await client.query("rollback");
       client.release();

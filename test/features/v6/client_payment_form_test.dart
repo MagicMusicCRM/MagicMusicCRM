@@ -8,6 +8,7 @@ Future<void> _pumpForm(
   WidgetTester tester, {
   required ClientPaymentSubmit onSubmit,
   String? branchId = '11111111-1111-4111-8111-111111111111',
+  List<CommerceSubscription>? subscriptions,
 }) async {
   tester.view.physicalSize = const Size(1000, 1100);
   tester.view.devicePixelRatio = 1;
@@ -20,38 +21,40 @@ Future<void> _pumpForm(
           child: ClientPaymentForm(
             branchId: branchId,
             branchName: branchId == null ? 'Филиал не указан' : 'Сокол',
-            subscriptions: [
-              CommerceSubscription.fromJson({
-                'id': '22222222-2222-4222-8222-222222222222',
-                'status': 'active',
-                'startsAt': '2026-08-01T00:00:00.000Z',
-                'expiresAt': null,
-                'units': {
-                  'total': '10',
-                  'used': '0',
-                  'reserved': '0',
-                  'paid': '5',
-                  'available': '5',
-                  'remaining': '10',
-                },
-                'financial': {
-                  'actualPaidMinor': '250000',
-                  'obligationMinor': '500000',
-                  'debtMinor': '250000',
-                  'overpaymentMinor': '0',
-                  'nextPaymentAt': null,
-                },
-                'terms': {
-                  'displayName': '10 занятий',
-                  'validityDays': 90,
-                  'basePriceMinor': '500000',
-                  'finalPriceMinor': '500000',
-                  'currencyCode': 'RUB',
-                  'discount': {'type': 'none'},
-                },
-                'installments': <dynamic>[],
-              }),
-            ],
+            subscriptions:
+                subscriptions ??
+                [
+                  CommerceSubscription.fromJson({
+                    'id': '22222222-2222-4222-8222-222222222222',
+                    'status': 'active',
+                    'startsAt': '2026-08-01T00:00:00.000Z',
+                    'expiresAt': null,
+                    'units': {
+                      'total': '10',
+                      'used': '0',
+                      'reserved': '0',
+                      'paid': '5',
+                      'available': '5',
+                      'remaining': '10',
+                    },
+                    'financial': {
+                      'actualPaidMinor': '250000',
+                      'obligationMinor': '500000',
+                      'debtMinor': '250000',
+                      'overpaymentMinor': '0',
+                      'nextPaymentAt': null,
+                    },
+                    'terms': {
+                      'displayName': '10 занятий',
+                      'validityDays': 90,
+                      'basePriceMinor': '500000',
+                      'finalPriceMinor': '500000',
+                      'currencyCode': 'RUB',
+                      'discount': {'type': 'none'},
+                    },
+                    'installments': <dynamic>[],
+                  }),
+                ],
             balanceMinor: BigInt.from(-125050),
             now: DateTime(2026, 8, 4),
             onSubmit: onSubmit,
@@ -72,6 +75,69 @@ void main() {
       'Проведён, ожидает подтверждения',
     );
     expect(clientPaymentStatusLabel('paid'), 'Оплачен');
+  });
+
+  testWidgets('new payment only offers active subscriptions', (tester) async {
+    CommerceSubscription subscription(String id, String status, String name) =>
+        CommerceSubscription.fromJson({
+          'id': id,
+          'status': status,
+          'startsAt': '2026-08-01T00:00:00.000Z',
+          'expiresAt': null,
+          'units': {
+            'total': '10',
+            'used': '0',
+            'reserved': '0',
+            'paid': '0',
+            'available': '10',
+            'remaining': '10',
+          },
+          'financial': {
+            'actualPaidMinor': '0',
+            'obligationMinor': '500000',
+            'debtMinor': '500000',
+            'overpaymentMinor': '0',
+            'nextPaymentAt': null,
+          },
+          'terms': {
+            'displayName': name,
+            'validityDays': 90,
+            'basePriceMinor': '500000',
+            'finalPriceMinor': '500000',
+            'currencyCode': 'RUB',
+            'discount': {'type': 'none'},
+          },
+          'installments': <dynamic>[],
+        });
+
+    await _pumpForm(
+      tester,
+      subscriptions: [
+        subscription(
+          '22222222-2222-4222-8222-222222222222',
+          'active',
+          'Действующий абонемент',
+        ),
+        subscription(
+          '33333333-3333-4333-8333-333333333333',
+          'cancelled',
+          'Отменённый абонемент',
+        ),
+        subscription(
+          '44444444-4444-4444-8444-444444444444',
+          'replaced',
+          'Заменённый абонемент',
+        ),
+      ],
+      onSubmit: (_) async {},
+    );
+
+    await tester.tap(find.byKey(const Key('payment-subscription')));
+    await tester.pumpAndSettle();
+    expect(find.text('Действующий абонемент'), findsWidgets);
+    expect(find.text('Отменённый абонемент'), findsNothing);
+    expect(find.text('Заменённый абонемент'), findsNothing);
+    expect(find.text('Без привязки к абонементу'), findsOneWidget);
   });
 
   test(

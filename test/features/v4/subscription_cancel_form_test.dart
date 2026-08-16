@@ -276,6 +276,11 @@ void main() {
       });
       expect(api.studentCardLoadCount, 2);
       expect(find.text('Абонемент отменён'), findsOneWidget);
+      expect(
+        find.byKey(const Key('subscription-cancel-$_issuedId')),
+        findsNothing,
+      );
+      expect(find.text('Абонементов пока нет'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pump(const Duration(seconds: 4));
     },

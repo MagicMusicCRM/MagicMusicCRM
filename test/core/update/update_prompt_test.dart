@@ -104,7 +104,13 @@ void main() {
       expect(service.applyCalls, 1);
       expect(find.text('Загружаем обновление…'), findsNothing);
       expect(find.text('Не удалось запустить обновление'), findsOneWidget);
-      expect(find.text('Скачать вручную'), findsOneWidget);
+      expect(find.text('Скачать вручную'), findsNothing);
+      expect(
+        find.text(
+          'Приложение продолжит работать. Закройте окно и повторите попытку позже.',
+        ),
+        findsOneWidget,
+      );
 
       await tester.tap(find.text('Закрыть'));
       await tester.pumpAndSettle();

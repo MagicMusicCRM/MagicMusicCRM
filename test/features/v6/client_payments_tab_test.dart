@@ -13,6 +13,66 @@ const _student = <String, dynamic>{
 };
 
 void main() {
+  testWidgets(
+    'subscription cancellation credit has an explicit Russian title',
+    (tester) async {
+      tester.view.physicalSize = const Size(800, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final api = FakeCardApiClient(
+        role: 'director',
+        student: _student,
+        studentAccounts: const [
+          {
+            'currencyCode': 'RUB',
+            'actualPaymentsMinor': '2400000',
+            'adjustmentsMinor': '0',
+            'obligationDebitsMinor': '2400000',
+            'obligationCreditsMinor': '2400000',
+            'writeOffsMinor': '0',
+            'balanceMinor': '2400000',
+            'debtMinor': '0',
+          },
+        ],
+        studentMovements: const [
+          {
+            'id': 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+            'kind': 'obligation',
+            'direction': 'credit',
+            'amountMinor': '2400000',
+            'currencyCode': 'RUB',
+            'occurredAt': '2026-08-16T09:00:00.000Z',
+            'factType': 'adjustment',
+            'subscriptionName': 'Абонемент 12 уроков «УТРО»',
+          },
+        ],
+      );
+      await pumpClientCard(
+        tester,
+        api: api,
+        seed: _student,
+        entityType: 'student',
+      );
+
+      await tester.tap(find.text('Оплаты'));
+      await tester.pumpAndSettle();
+      final scrollable = tester.state<ScrollableState>(
+        find.descendant(
+          of: find.byKey(const Key('client-payments-tab')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      scrollable.position.jumpTo(scrollable.position.maxScrollExtent);
+      await tester.pump();
+      await tester.tap(find.text('Поступления и списания'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Возврат по абонементу'), findsOneWidget);
+      expect(find.text('Обязательство по абонементу'), findsNothing);
+    },
+  );
+
   testWidgets('lesson tab shows the reconciled server balance and its links', (
     tester,
   ) async {
@@ -375,7 +435,7 @@ void main() {
   );
 
   testWidgets(
-    'canonical paid record can be adjusted and its adjustment can be reversed',
+    'payment linked to a cancelled subscription remains controllable',
     (tester) async {
       tester.view.physicalSize = const Size(800, 900);
       tester.view.devicePixelRatio = 1;
@@ -387,6 +447,16 @@ void main() {
       final api = FakeCardApiClient(
         role: 'manager',
         student: _student,
+        studentSubscriptions: const [
+          {
+            'id': '55555555-5555-4555-8555-555555555555',
+            'status': 'cancelled',
+            'packageName': 'Закрытый абонемент',
+            'packagePrice': 3000,
+            'lessonsTotal': 10,
+            'lessonsUsed': 0,
+          },
+        ],
         studentAccounts: const [
           {
             'currencyCode': 'RUB',
@@ -421,6 +491,8 @@ void main() {
             'status': 'paid',
             'sourcePaymentId': sourcePaymentId,
             'paymentRecordVersion': 1,
+            'issuedSubscriptionId': '55555555-5555-4555-8555-555555555555',
+            'subscriptionName': 'Закрытый абонемент',
           },
         ],
         adjustmentReversalPreview: const {

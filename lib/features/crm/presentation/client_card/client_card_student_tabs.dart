@@ -567,7 +567,17 @@ class _PaymentMovementRow extends StatelessWidget {
       CommerceMovementKind.paymentRecord => 'Оплата',
       CommerceMovementKind.refund => 'Возврат',
       CommerceMovementKind.adjustment => 'Корректировка',
-      CommerceMovementKind.obligation => 'Обязательство по абонементу',
+      CommerceMovementKind.obligation => switch ((
+        movement.direction,
+        movement.factType,
+      )) {
+        (CommerceMovementDirection.credit, 'adjustment') =>
+          'Возврат по абонементу',
+        (CommerceMovementDirection.credit, _) => 'Пересчёт абонемента',
+        (CommerceMovementDirection.debit, 'installment') =>
+          'Взнос по абонементу',
+        (CommerceMovementDirection.debit, _) => 'Начисление по абонементу',
+      },
       CommerceMovementKind.lessonCharge => 'Списание за занятие',
     };
     final details = [

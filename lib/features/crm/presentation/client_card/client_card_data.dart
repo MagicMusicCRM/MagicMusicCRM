@@ -335,7 +335,10 @@ extension _ClientCardData on _ClientCardState {
         _balance = commerce?.student.primaryBalance;
         _commerceStudent = commerce?.student;
         _subscriptions =
-            commerce?.student.subscriptionModels ?? const <Subscription>[];
+            commerce?.student.subscriptionModels
+                .where((subscription) => subscription.isActive)
+                .toList(growable: false) ??
+            const <Subscription>[];
         _payments = commerce?.student.paymentModels ?? const <Payment>[];
         _lessons = _list(card['lessons']).map(Lesson.fromMap).toList();
         _studentTasks = _list(card['tasks']);

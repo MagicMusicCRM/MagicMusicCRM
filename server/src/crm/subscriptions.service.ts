@@ -753,11 +753,30 @@ export class SubscriptionsService {
       );
       await client.query(
         `
-          update app.payments
-          set payment_record_id = $1
-          where id = $1 and payment_record_id is null
+          insert into app.subscription_obligation_facts (
+            student_id, issued_subscription_id, fact_type, direction,
+            amount_minor, currency_code, source_type, source_ref
+          ) values (
+            $1, $2::uuid, 'issue', 'debit', $3::bigint, $4,
+            'subscription.issue', $2::text
+          )
         `,
-        [payment.id],
+        [
+          studentId,
+          subscription.id,
+          subscriptionPackage.base_price_minor,
+          subscriptionPackage.currency_code,
+        ],
+      );
+      await client.query(
+        `
+          update app.payments
+          set payment_record_id = $1, issued_subscription_id = $2
+          where id = $1
+            and payment_record_id is null
+            and issued_subscription_id is null
+        `,
+        [payment.id, subscription.id],
       );
       await client.query(
         `

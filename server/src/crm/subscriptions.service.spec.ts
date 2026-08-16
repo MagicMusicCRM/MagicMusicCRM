@@ -278,6 +278,7 @@ describe("SubscriptionsService", () => {
           ],
         },
         { rows: [] }, // create canonical payment record
+        { rows: [] }, // create subscription obligation debit
         { rows: [] }, // link actual payment to canonical record
         { rows: [] }, // append payment status event
         { rows: [] }, // initialize payment and subscription aggregates
@@ -365,6 +366,18 @@ describe("SubscriptionsService", () => {
         String(call[0]).includes("insert into app.client_payment_records"),
       ),
     ).toBe(true);
+    expect(
+      query.mock.calls.some((call) =>
+        String(call[0]).includes(
+          "insert into app.subscription_obligation_facts",
+        ),
+      ),
+    ).toBe(true);
+    const paymentLink = query.mock.calls.find((call) =>
+      String(call[0]).includes("update app.payments"),
+    );
+    expect(String(paymentLink?.[0])).toContain("issued_subscription_id");
+    expect(paymentLink?.[1]).toEqual(["payment-a", "subscription-a"]);
     expect(
       query.mock.calls.some((call) =>
         String(call[0]).includes("commerce:issued-subscription"),
