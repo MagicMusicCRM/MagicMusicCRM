@@ -1,11 +1,22 @@
 # MagicMusicCRM — актуальная передача
 
-> Обновлено: 2026-08-15
-> Production: client `1.5.14+194`, server `be9b19e0`,
+> Обновлено: 2026-08-16
+> Production: client `1.5.15+195`, server `be9b19e0`,
 > image `sha256:97f2620b…`, migration `0138`
 > Рабочая ветка: `codex/v7-production-readiness`
-> Статус: production rollout `1.5.14+194` PASS;
+> Статус: production client hotfix `1.5.15+195` PASS;
 > owner mega-UAT не завершён
+
+Client-only hotfix `1.5.15+195` восстановил отмену уже выданного клиенту
+абонемента. Flutter теперь берёт рекомендованный сервером возврат из preview,
+показывает его как «Возврат на личный счёт» и передаёт обязательный
+`refundMinor` в cancel-команду; финансовая и учебная история сохраняется.
+Flutter `827/827`, analyze, Windows portable/Setup, Android APK/AAB, подписи,
+encrypted off-host backup/isolated restore, rollback manifests, двойной
+reconciliation и public downloads PASS. Сервер остался на healthy revision
+`be9b19e0`, restart `0`, outbox `0/0`. Оба manifest переключены на build `195`,
+GitHub Release `v1.5.15` опубликован. Evidence:
+`docs/audits/v7-production-subscription-cancel-hotfix-195.md`.
 
 Release `1.5.14+194` добавил безопасный пересчёт уже назначенных и оплаченных
 платежей через signed preview и append-only замену со сторно. Редактирование
