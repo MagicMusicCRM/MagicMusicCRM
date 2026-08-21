@@ -17,25 +17,31 @@ void main() {
     expect(productionSources, isNot(contains('.createTask(')));
     expect(productionSources, isNot(contains('.listTasks(')));
 
-    final route = File(
+    final workspaceRoute = File(
+      'lib/features/crm/presentation/staff_workspace_screen.dart',
+    ).readAsStringSync();
+    expect(workspaceRoute, contains('SharedTasksV4Panel('));
+
+    final messenger = File(
       'lib/features/messenger/presentation/screens/'
       'messenger_screen_builders_a.dart',
     ).readAsStringSync();
-    expect(route, contains('SharedTasksV4Panel('));
+    expect(messenger, isNot(contains('SharedTasksV4Panel(')));
 
-    final backendRuntime = [
-      Directory('server/src/crm'),
-      Directory('server/src/notifications'),
-      Directory('server/src/migration'),
-    ]
-        .expand((directory) => directory.listSync(recursive: true))
-        .whereType<File>()
-        .where(
-          (file) =>
-              file.path.endsWith('.ts') && !file.path.endsWith('.spec.ts'),
-        )
-        .map((file) => file.readAsStringSync())
-        .join('\n');
+    final backendRuntime =
+        [
+              Directory('server/src/crm'),
+              Directory('server/src/notifications'),
+              Directory('server/src/migration'),
+            ]
+            .expand((directory) => directory.listSync(recursive: true))
+            .whereType<File>()
+            .where(
+              (file) =>
+                  file.path.endsWith('.ts') && !file.path.endsWith('.spec.ts'),
+            )
+            .map((file) => file.readAsStringSync())
+            .join('\n');
     expect(backendRuntime, isNot(contains('app.tasks')));
     expect(backendRuntime, isNot(contains('app.task_history')));
     expect(backendRuntime, isNot(contains('/crm/tasks')));

@@ -7,18 +7,11 @@ import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
-import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
-import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
-import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/alert_policy.dart';
-import 'package:magic_music_crm/core/services/section_unseen_service.dart';
-import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
-import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_messenger_shell.dart';
-import 'package:magic_music_crm/core/widgets/v7/v7_nav_shell.dart';
 import 'package:magic_music_crm/core/widgets/v7/dirty_form_exit.dart';
 import 'package:magic_music_crm/core/widgets/v7/magic_page_state.dart';
 import 'package:magic_music_crm/core/widgets/telegram/chat_list_tile.dart';
@@ -36,7 +29,6 @@ import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/core/services/magic_messenger_service.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/core/services/magic_realtime_service.dart';
-import 'package:magic_music_crm/core/providers/crm_navigation_provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/features/profile/presentation/screens/profile_screen.dart';
 import 'package:desktop_drop/desktop_drop.dart';
@@ -44,20 +36,9 @@ import 'package:magic_music_crm/core/widgets/telegram/send_file_dialog.dart';
 import 'package:magic_music_crm/core/widgets/telegram/avatar_widget.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/features/client/presentation/screens/client_portal_screen.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/admin_overview_widget.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/manage_entities_widget.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
-import 'package:magic_music_crm/features/manager/presentation/widgets/manager_overview_widget.dart';
-import 'package:magic_music_crm/features/manager/presentation/widgets/clients_widget.dart';
-import 'package:magic_music_crm/features/manager/presentation/widgets/finance_widget.dart';
-import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tasks_v4_panel.dart';
-import 'package:magic_music_crm/features/manager/presentation/widgets/reports_widget.dart';
-import 'package:magic_music_crm/features/teacher/presentation/widgets/teacher_schedule_widget.dart';
-import 'package:magic_music_crm/features/teacher/presentation/widgets/teacher_students_widget.dart';
 import 'package:magic_music_crm/core/providers/chat_providers.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
-import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:mime/mime.dart';
 import 'package:magic_music_crm/features/messenger/data/chat_archive_api.dart';
 import 'package:magic_music_crm/features/messenger/inbox_logic.dart';
@@ -121,12 +102,6 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   String? _chatListError;
   String? _messagesLoadError;
   String _searchQuery = '';
-  int _selectedCrmTab = 0;
-
-  /// Какой раздел уже отмечен просмотренным — чтобы не слать запрос на
-  /// каждый кадр build().
-  String? _lastMarkedSection;
-  int _selectedReportsTab = 0;
   bool _showProfilePanel = false;
   bool _showMyProfile = false;
   int _currentLoadId = 0;
@@ -175,42 +150,6 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
   bool get _isManagerOrAdminRole =>
       _isAdminRole || widget.role == 'manager' || widget.role == 'director';
 
-  /// Счётчик непросмотренного для вкладки. 0 — бейдж не рисуется.
-  ///
-  /// ✔ Заказчик 17.07: «счётчик непрочитанных или непросмотренных изменений»
-  /// по разделам. Считает сервер (см. section-views.service.ts): счётчик обязан
-  /// пережить перезапуск и совпадать на телефоне и на компьютере.
-  int _unseenFor(int tab) {
-    final key = sectionKeyForTab(tab);
-    if (key == null) return 0;
-    return ref.watch(sectionUnseenProvider).asData?.value[key] ?? 0;
-  }
-
-  /// «Я открыл раздел» — обнуляет его счётчик.
-  ///
-  /// Зовётся при КАЖДОЙ отрисовке открытой вкладки, а не только по нажатию:
-  /// вкладку открывают и переходом из задачи, и глубокой ссылкой, и после
-  /// перезапуска — по нажатию отметилась бы только часть случаев. Сервер это
-  /// терпит: запрос идемпотентный (`on conflict do update`).
-  void _markSectionSeen(int tab) {
-    final key = sectionKeyForTab(tab);
-    if (key == null) {
-      _lastMarkedSection = null;
-      return;
-    }
-    if (_lastMarkedSection == key) return;
-    _lastMarkedSection = key;
-    unawaited(
-      ref
-          .read(sectionUnseenServiceProvider)
-          .markSeen(key)
-          .then((_) => ref.invalidate(sectionUnseenProvider))
-          // Счётчик — не то, ради чего стоит показывать человеку ошибку: не
-          // обнулился, обнулится при следующем открытии.
-          .catchError((_) {}),
-    );
-  }
-
   /// Manager-tier may clear assignment markers created by others. Claiming is
   /// advisory and available to every staff role.
   bool get _isManagerTier =>
@@ -218,23 +157,13 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
       widget.role == 'director' ||
       widget.role == 'system_admin';
 
-  CapabilitySnapshot? get _accessSnapshot =>
-      ref.read(capabilitySnapshotProvider).asData?.value;
-
   bool get _isStaffRole => _isManagerOrAdminRole || widget.role == 'teacher';
   String _currentUserDisplayName = 'Пользователь';
   String? _openingNavigationPartnerId;
-  String? _userRolesInitialSearch;
 
   @override
   void initState() {
     super.initState();
-    final initialLink = widget.initialLink;
-    if (initialLink != null) {
-      _selectedCrmTab = crmTabForEntityLink(initialLink, widget.role) ?? 0;
-      _userRolesInitialSearch = initialLink.optionalFocus?.filter['query']
-          ?.toString();
-    }
     _bootstrapMessenger();
 
     // Check for pending navigation from notifications
@@ -249,25 +178,6 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
     if (mounted) setState(fn);
   }
 
-  void _selectCrmTab(int tab, {bool resetReports = false}) {
-    _emitState(() {
-      _selectedCrmTab = tab;
-      if (resetReports && tab == 7) _selectedReportsTab = 0;
-    });
-    final section = crmSectionForTab(widget.role, tab);
-    final workspace = WorkspaceNavigationScope.maybeOf(context);
-    if (workspace == null) return;
-    final controller = workspace.controller;
-    final link = EntityRouteRegistry.sectionRootLink(section);
-    final current = controller.state.activeTab.currentRoute.link;
-    if (current.rawEntityType == link.rawEntityType &&
-        current.entityId == link.entityId &&
-        current.optionalFocus?.focus == link.optionalFocus?.focus) {
-      return;
-    }
-    controller.replaceCurrentLink(controller.state.activeTabId, link);
-  }
-
   @override
   void dispose() {
     _typingStopTimer?.cancel();
@@ -280,10 +190,6 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Rebuild immediately when the account/accessVersion-keyed snapshot is
-    // dropped or replaced after access.invalidated.
-    ref.watch(capabilitySnapshotProvider);
-    // Listen for notification navigation events
     ref.listen(messengerNavigationProvider, (previous, next) {
       if (next != null) {
         _logMessenger(
@@ -292,146 +198,17 @@ class _MessengerScreenState extends ConsumerState<MessengerScreen> {
         _checkDeepLink();
       }
     });
-
-    if (widget.role == 'client') {
-      // Clients only see the chat shell directly, no CRM navigation
-      return AppBackScope(
-        hasLocalHistory: _hasInternalBackState(includeCrmTabs: false),
-        onBack: () => _consumeBackNavigation(includeCrmTabs: false),
-        child: Scaffold(body: SafeArea(child: _buildMessengerShell(context))),
-      );
-    }
-
-    // Staff view with CRM navigation
-    final isDesktopPlatform =
-        defaultTargetPlatform == TargetPlatform.windows ||
-        defaultTargetPlatform == TargetPlatform.macOS ||
-        defaultTargetPlatform == TargetPlatform.linux;
-    final isDesktop =
-        isDesktopPlatform || MediaQuery.of(context).size.width >= 768;
-
-    // Счётчики непросмотренного пересчитываются, когда что-то появилось.
-    //
-    // Раскладка «сущность → раздел» берётся из sectionForEntity — та же, по
-    // которой решается, звучать ли. Заведи здесь вторую, и бейдж со звуком
-    // разошлись бы: звук молчит про открытый раздел, а бейдж на нём капает.
-    //
-    // Опрос-фолбэк (isFallbackPoll) пропускаем: он приходит по таймеру, а не
-    // потому, что что-то случилось, и дёргал бы сервер вхолостую.
-    if (!widget.workspaceOwned) {
-      ref.listen(crmRealtimeProvider, (previous, next) {
-        final event = next.value;
-        if (event == null || !mounted || event.isFallbackPoll) return;
-        if (sectionForEntity(event.entity) == null) return;
-        ref.invalidate(sectionUnseenProvider);
-      });
-
-      ref.listen<CrmNavigationRequest?>(crmNavigationRequestProvider, (
-        previous,
-        next,
-      ) {
-        if (next == null || !mounted) return;
-        final snapshot = _accessSnapshot;
-        unawaited(
-          snapshot == null
-              ? openEntityLink(
-                  context,
-                  ref,
-                  next.link,
-                  target: next.openInNewTab
-                      ? EntityOpenTarget.newTab
-                      : EntityOpenTarget.current,
-                  sourceViewState: next.sourceState,
-                )
-              : navigateEntityLink(
-                  context,
-                  snapshot,
-                  next.link,
-                  target: next.openInNewTab
-                      ? EntityOpenTarget.newTab
-                      : EntityOpenTarget.current,
-                  sourceViewState: next.sourceState,
-                ),
-        );
-        Future.microtask(
-          () => ref.read(crmNavigationRequestProvider.notifier).clear(),
-        );
-      });
-    }
-
-    final visibleCrmTabs = _visibleCrmTabs(isDesktop);
-    // Normalise to a tab the current role can actually see, so a stale or
-    // hidden index never renders a destination unavailable to the role.
-    final selectedCrmTab = visibleCrmTabs.contains(_selectedCrmTab)
-        ? _selectedCrmTab
-        : visibleCrmTabs.first;
-
-    // Сообщаем «где сейчас пользователь» — по этому решается, звучать ли
-    // (✔ заказчик 17.07: молчим про то, на что человек смотрит). Берётся
-    // нормализованная вкладка, а не сырое поле: у роли без доступа к разделу
-    // сырое значение врёт. Чат считается открытым только на своей вкладке.
-    //
-    // После кадра, а не в build(): менять провайдер во время построения нельзя.
-    final openChatId = selectedCrmTab == CrmSection.chat
-        ? _selectedChatId
-        : null;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ref
           .read(activeViewProvider.notifier)
-          .set(crmTab: selectedCrmTab, chatId: openChatId);
-      if (!widget.workspaceOwned) _markSectionSeen(selectedCrmTab);
+          .set(crmTab: CrmSection.chat, chatId: _selectedChatId);
     });
-    final bodyContent = _buildCrmBody(
-      context,
-      isDesktop: isDesktop,
-      selectedTab: selectedCrmTab,
+    return AppBackScope(
+      hasLocalHistory: _hasInternalBackState(),
+      onBack: _consumeBackNavigation,
+      child: Scaffold(body: SafeArea(child: _buildMessengerShell(context))),
     );
-
-    if (isDesktop && !widget.workspaceOwned) {
-      return Scaffold(
-        body: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            V7NavShell(
-              isDesktop: true,
-              destinations: [
-                for (final tab in visibleCrmTabs) _v7DestinationForTab(tab),
-              ],
-              selectedIndex: visibleCrmTabs.indexOf(selectedCrmTab),
-              onSelected: (pos) {
-                if (!mounted) return; // «Ещё» menu resolves async
-                final canonical = visibleCrmTabs[pos];
-                _selectCrmTab(canonical, resetReports: true);
-              },
-            ),
-            Expanded(child: bodyContent),
-          ],
-        ),
-      );
-    } else {
-      return AppBackScope(
-        hasLocalHistory: _hasInternalBackState(includeCrmTabs: true),
-        onBack: () => _consumeBackNavigation(includeCrmTabs: true),
-        child: Scaffold(
-          body: SafeArea(child: bodyContent),
-          bottomNavigationBar:
-              isDesktop || (selectedCrmTab == 0 && _selectedChatId != null)
-              ? null // Hide bar in chat view
-              : V7NavShell(
-                  isDesktop: false,
-                  destinations: [
-                    for (final tab in visibleCrmTabs) _v7DestinationForTab(tab),
-                  ],
-                  selectedIndex: visibleCrmTabs.indexOf(selectedCrmTab),
-                  onSelected: (pos) {
-                    if (!mounted) return; // «Ещё» menu resolves async
-                    _selectCrmTab(visibleCrmTabs[pos]);
-                  },
-                ),
-        ),
-      );
-    }
   }
 
   final GlobalKey<_MessageListViewState> _messagesActionKey = GlobalKey();

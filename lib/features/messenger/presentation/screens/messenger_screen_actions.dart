@@ -59,10 +59,6 @@ extension _MessengerActions on _MessengerScreenState {
         if (item != null) {
           _logMessenger('MessengerScreen: found target chat, selecting.');
           _selectChat(item);
-          // If we are not on the chat tab, switch to it
-          if (_selectedCrmTab != 0) {
-            _emitState(() => _selectedCrmTab = 0);
-          }
           // Clear ONLY after successful navigation
           Future.microtask(() {
             ref.read(messengerNavigationProvider.notifier).clear();
@@ -123,7 +119,6 @@ extension _MessengerActions on _MessengerScreenState {
           if (!_chatItems.any((chatItem) => chatItem['id'] == item['id'])) item,
           ..._chatItems.where((chatItem) => chatItem['id'] != item['id']),
         ];
-        _selectedCrmTab = 0;
       });
       _selectChat(item);
       Future.microtask(() {

@@ -418,15 +418,14 @@ extension _MessengerMessaging on _MessengerScreenState {
     });
   }
 
-  bool _hasInternalBackState({required bool includeCrmTabs}) {
+  bool _hasInternalBackState() {
     return _showMyProfile ||
         _showProfilePanel ||
         _isSearchingInChat ||
-        _selectedChatId != null ||
-        (includeCrmTabs && _selectedCrmTab != 0);
+        _selectedChatId != null;
   }
 
-  void _consumeBackNavigation({required bool includeCrmTabs}) {
+  void _consumeBackNavigation() {
     if (_showMyProfile) {
       _emitState(() => _showMyProfile = false);
       return;
@@ -449,11 +448,6 @@ extension _MessengerMessaging on _MessengerScreenState {
 
     if (_selectedChatId != null) {
       _deselectChat();
-      return;
-    }
-
-    if (includeCrmTabs && _selectedCrmTab != 0) {
-      _selectCrmTab(0);
     }
   }
 

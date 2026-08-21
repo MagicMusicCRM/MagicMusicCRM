@@ -5,11 +5,12 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/workspace/workspace_store.dart';
+import 'package:magic_music_crm/features/crm/presentation/staff_workspace_screen.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/clients_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/manager_overview_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/reports_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tasks_v4_panel.dart';
-import 'package:magic_music_crm/features/messenger/presentation/screens/messenger_screen.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7_nav_shell.dart';
 
 import 'messenger_test_api.dart';
@@ -52,8 +53,11 @@ Future<RecordingFakeApiClient> _pumpStaffMessenger(
         capabilitySnapshotProvider.overrideWith(
           (ref) async => _staffSnapshot(role),
         ),
+        accountWorkspaceStoreProvider.overrideWithValue(
+          AccountWorkspaceStore(InMemoryWorkspaceKeyValueStore()),
+        ),
       ],
-      child: MaterialApp(home: MessengerScreen(role: role)),
+      child: const MaterialApp(home: StaffWorkspaceScreen()),
     ),
   );
   await tester.pump();
@@ -79,17 +83,20 @@ void main() {
           capabilitySnapshotProvider.overrideWith(
             (ref) async => _staffSnapshot('teacher'),
           ),
+          accountWorkspaceStoreProvider.overrideWithValue(
+            AccountWorkspaceStore(InMemoryWorkspaceKeyValueStore()),
+          ),
         ],
         child: MaterialApp(
           theme: AppTheme.dark,
-          home: const MessengerScreen(role: 'teacher', workspaceOwned: true),
+          home: const StaffWorkspaceScreen(),
         ),
       ),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 150));
 
-    expect(find.byType(V7NavShell), findsNothing);
+    expect(find.byType(V7NavShell), findsOneWidget);
   });
 
   testWidgets('manager can open Tasks from the mobile overflow navigation', (
