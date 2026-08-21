@@ -1,0 +1,5 @@
+# Guard the current architecture without failing on pre-existing debt.
+# Raise these thresholds only after reviewing a deliberate baseline update.
+[constraints]
+min_quality = 0.47
+max_cycles = 1
