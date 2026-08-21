@@ -16,6 +16,7 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_con
 import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
 
 import 'lesson_decision_flow.dart';
+import 'lesson_form_rules.dart';
 
 /// Unified v4 create/edit form.
 ///
@@ -751,38 +752,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   bool _hasScheduleChanges(Map<String, dynamic> successor) {
     final lesson = widget.lesson;
     if (lesson == null) return true;
-    String? value(String snake, String camel) {
-      final raw = lesson[snake] ?? lesson[camel];
-      final text = raw?.toString();
-      return text == null || text.isEmpty ? null : text;
-    }
-
-    final currentStartsAt = DateTime.tryParse(
-      value('scheduled_at', 'scheduledAt') ?? '',
-    )?.toUtc();
-    final nextStartsAt = DateTime.tryParse(
-      successor['scheduledAt']?.toString() ?? '',
-    )?.toUtc();
-    final currentDuration =
-        (lesson['duration_minutes'] ?? lesson['durationMinutes']) as num?;
-    final teacherChanged =
-        successor['teacherId']?.toString() != value('teacher_id', 'teacherId');
-    final branchChanged =
-        successor['branchId']?.toString() != value('branch_id', 'branchId');
-    final roomChanged =
-        successor['roomId']?.toString() != value('room_id', 'roomId');
-    final scheduledChanged =
-        currentStartsAt == null ||
-        nextStartsAt == null ||
-        !currentStartsAt.isAtSameMomentAs(nextStartsAt);
-    final durationChanged =
-        (successor['durationMinutes'] as num?)?.toInt() !=
-        currentDuration?.toInt();
-    return teacherChanged ||
-        branchChanged ||
-        roomChanged ||
-        scheduledChanged ||
-        durationChanged;
+    return hasLessonScheduleChanges(lesson: lesson, successor: successor);
   }
 
   LessonDecisionOperation get _financialEditOperation {
@@ -861,35 +831,14 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     LessonDecisionCatalogItem rule, {
     String? valueMinor,
   }) {
-    final value = BigInt.tryParse(valueMinor ?? rule.value) ?? BigInt.zero;
-    if (rule.mode == 'percent') {
-      final whole = value ~/ BigInt.from(100);
-      final fraction = (value % BigInt.from(100)).toString().padLeft(2, '0');
-      return fraction == '00' ? '$whole' : '$whole,$fraction';
-    }
-    final whole = value ~/ BigInt.from(100);
-    final fraction = (value % BigInt.from(100)).toString().padLeft(2, '0');
-    return fraction == '00' ? '$whole' : '$whole,$fraction';
+    return formatCompensationMinorInput(valueMinor ?? rule.value);
   }
 
   String? _compensationValueMinor() {
-    final mode = _selectedCompensationRule?.mode;
-    if (mode == null || mode == 'none' || mode == 'standard') return null;
-    final raw = _compensationValueController.text
-        .trim()
-        .replaceAll(' ', '')
-        .replaceAll(',', '.');
-    final value = double.tryParse(raw);
-    if (value == null || value < 0) return null;
-    if (mode == 'percent') {
-      if (value > 200) return null;
-      return (value * 100).round().toString();
-    }
-    if (!RegExp(r'^\d+(?:\.\d{1,2})?$').hasMatch(raw)) return null;
-    final parts = raw.split('.');
-    return (BigInt.parse(parts.first) * BigInt.from(100) +
-            BigInt.parse(parts.length == 1 ? '0' : parts.last.padRight(2, '0')))
-        .toString();
+    return parseCompensationValueMinor(
+      mode: _selectedCompensationRule?.mode,
+      rawValue: _compensationValueController.text,
+    );
   }
 
   bool get _compensationNeedsReason {
