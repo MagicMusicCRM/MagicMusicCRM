@@ -423,9 +423,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
-    final now = DateTime.now();
-    final createLowerBound = DateTime(now.year, now.month, now.day - 30);
-    final oldInitialDate = createLowerBound.subtract(const Duration(days: 1));
+    final oldInitialDate = DateTime.now().subtract(const Duration(days: 31));
 
     await tester.pumpWidget(
       ProviderScope(
@@ -436,14 +434,26 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    final beforeOpening = DateTime.now();
     await tester.tap(find.byKey(const ValueKey('lesson-date-field')));
     await tester.pumpAndSettle();
+    final afterOpening = DateTime.now();
 
     final picker = tester.widget<DatePickerDialog>(
       find.byType(DatePickerDialog),
     );
-    expect(picker.firstDate, createLowerBound);
-    expect(picker.initialDate, createLowerBound);
+    final beforeLowerBound = DateTime(
+      beforeOpening.year,
+      beforeOpening.month,
+      beforeOpening.day - 30,
+    );
+    final afterLowerBound = DateTime(
+      afterOpening.year,
+      afterOpening.month,
+      afterOpening.day - 30,
+    );
+    expect(picker.firstDate, anyOf(beforeLowerBound, afterLowerBound));
+    expect(picker.initialDate, picker.firstDate);
   });
 
   testWidgets('editing a lesson older than 30 days opens the date picker', (
