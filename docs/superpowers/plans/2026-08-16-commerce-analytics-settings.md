@@ -1,5 +1,8 @@
 # Commerce Analytics and Settings Implementation Plan
 
+> **Latest owner scope:** visual click-through only. Buttons open the required
+> surface; no mocked calculations, persistence, network requests or business engine.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Покрыть клиентскую коммерцию, школьную аналитику и все шесть областей системных настроек.

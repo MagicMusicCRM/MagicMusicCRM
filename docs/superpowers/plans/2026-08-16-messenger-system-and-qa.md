@@ -1,5 +1,8 @@
 # Messenger System and QA Implementation Plan
 
+> **Latest owner scope:** visual click-through only. Buttons open the required
+> surface; no mocked calculations, persistence, network requests or business engine.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Завершить покрытие чатов, связанных сущностей, обновлений и системных состояний, затем доказать полноту автоматическим обходом манифеста.
