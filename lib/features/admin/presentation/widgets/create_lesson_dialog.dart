@@ -130,6 +130,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   int _roomsRequestRevision = 0;
   int _decisionCatalogRequestRevision = 0;
   int _subscriptionsRequestRevision = 0;
+  int _clientSelectionRevision = 0;
 
   Map<String, dynamic>? _selectedClient;
   String? _selectedTeacherId;
@@ -326,6 +327,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
       _isEdit ? 'Изменения занятия применены' : 'Занятие создано';
 
   Future<void> _loadData() async {
+    final clientSelectionRevision = _clientSelectionRevision;
     setState(() => _loading = true);
     try {
       Map<String, dynamic>? resolvedClient;
@@ -383,10 +385,17 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
             }
           });
         }
+        final selectedClientKey = _clientKey;
         await Future.wait([
           _loadRooms(branchId),
           _loadDecisionCatalog(branchId),
         ]);
+        if (!mounted ||
+            clientSelectionRevision != _clientSelectionRevision ||
+            _clientKey != selectedClientKey ||
+            _selectedBranchId != branchId) {
+          return;
+        }
       }
       await _loadSubscriptions();
     } catch (error) {
@@ -406,6 +415,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   }
 
   Future<void> _selectClient(Map<String, dynamic> row) async {
+    final revision = ++_clientSelectionRevision;
     final branchId = _clientBranchId(row);
     final switchBranch = _hasBranch(branchId) && branchId != _selectedBranchId;
     setState(() {
@@ -420,11 +430,19 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         _compensationRuleKey = null;
       }
     });
+    final selectedClientKey = _clientKey;
+    final selectedBranchId = _selectedBranchId;
     if (switchBranch) {
       await Future.wait([
         _loadRooms(branchId!),
         _loadDecisionCatalog(branchId),
       ]);
+    }
+    if (!mounted ||
+        revision != _clientSelectionRevision ||
+        _clientKey != selectedClientKey ||
+        _selectedBranchId != selectedBranchId) {
+      return;
     }
     await _loadSubscriptions();
   }

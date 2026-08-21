@@ -59,13 +59,16 @@ class _ControlledApiClient extends MagicApiClient {
   _ControlledApiClient({
     this.controlBranchLoads = false,
     this.controlSubscriptionLoads = false,
+    this.controlInitialRoomLoad = false,
   }) : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   final bool controlBranchLoads;
   final bool controlSubscriptionLoads;
+  final bool controlInitialRoomLoad;
+  final initialRoomResponse = Completer<Map<String, dynamic>>();
   final roomResponses = <String, Completer<Map<String, dynamic>>>{};
   final catalogResponses = <String, Completer<Map<String, dynamic>>>{};
-  final commerceResponses = <String, Completer<Map<String, dynamic>>>{};
+  final commerceResponses = <String, List<Completer<Map<String, dynamic>>>>{};
   final _roomCallCounts = <String, int>{};
   final _catalogCallCounts = <String, int>{};
 
@@ -92,7 +95,7 @@ class _ControlledApiClient extends MagicApiClient {
                 {
                   'ref': {'type': 'student', 'id': _studentAId},
                   'label': 'Ученик А',
-                  'branchId': _branchAId,
+                  'branchId': _branchBId,
                   'lifecycleState': 'active',
                   'tombstone': false,
                   'version': 1,
@@ -114,6 +117,11 @@ class _ControlledApiClient extends MagicApiClient {
         final branchId = queryParameters!['branchId'].toString();
         final callCount = (_roomCallCounts[branchId] ?? 0) + 1;
         _roomCallCounts[branchId] = callCount;
+        if (controlInitialRoomLoad &&
+            branchId == _branchAId &&
+            callCount == 1) {
+          return await initialRoomResponse.future as T;
+        }
         if (controlBranchLoads && (branchId != _branchAId || callCount > 1)) {
           return await roomResponses
                   .putIfAbsent(branchId, Completer<Map<String, dynamic>>.new)
@@ -136,10 +144,9 @@ class _ControlledApiClient extends MagicApiClient {
         if (path.startsWith('/crm/students/') && path.endsWith('/commerce')) {
           final studentId = path.split('/')[3];
           if (controlSubscriptionLoads) {
-            return await commerceResponses
-                    .putIfAbsent(studentId, Completer<Map<String, dynamic>>.new)
-                    .future
-                as T;
+            final response = Completer<Map<String, dynamic>>();
+            commerceResponses.putIfAbsent(studentId, () => []).add(response);
+            return await response.future as T;
           }
           return _commerceResponse(studentId, 'Абонемент') as T;
         }
@@ -414,18 +421,91 @@ void main() {
       'Ученик Б',
     );
 
-    client.commerceResponses[_studentBId]!.complete(
+    client.commerceResponses[_studentBId]!.single.complete(
       _commerceResponse(_studentBId, 'Абонемент Б'),
     );
     await tester.pumpAndSettle();
     expect(find.text('Абонемент Б · остаток 8'), findsWidgets);
 
-    client.commerceResponses[_studentAId]!.complete(
+    client.commerceResponses[_studentAId]!.single.complete(
       _commerceResponse(_studentAId, 'Абонемент А'),
     );
     await tester.pumpAndSettle();
 
     expect(find.text('Абонемент Б · остаток 8'), findsWidgets);
     expect(find.text('Абонемент А · остаток 8'), findsNothing);
+  });
+
+  testWidgets(
+    'stale cross-branch client load cannot supersede latest subscriptions',
+    (tester) async {
+      tester.view.physicalSize = const Size(1400, 2200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final client = _ControlledApiClient(
+        controlBranchLoads: true,
+        controlSubscriptionLoads: true,
+      );
+
+      await tester.pumpWidget(_controlledHost(client));
+      await tester.pumpAndSettle();
+      await _selectPickerOption(
+        tester,
+        const ValueKey('lesson-client-field'),
+        'Ученик А',
+      );
+      await _selectPickerOption(
+        tester,
+        const ValueKey('lesson-client-field'),
+        'Ученик Б',
+      );
+      await _selectPickerOption(
+        tester,
+        const ValueKey('lesson-client-field'),
+        'Ученик А',
+      );
+
+      client.roomResponses[_branchBId]!.complete(
+        _roomResponse(_branchBId, 'Б'),
+      );
+      client.catalogResponses[_branchBId]!.complete(_catalogResponse('Б'));
+      await tester.pumpAndSettle();
+      client.commerceResponses[_studentAId]!.first.complete(
+        _commerceResponse(_studentAId, 'Абонемент А'),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Абонемент А · остаток 8'), findsWidgets);
+      expect(client.commerceResponses[_studentAId], hasLength(1));
+    },
+  );
+
+  testWidgets('stale startup load cannot supersede selected subscriptions', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final client = _ControlledApiClient(
+      controlSubscriptionLoads: true,
+      controlInitialRoomLoad: true,
+    );
+
+    await tester.pumpWidget(_controlledHost(client));
+    await tester.pumpAndSettle();
+    await _selectPickerOption(
+      tester,
+      const ValueKey('lesson-client-field'),
+      'Ученик А',
+    );
+    client.initialRoomResponse.complete(_roomResponse(_branchAId, 'А'));
+    await tester.pumpAndSettle();
+    client.commerceResponses[_studentAId]!.first.complete(
+      _commerceResponse(_studentAId, 'Абонемент А'),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Абонемент А · остаток 8'), findsWidgets);
+    expect(client.commerceResponses[_studentAId], hasLength(1));
   });
 }
