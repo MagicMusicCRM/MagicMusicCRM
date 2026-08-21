@@ -717,12 +717,14 @@ extension _CreateLessonDialogView on _CreateLessonDialogState {
       onPressed: () async {
         final now = DateTime.now();
         final rollingLowerBound = DateTime(now.year, now.month, now.day - 30);
+        final selectedDateIsOlder = _selectedDate.isBefore(rollingLowerBound);
+        final allowOlderEditDate = _isEdit && selectedDateIsOlder;
         final date = await showDatePicker(
           context: context,
-          initialDate: _selectedDate,
-          firstDate: _selectedDate.isBefore(rollingLowerBound)
-              ? _selectedDate
-              : rollingLowerBound,
+          initialDate: selectedDateIsOlder && !_isEdit
+              ? rollingLowerBound
+              : _selectedDate,
+          firstDate: allowOlderEditDate ? _selectedDate : rollingLowerBound,
           lastDate: DateTime.now().add(const Duration(days: 365)),
         );
         if (date != null) _updateFormState(() => _selectedDate = date);

@@ -416,6 +416,36 @@ void main() {
     );
   });
 
+  testWidgets('creating with an old initial date keeps the 30-day boundary', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final now = DateTime.now();
+    final createLowerBound = DateTime(now.year, now.month, now.day - 30);
+    final oldInitialDate = createLowerBound.subtract(const Duration(days: 1));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [magicApiClientProvider.overrideWithValue(_FakeApiClient())],
+        child: MaterialApp(
+          home: Scaffold(body: CreateLessonDialog(initialDate: oldInitialDate)),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('lesson-date-field')));
+    await tester.pumpAndSettle();
+
+    final picker = tester.widget<DatePickerDialog>(
+      find.byType(DatePickerDialog),
+    );
+    expect(picker.firstDate, createLowerBound);
+    expect(picker.initialDate, createLowerBound);
+  });
+
   testWidgets('editing a lesson older than 30 days opens the date picker', (
     tester,
   ) async {
