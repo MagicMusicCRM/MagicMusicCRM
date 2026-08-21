@@ -572,11 +572,51 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
 
   Future<void> _save() async {
     if (_saving) return;
-    if (_validationMessage != null) {
-      setState(() => _validationMessage = null);
-    }
+    if (_validationMessage != null) setState(() => _validationMessage = null);
     final clientId = _clientId;
     final clientType = _clientType;
+    final version = (widget.lesson?['version'] as num?)?.toInt();
+    final compensationValueMinor = _compensationValueMinor();
+    final startsAt = DateTime.utc(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      _selectedTime.hour - 3,
+      _selectedTime.minute,
+    );
+    final payload = _lessonPayload(scheduledAt: startsAt.toIso8601String());
+    final scheduleChanged = _isEdit && _hasScheduleChanges(payload);
+    final financialChanged = _isEdit && _hasFinancialDecisionChanges;
+    final validationMessage = _saveValidationMessage(
+      version,
+      compensationValueMinor,
+      scheduleChanged,
+      financialChanged,
+    );
+    if (validationMessage != null) {
+      setState(() => _validationMessage = validationMessage);
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      final saved = _isEdit
+          ? await _saveEdit(payload, scheduleChanged, compensationValueMinor)
+          : await _saveCreate(payload, startsAt, clientType!, clientId!);
+      if (!saved || !mounted) return;
+      _showSaveResult();
+    } catch (error) {
+      _showSaveError(error);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  String? _saveValidationMessage(
+    int? version,
+    String? compensationValueMinor,
+    bool scheduleChanged,
+    bool financialChanged,
+  ) {
     final missingSubscription =
         !_isEdit &&
         _clientChargeType == 'subscription' &&
@@ -585,21 +625,18 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         !_isEdit &&
         _clientChargeType == 'none' &&
         !_selectedSettlementIsNoCharge;
-    final version = (widget.lesson?['version'] as num?)?.toInt();
     final compensationValueRequired = switch (_selectedCompensationRule?.mode) {
       'percent' || 'fixed' || 'hourly' => true,
       _ => false,
     };
-    final compensationValueMinor = _compensationValueMinor();
     final missingCompensationValue =
         compensationValueRequired && compensationValueMinor == null;
     final missingCompensationReason =
         !_isEdit &&
         _compensationNeedsReason &&
         _plannedSettlementReasonController.text.trim().isEmpty;
-
     final missingClient =
-        !_isGroupEdit && (clientId == null || clientType == null);
+        !_isGroupEdit && (_clientId == null || _clientType == null);
     if (missingClient ||
         _selectedTeacherId == null ||
         _selectedBranchId == null ||
@@ -611,106 +648,88 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         missingCompensationValue ||
         missingCompensationReason ||
         (_isEdit && version == null)) {
-      setState(() {
-        _validationMessage = _isEdit && version == null
-            ? 'Обновите расписание: версия занятия не получена'
-            : missingCompensationValue
-            ? 'Введите корректный процент или сумму оплаты преподавателю'
-            : missingCompensationReason
-            ? 'Укажите причину индивидуального значения оплаты преподавателю'
-            : invalidNoFunding
-            ? 'Для платного списания выберите абонемент или личный счёт'
-            : 'Заполните обязательные поля корректно';
-      });
-      return;
+      return _isEdit && version == null
+          ? 'Обновите расписание: версия занятия не получена'
+          : missingCompensationValue
+          ? 'Введите корректный процент или сумму оплаты преподавателю'
+          : missingCompensationReason
+          ? 'Укажите причину индивидуального значения оплаты преподавателю'
+          : invalidNoFunding
+          ? 'Для платного списания выберите абонемент или личный счёт'
+          : 'Заполните обязательные поля корректно';
     }
-
-    final startsAt = DateTime.utc(
-      _selectedDate.year,
-      _selectedDate.month,
-      _selectedDate.day,
-      _selectedTime.hour - 3,
-      _selectedTime.minute,
-    );
-    final payload = _lessonPayload(scheduledAt: startsAt.toIso8601String());
-    final scheduleChanged = _isEdit && _hasScheduleChanges(payload);
-    final financialChanged = _isEdit && _hasFinancialDecisionChanges;
     if (_isEdit && !scheduleChanged && !financialChanged) {
-      setState(() {
-        _validationMessage =
-            'Измените параметры расписания или оплату преподавателю';
-      });
-      return;
+      return 'Измените параметры расписания или оплату преподавателю';
     }
+    return null;
+  }
 
-    setState(() => _saving = true);
+  Future<bool> _saveCreate(
+    Map<String, dynamic> payload,
+    DateTime startsAt,
+    String clientType,
+    String clientId,
+  ) async {
+    final api = ref.read(magicApiClientProvider);
+    final canSave = await _previewConstraintsBeforeSave(
+      startsAt,
+      clientType,
+      clientId,
+    );
+    if (!canSave || !mounted) return false;
     try {
-      final api = ref.read(magicApiClientProvider);
-      if (_isEdit) {
-        final operation = scheduleChanged
-            ? LessonDecisionOperation.reschedule
-            : _financialEditOperation;
-        final changed = await showLessonDecisionFlow(
-          context,
-          api: api,
-          operation: operation,
-          lesson: widget.lesson!,
-          successor: scheduleChanged ? payload : null,
-          initialSettlementTypeKey: _settlementTypeKey,
-          initialCompensationRuleKey: _compensationRuleKey,
-          initialCompensationValueMinor: compensationValueMinor,
-        );
-        if (changed != true || !mounted) return;
-        Navigator.pop(context, true);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(_savedMessage)));
-        return;
-      }
-
-      final canSave = await _previewConstraintsBeforeSave(
-        startsAt,
-        clientType!,
-        clientId!,
-      );
-      if (!canSave || !mounted) return;
-      try {
-        await api.createLessonRaw(payload);
-      } on MagicApiException catch (error) {
-        final violations = lessonConstraintViolations(error);
-        if (violations == null || violations.isEmpty) rethrow;
-        if (mounted) {
-          setState(() {
-            _scheduleAnalysis = LessonScheduleAnalysis.fromViolations(
-              violations,
-            );
-          });
-          await _showConstraintViolations(violations);
-        }
-        return;
-      }
-
-      if (!mounted) return;
-      Navigator.pop(context, true);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(_savedMessage)));
-    } catch (error) {
+      await api.createLessonRaw(payload);
+    } on MagicApiException catch (error) {
+      final violations = lessonConstraintViolations(error);
+      if (violations == null || violations.isEmpty) rethrow;
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              userErrorMessage(
-                error,
-                fallback: 'Не удалось сохранить занятие.',
-              ),
-            ),
-          ),
-        );
+        setState(() {
+          _scheduleAnalysis = LessonScheduleAnalysis.fromViolations(violations);
+        });
+        await _showConstraintViolations(violations);
       }
-    } finally {
-      if (mounted) setState(() => _saving = false);
+      return false;
     }
+    return true;
+  }
+
+  Future<bool> _saveEdit(
+    Map<String, dynamic> payload,
+    bool scheduleChanged,
+    String? compensationValueMinor,
+  ) async {
+    final operation = scheduleChanged
+        ? LessonDecisionOperation.reschedule
+        : _financialEditOperation;
+    final changed = await showLessonDecisionFlow(
+      context,
+      api: ref.read(magicApiClientProvider),
+      operation: operation,
+      lesson: widget.lesson!,
+      successor: scheduleChanged ? payload : null,
+      initialSettlementTypeKey: _settlementTypeKey,
+      initialCompensationRuleKey: _compensationRuleKey,
+      initialCompensationValueMinor: compensationValueMinor,
+    );
+    return changed == true && mounted;
+  }
+
+  void _showSaveResult() {
+    Navigator.pop(context, true);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(_savedMessage)));
+  }
+
+  void _showSaveError(Object error) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          userErrorMessage(error, fallback: 'Не удалось сохранить занятие.'),
+        ),
+      ),
+    );
   }
 
   Map<String, dynamic> _lessonPayload({required String scheduledAt}) {

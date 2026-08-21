@@ -490,6 +490,7 @@ Widget _host(
   String? leadName,
   String? initialBranchId,
   bool initialIsTrial = false,
+  ValueNotifier<bool?>? dialogResult,
 }) {
   return ProviderScope(
     overrides: [magicApiClientProvider.overrideWithValue(client)],
@@ -498,14 +499,17 @@ Widget _host(
         body: Builder(
           builder: (context) => Center(
             child: FilledButton(
-              onPressed: () => CreateLessonDialog.show(
-                context,
-                lesson: lesson,
-                leadId: leadId,
-                leadName: leadName,
-                initialBranchId: initialBranchId,
-                initialIsTrial: initialIsTrial,
-              ),
+              onPressed: () async {
+                final result = await CreateLessonDialog.show(
+                  context,
+                  lesson: lesson,
+                  leadId: leadId,
+                  leadName: leadName,
+                  initialBranchId: initialBranchId,
+                  initialIsTrial: initialIsTrial,
+                );
+                dialogResult?.value = result;
+              },
               child: const Text('открыть диалог'),
             ),
           ),
@@ -546,6 +550,7 @@ Future<void> _pumpDialog(
   String? leadName,
   String? initialBranchId,
   bool initialIsTrial = false,
+  ValueNotifier<bool?>? dialogResult,
 }) async {
   tester.view.physicalSize = const Size(1400, 2400);
   tester.view.devicePixelRatio = 1;
@@ -558,6 +563,7 @@ Future<void> _pumpDialog(
       leadName: leadName,
       initialBranchId: initialBranchId,
       initialIsTrial: initialIsTrial,
+      dialogResult: dialogResult,
     ),
   );
   await tester.pumpAndSettle();
@@ -774,6 +780,8 @@ void main() {
     'Lead preset previews and commits a trial with required resources and snapshot',
     (tester) async {
       final client = _FakeApiClient(teacherCurrentRate: 1250);
+      final dialogResult = ValueNotifier<bool?>(null);
+      addTearDown(dialogResult.dispose);
       await _pumpDialog(
         tester,
         client,
@@ -781,6 +789,7 @@ void main() {
         leadName: 'Анна Лидова',
         initialBranchId: _branchId,
         initialIsTrial: true,
+        dialogResult: dialogResult,
       );
 
       expect(find.text('Пробное занятие'), findsWidgets);
@@ -894,6 +903,8 @@ void main() {
         'settlementTypeKey': 'free_lesson',
         'teacherCompensationRuleKey': 'standard',
       });
+      expect(dialogResult.value, isTrue);
+      expect(find.text('Новое занятие'), findsNothing);
     },
   );
 
@@ -1530,7 +1541,14 @@ void main() {
   ) async {
     final client = _FakeApiClient();
     final lesson = _editableLesson();
-    await _pumpDialog(tester, client, lesson: lesson);
+    final dialogResult = ValueNotifier<bool?>(null);
+    addTearDown(dialogResult.dispose);
+    await _pumpDialog(
+      tester,
+      client,
+      lesson: lesson,
+      dialogResult: dialogResult,
+    );
     await _moveEditableLessonToNextDay(tester);
 
     await tester.ensureVisible(find.text('Перейти к расчёту'));
@@ -1586,6 +1604,8 @@ void main() {
     expect(body['successor'], isNot(contains('force')));
     expect(body['previewToken'], 'signed-lesson-preview');
     expect(body['confirm'], isTrue);
+    expect(dialogResult.value, isTrue);
+    expect(find.text('Перенести или изменить занятие'), findsNothing);
   });
 
   testWidgets(
@@ -1774,6 +1794,27 @@ void main() {
       findsOneWidget,
     );
     expect(find.byKey(const Key('lesson-decision-reason')), findsNothing);
+    expect(client.decisionPreviews, isEmpty);
+    expect(client.decisionCommits, isEmpty);
+  });
+
+  testWidgets('edit без версии остаётся открытым и не запускает расчёт', (
+    tester,
+  ) async {
+    final client = _FakeApiClient();
+    final lesson = _editableLesson()..remove('version');
+    await _pumpDialog(tester, client, lesson: lesson);
+    await _moveEditableLessonToNextDay(tester);
+
+    await tester.ensureVisible(find.text('Перейти к расчёту'));
+    await tester.tap(find.text('Перейти к расчёту'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Обновите расписание: версия занятия не получена'),
+      findsOneWidget,
+    );
+    expect(find.text('Перенести или изменить занятие'), findsOneWidget);
     expect(client.decisionPreviews, isEmpty);
     expect(client.decisionCommits, isEmpty);
   });
