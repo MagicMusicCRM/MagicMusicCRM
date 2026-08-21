@@ -3,7 +3,7 @@ import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/providers/crm_navigation_provider.dart';
-import 'package:magic_music_crm/core/security/capability_snapshot.dart';
+import 'package:magic_music_crm/core/security/capability_snapshot_model.dart';
 
 void main() {
   const capabilities = <String>{
