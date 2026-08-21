@@ -5,6 +5,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/entity_presentation_resolver.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
@@ -563,6 +564,7 @@ void main() {
         entityId: 'student-1',
         variant: 'student',
       ),
+      titleResolver: const EntityPresentationResolver().pageTitle,
       sharedScope: const WorkspaceSharedScope(
         session: Object(),
         cache: Object(),

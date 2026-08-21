@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/entity_presentation_resolver.dart';
 import 'package:magic_music_crm/core/workspace/desktop_workspace_shell.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 import 'package:magic_music_crm/core/workspace/workspace_store.dart';
@@ -51,6 +52,7 @@ void main() {
   WorkspaceController controller() => WorkspaceController(
     accountId: 'account-1',
     initialLink: link('home'),
+    titleResolver: const EntityPresentationResolver().pageTitle,
     sharedScope: WorkspaceSharedScope(
       session: Object(),
       cache: Object(),

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/entity_presentation_resolver.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 import 'package:magic_music_crm/core/workspace/workspace_store.dart';
 
@@ -13,6 +14,7 @@ void main() {
   WorkspaceController controller(String accountId) => WorkspaceController(
     accountId: accountId,
     initialLink: link('home'),
+    titleResolver: const EntityPresentationResolver().pageTitle,
     sharedScope: WorkspaceSharedScope(
       session: Object(),
       cache: Object(),

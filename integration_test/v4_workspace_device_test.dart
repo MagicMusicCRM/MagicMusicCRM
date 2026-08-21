@@ -9,6 +9,7 @@ import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_text.dart';
+import 'package:magic_music_crm/core/navigation/entity_presentation_resolver.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/workspace/desktop_workspace_shell.dart';
 import 'package:magic_music_crm/core/workspace/production_workspace_host.dart';
@@ -26,6 +27,7 @@ void main() {
     return WorkspaceController(
       accountId: accountId,
       initialLink: link('home', type: EntityLinkType.report),
+      titleResolver: const EntityPresentationResolver().pageTitle,
       sharedScope: WorkspaceSharedScope(
         session: Object(),
         cache: Object(),

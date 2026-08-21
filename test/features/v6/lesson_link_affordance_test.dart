@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
+import 'package:magic_music_crm/core/navigation/entity_presentation_resolver.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_details_sheet.dart';
@@ -23,6 +24,7 @@ void main() {
             entityType: EntityLinkType.report,
             entityId: '__section__',
           ),
+          titleResolver: const EntityPresentationResolver().pageTitle,
           sharedScope: const WorkspaceSharedScope(
             session: Object(),
             cache: Object(),

@@ -26,6 +26,7 @@ void main() {
     accountId: 'account-1',
     initialLink: student('student-1'),
     initialTitle: 'Ученик',
+    titleResolver: const EntityPresentationResolver().pageTitle,
     sharedScope: WorkspaceSharedScope(
       session: Object(),
       cache: Object(),

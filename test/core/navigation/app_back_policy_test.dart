@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/navigation/app_back_policy.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/entity_presentation_resolver.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:magic_music_crm/core/widgets/v7/magic_sheet.dart';
@@ -248,6 +249,7 @@ WorkspaceController _workspaceController() => WorkspaceController(
     entityType: EntityLinkType.chat,
     entityId: 'home',
   ),
+  titleResolver: const EntityPresentationResolver().pageTitle,
   sharedScope: WorkspaceSharedScope(
     session: Object(),
     cache: Object(),

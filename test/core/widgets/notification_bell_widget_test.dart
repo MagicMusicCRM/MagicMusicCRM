@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/entity_presentation_resolver.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/magic_notifications_service.dart';
 import 'package:magic_music_crm/core/widgets/notification_bell_widget.dart';
@@ -68,6 +69,7 @@ void main() {
         entityType: EntityLinkType.chat,
         entityId: 'home',
       ),
+      titleResolver: const EntityPresentationResolver().pageTitle,
       sharedScope: WorkspaceSharedScope(
         session: Object(),
         cache: Object(),
@@ -137,6 +139,7 @@ void main() {
           entityType: EntityLinkType.chat,
           entityId: 'home',
         ),
+        titleResolver: const EntityPresentationResolver().pageTitle,
         sharedScope: WorkspaceSharedScope(
           session: Object(),
           cache: Object(),
@@ -217,6 +220,7 @@ void main() {
         entityType: EntityLinkType.chat,
         entityId: 'home',
       ),
+      titleResolver: const EntityPresentationResolver().pageTitle,
       sharedScope: WorkspaceSharedScope(
         session: Object(),
         cache: Object(),

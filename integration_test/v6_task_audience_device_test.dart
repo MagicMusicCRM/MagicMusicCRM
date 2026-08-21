@@ -134,6 +134,7 @@ void main() {
         entityType: EntityLinkType.chat,
         entityId: 'home',
       ),
+      titleResolver: const EntityPresentationResolver().pageTitle,
       sharedScope: WorkspaceSharedScope(
         session: Object(),
         cache: Object(),
@@ -203,6 +204,7 @@ void main() {
         entityType: EntityLinkType.chat,
         entityId: 'home',
       ),
+      titleResolver: const EntityPresentationResolver().pageTitle,
       sharedScope: WorkspaceSharedScope(
         session: Object(),
         cache: Object(),

@@ -8,6 +8,7 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/entity_presentation_resolver.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
@@ -298,6 +299,7 @@ WorkspaceController _workspaceController() => WorkspaceController(
     entityType: EntityLinkType.chat,
     entityId: 'home',
   ),
+  titleResolver: const EntityPresentationResolver().pageTitle,
   sharedScope: WorkspaceSharedScope(
     session: Object(),
     cache: Object(),

@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
-import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/workspace/workspace_state.dart';
 
 class WorkspaceSharedScope {
@@ -44,8 +43,8 @@ class WorkspaceController extends ChangeNotifier {
     required String accountId,
     required EntityLink initialLink,
     required this.sharedScope,
+    required WorkspaceTitleResolver titleResolver,
     String initialTitle = 'Главная',
-    WorkspaceTitleResolver? titleResolver,
   }) : _state = WorkspaceState(
          accountId: accountId,
          activeTabId: 'tab-1',
@@ -67,7 +66,7 @@ class WorkspaceController extends ChangeNotifier {
   static const maxTabs = 10;
 
   final WorkspaceSharedScope sharedScope;
-  final WorkspaceTitleResolver? _titleResolver;
+  final WorkspaceTitleResolver _titleResolver;
   final Map<String, _WorkspaceFormActions> _formActions = {};
   WorkspaceState _state;
   var _nextTabNumber = 2;
@@ -599,11 +598,7 @@ class WorkspaceController extends ChangeNotifier {
     );
   }
 
-  static String _defaultTitle(EntityLink link) =>
-      const EntityPresentationResolver().pageTitle(link);
-
-  String _titleFor(EntityLink link) =>
-      _titleResolver?.call(link) ?? _defaultTitle(link);
+  String _titleFor(EntityLink link) => _titleResolver(link);
 
   static void _requireSupported(EntityLink link) {
     if (!link.isSupported) {
