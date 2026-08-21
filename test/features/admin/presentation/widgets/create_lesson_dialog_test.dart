@@ -7,7 +7,10 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
+import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
+import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
+import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/create_lesson_dialog.dart';
 
 const _branchAId = '11111111-1111-4111-8111-111111111111';
@@ -263,6 +266,45 @@ Widget _controlledHost(_ControlledApiClient client) {
   );
 }
 
+Widget _showHost({
+  required bool isDesktop,
+  required WorkspaceController controller,
+  required ValueNotifier<bool?> result,
+}) {
+  return ProviderScope(
+    overrides: [magicApiClientProvider.overrideWithValue(_FakeApiClient())],
+    child: MaterialApp(
+      home: WorkspaceNavigationScope(
+        controller: controller,
+        isDesktop: isDesktop,
+        child: Scaffold(
+          body: Builder(
+            builder: (context) => FilledButton(
+              onPressed: () async {
+                result.value = await CreateLessonDialog.show(context);
+              },
+              child: const Text('Открыть занятие'),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+WorkspaceController _workspaceController() => WorkspaceController(
+  accountId: 'account-1',
+  initialLink: EntityLink.typed(
+    entityType: EntityLinkType.chat,
+    entityId: 'home',
+  ),
+  sharedScope: WorkspaceSharedScope(
+    session: Object(),
+    cache: Object(),
+    realtime: Object(),
+  ),
+);
+
 Future<void> _selectPickerOption(
   WidgetTester tester,
   Key field,
@@ -282,6 +324,97 @@ Future<void> _selectPickerOption(
 
 void main() {
   setUpAll(() => initializeDateFormatting('ru'));
+
+  testWidgets(
+    'mobile show uses the lesson editor route and returns its result',
+    (tester) async {
+      final controller = _workspaceController();
+      final result = ValueNotifier<bool?>(true);
+      addTearDown(controller.dispose);
+      addTearDown(result.dispose);
+      await tester.pumpWidget(
+        _showHost(isDesktop: false, controller: controller, result: result),
+      );
+
+      await tester.tap(find.text('Открыть занятие'));
+      await tester.pumpAndSettle();
+
+      final dialogContext = tester.element(find.text('Новое занятие'));
+      final route = ModalRoute.of(dialogContext);
+      expect(route?.settings.name, 'lesson-editor');
+      expect((route as MaterialPageRoute).fullscreenDialog, isTrue);
+      expect(find.byType(BackButton), findsOneWidget);
+
+      await tester.tap(find.text('Отмена'));
+      await tester.pumpAndSettle();
+      expect(result.value, isNull);
+    },
+  );
+
+  testWidgets('desktop show uses a dialog surface and returns its result', (
+    tester,
+  ) async {
+    final controller = _workspaceController();
+    final result = ValueNotifier<bool?>(true);
+    addTearDown(controller.dispose);
+    addTearDown(result.dispose);
+    await tester.pumpWidget(
+      _showHost(isDesktop: true, controller: controller, result: result),
+    );
+
+    await tester.tap(find.text('Открыть занятие'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.byType(BackButton), findsNothing);
+
+    await tester.tap(find.text('Отмена'));
+    await tester.pumpAndSettle();
+    expect(result.value, isNull);
+  });
+
+  testWidgets('create view keeps stable fields and active feedback surfaces', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(_controlledHost(_ControlledApiClient()));
+    await tester.pumpAndSettle();
+
+    for (final key in <Key>[
+      const ValueKey('lesson-client-field'),
+      const ValueKey('lesson-branch-field:$_branchAId'),
+      const ValueKey('lesson-teacher-field'),
+      const ValueKey('lesson-room-field'),
+      const ValueKey('lesson-date-field'),
+      const ValueKey('lesson-time-field'),
+      const ValueKey('lesson-duration-field'),
+      const ValueKey('lesson-trial-toggle'),
+      const ValueKey('lesson-snapshot-preview'),
+      const ValueKey('lesson-run-schedule-analyzer'),
+    ]) {
+      expect(find.byKey(key), findsOneWidget);
+    }
+
+    final analyzer = find.byKey(const ValueKey('lesson-run-schedule-analyzer'));
+    await tester.ensureVisible(analyzer);
+    await tester.tap(analyzer);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('lesson-conflict-inspector')),
+      findsOneWidget,
+    );
+
+    await tester.ensureVisible(find.text('Создать'));
+    await tester.tap(find.text('Создать'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('lesson-form-validation-error')),
+      findsOneWidget,
+    );
+  });
 
   testWidgets('editing a lesson older than 30 days opens the date picker', (
     tester,
