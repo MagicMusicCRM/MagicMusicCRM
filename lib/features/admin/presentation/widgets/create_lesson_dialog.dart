@@ -1792,10 +1792,14 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     return OutlinedButton.icon(
       key: const ValueKey('lesson-date-field'),
       onPressed: () async {
+        final now = DateTime.now();
+        final rollingLowerBound = DateTime(now.year, now.month, now.day - 30);
         final date = await showDatePicker(
           context: context,
           initialDate: _selectedDate,
-          firstDate: DateTime.now().subtract(const Duration(days: 30)),
+          firstDate: _selectedDate.isBefore(rollingLowerBound)
+              ? _selectedDate
+              : rollingLowerBound,
           lastDate: DateTime.now().add(const Duration(days: 365)),
         );
         if (date != null) setState(() => _selectedDate = date);
