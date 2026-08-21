@@ -13,9 +13,9 @@ import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/workspace/desktop_workspace_shell.dart';
 import 'package:magic_music_crm/core/workspace/workspace_store.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7_nav_shell.dart';
-import 'package:magic_music_crm/features/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/client_card.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
+import 'package:magic_music_crm/features/crm/presentation/staff_workspace_screen.dart';
 
 import '../crm/client_card/card_fake_api.dart';
 
@@ -464,7 +464,7 @@ void main() {
           ),
         ],
         child: const MaterialApp(
-          home: AdminDashboardScreen(
+          home: StaffWorkspaceScreen(
             initialLink: EntityLink(
               entityType: EntityLinkType.client,
               entityId: 'student-1',

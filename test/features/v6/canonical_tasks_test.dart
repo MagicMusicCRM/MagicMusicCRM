@@ -18,7 +18,7 @@ void main() {
     expect(productionSources, isNot(contains('.listTasks(')));
 
     final workspaceRoute = File(
-      'lib/features/crm/presentation/staff_workspace_screen.dart',
+      'lib/features/crm/presentation/staff_workspace_secondary_destination.dart',
     ).readAsStringSync();
     expect(workspaceRoute, contains('SharedTasksV4Panel('));
 

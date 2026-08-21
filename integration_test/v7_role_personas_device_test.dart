@@ -9,16 +9,14 @@ import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/workspace/workspace_store.dart';
-import 'package:magic_music_crm/features/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/manage_entities_widget.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
 import 'package:magic_music_crm/features/client/presentation/screens/client_dashboard_screen.dart';
-import 'package:magic_music_crm/features/manager/presentation/screens/manager_dashboard_screen.dart';
+import 'package:magic_music_crm/features/crm/presentation/staff_workspace_screen.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/clients_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/manager_overview_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/reports_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tasks_v4_panel.dart';
-import 'package:magic_music_crm/features/teacher/presentation/screens/teacher_dashboard_screen.dart';
 import 'package:magic_music_crm/features/teacher/presentation/widgets/teacher_schedule_widget.dart';
 import 'package:magic_music_crm/features/teacher/presentation/widgets/teacher_students_widget.dart';
 
@@ -366,7 +364,7 @@ Widget _teacherApp(_PersonaApi api) => ProviderScope(
     child: MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
-      home: const TeacherDashboardScreen(),
+      home: const StaffWorkspaceScreen(),
     ),
   ),
 );
@@ -402,7 +400,7 @@ Widget _adminApp(_PersonaApi api) => ProviderScope(
     child: MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
-      home: const AdminDashboardScreen(),
+      home: const StaffWorkspaceScreen(),
     ),
   ),
 );
@@ -443,7 +441,7 @@ Widget _managerApp(_PersonaApi api) => ProviderScope(
     child: MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
-      home: const ManagerDashboardScreen(),
+      home: const StaffWorkspaceScreen(),
     ),
   ),
 );
@@ -491,7 +489,7 @@ Widget _directorApp(_PersonaApi api) => ProviderScope(
     child: MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
-      home: const ManagerDashboardScreen(),
+      home: const StaffWorkspaceScreen(),
     ),
   ),
 );

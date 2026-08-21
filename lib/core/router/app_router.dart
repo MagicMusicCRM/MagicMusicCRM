@@ -21,12 +21,10 @@ import 'package:magic_music_crm/features/auth/data/services/magic_auth_service.d
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 import 'package:magic_music_crm/features/client/presentation/screens/client_dashboard_screen.dart';
-import 'package:magic_music_crm/features/admin/presentation/screens/admin_dashboard_screen.dart';
-import 'package:magic_music_crm/features/teacher/presentation/screens/teacher_dashboard_screen.dart';
-import 'package:magic_music_crm/features/manager/presentation/screens/manager_dashboard_screen.dart';
 import 'package:magic_music_crm/features/admin/presentation/screens/profile_detail_screen.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/manage_entities_widget.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
+import 'package:magic_music_crm/features/crm/presentation/staff_workspace_screen.dart';
 import 'package:magic_music_crm/features/profile/presentation/screens/profile_screen.dart';
 import 'package:magic_music_crm/features/profile/presentation/screens/account_deletion_screen.dart';
 import 'package:magic_music_crm/features/profile/presentation/screens/account_deletion_status_screen.dart';
@@ -349,17 +347,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/admin',
         builder: (context, state) =>
-            AdminDashboardScreen(initialLink: _dashboardEntityLink(state)),
+            StaffWorkspaceScreen(initialLink: _dashboardEntityLink(state)),
       ),
       GoRoute(
         path: '/teacher',
         builder: (context, state) =>
-            TeacherDashboardScreen(initialLink: _dashboardEntityLink(state)),
+            StaffWorkspaceScreen(initialLink: _dashboardEntityLink(state)),
       ),
       GoRoute(
         path: '/manager',
         builder: (context, state) =>
-            ManagerDashboardScreen(initialLink: _dashboardEntityLink(state)),
+            StaffWorkspaceScreen(initialLink: _dashboardEntityLink(state)),
       ),
       GoRoute(
         path: '/student/:id',
