@@ -127,6 +127,9 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   List<Map<String, dynamic>> _branches = [];
   List<Map<String, dynamic>> _rooms = [];
   List<Map<String, dynamic>> _subscriptions = [];
+  int _roomsRequestRevision = 0;
+  int _decisionCatalogRequestRevision = 0;
+  int _subscriptionsRequestRevision = 0;
 
   Map<String, dynamic>? _selectedClient;
   String? _selectedTeacherId;
@@ -427,9 +430,14 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   }
 
   Future<void> _loadRooms(String branchId) async {
+    final revision = ++_roomsRequestRevision;
     try {
       final rooms = await _crm.listRooms(branchId: branchId, limit: 100);
-      if (!mounted) return;
+      if (!mounted ||
+          revision != _roomsRequestRevision ||
+          _selectedBranchId != branchId) {
+        return;
+      }
       setState(() {
         _rooms = rooms;
         if (_selectedRoomId != null &&
@@ -440,18 +448,38 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         }
       });
     } catch (error) {
+      if (!mounted ||
+          revision != _roomsRequestRevision ||
+          _selectedBranchId != branchId) {
+        return;
+      }
       debugPrint('Error loading rooms: $error');
     }
   }
 
   Future<void> _loadDecisionCatalog(String branchId) async {
-    final response = await ref
-        .read(magicApiClientProvider)
-        .get<Map<String, dynamic>>(
-          '/crm/configuration/lesson-decisions',
-          queryParameters: {'branchId': branchId},
-        );
-    if (!mounted) return;
+    final revision = ++_decisionCatalogRequestRevision;
+    late final Map<String, dynamic> response;
+    try {
+      response = await ref
+          .read(magicApiClientProvider)
+          .get<Map<String, dynamic>>(
+            '/crm/configuration/lesson-decisions',
+            queryParameters: {'branchId': branchId},
+          );
+    } catch (_) {
+      if (!mounted ||
+          revision != _decisionCatalogRequestRevision ||
+          _selectedBranchId != branchId) {
+        return;
+      }
+      rethrow;
+    }
+    if (!mounted ||
+        revision != _decisionCatalogRequestRevision ||
+        _selectedBranchId != branchId) {
+      return;
+    }
     final catalog = LessonDecisionCatalog.fromJson(
       response,
       LessonDecisionOperation.settle,
@@ -507,6 +535,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
   }
 
   Future<void> _loadSubscriptions() async {
+    final revision = ++_subscriptionsRequestRevision;
     final studentId = _clientType == 'student' ? _clientId : null;
     if (studentId == null) {
       if (mounted) {
@@ -523,7 +552,12 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         studentId: studentId,
         limit: 50,
       );
-      if (!mounted) return;
+      if (!mounted ||
+          revision != _subscriptionsRequestRevision ||
+          _clientType != 'student' ||
+          _clientId != studentId) {
+        return;
+      }
       setState(() {
         _subscriptions = rows
             .where((row) => row['status']?.toString() == 'active')
@@ -539,6 +573,12 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         }
       });
     } catch (error) {
+      if (!mounted ||
+          revision != _subscriptionsRequestRevision ||
+          _clientType != 'student' ||
+          _clientId != studentId) {
+        return;
+      }
       debugPrint('Error loading subscriptions: $error');
     }
   }
