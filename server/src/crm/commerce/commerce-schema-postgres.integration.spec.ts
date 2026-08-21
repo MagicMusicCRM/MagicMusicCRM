@@ -861,6 +861,16 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
     const client = await pool.connect();
     await client.query("begin");
     try {
+      const migrationRoot = resolve(process.cwd(), "db/migrations");
+      await client.query(
+        readFileSync(
+          resolve(
+            migrationRoot,
+            "0141_repair_legacy_subscription_aggregate_versions.down.sql",
+          ),
+          "utf8",
+        ),
+      );
       const fixture = await createClientFixture(client);
       const subscriptionPackage = await client.query<{ id: string }>(
         `
@@ -927,6 +937,25 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
 
       await backfillV7Commerce(client);
 
+      const aggregateBeforeUpgrade = await client.query<{ version: string }>(
+        `select version::text
+         from app.aggregate_versions
+         where aggregate_type = 'commerce:issued-subscription'
+           and aggregate_id = $1`,
+        [subscription.rows[0]!.id],
+      );
+      expect(aggregateBeforeUpgrade.rows).toEqual([]);
+
+      await client.query(
+        readFileSync(
+          resolve(
+            migrationRoot,
+            "0141_repair_legacy_subscription_aggregate_versions.up.sql",
+          ),
+          "utf8",
+        ),
+      );
+
       const repaired = await client.query<{
         payment_subscription_id: string | null;
         record_subscription_id: string | null;
@@ -964,6 +993,14 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
         repair_count: "1",
         balance_minor: "2400000",
       });
+      const aggregateAfterUpgrade = await client.query<{ version: string }>(
+        `select version::text
+         from app.aggregate_versions
+         where aggregate_type = 'commerce:issued-subscription'
+           and aggregate_id = $1`,
+        [subscription.rows[0]!.id],
+      );
+      expect(aggregateAfterUpgrade.rows).toEqual([{ version: "1" }]);
       expect(await reconcileV7Commerce(client)).toEqual([]);
 
       await backfillV7Commerce(client);
