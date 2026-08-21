@@ -10,6 +10,7 @@ import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/core/widgets/lazy_indexed_stack.dart';
 import 'package:magic_music_crm/core/widgets/v7/magic_page_state.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7_nav_shell.dart';
+import 'package:magic_music_crm/features/client/presentation/screens/client_portal_screen.dart';
 import 'package:magic_music_crm/features/client/presentation/widgets/subscription_status_card.dart';
 import 'package:magic_music_crm/features/client/presentation/widgets/upcoming_lessons_list.dart';
 import 'package:magic_music_crm/features/messenger/presentation/screens/messenger_screen.dart';
@@ -32,6 +33,12 @@ class ClientDashboardScreen extends ConsumerStatefulWidget {
 
 class _ClientDashboardScreenState extends ConsumerState<ClientDashboardScreen> {
   int _selectedIndex = 0;
+
+  void _openSchool() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(builder: (_) => const ClientPortalScreen()),
+    );
+  }
 
   // Client bottom nav (mobile) / rail (desktop): Чат opens first by default,
   // Профиль is last. «Занятия» merges the old Занятия+Расписание; «Абонемент»
@@ -88,11 +95,11 @@ class _ClientDashboardScreenState extends ConsumerState<ClientDashboardScreen> {
     // triggering their API providers simultaneously.
     final body = LazyIndexedStack(
       index: _selectedIndex,
-      children: const [
-        MessengerScreen(role: 'client'),
-        _ClientSectionFrame(child: UpcomingLessonsList()),
-        _ClientSubscriptionView(),
-        ProfileScreen(),
+      children: [
+        MessengerScreen(role: 'client', onOpenSchool: _openSchool),
+        const _ClientSectionFrame(child: UpcomingLessonsList()),
+        const _ClientSubscriptionView(),
+        const ProfileScreen(),
       ],
     );
 

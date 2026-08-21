@@ -273,17 +273,11 @@ extension _MessengerBuildersA on _MessengerScreenState {
                   style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
                 ),
               ),
-              if (widget.role == 'client')
+              if (widget.role == 'client' && widget.onOpenSchool != null)
                 IconButton(
                   icon: const Icon(Icons.school_rounded),
                   tooltip: 'Моя школа',
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const ClientPortalScreen(),
-                      ),
-                    );
-                  },
+                  onPressed: widget.onOpenSchool,
                 ),
               if (canCreateGroups)
                 PopupMenuButton<String>(

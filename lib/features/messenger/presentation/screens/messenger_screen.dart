@@ -35,7 +35,6 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:magic_music_crm/core/widgets/telegram/send_file_dialog.dart';
 import 'package:magic_music_crm/core/widgets/telegram/avatar_widget.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
-import 'package:magic_music_crm/features/client/presentation/screens/client_portal_screen.dart';
 import 'package:magic_music_crm/core/providers/chat_providers.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
@@ -63,11 +62,13 @@ class MessengerScreen extends ConsumerStatefulWidget {
   final String role; // 'client', 'admin', 'system_admin', 'manager', 'teacher'
   final EntityLink? initialLink;
   final ContextViewState? initialViewState;
+  final VoidCallback? onOpenSchool;
   const MessengerScreen({
     super.key,
     required this.role,
     this.initialLink,
     this.initialViewState,
+    this.onOpenSchool,
     this.workspaceOwned = false,
   });
 
