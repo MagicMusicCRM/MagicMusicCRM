@@ -143,6 +143,7 @@ Map<String, dynamic> _busyPreview() => {
 class _FakeApiClient extends MagicApiClient {
   _FakeApiClient({
     this.preview,
+    this.previewError,
     this.createError,
     this.subscriptions = const [],
     this.decisionCatalog,
@@ -151,6 +152,7 @@ class _FakeApiClient extends MagicApiClient {
   }) : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   Map<String, dynamic>? preview;
+  Object? previewError;
   MagicApiException? createError;
   final List<Map<String, dynamic>> subscriptions;
   final Map<String, dynamic>? decisionCatalog;
@@ -398,6 +400,7 @@ class _FakeApiClient extends MagicApiClient {
   }) async {
     if (path == '/crm/lessons/constraints/preview') {
       constraintPreviews.add(Map<String, dynamic>.from(data as Map));
+      if (previewError case final error?) throw error;
       return (preview ?? _freePreview()) as T;
     }
     if (path == '/crm/lessons') {
@@ -904,7 +907,8 @@ void main() {
         'teacherCompensationRuleKey': 'standard',
       });
       expect(dialogResult.value, isTrue);
-      expect(find.text('Новое занятие'), findsNothing);
+      expect(find.text('Пробное занятие'), findsNothing);
+      expect(find.text('Занятие создано'), findsOneWidget);
     },
   );
 
@@ -1330,6 +1334,26 @@ void main() {
     expect(client.lessonPosts, isEmpty);
   });
 
+  testWidgets('ошибка preview не блокирует authoritative create', (
+    tester,
+  ) async {
+    final client = _FakeApiClient(
+      previewError: Exception('schedule preview unavailable'),
+    );
+    final dialogResult = ValueNotifier<bool?>(null);
+    addTearDown(dialogResult.dispose);
+    await _pumpDialog(tester, client, dialogResult: dialogResult);
+    await _selectRequiredResources(tester, clientName: 'Иван Прилежный');
+
+    await _tapCreate(tester);
+    await tester.pumpAndSettle();
+
+    expect(client.constraintPreviews, hasLength(1));
+    expect(client.lessonPosts, hasLength(1));
+    expect(dialogResult.value, isTrue);
+    expect(find.text('Новое занятие'), findsNothing);
+  });
+
   testWidgets(
     'inline Schedule Analyzer applies and rechecks a ranked variant',
     (tester) async {
@@ -1606,6 +1630,7 @@ void main() {
     expect(body['confirm'], isTrue);
     expect(dialogResult.value, isTrue);
     expect(find.text('Перенести или изменить занятие'), findsNothing);
+    expect(find.text('Изменения занятия применены'), findsOneWidget);
   });
 
   testWidgets(
