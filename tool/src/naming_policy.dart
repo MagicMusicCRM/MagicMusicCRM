@@ -97,11 +97,11 @@ List<NamingViolation> findSymbolViolations({
 bool isExceptionCovered(
   String finding,
   Iterable<NamingPolicyException> exceptions,
-) => exceptions.any(
-  (exception) => exception.target.contains('::')
-      ? exception.target == finding
-      : finding.startsWith(exception.target),
-);
+) => exceptions.any((exception) {
+  final target = exception.target.trim();
+  if (target.isEmpty) return false;
+  return target.contains('::') ? target == finding : finding.startsWith(target);
+});
 
 List<NamingViolation> findExceptionValidationViolations({
   required Iterable<NamingPolicyException> exceptions,
@@ -111,6 +111,8 @@ List<NamingViolation> findExceptionValidationViolations({
   final tracked = trackedPaths.toList();
   return [
     for (final exception in exceptions) ...[
+      if (exception.target.trim().isEmpty)
+        NamingViolation(exception.target, 'empty-target'),
       if (exception.category.trim().isEmpty)
         NamingViolation(exception.target, 'empty-category'),
       if (exception.reason.trim().isEmpty)
@@ -130,7 +132,9 @@ bool _matchesTrackedPathOrSymbol(
   Iterable<String> paths,
   Map<String, String> sources,
 ) {
-  final targetParts = exception.target.split('::');
+  final target = exception.target.trim();
+  if (target.isEmpty) return false;
+  final targetParts = target.split('::');
   final targetPath = targetParts.first;
   if (!paths.any((path) => path.startsWith(targetPath))) return false;
   if (targetParts.length == 1) return true;

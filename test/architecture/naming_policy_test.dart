@@ -131,4 +131,36 @@ void main() {
       }),
     );
   });
+
+  test('rejects an empty exception target without covering findings', () {
+    const exception = NamingPolicyException(
+      target: '',
+      category: 'cleanup-debt',
+      reason: 'This entry is intentionally invalid.',
+      owner: 'flutter',
+      removeWhen: 'It must never be accepted.',
+    );
+
+    final validation = findExceptionValidationViolations(
+      exceptions: const [exception],
+      trackedPaths: const ['lib/auth.dart'],
+      sources: const {'lib/auth.dart': 'class _V7Field {}'},
+    );
+
+    expect(validation.map((item) => item.rule), contains('empty-target'));
+    expect(
+      findNamingViolations(
+        paths: const ['lib/features/tasks/v9/tasks_panel.dart'],
+        exceptions: const [exception],
+      ),
+      isNotEmpty,
+    );
+    expect(
+      findSymbolViolations(
+        sources: const {'lib/auth.dart': 'class _V7Field {}'},
+        exceptions: const [exception],
+      ),
+      isNotEmpty,
+    );
+  });
 }
