@@ -4,7 +4,7 @@ import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_text.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
-import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_view.dart';
+import 'package:magic_music_crm/features/manager/presentation/tasks/shared_task_presentation.dart';
 
 class SharedTaskDetails extends StatelessWidget {
   const SharedTaskDetails({

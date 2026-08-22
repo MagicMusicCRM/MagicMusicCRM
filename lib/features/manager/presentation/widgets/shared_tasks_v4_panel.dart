@@ -203,6 +203,24 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
     );
   }
 
+  Future<void> _openAdvancedFilters() async {
+    final selected = await showMagicAdaptiveSurface<String>(
+      context,
+      kind: AppSurfaceKind.selection,
+      title: 'Фильтры задач',
+      icon: Icons.tune_rounded,
+      builder: (surfaceContext) => SharedTaskAdvancedFilters(
+        value: _controller.state.query.state,
+        onChanged: (value) => Navigator.pop(surfaceContext, value),
+      ),
+    );
+    if (!mounted || selected == null) return;
+    final query = _controller.state.query;
+    if (selected != query.state) {
+      await _controller.setQuery(query.copyWith(state: selected));
+    }
+  }
+
   Future<void> _openLinkedEntity(
     Map<String, dynamic> task,
     EntityLink link,
@@ -242,6 +260,7 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
       onClose: (task) => unawaited(_close(task)),
       onEdit: (task) => unawaited(_openEditor(task)),
       onCreate: () => unawaited(_openEditor()),
+      onAdvancedFilters: () => unawaited(_openAdvancedFilters()),
       onRetry: () => unawaited(_controller.retry()),
       onRefresh: _load,
       canCreate: canCreate,

@@ -27,6 +27,7 @@ class FakeSharedTasksDataSource extends SharedTasksDataSource {
   String? listedFrom;
   String? listedTo;
   int calendarCalls = 0;
+  int listCalls = 0;
   Map<String, dynamic>? lastCreateData;
   bool failAudiencePreview = false;
   bool taskAllDay = false;
@@ -55,6 +56,7 @@ class FakeSharedTasksDataSource extends SharedTasksDataSource {
     String? linkedEntityType,
     String? linkedEntityId,
   }) async {
+    listCalls++;
     if (failNextList) {
       failNextList = false;
       throw StateError('list unavailable');
@@ -538,20 +540,76 @@ void main() {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      _host(FakeSharedTasksDataSource(), size: const Size(390, 844)),
-    );
+    final source = FakeSharedTasksDataSource();
+    await tester.pumpWidget(_host(source, size: const Size(390, 844)));
     await tester.pumpAndSettle();
 
     final filter = find.byKey(const Key('shared-task-mobile-filter'));
     expect(tester.getSize(filter).height, 56);
+    final callsBeforeSelection = source.listCalls;
     await tester.tap(find.byTooltip('Расширенные фильтры'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('magic-sheet-mobile')), findsOneWidget);
+    expect(find.byKey(const ValueKey('magic-sheet-frame')), findsOneWidget);
+    expect(find.text('Фильтры задач'), findsOneWidget);
+    expect(find.text('Развернуть'), findsOneWidget);
     expect(
       find.byKey(const Key('shared-task-advanced-filter-scroll')),
       findsOneWidget,
     );
+    await tester.tap(find.text('Развернуть'));
+    await tester.pumpAndSettle();
+    expect(find.text('Свернуть'), findsOneWidget);
+
+    await tester.tap(find.text('Закрытые').last);
+    await tester.pumpAndSettle();
+    expect(source.listCalls, callsBeforeSelection + 1);
+    expect(find.byKey(const ValueKey('magic-sheet-mobile')), findsNothing);
+  });
+
+  testWidgets('wide host opens advanced filters as drawer for narrow panel', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1000, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final source = FakeSharedTasksDataSource();
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(size: Size(1000, 900)),
+            child: Scaffold(
+              body: Center(
+                child: SizedBox(
+                  width: 390,
+                  height: 700,
+                  child: SharedTasksV4Panel(
+                    dataSource: source,
+                    embedded: true,
+                    canWrite: false,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('shared-task-mobile-filter')), findsOneWidget);
+    final callsBeforeSelection = source.listCalls;
+
+    await tester.tap(find.byTooltip('Расширенные фильтры'));
+    await tester.pumpAndSettle();
+    expect(find.text('Фильтры задач'), findsOneWidget);
+    expect(find.byTooltip('Закрыть'), findsOneWidget);
+    expect(find.byKey(const ValueKey('magic-sheet-mobile')), findsNothing);
+
+    await tester.tap(find.text('Закрытые').last);
+    await tester.pumpAndSettle();
+    expect(source.listCalls, callsBeforeSelection + 1);
+    expect(find.text('Фильтры задач'), findsNothing);
   });
 
   testWidgets('mobile task editor opens as an expandable full-width sheet', (

@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/magic_page_state.dart';
-import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_controller.dart';
+import 'package:magic_music_crm/features/manager/presentation/tasks/shared_task_presentation.dart';
+import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_models.dart';
 
 typedef SharedTaskCallback = void Function(Map<String, dynamic> task);
 
@@ -16,6 +17,7 @@ class SharedTasksView extends StatefulWidget {
     required this.onClose,
     required this.onEdit,
     required this.onCreate,
+    required this.onAdvancedFilters,
     required this.onRetry,
     required this.onRefresh,
     required this.canCreate,
@@ -32,6 +34,7 @@ class SharedTasksView extends StatefulWidget {
   final SharedTaskCallback onClose;
   final SharedTaskCallback onEdit;
   final VoidCallback onCreate;
+  final VoidCallback onAdvancedFilters;
   final VoidCallback onRetry;
   final Future<void> Function() onRefresh;
   final bool canCreate;
@@ -85,6 +88,7 @@ class _SharedTasksViewState extends State<SharedTasksView> {
                 ? _MobileTaskFilter(
                     value: widget.state.query.state,
                     onChanged: _setStateFilter,
+                    onAdvancedFilters: widget.onAdvancedFilters,
                     onCreate: widget.embedded && widget.canCreate
                         ? widget.onCreate
                         : null,
@@ -569,10 +573,12 @@ class _MobileTaskFilter extends StatelessWidget {
   const _MobileTaskFilter({
     required this.value,
     required this.onChanged,
+    required this.onAdvancedFilters,
     this.onCreate,
   });
   final String value;
   final ValueChanged<String> onChanged;
+  final VoidCallback onAdvancedFilters;
   final VoidCallback? onCreate;
 
   @override
@@ -602,20 +608,7 @@ class _MobileTaskFilter extends StatelessWidget {
           ),
           IconButton(
             tooltip: 'Расширенные фильтры',
-            onPressed: () => showModalBottomSheet<void>(
-              context: context,
-              isScrollControlled: true,
-              builder: (context) => Material(
-                key: const ValueKey('magic-sheet-mobile'),
-                child: _AdvancedFilters(
-                  value: value,
-                  onChanged: (next) {
-                    Navigator.pop(context);
-                    onChanged(next);
-                  },
-                ),
-              ),
-            ),
+            onPressed: onAdvancedFilters,
             icon: const Icon(Icons.tune_rounded),
           ),
           if (onCreate != null)
@@ -675,8 +668,12 @@ class _DesktopTaskFilter extends StatelessWidget {
   );
 }
 
-class _AdvancedFilters extends StatelessWidget {
-  const _AdvancedFilters({required this.value, required this.onChanged});
+class SharedTaskAdvancedFilters extends StatelessWidget {
+  const SharedTaskAdvancedFilters({
+    super.key,
+    required this.value,
+    required this.onChanged,
+  });
   final String value;
   final ValueChanged<String> onChanged;
 
@@ -834,39 +831,6 @@ class _SharedTaskCard extends StatelessWidget {
     );
   }
 }
-
-class SharedTaskMetaChip extends StatelessWidget {
-  const SharedTaskMetaChip({
-    super.key,
-    required this.icon,
-    required this.label,
-  });
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-    decoration: BoxDecoration(
-      color: AppColor.goldSoft,
-      borderRadius: BorderRadius.circular(AppRadius.chip),
-    ),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 15, color: AppColor.gold),
-        const SizedBox(width: 5),
-        Text(label),
-      ],
-    ),
-  );
-}
-
-String sharedTaskPriorityLabel(Object? value) => switch (value?.toString()) {
-  'high' => 'Высокий',
-  'low' => 'Низкий',
-  _ => 'Обычный',
-};
 
 bool _sameDay(DateTime left, DateTime right) =>
     left.year == right.year &&
