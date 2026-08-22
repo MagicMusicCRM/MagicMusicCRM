@@ -182,6 +182,147 @@ void main() {
   );
 
   test(
+    'later same-section retry wins after the older retry completes',
+    () async {
+      final source = _ControlledReportingDataSource();
+      final controller = ReportingController(
+        dataSource: source,
+        canReadStatus: true,
+        canReadSchoolFinance: false,
+      );
+      addTearDown(controller.dispose);
+      final initial = controller.load(firstFilter);
+      source.statusCalls[0].succeed({'count': 1});
+      source.lessonCalls[0].succeed({'lessons': 1});
+      source.taskCalls[0].succeed({'open': 1});
+      await initial;
+
+      final olderRetry = controller.reloadSection(
+        ReportingSectionKey.status,
+        firstFilter,
+      );
+      final newerRetry = controller.reloadSection(
+        ReportingSectionKey.status,
+        firstFilter,
+      );
+      source.statusCalls[2].succeed({'count': 3});
+      await newerRetry;
+      source.statusCalls[1].succeed({'count': 2});
+      await olderRetry;
+
+      expect(controller.state.status.data, {'count': 3});
+      expect(controller.state.status.error, isNull);
+    },
+  );
+
+  test('concurrent retries for distinct sections remain independent', () async {
+    final source = _ControlledReportingDataSource();
+    final controller = ReportingController(
+      dataSource: source,
+      canReadStatus: true,
+      canReadSchoolFinance: false,
+    );
+    addTearDown(controller.dispose);
+    final initial = controller.load(firstFilter);
+    source.statusCalls[0].succeed({'count': 1});
+    source.lessonCalls[0].succeed({'lessons': 1});
+    source.taskCalls[0].succeed({'open': 1});
+    await initial;
+
+    final statusRetry = controller.reloadSection(
+      ReportingSectionKey.status,
+      firstFilter,
+    );
+    final lessonRetry = controller.reloadSection(
+      ReportingSectionKey.lessons,
+      firstFilter,
+    );
+    source.lessonCalls[1].succeed({'lessons': 4});
+    await lessonRetry;
+    expect(controller.state.status.loading, isTrue);
+    expect(controller.state.lessons.data, {'lessons': 4});
+    source.statusCalls[1].succeed({'count': 3});
+    await statusRetry;
+
+    expect(controller.state.status.data, {'count': 3});
+    expect(controller.state.lessons.data, {'lessons': 4});
+    expect(controller.state.tasks.data, {'open': 1});
+  });
+
+  test('whole reload supersedes an in-flight section retry', () async {
+    final source = _ControlledReportingDataSource();
+    final controller = ReportingController(
+      dataSource: source,
+      canReadStatus: true,
+      canReadSchoolFinance: false,
+    );
+    addTearDown(controller.dispose);
+    final initial = controller.load(firstFilter);
+    source.statusCalls[0].succeed({'filter': 'initial'});
+    source.lessonCalls[0].succeed({'lessons': 1});
+    source.taskCalls[0].succeed({'open': 1});
+    await initial;
+
+    final retry = controller.reloadSection(
+      ReportingSectionKey.status,
+      firstFilter,
+    );
+    final reload = controller.load(secondFilter);
+    source.statusCalls[2].succeed({'filter': 'reload'});
+    source.lessonCalls[1].succeed({'lessons': 2});
+    source.taskCalls[1].succeed({'open': 2});
+    await reload;
+    source.statusCalls[1].fail(StateError('stale retry failure'));
+    await retry;
+
+    expect(controller.state.status.data, {'filter': 'reload'});
+    expect(controller.state.status.error, isNull);
+  });
+
+  test(
+    'filter-mismatched section retry falls back to a whole reload',
+    () async {
+      final source = _ControlledReportingDataSource();
+      final controller = ReportingController(
+        dataSource: source,
+        canReadStatus: true,
+        canReadSchoolFinance: true,
+      );
+      addTearDown(controller.dispose);
+      final initial = controller.load(firstFilter);
+      source.statusCalls[0].succeed({'filter': 'initial'});
+      source.lessonCalls[0].succeed({'lessons': 1});
+      source.taskCalls[0].succeed({'open': 1});
+      source.financeCalls[0].succeed({'finance': 1});
+      await initial;
+
+      final mismatchedRetry = controller.reloadSection(
+        ReportingSectionKey.status,
+        secondFilter,
+      );
+
+      expect(source.statusCalls, hasLength(2));
+      expect(source.lessonCalls, hasLength(2));
+      expect(source.taskCalls, hasLength(2));
+      expect(source.financeCalls, hasLength(2));
+      expect(source.statusCalls[1].filter, secondFilter);
+      expect(source.lessonCalls[1].filter, secondFilter);
+      expect(source.taskCalls[1].filter, isNull);
+      expect(source.financeCalls[1].filter, secondFilter);
+      source.statusCalls[1].succeed({'filter': 'replacement'});
+      source.lessonCalls[1].succeed({'lessons': 2});
+      source.taskCalls[1].succeed({'open': 2});
+      source.financeCalls[1].succeed({'finance': 2});
+      await mismatchedRetry;
+
+      expect(controller.state.status.data, {'filter': 'replacement'});
+      expect(controller.state.lessons.data, {'lessons': 2});
+      expect(controller.state.tasks.data, {'open': 2});
+      expect(controller.state.finance.data, {'finance': 2});
+    },
+  );
+
+  test(
     'dispose ignores late completions without notifying listeners',
     () async {
       final source = _ControlledReportingDataSource();

@@ -26,6 +26,15 @@ export 'package:magic_music_crm/features/manager/presentation/reporting/report_e
 export 'package:magic_music_crm/features/manager/presentation/reporting/reporting_models.dart'
     show DashboardFilter;
 
+typedef _ReportingAccessInput = ({
+  String? accountId,
+  int? accessVersion,
+  String? snapshotRole,
+  String fallbackRole,
+  bool canReadStatus,
+  bool canReadSchoolFinance,
+});
+
 class ReportingV4Panel extends ConsumerStatefulWidget {
   const ReportingV4Panel({
     super.key,
@@ -49,6 +58,8 @@ class ReportingV4Panel extends ConsumerStatefulWidget {
 class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
   final _scrollController = ScrollController();
   late ReportingController _controller;
+  late _ReportingAccessInput _controllerAccess;
+  ProviderSubscription<ReportingDataSource>? _dataSourceSubscription;
   EntityLink? _drilldownLink;
   Map<String, dynamic>? _drilldown;
   bool _lessonDrilldown = false;
@@ -59,6 +70,9 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
   Object? _exportError;
   bool _exporting = false;
   bool _disposed = false;
+  int _inputGeneration = 0;
+  int _drilldownOperation = 0;
+  int _exportOperation = 0;
 
   bool get _canReadStatus =>
       widget.accessSnapshot?.allows('report.status.read') ??
@@ -71,6 +85,18 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
       (widget.role == 'director' || widget.role == 'system_admin');
 
   DashboardFilter get _filter => widget.filter ?? DashboardFilter.defaults();
+
+  _ReportingAccessInput get _accessInput {
+    final snapshot = widget.accessSnapshot;
+    return (
+      accountId: snapshot?.accountId,
+      accessVersion: snapshot?.accessVersion,
+      snapshotRole: snapshot?.role,
+      fallbackRole: widget.role,
+      canReadStatus: _canReadStatus,
+      canReadSchoolFinance: _canReadSchoolFinance,
+    );
+  }
 
   ReportingDataSource get _dataSource => _controller.dataSource;
 
@@ -88,21 +114,29 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
   @override
   void initState() {
     super.initState();
-    _controller = _createController(ref.read(reportingDataSourceProvider));
+    _controllerAccess = _accessInput;
+    _controller = _createController(
+      ref.read(reportingDataSourceProvider),
+      _controllerAccess,
+    );
     _controller.addListener(_onReportingChanged);
+    _dataSourceSubscription = ref.listenManual(reportingDataSourceProvider, (
+      previous,
+      next,
+    ) {
+      if (_disposed || identical(next, _controller.dataSource)) return;
+      _replaceController(next, _accessInput);
+      unawaited(_load());
+    });
     unawaited(_load());
   }
 
   @override
   void didUpdateWidget(covariant ReportingV4Panel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final dataSource = ref.read(reportingDataSourceProvider);
-    final accessChanged =
-        oldWidget.role != widget.role ||
-        oldWidget.accessSnapshot?.accessVersion !=
-            widget.accessSnapshot?.accessVersion;
-    if (accessChanged || !identical(dataSource, _controller.dataSource)) {
-      _replaceController(dataSource);
+    final access = _accessInput;
+    if (access != _controllerAccess) {
+      _replaceController(ref.read(reportingDataSourceProvider), access);
       unawaited(_load());
     } else if (oldWidget.filter != widget.filter ||
         oldWidget.reloadToken != widget.reloadToken) {
@@ -113,25 +147,49 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
   @override
   void dispose() {
     _disposed = true;
+    _dataSourceSubscription?.close();
     _controller.removeListener(_onReportingChanged);
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
-  ReportingController _createController(ReportingDataSource dataSource) {
+  ReportingController _createController(
+    ReportingDataSource dataSource,
+    _ReportingAccessInput access,
+  ) {
     return ReportingController(
       dataSource: dataSource,
-      canReadStatus: _canReadStatus,
-      canReadSchoolFinance: _canReadSchoolFinance,
+      canReadStatus: access.canReadStatus,
+      canReadSchoolFinance: access.canReadSchoolFinance,
     );
   }
 
-  void _replaceController(ReportingDataSource dataSource) {
+  void _replaceController(
+    ReportingDataSource dataSource,
+    _ReportingAccessInput access,
+  ) {
+    _inputGeneration++;
+    _drilldownOperation++;
+    _exportOperation++;
+    _clearAccessSensitiveState();
     _controller.removeListener(_onReportingChanged);
     _controller.dispose();
-    _controller = _createController(dataSource);
+    _controllerAccess = access;
+    _controller = _createController(dataSource, access);
     _controller.addListener(_onReportingChanged);
+  }
+
+  void _clearAccessSensitiveState() {
+    _financeDetail = null;
+    _drilldownLink = null;
+    _drilldown = null;
+    _lessonDrilldown = false;
+    _drilldownLoading = false;
+    _drilldownError = null;
+    _exporting = false;
+    _exportStatus = null;
+    _exportError = null;
   }
 
   void _onReportingChanged() {
@@ -147,6 +205,8 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
     Map<String, dynamic> rawLink, {
     int? expectedCount,
   }) async {
+    final inputGeneration = _inputGeneration;
+    final operation = ++_drilldownOperation;
     final link = EntityLink.fromJson(rawLink);
     final lessonDrilldown = link.rawEntityType == 'lesson_list';
     final resolution = EntityRouteRegistry().resolve(link, _snapshot);
@@ -166,16 +226,16 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
     });
     try {
       final response = await _dataSource.loadDrilldown(link, _filter);
+      if (!_isCurrentDrilldown(inputGeneration, operation)) return;
       if (expectedCount != null && _int(response['total']) != expectedCount) {
         throw StateError('Количество в карточке и детализации не совпадает.');
       }
-      if (!mounted) return;
       setState(() {
         _drilldown = response;
         _drilldownLoading = false;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!_isCurrentDrilldown(inputGeneration, operation)) return;
       setState(() {
         _drilldownError = error;
         _drilldownLoading = false;
@@ -185,6 +245,8 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
 
   Future<void> _startExport(String reportKey, String format) async {
     if (_exporting) return;
+    final inputGeneration = _inputGeneration;
+    final operation = ++_exportOperation;
     setState(() {
       _exporting = true;
       _exportError = null;
@@ -199,32 +261,39 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
           await ReportExportCoordinator(
             dataSource: _dataSource,
             opener: ref.read(reportFileOpenerProvider),
-            isCancelled: () => _disposed,
+            isCancelled: () => _isExportCancelled(inputGeneration, operation),
           ).export(
             reportKey: reportKey,
             format: format,
             filter: filter,
-            onProgress: _updateExportProgress,
+            onProgress: (progress) =>
+                _updateExportProgress(progress, inputGeneration, operation),
           );
-      if (!mounted) return;
+      if (_isExportCancelled(inputGeneration, operation)) return;
       setState(() {
         _exportStatus = outcome.opened
             ? 'Файл открыт: ${outcome.filename}'
             : 'Файл сохранён: ${outcome.path}';
       });
     } catch (error) {
-      if (!mounted) return;
+      if (_isExportCancelled(inputGeneration, operation)) return;
       setState(() {
         _exportError = error;
         _exportStatus = null;
       });
     } finally {
-      if (mounted) setState(() => _exporting = false);
+      if (!_isExportCancelled(inputGeneration, operation)) {
+        setState(() => _exporting = false);
+      }
     }
   }
 
-  void _updateExportProgress(ReportExportProgress progress) {
-    if (!mounted) return;
+  void _updateExportProgress(
+    ReportExportProgress progress,
+    int inputGeneration,
+    int operation,
+  ) {
+    if (_isExportCancelled(inputGeneration, operation)) return;
     final status = switch (progress.stage) {
       ReportExportProgressStage.requesting => 'Подготавливаем файл…',
       ReportExportProgressStage.queued =>
@@ -235,6 +304,17 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
     };
     if (status != null) setState(() => _exportStatus = status);
   }
+
+  bool _isCurrentDrilldown(int inputGeneration, int operation) =>
+      mounted &&
+      !_disposed &&
+      inputGeneration == _inputGeneration &&
+      operation == _drilldownOperation;
+
+  bool _isExportCancelled(int inputGeneration, int operation) =>
+      _disposed ||
+      inputGeneration != _inputGeneration ||
+      operation != _exportOperation;
 
   CapabilitySnapshot get _snapshot {
     if (widget.accessSnapshot != null) return widget.accessSnapshot!;
@@ -267,7 +347,11 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
         state: EntityRouteState.forbidden,
       );
     }
-    if (_financeDetail != null) return _buildFinanceDetail(context);
+    if (_financeDetail != null &&
+        _canReadSchoolFinance &&
+        !_reporting.finance.forbidden) {
+      return _buildFinanceDetail(context);
+    }
     if (_drilldownLink != null) return _buildDrilldown(context);
 
     final statusItems = _mapList(_statusSummary['items']);
@@ -489,6 +573,7 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
   }
 
   void _openFinanceRow(Map<String, dynamic> row) {
+    if (!_canReadSchoolFinance || _reporting.finance.forbidden) return;
     final link = EntityLink.fromJson(_stringMap(row['link']));
     if (widget.onOpenEntity != null) {
       widget.onOpenEntity!(link);
