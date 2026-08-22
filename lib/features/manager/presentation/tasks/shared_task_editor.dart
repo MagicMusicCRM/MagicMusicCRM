@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -65,10 +67,53 @@ String _taskSavedMessage(Map<String, dynamic> result, {required bool created}) {
       : action;
 }
 
+class _MutationAttempt {
+  const _MutationAttempt({
+    required this.payloadFingerprint,
+    required this.identity,
+  });
+
+  final String payloadFingerprint;
+  final MagicMutationIdentity identity;
+}
+
+String _payloadFingerprint(Map<String, dynamic> payload) =>
+    jsonEncode(_canonicalJson(payload));
+
+Object? _canonicalJson(Object? value) {
+  if (value is Map) {
+    final keys = value.keys.map((key) => key.toString()).toList()..sort();
+    return {for (final key in keys) key: _canonicalJson(value[key])};
+  }
+  if (value is Iterable) {
+    return value.map(_canonicalJson).toList(growable: false);
+  }
+  return value;
+}
+
+Map<String, dynamic> _immutablePayload(Map<String, dynamic> payload) =>
+    Map<String, dynamic>.unmodifiable(
+      payload.map((key, value) => MapEntry(key, _immutableJson(value))),
+    );
+
+Object? _immutableJson(Object? value) {
+  if (value is Map) {
+    return Map<String, dynamic>.unmodifiable(
+      value.map(
+        (key, nested) => MapEntry(key.toString(), _immutableJson(nested)),
+      ),
+    );
+  }
+  if (value is Iterable) {
+    return List<Object?>.unmodifiable(value.map(_immutableJson));
+  }
+  return value;
+}
+
 class SharedTaskEditor extends StatefulWidget {
   const SharedTaskEditor({
     super.key,
-    this.dataSource,
+    required this.dataSource,
     this.audienceOptions = const [],
     this.task,
     this.linkedEntity,
@@ -77,9 +122,7 @@ class SharedTaskEditor extends StatefulWidget {
     this.embedded = false,
   });
 
-  /// Null only for the temporary payload-only compatibility used by existing
-  /// direct editor characterizations. Production entry points always supply it.
-  final SharedTasksDataSource? dataSource;
+  final SharedTasksDataSource dataSource;
   final List<SharedTaskAudienceOption> audienceOptions;
   final Map<String, dynamic>? task;
   final EntityLink? linkedEntity;
@@ -110,11 +153,13 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
   bool _previewLoading = false;
   int _previewGeneration = 0;
   bool _saving = false;
+  bool _terminalSuccess = false;
+  bool _savedCallbackAttempted = false;
   Object? _saveError;
-  MagicMutationIdentity? _identity;
+  _MutationAttempt? _attempt;
 
-  SharedTaskAudiencePreviewLoader? get _audiencePreview =>
-      widget.audiencePreview ?? widget.dataSource?.previewAudience;
+  SharedTaskAudiencePreviewLoader get _audiencePreview =>
+      widget.audiencePreview ?? widget.dataSource.previewAudience;
 
   @override
   void initState() {
@@ -139,7 +184,6 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
     if (_audiences.isEmpty) {
       _audiences.add({'type': 'allBranches'});
     }
-    _reminder = task?['hasReminder'] == true;
     final existingReminders = task?['reminders'];
     if (existingReminders is List) {
       _existingReminders = existingReminders
@@ -149,6 +193,7 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
     }
     for (final reminder in _existingReminders) {
       if (reminder['channel'] != 'in_app') continue;
+      _reminder = true;
       _reminderAt = DateTime.tryParse(
         reminder['dueAt']?.toString() ?? '',
       )?.toLocal();
@@ -364,8 +409,10 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
       !_saving &&
       _title.text.trim().isNotEmpty &&
       _hasValidInterval &&
-      (_audiencePreview == null ||
-          (!_previewLoading && _previewError == null && _preview != null));
+      !_terminalSuccess &&
+      !_previewLoading &&
+      _previewError == null &&
+      _preview != null;
 
   bool get _hasValidInterval => _allDay || (_end?.isAfter(_start) ?? false);
 
@@ -408,7 +455,6 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
       if (value) {
         _reminderAt ??= _defaultReminderAt();
       } else {
-        _existingReminders = const [];
         _reminderAt = null;
         _reminderCustomized = false;
       }
@@ -455,7 +501,7 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
 
   void _refreshAudiencePreview() {
     final loader = _audiencePreview;
-    if (loader == null || !mounted) return;
+    if (!mounted) return;
     final generation = ++_previewGeneration;
     setState(() {
       _previewLoading = true;
@@ -481,12 +527,6 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
   }
 
   Widget _buildAudiencePreview(BuildContext context) {
-    if (_audiencePreview == null) {
-      return const Text(
-        'Сотрудники назначаются лично. Филиал и вся школа используют '
-        'актуальный состав на момент показа задачи.',
-      );
-    }
     return Container(
       key: const Key('shared-task-audience-preview'),
       padding: const EdgeInsets.all(AppSpace.md),
@@ -571,41 +611,65 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
   }
 
   Future<void> _submit() async {
-    final payload = _payload();
-    final source = widget.dataSource;
-    if (source == null) {
-      Navigator.pop(context, payload);
-      return;
-    }
+    if (_saving || _terminalSuccess) return;
+    final payload = _immutablePayload(_payload());
+    final fingerprint = _payloadFingerprint(payload);
     final created = widget.task == null;
-    final identity = _identity ??= MagicMutationIdentity.create(
-      created ? 'shared-task-create' : 'shared-task-update',
-    );
+    final previousAttempt = _attempt;
+    final attempt = previousAttempt?.payloadFingerprint == fingerprint
+        ? previousAttempt!
+        : _MutationAttempt(
+            payloadFingerprint: fingerprint,
+            identity: MagicMutationIdentity.create(
+              created ? 'shared-task-create' : 'shared-task-update',
+            ),
+          );
+    _attempt = attempt;
     setState(() {
       _saving = true;
       _saveError = null;
     });
+    Map<String, dynamic> result;
     try {
-      final result = created
-          ? await source.create(payload, identity)
-          : await source.update(
+      result = created
+          ? await widget.dataSource.create(payload, attempt.identity)
+          : await widget.dataSource.update(
               widget.task!['id'].toString(),
               payload,
-              identity,
+              attempt.identity,
             );
-      if (!mounted) return;
-      final messenger = ScaffoldMessenger.maybeOf(context);
-      widget.onSaved?.call();
-      Navigator.pop(context, true);
-      messenger?.showSnackBar(
-        SnackBar(content: Text(_taskSavedMessage(result, created: created))),
-      );
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _saving = false;
         _saveError = error;
       });
+      return;
+    }
+
+    _terminalSuccess = true;
+    _saving = false;
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (!_savedCallbackAttempted) {
+      _savedCallbackAttempted = true;
+      try {
+        widget.onSaved?.call();
+      } catch (_) {
+        // A consumer callback cannot turn a committed command into a retry.
+      }
+    }
+    try {
+      Navigator.pop(context, true);
+    } catch (_) {
+      // The server command has succeeded and must remain terminal.
+    }
+    try {
+      messenger?.showSnackBar(
+        SnackBar(content: Text(_taskSavedMessage(result, created: created))),
+      );
+    } catch (_) {
+      // Presentation failure cannot make a committed command retryable.
     }
   }
 
@@ -627,7 +691,8 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
       if (end != null) 'endAt': end.toUtc().toIso8601String(),
       'audiences': _audiences,
       'linkedEntity': ?linkedEntity,
-      if (_reminder) 'reminders': _reminderPayload(),
+      if (widget.task != null || _reminder || _existingReminders.isNotEmpty)
+        'reminders': _reminderPayload(),
       if (widget.task != null) 'expectedVersion': widget.task!['version'],
     };
   }
@@ -641,14 +706,16 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
     for (final reminder in _existingReminders) {
       final channel = reminder['channel']?.toString();
       if (channel == null || channel.isEmpty) continue;
-      if (channel == 'in_app' && !replacedInApp) {
-        result.add({'dueAt': dueAt, 'channel': channel});
-        replacedInApp = true;
-      } else {
-        result.add({'dueAt': reminder['dueAt'], 'channel': channel});
+      if (channel == 'in_app') {
+        if (_reminder && !replacedInApp) {
+          result.add({'dueAt': dueAt, 'channel': channel});
+          replacedInApp = true;
+        }
+        continue;
       }
+      result.add({'dueAt': reminder['dueAt'], 'channel': channel});
     }
-    if (!replacedInApp) {
+    if (_reminder && !replacedInApp) {
       result.add({'dueAt': dueAt, 'channel': 'in_app'});
     }
     return result;

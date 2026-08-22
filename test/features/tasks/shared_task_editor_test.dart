@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
@@ -13,7 +15,9 @@ class RecordingSharedTasksDataSource extends SharedTasksDataSource {
   bool failPreview = false;
   Map<String, dynamic>? lastPayload;
   String? updatedTaskId;
+  Completer<Map<String, dynamic>>? pendingMutation;
   final List<MagicMutationIdentity> identities = [];
+  final List<Map<String, dynamic>> payloads = [];
 
   @override
   Future<List<SharedTaskAudienceOption>> audienceOptions() async => const [
@@ -48,10 +52,13 @@ class RecordingSharedTasksDataSource extends SharedTasksDataSource {
   ) async {
     identities.add(identity);
     lastPayload = Map<String, dynamic>.from(data);
+    payloads.add(Map<String, dynamic>.from(data));
     if (failuresRemaining > 0) {
       failuresRemaining--;
       throw StateError('offline');
     }
+    final pending = pendingMutation;
+    if (pending != null) return pending.future;
     return {
       ...data,
       'recipientSummary': {'totalRecipients': 4},
@@ -97,23 +104,35 @@ class RecordingSharedTasksDataSource extends SharedTasksDataSource {
   }) async => {'items': <Map<String, dynamic>>[]};
 }
 
+class EditorLifecycleProbe {
+  int completions = 0;
+  bool? result;
+}
+
 Widget _launcher({
   required RecordingSharedTasksDataSource source,
   Map<String, dynamic>? task,
   EntityLink? linkedEntity,
   VoidCallback? onSaved,
+  EditorLifecycleProbe? lifecycle,
 }) {
   return MaterialApp(
     home: Scaffold(
       body: Builder(
         builder: (context) => FilledButton(
-          onPressed: () => showSharedTaskEditor(
-            context,
-            dataSource: source,
-            task: task,
-            linkedEntity: linkedEntity,
-            onSaved: onSaved,
-          ),
+          onPressed: () async {
+            final result = await showSharedTaskEditor(
+              context,
+              dataSource: source,
+              task: task,
+              linkedEntity: linkedEntity,
+              onSaved: onSaved,
+            );
+            if (lifecycle != null) {
+              lifecycle.result = result;
+              lifecycle.completions++;
+            }
+          },
           child: const Text('Открыть редактор'),
         ),
       ),
@@ -147,6 +166,13 @@ Map<String, dynamic> _updateTask() => {
     {'type': 'allBranches'},
   ],
 };
+
+Map<String, dynamic> _taskWithReminders(List<Map<String, dynamic>> reminders) =>
+    {
+      ..._updateTask(),
+      'hasReminder': reminders.isNotEmpty,
+      'reminders': reminders,
+    };
 
 void main() {
   testWidgets('failed update keeps draft and reuses mutation identity', (
@@ -300,5 +326,182 @@ void main() {
     expect(source.createCalls, 0);
     expect(source.updateCalls, 0);
     expect(source.identities, isEmpty);
+  });
+
+  testWidgets('editing draft after failure rotates mutation identity', (
+    tester,
+  ) async {
+    final source = RecordingSharedTasksDataSource()..failuresRemaining = 1;
+    await tester.pumpWidget(_launcher(source: source, task: _updateTask()));
+    await _openEditor(tester);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Сохранить'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('shared-task-title')),
+      'Новый payload после ошибки',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Сохранить'));
+    await tester.pumpAndSettle();
+
+    expect(source.updateCalls, 2);
+    expect(source.payloads[0]['title'], 'Исходный заголовок');
+    expect(source.payloads[1]['title'], 'Новый payload после ошибки');
+    expect(
+      source.identities[1].idempotencyKey,
+      isNot(source.identities[0].idempotencyKey),
+    );
+  });
+
+  testWidgets('throwing onSaved cannot make successful mutation retryable', (
+    tester,
+  ) async {
+    final source = RecordingSharedTasksDataSource();
+    final lifecycle = EditorLifecycleProbe();
+    var callbackAttempts = 0;
+    await tester.pumpWidget(
+      _launcher(
+        source: source,
+        lifecycle: lifecycle,
+        onSaved: () {
+          callbackAttempts++;
+          throw StateError('consumer failed');
+        },
+      ),
+    );
+    await _openEditor(tester);
+    await tester.enterText(
+      find.byKey(const Key('shared-task-title')),
+      'Успешная команда',
+    );
+    await tester.pump();
+
+    tester
+        .widget<FilledButton>(find.widgetWithText(FilledButton, 'Создать'))
+        .onPressed!();
+    await tester.pumpAndSettle();
+
+    expect(source.createCalls, 1);
+    expect(callbackAttempts, 1);
+    expect(lifecycle.completions, 1);
+    expect(lifecycle.result, isTrue);
+    expect(find.byKey(const Key('shared-task-save-error')), findsNothing);
+    expect(find.text('Открыть редактор'), findsOneWidget);
+  });
+
+  testWidgets('pending double submit runs one mutation and one completion', (
+    tester,
+  ) async {
+    final source = RecordingSharedTasksDataSource();
+    final pending = Completer<Map<String, dynamic>>();
+    source.pendingMutation = pending;
+    final lifecycle = EditorLifecycleProbe();
+    var saved = 0;
+    await tester.pumpWidget(
+      _launcher(source: source, lifecycle: lifecycle, onSaved: () => saved++),
+    );
+    await _openEditor(tester);
+    await tester.enterText(
+      find.byKey(const Key('shared-task-title')),
+      'Один запрос',
+    );
+    await tester.pump();
+
+    final submit = find.widgetWithText(FilledButton, 'Создать');
+    final onPressed = tester.widget<FilledButton>(submit).onPressed!;
+    onPressed();
+    onPressed();
+    expect(source.createCalls, 1);
+    pending.complete({
+      'recipientSummary': {'totalRecipients': 4},
+    });
+    await tester.pumpAndSettle();
+
+    expect(source.createCalls, 1);
+    expect(saved, 1);
+    expect(lifecycle.completions, 1);
+    expect(lifecycle.result, isTrue);
+  });
+
+  testWidgets('email and push reminders survive an untouched title edit', (
+    tester,
+  ) async {
+    final reminders = <Map<String, dynamic>>[
+      {'dueAt': '2026-08-25T07:00:00.000Z', 'channel': 'email'},
+      {'dueAt': '2026-08-25T07:30:00.000Z', 'channel': 'push'},
+    ];
+    final source = RecordingSharedTasksDataSource();
+    await tester.pumpWidget(
+      _launcher(source: source, task: _taskWithReminders(reminders)),
+    );
+    await _openEditor(tester);
+
+    expect(
+      tester
+          .widget<SwitchListTile>(
+            find.widgetWithText(SwitchListTile, 'Напомнить в приложении'),
+          )
+          .value,
+      isFalse,
+    );
+    await tester.enterText(
+      find.byKey(const Key('shared-task-title')),
+      'Только заголовок',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Сохранить'));
+    await tester.pumpAndSettle();
+
+    expect(source.lastPayload?['reminders'], reminders);
+  });
+
+  testWidgets('enabling in-app preserves email and push reminders', (
+    tester,
+  ) async {
+    final reminders = <Map<String, dynamic>>[
+      {'dueAt': '2026-08-25T07:00:00.000Z', 'channel': 'email'},
+      {'dueAt': '2026-08-25T07:30:00.000Z', 'channel': 'push'},
+    ];
+    final source = RecordingSharedTasksDataSource();
+    await tester.pumpWidget(
+      _launcher(source: source, task: _taskWithReminders(reminders)),
+    );
+    await _openEditor(tester);
+
+    await tester.tap(find.text('Напомнить в приложении'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Сохранить'));
+    await tester.pumpAndSettle();
+
+    final payload = (source.lastPayload?['reminders'] as List)
+        .whereType<Map<String, dynamic>>()
+        .toList();
+    expect(
+      payload.where((item) => item['channel'] == 'email'),
+      reminders.take(1),
+    );
+    expect(payload.where((item) => item['channel'] == 'push'), [reminders[1]]);
+    expect(payload.where((item) => item['channel'] == 'in_app'), hasLength(1));
+  });
+
+  testWidgets('disabling in-app removes only that reminder channel', (
+    tester,
+  ) async {
+    final reminders = <Map<String, dynamic>>[
+      {'dueAt': '2026-08-25T07:00:00.000Z', 'channel': 'email'},
+      {'dueAt': '2026-08-25T07:30:00.000Z', 'channel': 'push'},
+      {'dueAt': '2026-08-25T08:30:00.000Z', 'channel': 'in_app'},
+    ];
+    final source = RecordingSharedTasksDataSource();
+    await tester.pumpWidget(
+      _launcher(source: source, task: _taskWithReminders(reminders)),
+    );
+    await _openEditor(tester);
+
+    await tester.tap(find.text('Напомнить в приложении'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Сохранить'));
+    await tester.pumpAndSettle();
+
+    expect(source.lastPayload?['reminders'], reminders.take(2).toList());
   });
 }

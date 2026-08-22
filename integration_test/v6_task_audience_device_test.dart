@@ -12,6 +12,7 @@ import 'package:magic_music_crm/core/widgets/notification_bell_widget.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
+import 'package:magic_music_crm/features/manager/presentation/tasks/shared_task_editor.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tasks_v4_panel.dart';
 
 import 'evidence_screenshot.dart';
@@ -335,6 +336,7 @@ class _TaskAudienceDeviceHome extends StatefulWidget {
 }
 
 class _TaskAudienceDeviceHomeState extends State<_TaskAudienceDeviceHome> {
+  final _source = FakeSharedTasksDataSource();
   bool _saved = false;
 
   @override
@@ -345,29 +347,29 @@ class _TaskAudienceDeviceHomeState extends State<_TaskAudienceDeviceHome> {
             ? const Text('Сохранено: Вся школа')
             : FilledButton(
                 onPressed: () async {
-                  final result =
-                      await showMagicAdaptiveSurface<Map<String, dynamic>>(
-                        context,
-                        kind: AppSurfaceKind.selection,
-                        title: 'Новая задача',
-                        builder: (_) => SharedTaskEditor(
-                          embedded: true,
-                          audienceOptions: const [],
-                          audiencePreview: (audiences) async => {
-                            'totalRecipients': 4,
-                            'hasDynamicMembership': true,
-                            'selectors': const [
-                              {
-                                'type': 'allBranches',
-                                'label': 'Вся школа',
-                                'mode': 'dynamic',
-                                'currentRecipientCount': 4,
-                              },
-                            ],
+                  final result = await showMagicAdaptiveSurface<bool>(
+                    context,
+                    kind: AppSurfaceKind.selection,
+                    title: 'Новая задача',
+                    builder: (_) => SharedTaskEditor(
+                      dataSource: _source,
+                      embedded: true,
+                      audienceOptions: const [],
+                      audiencePreview: (audiences) async => {
+                        'totalRecipients': 4,
+                        'hasDynamicMembership': true,
+                        'selectors': const [
+                          {
+                            'type': 'allBranches',
+                            'label': 'Вся школа',
+                            'mode': 'dynamic',
+                            'currentRecipientCount': 4,
                           },
-                        ),
-                      );
-                  if (mounted && result != null) setState(() => _saved = true);
+                        ],
+                      },
+                    ),
+                  );
+                  if (mounted && result == true) setState(() => _saved = true);
                 },
                 child: const Text('Новая задача'),
               ),

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/features/manager/presentation/tasks/shared_task_editor.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_data_source.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_models.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tasks_v4_panel.dart';
@@ -580,10 +581,12 @@ void main() {
     tester.view.physicalSize = const Size(1000, 1000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
+    final source = FakeSharedTasksDataSource();
     await tester.pumpWidget(
-      const MaterialApp(
+      MaterialApp(
         home: Scaffold(
           body: SharedTaskEditor(
+            dataSource: source,
             audienceOptions: [
               SharedTaskAudienceOption(
                 type: 'user',
@@ -685,10 +688,12 @@ void main() {
   testWidgets('invalid interval is visible and cannot be submitted', (
     tester,
   ) async {
+    final source = FakeSharedTasksDataSource();
     await tester.pumpWidget(
-      const MaterialApp(
+      MaterialApp(
         home: Scaffold(
           body: SharedTaskEditor(
+            dataSource: source,
             task: {
               'id': '11111111-1111-4111-8111-111111111111',
               'title': 'Некорректный интервал',

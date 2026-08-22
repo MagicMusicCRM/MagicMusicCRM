@@ -18,8 +18,6 @@ import 'package:magic_music_crm/features/manager/presentation/tasks/shared_task_
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_controller.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_data_source.dart';
 
-export 'package:magic_music_crm/features/manager/presentation/tasks/shared_task_editor.dart';
-
 class SharedTasksV4Panel extends ConsumerStatefulWidget {
   const SharedTasksV4Panel({
     super.key,
