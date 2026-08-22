@@ -98,6 +98,8 @@ class SharedTasksQuery {
 class SharedTasksState {
   const SharedTasksState({
     this.query = const SharedTasksQuery(),
+    this.appliedQuery = const SharedTasksQuery(),
+    this.successfulQuery,
     this.items = const [],
     this.counters = const {'open': 0, 'overdue': 0},
     this.calendar = const {},
@@ -109,6 +111,8 @@ class SharedTasksState {
   });
 
   final SharedTasksQuery query;
+  final SharedTasksQuery appliedQuery;
+  final SharedTasksQuery? successfulQuery;
   final List<Map<String, dynamic>> items;
   final Map<String, dynamic> counters;
   final Map<String, int> calendar;
@@ -118,8 +122,17 @@ class SharedTasksState {
   final Set<String> closing;
   final Map<String, Object> closeErrors;
 
+  bool get contentQueryChanged =>
+      error != null &&
+      successfulQuery != null &&
+      successfulQuery != appliedQuery;
+
+  SharedTasksQuery get contentQuery => successfulQuery ?? appliedQuery;
+
   SharedTasksState copyWith({
     SharedTasksQuery? query,
+    SharedTasksQuery? appliedQuery,
+    Object? successfulQuery = _unchanged,
     List<Map<String, dynamic>>? items,
     Map<String, dynamic>? counters,
     Map<String, int>? calendar,
@@ -130,6 +143,10 @@ class SharedTasksState {
     Map<String, Object>? closeErrors,
   }) => SharedTasksState(
     query: query ?? this.query,
+    appliedQuery: appliedQuery ?? this.appliedQuery,
+    successfulQuery: identical(successfulQuery, _unchanged)
+        ? this.successfulQuery
+        : successfulQuery as SharedTasksQuery?,
     items: items ?? this.items,
     counters: counters ?? this.counters,
     calendar: calendar ?? this.calendar,
@@ -162,7 +179,10 @@ class SharedTasksController extends ChangeNotifier {
     Stream<void>? refreshes,
     SharedTasksQuery initialQuery = const SharedTasksQuery(),
     this.refreshDebounce = const Duration(milliseconds: 200),
-  }) : state = SharedTasksState(query: initialQuery) {
+  }) : state = SharedTasksState(
+         query: initialQuery,
+         appliedQuery: initialQuery,
+       ) {
     _refreshSubscription = refreshes?.listen((_) {
       _refreshTimer?.cancel();
       _refreshTimer = Timer(refreshDebounce, () => unawaited(refresh()));
@@ -182,10 +202,12 @@ class SharedTasksController extends ChangeNotifier {
   Future<void> refresh({bool showLoading = false}) =>
       setQuery(state.query, showLoading: showLoading);
 
+  Future<void> retry({bool showLoading = true}) =>
+      setQuery(state.appliedQuery, showLoading: showLoading);
+
   void updateQuery(SharedTasksQuery query) {
     if (_disposed || query == state.query) return;
-    _revision++;
-    state = state.copyWith(query: query, loading: false);
+    state = state.copyWith(query: query);
     notifyListeners();
   }
 
@@ -197,6 +219,7 @@ class SharedTasksController extends ChangeNotifier {
     final revision = ++_revision;
     state = state.copyWith(
       query: query,
+      appliedQuery: query,
       loading: showLoading || !state.hasLoaded,
       error: null,
     );
@@ -262,6 +285,7 @@ class SharedTasksController extends ChangeNotifier {
         calendar: Map.unmodifiable(calendar),
         loading: false,
         hasLoaded: true,
+        successfulQuery: query,
         error: null,
       );
     } catch (error) {

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
 
-import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_controller.dart';
@@ -46,6 +45,8 @@ class _ControlledSharedTasksDataSource extends SharedTasksDataSource {
   final List<_ListCall> listCalls = [];
   final List<_CalendarCall> calendarCalls = [];
   final List<MagicMutationIdentity> closeIdentities = [];
+  final List<String> closeTaskIds = [];
+  final List<int> closeVersions = [];
 
   @override
   Future<Map<String, dynamic>> list({
@@ -109,6 +110,8 @@ class _ControlledSharedTasksDataSource extends SharedTasksDataSource {
     int expectedVersion,
     MagicMutationIdentity identity,
   ) {
+    closeTaskIds.add(taskId);
+    closeVersions.add(expectedVersion);
     closeIdentities.add(identity);
     return closeResults.removeFirst();
   }
@@ -186,6 +189,8 @@ void main() {
     expect(controller.state.error, isA<StateError>());
     expect(controller.state.loading, isFalse);
     expect(controller.state.hasLoaded, isTrue);
+    expect(controller.state.successfulQuery, controller.state.appliedQuery);
+    expect(controller.state.contentQueryChanged, isFalse);
   });
 
   test('calendar responses cannot overwrite a newer month', () async {
@@ -283,6 +288,72 @@ void main() {
     },
   );
 
+  test('draft search does not strand an active initial load', () async {
+    final source = _ControlledSharedTasksDataSource();
+    final pending = Completer<Map<String, dynamic>>();
+    source.listResults.add(pending.future);
+    final controller = SharedTasksController(dataSource: source);
+    addTearDown(controller.dispose);
+
+    final loading = controller.setQuery(const SharedTasksQuery());
+    controller.updateQuery(controller.state.query.copyWith(search: 'черновик'));
+    expect(controller.state.loading, isTrue);
+    pending.complete(_response('loaded'));
+    await loading;
+
+    expect(controller.state.items.single['id'], 'loaded');
+    expect(controller.state.query.search, 'черновик');
+    expect(controller.state.successfulQuery?.search, isNull);
+  });
+
+  test('draft search does not strand a close-triggered refresh', () async {
+    final source = _ControlledSharedTasksDataSource();
+    final refreshed = Completer<Map<String, dynamic>>();
+    source.listResults.addAll([
+      Future.value(_response('task-1')),
+      refreshed.future,
+    ]);
+    source.closeResults.add(Future.value(const {'id': 'task-1'}));
+    final controller = SharedTasksController(dataSource: source);
+    addTearDown(controller.dispose);
+    await controller.setQuery(const SharedTasksQuery());
+
+    final closing = controller.close(const {'id': 'task-1', 'version': 3});
+    await pumpEventQueue();
+    controller.updateQuery(
+      controller.state.query.copyWith(search: 'после закрытия'),
+    );
+    refreshed.complete({'items': <Map<String, dynamic>>[]});
+    expect((await closing).succeeded, isTrue);
+
+    expect(controller.state.items, isEmpty);
+    expect(controller.state.query.search, 'после закрытия');
+    expect(controller.state.successfulQuery?.search, isNull);
+  });
+
+  test('failed changed query retains explicitly associated content', () async {
+    final source = _ControlledSharedTasksDataSource();
+    source.listResults.addAll([
+      Future.value(_response('open')),
+      Future.error(StateError('closed offline')),
+      Future.value(_response('closed', state: 'closed')),
+    ]);
+    final controller = SharedTasksController(dataSource: source);
+    addTearDown(controller.dispose);
+    await controller.setQuery(const SharedTasksQuery(state: 'open'));
+
+    await controller.setQuery(const SharedTasksQuery(state: 'closed'));
+    expect(controller.state.items.single['id'], 'open');
+    expect(controller.state.appliedQuery.state, 'closed');
+    expect(controller.state.successfulQuery?.state, 'open');
+    expect(controller.state.contentQueryChanged, isTrue);
+
+    await controller.retry();
+    expect(controller.state.items.single['id'], 'closed');
+    expect(controller.state.error, isNull);
+    expect(controller.state.contentQueryChanged, isFalse);
+  });
+
   test('linked results own local counters and overdue filtering', () async {
     final source = _ControlledSharedTasksDataSource();
     source.listResults.add(
@@ -329,10 +400,12 @@ void main() {
       source.closeResults.addAll([
         Future.error(StateError('offline')),
         Future.value(const {'id': 'task-1'}),
+        Future.value(const {'id': 'task-1'}),
       ]);
-      source.listResults.add(
+      source.listResults.addAll([
         Future.value(_response('task-1', state: 'closed')),
-      );
+        Future.value(_response('task-1', state: 'closed')),
+      ]);
       final controller = SharedTasksController(dataSource: source);
       addTearDown(controller.dispose);
       const task = {'id': 'task-1', 'version': 7};
@@ -345,42 +418,173 @@ void main() {
       expect(succeeded.succeeded, isTrue);
       expect(source.closeIdentities, hasLength(2));
       expect(source.closeIdentities.last, same(source.closeIdentities.first));
+      expect(source.closeTaskIds, everyElement('task-1'));
+      expect(source.closeVersions, everyElement(7));
       expect(controller.state.closing, isEmpty);
       expect(controller.state.closeErrors, isEmpty);
+
+      expect((await controller.close(task)).succeeded, isTrue);
+      expect(source.closeIdentities, hasLength(3));
+      expect(
+        source.closeIdentities.last,
+        isNot(same(source.closeIdentities.first)),
+      );
     },
   );
 
-  test('refresh stream is debounced and canceled on dispose', () {
-    fakeAsync((async) {
-      final source = _ControlledSharedTasksDataSource();
-      source.listResults.addAll([
-        Future.value(_response('initial')),
-        Future.value(_response('refreshed')),
-      ]);
-      final refreshes = StreamController<void>.broadcast(sync: true);
-      final controller = SharedTasksController(
-        dataSource: source,
-        refreshes: refreshes.stream,
-      );
-      controller.setQuery(const SharedTasksQuery());
-      async.flushMicrotasks();
-      expect(source.listCalls, hasLength(1));
+  test('stale list failure cannot replace a newer success', () async {
+    final source = _ControlledSharedTasksDataSource();
+    final stale = Completer<Map<String, dynamic>>();
+    source.listResults.addAll([
+      stale.future,
+      Future.value(_response('closed', state: 'closed')),
+    ]);
+    final controller = SharedTasksController(dataSource: source);
+    addTearDown(controller.dispose);
 
-      refreshes.add(null);
-      refreshes.add(null);
-      async.elapse(const Duration(milliseconds: 199));
-      expect(source.listCalls, hasLength(1));
-      async.elapse(const Duration(milliseconds: 1));
-      async.flushMicrotasks();
-      expect(source.listCalls, hasLength(2));
+    final first = controller.setQuery(const SharedTasksQuery(state: 'open'));
+    await controller.setQuery(const SharedTasksQuery(state: 'closed'));
+    stale.completeError(StateError('stale offline'));
+    await first;
 
-      controller.dispose();
-      refreshes.add(null);
-      async.elapse(const Duration(milliseconds: 200));
-      async.flushMicrotasks();
-      expect(source.listCalls, hasLength(2));
-      refreshes.close();
-      async.flushMicrotasks();
-    });
+    expect(controller.state.items.single['id'], 'closed');
+    expect(controller.state.error, isNull);
+  });
+
+  test('stale calendar failure cannot replace a newer success', () async {
+    final source = _ControlledSharedTasksDataSource();
+    final stale = Completer<Map<String, int>>();
+    source.listResults.addAll([
+      Future.value(_response('august')),
+      Future.value(_response('september')),
+    ]);
+    source.calendarResults.addAll([
+      stale.future,
+      Future.value(const {'2026-09-03': 2}),
+    ]);
+    final controller = SharedTasksController(dataSource: source);
+    addTearDown(controller.dispose);
+
+    final first = controller.setQuery(
+      SharedTasksQuery(calendarMode: true, calendarMonth: DateTime(2026, 8)),
+    );
+    await pumpEventQueue();
+    await controller.setQuery(
+      SharedTasksQuery(calendarMode: true, calendarMonth: DateTime(2026, 9)),
+    );
+    stale.completeError(StateError('stale calendar'));
+    await first;
+
+    expect(controller.state.calendar, const {'2026-09-03': 2});
+    expect(controller.state.error, isNull);
+  });
+
+  test('close refresh cannot overwrite a newer explicit query', () async {
+    final source = _ControlledSharedTasksDataSource();
+    final closeRefresh = Completer<Map<String, dynamic>>();
+    source.listResults.addAll([
+      Future.value(_response('open')),
+      closeRefresh.future,
+      Future.value(_response('closed', state: 'closed')),
+    ]);
+    source.closeResults.add(Future.value(const {'id': 'task-1'}));
+    final controller = SharedTasksController(dataSource: source);
+    addTearDown(controller.dispose);
+    await controller.setQuery(const SharedTasksQuery(state: 'open'));
+
+    final closing = controller.close(const {'id': 'task-1', 'version': 4});
+    await pumpEventQueue();
+    await controller.setQuery(const SharedTasksQuery(state: 'closed'));
+    closeRefresh.complete(_response('stale-open'));
+    expect((await closing).succeeded, isTrue);
+
+    expect(controller.state.query.state, 'closed');
+    expect(controller.state.items.single['id'], 'closed');
+  });
+
+  test('duplicate pending close is ignored', () async {
+    final source = _ControlledSharedTasksDataSource();
+    final pending = Completer<Map<String, dynamic>>();
+    source.closeResults.add(pending.future);
+    source.listResults.add(Future.value({'items': <Map<String, dynamic>>[]}));
+    final controller = SharedTasksController(dataSource: source);
+    addTearDown(controller.dispose);
+    const task = {'id': 'task-1', 'version': 5};
+
+    final first = controller.close(task);
+    final duplicate = await controller.close(task);
+    expect(duplicate.succeeded, isFalse);
+    expect(source.closeTaskIds, ['task-1']);
+    expect(controller.state.closing, {'task-1'});
+
+    pending.complete(const {'id': 'task-1'});
+    expect((await first).succeeded, isTrue);
+    expect(controller.state.closing, isEmpty);
+  });
+
+  test('initial failure can recover and clears the error', () async {
+    final source = _ControlledSharedTasksDataSource();
+    source.listResults.addAll([
+      Future.error(StateError('offline')),
+      Future.value(_response('recovered')),
+    ]);
+    final controller = SharedTasksController(dataSource: source);
+    addTearDown(controller.dispose);
+
+    await controller.setQuery(const SharedTasksQuery());
+    expect(controller.state.hasLoaded, isFalse);
+    expect(controller.state.error, isA<StateError>());
+    await controller.retry();
+
+    expect(controller.state.items.single['id'], 'recovered');
+    expect(controller.state.hasLoaded, isTrue);
+    expect(controller.state.error, isNull);
+  });
+
+  test('pending completion does not notify after dispose', () async {
+    final source = _ControlledSharedTasksDataSource();
+    final pending = Completer<Map<String, dynamic>>();
+    source.listResults.add(pending.future);
+    final controller = SharedTasksController(dataSource: source);
+    var notifications = 0;
+    controller.addListener(() => notifications++);
+
+    final loading = controller.setQuery(const SharedTasksQuery());
+    expect(notifications, 1);
+    controller.dispose();
+    pending.complete(_response('late'));
+    await loading;
+
+    expect(notifications, 1);
+  });
+
+  testWidgets('refresh stream is debounced and canceled on dispose', (
+    tester,
+  ) async {
+    final source = _ControlledSharedTasksDataSource();
+    source.listResults.addAll([
+      Future.value(_response('initial')),
+      Future.value(_response('refreshed')),
+    ]);
+    final refreshes = StreamController<void>.broadcast(sync: true);
+    final controller = SharedTasksController(
+      dataSource: source,
+      refreshes: refreshes.stream,
+    );
+    await controller.setQuery(const SharedTasksQuery());
+    expect(source.listCalls, hasLength(1));
+
+    refreshes.add(null);
+    refreshes.add(null);
+    await tester.pump(const Duration(milliseconds: 199));
+    expect(source.listCalls, hasLength(1));
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(source.listCalls, hasLength(2));
+
+    controller.dispose();
+    refreshes.add(null);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(source.listCalls, hasLength(2));
+    await refreshes.close();
   });
 }

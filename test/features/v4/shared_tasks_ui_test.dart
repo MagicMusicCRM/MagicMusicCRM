@@ -11,6 +11,7 @@ import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tas
 
 class FakeSharedTasksDataSource extends SharedTasksDataSource {
   bool closed = false;
+  bool failNextList = false;
   bool failNextClose = false;
   int createCalls = 0;
   int updateCalls = 0;
@@ -52,6 +53,10 @@ class FakeSharedTasksDataSource extends SharedTasksDataSource {
     String? linkedEntityType,
     String? linkedEntityId,
   }) async {
+    if (failNextList) {
+      failNextList = false;
+      throw StateError('list unavailable');
+    }
     listedTaskId = taskId;
     listedEntityType = linkedEntityType;
     listedEntityId = linkedEntityId;
@@ -224,6 +229,31 @@ class FakeSharedTasksDataSource extends SharedTasksDataSource {
       audienceOptionsSync;
 }
 
+class SwitchingSharedTasksDataSource extends FakeSharedTasksDataSource {
+  final responses = <Completer<Map<String, dynamic>>>[];
+  final taskIds = <String?>[];
+  final linkedIds = <String?>[];
+
+  @override
+  Future<Map<String, dynamic>> listFiltered({
+    String? state,
+    String? taskId,
+    String? linkedEntityType,
+    String? linkedEntityId,
+    String? q,
+    String? priority,
+    String? scope,
+    String? from,
+    String? to,
+  }) {
+    taskIds.add(taskId);
+    linkedIds.add(linkedEntityId);
+    final response = Completer<Map<String, dynamic>>();
+    responses.add(response);
+    return response.future;
+  }
+}
+
 Widget _host(
   FakeSharedTasksDataSource source, {
   Size size = const Size(900, 900),
@@ -350,6 +380,30 @@ void main() {
     expect(source.listedScope, 'branch');
     expect(source.calendarCalls, 1);
     expect(find.byKey(const Key('shared-task-month-grid')), findsOneWidget);
+  });
+
+  testWidgets('failed filter keeps content visible with retry notice', (
+    tester,
+  ) async {
+    final source = FakeSharedTasksDataSource();
+    await tester.pumpWidget(_host(source));
+    await tester.pumpAndSettle();
+    expect(find.text('Подготовить отчёт'), findsOneWidget);
+
+    source.failNextList = true;
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Закрытые').last);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('shared-tasks-stale-notice')), findsOneWidget);
+    expect(find.textContaining('предыдущего запроса'), findsOneWidget);
+    expect(find.text('Подготовить отчёт'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Повторить'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Повторить'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('shared-tasks-stale-notice')), findsNothing);
   });
 
   testWidgets('read-only role has no task mutation controls', (tester) async {
@@ -768,5 +822,58 @@ void main() {
     expect(source.listedEntityId, '44444444-4444-4444-8444-444444444444');
     expect(find.text('История'), findsOneWidget);
     expect(find.text('Задача создана'), findsOneWidget);
+  });
+
+  testWidgets('repump synchronizes focused and linked task scope', (
+    tester,
+  ) async {
+    final source = SwitchingSharedTasksDataSource();
+    EntityLink taskLink(String id) =>
+        EntityLink.typed(entityType: EntityLinkType.task, entityId: id);
+    EntityLink studentLink(String id) => EntityLink.typed(
+      entityType: EntityLinkType.client,
+      entityId: id,
+      variant: 'student',
+    );
+
+    await tester.pumpWidget(
+      _host(
+        source,
+        initialLink: taskLink('task-old'),
+        linkedEntity: studentLink('student-old'),
+      ),
+    );
+    await tester.pump();
+    expect(source.taskIds, ['task-old']);
+
+    await tester.pumpWidget(
+      _host(
+        source,
+        initialLink: taskLink('task-new'),
+        linkedEntity: studentLink('student-new'),
+      ),
+    );
+    await tester.pump();
+    expect(source.taskIds, ['task-old', 'task-new']);
+    expect(source.linkedIds, ['student-old', 'student-new']);
+
+    source.responses.first.complete({
+      'items': [
+        {...source.task, 'id': 'task-old', 'title': 'Старая задача'},
+      ],
+    });
+    await tester.pump();
+    expect(find.text('Старая задача'), findsNothing);
+
+    source.responses.last.complete({
+      'items': [
+        {...source.task, 'id': 'task-new', 'title': 'Новая связанная задача'},
+      ],
+    });
+    await tester.pumpAndSettle();
+
+    expect(find.text('Старая задача'), findsNothing);
+    expect(find.text('Новая связанная задача'), findsWidgets);
+    expect(find.text('История'), findsOneWidget);
   });
 }

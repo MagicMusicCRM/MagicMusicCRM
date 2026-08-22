@@ -150,6 +150,37 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
   }
 
   @override
+  void didUpdateWidget(covariant SharedTasksV4Panel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldFocusedTaskId = _focusedTaskIdFor(oldWidget.initialLink);
+    final nextFocusedTaskId = _focusedTaskId;
+    final focusChanged = oldFocusedTaskId != nextFocusedTaskId;
+    final linkedChanged = !_sameEntityScope(
+      oldWidget.linkedEntity,
+      widget.linkedEntity,
+    );
+    final defaultsChanged =
+        oldWidget.defaultToMineToday != widget.defaultToMineToday;
+    if (!focusChanged && !linkedChanged && !defaultsChanged) return;
+    if (focusChanged) _focusConsumed = false;
+
+    final query = _controller.state.query;
+    _controller.setQuery(
+      query.copyWith(
+        taskId: nextFocusedTaskId,
+        linkedEntityType: widget.linkedEntity?.rawEntityType,
+        linkedEntityId: widget.linkedEntity?.entityId,
+        scope: defaultsChanged
+            ? (widget.defaultToMineToday ? 'mine' : 'all')
+            : query.scope,
+        day: defaultsChanged
+            ? (widget.defaultToMineToday ? sharedTasksMoscowToday() : null)
+            : query.day,
+      ),
+    );
+  }
+
+  @override
   void dispose() {
     _realtimeSubscription?.close();
     _controller
@@ -161,11 +192,7 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
     super.dispose();
   }
 
-  String? get _focusedTaskId =>
-      widget.initialLink?.entityType == EntityLinkType.task &&
-          widget.initialLink?.entityId != '__section__'
-      ? widget.initialLink?.entityId
-      : null;
+  String? get _focusedTaskId => _focusedTaskIdFor(widget.initialLink);
 
   Future<void> _load({bool showLoading = true}) =>
       _controller.refresh(showLoading: showLoading);
@@ -176,6 +203,14 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
     final state = _controller.state;
     if (!state.hasLoaded || state.loading || state.error != null) return;
     final focusedTask = _focusedTaskId != null;
+    final successfulQuery = state.successfulQuery;
+    if (focusedTask &&
+        (successfulQuery?.taskId != _focusedTaskId ||
+            successfulQuery?.linkedEntityType !=
+                widget.linkedEntity?.rawEntityType ||
+            successfulQuery?.linkedEntityId != widget.linkedEntity?.entityId)) {
+      return;
+    }
     if (focusedTask && state.items.isNotEmpty) {
       final title = state.items.first['title']?.toString().trim() ?? '';
       if (title.isNotEmpty) {
@@ -416,6 +451,7 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
   Widget _body() {
     final state = _controller.state;
     final query = state.query;
+    final contentQuery = state.contentQuery;
     if (state.loading && !state.hasLoaded) {
       return const MagicPageState.loading();
     }
@@ -427,10 +463,11 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
         onAction: _load,
       );
     }
-    if (query.calendarMode) {
+    late final Widget content;
+    if (contentQuery.calendarMode) {
       final now = DateTime.now();
-      return _SharedTaskMonthGrid(
-        month: query.calendarMonth ?? DateTime(now.year, now.month),
+      content = _SharedTaskMonthGrid(
+        month: contentQuery.calendarMonth ?? DateTime(now.year, now.month),
         counts: state.calendar,
         onMonthChanged: (month) {
           _controller.setQuery(query.copyWith(calendarMonth: month));
@@ -439,44 +476,63 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
           _controller.setQuery(query.copyWith(day: day, calendarMode: false));
         },
       );
-    }
-    if (state.items.isEmpty) {
-      return const MagicPageState(
+    } else if (state.items.isEmpty) {
+      content = const MagicPageState(
         kind: MagicPageStateKind.empty,
         title: 'Нет задач',
         message: 'Создайте задачу, чтобы она появилась в этом списке.',
       );
+    } else {
+      content = RefreshIndicator(
+        onRefresh: _load,
+        child: ListView.separated(
+          controller: widget.scrollController,
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
+          itemCount: state.items.length,
+          separatorBuilder: (_, _) => const SizedBox(height: AppSpace.sm),
+          itemBuilder: (context, index) {
+            final task = state.items[index];
+            final id = task['id']?.toString() ?? '';
+            return _SharedTaskCard(
+              task: task,
+              closing: state.closing.contains(id),
+              closeError: state.closeErrors[id],
+              onClose: () => _close(task),
+              onEdit: () => _openEditor(task),
+              onOpen: () => _openDetails(task),
+              canEdit:
+                  widget.canWrite ??
+                  ref
+                          .read(capabilitySnapshotProvider)
+                          .value
+                          ?.allows('workflow.task.write') ==
+                      true,
+            );
+          },
+        ),
+      );
     }
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView.separated(
-        controller: widget.scrollController,
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
-        itemCount: state.items.length,
-        separatorBuilder: (_, _) => const SizedBox(height: AppSpace.sm),
-        itemBuilder: (context, index) {
-          final task = state.items[index];
-          final id = task['id']?.toString() ?? '';
-          return _SharedTaskCard(
-            task: task,
-            closing: state.closing.contains(id),
-            closeError: state.closeErrors[id],
-            onClose: () => _close(task),
-            onEdit: () => _openEditor(task),
-            onOpen: () => _openDetails(task),
-            canEdit:
-                widget.canWrite ??
-                ref
-                        .read(capabilitySnapshotProvider)
-                        .value
-                        ?.allows('workflow.task.write') ==
-                    true,
-          );
-        },
-      ),
+    if (state.error == null) return content;
+    return Column(
+      children: [
+        _SharedTasksStaleNotice(
+          queryChanged: state.contentQueryChanged,
+          onRetry: () => unawaited(_controller.retry()),
+        ),
+        Expanded(child: content),
+      ],
     );
   }
 }
+
+String? _focusedTaskIdFor(EntityLink? link) =>
+    link?.entityType == EntityLinkType.task && link?.entityId != '__section__'
+    ? link?.entityId
+    : null;
+
+bool _sameEntityScope(EntityLink? left, EntityLink? right) =>
+    left?.rawEntityType == right?.rawEntityType &&
+    left?.entityId == right?.entityId;
 
 bool _sameDay(DateTime left, DateTime right) =>
     left.year == right.year &&
@@ -746,6 +802,48 @@ class _ReminderBanner extends StatelessWidget {
           ),
           const SizedBox(width: AppSpace.sm),
           Expanded(child: Text('Просроченных задач: $overdue')),
+        ],
+      ),
+    );
+  }
+}
+
+class _SharedTasksStaleNotice extends StatelessWidget {
+  const _SharedTasksStaleNotice({
+    required this.queryChanged,
+    required this.onRetry,
+  });
+
+  final bool queryChanged;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      key: const Key('shared-tasks-stale-notice'),
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+      decoration: BoxDecoration(
+        color: colors.errorContainer,
+        borderRadius: BorderRadius.circular(AppRadius.control),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.sync_problem_rounded, color: colors.onErrorContainer),
+          const SizedBox(width: AppSpace.sm),
+          Expanded(
+            child: Text(
+              queryChanged
+                  ? 'Не удалось загрузить выбранный фильтр. '
+                        'Показаны задачи предыдущего запроса.'
+                  : 'Не удалось обновить задачи. '
+                        'Показаны ранее загруженные данные.',
+              style: TextStyle(color: colors.onErrorContainer),
+            ),
+          ),
+          TextButton(onPressed: onRetry, child: const Text('Повторить')),
         ],
       ),
     );
