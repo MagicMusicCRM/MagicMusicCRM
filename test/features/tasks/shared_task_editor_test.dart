@@ -1,8 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
+import 'package:magic_music_crm/core/api/magic_api_providers.dart';
+import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_task_editor.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_data_source.dart';
@@ -102,6 +106,89 @@ class RecordingSharedTasksDataSource extends SharedTasksDataSource {
     String? linkedEntityType,
     String? linkedEntityId,
   }) async => {'items': <Map<String, dynamic>>[]};
+}
+
+class _WrapperApiClient extends MagicApiClient {
+  _WrapperApiClient()
+    : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
+
+  int createCalls = 0;
+  Map<String, dynamic>? createPayload;
+  MagicMutationIdentity? createIdentity;
+
+  @override
+  Future<T> get<T>(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) async {
+    if (path == '/admin/profiles' || path == '/crm/branches') {
+      return {'items': <Map<String, dynamic>>[]} as T;
+    }
+    throw StateError('Unexpected GET $path');
+  }
+
+  @override
+  Future<T> post<T>(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) async {
+    if (path == '/crm/shared-tasks/audience-preview') {
+      return {
+            'totalRecipients': 4,
+            'hasDynamicMembership': true,
+            'selectors': const [
+              {
+                'type': 'allBranches',
+                'label': 'Вся школа',
+                'mode': 'dynamic',
+                'currentRecipientCount': 4,
+              },
+            ],
+            'recipients': const <Map<String, dynamic>>[],
+          }
+          as T;
+    }
+    throw StateError('Unexpected POST $path');
+  }
+
+  @override
+  Future<T> postIdempotent<T>(
+    String path, {
+    required MagicMutationIdentity identity,
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) async {
+    if (path != '/crm/shared-tasks') {
+      throw StateError('Unexpected idempotent POST $path');
+    }
+    createCalls++;
+    createPayload = Map<String, dynamic>.from(data! as Map);
+    createIdentity = identity;
+    return {
+          'recipientSummary': {'totalRecipients': 4},
+        }
+        as T;
+  }
+}
+
+class _ShowCreateSharedTaskLauncher extends ConsumerWidget {
+  const _ShowCreateSharedTaskLauncher({required this.onSaved});
+
+  final VoidCallback onSaved;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Scaffold(
+      body: FilledButton(
+        onPressed: () => showCreateSharedTask(context, ref, onSaved: onSaved),
+        child: const Text('Открыть через WidgetRef'),
+      ),
+    );
+  }
 }
 
 class EditorLifecycleProbe {
@@ -503,5 +590,129 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(source.lastPayload?['reminders'], reminders.take(2).toList());
+  });
+
+  testWidgets('pending mutation freezes draft and failure restores editing', (
+    tester,
+  ) async {
+    final source = RecordingSharedTasksDataSource();
+    final firstPending = Completer<Map<String, dynamic>>();
+    source.pendingMutation = firstPending;
+    await tester.pumpWidget(_launcher(source: source, task: _updateTask()));
+    await _openEditor(tester);
+    final title = find.byKey(const Key('shared-task-title'));
+    await tester.enterText(title, 'Черновик до запроса');
+    await tester.pump();
+
+    tester
+        .widget<FilledButton>(find.widgetWithText(FilledButton, 'Сохранить'))
+        .onPressed!();
+    await tester.pump();
+    expect(source.updateCalls, 1);
+    expect(tester.widget<TextField>(title).readOnly, isTrue);
+
+    await tester.tap(title, warnIfMissed: false);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyX);
+    await tester.tap(find.text('Напомнить в приложении'), warnIfMissed: false);
+    await tester.tap(find.text('Сотрудники'), warnIfMissed: false);
+    await tester.pump();
+
+    expect(
+      tester.widget<TextField>(title).controller?.text,
+      'Черновик до запроса',
+    );
+    expect(
+      tester
+          .widget<SwitchListTile>(
+            find.widgetWithText(SwitchListTile, 'Напомнить в приложении'),
+          )
+          .value,
+      isTrue,
+    );
+    expect(source.payloads.single['title'], 'Черновик до запроса');
+
+    source.pendingMutation = null;
+    firstPending.completeError(StateError('offline'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('shared-task-save-error')), findsOneWidget);
+    expect(tester.widget<TextField>(title).readOnly, isFalse);
+
+    await tester.enterText(title, 'Разрешено после ошибки');
+    await tester.tap(find.text('Напомнить в приложении'));
+    await tester.pump();
+    expect(
+      tester.widget<TextField>(title).controller?.text,
+      'Разрешено после ошибки',
+    );
+    expect(
+      tester
+          .widget<SwitchListTile>(
+            find.widgetWithText(SwitchListTile, 'Напомнить в приложении'),
+          )
+          .value,
+      isFalse,
+    );
+
+    final secondPending = Completer<Map<String, dynamic>>();
+    source.pendingMutation = secondPending;
+    tester
+        .widget<FilledButton>(find.widgetWithText(FilledButton, 'Сохранить'))
+        .onPressed!();
+    await tester.pump();
+    await tester.tap(title, warnIfMissed: false);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
+    await tester.tap(find.text('Напомнить в приложении'), warnIfMissed: false);
+    await tester.pump();
+
+    expect(
+      tester.widget<TextField>(title).controller?.text,
+      'Разрешено после ошибки',
+    );
+    expect(source.payloads.last['title'], 'Разрешено после ошибки');
+    expect(source.payloads.last['reminders'], isEmpty);
+
+    secondPending.complete({
+      'recipientSummary': {'totalRecipients': 4},
+    });
+    await tester.pumpAndSettle();
+    expect(source.updateCalls, 2);
+    expect(find.text('Открыть редактор'), findsOneWidget);
+  });
+
+  testWidgets('showCreateSharedTask uses providers and canonical mutation', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final api = _WrapperApiClient();
+    var saved = 0;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [magicApiClientProvider.overrideWithValue(api)],
+        child: MaterialApp(
+          home: _ShowCreateSharedTaskLauncher(onSaved: () => saved++),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Открыть через WidgetRef'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SharedTaskEditor), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const Key('shared-task-title')),
+      'Через provider seam',
+    );
+    await tester.pump();
+    tester
+        .widget<FilledButton>(find.widgetWithText(FilledButton, 'Создать'))
+        .onPressed!();
+    await tester.pumpAndSettle();
+
+    expect(api.createCalls, 1);
+    expect(api.createPayload?['title'], 'Через provider seam');
+    expect(api.createIdentity?.idempotencyKey, contains('shared-task-create'));
+    expect(saved, 1);
+    expect(find.text('Открыть через WidgetRef'), findsOneWidget);
   });
 }

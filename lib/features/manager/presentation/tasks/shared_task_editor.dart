@@ -222,7 +222,7 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
     final options = widget.audienceOptions
         .where((option) => option.type == _audienceType)
         .toList();
-    final content = SizedBox(
+    final editorFields = SizedBox(
       width: 560,
       child: SingleChildScrollView(
         child: Column(
@@ -231,8 +231,12 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
             TextField(
               key: const Key('shared-task-title'),
               controller: _title,
+              readOnly: _draftFrozen,
+              enableInteractiveSelection: !_draftFrozen,
               decoration: const InputDecoration(labelText: 'Название'),
-              onChanged: (_) => setState(() {}),
+              onChanged: (_) {
+                if (!_draftFrozen) setState(() {});
+              },
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField<String>(
@@ -245,13 +249,17 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
                 DropdownMenuItem(value: 'medium', child: Text('Обычный')),
                 DropdownMenuItem(value: 'low', child: Text('Низкий')),
               ],
-              onChanged: (value) {
-                if (value != null) setState(() => _priority = value);
-              },
+              onChanged: _draftFrozen
+                  ? null
+                  : (value) {
+                      if (value != null) setState(() => _priority = value);
+                    },
             ),
             const SizedBox(height: 10),
             TextField(
               controller: _body,
+              readOnly: _draftFrozen,
+              enableInteractiveSelection: !_draftFrozen,
               minLines: 2,
               maxLines: 4,
               decoration: const InputDecoration(labelText: 'Описание'),
@@ -260,19 +268,23 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
               contentPadding: EdgeInsets.zero,
               title: const Text('На весь день'),
               value: _allDay,
-              onChanged: _setAllDay,
+              onChanged: _draftFrozen ? null : _setAllDay,
             ),
             _DateTimeButton(
               label: 'Начало',
               value: _start,
               dateOnly: _allDay,
+              enabled: !_draftFrozen,
               onChanged: _setStart,
             ),
             if (!_allDay)
               _DateTimeButton(
                 label: 'Окончание',
                 value: _end ?? _start.add(const Duration(hours: 1)),
-                onChanged: (value) => setState(() => _end = value),
+                enabled: !_draftFrozen,
+                onChanged: (value) {
+                  if (!_draftFrozen) setState(() => _end = value);
+                },
               ),
             if (!_hasValidInterval) ...[
               const SizedBox(height: AppSpace.xs),
@@ -292,10 +304,12 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
                 ButtonSegment(value: 'allBranches', label: Text('Вся школа')),
               ],
               selected: {_audienceType},
-              onSelectionChanged: (selection) => setState(() {
-                _audienceType = selection.first;
-                _targetId = null;
-              }),
+              onSelectionChanged: _draftFrozen
+                  ? null
+                  : (selection) => setState(() {
+                      _audienceType = selection.first;
+                      _targetId = null;
+                    }),
             ),
             if (_audienceType != 'allBranches') ...[
               const SizedBox(height: 10),
@@ -314,7 +328,9 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
                       ),
                     )
                     .toList(),
-                onChanged: (value) => setState(() => _targetId = value),
+                onChanged: _draftFrozen
+                    ? null
+                    : (value) => setState(() => _targetId = value),
               ),
             ],
             const SizedBox(height: 8),
@@ -329,7 +345,7 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
                   .map(
                     (audience) => InputChip(
                       label: Text(_audienceLabel(audience)),
-                      onDeleted: _audiences.length == 1
+                      onDeleted: _draftFrozen || _audiences.length == 1
                           ? null
                           : () => _removeAudience(audience),
                     ),
@@ -343,14 +359,16 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
               title: const Text('Напомнить в приложении'),
               subtitle: const Text('Можно выбрать точные дату и время'),
               value: _reminder,
-              onChanged: _setReminder,
+              onChanged: _draftFrozen ? null : _setReminder,
             ),
             if (_reminder)
               _DateTimeButton(
                 key: const Key('shared-task-reminder-at'),
                 label: 'Напомнить',
                 value: _reminderAt ?? _defaultReminderAt(),
+                enabled: !_draftFrozen,
                 onChanged: (value) => setState(() {
+                  if (_draftFrozen) return;
                   _reminderAt = value;
                   _reminderCustomized = true;
                 }),
@@ -367,9 +385,13 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
         ),
       ),
     );
+    final content = FocusScope(
+      canRequestFocus: !_draftFrozen,
+      child: AbsorbPointer(absorbing: _draftFrozen, child: editorFields),
+    );
     final actions = <Widget>[
       TextButton(
-        onPressed: _saving ? null : () => Navigator.pop(context),
+        onPressed: _draftFrozen ? null : () => Navigator.pop(context),
         child: const Text('Отмена'),
       ),
       FilledButton(
@@ -402,8 +424,10 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
     );
   }
 
+  bool get _draftFrozen => _saving || _terminalSuccess;
+
   bool get _canAddAudience =>
-      _audienceType == 'allBranches' || _targetId != null;
+      !_draftFrozen && (_audienceType == 'allBranches' || _targetId != null);
 
   bool get _canSubmit =>
       !_saving &&
@@ -424,6 +448,7 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
       : _start.subtract(const Duration(hours: 1));
 
   void _setAllDay(bool value) {
+    if (_draftFrozen) return;
     setState(() {
       if (_allDay == value) return;
       _allDay = value;
@@ -441,6 +466,7 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
   }
 
   void _setStart(DateTime value) {
+    if (_draftFrozen) return;
     setState(() {
       _start = _allDay ? _dateOnly(value) : value;
       if (_reminder && !_reminderCustomized) {
@@ -450,6 +476,7 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
   }
 
   void _setReminder(bool value) {
+    if (_draftFrozen) return;
     setState(() {
       _reminder = value;
       if (value) {
@@ -462,6 +489,7 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
   }
 
   void _addAudience() {
+    if (_draftFrozen) return;
     final audience = {
       'type': _audienceType,
       if (_audienceType != 'allBranches') 'targetId': _targetId,
@@ -486,6 +514,7 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
   }
 
   void _removeAudience(Map<String, dynamic> audience) {
+    if (_draftFrozen) return;
     setState(() => _audiences.remove(audience));
     _refreshAudiencePreview();
   }
@@ -625,6 +654,7 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
             ),
           );
     _attempt = attempt;
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       _saving = true;
       _saveError = null;
@@ -728,44 +758,55 @@ class _DateTimeButton extends StatelessWidget {
     required this.label,
     required this.value,
     required this.onChanged,
+    this.enabled = true,
     this.dateOnly = false,
   });
 
   final String label;
   final DateTime value;
   final ValueChanged<DateTime> onChanged;
+  final bool enabled;
   final bool dateOnly;
 
   @override
   Widget build(BuildContext context) {
     return ListTile(
+      enabled: enabled,
       contentPadding: EdgeInsets.zero,
       title: Text(label),
       subtitle: Text(
         DateFormat(dateOnly ? 'dd.MM.yyyy' : 'dd.MM.yyyy HH:mm').format(value),
       ),
       trailing: const Icon(Icons.calendar_month_outlined),
-      onTap: () async {
-        final date = await showDatePicker(
-          context: context,
-          initialDate: value,
-          firstDate: DateTime.now().subtract(const Duration(days: 365)),
-          lastDate: DateTime.now().add(const Duration(days: 3650)),
-        );
-        if (date == null || !context.mounted) return;
-        if (dateOnly) {
-          onChanged(DateTime(date.year, date.month, date.day));
-          return;
-        }
-        final time = await showTimePicker(
-          context: context,
-          initialTime: TimeOfDay.fromDateTime(value),
-        );
-        if (time == null) return;
-        onChanged(
-          DateTime(date.year, date.month, date.day, time.hour, time.minute),
-        );
-      },
+      onTap: !enabled
+          ? null
+          : () async {
+              final date = await showDatePicker(
+                context: context,
+                initialDate: value,
+                firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                lastDate: DateTime.now().add(const Duration(days: 3650)),
+              );
+              if (date == null || !context.mounted) return;
+              if (dateOnly) {
+                onChanged(DateTime(date.year, date.month, date.day));
+                return;
+              }
+              final time = await showTimePicker(
+                context: context,
+                initialTime: TimeOfDay.fromDateTime(value),
+              );
+              if (time == null) return;
+              onChanged(
+                DateTime(
+                  date.year,
+                  date.month,
+                  date.day,
+                  time.hour,
+                  time.minute,
+                ),
+              );
+            },
     );
   }
 }
