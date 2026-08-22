@@ -7,7 +7,7 @@ import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
-import 'package:magic_music_crm/core/widgets/v7/dirty_form_exit.dart';
+import 'package:magic_music_crm/core/forms/dirty_form_exit.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/student_funnel_editor.dart';
 
 import 'client_forms_api.dart';

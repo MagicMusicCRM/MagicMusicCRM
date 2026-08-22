@@ -19,7 +19,7 @@ import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 import 'package:magic_music_crm/core/workspace/workspace_state.dart';
 import 'package:magic_music_crm/core/workspace/workspace_store.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
-import 'package:magic_music_crm/core/widgets/v7/dirty_form_exit.dart';
+import 'package:magic_music_crm/core/forms/dirty_form_exit.dart';
 import 'package:magic_music_crm/core/widgets/v7/v7_nav_shell.dart';
 import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
 
