@@ -163,4 +163,75 @@ void main() {
       isNotEmpty,
     );
   });
+
+  test('rejects broad Flutter prefixes without covering paths or symbols', () {
+    for (final target in <String>['l', 'lib/']) {
+      final exception = NamingPolicyException(
+        target: target,
+        category: 'cleanup-debt',
+        reason: 'This entry is intentionally invalid.',
+        owner: 'flutter',
+        removeWhen: 'It must never be accepted.',
+      );
+
+      expect(
+        findExceptionValidationViolations(
+          exceptions: [exception],
+          trackedPaths: const ['lib/auth.dart'],
+          sources: const {'lib/auth.dart': 'class _V7Field {}'},
+        ).map((item) => item.rule),
+        contains('invalid-target'),
+      );
+      expect(
+        findNamingViolations(
+          paths: const ['lib/features/tasks/v9/tasks_panel.dart'],
+          exceptions: [exception],
+        ),
+        isNotEmpty,
+      );
+      expect(
+        findSymbolViolations(
+          sources: const {'lib/auth.dart': 'class _V7Field {}'},
+          exceptions: [exception],
+        ),
+        isNotEmpty,
+      );
+    }
+  });
+
+  test('rejects the test root without covering historical test buckets', () {
+    final exception = NamingPolicyException(
+      target: 'test/',
+      category: 'historical-test-bucket',
+      reason: 'This entry is intentionally invalid.',
+      owner: 'flutter',
+      removeWhen: 'It must never be accepted.',
+    );
+
+    expect(
+      findExceptionValidationViolations(
+        exceptions: [exception],
+        trackedPaths: const ['test/features/v9/example_test.dart'],
+        sources: const {},
+      ).map((item) => item.rule),
+      contains('invalid-target'),
+    );
+    expect(
+      findNamingViolations(
+        paths: const ['test/features/v9/example_test.dart'],
+        exceptions: [exception],
+      ),
+      isNotEmpty,
+    );
+  });
+
+  test('guards the live S8 historical test item', () {
+    expect(
+      findNamingViolations(
+        paths: const ['test/features/s8_desktop_ux_states_test.dart'],
+        exceptions: const [],
+      ).single.rule,
+      'test-generation-bucket',
+    );
+  });
 }

@@ -53,7 +53,7 @@ List<NamingViolation> findNamingViolations({
     r'(^|[/_])(old|new|temp|tmp)([/_.-]|$)',
     caseSensitive: false,
   );
-  final testBucket = RegExp(r'^test/features/(v\d+|s\d+)/');
+  final testBucket = RegExp(r'^test/features/(?:v\d+/|s\d+(?:/|_))');
   bool productionSource(String path) =>
       path.startsWith('lib/') || path.startsWith('server/src/');
 
@@ -100,7 +100,13 @@ bool isExceptionCovered(
 ) => exceptions.any((exception) {
   final target = exception.target.trim();
   if (target.isEmpty) return false;
-  return target.contains('::') ? target == finding : finding.startsWith(target);
+  if (target.contains('::')) {
+    return _isExactSymbolTarget(target) && target == finding;
+  }
+  if (target.endsWith('/')) {
+    return _isBoundedDirectoryTarget(target) && finding.startsWith(target);
+  }
+  return finding == target || finding.startsWith('$target::');
 });
 
 List<NamingViolation> findExceptionValidationViolations({
@@ -113,6 +119,9 @@ List<NamingViolation> findExceptionValidationViolations({
     for (final exception in exceptions) ...[
       if (exception.target.trim().isEmpty)
         NamingViolation(exception.target, 'empty-target'),
+      if (exception.target.trim().isNotEmpty &&
+          !_hasValidTargetShape(exception.target.trim(), tracked))
+        NamingViolation(exception.target, 'invalid-target'),
       if (exception.category.trim().isEmpty)
         NamingViolation(exception.target, 'empty-category'),
       if (exception.reason.trim().isEmpty)
@@ -121,7 +130,8 @@ List<NamingViolation> findExceptionValidationViolations({
         NamingViolation(exception.target, 'empty-owner'),
       if (exception.removeWhen.trim().isEmpty)
         NamingViolation(exception.target, 'empty-remove_when'),
-      if (!_matchesTrackedPathOrSymbol(exception, tracked, sources))
+      if (_hasValidTargetShape(exception.target.trim(), tracked) &&
+          !_matchesTrackedPathOrSymbol(exception, tracked, sources))
         NamingViolation(exception.target, 'unused-naming-exception'),
     ],
   ];
@@ -134,10 +144,15 @@ bool _matchesTrackedPathOrSymbol(
 ) {
   final target = exception.target.trim();
   if (target.isEmpty) return false;
+  if (!_hasValidTargetShape(target, paths)) return false;
   final targetParts = target.split('::');
   final targetPath = targetParts.first;
-  if (!paths.any((path) => path.startsWith(targetPath))) return false;
-  if (targetParts.length == 1) return true;
+  if (targetParts.length == 1) {
+    if (target.endsWith('/')) {
+      return _directoryMatchesRelevantDebt(target, paths, sources);
+    }
+    return paths.contains(target);
+  }
 
   final source = sources[targetPath];
   if (source == null) return false;
@@ -145,6 +160,48 @@ bool _matchesTrackedPathOrSymbol(
     sources: {targetPath: source},
     exceptions: const [],
   ).any((violation) => violation.path == exception.target);
+}
+
+bool _hasValidTargetShape(String target, Iterable<String> paths) {
+  if (target.isEmpty) return false;
+  if (target.contains('::')) return _isExactSymbolTarget(target);
+  if (target.endsWith('/')) return _isBoundedDirectoryTarget(target);
+  return paths.contains(target);
+}
+
+bool _isExactSymbolTarget(String target) {
+  final parts = target.split('::');
+  return parts.length == 2 && parts.every((part) => part.isNotEmpty);
+}
+
+bool _isBoundedDirectoryTarget(String target) {
+  final segments = target.substring(0, target.length - 1).split('/');
+  return segments.length >= 3;
+}
+
+bool _directoryMatchesRelevantDebt(
+  String target,
+  Iterable<String> paths,
+  Map<String, String> sources,
+) {
+  final directoryPaths = [
+    for (final path in paths)
+      if (path.startsWith(target)) path,
+  ];
+  if (directoryPaths.isEmpty) return false;
+  if (findNamingViolations(
+    paths: directoryPaths,
+    exceptions: const [],
+  ).isNotEmpty) {
+    return true;
+  }
+  return findSymbolViolations(
+    sources: {
+      for (final entry in sources.entries)
+        if (entry.key.startsWith(target)) entry.key: entry.value,
+    },
+    exceptions: const [],
+  ).isNotEmpty;
 }
 
 String _withoutCommentsAndStrings(String source) {
