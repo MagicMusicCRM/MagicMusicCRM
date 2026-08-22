@@ -20,7 +20,7 @@ import 'package:magic_music_crm/core/workspace/workspace_state.dart';
 import 'package:magic_music_crm/core/workspace/workspace_store.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:magic_music_crm/core/forms/dirty_form_exit.dart';
-import 'package:magic_music_crm/core/widgets/v7/v7_nav_shell.dart';
+import 'package:magic_music_crm/core/navigation/responsive_navigation_shell.dart';
 import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
 
 class ProductionWorkspaceHost extends ConsumerStatefulWidget {
@@ -247,11 +247,11 @@ class _ProductionWorkspaceHostState
     final unseen = ref.watch(sectionUnseenProvider).asData?.value ?? const {};
     return Scaffold(
       body: widget.tabBuilder(context, tab),
-      bottomNavigationBar: V7NavShell(
+      bottomNavigationBar: ResponsiveNavigationShell(
         isDesktop: false,
         destinations: [
           for (final tab in visible)
-            crmV7DestinationForTab(
+            crmDestinationForTab(
               widget.snapshot.role,
               tab,
               badgeCount: unseen[sectionKeyForTab(tab)] ?? 0,
@@ -281,11 +281,11 @@ class _ProductionWorkspaceHostState
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Material(
-          child: V7NavShell(
+          child: ResponsiveNavigationShell(
             isDesktop: true,
             destinations: [
               for (final tab in visible)
-                crmV7DestinationForTab(
+                crmDestinationForTab(
                   widget.snapshot.role,
                   tab,
                   badgeCount: unseen[sectionKeyForTab(tab)] ?? 0,

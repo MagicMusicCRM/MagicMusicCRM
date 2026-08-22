@@ -14,4 +14,3 @@ export 'magic_menu.dart';
 export 'magic_sheet.dart';
 export 'magic_shimmer.dart';
 export 'magic_toast.dart';
-export 'v7_nav_shell.dart';

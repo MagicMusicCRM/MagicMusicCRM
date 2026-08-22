@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
-import '../../theme/design_tokens.dart';
-import '../../theme/telegram_colors.dart';
-import '../app_logo.dart';
-import 'magic_menu.dart';
+import '../theme/design_tokens.dart';
+import '../theme/telegram_colors.dart';
+import '../widgets/app_logo.dart';
+import '../widgets/v7/magic_menu.dart';
 
-/// One destination in a [V7NavShell].
-class V7NavDestination {
-  const V7NavDestination({
+/// One destination in a [ResponsiveNavigationShell].
+class ResponsiveNavDestination {
+  const ResponsiveNavDestination({
     required this.icon,
     required this.selectedIcon,
     required this.label,
@@ -22,7 +22,7 @@ class V7NavDestination {
   final int badgeCount;
 }
 
-/// v7 navigation shell — a desktop left rail (`.rail`, 76px) or a phone bottom
+/// Responsive navigation shell — a desktop left rail (`.rail`, 76px) or a phone bottom
 /// bar (`.tabbar`, 62px). On phone, a role with more than five destinations
 /// shows four primary tabs plus an «Ещё» overflow (a [showMagicMenu] pop-menu),
 /// mirroring the prototype `tabbar()` logic exactly (4 primary + «Ещё» when
@@ -31,8 +31,8 @@ class V7NavDestination {
 /// Presentational only: [selectedIndex] / [onSelected] index into
 /// [destinations]; RBAC (which destinations a role sees) is decided by the
 /// caller.
-class V7NavShell extends StatelessWidget {
-  const V7NavShell({
+class ResponsiveNavigationShell extends StatelessWidget {
+  const ResponsiveNavigationShell({
     super.key,
     required this.destinations,
     required this.selectedIndex,
@@ -40,7 +40,7 @@ class V7NavShell extends StatelessWidget {
     required this.isDesktop,
   });
 
-  final List<V7NavDestination> destinations;
+  final List<ResponsiveNavDestination> destinations;
   final int selectedIndex;
   final ValueChanged<int> onSelected;
   final bool isDesktop;
@@ -138,7 +138,7 @@ class V7NavShell extends StatelessWidget {
                   // render box, not the full-width bar.
                   child: Builder(
                     builder: (tabContext) => _BarTab(
-                      destination: const V7NavDestination(
+                      destination: const ResponsiveNavDestination(
                         icon: Icons.more_horiz_rounded,
                         selectedIcon: Icons.more_horiz_rounded,
                         label: 'Ещё',
@@ -185,7 +185,7 @@ class _RailItem extends StatelessWidget {
     required this.onTap,
   });
 
-  final V7NavDestination destination;
+  final ResponsiveNavDestination destination;
   final bool selected;
   final bool isDark;
   final VoidCallback onTap;
@@ -260,7 +260,7 @@ class _BarTab extends StatelessWidget {
     required this.onTap,
   });
 
-  final V7NavDestination destination;
+  final ResponsiveNavDestination destination;
   final bool selected;
   final bool isDark;
   final VoidCallback onTap;

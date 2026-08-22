@@ -12,7 +12,7 @@ import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/workspace/desktop_workspace_shell.dart';
 import 'package:magic_music_crm/core/workspace/workspace_store.dart';
-import 'package:magic_music_crm/core/widgets/v7/v7_nav_shell.dart';
+import 'package:magic_music_crm/core/navigation/responsive_navigation_shell.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/client_card.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 import 'package:magic_music_crm/features/crm/presentation/staff_workspace_screen.dart';
@@ -477,7 +477,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(DesktopWorkspaceShell), findsOneWidget);
-    expect(find.byType(V7NavShell), findsOneWidget);
+    expect(find.byType(ResponsiveNavigationShell), findsOneWidget);
     expect(find.byType(ClientCardRouteSurface), findsOneWidget);
     expect(find.byType(Dialog), findsNothing);
     expect(find.text('Обзор'), findsOneWidget);

@@ -9,7 +9,7 @@ import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/core/widgets/lazy_indexed_stack.dart';
 import 'package:magic_music_crm/core/widgets/v7/magic_page_state.dart';
-import 'package:magic_music_crm/core/widgets/v7/v7_nav_shell.dart';
+import 'package:magic_music_crm/core/navigation/responsive_navigation_shell.dart';
 import 'package:magic_music_crm/features/client/presentation/screens/client_portal_screen.dart';
 import 'package:magic_music_crm/features/client/presentation/widgets/subscription_status_card.dart';
 import 'package:magic_music_crm/features/client/presentation/widgets/upcoming_lessons_list.dart';
@@ -43,23 +43,23 @@ class _ClientDashboardScreenState extends ConsumerState<ClientDashboardScreen> {
   // Client bottom nav (mobile) / rail (desktop): Чат opens first by default,
   // Профиль is last. «Занятия» merges the old Занятия+Расписание; «Абонемент»
   // merges the old Абонемент+Оплаты behind an in-tab toggle.
-  static const _destinations = <V7NavDestination>[
-    V7NavDestination(
+  static const _destinations = <ResponsiveNavDestination>[
+    ResponsiveNavDestination(
       label: 'Чат',
       icon: Icons.chat_bubble_outline_rounded,
       selectedIcon: Icons.chat_bubble_rounded,
     ),
-    V7NavDestination(
+    ResponsiveNavDestination(
       label: 'Занятия',
       icon: Icons.school_outlined,
       selectedIcon: Icons.school_rounded,
     ),
-    V7NavDestination(
+    ResponsiveNavDestination(
       label: 'Абонемент',
       icon: Icons.confirmation_number_outlined,
       selectedIcon: Icons.confirmation_number_rounded,
     ),
-    V7NavDestination(
+    ResponsiveNavDestination(
       label: 'Профиль',
       icon: Icons.person_outline_rounded,
       selectedIcon: Icons.person_rounded,
@@ -107,7 +107,7 @@ class _ClientDashboardScreenState extends ConsumerState<ClientDashboardScreen> {
       return Scaffold(
         body: Row(
           children: [
-            V7NavShell(
+            ResponsiveNavigationShell(
               isDesktop: true,
               destinations: _destinations,
               selectedIndex: _selectedIndex,
@@ -121,7 +121,7 @@ class _ClientDashboardScreenState extends ConsumerState<ClientDashboardScreen> {
 
     return Scaffold(
       body: SafeArea(child: body),
-      bottomNavigationBar: V7NavShell(
+      bottomNavigationBar: ResponsiveNavigationShell(
         isDesktop: false,
         destinations: _destinations,
         selectedIndex: _selectedIndex,

@@ -11,7 +11,7 @@ import 'package:magic_music_crm/features/manager/presentation/widgets/clients_wi
 import 'package:magic_music_crm/features/manager/presentation/widgets/manager_overview_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/reports_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tasks_v4_panel.dart';
-import 'package:magic_music_crm/core/widgets/v7/v7_nav_shell.dart';
+import 'package:magic_music_crm/core/navigation/responsive_navigation_shell.dart';
 
 import 'messenger_test_api.dart';
 
@@ -96,7 +96,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 150));
 
-    expect(find.byType(V7NavShell), findsOneWidget);
+    expect(find.byType(ResponsiveNavigationShell), findsOneWidget);
   });
 
   testWidgets('manager can open Tasks from the mobile overflow navigation', (

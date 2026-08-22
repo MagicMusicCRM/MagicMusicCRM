@@ -8,7 +8,7 @@ import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/workspace/desktop_workspace_shell.dart';
 import 'package:magic_music_crm/core/workspace/production_workspace_host.dart';
 import 'package:magic_music_crm/core/workspace/workspace_store.dart';
-import 'package:magic_music_crm/core/widgets/v7/v7_nav_shell.dart';
+import 'package:magic_music_crm/core/navigation/responsive_navigation_shell.dart';
 import 'package:magic_music_crm/features/admin/presentation/screens/profile_detail_screen.dart';
 import 'package:magic_music_crm/features/crm/presentation/workspace_entity_surface.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/access_editor_sheet.dart';
@@ -99,7 +99,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(DesktopWorkspaceShell), findsNothing);
-    expect(find.byType(V7NavShell), findsOneWidget);
+    expect(find.byType(ResponsiveNavigationShell), findsOneWidget);
     expect(find.text('Чат'), findsOneWidget);
     expect(find.text('Клиенты'), findsOneWidget);
     expect(find.text('home'), findsOneWidget);
@@ -108,7 +108,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('__section__'), findsOneWidget);
-    expect(find.byType(V7NavShell), findsOneWidget);
+    expect(find.byType(ResponsiveNavigationShell), findsOneWidget);
   });
 
   testWidgets('compact teacher can switch between all assigned surfaces', (
@@ -565,12 +565,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byType(V7NavShell), findsOneWidget);
+    expect(find.byType(ResponsiveNavigationShell), findsOneWidget);
     await tester.tap(find.text('Клиенты'));
     await tester.pumpAndSettle();
 
     expect(find.text('client_status:__section__'), findsOneWidget);
-    expect(find.byType(V7NavShell), findsOneWidget);
+    expect(find.byType(ResponsiveNavigationShell), findsOneWidget);
   });
 
   test(
