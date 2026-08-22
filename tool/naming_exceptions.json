@@ -1,27 +1,6 @@
 [
   {
-    "target": "lib/core/navigation/crm_nav_rbac.dart",
-    "category": "cleanup-debt",
-    "reason": "The navigation destination API still has a generation-specific name.",
-    "owner": "flutter",
-    "remove_when": "Foundation milestone introduces the responsive navigation shell."
-  },
-  {
-    "target": "lib/core/workspace/production_workspace_host.dart",
-    "category": "cleanup-debt",
-    "reason": "The workspace host still consumes the generation-specific navigation API.",
-    "owner": "flutter",
-    "remove_when": "Foundation milestone introduces the responsive navigation shell."
-  },
-  {
-    "target": "lib/features/client/presentation/screens/client_dashboard_screen.dart",
-    "category": "cleanup-debt",
-    "reason": "The client dashboard still consumes the generation-specific navigation API.",
-    "owner": "flutter",
-    "remove_when": "Foundation milestone introduces the responsive navigation shell."
-  },
-  {
-    "target": "lib/features/crm/presentation/client_card/client_card_student.dart",
+    "target": "lib/features/crm/presentation/client_card/client_card_student.dart::SharedTasksV4Panel",
     "category": "cleanup-debt",
     "reason": "The client card still consumes a generation-named tasks panel.",
     "owner": "flutter",
@@ -35,11 +14,11 @@
     "remove_when": "Cohesion milestone gives client-card tabs capability names."
   },
   {
-    "target": "lib/features/crm/presentation/staff_workspace_secondary_destination.dart",
+    "target": "lib/features/crm/presentation/staff_workspace_secondary_destination.dart::SharedTasksV4Panel",
     "category": "cleanup-debt",
-    "reason": "The workspace destination still refers to a generation-named navigation type.",
+    "reason": "The workspace destination still consumes the historical Shared Tasks panel.",
     "owner": "flutter",
-    "remove_when": "Foundation milestone introduces the responsive navigation shell."
+    "remove_when": "Shared Tasks milestone completes the semantic split."
   },
   {
     "target": "lib/features/manager/presentation/widgets/reporting_v4_panel.dart",
@@ -49,7 +28,7 @@
     "remove_when": "High-impact reporting milestone completes the semantic rename."
   },
   {
-    "target": "lib/features/manager/presentation/widgets/reports_widget.dart",
+    "target": "lib/features/manager/presentation/widgets/reports_widget.dart::ReportingV4Panel",
     "category": "cleanup-debt",
     "reason": "The reports widget still consumes a generation-named reporting panel.",
     "owner": "flutter",
@@ -63,9 +42,191 @@
     "remove_when": "High-impact Shared Tasks milestone completes the semantic split."
   },
   {
+    "target": "lib/features/crm/presentation/client_card/client_card_tabs_a.dart::SharedTasksV4Panel",
+    "category": "cleanup-debt",
+    "reason": "The client-card tab still consumes the historical Shared Tasks panel.",
+    "owner": "flutter",
+    "remove_when": "Shared Tasks milestone completes the semantic split."
+  },
+  {
+    "target": "lib/features/manager/presentation/widgets/reporting_v4_panel.dart::ReportingV4Panel",
+    "category": "cleanup-debt",
+    "reason": "The reporting presentation panel has a historical generation name.",
+    "owner": "flutter",
+    "remove_when": "High-impact reporting milestone completes the semantic rename."
+  },
+  {
+    "target": "lib/features/manager/presentation/widgets/reporting_v4_panel.dart::_ReportingV4PanelState",
+    "category": "cleanup-debt",
+    "reason": "The reporting panel state retains its historical generation name.",
+    "owner": "flutter",
+    "remove_when": "High-impact reporting milestone completes the semantic rename."
+  },
+  {
+    "target": "lib/features/manager/presentation/widgets/reporting_v4_panel.dart::getV4ClientStatusSummary",
+    "category": "api-contract",
+    "reason": "The reporting panel calls a live V4 analytics route method.",
+    "owner": "platform",
+    "remove_when": "Analytics V4 API contract is retired through an approved migration."
+  },
+  {
+    "target": "lib/features/manager/presentation/widgets/reporting_v4_panel.dart::getV4LessonSuccess",
+    "category": "api-contract",
+    "reason": "The reporting panel calls a live V4 analytics route method.",
+    "owner": "platform",
+    "remove_when": "Analytics V4 API contract is retired through an approved migration."
+  },
+  {
+    "target": "lib/features/manager/presentation/widgets/reporting_v4_panel.dart::getV4SchoolFinance",
+    "category": "api-contract",
+    "reason": "The reporting panel calls a live V4 analytics route method.",
+    "owner": "platform",
+    "remove_when": "Analytics V4 API contract is retired through an approved migration."
+  },
+  {
+    "target": "lib/features/manager/presentation/widgets/reporting_v4_panel.dart::getV4LessonSuccessList",
+    "category": "api-contract",
+    "reason": "The reporting panel calls a live V4 analytics route method.",
+    "owner": "platform",
+    "remove_when": "Analytics V4 API contract is retired through an approved migration."
+  },
+  {
+    "target": "lib/features/manager/presentation/widgets/reporting_v4_panel.dart::getV4ClientStatusList",
+    "category": "api-contract",
+    "reason": "The reporting panel calls a live V4 analytics route method.",
+    "owner": "platform",
+    "remove_when": "Analytics V4 API contract is retired through an approved migration."
+  },
+  {
+    "target": "lib/features/manager/presentation/widgets/reporting_v4_panel.dart::requestV4ReportExport",
+    "category": "api-contract",
+    "reason": "The reporting panel calls a live V4 analytics route method.",
+    "owner": "platform",
+    "remove_when": "Analytics V4 API contract is retired through an approved migration."
+  },
+  {
+    "target": "lib/features/manager/presentation/widgets/reporting_v4_panel.dart::getV4ReportExportJob",
+    "category": "api-contract",
+    "reason": "The reporting panel calls a live V4 analytics route method.",
+    "owner": "platform",
+    "remove_when": "Analytics V4 API contract is retired through an approved migration."
+  },
+  {
+    "target": "lib/features/manager/presentation/widgets/reporting_v4_panel.dart::downloadV4ReportExport",
+    "category": "api-contract",
+    "reason": "The reporting panel calls a live V4 analytics route method.",
+    "owner": "platform",
+    "remove_when": "Analytics V4 API contract is retired through an approved migration."
+  },
+  {
+    "target": "lib/features/manager/presentation/widgets/reporting_v4_panel.dart::V4ReportExportJob",
+    "category": "api-contract",
+    "reason": "The reporting panel uses a DTO bound to a live V4 analytics route.",
+    "owner": "platform",
+    "remove_when": "Analytics V4 API contract is retired through an approved migration."
+  },
+  {
+    "target": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart::SharedTasksV4Panel",
+    "category": "cleanup-debt",
+    "reason": "The shared tasks panel has a historical generation name.",
+    "owner": "flutter",
+    "remove_when": "High-impact Shared Tasks milestone completes the semantic split."
+  },
+  {
+    "target": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart::_SharedTasksV4PanelState",
+    "category": "cleanup-debt",
+    "reason": "The shared tasks panel state retains its historical generation name.",
+    "owner": "flutter",
+    "remove_when": "High-impact Shared Tasks milestone completes the semantic split."
+  },
+  {
     "target": "lib/core/services/magic_crm_service_finance.dart",
     "category": "api-contract",
     "reason": "V4 reporting methods and DTOs are bound to live analytics routes.",
+    "owner": "platform",
+    "remove_when": "Analytics V4 API contract is retired through an approved migration."
+  },
+  {
+    "target": "lib/core/services/magic_crm_service_finance.dart::getV4ClientStatusSummary",
+    "category": "api-contract",
+    "reason": "The method is bound to a live V4 analytics route.",
+    "owner": "platform",
+    "remove_when": "Analytics V4 API contract is retired through an approved migration."
+  },
+  {
+    "target": "lib/core/services/magic_crm_service_finance.dart::_v4ReportQuery",
+    "category": "api-contract",
+    "reason": "The helper builds parameters for live V4 analytics routes.",
+    "owner": "platform",
+    "remove_when": "Analytics V4 API contract is retired through an approved migration."
+  },
+  {
+    "target": "lib/core/services/magic_crm_service_finance.dart::getV4ClientStatusList",
+    "category": "api-contract",
+    "reason": "The method is bound to a live V4 analytics route.",
+    "owner": "platform",
+    "remove_when": "Analytics V4 API contract is retired through an approved migration."
+  },
+  {
+    "target": "lib/core/services/magic_crm_service_finance.dart::getV4LessonSuccess",
+    "category": "api-contract",
+    "reason": "The method is bound to a live V4 analytics route.",
+    "owner": "platform",
+    "remove_when": "Analytics V4 API contract is retired through an approved migration."
+  },
+  {
+    "target": "lib/core/services/magic_crm_service_finance.dart::getV4LessonSuccessList",
+    "category": "api-contract",
+    "reason": "The method is bound to a live V4 analytics route.",
+    "owner": "platform",
+    "remove_when": "Analytics V4 API contract is retired through an approved migration."
+  },
+  {
+    "target": "lib/core/services/magic_crm_service_finance.dart::getV4SchoolFinance",
+    "category": "api-contract",
+    "reason": "The method is bound to a live V4 analytics route.",
+    "owner": "platform",
+    "remove_when": "Analytics V4 API contract is retired through an approved migration."
+  },
+  {
+    "target": "lib/core/services/magic_crm_service_finance.dart::V4ReportExportResult",
+    "category": "api-contract",
+    "reason": "The DTO is bound to a live V4 analytics route.",
+    "owner": "platform",
+    "remove_when": "Analytics V4 API contract is retired through an approved migration."
+  },
+  {
+    "target": "lib/core/services/magic_crm_service_finance.dart::requestV4ReportExport",
+    "category": "api-contract",
+    "reason": "The method is bound to a live V4 analytics route.",
+    "owner": "platform",
+    "remove_when": "Analytics V4 API contract is retired through an approved migration."
+  },
+  {
+    "target": "lib/core/services/magic_crm_service_finance.dart::_tryV4ExportJson",
+    "category": "api-contract",
+    "reason": "The helper decodes a live V4 analytics export response.",
+    "owner": "platform",
+    "remove_when": "Analytics V4 API contract is retired through an approved migration."
+  },
+  {
+    "target": "lib/core/services/magic_crm_service_finance.dart::V4ReportExportJob",
+    "category": "api-contract",
+    "reason": "The DTO is bound to a live V4 analytics route.",
+    "owner": "platform",
+    "remove_when": "Analytics V4 API contract is retired through an approved migration."
+  },
+  {
+    "target": "lib/core/services/magic_crm_service_finance.dart::getV4ReportExportJob",
+    "category": "api-contract",
+    "reason": "The method is bound to a live V4 analytics route.",
+    "owner": "platform",
+    "remove_when": "Analytics V4 API contract is retired through an approved migration."
+  },
+  {
+    "target": "lib/core/services/magic_crm_service_finance.dart::downloadV4ReportExport",
+    "category": "api-contract",
+    "reason": "The method is bound to a live V4 analytics route.",
     "owner": "platform",
     "remove_when": "Analytics V4 API contract is retired through an approved migration."
   },

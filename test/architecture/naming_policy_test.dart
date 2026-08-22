@@ -237,6 +237,110 @@ void main() {
     );
   });
 
+  test('rejects lower-case generation symbols with exact exceptions only', () {
+    const exactException = NamingPolicyException(
+      target: 'lib/auth.dart::_v7PhoneDecoration',
+      category: 'cleanup-debt',
+      reason: 'The exact control extraction is pending.',
+      owner: 'flutter',
+      removeWhen: 'Shared auth controls replace this exact symbol.',
+    );
+    const sources = {
+      'lib/auth.dart': '''
+        class _v7PhoneDecoration {}
+        class _v9Field {}
+        class someV7Widget {}
+      ''',
+    };
+
+    expect(
+      findSymbolViolations(
+        sources: sources,
+        exceptions: const [],
+      ).map((item) => item.path),
+      containsAll(<String>{
+        'lib/auth.dart::_v7PhoneDecoration',
+        'lib/auth.dart::_v9Field',
+        'lib/auth.dart::someV7Widget',
+      }),
+    );
+    expect(
+      findSymbolViolations(
+        sources: sources,
+        exceptions: const [exactException],
+      ).map((item) => item.path),
+      containsAll(<String>{
+        'lib/auth.dart::_v9Field',
+        'lib/auth.dart::someV7Widget',
+      }),
+    );
+  });
+
+  test('does not let a file contract exception cover an unrelated symbol', () {
+    const exception = NamingPolicyException(
+      target: 'lib/contracts.dart',
+      category: 'api-contract',
+      reason: 'The file documents a live V4 API contract.',
+      owner: 'platform',
+      removeWhen: 'The V4 API contract is retired.',
+    );
+
+    expect(
+      findSymbolViolations(
+        sources: const {'lib/contracts.dart': 'class _V99Unrelated {}'},
+        exceptions: const [exception],
+      ),
+      isNotEmpty,
+    );
+  });
+
+  test('rejects generic cleanup directories without covering debt', () {
+    const exception = NamingPolicyException(
+      target: 'lib/features/manager/',
+      category: 'cleanup-debt',
+      reason: 'This directory is intentionally too broad.',
+      owner: 'flutter',
+      removeWhen: 'It must never be accepted.',
+    );
+
+    expect(
+      findExceptionValidationViolations(
+        exceptions: const [exception],
+        trackedPaths: const ['lib/features/manager/reporting_v4_panel.dart'],
+        sources: const {},
+      ).map((item) => item.rule),
+      contains('invalid-target'),
+    );
+    expect(
+      findNamingViolations(
+        paths: const ['lib/features/manager/reporting_v4_panel.dart'],
+        exceptions: const [exception],
+      ),
+      isNotEmpty,
+    );
+  });
+
+  test('rejects stale cleanup file exceptions', () {
+    const exception = NamingPolicyException(
+      target: 'lib/contracts.dart',
+      category: 'cleanup-debt',
+      reason: 'This file has no remaining cleanup debt.',
+      owner: 'flutter',
+      removeWhen: 'It must never be accepted.',
+    );
+
+    expect(
+      findExceptionValidationViolations(
+        exceptions: const [exception],
+        trackedPaths: const ['lib/contracts.dart'],
+        sources: const {
+          'lib/contracts.dart': 'const route = \'/analytics/v4\';',
+        },
+      ).map((item) => item.rule),
+      contains('stale-cleanup-exception'),
+    );
+  });
+
   test('production code does not import a wide UI barrel', () {
     const historicalBarrelImport =
         'core/widgets/'

@@ -59,16 +59,19 @@ List<NamingViolation> findNamingViolations({
 
   return [
     for (final path in paths.where(productionSource))
-      if (!isExceptionCovered(path, exceptions) && generation.hasMatch(path))
+      if (!isExceptionCovered(path, 'production-generation-name', exceptions) &&
+          generation.hasMatch(path))
         NamingViolation(path, 'production-generation-name'),
     for (final path in paths.where((path) => path.startsWith('lib/')))
-      if (!isExceptionCovered(path, exceptions) && partSuffix.hasMatch(path))
+      if (!isExceptionCovered(path, 'mechanical-part-suffix', exceptions) &&
+          partSuffix.hasMatch(path))
         NamingViolation(path, 'mechanical-part-suffix'),
     for (final path in paths.where(productionSource))
-      if (!isExceptionCovered(path, exceptions) && temporary.hasMatch(path))
+      if (!isExceptionCovered(path, 'temporary-name', exceptions) &&
+          temporary.hasMatch(path))
         NamingViolation(path, 'temporary-name'),
     for (final path in paths.where(testBucket.hasMatch))
-      if (!isExceptionCovered(path, exceptions))
+      if (!isExceptionCovered(path, 'test-generation-bucket', exceptions))
         NamingViolation(path, 'test-generation-bucket'),
   ];
 }
@@ -79,6 +82,7 @@ List<NamingViolation> findSymbolViolations({
 }) {
   final generationSymbol = RegExp(
     r'\b(?:_?V\d+[A-Z][A-Za-z0-9_]*|[A-Za-z_][A-Za-z0-9_]*V\d+(?:[A-Z][A-Za-z0-9_]*)?)\b',
+    caseSensitive: false,
   );
 
   return [
@@ -86,7 +90,11 @@ List<NamingViolation> findSymbolViolations({
       for (final match in generationSymbol.allMatches(
         _withoutCommentsAndStrings(entry.value),
       ))
-        if (!isExceptionCovered('${entry.key}::${match.group(0)}', exceptions))
+        if (!isExceptionCovered(
+          '${entry.key}::${match.group(0)}',
+          'production-generation-symbol',
+          exceptions,
+        ))
           NamingViolation(
             '${entry.key}::${match.group(0)}',
             'production-generation-symbol',
@@ -96,17 +104,20 @@ List<NamingViolation> findSymbolViolations({
 
 bool isExceptionCovered(
   String finding,
+  String rule,
   Iterable<NamingPolicyException> exceptions,
 ) => exceptions.any((exception) {
   final target = exception.target.trim();
   if (target.isEmpty) return false;
-  if (target.contains('::')) {
+  if (rule == 'production-generation-symbol') {
     return _isExactSymbolTarget(target) && target == finding;
   }
+  if (target.contains('::')) return false;
   if (target.endsWith('/')) {
-    return _isBoundedDirectoryTarget(target) && finding.startsWith(target);
+    return _isCategoryShapedDirectoryTarget(exception) &&
+        finding.startsWith(target);
   }
-  return finding == target || finding.startsWith('$target::');
+  return finding == target;
 });
 
 List<NamingViolation> findExceptionValidationViolations({
@@ -120,7 +131,7 @@ List<NamingViolation> findExceptionValidationViolations({
       if (exception.target.trim().isEmpty)
         NamingViolation(exception.target, 'empty-target'),
       if (exception.target.trim().isNotEmpty &&
-          !_hasValidTargetShape(exception.target.trim(), tracked))
+          !_hasValidTargetShape(exception, tracked))
         NamingViolation(exception.target, 'invalid-target'),
       if (exception.category.trim().isEmpty)
         NamingViolation(exception.target, 'empty-category'),
@@ -130,9 +141,15 @@ List<NamingViolation> findExceptionValidationViolations({
         NamingViolation(exception.target, 'empty-owner'),
       if (exception.removeWhen.trim().isEmpty)
         NamingViolation(exception.target, 'empty-remove_when'),
-      if (_hasValidTargetShape(exception.target.trim(), tracked) &&
+      if (_hasValidTargetShape(exception, tracked) &&
           !_matchesTrackedPathOrSymbol(exception, tracked, sources))
-        NamingViolation(exception.target, 'unused-naming-exception'),
+        NamingViolation(
+          exception.target,
+          exception.category == 'cleanup-debt' &&
+                  !exception.target.contains('::')
+              ? 'stale-cleanup-exception'
+              : 'unused-naming-exception',
+        ),
     ],
   ];
 }
@@ -144,12 +161,18 @@ bool _matchesTrackedPathOrSymbol(
 ) {
   final target = exception.target.trim();
   if (target.isEmpty) return false;
-  if (!_hasValidTargetShape(target, paths)) return false;
+  if (!_hasValidTargetShape(exception, paths)) return false;
   final targetParts = target.split('::');
   final targetPath = targetParts.first;
   if (targetParts.length == 1) {
     if (target.endsWith('/')) {
       return _directoryMatchesRelevantDebt(target, paths, sources);
+    }
+    if (exception.category == 'cleanup-debt') {
+      return findNamingViolations(
+        paths: paths.where((path) => path == target),
+        exceptions: const [],
+      ).isNotEmpty;
     }
     return paths.contains(target);
   }
@@ -162,10 +185,14 @@ bool _matchesTrackedPathOrSymbol(
   ).any((violation) => violation.path == exception.target);
 }
 
-bool _hasValidTargetShape(String target, Iterable<String> paths) {
+bool _hasValidTargetShape(
+  NamingPolicyException exception,
+  Iterable<String> paths,
+) {
+  final target = exception.target.trim();
   if (target.isEmpty) return false;
   if (target.contains('::')) return _isExactSymbolTarget(target);
-  if (target.endsWith('/')) return _isBoundedDirectoryTarget(target);
+  if (target.endsWith('/')) return _isCategoryShapedDirectoryTarget(exception);
   return paths.contains(target);
 }
 
@@ -174,9 +201,17 @@ bool _isExactSymbolTarget(String target) {
   return parts.length == 2 && parts.every((part) => part.isNotEmpty);
 }
 
-bool _isBoundedDirectoryTarget(String target) {
-  final segments = target.substring(0, target.length - 1).split('/');
-  return segments.length >= 3;
+bool _isCategoryShapedDirectoryTarget(NamingPolicyException exception) {
+  final target = exception.target.trim();
+  return switch (exception.category) {
+    'historical-test-bucket' => RegExp(
+      r'^test/features/(?:v\d+|s\d+)/$',
+    ).hasMatch(target),
+    'migration' => RegExp(
+      r'^server/src/migration(?:/[^/]+)*/v\d+/$',
+    ).hasMatch(target),
+    _ => false,
+  };
 }
 
 bool _directoryMatchesRelevantDebt(
