@@ -15,15 +15,6 @@ import 'package:magic_music_crm/features/manager/presentation/reporting/reportin
 import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_presentation.dart';
 import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_summary_view.dart';
 
-export 'package:magic_music_crm/features/manager/presentation/reporting/report_export_files.dart'
-    show
-        ReportFileOpener,
-        ReportFileOpenResult,
-        reportFileOpenerProvider,
-        validateReportExportBytes;
-export 'package:magic_music_crm/features/manager/presentation/reporting/reporting_models.dart'
-    show DashboardFilter;
-
 typedef _ReportingAccessInput = ({
   String? accountId,
   int? accessVersion,
@@ -33,8 +24,8 @@ typedef _ReportingAccessInput = ({
   bool canReadSchoolFinance,
 });
 
-class ReportingV4Panel extends ConsumerStatefulWidget {
-  const ReportingV4Panel({
+class ReportingPanel extends ConsumerStatefulWidget {
+  const ReportingPanel({
     super.key,
     required this.role,
     this.onOpenEntity,
@@ -50,10 +41,10 @@ class ReportingV4Panel extends ConsumerStatefulWidget {
   final CapabilitySnapshot? accessSnapshot;
 
   @override
-  ConsumerState<ReportingV4Panel> createState() => _ReportingV4PanelState();
+  ConsumerState<ReportingPanel> createState() => _ReportingPanelState();
 }
 
-class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
+class _ReportingPanelState extends ConsumerState<ReportingPanel> {
   final _scrollController = ScrollController();
   late ReportingController _controller;
   late _ReportingAccessInput _controllerAccess;
@@ -121,7 +112,7 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
   }
 
   @override
-  void didUpdateWidget(covariant ReportingV4Panel oldWidget) {
+  void didUpdateWidget(covariant ReportingPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     final access = _accessInput;
     if (access != _controllerAccess) {
@@ -288,7 +279,7 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
       ReportExportProgressStage.requesting => 'Подготавливаем файл…',
       ReportExportProgressStage.queued =>
         'В очереди: ${progress.rowCount} строк',
-      ReportExportProgressStage.polling => _jobStatusLabel(progress.job!),
+      ReportExportProgressStage.polling => _jobStatusLabel(progress),
       ReportExportProgressStage.downloading ||
       ReportExportProgressStage.opening => null,
     };
@@ -390,10 +381,10 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
   }
 }
 
-String _jobStatusLabel(V4ReportExportJob job) {
-  return switch (job.status) {
-    'queued' => 'Экспорт в очереди: ${job.rowCount} строк',
-    'processing' => 'Формируем файл: ${job.rowCount} строк',
+String _jobStatusLabel(ReportExportProgress progress) {
+  return switch (progress.job?.status) {
+    'queued' => 'Экспорт в очереди: ${progress.rowCount ?? 0} строк',
+    'processing' => 'Формируем файл: ${progress.rowCount ?? 0} строк',
     'ready' => 'Файл готов',
     'expired' => 'Срок хранения файла истёк',
     _ => 'Не удалось сформировать файл',

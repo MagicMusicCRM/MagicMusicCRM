@@ -11,7 +11,9 @@ import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
-import 'package:magic_music_crm/features/manager/presentation/widgets/reporting_v4_panel.dart';
+import 'package:magic_music_crm/features/manager/presentation/reporting/report_export_files.dart';
+import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_models.dart';
+import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_panel.dart';
 
 void main() {
   test('dashboard filter restores from workspace and direct-link state', () {
@@ -102,7 +104,7 @@ void main() {
           }),
         ],
         child: const MaterialApp(
-          home: Scaffold(body: ReportingV4Panel(role: 'director')),
+          home: Scaffold(body: ReportingPanel(role: 'director')),
         ),
       ),
     );
@@ -146,7 +148,7 @@ void main() {
           }),
         ],
         child: const MaterialApp(
-          home: Scaffold(body: ReportingV4Panel(role: 'director')),
+          home: Scaffold(body: ReportingPanel(role: 'director')),
         ),
       ),
     );
@@ -179,7 +181,7 @@ void main() {
           }),
         ],
         child: const MaterialApp(
-          home: Scaffold(body: ReportingV4Panel(role: 'director')),
+          home: Scaffold(body: ReportingPanel(role: 'director')),
         ),
       ),
     );
@@ -248,7 +250,7 @@ void main() {
         ],
         child: MaterialApp(
           home: Scaffold(
-            body: ReportingV4Panel(role: 'director', filter: filter),
+            body: ReportingPanel(role: 'director', filter: filter),
           ),
         ),
       ),
@@ -317,7 +319,7 @@ void main() {
         ],
         child: MaterialApp(
           home: Scaffold(
-            body: ReportingV4Panel(role: 'director', accessSnapshot: snapshot),
+            body: ReportingPanel(role: 'director', accessSnapshot: snapshot),
           ),
         ),
       ),
@@ -344,7 +346,7 @@ Widget _app(
     ],
     child: MaterialApp(
       home: Scaffold(
-        body: ReportingV4Panel(
+        body: ReportingPanel(
           key: ValueKey(api),
           role: role,
           onOpenEntity: onOpenEntity,

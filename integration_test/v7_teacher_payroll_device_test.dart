@@ -9,8 +9,8 @@ import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_dialog.dart';
+import 'package:magic_music_crm/features/manager/presentation/reporting/report_export_files.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/teacher_stats_widget.dart';
-import 'package:magic_music_crm/features/manager/presentation/widgets/reporting_v4_panel.dart';
 
 import 'evidence_screenshot.dart';
 

@@ -16,8 +16,9 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
+import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_models.dart';
+import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_panel.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/finance_widget.dart';
-import 'package:magic_music_crm/features/manager/presentation/widgets/reporting_v4_panel.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/teacher_stats_widget.dart';
 import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
 
@@ -215,7 +216,7 @@ class _ReportsWidgetState extends ConsumerState<ReportsWidget>
       children: [
         _buildDashboardFilterBar(title: 'Аналитика'),
         Expanded(
-          child: ReportingV4Panel(
+          child: ReportingPanel(
             key: const ValueKey('unified-dashboard'),
             role: widget.role,
             filter: _dashboardFilter,

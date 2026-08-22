@@ -9,7 +9,8 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
-import 'package:magic_music_crm/features/manager/presentation/widgets/reporting_v4_panel.dart';
+import 'package:magic_music_crm/features/manager/presentation/reporting/report_export_files.dart';
+import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_models.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/reports_widget.dart';
 
 import 'evidence_screenshot.dart';

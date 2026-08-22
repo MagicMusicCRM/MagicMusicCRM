@@ -10,7 +10,7 @@ import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/teacher_rate_selector.dart';
-import 'package:magic_music_crm/features/manager/presentation/widgets/reporting_v4_panel.dart';
+import 'package:magic_music_crm/features/manager/presentation/reporting/report_export_files.dart';
 
 /// KVA-238: отчёт «Статистика преподавателей» — учебные единицы (группа /
 /// индивидуально с учеником / пробные), дни с часами, часы всего, ставка за

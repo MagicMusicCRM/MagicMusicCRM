@@ -346,14 +346,14 @@ void main() {
     expect(
       findExceptionValidationViolations(
         exceptions: const [exception],
-        trackedPaths: const ['lib/features/manager/reporting_v4_panel.dart'],
+        trackedPaths: const ['lib/features/manager/example_v99_panel.dart'],
         sources: const {},
       ).map((item) => item.rule),
       contains('invalid-target'),
     );
     expect(
       findNamingViolations(
-        paths: const ['lib/features/manager/reporting_v4_panel.dart'],
+        paths: const ['lib/features/manager/example_v99_panel.dart'],
         exceptions: const [exception],
       ),
       isNotEmpty,

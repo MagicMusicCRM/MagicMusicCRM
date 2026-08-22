@@ -10,7 +10,7 @@ import 'package:magic_music_crm/features/manager/presentation/reporting/report_e
 import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_data_source.dart';
 import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_models.dart'
     as models;
-import 'package:magic_music_crm/features/manager/presentation/widgets/reporting_v4_panel.dart';
+import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_panel.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 final _activeReportingSourceProvider = StateProvider<ReportingDataSource?>(
@@ -206,7 +206,7 @@ Widget _fixedSourceApp(
     home: Scaffold(
       body: ValueListenableBuilder<_PanelInputs>(
         valueListenable: inputs,
-        builder: (context, value, child) => ReportingV4Panel(
+        builder: (context, value, child) => ReportingPanel(
           role: 'director',
           accessSnapshot: value.snapshot,
           reloadToken: value.reloadToken,
@@ -238,7 +238,7 @@ Widget _reactiveSourceApp(
           if (opener != null)
             export_files.reportFileOpenerProvider.overrideWithValue(opener),
         ],
-        child: ReportingV4Panel(
+        child: ReportingPanel(
           role: 'director',
           accessSnapshot: _snapshot('account-a', 1, finance: true),
         ),
