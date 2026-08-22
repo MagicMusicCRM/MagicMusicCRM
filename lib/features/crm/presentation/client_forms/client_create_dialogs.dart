@@ -23,7 +23,7 @@ Future<Map<String, dynamic>?> showStudentCreateSurface(
     subtitle: 'Карточка будет сразу добавлена в воронку',
     icon: Icons.person_add_alt_1_rounded,
     builder: (_) =>
-        StudentCreateDialogV4(initialBranchId: initialBranchId, embedded: true),
+        StudentCreateDialog(initialBranchId: initialBranchId, embedded: true),
   );
 }
 
@@ -374,8 +374,8 @@ class _LeadCreateDialogState extends ConsumerState<LeadCreateDialog> {
   }
 }
 
-class StudentCreateDialogV4 extends ConsumerStatefulWidget {
-  const StudentCreateDialogV4({
+class StudentCreateDialog extends ConsumerStatefulWidget {
+  const StudentCreateDialog({
     super.key,
     this.initialBranchId,
     this.embedded = false,
@@ -385,11 +385,11 @@ class StudentCreateDialogV4 extends ConsumerStatefulWidget {
   final bool embedded;
 
   @override
-  ConsumerState<StudentCreateDialogV4> createState() =>
-      _StudentCreateDialogV4State();
+  ConsumerState<StudentCreateDialog> createState() =>
+      _StudentCreateDialogState();
 }
 
-class _StudentCreateDialogV4State extends ConsumerState<StudentCreateDialogV4> {
+class _StudentCreateDialogState extends ConsumerState<StudentCreateDialog> {
   final _firstName = TextEditingController();
   final _lastName = TextEditingController();
   final _customValues = <String, Object?>{};

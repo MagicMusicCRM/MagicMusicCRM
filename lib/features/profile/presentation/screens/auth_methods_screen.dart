@@ -151,9 +151,9 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
     );
   }
 
-  /// v7 input decoration: control radius (10), gold focus ring (2), theme-aware
+  /// Auth input decoration: control radius (10), gold focus ring (2), theme-aware
   /// fill from the active [InputDecorationTheme] (falls back to the surface).
-  InputDecoration _v7FieldDecoration(
+  InputDecoration _authFieldDecoration(
     BuildContext context, {
     required String labelText,
     Widget? prefixIcon,
@@ -289,7 +289,7 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
                         TextFormField(
                           controller: _newEmailController,
                           keyboardType: TextInputType.emailAddress,
-                          decoration: _v7FieldDecoration(
+                          decoration: _authFieldDecoration(
                             context,
                             labelText: 'Новая почта',
                             prefixIcon: const Icon(Icons.alternate_email),
@@ -311,7 +311,7 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
                         TextFormField(
                           controller: _currentPasswordController,
                           obscureText: true,
-                          decoration: _v7FieldDecoration(
+                          decoration: _authFieldDecoration(
                             context,
                             labelText: 'Текущий пароль',
                             prefixIcon: const Icon(Icons.lock_outline),
@@ -347,7 +347,7 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
                         TextFormField(
                           controller: _passwordController,
                           obscureText: _obscurePassword,
-                          decoration: _v7FieldDecoration(
+                          decoration: _authFieldDecoration(
                             context,
                             labelText: 'Новый пароль',
                             prefixIcon: const Icon(Icons.lock_outline),
@@ -375,7 +375,7 @@ class _AuthMethodsScreenState extends ConsumerState<AuthMethodsScreen> {
                         TextFormField(
                           controller: _confirmPasswordController,
                           obscureText: _obscurePassword,
-                          decoration: _v7FieldDecoration(
+                          decoration: _authFieldDecoration(
                             context,
                             labelText: 'Повторите пароль',
                             prefixIcon: const Icon(Icons.lock_reset_outlined),

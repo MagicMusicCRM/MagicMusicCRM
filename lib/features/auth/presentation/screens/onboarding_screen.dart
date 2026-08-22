@@ -1,9 +1,4 @@
-// The shared v7 auth helpers (_V7Field / _V7PrimaryButton) are pasted
-// byte-for-byte identically across all 6 auth screens per the v7 spec, so a
-// few of their parameters are intentionally unused on this particular screen.
-// ignore_for_file: unused_element_parameter
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
@@ -12,6 +7,7 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/utils/ru_phone.dart';
 import 'package:magic_music_crm/core/widgets/app_logo.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
+import 'package:magic_music_crm/features/auth/presentation/widgets/auth_form_controls.dart';
 import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 
 /// One v7 onboarding slide (presentation-only — no service binding).
@@ -110,9 +106,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     }
   }
 
-  /// Mirrors the v7 `_V7Field` input decoration so the phone field matches the
-  /// surrounding name fields exactly.
-  InputDecoration _v7PhoneDecoration() {
+  /// Matches the phone input decoration to the surrounding name fields.
+  InputDecoration _phoneInputDecoration() {
     return InputDecoration(
       hintStyle: const TextStyle(color: AppColor.text2),
       filled: true,
@@ -230,7 +225,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         const SizedBox(height: AppSpace.xl),
         _ObDots(count: _obSlides.length, active: _step),
         const SizedBox(height: AppSpace.xl),
-        _V7PrimaryButton(
+        AuthPrimaryButton(
           label: isLast ? 'Продолжить' : 'Далее',
           icon: Icons.arrow_forward,
           onPressed: _nextSlide,
@@ -284,7 +279,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             ),
           ),
           const SizedBox(height: AppSpace.lg),
-          _V7Field(
+          AuthField(
             controller: _firstNameController,
             label: 'Имя',
             textInputAction: TextInputAction.next,
@@ -293,7 +288,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 value == null || value.trim().isEmpty ? 'Укажите имя' : null,
           ),
           const SizedBox(height: AppSpace.lg),
-          _V7Field(
+          AuthField(
             controller: _lastNameController,
             label: 'Фамилия',
             textInputAction: TextInputAction.next,
@@ -316,7 +311,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               ),
               const SizedBox(height: AppSpace.sm),
               RuPhoneField(
-                decoration: _v7PhoneDecoration(),
+                decoration: _phoneInputDecoration(),
                 onCanonicalChanged: (c) {
                   _canonicalPhone = c;
                   if (_phoneError != null && _phoneIsValid) {
@@ -334,7 +329,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             ],
           ),
           const SizedBox(height: AppSpace.xxl),
-          _V7PrimaryButton(
+          AuthPrimaryButton(
             label: 'Продолжить',
             icon: Icons.arrow_forward,
             loading: _isSaving,
@@ -372,179 +367,6 @@ class _ObDots extends StatelessWidget {
           ),
         ],
       ],
-    );
-  }
-}
-
-class _V7Field extends StatelessWidget {
-  const _V7Field({
-    required this.controller,
-    required this.label,
-    this.hint,
-    this.obscureText = false,
-    this.keyboardType,
-    this.textInputAction,
-    this.enabled = true,
-    this.autocorrect = true,
-    this.suffix,
-    this.validator,
-    this.inputFormatters,
-    this.onSubmitted,
-    this.autofillHints,
-  });
-
-  final TextEditingController controller;
-  final String label;
-  final String? hint;
-  final bool obscureText;
-  final TextInputType? keyboardType;
-  final TextInputAction? textInputAction;
-  final bool enabled;
-  final bool autocorrect;
-  final Widget? suffix;
-  final String? Function(String?)? validator;
-  final List<TextInputFormatter>? inputFormatters;
-  final ValueChanged<String>? onSubmitted;
-  final Iterable<String>? autofillHints;
-
-  @override
-  Widget build(BuildContext context) {
-    final decoration = InputDecoration(
-      hintText: hint,
-      hintStyle: const TextStyle(color: AppColor.text2),
-      suffixIcon: suffix,
-      filled: true,
-      fillColor: AppColor.input,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppRadius.control),
-        borderSide: const BorderSide(color: AppColor.divider),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppRadius.control),
-        borderSide: const BorderSide(color: AppColor.goldLine, width: 2),
-      ),
-      disabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppRadius.control),
-        borderSide: const BorderSide(color: AppColor.divider),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppRadius.control),
-        borderSide: const BorderSide(color: AppColor.danger),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppRadius.control),
-        borderSide: const BorderSide(color: AppColor.danger, width: 2),
-      ),
-    );
-
-    final field = (validator != null)
-        ? TextFormField(
-            controller: controller,
-            obscureText: obscureText,
-            keyboardType: keyboardType,
-            textInputAction: textInputAction,
-            enabled: enabled,
-            autocorrect: autocorrect,
-            autofillHints: autofillHints,
-            inputFormatters: inputFormatters,
-            onFieldSubmitted: onSubmitted,
-            style: const TextStyle(color: AppColor.text),
-            decoration: decoration,
-            validator: validator,
-          )
-        : TextField(
-            controller: controller,
-            obscureText: obscureText,
-            keyboardType: keyboardType,
-            textInputAction: textInputAction,
-            enabled: enabled,
-            autocorrect: autocorrect,
-            autofillHints: autofillHints,
-            inputFormatters: inputFormatters,
-            onSubmitted: onSubmitted,
-            style: const TextStyle(color: AppColor.text),
-            decoration: decoration,
-          );
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: AppColor.text2,
-          ),
-        ),
-        const SizedBox(height: AppSpace.sm),
-        field,
-      ],
-    );
-  }
-}
-
-class _V7PrimaryButton extends StatelessWidget {
-  const _V7PrimaryButton({
-    required this.label,
-    required this.onPressed,
-    this.loading = false,
-    this.icon,
-    this.height = 52,
-  });
-
-  final String label;
-  final VoidCallback? onPressed;
-  final bool loading;
-  final IconData? icon;
-  final double height;
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = onPressed != null && !loading;
-    return Opacity(
-      opacity: enabled ? 1.0 : 0.42,
-      child: SizedBox(
-        height: height,
-        width: double.infinity,
-        child: Material(
-          color: AppColor.gold,
-          borderRadius: BorderRadius.circular(AppRadius.control),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(AppRadius.control),
-            onTap: enabled ? onPressed : null,
-            child: Center(
-              child: loading
-                  ? const SizedBox(
-                      height: 22,
-                      width: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppColor.onGold,
-                      ),
-                    )
-                  : Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (icon != null) ...[
-                          Icon(icon, size: 17, color: AppColor.onGold),
-                          const SizedBox(width: AppSpace.sm),
-                        ],
-                        Text(
-                          label,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: AppColor.onGold,
-                          ),
-                        ),
-                      ],
-                    ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

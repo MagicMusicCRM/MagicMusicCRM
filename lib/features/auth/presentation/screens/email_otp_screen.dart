@@ -7,6 +7,7 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/app_logo.dart';
 import 'package:magic_music_crm/core/widgets/responsive_constraint.dart';
 import 'package:magic_music_crm/core/widgets/magic_toast.dart';
+import 'package:magic_music_crm/features/auth/presentation/widgets/auth_form_controls.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 
 const int emailOtpCodeLength = 6;
@@ -215,7 +216,7 @@ class _EmailOtpScreenState extends ConsumerState<EmailOtpScreen> {
                         _buildErrorPill(_errorMessage!),
                       ],
                       const SizedBox(height: AppSpace.lg),
-                      _V7PrimaryButton(
+                      AuthPrimaryButton(
                         label: 'Подтвердить',
                         loading: _isLoading,
                         onPressed: _isLoading ? null : _verifyCode,
@@ -322,13 +323,11 @@ class _EmailOtpScreenState extends ConsumerState<EmailOtpScreen> {
                       fillColor: AppColor.input,
                       contentPadding: EdgeInsets.zero,
                       enabledBorder: OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(AppRadius.control),
+                        borderRadius: BorderRadius.circular(AppRadius.control),
                         borderSide: const BorderSide(color: AppColor.divider),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(AppRadius.control),
+                        borderRadius: BorderRadius.circular(AppRadius.control),
                         borderSide: const BorderSide(
                           color: AppColor.goldLine,
                           width: 2,
@@ -385,72 +384,6 @@ class _EmailOtpScreenState extends ConsumerState<EmailOtpScreen> {
           child: const Text('Отправить снова'),
         ),
       ],
-    );
-  }
-}
-
-class _V7PrimaryButton extends StatelessWidget {
-  const _V7PrimaryButton({
-    required this.label,
-    required this.onPressed,
-    this.loading = false,
-    // ignore: unused_element_parameter
-    this.icon,
-    // ignore: unused_element_parameter
-    this.height = 52,
-  });
-
-  final String label;
-  final VoidCallback? onPressed;
-  final bool loading;
-  final IconData? icon;
-  final double height;
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = onPressed != null && !loading;
-    return Opacity(
-      opacity: enabled ? 1.0 : 0.42,
-      child: SizedBox(
-        height: height,
-        width: double.infinity,
-        child: Material(
-          color: AppColor.gold,
-          borderRadius: BorderRadius.circular(AppRadius.control),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(AppRadius.control),
-            onTap: enabled ? onPressed : null,
-            child: Center(
-              child: loading
-                  ? const SizedBox(
-                      height: 22,
-                      width: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppColor.onGold,
-                      ),
-                    )
-                  : Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (icon != null) ...[
-                          Icon(icon, size: 17, color: AppColor.onGold),
-                          const SizedBox(width: AppSpace.sm),
-                        ],
-                        Text(
-                          label,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: AppColor.onGold,
-                          ),
-                        ),
-                      ],
-                    ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

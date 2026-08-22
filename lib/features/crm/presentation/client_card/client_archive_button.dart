@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
-import 'client_card_v4_api.dart';
+import 'client_card_api.dart';
 
 bool clientRoleCanArchive(String role) =>
     role == 'director' || role == 'system_admin';
@@ -34,7 +34,7 @@ class _ClientArchiveButtonState extends ConsumerState<ClientArchiveButton> {
     setState(() => _busy = true);
     try {
       final preview = await ref
-          .read(clientCardV4ApiProvider)
+          .read(clientCardApiProvider)
           .previewArchive(
             entityType: widget.entityType,
             entityId: widget.entityId,
@@ -46,7 +46,7 @@ class _ClientArchiveButtonState extends ConsumerState<ClientArchiveButton> {
       );
       if (confirmed == null || !mounted) return;
       await ref
-          .read(clientCardV4ApiProvider)
+          .read(clientCardApiProvider)
           .archive(
             entityType: widget.entityType,
             entityId: widget.entityId,

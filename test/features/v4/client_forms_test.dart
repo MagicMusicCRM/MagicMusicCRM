@@ -299,7 +299,7 @@ void main() {
     final api = _ClientFormsFakeApi();
     await _pump(
       tester,
-      const StudentCreateDialogV4(),
+      const StudentCreateDialog(),
       api,
       size: const Size(320, 700),
     );
@@ -325,7 +325,7 @@ void main() {
     tester,
   ) async {
     final api = _ClientFormsFakeApi(studentRequiredField: true);
-    await _pump(tester, const StudentCreateDialogV4(), api);
+    await _pump(tester, const StudentCreateDialog(), api);
 
     await tester.tap(find.byKey(const ValueKey('student-submit')));
     await tester.pump();
@@ -356,7 +356,7 @@ void main() {
     'inactive Student source refresh keeps draft and requires a fresh choice',
     (tester) async {
       final api = _ClientFormsFakeApi(failFirstStudentWithInactiveSource: true);
-      await _pump(tester, const StudentCreateDialogV4(), api);
+      await _pump(tester, const StudentCreateDialog(), api);
       await _enterStudentMinimum(tester);
 
       await tester.tap(find.byKey(const ValueKey('student-submit')));
@@ -377,7 +377,7 @@ void main() {
 
   testWidgets('student network error keeps the entered draft', (tester) async {
     final api = _ClientFormsFakeApi(failStudentCreate: true);
-    await _pump(tester, const StudentCreateDialogV4(), api);
+    await _pump(tester, const StudentCreateDialog(), api);
     await _enterStudentMinimum(tester);
 
     await tester.tap(find.byKey(const ValueKey('student-submit')));

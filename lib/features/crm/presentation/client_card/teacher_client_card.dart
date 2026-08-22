@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
-import 'client_card_v4_api.dart';
+import 'client_card_api.dart';
 
 class TeacherClientCard extends ConsumerStatefulWidget {
   const TeacherClientCard({
@@ -43,7 +43,7 @@ class _TeacherClientCardState extends ConsumerState<TeacherClientCard> {
     });
     try {
       final card = await ref
-          .read(clientCardV4ApiProvider)
+          .read(clientCardApiProvider)
           .loadCard(entityType: widget.entityType, entityId: widget.entityId);
       if (!mounted) return;
       setState(() {

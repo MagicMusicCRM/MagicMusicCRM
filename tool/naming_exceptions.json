@@ -21,34 +21,6 @@
     "remove_when": "Foundation milestone introduces the responsive navigation shell."
   },
   {
-    "target": "lib/features/auth/presentation/screens/",
-    "category": "cleanup-debt",
-    "reason": "Auth screens still duplicate generation-named form controls.",
-    "owner": "flutter",
-    "remove_when": "Foundation milestone extracts shared auth form controls."
-  },
-  {
-    "target": "lib/features/crm/presentation/client_card/client_card_v4_api.dart",
-    "category": "cleanup-debt",
-    "reason": "The client-card API has unversioned routes but a historical implementation name.",
-    "owner": "flutter",
-    "remove_when": "Foundation milestone renames the client-card API by capability."
-  },
-  {
-    "target": "lib/features/crm/presentation/client_card/client_archive_button.dart",
-    "category": "cleanup-debt",
-    "reason": "The archive control still consumes the historical client-card API name.",
-    "owner": "flutter",
-    "remove_when": "Foundation milestone renames the client-card API by capability."
-  },
-  {
-    "target": "lib/features/crm/presentation/client_card/teacher_client_card.dart",
-    "category": "cleanup-debt",
-    "reason": "The teacher client card still consumes the historical client-card API name.",
-    "owner": "flutter",
-    "remove_when": "Foundation milestone renames the client-card API by capability."
-  },
-  {
     "target": "lib/features/crm/presentation/client_card/client_card_student.dart",
     "category": "cleanup-debt",
     "reason": "The client card still consumes a generation-named tasks panel.",
@@ -61,13 +33,6 @@
     "reason": "The client-card part file has a mechanical suffix and generation-named dependency.",
     "owner": "flutter",
     "remove_when": "Cohesion milestone gives client-card tabs capability names."
-  },
-  {
-    "target": "lib/features/crm/presentation/client_forms/client_create_dialogs.dart",
-    "category": "cleanup-debt",
-    "reason": "The create dialog still has a generation-specific public name.",
-    "owner": "flutter",
-    "remove_when": "Foundation milestone renames the create dialog by capability."
   },
   {
     "target": "lib/features/crm/presentation/staff_workspace_secondary_destination.dart",

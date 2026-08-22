@@ -6,6 +6,7 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/app_logo.dart';
 import 'package:magic_music_crm/core/widgets/magic_shimmer.dart';
 import 'package:magic_music_crm/features/auth/data/models/release_gate_models.dart';
+import 'package:magic_music_crm/features/auth/presentation/widgets/auth_form_controls.dart';
 import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -239,7 +240,7 @@ class _LegalConsentScreenState extends ConsumerState<LegalConsentScreen> {
             ),
           ],
           const SizedBox(height: AppSpace.lg),
-          _V7PrimaryButton(
+          AuthPrimaryButton(
             label: 'Принять и войти',
             loading: _isSaving,
             onPressed: _isSaving
@@ -363,57 +364,6 @@ class _ConsentRow extends StatelessWidget {
                 ),
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _V7PrimaryButton extends StatelessWidget {
-  const _V7PrimaryButton({
-    required this.label,
-    required this.onPressed,
-    this.loading = false,
-  });
-
-  final String label;
-  final VoidCallback? onPressed;
-  final bool loading;
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = onPressed != null && !loading;
-    return Opacity(
-      opacity: enabled ? 1.0 : 0.42,
-      child: SizedBox(
-        height: 52,
-        width: double.infinity,
-        child: Material(
-          color: AppColor.gold,
-          borderRadius: BorderRadius.circular(AppRadius.control),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(AppRadius.control),
-            onTap: enabled ? onPressed : null,
-            child: Center(
-              child: loading
-                  ? const SizedBox(
-                      height: 22,
-                      width: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppColor.onGold,
-                      ),
-                    )
-                  : Text(
-                      label,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: AppColor.onGold,
-                      ),
-                    ),
-            ),
           ),
         ),
       ),

@@ -6,7 +6,7 @@ import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/client_archive_button.dart';
 
-import '../test/features/v4/client_card_roles_test.dart';
+import '../test/features/crm/client_card/client_card_roles_test.dart';
 import 'evidence_screenshot.dart';
 
 void main() {

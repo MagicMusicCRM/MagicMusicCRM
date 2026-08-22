@@ -2,12 +2,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 
-final clientCardV4ApiProvider = Provider<ClientCardV4Api>((ref) {
-  return ClientCardV4Api(ref.watch(magicApiClientProvider));
+final clientCardApiProvider = Provider<ClientCardApi>((ref) {
+  return ClientCardApi(ref.watch(magicApiClientProvider));
 });
 
-class ClientCardV4Api {
-  const ClientCardV4Api(this._api);
+class ClientCardApi {
+  const ClientCardApi(this._api);
 
   final MagicApiClient _api;
 

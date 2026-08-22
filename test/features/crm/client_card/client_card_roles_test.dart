@@ -6,6 +6,7 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/client_archive_button.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_card/client_card_api.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/comment_share_button.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/teacher_client_card.dart';
 
@@ -15,6 +16,7 @@ class ClientCardRolesTestApi extends MagicApiClient {
 
   final posts = <({String path, Map<String, dynamic> data})>[];
   final patches = <({String path, Map<String, dynamic> data})>[];
+  final gets = <String>[];
 
   @override
   Future<T> get<T>(
@@ -22,6 +24,7 @@ class ClientCardRolesTestApi extends MagicApiClient {
     Map<String, dynamic>? queryParameters,
     bool authenticated = true,
   }) async {
+    gets.add(path);
     if (path == '/crm/clients/student/student-a/card') {
       return <String, dynamic>{
             'projection': 'teacher',
@@ -161,6 +164,41 @@ Future<void> _pump(
 
 void main() {
   setUpAll(() => initializeDateFormatting('ru'));
+
+  test(
+    'client card API preserves unversioned routes and archive payloads',
+    () async {
+      final api = ClientCardRolesTestApi();
+      final clientCardApi = ClientCardApi(api);
+
+      await clientCardApi.loadCard(
+        entityType: 'student',
+        entityId: 'student-a',
+      );
+      await clientCardApi.previewArchive(
+        entityType: 'student',
+        entityId: 'student-a',
+      );
+      await clientCardApi.archive(
+        entityType: 'student',
+        entityId: 'student-a',
+        expectedVersion: 7,
+        reason: 'crm.client.archive.inactive',
+      );
+
+      expect(api.gets, ['/crm/clients/student/student-a/card']);
+      expect(api.posts[0].path, '/crm/clients/archive/preview');
+      expect(api.posts[0].data, {'type': 'student', 'id': 'student-a'});
+      expect(api.posts[1].path, '/crm/clients/archive');
+      expect(api.posts[1].data, {
+        'type': 'student',
+        'id': 'student-a',
+        'expectedVersion': 7,
+        'confirm': true,
+        'reason': 'crm.client.archive.inactive',
+      });
+    },
+  );
 
   testWidgets('Teacher card renders only learning sections on narrow layout', (
     tester,
