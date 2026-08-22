@@ -43,6 +43,24 @@ void main() {
     );
   });
 
+  test('migration directory exceptions cover only generation path debt', () {
+    const exception = NamingPolicyException(
+      target: 'server/src/migration/commerce/v7/',
+      category: 'migration',
+      reason: 'Calls versioned PostgreSQL reconciliation functions.',
+      owner: 'platform',
+      removeWhen: 'V7 commerce migration is formally retired.',
+    );
+
+    expect(
+      findNamingViolations(
+        paths: const ['server/src/migration/commerce/v7/old_reconcile.ts'],
+        exceptions: const [exception],
+      ).map((item) => item.rule),
+      ['temporary-name'],
+    );
+  });
+
   test('rejects generation symbols and historical test buckets', () {
     expect(
       findSymbolViolations(
@@ -224,6 +242,28 @@ void main() {
         exceptions: [exception],
       ),
       isNotEmpty,
+    );
+  });
+
+  test('historical test directories cover only test generation buckets', () {
+    const exception = NamingPolicyException(
+      target: 'test/features/v9/',
+      category: 'historical-test-bucket',
+      reason: 'Preserves the historical generation test bucket.',
+      owner: 'flutter',
+      removeWhen: 'The historical test bucket is retired.',
+    );
+    const finding = 'test/features/v9/example_test.dart';
+
+    expect(
+      isExceptionCovered(finding, 'test-generation-bucket', const [exception]),
+      isTrue,
+    );
+    expect(
+      isExceptionCovered(finding, 'production-generation-name', const [
+        exception,
+      ]),
+      isFalse,
     );
   });
 

@@ -23,6 +23,11 @@ class NamingViolation {
   final String rule;
 }
 
+const Map<String, String> _directoryRuleByCategory = {
+  'migration': 'production-generation-name',
+  'historical-test-bucket': 'test-generation-bucket',
+};
+
 List<String> trackedPaths() {
   final result = Process.runSync('git', const ['ls-files']);
   if (result.exitCode != 0) {
@@ -115,6 +120,7 @@ bool isExceptionCovered(
   if (target.contains('::')) return false;
   if (target.endsWith('/')) {
     return _isCategoryShapedDirectoryTarget(exception) &&
+        _directoryRuleByCategory[exception.category] == rule &&
         finding.startsWith(target);
   }
   return finding == target;
@@ -166,7 +172,7 @@ bool _matchesTrackedPathOrSymbol(
   final targetPath = targetParts.first;
   if (targetParts.length == 1) {
     if (target.endsWith('/')) {
-      return _directoryMatchesRelevantDebt(target, paths, sources);
+      return _directoryMatchesRelevantDebt(exception, paths);
     }
     if (exception.category == 'cleanup-debt') {
       return findNamingViolations(
@@ -215,28 +221,21 @@ bool _isCategoryShapedDirectoryTarget(NamingPolicyException exception) {
 }
 
 bool _directoryMatchesRelevantDebt(
-  String target,
+  NamingPolicyException exception,
   Iterable<String> paths,
-  Map<String, String> sources,
 ) {
+  final target = exception.target.trim();
+  final allowedRule = _directoryRuleByCategory[exception.category];
+  if (allowedRule == null) return false;
   final directoryPaths = [
     for (final path in paths)
       if (path.startsWith(target)) path,
   ];
   if (directoryPaths.isEmpty) return false;
-  if (findNamingViolations(
+  return findNamingViolations(
     paths: directoryPaths,
     exceptions: const [],
-  ).isNotEmpty) {
-    return true;
-  }
-  return findSymbolViolations(
-    sources: {
-      for (final entry in sources.entries)
-        if (entry.key.startsWith(target)) entry.key: entry.value,
-    },
-    exceptions: const [],
-  ).isNotEmpty;
+  ).any((violation) => violation.rule == allowedRule);
 }
 
 String _withoutCommentsAndStrings(String source) {
