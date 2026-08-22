@@ -28,9 +28,8 @@ void main() {
         opener: opener.call,
       );
 
-      final outcome = await coordinator.export(
-        reportKey: 'client-status',
-        format: 'csv',
+      final outcome = await _export(
+        coordinator,
         filter: const {'status': 'new'},
       );
 
@@ -95,7 +94,8 @@ void main() {
           delay: (duration) async => delays.add(duration),
         );
 
-        final outcome = await coordinator.export(
+        final outcome = await _export(
+          coordinator,
           reportKey: 'school_finance',
           format: 'xlsx',
           filter: const {'branchId': 'branch-1'},
@@ -150,11 +150,7 @@ void main() {
       );
 
       await expectLater(
-        coordinator.export(
-          reportKey: 'client-status',
-          format: 'csv',
-          filter: const {},
-        ),
+        _export(coordinator),
         throwsA(
           isA<StateError>().having(
             (error) => error.message,
@@ -187,11 +183,7 @@ void main() {
       );
 
       await expectLater(
-        coordinator.export(
-          reportKey: 'client-status',
-          format: 'csv',
-          filter: const {},
-        ),
+        _export(coordinator),
         throwsA(
           isA<StateError>().having(
             (error) => error.message,
@@ -233,11 +225,7 @@ void main() {
           delay: (_) async {},
         );
 
-        final outcome = await coordinator.export(
-          reportKey: 'client-status',
-          format: 'csv',
-          filter: const {},
-        );
+        final outcome = await _export(coordinator);
 
         expect(outcome.filename, 'report.csv');
         expect(opener.lastFilename, 'report.csv');
@@ -267,11 +255,7 @@ void main() {
         );
 
         await expectLater(
-          coordinator.export(
-            reportKey: 'client-status',
-            format: corrupt.$1,
-            filter: const {},
-          ),
+          _export(coordinator, format: corrupt.$1),
           throwsFormatException,
         );
         expect(opener.calls, 0);
@@ -303,11 +287,7 @@ void main() {
       );
 
       await expectLater(
-        coordinator.export(
-          reportKey: 'client-status',
-          format: 'csv',
-          filter: const {},
-        ),
+        _export(coordinator),
         throwsA(
           isA<TimeoutException>().having(
             (error) => error.message,
@@ -321,46 +301,155 @@ void main() {
       expect(source.downloads, 0);
     });
 
-    test(
-      'cancellation stops after the in-flight poll before download',
-      () async {
-        final source = _FakeReportingDataSource(
-          requested: const V4ReportExportResult.async(
-            jobId: 'job-cancelled',
-            status: 'queued',
+    test('cancellation during injected delay starts no job read', () async {
+      final delayStarted = Completer<void>();
+      final releaseDelay = Completer<void>();
+      final source = _FakeReportingDataSource(
+        requested: const V4ReportExportResult.async(
+          jobId: 'job-cancelled',
+          status: 'queued',
+          rowCount: 20,
+        ),
+        jobs: const [
+          V4ReportExportJob(
+            id: 'job-cancelled',
+            status: 'ready',
             rowCount: 20,
+            downloadReady: true,
+            filename: 'client-status.csv',
           ),
-          jobs: const [
-            V4ReportExportJob(
-              id: 'job-cancelled',
-              status: 'ready',
-              rowCount: 20,
-              downloadReady: true,
-              filename: 'client-status.csv',
-            ),
-          ],
-          downloadedBytes: _validCsvBytes,
-        );
-        var cancelled = false;
-        final coordinator = ReportExportCoordinator(
-          dataSource: source,
-          opener: _unexpectedOpen,
-          delay: (_) async => cancelled = true,
-          isCancelled: () => cancelled,
-        );
+        ],
+        downloadedBytes: _validCsvBytes,
+      );
+      var cancelled = false;
+      final coordinator = ReportExportCoordinator(
+        dataSource: source,
+        opener: _unexpectedOpen,
+        delay: (_) {
+          delayStarted.complete();
+          return releaseDelay.future;
+        },
+        isCancelled: () => cancelled,
+      );
 
-        await expectLater(
-          coordinator.export(
-            reportKey: 'client-status',
-            format: 'csv',
-            filter: const {},
+      final export = _export(coordinator);
+      await delayStarted.future;
+      cancelled = true;
+      releaseDelay.complete();
+
+      await expectLater(export, throwsA(isA<ReportExportCancelledException>()));
+      expect(source.jobReads, 0);
+      expect(source.downloads, 0);
+    });
+
+    test('already cancelled export starts no request or opener', () async {
+      final source = _FakeReportingDataSource(
+        requested: V4ReportExportResult.sync(
+          bytes: _validCsvBytes,
+          filename: 'client-status.csv',
+        ),
+      );
+      final opener = _RecordingOpener(
+        result: const ReportFileOpenResult(
+          path: 'C:/Reports/client-status.csv',
+          opened: true,
+        ),
+      );
+      final coordinator = ReportExportCoordinator(
+        dataSource: source,
+        opener: opener.call,
+        isCancelled: () => true,
+      );
+
+      await expectLater(
+        _export(coordinator),
+        throwsA(isA<ReportExportCancelledException>()),
+      );
+      expect(source.requestCalls, 0);
+      expect(opener.calls, 0);
+    });
+
+    test('cancellation while sync request is pending skips opener', () async {
+      final requestCompleter = Completer<V4ReportExportResult>();
+      final source = _FakeReportingDataSource(
+        requested: V4ReportExportResult.sync(
+          bytes: _validCsvBytes,
+          filename: 'unused.csv',
+        ),
+        requestCompleter: requestCompleter,
+      );
+      final opener = _RecordingOpener(
+        result: const ReportFileOpenResult(
+          path: 'C:/Reports/client-status.csv',
+          opened: true,
+        ),
+      );
+      var cancelled = false;
+      final coordinator = ReportExportCoordinator(
+        dataSource: source,
+        opener: opener.call,
+        isCancelled: () => cancelled,
+      );
+
+      final export = _export(coordinator);
+      expect(source.requestCalls, 1);
+      cancelled = true;
+      requestCompleter.complete(
+        V4ReportExportResult.sync(
+          bytes: _validCsvBytes,
+          filename: 'client-status.csv',
+        ),
+      );
+
+      await expectLater(export, throwsA(isA<ReportExportCancelledException>()));
+      expect(opener.calls, 0);
+    });
+
+    test('cancellation while download is pending skips opener', () async {
+      final downloadCompleter = Completer<List<int>>();
+      final downloadStarted = Completer<void>();
+      final source = _FakeReportingDataSource(
+        requested: const V4ReportExportResult.async(
+          jobId: 'job-download',
+          status: 'queued',
+          rowCount: 20,
+        ),
+        jobs: const [
+          V4ReportExportJob(
+            id: 'job-download',
+            status: 'ready',
+            rowCount: 20,
+            downloadReady: true,
+            filename: 'client-status.csv',
           ),
-          throwsA(isA<ReportExportCancelledException>()),
-        );
-        expect(source.jobReads, 1);
-        expect(source.downloads, 0);
-      },
-    );
+        ],
+        downloadedBytes: _validCsvBytes,
+        downloadCompleter: downloadCompleter,
+        downloadStarted: downloadStarted,
+      );
+      final opener = _RecordingOpener(
+        result: const ReportFileOpenResult(
+          path: 'C:/Reports/client-status.csv',
+          opened: true,
+        ),
+      );
+      var cancelled = false;
+      final coordinator = ReportExportCoordinator(
+        dataSource: source,
+        opener: opener.call,
+        delay: (_) async {},
+        isCancelled: () => cancelled,
+      );
+
+      final export = _export(coordinator);
+      await downloadStarted.future;
+      cancelled = true;
+      downloadCompleter.complete(_validCsvBytes);
+
+      await expectLater(export, throwsA(isA<ReportExportCancelledException>()));
+      expect(source.downloads, 1);
+      expect(opener.calls, 0);
+    });
 
     test('file opener failure remains an export failure', () async {
       final coordinator = ReportExportCoordinator(
@@ -374,11 +463,7 @@ void main() {
       );
 
       await expectLater(
-        coordinator.export(
-          reportKey: 'client-status',
-          format: 'csv',
-          filter: const {},
-        ),
+        _export(coordinator),
         throwsA(
           isA<StateError>().having(
             (error) => error.message,
@@ -403,11 +488,7 @@ void main() {
         ),
       );
 
-      final outcome = await coordinator.export(
-        reportKey: 'client-status',
-        format: 'csv',
-        filter: const {},
-      );
+      final outcome = await _export(coordinator);
 
       expect(outcome.filename, 'client-status.csv');
       expect(outcome.path, 'C:/Reports/client-status.csv');
@@ -423,6 +504,21 @@ final List<int> _validCsvBytes = [
   ...utf8.encode('name\nАлина'),
 ];
 const List<int> _validXlsxBytes = [0x50, 0x4b, 0x03, 0x04];
+
+Future<ReportExportOutcome> _export(
+  ReportExportCoordinator coordinator, {
+  String reportKey = 'client-status',
+  String format = 'csv',
+  Map<String, dynamic> filter = const {},
+  void Function(ReportExportProgress progress)? onProgress,
+}) {
+  return coordinator.export(
+    reportKey: reportKey,
+    format: format,
+    filter: filter,
+    onProgress: onProgress,
+  );
+}
 
 Future<ReportFileOpenResult> _unexpectedOpen(List<int> bytes, String filename) {
   throw StateError('opener must not be called');
@@ -450,12 +546,18 @@ class _FakeReportingDataSource implements ReportingDataSource {
     this.jobs = const [],
     this.downloadedBytes = const [],
     this.repeatLastJob = false,
+    this.requestCompleter,
+    this.downloadCompleter,
+    this.downloadStarted,
   });
 
   final V4ReportExportResult requested;
   final List<V4ReportExportJob> jobs;
   final List<int> downloadedBytes;
   final bool repeatLastJob;
+  final Completer<V4ReportExportResult>? requestCompleter;
+  final Completer<List<int>>? downloadCompleter;
+  final Completer<void>? downloadStarted;
   int requestCalls = 0;
   int jobReads = 0;
   int downloads = 0;
@@ -475,6 +577,7 @@ class _FakeReportingDataSource implements ReportingDataSource {
     requestedReportKey = reportKey;
     requestedFormat = format;
     requestedFilter = Map<String, dynamic>.from(filter);
+    if (requestCompleter != null) return requestCompleter!.future;
     return requested;
   }
 
@@ -491,6 +594,8 @@ class _FakeReportingDataSource implements ReportingDataSource {
   Future<List<int>> downloadExport(String jobId) async {
     downloads++;
     downloadedJobIds.add(jobId);
+    downloadStarted?.complete();
+    if (downloadCompleter != null) return downloadCompleter!.future;
     return List<int>.from(downloadedBytes);
   }
 

@@ -68,14 +68,17 @@ class ReportExportCoordinator {
     required Map<String, dynamic> filter,
     void Function(ReportExportProgress progress)? onProgress,
   }) async {
+    _throwIfCancelled();
     onProgress?.call(
       const ReportExportProgress(stage: ReportExportProgressStage.requesting),
     );
+    _throwIfCancelled();
     final requested = await dataSource.requestExport(
       reportKey: reportKey,
       format: format,
       filter: filter,
     );
+    _throwIfCancelled();
     if (!requested.isAsync) {
       return _open(requested.bytes!, requested.filename!, format, onProgress);
     }
@@ -87,14 +90,12 @@ class ReportExportCoordinator {
         rowCount: requested.rowCount,
       ),
     );
-    for (
-      var attempt = 0;
-      attempt < maxPollingAttempts && !isCancelled();
-      attempt++
-    ) {
+    for (var attempt = 0; attempt < maxPollingAttempts; attempt++) {
+      _throwIfCancelled();
       await delay(pollInterval);
+      _throwIfCancelled();
       final job = await dataSource.getExportJob(jobId);
-      if (isCancelled()) throw const ReportExportCancelledException();
+      _throwIfCancelled();
       onProgress?.call(
         ReportExportProgress(
           stage: ReportExportProgressStage.polling,
@@ -102,6 +103,7 @@ class ReportExportCoordinator {
           job: job,
         ),
       );
+      _throwIfCancelled();
       if (job.status == 'failed' || job.status == 'expired') {
         throw StateError(job.errorCode ?? 'Экспорт недоступен');
       }
@@ -115,11 +117,13 @@ class ReportExportCoordinator {
             filename: filename,
           ),
         );
+        _throwIfCancelled();
         final bytes = await dataSource.downloadExport(jobId);
+        _throwIfCancelled();
         return _open(bytes, filename, format, onProgress);
       }
     }
-    if (isCancelled()) throw const ReportExportCancelledException();
+    _throwIfCancelled();
     throw TimeoutException('Экспорт занимает слишком много времени.');
   }
 
@@ -129,6 +133,7 @@ class ReportExportCoordinator {
     String format,
     void Function(ReportExportProgress progress)? onProgress,
   ) async {
+    _throwIfCancelled();
     validateReportExportBytes(bytes, format);
     onProgress?.call(
       ReportExportProgress(
@@ -136,12 +141,18 @@ class ReportExportCoordinator {
         filename: filename,
       ),
     );
+    _throwIfCancelled();
     final result = await opener(bytes, filename);
+    _throwIfCancelled();
     return ReportExportOutcome(
       path: result.path,
       filename: filename,
       opened: result.opened,
     );
+  }
+
+  void _throwIfCancelled() {
+    if (isCancelled()) throw const ReportExportCancelledException();
   }
 }
 
