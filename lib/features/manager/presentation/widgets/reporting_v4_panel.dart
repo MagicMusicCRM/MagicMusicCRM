@@ -13,6 +13,7 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/magic_desktop_scrollbar.dart';
 import 'package:magic_music_crm/features/manager/presentation/reporting/report_export_coordinator.dart';
 import 'package:magic_music_crm/features/manager/presentation/reporting/report_export_files.dart';
+import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_controller.dart';
 import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_data_source.dart';
 import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_models.dart';
 
@@ -47,20 +48,7 @@ class ReportingV4Panel extends ConsumerStatefulWidget {
 
 class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
   final _scrollController = ScrollController();
-  bool _loading = true;
-  bool _forbidden = false;
-  bool _statusLoading = true;
-  bool _lessonLoading = true;
-  bool _tasksLoading = true;
-  bool _financeLoading = true;
-  Object? _statusError;
-  Object? _lessonError;
-  Object? _tasksError;
-  Object? _financeError;
-  Map<String, dynamic> _statusSummary = const {};
-  Map<String, dynamic> _lessonSuccess = const {};
-  Map<String, dynamic> _tasks = const {};
-  Map<String, dynamic>? _schoolFinance;
+  late ReportingController _controller;
   EntityLink? _drilldownLink;
   Map<String, dynamic>? _drilldown;
   bool _lessonDrilldown = false;
@@ -84,22 +72,40 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
 
   DashboardFilter get _filter => widget.filter ?? DashboardFilter.defaults();
 
-  ReportingDataSource get _dataSource => ref.read(reportingDataSourceProvider);
+  ReportingDataSource get _dataSource => _controller.dataSource;
+
+  ReportingState get _reporting => _controller.state;
+
+  Map<String, dynamic> get _statusSummary => _reporting.status.data ?? const {};
+
+  Map<String, dynamic> get _lessonSuccess =>
+      _reporting.lessons.data ?? const {};
+
+  Map<String, dynamic> get _tasks => _reporting.tasks.data ?? const {};
+
+  Map<String, dynamic>? get _schoolFinance => _reporting.finance.data;
 
   @override
   void initState() {
     super.initState();
+    _controller = _createController(ref.read(reportingDataSourceProvider));
+    _controller.addListener(_onReportingChanged);
     unawaited(_load());
   }
 
   @override
   void didUpdateWidget(covariant ReportingV4Panel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.filter != widget.filter ||
-        oldWidget.reloadToken != widget.reloadToken ||
+    final dataSource = ref.read(reportingDataSourceProvider);
+    final accessChanged =
         oldWidget.role != widget.role ||
         oldWidget.accessSnapshot?.accessVersion !=
-            widget.accessSnapshot?.accessVersion) {
+            widget.accessSnapshot?.accessVersion;
+    if (accessChanged || !identical(dataSource, _controller.dataSource)) {
+      _replaceController(dataSource);
+      unawaited(_load());
+    } else if (oldWidget.filter != widget.filter ||
+        oldWidget.reloadToken != widget.reloadToken) {
       unawaited(_load());
     }
   }
@@ -107,100 +113,35 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
   @override
   void dispose() {
     _disposed = true;
+    _controller.removeListener(_onReportingChanged);
+    _controller.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
-  Future<void> _load() async {
-    if (!_canReadStatus) {
-      setState(() {
-        _forbidden = true;
-        _loading = false;
-      });
-      return;
-    }
-    setState(() {
-      _loading = false;
-      _forbidden = false;
-      _statusLoading = true;
-      _lessonLoading = true;
-      _tasksLoading = true;
-      _financeLoading = _canReadSchoolFinance;
-      _statusError = null;
-      _lessonError = null;
-      _tasksError = null;
-      _financeError = null;
-    });
-    await Future.wait([
-      _loadStatus(),
-      _loadLessons(),
-      _loadTasks(),
-      if (_canReadSchoolFinance) _loadFinance(),
-    ]);
-  }
-
-  Future<void> _loadStatus() {
-    return _loadSection(
-      () => _dataSource.loadClientStatus(_filter),
-      (value) => _statusSummary = value,
-      (value) => _statusError = value,
-      (value) => _statusLoading = value,
+  ReportingController _createController(ReportingDataSource dataSource) {
+    return ReportingController(
+      dataSource: dataSource,
+      canReadStatus: _canReadStatus,
+      canReadSchoolFinance: _canReadSchoolFinance,
     );
   }
 
-  Future<void> _loadLessons() {
-    return _loadSection(
-      () => _dataSource.loadLessonSuccess(_filter),
-      (value) => _lessonSuccess = value,
-      (value) => _lessonError = value,
-      (value) => _lessonLoading = value,
-    );
+  void _replaceController(ReportingDataSource dataSource) {
+    _controller.removeListener(_onReportingChanged);
+    _controller.dispose();
+    _controller = _createController(dataSource);
+    _controller.addListener(_onReportingChanged);
   }
 
-  Future<void> _loadTasks() => _loadSection(
-    _dataSource.loadOpenTaskSummary,
-    (value) => _tasks = value,
-    (value) => _tasksError = value,
-    (value) => _tasksLoading = value,
-  );
-
-  Future<void> _loadFinance() {
-    return _loadSection(
-      () => _dataSource.loadSchoolFinance(_filter),
-      (value) => _schoolFinance = value,
-      (value) => _financeError = value,
-      (value) => _financeLoading = value,
-    );
+  void _onReportingChanged() {
+    if (mounted) setState(() {});
   }
 
-  Future<void> _loadSection(
-    Future<Map<String, dynamic>> Function() load,
-    void Function(Map<String, dynamic>) apply,
-    void Function(Object?) setError,
-    void Function(bool) setLoading,
-  ) async {
-    if (mounted) {
-      setState(() {
-        setError(null);
-        setLoading(true);
-      });
-    }
-    try {
-      final value = await load();
-      if (!mounted) return;
-      setState(() {
-        apply(value);
-        setError(null);
-        setLoading(false);
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        setError(error);
-        setLoading(false);
-      });
-    }
-  }
+  Future<void> _load() => _controller.load(_filter);
+
+  Future<void> _reloadSection(ReportingSectionKey key) =>
+      _controller.reloadSection(key, _filter);
 
   Future<void> _openDrilldown(
     Map<String, dynamic> rawLink, {
@@ -314,13 +255,13 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
+    if (_reporting.loading) {
       return const Center(
         key: ValueKey('reporting-loading'),
         child: CircularProgressIndicator(),
       );
     }
-    if (_forbidden) {
+    if (_reporting.forbidden) {
       return const EntityLinkStateView(
         key: ValueKey('reporting-forbidden'),
         state: EntityRouteState.forbidden,
@@ -348,9 +289,9 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
               key: const ValueKey('dashboard-lessons-section'),
               title: 'Занятия',
               subtitle: 'Успешность за выбранный период и филиал',
-              loading: _lessonLoading,
-              error: _lessonError,
-              onRetry: _loadLessons,
+              loading: _reporting.lessons.loading,
+              error: _reporting.lessons.error,
+              onRetry: () => _reloadSection(ReportingSectionKey.lessons),
               child: _lessonCard(),
             ),
             const SizedBox(height: 16),
@@ -358,9 +299,9 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
               key: const ValueKey('dashboard-clients-section'),
               title: 'Клиенты и воронка',
               subtitle: 'Статусы с теми же периодом и филиалом',
-              loading: _statusLoading,
-              error: _statusError,
-              onRetry: _loadStatus,
+              loading: _reporting.status.loading,
+              error: _reporting.status.error,
+              onRetry: () => _reloadSection(ReportingSectionKey.status),
               child: statusItems.isEmpty
                   ? const Text('За выбранный период клиентов нет')
                   : Column(children: statusItems.map(_statusCard).toList()),
@@ -371,9 +312,9 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
               title: 'Задачи',
               subtitle:
                   'Текущая очередь · период и филиал к этому показателю не применяются',
-              loading: _tasksLoading,
-              error: _tasksError,
-              onRetry: _loadTasks,
+              loading: _reporting.tasks.loading,
+              error: _reporting.tasks.error,
+              onRetry: () => _reloadSection(ReportingSectionKey.tasks),
               child: _taskSummary(),
             ),
             if (_canReadSchoolFinance) ...[
@@ -382,9 +323,9 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
                 key: const ValueKey('dashboard-finance-section'),
                 title: 'Финансы школы',
                 subtitle: 'Выручка и расходы за выбранный период и филиал',
-                loading: _financeLoading,
-                error: _financeError,
-                onRetry: _loadFinance,
+                loading: _reporting.finance.loading,
+                error: _reporting.finance.error,
+                onRetry: () => _reloadSection(ReportingSectionKey.finance),
                 child: financeRows.isEmpty
                     ? const Text('За выбранный период финансовых данных нет')
                     : _financeChart(financeRows),
