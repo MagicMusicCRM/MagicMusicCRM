@@ -16,8 +16,8 @@ import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_data_source.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_view.dart';
 
-class SharedTasksV4Panel extends ConsumerStatefulWidget {
-  const SharedTasksV4Panel({
+class SharedTasksPanel extends ConsumerStatefulWidget {
+  const SharedTasksPanel({
     super.key,
     this.dataSource,
     this.embedded = false,
@@ -37,10 +37,10 @@ class SharedTasksV4Panel extends ConsumerStatefulWidget {
   final bool defaultToMineToday;
 
   @override
-  ConsumerState<SharedTasksV4Panel> createState() => _SharedTasksV4PanelState();
+  ConsumerState<SharedTasksPanel> createState() => _SharedTasksPanelState();
 }
 
-class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
+class _SharedTasksPanelState extends ConsumerState<SharedTasksPanel> {
   late SharedTasksDataSource _dataSource;
   late SharedTasksController _controller;
   StreamController<void>? _realtimeRefreshes;
@@ -82,7 +82,7 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
   }
 
   @override
-  void didUpdateWidget(covariant SharedTasksV4Panel oldWidget) {
+  void didUpdateWidget(covariant SharedTasksPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     final oldFocusedTaskId = _focusedTaskIdFor(oldWidget.initialLink);
     final nextFocusedTaskId = _focusedTaskId;

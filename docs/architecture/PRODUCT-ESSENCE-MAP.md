@@ -463,7 +463,7 @@ flowchart LR
 
 ### 12.6. Задачи
 
-**Факт:** production использует одну модель `app.shared_tasks` и один workbench `SharedTasksV4Panel`. Миграция `0101` сохраняет приоритет, филиал, аудитории, историю и legacy typed link; старые `TasksWidget`, `/crm/tasks` и runtime-чтения `app.tasks` удалены.
+**Факт:** production использует одну модель `app.shared_tasks` и один workbench `SharedTasksPanel`. Миграция `0101` сохраняет приоритет, филиал, аудитории, историю и legacy typed link; старые `TasksWidget`, `/crm/tasks` и runtime-чтения `app.tasks` удалены.
 
 **Правило области:** преподаватель видит задачи, получателем которых является; Управляющий дополнительно видит задачи своего филиала; Директор и Администратор системы — доступные задачи всей школы. Режимы «Мои / Мой филиал / Вся школа / Все доступные» используют ту же visibility-проекцию, что dashboard и карточки клиентов. Реальная owner-UAT остаётся этапом 9.
 
@@ -471,7 +471,7 @@ flowchart LR
 
 **Факт:** production-раздел разделён на «Обзор» и «Журналы». Один `DashboardFilter` управляет периодом и филиалом в обзорных KPI, журнале действий, финансовых операциях и расчётах преподавателей; каталог абонементов сохранён отдельной неаналитической поверхностью до консолидации настроек.
 
-**Факт:** client status и lesson KPI открывают исходные записи с тем же серверным predicate; задача ведёт в канонический `SharedTasksV4Panel`. Общешкольная finance-секция и её запросы создаются только при `commerce.school_finance.read`. XLSX строится из той же `schoolFinance`-проекции, проходит reconciliation значений/формулы и реально открывается Microsoft Excel.
+**Факт:** client status и lesson KPI открывают исходные записи с тем же серверным predicate; задача ведёт в канонический `SharedTasksPanel`. Общешкольная finance-секция и её запросы создаются только при `commerce.school_finance.read`. XLSX строится из той же `schoolFinance`-проекции, проходит reconciliation значений/формулы и реально открывается Microsoft Excel.
 
 ## 13. Корневые причины, а не отдельные симптомы
 
@@ -583,7 +583,7 @@ flowchart TD
 - `lib/features/manager/presentation/widgets/student_funnel_editor.dart` — версионный редактор Учеников.
 - `lib/features/crm/presentation/client_card/subscription_issue_sheet.dart` — скидка, доплата и рассрочка при выдаче.
 - `lib/features/crm/presentation/client_card/client_payment_form.dart` — отдельная упрощённая форма оплаты.
-- `lib/features/manager/presentation/widgets/tasks_widget.dart` и `shared_tasks_v4_panel.dart` — параллельные модели задач.
+- `lib/features/manager/presentation/tasks/shared_tasks_panel.dart` — единый workbench канонической модели `app.shared_tasks`.
 - `lib/features/manager/presentation/widgets/reports_widget.dart` — текущее переходное объединение аналитики.
 
 ## 19. Принятое решение о доступе Управляющего

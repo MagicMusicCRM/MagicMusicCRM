@@ -10,7 +10,7 @@ import 'package:magic_music_crm/features/crm/presentation/staff_workspace_screen
 import 'package:magic_music_crm/features/manager/presentation/widgets/clients_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/manager_overview_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/reports_widget.dart';
-import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tasks_v4_panel.dart';
+import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_panel.dart';
 import 'package:magic_music_crm/core/navigation/responsive_navigation_shell.dart';
 
 import 'messenger_test_api.dart';
@@ -113,7 +113,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 150));
 
-    expect(find.byType(SharedTasksV4Panel), findsOneWidget);
+    expect(find.byType(SharedTasksPanel), findsOneWidget);
   });
 
   testWidgets('manager Overview Tasks action opens Tasks instead of Clients', (
@@ -135,7 +135,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 150));
 
-    expect(find.byType(SharedTasksV4Panel), findsOneWidget);
+    expect(find.byType(SharedTasksPanel), findsOneWidget);
     expect(find.byType(ClientsWidget), findsNothing);
   });
 
@@ -162,7 +162,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 150));
 
-    expect(find.byType(SharedTasksV4Panel), findsOneWidget);
+    expect(find.byType(SharedTasksPanel), findsOneWidget);
     expect(find.text('Мои задачи'), findsOneWidget);
     expect(find.byKey(const Key('shared-task-today-filter')), findsOneWidget);
     expect(find.text('Новая задача'), findsNothing);

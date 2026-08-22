@@ -8,7 +8,7 @@ import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_task_editor.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_data_source.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_models.dart';
-import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tasks_v4_panel.dart';
+import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_panel.dart';
 
 class FakeSharedTasksDataSource extends SharedTasksDataSource {
   bool closed = false;
@@ -275,7 +275,7 @@ Widget _host(
     child: MaterialApp(
       home: MediaQuery(
         data: MediaQueryData(size: size),
-        child: SharedTasksV4Panel(
+        child: SharedTasksPanel(
           dataSource: source,
           initialLink: initialLink,
           linkedEntity: linkedEntity,
@@ -584,7 +584,7 @@ void main() {
                 child: SizedBox(
                   width: 390,
                   height: 700,
-                  child: SharedTasksV4Panel(
+                  child: SharedTasksPanel(
                     dataSource: source,
                     embedded: true,
                     canWrite: false,

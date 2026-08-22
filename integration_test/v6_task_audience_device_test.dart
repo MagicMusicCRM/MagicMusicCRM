@@ -13,10 +13,10 @@ import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_task_editor.dart';
-import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tasks_v4_panel.dart';
+import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_panel.dart';
 
 import 'evidence_screenshot.dart';
-import '../test/features/v4/shared_tasks_ui_test.dart';
+import '../test/features/tasks/shared_tasks_ui_test.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -98,7 +98,7 @@ void main() {
           child: MaterialApp(
             theme: AppTheme.dark,
             home: Scaffold(
-              body: SharedTasksV4Panel(dataSource: source, canWrite: true),
+              body: SharedTasksPanel(dataSource: source, canWrite: true),
             ),
           ),
         ),

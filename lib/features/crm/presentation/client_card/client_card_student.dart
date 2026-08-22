@@ -53,7 +53,7 @@ extension _ClientCardStudent on _ClientCardState {
   // ── Student tab: Задачи ──────────────────────────────────────────────────
   Widget _buildStudentTasksTab(ColorScheme cs) {
     return _studentGuard(cs, () {
-      return SharedTasksV4Panel(
+      return SharedTasksPanel(
         embedded: true,
         linkedEntity: EntityLink.typed(
           entityType: EntityLinkType.client,

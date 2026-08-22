@@ -4,7 +4,7 @@ import 'package:magic_music_crm/core/security/capability_snapshot_model.dart';
 import 'package:magic_music_crm/core/workspace/workspace_state.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/manage_entities_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/reports_widget.dart';
-import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tasks_v4_panel.dart';
+import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_panel.dart';
 import 'package:magic_music_crm/features/messenger/presentation/screens/messenger_screen.dart';
 
 Widget buildStaffWorkspaceSecondaryDestination({
@@ -15,7 +15,7 @@ Widget buildStaffWorkspaceSecondaryDestination({
 }) {
   final route = tab.currentRoute;
   return switch (selectedTab) {
-    6 when snapshot.allows('workflow.task.read') => SharedTasksV4Panel(
+    6 when snapshot.allows('workflow.task.read') => SharedTasksPanel(
       initialLink: route.link,
       canWrite: snapshot.allows('workflow.task.write'),
       defaultToMineToday: snapshot.role == 'admin',

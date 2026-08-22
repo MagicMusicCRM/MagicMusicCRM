@@ -629,7 +629,7 @@ extension _ClientCardTabsA on _ClientCardState {
   Widget _buildTasksTab(ColorScheme cs) {
     final targetType = _isConverted ? 'student' : widget.entityType;
     final targetId = _isConverted ? _studentId : _entityId;
-    return SharedTasksV4Panel(
+    return SharedTasksPanel(
       embedded: true,
       linkedEntity: EntityLink.typed(
         entityType: EntityLinkType.client,

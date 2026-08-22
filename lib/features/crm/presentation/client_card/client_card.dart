@@ -15,7 +15,7 @@ import 'package:magic_music_crm/features/admin/presentation/providers/schedule_n
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/create_lesson_dialog.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/client_app_user_panel.dart';
-import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tasks_v4_panel.dart';
+import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_panel.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/students_board_providers.dart';
 import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';

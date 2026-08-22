@@ -1,24 +1,10 @@
 [
   {
-    "target": "lib/features/crm/presentation/client_card/client_card_student.dart::SharedTasksV4Panel",
-    "category": "cleanup-debt",
-    "reason": "The client card still consumes a generation-named tasks panel.",
-    "owner": "flutter",
-    "remove_when": "Shared Tasks milestone splits and renames the panel."
-  },
-  {
     "target": "lib/features/crm/presentation/client_card/client_card_tabs_a.dart",
     "category": "cleanup-debt",
-    "reason": "The client-card part file has a mechanical suffix and generation-named dependency.",
+    "reason": "The client-card part file retains a mechanical suffix.",
     "owner": "flutter",
     "remove_when": "Cohesion milestone gives client-card tabs capability names."
-  },
-  {
-    "target": "lib/features/crm/presentation/staff_workspace_secondary_destination.dart::SharedTasksV4Panel",
-    "category": "cleanup-debt",
-    "reason": "The workspace destination still consumes the historical Shared Tasks panel.",
-    "owner": "flutter",
-    "remove_when": "Shared Tasks milestone completes the semantic split."
   },
   {
     "target": "lib/features/manager/presentation/widgets/reporting_v4_panel.dart",
@@ -33,20 +19,6 @@
     "reason": "The reports widget still consumes a generation-named reporting panel.",
     "owner": "flutter",
     "remove_when": "High-impact reporting milestone completes the semantic rename."
-  },
-  {
-    "target": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
-    "category": "cleanup-debt",
-    "reason": "The shared tasks panel has a historical generation name.",
-    "owner": "flutter",
-    "remove_when": "High-impact Shared Tasks milestone completes the semantic split."
-  },
-  {
-    "target": "lib/features/crm/presentation/client_card/client_card_tabs_a.dart::SharedTasksV4Panel",
-    "category": "cleanup-debt",
-    "reason": "The client-card tab still consumes the historical Shared Tasks panel.",
-    "owner": "flutter",
-    "remove_when": "Shared Tasks milestone completes the semantic split."
   },
   {
     "target": "lib/features/manager/presentation/widgets/reporting_v4_panel.dart::ReportingV4Panel",
@@ -124,20 +96,6 @@
     "reason": "The reporting panel uses a DTO bound to a live V4 analytics route.",
     "owner": "platform",
     "remove_when": "Analytics V4 API contract is retired through an approved migration."
-  },
-  {
-    "target": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart::SharedTasksV4Panel",
-    "category": "cleanup-debt",
-    "reason": "The shared tasks panel has a historical generation name.",
-    "owner": "flutter",
-    "remove_when": "High-impact Shared Tasks milestone completes the semantic split."
-  },
-  {
-    "target": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart::_SharedTasksV4PanelState",
-    "category": "cleanup-debt",
-    "reason": "The shared tasks panel state retains its historical generation name.",
-    "owner": "flutter",
-    "remove_when": "High-impact Shared Tasks milestone completes the semantic split."
   },
   {
     "target": "lib/core/services/magic_crm_service_finance.dart",

@@ -16,17 +16,26 @@ void main() {
     expect(productionSources, isNot(contains('TasksWidget(')));
     expect(productionSources, isNot(contains('.createTask(')));
     expect(productionSources, isNot(contains('.listTasks(')));
+    expect(productionSources, contains('SharedTasksPanel('));
+    expect(
+      productionSources,
+      isNot(contains(<String>['SharedTasks', 'V4Panel'].join())),
+    );
+    expect(
+      productionSources,
+      isNot(contains(<String>['shared_tasks_', 'v4_panel'].join())),
+    );
 
     final workspaceRoute = File(
       'lib/features/crm/presentation/staff_workspace_secondary_destination.dart',
     ).readAsStringSync();
-    expect(workspaceRoute, contains('SharedTasksV4Panel('));
+    expect(workspaceRoute, contains('SharedTasksPanel('));
 
     final messenger = File(
       'lib/features/messenger/presentation/screens/'
       'messenger_screen_builders_a.dart',
     ).readAsStringSync();
-    expect(messenger, isNot(contains('SharedTasksV4Panel(')));
+    expect(messenger, isNot(contains('SharedTasksPanel(')));
 
     final backendRuntime =
         [

@@ -16,7 +16,7 @@ import 'package:magic_music_crm/features/crm/presentation/staff_workspace_screen
 import 'package:magic_music_crm/features/manager/presentation/widgets/clients_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/manager_overview_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/reports_widget.dart';
-import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tasks_v4_panel.dart';
+import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_panel.dart';
 import 'package:magic_music_crm/features/teacher/presentation/widgets/teacher_schedule_widget.dart';
 import 'package:magic_music_crm/features/teacher/presentation/widgets/teacher_students_widget.dart';
 
@@ -184,7 +184,7 @@ void main() {
     }
     await _openDesktopSection<ScheduleWidget>(tester, 'Расписание');
     await _openDesktopSection<ClientsWidget>(tester, 'Клиенты');
-    await _openDesktopSection<SharedTasksV4Panel>(tester, 'Задачи');
+    await _openDesktopSection<SharedTasksPanel>(tester, 'Задачи');
     final scope = tester.widget<DropdownButton<String>>(
       find.byKey(const Key('shared-task-scope-filter')),
     );
@@ -234,7 +234,7 @@ void main() {
     await _openDesktopSection<ClientsWidget>(tester, 'Клиенты');
     expect(find.text('Лиды'), findsWidgets);
     expect(find.text('Ученики'), findsWidgets);
-    await _openDesktopSection<SharedTasksV4Panel>(tester, 'Задачи');
+    await _openDesktopSection<SharedTasksPanel>(tester, 'Задачи');
     await _openDesktopSection<ReportsWidget>(tester, 'Аналитика');
     expect(find.text('Финансы XLSX'), findsNothing);
     await captureEvidence(tester, 'manager-windows-persona-analytics');
@@ -289,7 +289,7 @@ void main() {
     await _openDesktopSection<ManagerOverviewWidget>(tester, 'Обзор');
     await _openDesktopSection<ScheduleWidget>(tester, 'Расписание');
     await _openDesktopSection<ClientsWidget>(tester, 'Клиенты');
-    await _openDesktopSection<SharedTasksV4Panel>(tester, 'Задачи');
+    await _openDesktopSection<SharedTasksPanel>(tester, 'Задачи');
     await _openDesktopSection<ReportsWidget>(tester, 'Аналитика');
     expect(find.text('Финансы XLSX'), findsOneWidget);
     await captureEvidence(tester, 'director-windows-persona-analytics');
