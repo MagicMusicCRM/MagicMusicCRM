@@ -238,7 +238,10 @@ void main() {
   });
 
   test('production code does not import a wide UI barrel', () {
-    const historicalBarrelImport = 'core/widgets/' 'v7/' 'v7.dart';
+    const historicalBarrelImport =
+        'core/widgets/'
+        'v7/'
+        'v7.dart';
     final offenders = trackedDartSources().where((path) {
       final file = File(path);
       if (!file.existsSync()) return false;

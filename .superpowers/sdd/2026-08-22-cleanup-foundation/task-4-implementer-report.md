@@ -44,3 +44,13 @@
 - Sentrux changed from 4890 to 4889 while keeping depth 15 and a passing
   session gate; direct primitive imports increase explicit cross-module edges
   after removing the barrel.
+
+## Fix round 1 — naming policy test formatting
+
+- Applied `dart format` to `test/architecture/naming_policy_test.dart` only.
+  The resulting diff is limited to the new adjacent barrel-path string
+  literals; no unrelated file or line changed.
+- Focused formatter check, naming-policy test, naming CLI, and `git diff
+  --check` all pass.
+- Fresh Sentrux rescan/health/rules/session-end passes at quality 4889,
+  dependency depth 15, rules PASS, and session delta 0.
