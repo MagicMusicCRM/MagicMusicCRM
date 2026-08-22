@@ -123,9 +123,13 @@ class SharedTasksState {
   final Map<String, Object> closeErrors;
 
   bool get contentQueryChanged =>
-      error != null &&
-      successfulQuery != null &&
-      successfulQuery != appliedQuery;
+      successfulQuery != null && successfulQuery != appliedQuery;
+
+  bool get contentReplacementPending =>
+      loading && hasLoaded && contentQueryChanged;
+
+  bool get showContentNotice =>
+      hasLoaded && (error != null || contentReplacementPending);
 
   SharedTasksQuery get contentQuery => successfulQuery ?? appliedQuery;
 
@@ -202,8 +206,11 @@ class SharedTasksController extends ChangeNotifier {
   Future<void> refresh({bool showLoading = false}) =>
       setQuery(state.query, showLoading: showLoading);
 
-  Future<void> retry({bool showLoading = true}) =>
-      setQuery(state.appliedQuery, showLoading: showLoading);
+  Future<void> retry({bool showLoading = true}) => setQuery(
+    state.appliedQuery,
+    showLoading: showLoading,
+    preserveDraft: true,
+  );
 
   void updateQuery(SharedTasksQuery query) {
     if (_disposed || query == state.query) return;
@@ -214,11 +221,12 @@ class SharedTasksController extends ChangeNotifier {
   Future<void> setQuery(
     SharedTasksQuery query, {
     bool showLoading = true,
+    bool preserveDraft = false,
   }) async {
     if (_disposed) return;
     final revision = ++_revision;
     state = state.copyWith(
-      query: query,
+      query: preserveDraft ? state.query : query,
       appliedQuery: query,
       loading: showLoading || !state.hasLoaded,
       error: null,

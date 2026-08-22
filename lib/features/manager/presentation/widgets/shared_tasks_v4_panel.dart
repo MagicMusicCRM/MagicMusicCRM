@@ -512,11 +512,12 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
         ),
       );
     }
-    if (state.error == null) return content;
+    if (!state.showContentNotice) return content;
     return Column(
       children: [
         _SharedTasksStaleNotice(
           queryChanged: state.contentQueryChanged,
+          loading: state.contentReplacementPending,
           onRetry: () => unawaited(_controller.retry()),
         ),
         Expanded(child: content),
@@ -811,10 +812,12 @@ class _ReminderBanner extends StatelessWidget {
 class _SharedTasksStaleNotice extends StatelessWidget {
   const _SharedTasksStaleNotice({
     required this.queryChanged,
+    required this.loading,
     required this.onRetry,
   });
 
   final bool queryChanged;
+  final bool loading;
   final VoidCallback onRetry;
 
   @override
@@ -836,14 +839,20 @@ class _SharedTasksStaleNotice extends StatelessWidget {
           Expanded(
             child: Text(
               queryChanged
-                  ? 'Не удалось загрузить выбранный фильтр. '
-                        'Показаны задачи предыдущего запроса.'
+                  ? loading
+                        ? 'Загружаем выбранный фильтр. '
+                              'Пока показаны задачи предыдущего запроса.'
+                        : 'Не удалось загрузить выбранный фильтр. '
+                              'Показаны задачи предыдущего запроса.'
                   : 'Не удалось обновить задачи. '
                         'Показаны ранее загруженные данные.',
               style: TextStyle(color: colors.onErrorContainer),
             ),
           ),
-          TextButton(onPressed: onRetry, child: const Text('Повторить')),
+          TextButton(
+            onPressed: loading ? null : onRetry,
+            child: Text(loading ? 'Загрузка…' : 'Повторить'),
+          ),
         ],
       ),
     );

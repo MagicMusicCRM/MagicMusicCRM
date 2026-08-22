@@ -337,21 +337,34 @@ void main() {
       Future.value(_response('open')),
       Future.error(StateError('closed offline')),
       Future.value(_response('closed', state: 'closed')),
+      Future.value(_response('draft', state: 'closed')),
     ]);
     final controller = SharedTasksController(dataSource: source);
     addTearDown(controller.dispose);
     await controller.setQuery(const SharedTasksQuery(state: 'open'));
 
-    await controller.setQuery(const SharedTasksQuery(state: 'closed'));
+    await controller.setQuery(
+      const SharedTasksQuery(state: 'closed', search: 'failed search'),
+    );
     expect(controller.state.items.single['id'], 'open');
     expect(controller.state.appliedQuery.state, 'closed');
     expect(controller.state.successfulQuery?.state, 'open');
     expect(controller.state.contentQueryChanged, isTrue);
 
+    controller.updateQuery(
+      controller.state.query.copyWith(search: 'newer draft'),
+    );
     await controller.retry();
     expect(controller.state.items.single['id'], 'closed');
     expect(controller.state.error, isNull);
     expect(controller.state.contentQueryChanged, isFalse);
+    expect(controller.state.query.search, 'newer draft');
+    expect(controller.state.appliedQuery.search, 'failed search');
+    expect(controller.state.successfulQuery?.search, 'failed search');
+
+    await controller.refresh();
+    expect(source.listCalls.last.q, 'newer draft');
+    expect(controller.state.items.single['id'], 'draft');
   });
 
   test('linked results own local counters and overdue filtering', () async {

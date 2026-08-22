@@ -12,6 +12,7 @@ import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tas
 class FakeSharedTasksDataSource extends SharedTasksDataSource {
   bool closed = false;
   bool failNextList = false;
+  Completer<Map<String, dynamic>>? nextListCompleter;
   bool failNextClose = false;
   int createCalls = 0;
   int updateCalls = 0;
@@ -56,6 +57,11 @@ class FakeSharedTasksDataSource extends SharedTasksDataSource {
     if (failNextList) {
       failNextList = false;
       throw StateError('list unavailable');
+    }
+    final pending = nextListCompleter;
+    if (pending != null) {
+      nextListCompleter = null;
+      return pending.future;
     }
     listedTaskId = taskId;
     listedEntityType = linkedEntityType;
@@ -401,7 +407,19 @@ void main() {
     expect(find.text('Подготовить отчёт'), findsOneWidget);
     expect(find.widgetWithText(TextButton, 'Повторить'), findsOneWidget);
 
+    final retry = Completer<Map<String, dynamic>>();
+    source.nextListCompleter = retry;
     await tester.tap(find.widgetWithText(TextButton, 'Повторить'));
+    await tester.pump();
+    expect(find.byKey(const Key('shared-tasks-stale-notice')), findsOneWidget);
+    expect(find.textContaining('Загружаем выбранный'), findsOneWidget);
+    expect(find.text('Подготовить отчёт'), findsOneWidget);
+
+    source.closed = true;
+    retry.complete({
+      'items': [source.task],
+      'counters': {'open': 0, 'overdue': 0},
+    });
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('shared-tasks-stale-notice')), findsNothing);
   });
