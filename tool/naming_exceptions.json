@@ -1,0 +1,226 @@
+[
+  {
+    "target": "lib/core/widgets/v7/",
+    "category": "cleanup-debt",
+    "reason": "Active UI primitives still use the historical generation directory.",
+    "owner": "flutter",
+    "remove_when": "Foundation milestone removes the v7 widget boundary."
+  },
+  {
+    "target": "lib/core/navigation/crm_nav_rbac.dart",
+    "category": "cleanup-debt",
+    "reason": "The navigation destination API still has a generation-specific name.",
+    "owner": "flutter",
+    "remove_when": "Foundation milestone introduces the responsive navigation shell."
+  },
+  {
+    "target": "lib/core/workspace/production_workspace_host.dart",
+    "category": "cleanup-debt",
+    "reason": "The workspace host still consumes the generation-specific navigation API.",
+    "owner": "flutter",
+    "remove_when": "Foundation milestone introduces the responsive navigation shell."
+  },
+  {
+    "target": "lib/features/client/presentation/screens/client_dashboard_screen.dart",
+    "category": "cleanup-debt",
+    "reason": "The client dashboard still consumes the generation-specific navigation API.",
+    "owner": "flutter",
+    "remove_when": "Foundation milestone introduces the responsive navigation shell."
+  },
+  {
+    "target": "lib/features/auth/presentation/screens/",
+    "category": "cleanup-debt",
+    "reason": "Auth screens still duplicate generation-named form controls.",
+    "owner": "flutter",
+    "remove_when": "Foundation milestone extracts shared auth form controls."
+  },
+  {
+    "target": "lib/features/crm/presentation/client_card/client_card_v4_api.dart",
+    "category": "cleanup-debt",
+    "reason": "The client-card API has unversioned routes but a historical implementation name.",
+    "owner": "flutter",
+    "remove_when": "Foundation milestone renames the client-card API by capability."
+  },
+  {
+    "target": "lib/features/crm/presentation/client_card/client_archive_button.dart",
+    "category": "cleanup-debt",
+    "reason": "The archive control still consumes the historical client-card API name.",
+    "owner": "flutter",
+    "remove_when": "Foundation milestone renames the client-card API by capability."
+  },
+  {
+    "target": "lib/features/crm/presentation/client_card/teacher_client_card.dart",
+    "category": "cleanup-debt",
+    "reason": "The teacher client card still consumes the historical client-card API name.",
+    "owner": "flutter",
+    "remove_when": "Foundation milestone renames the client-card API by capability."
+  },
+  {
+    "target": "lib/features/crm/presentation/client_card/client_card_student.dart",
+    "category": "cleanup-debt",
+    "reason": "The client card still consumes a generation-named tasks panel.",
+    "owner": "flutter",
+    "remove_when": "Shared Tasks milestone splits and renames the panel."
+  },
+  {
+    "target": "lib/features/crm/presentation/client_card/client_card_tabs_a.dart",
+    "category": "cleanup-debt",
+    "reason": "The client-card part file has a mechanical suffix and generation-named dependency.",
+    "owner": "flutter",
+    "remove_when": "Cohesion milestone gives client-card tabs capability names."
+  },
+  {
+    "target": "lib/features/crm/presentation/client_forms/client_create_dialogs.dart",
+    "category": "cleanup-debt",
+    "reason": "The create dialog still has a generation-specific public name.",
+    "owner": "flutter",
+    "remove_when": "Foundation milestone renames the create dialog by capability."
+  },
+  {
+    "target": "lib/features/crm/presentation/staff_workspace_secondary_destination.dart",
+    "category": "cleanup-debt",
+    "reason": "The workspace destination still refers to a generation-named navigation type.",
+    "owner": "flutter",
+    "remove_when": "Foundation milestone introduces the responsive navigation shell."
+  },
+  {
+    "target": "lib/features/manager/presentation/widgets/reporting_v4_panel.dart",
+    "category": "cleanup-debt",
+    "reason": "The reporting presentation panel has a historical generation name.",
+    "owner": "flutter",
+    "remove_when": "High-impact reporting milestone completes the semantic rename."
+  },
+  {
+    "target": "lib/features/manager/presentation/widgets/reports_widget.dart",
+    "category": "cleanup-debt",
+    "reason": "The reports widget still consumes a generation-named reporting panel.",
+    "owner": "flutter",
+    "remove_when": "High-impact reporting milestone completes the semantic rename."
+  },
+  {
+    "target": "lib/features/manager/presentation/widgets/shared_tasks_v4_panel.dart",
+    "category": "cleanup-debt",
+    "reason": "The shared tasks panel has a historical generation name.",
+    "owner": "flutter",
+    "remove_when": "High-impact Shared Tasks milestone completes the semantic split."
+  },
+  {
+    "target": "lib/core/services/magic_crm_service_finance.dart",
+    "category": "api-contract",
+    "reason": "V4 reporting methods and DTOs are bound to live analytics routes.",
+    "owner": "platform",
+    "remove_when": "Analytics V4 API contract is retired through an approved migration."
+  },
+  {
+    "target": "lib/features/admin/presentation/widgets/schedule_widget_views_a.dart",
+    "category": "cleanup-debt",
+    "reason": "The schedule view part has a mechanical suffix.",
+    "owner": "flutter",
+    "remove_when": "Cohesion milestone gives schedule views capability names."
+  },
+  {
+    "target": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
+    "category": "cleanup-debt",
+    "reason": "The schedule view part has a mechanical suffix.",
+    "owner": "flutter",
+    "remove_when": "Cohesion milestone gives schedule views capability names."
+  },
+  {
+    "target": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
+    "category": "cleanup-debt",
+    "reason": "The client-card part has a mechanical suffix.",
+    "owner": "flutter",
+    "remove_when": "Cohesion milestone gives client-card tabs capability names."
+  },
+  {
+    "target": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
+    "category": "cleanup-debt",
+    "reason": "The messenger builder part has a mechanical suffix.",
+    "owner": "flutter",
+    "remove_when": "Cohesion milestone gives messenger builders capability names."
+  },
+  {
+    "target": "lib/features/messenger/presentation/screens/messenger_screen_builders_b.dart",
+    "category": "cleanup-debt",
+    "reason": "The messenger builder part has a mechanical suffix.",
+    "owner": "flutter",
+    "remove_when": "Cohesion milestone gives messenger builders capability names."
+  },
+  {
+    "target": "test/features/v4/",
+    "category": "historical-test-bucket",
+    "reason": "V4 tests await capability-based placement with their production clusters.",
+    "owner": "flutter",
+    "remove_when": "Closure milestone reorganizes historical test buckets."
+  },
+  {
+    "target": "test/features/v6/",
+    "category": "historical-test-bucket",
+    "reason": "V6 tests await capability-based placement with their production clusters.",
+    "owner": "flutter",
+    "remove_when": "Closure milestone reorganizes historical test buckets."
+  },
+  {
+    "target": "test/features/v7/",
+    "category": "historical-test-bucket",
+    "reason": "V7 tests await capability-based placement with their production clusters.",
+    "owner": "flutter",
+    "remove_when": "Closure milestone reorganizes historical test buckets."
+  },
+  {
+    "target": "test/features/s8_desktop_ux_states_test.dart",
+    "category": "historical-test-bucket",
+    "reason": "S8 tests await capability-based placement with their production clusters.",
+    "owner": "flutter",
+    "remove_when": "Closure milestone reorganizes historical test buckets."
+  },
+  {
+    "target": "server/src/migration/v3-import-utils",
+    "category": "migration",
+    "reason": "The import utility preserves versioned migration identifiers.",
+    "owner": "platform",
+    "remove_when": "V3 import migration is formally retired."
+  },
+  {
+    "target": "server/src/platform/v4-",
+    "category": "rollout",
+    "reason": "V4 rollout, reconciliation, and backfill operations remain live.",
+    "owner": "platform",
+    "remove_when": "V4 domain rollout is formally closed."
+  },
+  {
+    "target": "server/src/access-control/v4-access-coverage.ts",
+    "category": "rollout",
+    "reason": "The access coverage check validates the live V4 rollout.",
+    "owner": "platform",
+    "remove_when": "V4 domain rollout is formally closed."
+  },
+  {
+    "target": "server/src/analytics/v4-reporting-scope-postgres.integration.spec.ts",
+    "category": "api-contract",
+    "reason": "The integration test verifies V4 analytics reporting scope.",
+    "owner": "platform",
+    "remove_when": "Analytics V4 API contract is retired through an approved migration."
+  },
+  {
+    "target": "server/src/platform/v7-commerce-data.ts",
+    "category": "migration",
+    "reason": "The executable commerce migration calls versioned PostgreSQL functions.",
+    "owner": "platform",
+    "remove_when": "V7 commerce migration is formally retired."
+  },
+  {
+    "target": "lib/core/api/magic_token_store.dart",
+    "category": "persisted-namespace",
+    "reason": "The token storage keeps the persisted mmcrm.v3 namespace.",
+    "owner": "platform",
+    "remove_when": "Token namespace data migration is completed and reconciled."
+  },
+  {
+    "target": "lib/core/update/windows_update_service.dart",
+    "category": "release-channel",
+    "reason": "The Windows updater must keep the latest-v2.json release manifest path.",
+    "owner": "release",
+    "remove_when": "Updater bridge migration is approved and deployed."
+  }
+]
