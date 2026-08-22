@@ -11,6 +11,7 @@ import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/magic_desktop_scrollbar.dart';
+import 'package:magic_music_crm/features/manager/presentation/reporting/report_export_coordinator.dart';
 import 'package:magic_music_crm/features/manager/presentation/reporting/report_export_files.dart';
 import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_data_source.dart';
 import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_models.dart';
@@ -253,43 +254,23 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
         ..._filter.apiFilter,
         ...?_drilldownLink?.optionalFocus?.filter,
       };
-      final requested = await _dataSource.requestExport(
-        reportKey: reportKey,
-        format: format,
-        filter: filter,
-      );
-      if (!requested.isAsync) {
-        await _saveAndOpenExport(requested.bytes!, requested.filename!, format);
-        return;
-      }
-
-      final jobId = requested.jobId!;
-      if (mounted) {
-        setState(() {
-          _exportStatus = 'В очереди: ${requested.rowCount} строк';
-        });
-      }
-      for (var attempt = 0; attempt < 120 && !_disposed; attempt++) {
-        await Future<void>.delayed(const Duration(milliseconds: 500));
-        final job = await _dataSource.getExportJob(jobId);
-        if (_disposed) return;
-        if (mounted) {
-          setState(() => _exportStatus = _jobStatusLabel(job));
-        }
-        if (job.status == 'failed' || job.status == 'expired') {
-          throw StateError(job.errorCode ?? 'Экспорт недоступен');
-        }
-        if (job.downloadReady) {
-          final bytes = await _dataSource.downloadExport(jobId);
-          await _saveAndOpenExport(
-            bytes,
-            job.filename ?? 'report.$format',
-            format,
+      final outcome =
+          await ReportExportCoordinator(
+            dataSource: _dataSource,
+            opener: ref.read(reportFileOpenerProvider),
+            isCancelled: () => _disposed,
+          ).export(
+            reportKey: reportKey,
+            format: format,
+            filter: filter,
+            onProgress: _updateExportProgress,
           );
-          return;
-        }
-      }
-      throw TimeoutException('Экспорт занимает слишком много времени.');
+      if (!mounted) return;
+      setState(() {
+        _exportStatus = outcome.opened
+            ? 'Файл открыт: ${outcome.filename}'
+            : 'Файл сохранён: ${outcome.path}';
+      });
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -301,19 +282,17 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
     }
   }
 
-  Future<void> _saveAndOpenExport(
-    List<int> bytes,
-    String filename,
-    String format,
-  ) async {
-    validateReportExportBytes(bytes, format);
-    final result = await ref.read(reportFileOpenerProvider)(bytes, filename);
+  void _updateExportProgress(ReportExportProgress progress) {
     if (!mounted) return;
-    setState(() {
-      _exportStatus = result.opened
-          ? 'Файл открыт: $filename'
-          : 'Файл сохранён: ${result.path}';
-    });
+    final status = switch (progress.stage) {
+      ReportExportProgressStage.requesting => 'Подготавливаем файл…',
+      ReportExportProgressStage.queued =>
+        'В очереди: ${progress.rowCount} строк',
+      ReportExportProgressStage.polling => _jobStatusLabel(progress.job!),
+      ReportExportProgressStage.downloading ||
+      ReportExportProgressStage.opening => null,
+    };
+    if (status != null) setState(() => _exportStatus = status);
   }
 
   CapabilitySnapshot get _snapshot {
