@@ -105,6 +105,13 @@
     "remove_when": "Analytics V4 API contract is retired through an approved migration."
   },
   {
+    "target": "lib/features/manager/presentation/reporting/report_export_coordinator.dart::V4ReportExportJob",
+    "category": "api-contract",
+    "reason": "The export coordinator observes a DTO bound to a live V4 analytics route.",
+    "owner": "platform",
+    "remove_when": "Analytics V4 API contract is retired through an approved migration."
+  },
+  {
     "target": "lib/features/manager/presentation/widgets/reporting_v4_panel.dart::V4ReportExportJob",
     "category": "api-contract",
     "reason": "The reporting panel formats a DTO bound to a live V4 analytics route.",

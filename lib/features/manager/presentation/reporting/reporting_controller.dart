@@ -2,50 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_data_source.dart';
 import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_models.dart';
 
-enum ReportingSectionKey { status, lessons, tasks, finance }
-
-@immutable
-class ReportingSection<T> {
-  const ReportingSection({
-    this.data,
-    this.loading = false,
-    this.error,
-    this.forbidden = false,
-  });
-
-  final T? data;
-  final bool loading;
-  final Object? error;
-  final bool forbidden;
-}
-
-@immutable
-class ReportingState {
-  const ReportingState({
-    required this.loading,
-    required this.forbidden,
-    required this.status,
-    required this.lessons,
-    required this.tasks,
-    required this.finance,
-  });
-
-  factory ReportingState.initial() => const ReportingState(
-    loading: true,
-    forbidden: false,
-    status: ReportingSection(),
-    lessons: ReportingSection(),
-    tasks: ReportingSection(),
-    finance: ReportingSection(),
-  );
-
-  final bool loading;
-  final bool forbidden;
-  final ReportingSection<Map<String, dynamic>> status;
-  final ReportingSection<Map<String, dynamic>> lessons;
-  final ReportingSection<Map<String, dynamic>> tasks;
-  final ReportingSection<Map<String, dynamic>> finance;
-}
+export 'package:magic_music_crm/features/manager/presentation/reporting/reporting_models.dart'
+    show ReportingSection, ReportingSectionKey, ReportingState;
 
 class ReportingController extends ChangeNotifier {
   ReportingController({
