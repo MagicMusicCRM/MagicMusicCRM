@@ -234,9 +234,7 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
               readOnly: _draftFrozen,
               enableInteractiveSelection: !_draftFrozen,
               decoration: const InputDecoration(labelText: 'Название'),
-              onChanged: (_) {
-                if (!_draftFrozen) setState(() {});
-              },
+              onChanged: _onDraftTextChanged,
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField<String>(
@@ -249,11 +247,7 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
                 DropdownMenuItem(value: 'medium', child: Text('Обычный')),
                 DropdownMenuItem(value: 'low', child: Text('Низкий')),
               ],
-              onChanged: _draftFrozen
-                  ? null
-                  : (value) {
-                      if (value != null) setState(() => _priority = value);
-                    },
+              onChanged: _draftFrozen ? null : _setPriority,
             ),
             const SizedBox(height: 10),
             TextField(
@@ -275,6 +269,7 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
               value: _start,
               dateOnly: _allDay,
               enabled: !_draftFrozen,
+              canInteract: () => !_draftFrozen,
               onChanged: _setStart,
             ),
             if (!_allDay)
@@ -282,9 +277,8 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
                 label: 'Окончание',
                 value: _end ?? _start.add(const Duration(hours: 1)),
                 enabled: !_draftFrozen,
-                onChanged: (value) {
-                  if (!_draftFrozen) setState(() => _end = value);
-                },
+                canInteract: () => !_draftFrozen,
+                onChanged: _setEnd,
               ),
             if (!_hasValidInterval) ...[
               const SizedBox(height: AppSpace.xs),
@@ -304,12 +298,7 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
                 ButtonSegment(value: 'allBranches', label: Text('Вся школа')),
               ],
               selected: {_audienceType},
-              onSelectionChanged: _draftFrozen
-                  ? null
-                  : (selection) => setState(() {
-                      _audienceType = selection.first;
-                      _targetId = null;
-                    }),
+              onSelectionChanged: _draftFrozen ? null : _setAudienceType,
             ),
             if (_audienceType != 'allBranches') ...[
               const SizedBox(height: 10),
@@ -328,9 +317,7 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
                       ),
                     )
                     .toList(),
-                onChanged: _draftFrozen
-                    ? null
-                    : (value) => setState(() => _targetId = value),
+                onChanged: _draftFrozen ? null : _setAudienceTarget,
               ),
             ],
             const SizedBox(height: 8),
@@ -367,11 +354,8 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
                 label: 'Напомнить',
                 value: _reminderAt ?? _defaultReminderAt(),
                 enabled: !_draftFrozen,
-                onChanged: (value) => setState(() {
-                  if (_draftFrozen) return;
-                  _reminderAt = value;
-                  _reminderCustomized = true;
-                }),
+                canInteract: () => !_draftFrozen,
+                onChanged: _setReminderAt,
               ),
             if (_saveError != null) ...[
               const SizedBox(height: AppSpace.sm),
@@ -391,7 +375,7 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
     );
     final actions = <Widget>[
       TextButton(
-        onPressed: _draftFrozen ? null : () => Navigator.pop(context),
+        onPressed: _draftFrozen ? null : _cancel,
         child: const Text('Отмена'),
       ),
       FilledButton(
@@ -447,6 +431,21 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
       ? DateTime(_start.year, _start.month, _start.day, 9)
       : _start.subtract(const Duration(hours: 1));
 
+  void _onDraftTextChanged(String _) {
+    if (_draftFrozen) return;
+    setState(() {});
+  }
+
+  void _setPriority(String? value) {
+    if (_draftFrozen || value == null) return;
+    setState(() => _priority = value);
+  }
+
+  void _cancel() {
+    if (_draftFrozen || !mounted) return;
+    Navigator.pop(context);
+  }
+
   void _setAllDay(bool value) {
     if (_draftFrozen) return;
     setState(() {
@@ -475,6 +474,24 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
     });
   }
 
+  void _setEnd(DateTime value) {
+    if (_draftFrozen) return;
+    setState(() => _end = value);
+  }
+
+  void _setAudienceType(Set<String> selection) {
+    if (_draftFrozen || selection.isEmpty) return;
+    setState(() {
+      _audienceType = selection.first;
+      _targetId = null;
+    });
+  }
+
+  void _setAudienceTarget(String? value) {
+    if (_draftFrozen) return;
+    setState(() => _targetId = value);
+  }
+
   void _setReminder(bool value) {
     if (_draftFrozen) return;
     setState(() {
@@ -485,6 +502,14 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
         _reminderAt = null;
         _reminderCustomized = false;
       }
+    });
+  }
+
+  void _setReminderAt(DateTime value) {
+    if (_draftFrozen) return;
+    setState(() {
+      _reminderAt = value;
+      _reminderCustomized = true;
     });
   }
 
@@ -530,7 +555,7 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
 
   void _refreshAudiencePreview() {
     final loader = _audiencePreview;
-    if (!mounted) return;
+    if (!mounted || _draftFrozen) return;
     final generation = ++_previewGeneration;
     setState(() {
       _previewLoading = true;
@@ -759,6 +784,7 @@ class _DateTimeButton extends StatelessWidget {
     required this.value,
     required this.onChanged,
     this.enabled = true,
+    this.canInteract,
     this.dateOnly = false,
   });
 
@@ -766,7 +792,10 @@ class _DateTimeButton extends StatelessWidget {
   final DateTime value;
   final ValueChanged<DateTime> onChanged;
   final bool enabled;
+  final bool Function()? canInteract;
   final bool dateOnly;
+
+  bool get _canInteract => enabled && (canInteract?.call() ?? true);
 
   @override
   Widget build(BuildContext context) {
@@ -781,13 +810,14 @@ class _DateTimeButton extends StatelessWidget {
       onTap: !enabled
           ? null
           : () async {
+              if (!_canInteract) return;
               final date = await showDatePicker(
                 context: context,
                 initialDate: value,
                 firstDate: DateTime.now().subtract(const Duration(days: 365)),
                 lastDate: DateTime.now().add(const Duration(days: 3650)),
               );
-              if (date == null || !context.mounted) return;
+              if (date == null || !context.mounted || !_canInteract) return;
               if (dateOnly) {
                 onChanged(DateTime(date.year, date.month, date.day));
                 return;
@@ -796,7 +826,7 @@ class _DateTimeButton extends StatelessWidget {
                 context: context,
                 initialTime: TimeOfDay.fromDateTime(value),
               );
-              if (time == null) return;
+              if (time == null || !_canInteract) return;
               onChanged(
                 DateTime(
                   date.year,

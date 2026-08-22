@@ -236,6 +236,40 @@ Future<void> _openEditor(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+typedef _DraftCallbacks = ({
+  VoidCallback cancel,
+  ValueChanged<String?> priority,
+  ValueChanged<Set<String>> audienceType,
+  ValueChanged<String?> audienceTarget,
+});
+
+DropdownButtonFormField<String> _dropdown(WidgetTester tester, Key key) =>
+    tester.widget<DropdownButtonFormField<String>>(find.byKey(key));
+
+SegmentedButton<String> _audienceTypeControl(WidgetTester tester) => tester
+    .widget<SegmentedButton<String>>(find.byType(SegmentedButton<String>));
+
+_DraftCallbacks _draftCallbacks(WidgetTester tester) => (
+  cancel: tester
+      .widget<TextButton>(find.widgetWithText(TextButton, 'Отмена'))
+      .onPressed!,
+  priority: _dropdown(tester, const Key('shared-task-priority')).onChanged!,
+  audienceType: _audienceTypeControl(tester).onSelectionChanged!,
+  audienceTarget: _dropdown(
+    tester,
+    const Key('shared-task-audience-target'),
+  ).onChanged!,
+);
+
+Future<void> _selectUserAudience(WidgetTester tester) async {
+  await tester.tap(find.text('Сотрудники'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('shared-task-audience-target')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Анна').last);
+  await tester.pumpAndSettle();
+}
+
 Map<String, dynamic> _updateTask() => {
   'id': 'task-7',
   'title': 'Исходный заголовок',
@@ -676,6 +710,96 @@ void main() {
     });
     await tester.pumpAndSettle();
     expect(source.updateCalls, 2);
+    expect(find.text('Открыть редактор'), findsOneWidget);
+  });
+
+  testWidgets('stale callbacks stay frozen and fresh callbacks recover', (
+    tester,
+  ) async {
+    final source = RecordingSharedTasksDataSource();
+    final pending = Completer<Map<String, dynamic>>();
+    source.pendingMutation = pending;
+    var saved = 0;
+    await tester.pumpWidget(
+      _launcher(source: source, task: _updateTask(), onSaved: () => saved++),
+    );
+    await _openEditor(tester);
+    await _selectUserAudience(tester);
+    final stale = _draftCallbacks(tester);
+
+    tester
+        .widget<FilledButton>(find.widgetWithText(FilledButton, 'Сохранить'))
+        .onPressed!();
+    stale.priority('low');
+    stale.audienceType({'allBranches'});
+    stale.audienceTarget(null);
+    stale.cancel();
+    await tester.pump();
+
+    expect(find.byType(SharedTaskEditor), findsOneWidget);
+    expect(source.updateCalls, 1);
+    expect(saved, 0);
+    expect(source.payloads.single['priority'], 'high');
+    expect(source.payloads.single['audiences'], [
+      {'type': 'allBranches'},
+    ]);
+    expect(
+      _dropdown(tester, const Key('shared-task-priority')).initialValue,
+      'high',
+    );
+    expect(_audienceTypeControl(tester).selected, {'user'});
+    expect(
+      _dropdown(tester, const Key('shared-task-audience-target')).initialValue,
+      'user-1',
+    );
+
+    pending.complete({
+      'recipientSummary': {'totalRecipients': 4},
+    });
+    await tester.pumpAndSettle();
+    expect(source.updateCalls, 1);
+    expect(saved, 1);
+    expect(find.text('Открыть редактор'), findsOneWidget);
+
+    final failingSource = RecordingSharedTasksDataSource();
+    final failingPending = Completer<Map<String, dynamic>>();
+    failingSource.pendingMutation = failingPending;
+    var failedSaved = 0;
+    await tester.pumpWidget(
+      _launcher(
+        source: failingSource,
+        task: _updateTask(),
+        onSaved: () => failedSaved++,
+      ),
+    );
+    await _openEditor(tester);
+    await _selectUserAudience(tester);
+    tester
+        .widget<FilledButton>(find.widgetWithText(FilledButton, 'Сохранить'))
+        .onPressed!();
+    await tester.pump();
+
+    failingPending.completeError(StateError('offline'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('shared-task-save-error')), findsOneWidget);
+
+    final current = _draftCallbacks(tester);
+    current.priority('low');
+    current.audienceTarget(null);
+    current.audienceType({'allBranches'});
+    await tester.pump();
+
+    expect(
+      _dropdown(tester, const Key('shared-task-priority')).initialValue,
+      'low',
+    );
+    expect(_audienceTypeControl(tester).selected, {'allBranches'});
+    expect(find.byKey(const Key('shared-task-audience-target')), findsNothing);
+
+    current.cancel();
+    await tester.pumpAndSettle();
+    expect(failingSource.updateCalls, 1);
+    expect(failedSaved, 0);
     expect(find.text('Открыть редактор'), findsOneWidget);
   });
 
