@@ -92,10 +92,9 @@ extension _ClientCardStudent on _ClientCardState {
             const SizedBox(height: AppSpace.xl),
           ],
           if (canReadSchedule) ...[
-            StudentScheduleSection(
-              clientType: 'student',
-              clientId: _studentId,
-              lessons: _lessons.map((lesson) => lesson.raw).toList(),
+            RecurringSchedulePlanSection(
+              studentId: _studentId,
+              fallbackLessons: _lessons.map((lesson) => lesson.raw).toList(),
               branches: _branches,
               defaultBranchId: _clientBranchId,
               subscriptions: [

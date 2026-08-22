@@ -3,56 +3,27 @@ import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 
-import 'recurring_schedule_plan_section.dart';
-
-/// Canonical schedule surface in the client card.
-///
-/// Students use atomic recurring Schedule Plans. Leads only retain the lesson
-/// date tray; the legacy preference-series editor is intentionally not mounted.
-class StudentScheduleSection extends StatefulWidget {
-  final String clientType;
-  final String clientId;
+/// Compact lesson history shown for leads without recurring schedule controls.
+class LeadLessonDateTray extends StatefulWidget {
   final List<Map<String, dynamic>> lessons;
-  final List<Map<String, dynamic>> branches;
-  final String? defaultBranchId;
-  final List<Map<String, dynamic>> subscriptions;
   final bool canWrite;
-  final VoidCallback onChanged;
   final ValueChanged<Map<String, dynamic>>? onOpenLesson;
 
-  const StudentScheduleSection({
+  const LeadLessonDateTray({
     super.key,
-    required this.clientType,
-    required this.clientId,
     required this.lessons,
-    required this.branches,
-    required this.defaultBranchId,
     required this.canWrite,
-    this.subscriptions = const [],
-    required this.onChanged,
     this.onOpenLesson,
   });
 
   @override
-  State<StudentScheduleSection> createState() => _StudentScheduleSectionState();
+  State<LeadLessonDateTray> createState() => _LeadLessonDateTrayState();
 }
 
-class _StudentScheduleSectionState extends State<StudentScheduleSection> {
+class _LeadLessonDateTrayState extends State<LeadLessonDateTray> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    if (widget.clientType == 'student') {
-      return RecurringSchedulePlanSection(
-        studentId: widget.clientId,
-        fallbackLessons: widget.lessons,
-        branches: widget.branches,
-        defaultBranchId: widget.defaultBranchId,
-        subscriptions: widget.subscriptions,
-        canWrite: widget.canWrite,
-        onChanged: widget.onChanged,
-        onOpenLesson: widget.onOpenLesson,
-      );
-    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [_lessonStrip(cs), _paidLegend(cs)],

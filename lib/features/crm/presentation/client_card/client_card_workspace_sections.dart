@@ -447,15 +447,7 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
       padding: const EdgeInsets.all(AppSpace.xl),
       children: [
         if (canReadSchedule) ...[
-          StudentScheduleSection(
-            clientType: 'lead',
-            clientId: _leadId,
-            lessons: const [],
-            branches: _branches,
-            defaultBranchId: _clientBranchId,
-            canWrite: canWriteSchedule,
-            onChanged: () {},
-          ),
+          LeadLessonDateTray(lessons: const [], canWrite: canWriteSchedule),
           const SizedBox(height: AppSpace.lg),
         ],
         if (!canReadSchedule)

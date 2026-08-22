@@ -6,7 +6,7 @@
 /// (`groups?['name']`, `teachers?['first_name']`), so a raw-map getter keeps
 /// those reads byte-faithful without over-modelling every nested shape. Scalar
 /// getters mirror the widgets' prior expressions. [raw] is the underlying map
-/// for widgets still taking one (e.g. `StudentScheduleSection`).
+/// for presentation boundaries that still consume the legacy shape.
 class Lesson {
   final Map<String, dynamic> _m;
 

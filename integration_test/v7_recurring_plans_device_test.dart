@@ -6,7 +6,6 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/recurring_schedule_plan_section.dart';
-import 'package:magic_music_crm/features/crm/presentation/client_card/student_schedule_section.dart';
 
 import '../test/features/crm/client_card/card_fake_api.dart';
 import 'evidence_screenshot.dart';
@@ -607,10 +606,9 @@ void main() {
               body: SafeArea(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
-                  child: StudentScheduleSection(
-                    clientType: 'student',
-                    clientId: 'student-1',
-                    lessons: const [
+                  child: RecurringSchedulePlanSection(
+                    studentId: 'student-1',
+                    fallbackLessons: const [
                       {
                         'id': 'lesson-without-preference',
                         'scheduledAt': '2026-08-20T15:00:00.000Z',
