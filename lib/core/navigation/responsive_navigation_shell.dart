@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/design_tokens.dart';
 import '../theme/telegram_colors.dart';
 import '../widgets/app_logo.dart';
-import '../widgets/v7/magic_menu.dart';
+import '../widgets/magic_menu.dart';
 
 /// One destination in a [ResponsiveNavigationShell].
 class ResponsiveNavDestination {
