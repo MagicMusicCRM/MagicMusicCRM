@@ -1,6 +1,6 @@
 # MagicMusicCRM — действующие архитектурные решения
 
-Статус: active. Обновлено 2026-08-12.
+Статус: active. Обновлено 2026-08-22.
 
 ## Инженерный процесс
 
@@ -19,6 +19,18 @@ framework, обязательные фазовые workflows и вручную �
 - индекс RepoWise локальный и обновляется из живого checkout;
 - low-confidence или mock retrieval проверяется по исходнику;
 - documentation ceremony не блокирует небольшую безопасную реализацию.
+
+DECISION (owner, 2026-08-22): Активный production-код именуется по текущей
+ответственности, а не по историческому поколению реализации. Версии допустимы
+только у живых API, PostgreSQL, migration, rollout, persisted namespace и
+release contracts. Compatibility bridges изолируются, имеют потребителей и
+условие удаления; механические part-суффиксы `_a/_b/_c` и wide barrels не
+используются как постоянные архитектурные границы. Structural cleanup
+выполняется атомарными behavior-neutral cuts с тестами, обновлением RepoWise и
+Sentrux scan после каждого шага.
+
+Полная запись:
+`docs/superpowers/specs/2026-08-22-systematic-codebase-cleanup-design.md`.
 
 ## Runtime
 
