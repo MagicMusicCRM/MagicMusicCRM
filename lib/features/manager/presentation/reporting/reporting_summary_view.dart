@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/entity_link_state_view.dart';
+import 'package:magic_music_crm/core/navigation/entity_presentation_resolver.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/magic_desktop_scrollbar.dart';
 import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_models.dart';
@@ -51,9 +53,9 @@ class ReportingSummaryView extends StatelessWidget {
       );
     }
     if (state.forbidden) {
-      return const ReportingLinkStateView(
+      return const EntityLinkStateView(
         key: ValueKey('reporting-forbidden'),
-        state: ReportingLinkState.forbidden,
+        state: EntityRouteState.forbidden,
       );
     }
 

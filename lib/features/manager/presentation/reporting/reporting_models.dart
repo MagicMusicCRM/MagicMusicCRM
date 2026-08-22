@@ -3,8 +3,6 @@ import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 
 enum ReportingSectionKey { status, lessons, tasks, finance }
 
-enum ReportingLinkState { resolved, forbidden, archived, deleted, unknown }
-
 @immutable
 class ReportingSection<T> {
   const ReportingSection({

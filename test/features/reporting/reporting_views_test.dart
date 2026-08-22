@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/core/navigation/entity_link_state_view.dart';
+import 'package:magic_music_crm/core/navigation/entity_presentation_resolver.dart';
 import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_controller.dart';
 import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_drilldown_view.dart';
 import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_summary_view.dart';
@@ -340,6 +342,36 @@ void main() {
     await tester.pump();
     expect(find.text('Клиенты: 0'), findsOneWidget);
     expect(find.text('Список пуст'), findsOneWidget);
+  });
+
+  testWidgets('drilldown reuses canonical unavailable entity state view', (
+    tester,
+  ) async {
+    var retried = false;
+    var opened = false;
+    await tester.pumpWidget(
+      _app(
+        ReportingDrilldownView(
+          loading: false,
+          error: EntityRouteState.forbidden,
+          data: null,
+          lessonDrilldown: false,
+          onRetry: () => retried = true,
+          onBack: () {},
+          onOpenEntity: (_) => opened = true,
+        ),
+      ),
+    );
+
+    expect(find.byType(EntityLinkStateView), findsOneWidget);
+    expect(find.text('Нет доступа'), findsOneWidget);
+    expect(
+      find.text('Эта запись недоступна для текущего аккаунта.'),
+      findsOneWidget,
+    );
+    expect(find.text('Повторить'), findsNothing);
+    expect(retried, isFalse);
+    expect(opened, isFalse);
   });
 
   testWidgets('drilldown forwards exact canonical entity link', (tester) async {

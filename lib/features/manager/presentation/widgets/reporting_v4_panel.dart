@@ -203,7 +203,7 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
       setState(() {
         _drilldownLink = link;
         _drilldown = null;
-        _drilldownError = _reportingLinkState(resolution.state);
+        _drilldownError = resolution.state;
       });
       return;
     }
@@ -399,12 +399,3 @@ String _jobStatusLabel(V4ReportExportJob job) {
     _ => 'Не удалось сформировать файл',
   };
 }
-
-ReportingLinkState _reportingLinkState(EntityRouteState state) =>
-    switch (state) {
-      EntityRouteState.resolved => ReportingLinkState.resolved,
-      EntityRouteState.forbidden => ReportingLinkState.forbidden,
-      EntityRouteState.archived => ReportingLinkState.archived,
-      EntityRouteState.deleted => ReportingLinkState.deleted,
-      EntityRouteState.unknown => ReportingLinkState.unknown,
-    };

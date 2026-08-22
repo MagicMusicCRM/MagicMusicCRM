@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
-import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_models.dart';
+import 'package:magic_music_crm/core/navigation/entity_link_state_view.dart';
+import 'package:magic_music_crm/core/navigation/entity_presentation_resolver.dart';
 import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_presentation.dart';
 
 class ReportingDrilldownView extends StatelessWidget {
@@ -29,8 +30,8 @@ class ReportingDrilldownView extends StatelessWidget {
     if (loading) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (error is ReportingLinkState) {
-      return ReportingLinkStateView(state: error! as ReportingLinkState);
+    if (error is EntityRouteState) {
+      return EntityLinkStateView(state: error! as EntityRouteState);
     }
     if (error != null) {
       return _ReportingError(error: error!, onRetry: onRetry);

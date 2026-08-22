@@ -1,12 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
+import 'package:magic_music_crm/core/navigation/entity_presentation_resolver.dart';
 
 class EntityLinkStateView extends StatelessWidget {
-  const EntityLinkStateView({
-    super.key,
-    required this.state,
-    this.onBack,
-  });
+  const EntityLinkStateView({super.key, required this.state, this.onBack});
 
   final EntityRouteState state;
   final VoidCallback? onBack;
