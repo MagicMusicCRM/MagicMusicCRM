@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../theme/design_tokens.dart';
+import '../theme/design_tokens.dart';
 
 /// Opens a v7 bottom sheet (`.sheet` — grabber, head with icon-badge +
 /// title/subtitle, scrollable body, optional footer actions) and resolves to

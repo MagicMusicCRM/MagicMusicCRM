@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../theme/design_tokens.dart';
+import '../theme/design_tokens.dart';
 
 /// One row in a [showMagicMenu] pop-menu (`.pm-item`).
 class MagicMenuItem<T> {

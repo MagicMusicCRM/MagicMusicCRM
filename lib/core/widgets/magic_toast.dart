@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 
-import '../../theme/design_tokens.dart';
+import '../theme/design_tokens.dart';
 
 /// Semantic toast kinds → icon + tinted icon badge (v7 `.toast .t-ic`).
 enum MagicToastType { success, danger, info }

@@ -6,7 +6,7 @@ import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'package:magic_music_crm/core/widgets/voice_player_widget.dart';
 import 'package:magic_music_crm/core/widgets/file_attachment_widget.dart';
 import 'package:magic_music_crm/core/widgets/telegram/avatar_widget.dart';
-import 'package:magic_music_crm/core/widgets/v7/magic_sheet.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 
 /// Telegram-style message bubble.
 class MessageBubble extends StatelessWidget {

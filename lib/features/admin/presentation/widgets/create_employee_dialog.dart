@@ -6,7 +6,7 @@ import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/security/password_policy.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
-import 'package:magic_music_crm/core/widgets/v7/adaptive_surface.dart';
+import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/person_access_role_dialog.dart';
 
 Future<bool?> showCreateEmployeeSurface(BuildContext context) {

@@ -9,7 +9,7 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/forms/dirty_form_exit.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
-import 'package:magic_music_crm/core/widgets/v7/v7.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 
 import 'client_card_ui.dart';
 

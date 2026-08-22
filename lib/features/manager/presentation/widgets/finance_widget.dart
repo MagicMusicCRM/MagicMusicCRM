@@ -13,7 +13,10 @@ import 'package:magic_music_crm/core/models/payment.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
-import 'package:magic_music_crm/core/widgets/v7/v7.dart';
+import 'package:magic_music_crm/core/widgets/magic_desktop_scrollbar.dart';
+import 'package:magic_music_crm/core/widgets/magic_shimmer.dart';
+import 'package:magic_music_crm/core/widgets/magic_toast.dart';
+import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 

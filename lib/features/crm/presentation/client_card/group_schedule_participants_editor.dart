@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/models/schedule_plan.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
-import 'package:magic_music_crm/core/widgets/v7/v7.dart';
+import 'package:magic_music_crm/core/widgets/magic_page_state.dart';
 
 class GroupScheduleMemberOption {
   const GroupScheduleMemberOption({

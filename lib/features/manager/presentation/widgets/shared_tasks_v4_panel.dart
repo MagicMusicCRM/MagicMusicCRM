@@ -15,8 +15,8 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
-import 'package:magic_music_crm/core/widgets/v7/adaptive_surface.dart';
-import 'package:magic_music_crm/core/widgets/v7/magic_page_state.dart';
+import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
+import 'package:magic_music_crm/core/widgets/magic_page_state.dart';
 
 abstract class SharedTasksDataSource {
   Future<Map<String, dynamic>> list({

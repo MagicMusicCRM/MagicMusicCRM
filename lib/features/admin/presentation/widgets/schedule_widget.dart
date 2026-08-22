@@ -17,7 +17,7 @@ import 'package:magic_music_crm/features/admin/presentation/providers/schedule_n
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
-import 'package:magic_music_crm/core/widgets/v7/v7.dart';
+import 'package:magic_music_crm/core/widgets/magic_toast.dart';
 
 import 'create_lesson_dialog.dart';
 import 'schedule_day_canvas.dart';

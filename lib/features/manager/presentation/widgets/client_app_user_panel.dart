@@ -5,7 +5,8 @@ import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/providers/crm_navigation_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
-import 'package:magic_music_crm/core/widgets/v7/v7.dart';
+import 'package:magic_music_crm/core/widgets/magic_toast.dart';
+import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
 
 /// Shared «Пользователь приложения» panel embedded in both the lead card and
 /// the student card. Shows the app user(s) linked to the CRM entity, lets staff

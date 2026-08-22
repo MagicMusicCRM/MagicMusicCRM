@@ -3,7 +3,8 @@ import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/models/client_internal_context.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
-import 'package:magic_music_crm/core/widgets/v7/v7.dart';
+import 'package:magic_music_crm/core/widgets/magic_page_state.dart';
+import 'package:magic_music_crm/core/widgets/magic_shimmer.dart';
 
 class ClientInternalNoteCard extends StatefulWidget {
   const ClientInternalNoteCard({

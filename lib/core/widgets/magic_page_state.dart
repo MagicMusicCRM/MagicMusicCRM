@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
-import 'package:magic_music_crm/core/widgets/v7/magic_shimmer.dart';
+import 'package:magic_music_crm/core/widgets/magic_shimmer.dart';
 
 enum MagicPageStateKind { loading, empty, error, forbidden }
 

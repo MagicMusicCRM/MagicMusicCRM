@@ -4,7 +4,7 @@ import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_text.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
-import 'package:magic_music_crm/core/widgets/v7/adaptive_surface.dart';
+import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
 
 /// One icon+label+value row inside the lesson details sheet. Pure.
 Widget detailRow(

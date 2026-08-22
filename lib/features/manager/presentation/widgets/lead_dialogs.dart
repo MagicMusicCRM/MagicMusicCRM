@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
-import 'package:magic_music_crm/core/widgets/v7/v7.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 
 /// «Причина» loss-reason picker sheet. Returns (reasonId, comment) on confirm,
 /// or null if cancelled. Extracted from _LeadsWidgetState — pure (context+ref

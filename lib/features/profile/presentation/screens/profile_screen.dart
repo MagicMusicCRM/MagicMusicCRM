@@ -12,7 +12,7 @@ import 'package:magic_music_crm/core/widgets/responsive_constraint.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/core/utils/ru_phone.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
-import 'package:magic_music_crm/core/widgets/v7/magic_page_state.dart';
+import 'package:magic_music_crm/core/widgets/magic_page_state.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {

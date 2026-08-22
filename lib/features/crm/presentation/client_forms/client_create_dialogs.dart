@@ -8,7 +8,7 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
-import 'package:magic_music_crm/core/widgets/v7/adaptive_surface.dart';
+import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
 
 import 'client_forms_api.dart';
 

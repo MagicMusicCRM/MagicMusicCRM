@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:magic_music_crm/core/widgets/v7/magic_page_state.dart';
+import 'package:magic_music_crm/core/widgets/magic_page_state.dart';
 
 void main() {
   testWidgets('page states expose retry and concise empty guidance', (

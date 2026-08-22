@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/models/types.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
-import 'package:magic_music_crm/core/widgets/v7/v7.dart';
+import 'package:magic_music_crm/core/widgets/magic_drawer.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
 
 /// Reusable labelled dropdown for one lead-board filter facet. Pure.

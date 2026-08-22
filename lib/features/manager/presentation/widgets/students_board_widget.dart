@@ -11,7 +11,7 @@ import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/no_open_tasks_highlight.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
-import 'package:magic_music_crm/core/widgets/v7/magic_desktop_scrollbar.dart';
+import 'package:magic_music_crm/core/widgets/magic_desktop_scrollbar.dart';
 import 'package:magic_music_crm/core/utils/client_custom_field_display.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_forms/client_forms.dart';

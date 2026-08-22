@@ -11,7 +11,7 @@ import 'package:magic_music_crm/core/services/access_invalidation_provider.dart'
 import 'package:magic_music_crm/core/security/capability_shell.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
-import 'package:magic_music_crm/core/widgets/v7/magic_shimmer.dart';
+import 'package:magic_music_crm/core/widgets/magic_shimmer.dart';
 import 'package:magic_music_crm/features/auth/presentation/screens/login_screen.dart';
 import 'package:magic_music_crm/features/auth/presentation/screens/registration_screen.dart';
 import 'package:magic_music_crm/features/auth/presentation/screens/onboarding_screen.dart';

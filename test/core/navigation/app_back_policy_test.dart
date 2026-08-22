@@ -6,7 +6,7 @@ import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_presentation_resolver.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
-import 'package:magic_music_crm/core/widgets/v7/magic_sheet.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 
 void main() {
   testWidgets('Back closes overlay, route, then local tab state', (

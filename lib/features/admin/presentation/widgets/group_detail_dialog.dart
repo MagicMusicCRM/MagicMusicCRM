@@ -4,7 +4,7 @@ import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
-import 'package:magic_music_crm/core/widgets/v7/magic_desktop_scrollbar.dart';
+import 'package:magic_music_crm/core/widgets/magic_desktop_scrollbar.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/group_schedule_participants_editor.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/recurring_schedule_plan_section.dart';
 

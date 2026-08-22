@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
-import 'package:magic_music_crm/core/widgets/v7/magic_page_state.dart';
+import 'package:magic_music_crm/core/widgets/magic_page_state.dart';
 
 final subscriptionProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
   // magicCurrentStudentIdProvider derives from the portal switcher selection

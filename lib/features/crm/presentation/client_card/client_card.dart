@@ -24,7 +24,9 @@ import 'package:magic_music_crm/features/crm/presentation/client_forms/client_fo
 import 'package:magic_music_crm/core/utils/status_color.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/widgets/homework_attachment_widgets.dart';
-import 'package:magic_music_crm/core/widgets/v7/v7.dart';
+import 'package:magic_music_crm/core/widgets/magic_desktop_scrollbar.dart';
+import 'package:magic_music_crm/core/widgets/magic_page_state.dart';
+import 'package:magic_music_crm/core/widgets/magic_toast.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/models/types.dart';

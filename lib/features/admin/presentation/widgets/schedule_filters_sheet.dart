@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
-import 'package:magic_music_crm/core/widgets/v7/magic_sheet.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 
 import 'schedule_shared.dart';
 

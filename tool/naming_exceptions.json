@@ -1,12 +1,5 @@
 [
   {
-    "target": "lib/core/widgets/v7/",
-    "category": "cleanup-debt",
-    "reason": "Active UI primitives still use the historical generation directory.",
-    "owner": "flutter",
-    "remove_when": "Foundation milestone removes the v7 widget boundary."
-  },
-  {
     "target": "lib/core/navigation/crm_nav_rbac.dart",
     "category": "cleanup-debt",
     "reason": "The navigation destination API still has a generation-specific name.",

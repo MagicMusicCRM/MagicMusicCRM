@@ -8,7 +8,8 @@ import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_notifications_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
-import 'package:magic_music_crm/core/widgets/v7/v7.dart';
+import 'package:magic_music_crm/core/widgets/magic_toast.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 
 class NotificationBellWidget extends ConsumerStatefulWidget {
   const NotificationBellWidget({super.key});

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:magic_music_crm/core/widgets/v7/magic_toast.dart';
+import 'package:magic_music_crm/core/widgets/magic_toast.dart';
 
 /// #16 «тосты не исчезают»: MagicToast owns its dismissal [Timer], so it must
 /// auto-dismiss regardless of Flutter 3.41's SnackBar `persist` semantics —

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../theme/design_tokens.dart';
+import '../theme/design_tokens.dart';
 
 /// Opens a v7 end-side slide-out panel (`.drawer` — 380px, surface, head with
 /// title + close, scrollable body, optional footer) and resolves to whatever

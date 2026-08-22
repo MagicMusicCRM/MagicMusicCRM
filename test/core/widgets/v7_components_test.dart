@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:magic_music_crm/core/widgets/v7/v7.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
+import 'package:magic_music_crm/core/widgets/magic_drawer.dart';
+import 'package:magic_music_crm/core/widgets/magic_menu.dart';
+import 'package:magic_music_crm/core/widgets/magic_shimmer.dart';
+import 'package:magic_music_crm/core/widgets/magic_toast.dart';
 
 /// Smoke coverage for the P0 shared v7 component library (KVA-193). These
 /// widgets are not mounted in app screens yet, so this locks their basic

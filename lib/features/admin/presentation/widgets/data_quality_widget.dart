@@ -4,7 +4,8 @@ import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 
 import '../../../../core/theme/design_tokens.dart';
-import '../../../../core/widgets/v7/v7.dart';
+import '../../../../core/widgets/magic_shimmer.dart';
+import '../../../../core/widgets/magic_toast.dart';
 
 part 'data_quality_cards.dart';
 

@@ -7,7 +7,9 @@ import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/homework_attachment_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/homework_attachment_widgets.dart';
-import 'package:magic_music_crm/core/widgets/v7/v7.dart';
+import 'package:magic_music_crm/core/widgets/magic_toast.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
+import 'package:magic_music_crm/core/widgets/magic_shimmer.dart';
 
 /// Loads the lesson homeworks for a given student (or, when [studentId] is
 /// null, the caller's own homeworks — including lead-bound trial homework

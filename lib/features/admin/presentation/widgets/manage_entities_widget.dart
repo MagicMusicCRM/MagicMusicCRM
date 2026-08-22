@@ -9,7 +9,10 @@ import 'package:magic_music_crm/features/manager/presentation/widgets/user_roles
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/skeletons.dart';
-import '../../../../core/widgets/v7/v7.dart';
+import '../../../../core/widgets/magic_page_state.dart';
+import '../../../../core/widgets/magic_shimmer.dart';
+import '../../../../core/widgets/magic_sheet.dart';
+import '../../../../core/widgets/magic_toast.dart';
 import 'teacher_detail_dialog.dart';
 import 'staff_detail_dialog.dart';
 import 'group_detail_dialog.dart';

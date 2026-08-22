@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import '../../tool/src/naming_policy.dart';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -233,5 +235,17 @@ void main() {
       ).single.rule,
       'test-generation-bucket',
     );
+  });
+
+  test('production code does not import a wide UI barrel', () {
+    const historicalBarrelImport = 'core/widgets/' 'v7/' 'v7.dart';
+    final offenders = trackedDartSources().where((path) {
+      final file = File(path);
+      if (!file.existsSync()) return false;
+      final source = file.readAsStringSync();
+      return source.contains(historicalBarrelImport);
+    }).toList();
+
+    expect(offenders, isEmpty);
   });
 }

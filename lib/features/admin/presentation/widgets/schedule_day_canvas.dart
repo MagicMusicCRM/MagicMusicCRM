@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
-import 'package:magic_music_crm/core/widgets/v7/magic_desktop_scrollbar.dart';
+import 'package:magic_music_crm/core/widgets/magic_desktop_scrollbar.dart';
 part 'schedule_day_canvas_logic.dart';
 part 'schedule_day_canvas_widgets.dart';
 

@@ -5,7 +5,9 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/services/magic_profile_admin_service.dart';
 import '../../../../core/theme/design_tokens.dart';
-import '../../../../core/widgets/v7/v7.dart';
+import '../../../../core/widgets/magic_toast.dart';
+import '../../../../core/widgets/magic_sheet.dart';
+import '../../../../core/widgets/magic_shimmer.dart';
 
 part 'deletion_requests_cards.dart';
 

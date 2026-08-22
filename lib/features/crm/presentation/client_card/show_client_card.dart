@@ -7,7 +7,7 @@ import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/security/capability_shell.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
-import 'package:magic_music_crm/core/widgets/v7/magic_page_state.dart';
+import 'package:magic_music_crm/core/widgets/magic_page_state.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 
 import 'client_card.dart';

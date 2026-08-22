@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../theme/design_tokens.dart';
+import '../theme/design_tokens.dart';
 
 /// Token-driven skeleton primitives matching the v7 prototype `.skel`
 /// (base `#1d1d21` + a `rgba(255,255,255,.06)` sweep over `1.15s`).

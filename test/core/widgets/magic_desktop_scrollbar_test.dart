@@ -3,7 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:magic_music_crm/core/widgets/v7/magic_desktop_scrollbar.dart';
+import 'package:magic_music_crm/core/widgets/magic_desktop_scrollbar.dart';
 
 void main() {
   testWidgets(

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
-import 'package:magic_music_crm/core/widgets/v7/magic_drawer.dart';
-import 'package:magic_music_crm/core/widgets/v7/magic_sheet.dart';
+import 'package:magic_music_crm/core/widgets/magic_drawer.dart';
+import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 
 enum AdaptiveSurfaceContainer { route, sheet, drawer, dialog }
 
