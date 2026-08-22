@@ -1,157 +1,28 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_state_view.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
-import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/magic_desktop_scrollbar.dart';
-import 'package:open_filex/open_filex.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:magic_music_crm/features/manager/presentation/reporting/report_export_files.dart';
+import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_data_source.dart';
+import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_models.dart';
 
-typedef ReportFileOpener =
-    Future<ReportFileOpenResult> Function(List<int> bytes, String filename);
-
-@immutable
-class ReportFileOpenResult {
-  const ReportFileOpenResult({required this.path, required this.opened});
-
-  final String path;
-  final bool opened;
-}
-
-void validateReportExportBytes(List<int> bytes, String format) {
-  if (format == 'xlsx') {
-    final isZip =
-        bytes.length >= 4 &&
-        bytes[0] == 0x50 &&
-        bytes[1] == 0x4b &&
-        bytes[2] == 0x03 &&
-        bytes[3] == 0x04;
-    if (!isZip) {
-      throw const FormatException('Сервер вернул повреждённый файл отчёта.');
-    }
-    return;
-  }
-  if (format == 'csv') {
-    final hasUtf8Bom =
-        bytes.length >= 3 &&
-        bytes[0] == 0xef &&
-        bytes[1] == 0xbb &&
-        bytes[2] == 0xbf;
-    if (!hasUtf8Bom) {
-      throw const FormatException(
-        'Не удалось подготовить таблицу в выбранном формате.',
-      );
-    }
-    utf8.decode(bytes.sublist(3));
-    return;
-  }
-  throw FormatException('Неподдерживаемый формат экспорта: $format');
-}
-
-final reportFileOpenerProvider = Provider<ReportFileOpener>((ref) {
-  return (bytes, filename) async {
-    Directory directory;
-    final downloads = await getDownloadsDirectory();
-    if (downloads != null) {
-      directory = downloads;
-    } else if (Platform.isAndroid) {
-      directory =
-          await getExternalStorageDirectory() ?? await getTemporaryDirectory();
-    } else {
-      directory = await getTemporaryDirectory();
-    }
-    await directory.create(recursive: true);
-    final path = '${directory.path}${Platform.pathSeparator}$filename';
-    await File(path).writeAsBytes(bytes, flush: true);
-    final opened = await OpenFilex.open(path);
-    return ReportFileOpenResult(
-      path: path,
-      opened: opened.type == ResultType.done,
-    );
-  };
-});
-
-@immutable
-class DashboardFilter {
-  const DashboardFilter({required this.from, required this.to, this.branchId});
-
-  factory DashboardFilter.defaults() {
-    final now = DateTime.now();
-    return DashboardFilter(
-      from: DateTime(now.year, now.month - 5, 1),
-      to: DateTime(now.year, now.month, now.day),
-    );
-  }
-
-  factory DashboardFilter.fromContext(
-    ContextViewState? state,
-    Map<String, dynamic>? directFilter,
-  ) {
-    final fallback = DashboardFilter.defaults();
-    final raw = <String, dynamic>{...?state?.filters, ...?directFilter};
-    final from = DateTime.tryParse(
-      raw['dashboardFrom']?.toString() ?? raw['from']?.toString() ?? '',
-    );
-    final to = DateTime.tryParse(
-      raw['dashboardTo']?.toString() ?? raw['to']?.toString() ?? '',
-    );
-    final branch = raw['branchId']?.toString().trim();
-    if (from == null || to == null || from.isAfter(to)) return fallback;
-    return DashboardFilter(
-      from: DateTime(from.year, from.month, from.day),
-      to: DateTime(to.year, to.month, to.day),
-      branchId: branch == null || branch.isEmpty ? null : branch,
-    );
-  }
-
-  final DateTime from;
-  final DateTime to;
-  final String? branchId;
-
-  Map<String, dynamic> get apiFilter => {
-    'from': from.toUtc().toIso8601String(),
-    'to': to.add(const Duration(days: 1)).toUtc().toIso8601String(),
-    if (branchId != null) 'branchId': branchId,
-  };
-
-  ContextViewState toContextViewState() => ContextViewState(
-    filters: {
-      'dashboardFrom': from.toIso8601String(),
-      'dashboardTo': to.toIso8601String(),
-      if (branchId != null) 'branchId': branchId,
-    },
-  );
-
-  DashboardFilter copyWithRange(DateTimeRange range) => DashboardFilter(
-    from: DateTime(range.start.year, range.start.month, range.start.day),
-    to: DateTime(range.end.year, range.end.month, range.end.day),
-    branchId: branchId,
-  );
-
-  DashboardFilter copyWithBranch(String? value) =>
-      DashboardFilter(from: from, to: to, branchId: value);
-
-  @override
-  bool operator ==(Object other) =>
-      other is DashboardFilter &&
-      other.from == from &&
-      other.to == to &&
-      other.branchId == branchId;
-
-  @override
-  int get hashCode => Object.hash(from, to, branchId);
-}
+export 'package:magic_music_crm/features/manager/presentation/reporting/report_export_files.dart'
+    show
+        ReportFileOpener,
+        ReportFileOpenResult,
+        reportFileOpenerProvider,
+        validateReportExportBytes;
+export 'package:magic_music_crm/features/manager/presentation/reporting/reporting_models.dart'
+    show DashboardFilter;
 
 class ReportingV4Panel extends ConsumerStatefulWidget {
   const ReportingV4Panel({
@@ -212,6 +83,8 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
 
   DashboardFilter get _filter => widget.filter ?? DashboardFilter.defaults();
 
+  ReportingDataSource get _dataSource => ref.read(reportingDataSourceProvider);
+
   @override
   void initState() {
     super.initState();
@@ -266,15 +139,8 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
   }
 
   Future<void> _loadStatus() {
-    final filter = _filter.apiFilter;
     return _loadSection(
-      () => ref
-          .read(magicCrmServiceProvider)
-          .getV4ClientStatusSummary(
-            branchId: filter['branchId']?.toString(),
-            from: filter['from']?.toString(),
-            to: filter['to']?.toString(),
-          ),
+      () => _dataSource.loadClientStatus(_filter),
       (value) => _statusSummary = value,
       (value) => _statusError = value,
       (value) => _statusLoading = value,
@@ -282,15 +148,8 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
   }
 
   Future<void> _loadLessons() {
-    final filter = _filter.apiFilter;
     return _loadSection(
-      () => ref
-          .read(magicCrmServiceProvider)
-          .getV4LessonSuccess(
-            branchId: filter['branchId']?.toString(),
-            from: filter['from']?.toString(),
-            to: filter['to']?.toString(),
-          ),
+      () => _dataSource.loadLessonSuccess(_filter),
       (value) => _lessonSuccess = value,
       (value) => _lessonError = value,
       (value) => _lessonLoading = value,
@@ -298,24 +157,15 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
   }
 
   Future<void> _loadTasks() => _loadSection(
-    () => ref
-        .read(magicCrmServiceProvider)
-        .listSharedTasks(state: 'open', limit: 1),
+    _dataSource.loadOpenTaskSummary,
     (value) => _tasks = value,
     (value) => _tasksError = value,
     (value) => _tasksLoading = value,
   );
 
   Future<void> _loadFinance() {
-    final filter = _filter.apiFilter;
     return _loadSection(
-      () => ref
-          .read(magicCrmServiceProvider)
-          .getV4SchoolFinance(
-            branchId: filter['branchId']?.toString(),
-            from: filter['from']?.toString(),
-            to: filter['to']?.toString(),
-          ),
+      () => _dataSource.loadSchoolFinance(_filter),
       (value) => _schoolFinance = value,
       (value) => _financeError = value,
       (value) => _financeLoading = value,
@@ -366,7 +216,6 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
       });
       return;
     }
-    final filter = {..._filter.apiFilter, ...?link.optionalFocus?.filter};
     setState(() {
       _drilldownLink = link;
       _lessonDrilldown = lessonDrilldown;
@@ -374,10 +223,7 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
       _drilldownError = null;
     });
     try {
-      final service = ref.read(magicCrmServiceProvider);
-      final response = lessonDrilldown
-          ? await service.getV4LessonSuccessList(filter: filter)
-          : await service.getV4ClientStatusList(filter: filter);
+      final response = await _dataSource.loadDrilldown(link, _filter);
       if (expectedCount != null && _int(response['total']) != expectedCount) {
         throw StateError('Количество в карточке и детализации не совпадает.');
       }
@@ -403,12 +249,11 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
       _exportStatus = 'Подготавливаем файл…';
     });
     try {
-      final service = ref.read(magicCrmServiceProvider);
       final filter = {
         ..._filter.apiFilter,
         ...?_drilldownLink?.optionalFocus?.filter,
       };
-      final requested = await service.requestV4ReportExport(
+      final requested = await _dataSource.requestExport(
         reportKey: reportKey,
         format: format,
         filter: filter,
@@ -426,7 +271,7 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
       }
       for (var attempt = 0; attempt < 120 && !_disposed; attempt++) {
         await Future<void>.delayed(const Duration(milliseconds: 500));
-        final job = await service.getV4ReportExportJob(jobId);
+        final job = await _dataSource.getExportJob(jobId);
         if (_disposed) return;
         if (mounted) {
           setState(() => _exportStatus = _jobStatusLabel(job));
@@ -435,7 +280,7 @@ class _ReportingV4PanelState extends ConsumerState<ReportingV4Panel> {
           throw StateError(job.errorCode ?? 'Экспорт недоступен');
         }
         if (job.downloadReady) {
-          final bytes = await service.downloadV4ReportExport(jobId);
+          final bytes = await _dataSource.downloadExport(jobId);
           await _saveAndOpenExport(
             bytes,
             job.filename ?? 'report.$format',
