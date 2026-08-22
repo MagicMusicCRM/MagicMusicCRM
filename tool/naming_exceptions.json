@@ -35,65 +35,79 @@
     "remove_when": "High-impact reporting milestone completes the semantic rename."
   },
   {
-    "target": "lib/features/manager/presentation/widgets/reporting_v4_panel.dart::getV4ClientStatusSummary",
+    "target": "lib/features/manager/presentation/reporting/reporting_data_source.dart::getV4ClientStatusSummary",
     "category": "api-contract",
-    "reason": "The reporting panel calls a live V4 analytics route method.",
+    "reason": "The reporting data source adapter calls a live V4 analytics route method.",
     "owner": "platform",
     "remove_when": "Analytics V4 API contract is retired through an approved migration."
   },
   {
-    "target": "lib/features/manager/presentation/widgets/reporting_v4_panel.dart::getV4LessonSuccess",
+    "target": "lib/features/manager/presentation/reporting/reporting_data_source.dart::getV4LessonSuccess",
     "category": "api-contract",
-    "reason": "The reporting panel calls a live V4 analytics route method.",
+    "reason": "The reporting data source adapter calls a live V4 analytics route method.",
     "owner": "platform",
     "remove_when": "Analytics V4 API contract is retired through an approved migration."
   },
   {
-    "target": "lib/features/manager/presentation/widgets/reporting_v4_panel.dart::getV4SchoolFinance",
+    "target": "lib/features/manager/presentation/reporting/reporting_data_source.dart::getV4SchoolFinance",
     "category": "api-contract",
-    "reason": "The reporting panel calls a live V4 analytics route method.",
+    "reason": "The reporting data source adapter calls a live V4 analytics route method.",
     "owner": "platform",
     "remove_when": "Analytics V4 API contract is retired through an approved migration."
   },
   {
-    "target": "lib/features/manager/presentation/widgets/reporting_v4_panel.dart::getV4LessonSuccessList",
+    "target": "lib/features/manager/presentation/reporting/reporting_data_source.dart::getV4LessonSuccessList",
     "category": "api-contract",
-    "reason": "The reporting panel calls a live V4 analytics route method.",
+    "reason": "The reporting data source adapter calls a live V4 analytics route method.",
     "owner": "platform",
     "remove_when": "Analytics V4 API contract is retired through an approved migration."
   },
   {
-    "target": "lib/features/manager/presentation/widgets/reporting_v4_panel.dart::getV4ClientStatusList",
+    "target": "lib/features/manager/presentation/reporting/reporting_data_source.dart::getV4ClientStatusList",
     "category": "api-contract",
-    "reason": "The reporting panel calls a live V4 analytics route method.",
+    "reason": "The reporting data source adapter calls a live V4 analytics route method.",
     "owner": "platform",
     "remove_when": "Analytics V4 API contract is retired through an approved migration."
   },
   {
-    "target": "lib/features/manager/presentation/widgets/reporting_v4_panel.dart::requestV4ReportExport",
+    "target": "lib/features/manager/presentation/reporting/reporting_data_source.dart::requestV4ReportExport",
     "category": "api-contract",
-    "reason": "The reporting panel calls a live V4 analytics route method.",
+    "reason": "The reporting data source adapter calls a live V4 analytics route method.",
     "owner": "platform",
     "remove_when": "Analytics V4 API contract is retired through an approved migration."
   },
   {
-    "target": "lib/features/manager/presentation/widgets/reporting_v4_panel.dart::getV4ReportExportJob",
+    "target": "lib/features/manager/presentation/reporting/reporting_data_source.dart::getV4ReportExportJob",
     "category": "api-contract",
-    "reason": "The reporting panel calls a live V4 analytics route method.",
+    "reason": "The reporting data source adapter calls a live V4 analytics route method.",
     "owner": "platform",
     "remove_when": "Analytics V4 API contract is retired through an approved migration."
   },
   {
-    "target": "lib/features/manager/presentation/widgets/reporting_v4_panel.dart::downloadV4ReportExport",
+    "target": "lib/features/manager/presentation/reporting/reporting_data_source.dart::downloadV4ReportExport",
     "category": "api-contract",
-    "reason": "The reporting panel calls a live V4 analytics route method.",
+    "reason": "The reporting data source adapter calls a live V4 analytics route method.",
+    "owner": "platform",
+    "remove_when": "Analytics V4 API contract is retired through an approved migration."
+  },
+  {
+    "target": "lib/features/manager/presentation/reporting/reporting_data_source.dart::V4ReportExportJob",
+    "category": "api-contract",
+    "reason": "The reporting data source adapter uses a DTO bound to a live V4 analytics route.",
+    "owner": "platform",
+    "remove_when": "Analytics V4 API contract is retired through an approved migration."
+  },
+  {
+    "target": "lib/features/manager/presentation/reporting/reporting_data_source.dart::V4ReportExportResult",
+    "category": "api-contract",
+    "reason": "The reporting data source adapter uses a DTO bound to a live V4 analytics route.",
     "owner": "platform",
     "remove_when": "Analytics V4 API contract is retired through an approved migration."
   },
   {
     "target": "lib/features/manager/presentation/widgets/reporting_v4_panel.dart::V4ReportExportJob",
     "category": "api-contract",
-    "reason": "The reporting panel uses a DTO bound to a live V4 analytics route.",
+    "reason": "The reporting panel formats a DTO bound to a live V4 analytics route.",
     "owner": "platform",
     "remove_when": "Analytics V4 API contract is retired through an approved migration."
   },
