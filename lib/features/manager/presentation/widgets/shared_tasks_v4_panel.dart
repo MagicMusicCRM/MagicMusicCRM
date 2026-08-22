@@ -15,6 +15,7 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
 import 'package:magic_music_crm/core/widgets/magic_page_state.dart';
+import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_controller.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_data_source.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_models.dart';
 
@@ -108,22 +109,10 @@ class SharedTasksV4Panel extends ConsumerStatefulWidget {
 
 class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
   late SharedTasksDataSource _dataSource;
-  List<Map<String, dynamic>> _items = const [];
-  Map<String, dynamic> _counters = const {'open': 0, 'overdue': 0};
-  bool _loading = true;
-  Object? _error;
-  String _filter = 'open';
-  String _priority = 'all';
-  late String _scope;
+  late SharedTasksController _controller;
+  StreamController<void>? _realtimeRefreshes;
+  ProviderSubscription<AsyncValue<CrmChangedEvent>>? _realtimeSubscription;
   final TextEditingController _search = TextEditingController();
-  bool _calendarMode = false;
-  DateTime _calendarMonth = DateTime(DateTime.now().year, DateTime.now().month);
-  DateTime? _selectedDay;
-  Map<String, int> _calendarCounts = const {};
-  Timer? _realtimeDebounce;
-  final Set<String> _closing = {};
-  final Map<String, Object> _closeErrors = {};
-  final Map<String, MagicMutationIdentity> _closeIdentities = {};
   bool _focusConsumed = false;
 
   @override
@@ -131,142 +120,94 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
     super.initState();
     _dataSource =
         widget.dataSource ?? MagicCrmSharedTasksDataSource.fromWidgetRef(ref);
-    _scope = widget.defaultToMineToday ? 'mine' : 'all';
-    if (widget.defaultToMineToday) _selectedDay = _moscowToday();
+    _realtimeRefreshes = widget.dataSource == null
+        ? StreamController<void>.broadcast()
+        : null;
+    final now = DateTime.now();
+    _controller = SharedTasksController(
+      dataSource: _dataSource,
+      refreshes: _realtimeRefreshes?.stream,
+      initialQuery: SharedTasksQuery(
+        taskId: _focusedTaskId,
+        linkedEntityType: widget.linkedEntity?.rawEntityType,
+        linkedEntityId: widget.linkedEntity?.entityId,
+        scope: widget.defaultToMineToday ? 'mine' : 'all',
+        day: widget.defaultToMineToday ? sharedTasksMoscowToday() : null,
+        calendarMonth: DateTime(now.year, now.month),
+      ),
+    )..addListener(_onControllerChanged);
+    if (_realtimeRefreshes case final refreshes?) {
+      _realtimeSubscription = ref.listenManual(crmRealtimeProvider, (
+        previous,
+        next,
+      ) {
+        if (next.value?.entity == 'task' && !refreshes.isClosed) {
+          refreshes.add(null);
+        }
+      });
+    }
     Future<void>.microtask(_load);
   }
 
   @override
   void dispose() {
-    _realtimeDebounce?.cancel();
+    _realtimeSubscription?.close();
+    _controller
+      ..removeListener(_onControllerChanged)
+      ..dispose();
+    final refreshes = _realtimeRefreshes;
+    if (refreshes != null) unawaited(refreshes.close());
     _search.dispose();
     super.dispose();
   }
 
-  Future<void> _load({bool showLoading = true}) async {
-    if (showLoading && mounted) {
-      setState(() {
-        _loading = true;
-        _error = null;
-      });
-    }
-    try {
-      final focusedTask =
-          widget.initialLink?.entityType == EntityLinkType.task &&
-          widget.initialLink?.entityId != '__section__';
-      final day = focusedTask ? null : _selectedDay;
-      final dayFrom = day == null ? null : _moscowInstant(day);
-      final dayTo = day == null
-          ? null
-          : _moscowInstant(day.add(const Duration(days: 1)));
-      final result = await _dataSource.listFiltered(
-        state: focusedTask || _filter == 'all' || _filter == 'overdue'
-            ? null
-            : _filter,
-        taskId: focusedTask ? widget.initialLink?.entityId : null,
-        linkedEntityType: widget.linkedEntity?.rawEntityType,
-        linkedEntityId: widget.linkedEntity?.entityId,
-        q: _search.text.trim().isEmpty ? null : _search.text.trim(),
-        priority: _priority == 'all' ? null : _priority,
-        scope: _scope,
-        from: dayFrom,
-        to: dayTo,
-      );
-      if (_calendarMode) {
-        final nextMonth = DateTime(
-          _calendarMonth.year,
-          _calendarMonth.month + 1,
-        );
-        _calendarCounts = await _dataSource.calendar(
-          from: _moscowInstant(_calendarMonth),
-          to: _moscowInstant(nextMonth),
-          state: _filter == 'all' || _filter == 'overdue' ? null : _filter,
-          q: _search.text.trim().isEmpty ? null : _search.text.trim(),
-          priority: _priority == 'all' ? null : _priority,
-          scope: _scope,
-          linkedEntityType: widget.linkedEntity?.rawEntityType,
-          linkedEntityId: widget.linkedEntity?.entityId,
+  String? get _focusedTaskId =>
+      widget.initialLink?.entityType == EntityLinkType.task &&
+          widget.initialLink?.entityId != '__section__'
+      ? widget.initialLink?.entityId
+      : null;
+
+  Future<void> _load({bool showLoading = true}) =>
+      _controller.refresh(showLoading: showLoading);
+
+  void _onControllerChanged() {
+    if (!mounted) return;
+    setState(() {});
+    final state = _controller.state;
+    if (!state.hasLoaded || state.loading || state.error != null) return;
+    final focusedTask = _focusedTaskId != null;
+    if (focusedTask && state.items.isNotEmpty) {
+      final title = state.items.first['title']?.toString().trim() ?? '';
+      if (title.isNotEmpty) {
+        WorkspaceNavigationScope.maybeOf(
+          context,
+        )?.controller.updateEntityPresentation(
+          widget.initialLink!,
+          EntityPresentationReference(primary: title),
         );
       }
-      final rawItems = result['items'];
-      var items = rawItems is List
-          ? rawItems.whereType<Map<String, dynamic>>().toList()
-          : <Map<String, dynamic>>[];
-      if (_filter == 'overdue') {
-        items = items.where(_isOverdueSharedTask).toList();
-      }
-      if (!mounted) return;
-      setState(() {
-        _items = items;
-        _counters = widget.linkedEntity != null
-            ? {
-                'open': items.where((task) => task['state'] == 'open').length,
-                'overdue': items.where(_isOverdueSharedTask).length,
-              }
-            : result['counters'] is Map<String, dynamic>
-            ? result['counters'] as Map<String, dynamic>
-            : const {'open': 0, 'overdue': 0};
-        _loading = false;
-      });
-      if (focusedTask && items.isNotEmpty) {
-        final title = items.first['title']?.toString().trim() ?? '';
-        if (title.isNotEmpty) {
-          WorkspaceNavigationScope.maybeOf(
-            context,
-          )?.controller.updateEntityPresentation(
-            widget.initialLink!,
-            EntityPresentationReference(primary: title),
-          );
-        }
-      }
-      if (!_focusConsumed && focusedTask) {
-        _focusConsumed = true;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          if (items.isEmpty) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Связанная запись недоступна.')),
-            );
-            return;
-          }
-          unawaited(_openDetails(items.first));
-        });
-      }
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _error = error;
-        _loading = false;
-      });
     }
+    if (_focusConsumed || !focusedTask) return;
+    _focusConsumed = true;
+    final items = state.items;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (items.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Связанная запись недоступна.')),
+        );
+        return;
+      }
+      unawaited(_openDetails(items.first));
+    });
   }
 
   Future<void> _close(Map<String, dynamic> task) async {
-    final id = task['id']?.toString();
-    final version = task['version'];
-    if (id == null || version is! int || _closing.contains(id)) return;
-    final identity = _closeIdentities.putIfAbsent(
-      id,
-      () => MagicMutationIdentity.create('shared-task-close'),
-    );
-    setState(() {
-      _closing.add(id);
-      _closeErrors.remove(id);
-    });
-    try {
-      await _dataSource.close(id, version, identity);
-      _closeIdentities.remove(id);
-      await _load(showLoading: false);
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Задача закрыта.')));
-      }
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _closeErrors[id] = error);
-    } finally {
-      if (mounted) setState(() => _closing.remove(id));
+    final result = await _controller.close(task);
+    if (result.succeeded && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Задача закрыта.')));
     }
   }
 
@@ -370,36 +311,28 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.dataSource == null) {
-      ref.listen(crmRealtimeProvider, (previous, next) {
-        final event = next.value;
-        if (event?.entity != 'task') return;
-        _realtimeDebounce?.cancel();
-        _realtimeDebounce = Timer(
-          const Duration(milliseconds: 200),
-          () => mounted ? _load(showLoading: false) : null,
-        );
-      });
-    }
+    final state = _controller.state;
+    final query = state.query;
     final canWrite = widget.canWrite ?? false;
     final content = LayoutBuilder(
       builder: (context, constraints) {
         final mobile = constraints.maxWidth < 840;
         return Column(
           children: [
-            if (_counters['overdue'] case final num overdue when overdue > 0)
+            if (state.counters['overdue'] case final num overdue
+                when overdue > 0)
               _ReminderBanner(overdue: overdue.toInt()),
             mobile
                 ? _MobileTaskFilter(
-                    value: _filter,
+                    value: query.state,
                     onChanged: _setFilter,
                     onCreate: widget.embedded && canWrite
                         ? () => _openEditor()
                         : null,
                   )
                 : _DesktopTaskFilter(
-                    value: _filter,
-                    counters: _counters,
+                    value: query.state,
+                    counters: state.counters,
                     onChanged: _setFilter,
                     onCreate: widget.embedded && canWrite
                         ? () => _openEditor()
@@ -408,41 +341,38 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
             if (widget.linkedEntity == null)
               _TaskViewToolbar(
                 search: _search,
-                priority: _priority,
-                scope: _scope,
-                selectedDay: _selectedDay,
-                calendarMode: _calendarMode,
+                priority: query.priority,
+                scope: query.scope,
+                selectedDay: query.day,
+                calendarMode: query.calendarMode,
+                onSearchChanged: (value) {
+                  _controller.updateQuery(query.copyWith(search: value));
+                },
                 onSearch: () {
-                  _selectedDay = null;
-                  _load();
+                  _controller.setQuery(
+                    query.copyWith(search: _search.text, day: null),
+                  );
                 },
                 onPriorityChanged: (value) {
-                  setState(() {
-                    _priority = value;
-                    _selectedDay = null;
-                  });
-                  _load();
+                  _controller.setQuery(
+                    query.copyWith(priority: value, day: null),
+                  );
                 },
                 onScopeChanged: (value) {
-                  setState(() {
-                    _scope = value;
-                    _selectedDay = null;
-                  });
-                  _load();
+                  _controller.setQuery(query.copyWith(scope: value, day: null));
                 },
                 onDayChanged: (value) {
-                  setState(() {
-                    _selectedDay = value;
-                    _calendarMode = false;
-                  });
-                  _load();
+                  _controller.setQuery(
+                    query.copyWith(day: value, calendarMode: false),
+                  );
                 },
                 onCalendarChanged: (value) {
-                  setState(() {
-                    _calendarMode = value;
-                    if (value) _selectedDay = null;
-                  });
-                  _load();
+                  _controller.setQuery(
+                    query.copyWith(
+                      calendarMode: value,
+                      day: value ? null : query.day,
+                    ),
+                  );
                 },
               ),
             Expanded(child: _body()),
@@ -478,16 +408,18 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
   }
 
   void _setFilter(String value) {
-    if (value == _filter) return;
-    setState(() => _filter = value);
-    _load();
+    final query = _controller.state.query;
+    if (value == query.state) return;
+    _controller.setQuery(query.copyWith(state: value));
   }
 
   Widget _body() {
-    if (_loading) {
+    final state = _controller.state;
+    final query = state.query;
+    if (state.loading && !state.hasLoaded) {
       return const MagicPageState.loading();
     }
-    if (_error != null) {
+    if (state.error != null && !state.hasLoaded) {
       return MagicPageState(
         kind: MagicPageStateKind.error,
         title: 'Не удалось загрузить задачи',
@@ -495,24 +427,20 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
         onAction: _load,
       );
     }
-    if (_calendarMode) {
+    if (query.calendarMode) {
+      final now = DateTime.now();
       return _SharedTaskMonthGrid(
-        month: _calendarMonth,
-        counts: _calendarCounts,
+        month: query.calendarMonth ?? DateTime(now.year, now.month),
+        counts: state.calendar,
         onMonthChanged: (month) {
-          setState(() => _calendarMonth = month);
-          _load();
+          _controller.setQuery(query.copyWith(calendarMonth: month));
         },
         onDaySelected: (day) {
-          setState(() {
-            _selectedDay = day;
-            _calendarMode = false;
-          });
-          _load();
+          _controller.setQuery(query.copyWith(day: day, calendarMode: false));
         },
       );
     }
-    if (_items.isEmpty) {
+    if (state.items.isEmpty) {
       return const MagicPageState(
         kind: MagicPageStateKind.empty,
         title: 'Нет задач',
@@ -524,15 +452,15 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
       child: ListView.separated(
         controller: widget.scrollController,
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
-        itemCount: _items.length,
+        itemCount: state.items.length,
         separatorBuilder: (_, _) => const SizedBox(height: AppSpace.sm),
         itemBuilder: (context, index) {
-          final task = _items[index];
+          final task = state.items[index];
           final id = task['id']?.toString() ?? '';
           return _SharedTaskCard(
             task: task,
-            closing: _closing.contains(id),
-            closeError: _closeErrors[id],
+            closing: state.closing.contains(id),
+            closeError: state.closeErrors[id],
             onClose: () => _close(task),
             onEdit: () => _openEditor(task),
             onOpen: () => _openDetails(task),
@@ -549,33 +477,11 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
     );
   }
 }
-String _moscowInstant(DateTime date) => DateTime.utc(
-  date.year,
-  date.month,
-  date.day,
-).subtract(const Duration(hours: 3)).toIso8601String();
-
-DateTime _moscowToday() {
-  final now = DateTime.now().toUtc().add(const Duration(hours: 3));
-  return DateTime(now.year, now.month, now.day);
-}
 
 bool _sameDay(DateTime left, DateTime right) =>
     left.year == right.year &&
     left.month == right.month &&
     left.day == right.day;
-
-bool _isOverdueSharedTask(Map<String, dynamic> task) {
-  final start = DateTime.tryParse(task['startAt']?.toString() ?? '');
-  if (task['state'] != 'open' || start == null) return false;
-  if (task['allDay'] != true) return start.isBefore(DateTime.now());
-  final moscowStart = start.toUtc().add(const Duration(hours: 3));
-  return DateTime(
-    moscowStart.year,
-    moscowStart.month,
-    moscowStart.day,
-  ).isBefore(_moscowToday());
-}
 
 String _taskPriorityLabel(Object? value) => switch (value?.toString()) {
   'high' => 'Высокий',
@@ -590,6 +496,7 @@ class _TaskViewToolbar extends StatelessWidget {
     required this.scope,
     required this.selectedDay,
     required this.calendarMode,
+    required this.onSearchChanged,
     required this.onSearch,
     required this.onPriorityChanged,
     required this.onScopeChanged,
@@ -602,6 +509,7 @@ class _TaskViewToolbar extends StatelessWidget {
   final String scope;
   final DateTime? selectedDay;
   final bool calendarMode;
+  final ValueChanged<String> onSearchChanged;
   final VoidCallback onSearch;
   final ValueChanged<String> onPriorityChanged;
   final ValueChanged<String> onScopeChanged;
@@ -625,6 +533,7 @@ class _TaskViewToolbar extends StatelessWidget {
                 key: const Key('shared-task-search'),
                 controller: search,
                 textInputAction: TextInputAction.search,
+                onChanged: onSearchChanged,
                 onSubmitted: (_) => onSearch(),
                 decoration: InputDecoration(
                   isDense: true,
@@ -669,13 +578,14 @@ class _TaskViewToolbar extends StatelessWidget {
             ChoiceChip(
               key: const Key('shared-task-today-filter'),
               label: Text(
-                selectedDay == null || _sameDay(selectedDay!, _moscowToday())
+                selectedDay == null ||
+                        _sameDay(selectedDay!, sharedTasksMoscowToday())
                     ? 'Сегодня'
                     : DateFormat('dd.MM.yyyy').format(selectedDay!),
               ),
               selected: selectedDay != null,
               onSelected: (selected) =>
-                  onDayChanged(selected ? _moscowToday() : null),
+                  onDayChanged(selected ? sharedTasksMoscowToday() : null),
             ),
             const SizedBox(width: AppSpace.sm),
             IconButton.filledTonal(
