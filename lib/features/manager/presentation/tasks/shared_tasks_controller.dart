@@ -22,6 +22,16 @@ class SharedTaskCloseResult {
   final Object? error;
 }
 
+class _SharedTaskCloseAttempt {
+  const _SharedTaskCloseAttempt({
+    required this.expectedVersion,
+    required this.identity,
+  });
+
+  final int expectedVersion;
+  final MagicMutationIdentity identity;
+}
+
 class SharedTasksController extends ChangeNotifier {
   SharedTasksController({
     required this.dataSource,
@@ -46,7 +56,7 @@ class SharedTasksController extends ChangeNotifier {
   Timer? _refreshTimer;
   int _revision = 0;
   bool _disposed = false;
-  final Map<String, MagicMutationIdentity> _closeIdentities = {};
+  final Map<String, _SharedTaskCloseAttempt> _closeAttempts = {};
 
   Future<void> refresh({bool showLoading = false}) =>
       setQuery(state.query, showLoading: showLoading);
@@ -157,10 +167,14 @@ class SharedTasksController extends ChangeNotifier {
         state.closing.contains(id)) {
       return const SharedTaskCloseResult.ignored();
     }
-    final identity = _closeIdentities.putIfAbsent(
-      id,
-      () => MagicMutationIdentity.create('shared-task-close'),
-    );
+    final previousAttempt = _closeAttempts[id];
+    final attempt = previousAttempt?.expectedVersion == version
+        ? previousAttempt!
+        : _SharedTaskCloseAttempt(
+            expectedVersion: version,
+            identity: MagicMutationIdentity.create('shared-task-close'),
+          );
+    _closeAttempts[id] = attempt;
     state = state.copyWith(
       closing: Set.unmodifiable({...state.closing, id}),
       closeErrors: Map.unmodifiable({...state.closeErrors}..remove(id)),
@@ -168,8 +182,8 @@ class SharedTasksController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await dataSource.close(id, version, identity);
-      _closeIdentities.remove(id);
+      await dataSource.close(id, version, attempt.identity);
+      _closeAttempts.remove(id);
       state = state.copyWith(
         closeErrors: Map.unmodifiable({...state.closeErrors}..remove(id)),
       );

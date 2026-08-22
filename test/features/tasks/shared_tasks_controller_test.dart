@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_controller.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_data_source.dart';
-import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_models.dart';
 
 class _ListCall {
   const _ListCall({
@@ -442,6 +441,49 @@ void main() {
         source.closeIdentities.last,
         isNot(same(source.closeIdentities.first)),
       );
+    },
+  );
+
+  test(
+    'close failure replaces identity for a newer version and reuses it on retry',
+    () async {
+      final source = _ControlledSharedTasksDataSource();
+      source.closeResults.addAll([
+        Future.error(StateError('version 7 offline')),
+        Future.error(StateError('version 8 offline')),
+        Future.value(const {'id': 'task-1'}),
+      ]);
+      source.listResults.add(
+        Future.value(_response('task-1', state: 'closed')),
+      );
+      final controller = SharedTasksController(dataSource: source);
+      addTearDown(controller.dispose);
+
+      expect(
+        (await controller.close(const {
+          'id': 'task-1',
+          'version': 7,
+        })).succeeded,
+        isFalse,
+      );
+      expect(
+        (await controller.close(const {
+          'id': 'task-1',
+          'version': 8,
+        })).succeeded,
+        isFalse,
+      );
+      expect(source.closeIdentities[1], isNot(same(source.closeIdentities[0])));
+
+      expect(
+        (await controller.close(const {
+          'id': 'task-1',
+          'version': 8,
+        })).succeeded,
+        isTrue,
+      );
+      expect(source.closeVersions, [7, 8, 8]);
+      expect(source.closeIdentities[2], same(source.closeIdentities[1]));
     },
   );
 
