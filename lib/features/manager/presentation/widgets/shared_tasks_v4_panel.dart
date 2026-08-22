@@ -11,268 +11,12 @@ import 'package:magic_music_crm/core/navigation/entity_link_text.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
-import 'package:magic_music_crm/core/services/magic_crm_service.dart';
-import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
 import 'package:magic_music_crm/core/widgets/magic_page_state.dart';
-
-abstract class SharedTasksDataSource {
-  Future<Map<String, dynamic>> list({
-    String? state,
-    String? taskId,
-    String? linkedEntityType,
-    String? linkedEntityId,
-  });
-
-  Future<Map<String, dynamic>> listFiltered({
-    String? state,
-    String? taskId,
-    String? linkedEntityType,
-    String? linkedEntityId,
-    String? q,
-    String? priority,
-    String? scope,
-    String? from,
-    String? to,
-  }) => list(
-    state: state,
-    taskId: taskId,
-    linkedEntityType: linkedEntityType,
-    linkedEntityId: linkedEntityId,
-  );
-
-  Future<Map<String, int>> calendar({
-    required String from,
-    required String to,
-    String? state,
-    String? q,
-    String? priority,
-    String? scope,
-    String? linkedEntityType,
-    String? linkedEntityId,
-  }) async {
-    final result = await listFiltered(
-      state: state,
-      q: q,
-      priority: priority,
-      scope: scope,
-      from: from,
-      to: to,
-      linkedEntityType: linkedEntityType,
-      linkedEntityId: linkedEntityId,
-    );
-    final counts = <String, int>{};
-    for (final task in (result['items'] as List? ?? const [])) {
-      if (task is! Map<String, dynamic>) continue;
-      final start = DateTime.tryParse(task['startAt']?.toString() ?? '');
-      if (start == null) continue;
-      final local = start.toLocal();
-      final day =
-          '${local.year.toString().padLeft(4, '0')}-'
-          '${local.month.toString().padLeft(2, '0')}-'
-          '${local.day.toString().padLeft(2, '0')}';
-      counts[day] = (counts[day] ?? 0) + 1;
-    }
-    return counts;
-  }
-
-  Future<List<Map<String, dynamic>>> history(String taskId);
-
-  Future<Map<String, dynamic>> previewAudience(
-    List<Map<String, dynamic>> audiences,
-  );
-
-  Future<Map<String, dynamic>> create(
-    Map<String, dynamic> data,
-    MagicMutationIdentity identity,
-  );
-
-  Future<Map<String, dynamic>> update(
-    String taskId,
-    Map<String, dynamic> data,
-    MagicMutationIdentity identity,
-  );
-
-  Future<Map<String, dynamic>> close(
-    String taskId,
-    int expectedVersion,
-    MagicMutationIdentity identity,
-  );
-
-  Future<List<SharedTaskAudienceOption>> audienceOptions();
-}
-
-class SharedTaskAudienceOption {
-  const SharedTaskAudienceOption({
-    required this.type,
-    required this.id,
-    required this.label,
-  });
-
-  final String type;
-  final String id;
-  final String label;
-}
-
-typedef SharedTaskAudiencePreviewLoader =
-    Future<Map<String, dynamic>> Function(List<Map<String, dynamic>> audiences);
-
-class _ServiceSharedTasksDataSource implements SharedTasksDataSource {
-  _ServiceSharedTasksDataSource(this.ref);
-
-  final WidgetRef ref;
-
-  @override
-  Future<Map<String, dynamic>> list({
-    String? state,
-    String? taskId,
-    String? linkedEntityType,
-    String? linkedEntityId,
-  }) {
-    return ref
-        .read(magicCrmServiceProvider)
-        .listSharedTasks(
-          state: state,
-          taskId: taskId,
-          linkedEntityType: linkedEntityType,
-          linkedEntityId: linkedEntityId,
-        );
-  }
-
-  @override
-  Future<Map<String, dynamic>> listFiltered({
-    String? state,
-    String? taskId,
-    String? linkedEntityType,
-    String? linkedEntityId,
-    String? q,
-    String? priority,
-    String? scope,
-    String? from,
-    String? to,
-  }) {
-    return ref
-        .read(magicCrmServiceProvider)
-        .listSharedTasks(
-          state: state,
-          taskId: taskId,
-          linkedEntityType: linkedEntityType,
-          linkedEntityId: linkedEntityId,
-          q: q,
-          priority: priority,
-          scope: scope,
-          from: from,
-          to: to,
-        );
-  }
-
-  @override
-  Future<Map<String, int>> calendar({
-    required String from,
-    required String to,
-    String? state,
-    String? q,
-    String? priority,
-    String? scope,
-    String? linkedEntityType,
-    String? linkedEntityId,
-  }) {
-    return ref
-        .read(magicCrmServiceProvider)
-        .sharedTaskCalendar(
-          from: from,
-          to: to,
-          state: state,
-          q: q,
-          priority: priority,
-          scope: scope,
-          linkedEntityType: linkedEntityType,
-          linkedEntityId: linkedEntityId,
-        );
-  }
-
-  @override
-  Future<List<Map<String, dynamic>>> history(String taskId) {
-    return ref.read(magicCrmServiceProvider).listSharedTaskHistory(taskId);
-  }
-
-  @override
-  Future<Map<String, dynamic>> previewAudience(
-    List<Map<String, dynamic>> audiences,
-  ) {
-    return ref
-        .read(magicCrmServiceProvider)
-        .previewSharedTaskAudience(audiences);
-  }
-
-  @override
-  Future<Map<String, dynamic>> create(
-    Map<String, dynamic> data,
-    MagicMutationIdentity identity,
-  ) {
-    return ref
-        .read(magicCrmServiceProvider)
-        .createSharedTask(data: data, identity: identity);
-  }
-
-  @override
-  Future<Map<String, dynamic>> update(
-    String taskId,
-    Map<String, dynamic> data,
-    MagicMutationIdentity identity,
-  ) {
-    return ref
-        .read(magicCrmServiceProvider)
-        .updateSharedTask(taskId: taskId, data: data, identity: identity);
-  }
-
-  @override
-  Future<Map<String, dynamic>> close(
-    String taskId,
-    int expectedVersion,
-    MagicMutationIdentity identity,
-  ) {
-    return ref
-        .read(magicCrmServiceProvider)
-        .closeSharedTask(
-          taskId: taskId,
-          expectedVersion: expectedVersion,
-          identity: identity,
-        );
-  }
-
-  @override
-  Future<List<SharedTaskAudienceOption>> audienceOptions() async {
-    const taskRoles = {'admin', 'manager', 'director'};
-    final profiles = ref.read(magicProfileAdminServiceProvider);
-    final result = await Future.wait([
-      ...taskRoles.map((role) => profiles.listProfiles(role: role, limit: 100)),
-      ref.read(magicCrmServiceProvider).listBranches(limit: 100),
-    ]);
-    final branches = result.removeLast();
-    return [
-      ...result
-          .expand((rows) => rows)
-          .where((row) => row['user_id'] != null)
-          .map(
-            (row) => SharedTaskAudienceOption(
-              type: 'user',
-              id: row['user_id'].toString(),
-              label: _profileLabel(row),
-            ),
-          ),
-      ...branches.map(
-        (row) => SharedTaskAudienceOption(
-          type: 'branch',
-          id: row['id'].toString(),
-          label: row['name']?.toString() ?? 'Филиал',
-        ),
-      ),
-    ];
-  }
-}
+import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_data_source.dart';
+import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_models.dart';
 
 String _taskSavedMessage(Map<String, dynamic> result, {required bool created}) {
   final summary = result['recipientSummary'];
@@ -291,7 +35,7 @@ Future<void> showCreateSharedTask(
   EntityLink? linkedEntity,
   VoidCallback? onSaved,
 }) async {
-  final source = _ServiceSharedTasksDataSource(ref);
+  final source = MagicCrmSharedTasksDataSource.fromWidgetRef(ref);
   List<SharedTaskAudienceOption> options = const [];
   try {
     options = await source.audienceOptions();
@@ -385,7 +129,8 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
   @override
   void initState() {
     super.initState();
-    _dataSource = widget.dataSource ?? _ServiceSharedTasksDataSource(ref);
+    _dataSource =
+        widget.dataSource ?? MagicCrmSharedTasksDataSource.fromWidgetRef(ref);
     _scope = widget.defaultToMineToday ? 'mine' : 'all';
     if (widget.defaultToMineToday) _selectedDay = _moscowToday();
     Future<void>.microtask(_load);
@@ -804,7 +549,6 @@ class _SharedTasksV4PanelState extends ConsumerState<SharedTasksV4Panel> {
     );
   }
 }
-
 String _moscowInstant(DateTime date) => DateTime.utc(
   date.year,
   date.month,
@@ -2119,11 +1863,4 @@ class _DateTimeButton extends StatelessWidget {
       },
     );
   }
-}
-
-String _profileLabel(Map<String, dynamic> profile) {
-  final first = profile['first_name']?.toString().trim() ?? '';
-  final last = profile['last_name']?.toString().trim() ?? '';
-  final name = '$first $last'.trim();
-  return name.isEmpty ? 'Сотрудник' : name;
 }

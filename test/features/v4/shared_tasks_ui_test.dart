@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
+import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_data_source.dart';
+import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_models.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/shared_tasks_v4_panel.dart';
 
 class FakeSharedTasksDataSource extends SharedTasksDataSource {
