@@ -196,105 +196,105 @@
     "remove_when": "Closure milestone reorganizes historical test buckets."
   },
   {
-    "target": "server/src/migration/v3-import-utils.spec.ts",
+    "target": "server/src/migration/import/v3/v3-import-utils.spec.ts",
     "category": "migration",
     "reason": "The import utility preserves versioned migration identifiers.",
     "owner": "platform",
     "remove_when": "V3 import migration is formally retired."
   },
   {
-    "target": "server/src/migration/v3-import-utils.ts",
+    "target": "server/src/migration/import/v3/v3-import-utils.ts",
     "category": "migration",
     "reason": "The import utility preserves versioned migration identifiers.",
     "owner": "platform",
     "remove_when": "V3 import migration is formally retired."
   },
   {
-    "target": "server/src/platform/v4-backfill-postgres.integration.spec.ts",
+    "target": "server/src/platform/rollout/v4/backfill-postgres.integration.spec.ts",
     "category": "rollout",
     "reason": "V4 rollout, reconciliation, and backfill operations remain live.",
     "owner": "platform",
     "remove_when": "V4 domain rollout is formally closed."
   },
   {
-    "target": "server/src/platform/v4-backfill.ts",
+    "target": "server/src/platform/rollout/v4/backfill.ts",
     "category": "rollout",
     "reason": "V4 rollout, reconciliation, and backfill operations remain live.",
     "owner": "platform",
     "remove_when": "V4 domain rollout is formally closed."
   },
   {
-    "target": "server/src/platform/v4-domain-flags.spec.ts",
+    "target": "server/src/platform/rollout/v4/domain-flags.spec.ts",
     "category": "rollout",
     "reason": "V4 rollout, reconciliation, and backfill operations remain live.",
     "owner": "platform",
     "remove_when": "V4 domain rollout is formally closed."
   },
   {
-    "target": "server/src/platform/v4-domain-flags.ts",
+    "target": "server/src/platform/rollout/v4/domain-flags.ts",
     "category": "rollout",
     "reason": "V4 rollout, reconciliation, and backfill operations remain live.",
     "owner": "platform",
     "remove_when": "V4 domain rollout is formally closed."
   },
   {
-    "target": "server/src/platform/v4-migrate-dry-run-postgres.integration.spec.ts",
+    "target": "server/src/platform/rollout/v4/migrate-dry-run-postgres.integration.spec.ts",
     "category": "rollout",
     "reason": "V4 rollout, reconciliation, and backfill operations remain live.",
     "owner": "platform",
     "remove_when": "V4 domain rollout is formally closed."
   },
   {
-    "target": "server/src/platform/v4-migrate-dry-run.ts",
+    "target": "server/src/platform/rollout/v4/migrate-dry-run.ts",
     "category": "rollout",
     "reason": "V4 rollout, reconciliation, and backfill operations remain live.",
     "owner": "platform",
     "remove_when": "V4 domain rollout is formally closed."
   },
   {
-    "target": "server/src/platform/v4-preflight-postgres.integration.spec.ts",
+    "target": "server/src/platform/rollout/v4/preflight-postgres.integration.spec.ts",
     "category": "rollout",
     "reason": "V4 rollout, reconciliation, and backfill operations remain live.",
     "owner": "platform",
     "remove_when": "V4 domain rollout is formally closed."
   },
   {
-    "target": "server/src/platform/v4-preflight.ts",
+    "target": "server/src/platform/rollout/v4/preflight.ts",
     "category": "rollout",
     "reason": "V4 rollout, reconciliation, and backfill operations remain live.",
     "owner": "platform",
     "remove_when": "V4 domain rollout is formally closed."
   },
   {
-    "target": "server/src/platform/v4-reconcile.spec.ts",
+    "target": "server/src/platform/rollout/v4/reconcile.spec.ts",
     "category": "rollout",
     "reason": "V4 rollout, reconciliation, and backfill operations remain live.",
     "owner": "platform",
     "remove_when": "V4 domain rollout is formally closed."
   },
   {
-    "target": "server/src/platform/v4-reconcile.ts",
+    "target": "server/src/platform/rollout/v4/reconcile.ts",
     "category": "rollout",
     "reason": "V4 rollout, reconciliation, and backfill operations remain live.",
     "owner": "platform",
     "remove_when": "V4 domain rollout is formally closed."
   },
   {
-    "target": "server/src/platform/v4-shadow-compare.spec.ts",
+    "target": "server/src/platform/rollout/v4/shadow-compare.spec.ts",
     "category": "rollout",
     "reason": "V4 rollout, reconciliation, and backfill operations remain live.",
     "owner": "platform",
     "remove_when": "V4 domain rollout is formally closed."
   },
   {
-    "target": "server/src/platform/v4-shadow-compare.ts",
+    "target": "server/src/platform/rollout/v4/shadow-compare.ts",
     "category": "rollout",
     "reason": "V4 rollout, reconciliation, and backfill operations remain live.",
     "owner": "platform",
     "remove_when": "V4 domain rollout is formally closed."
   },
   {
-    "target": "server/src/access-control/v4-access-coverage.ts",
+    "target": "server/src/access-control/rollout/v4/access-coverage.ts",
     "category": "rollout",
     "reason": "The access coverage check validates the live V4 rollout.",
     "owner": "platform",
@@ -308,7 +308,7 @@
     "remove_when": "Analytics V4 API contract is retired through an approved migration."
   },
   {
-    "target": "server/src/platform/v7-commerce-data.ts",
+    "target": "server/src/migration/commerce/v7/commerce-data.ts",
     "category": "migration",
     "reason": "The executable commerce migration calls versioned PostgreSQL functions.",
     "owner": "platform",

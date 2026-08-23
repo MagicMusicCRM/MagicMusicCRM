@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { deterministicUuid } from './import-id';
+import { deterministicUuid } from '../../import-id';
 
 export type SourceRow = Record<string, unknown>;
 

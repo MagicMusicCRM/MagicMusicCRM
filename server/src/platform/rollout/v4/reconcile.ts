@@ -85,7 +85,7 @@ interface ReconciliationReport extends UnsignedReconciliationReport {
   };
 }
 
-const serverRoot = resolve(__dirname, "..", "..");
+const serverRoot = resolve(__dirname, "..", "..", "..", "..");
 const repoRoot = resolve(serverRoot, "..");
 const cleanFixturePath = resolve(
   repoRoot,

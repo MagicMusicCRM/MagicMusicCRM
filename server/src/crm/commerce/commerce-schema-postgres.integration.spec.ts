@@ -6,7 +6,7 @@ import { MigrationRunner } from "../../db/migration-runner";
 import {
   backfillV7Commerce,
   reconcileV7Commerce,
-} from "../../platform/v7-commerce-data";
+} from "../../migration/commerce/v7/commerce-data";
 import { CommerceSchemaRepository } from "./commerce-schema.repository";
 import { IssuedCommercialSnapshot } from "./commerce-schema.types";
 

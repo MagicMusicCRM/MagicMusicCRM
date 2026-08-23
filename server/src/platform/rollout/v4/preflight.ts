@@ -73,7 +73,7 @@ interface RawFindingRow extends QueryResultRow {
 
 type SchemaColumns = Map<string, Set<string>>;
 
-const serverRoot = resolve(__dirname, "..", "..");
+const serverRoot = resolve(__dirname, "..", "..", "..", "..");
 const repoRoot = resolve(serverRoot, "..");
 const reportJsonPath = resolve(
   repoRoot,

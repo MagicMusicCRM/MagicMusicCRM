@@ -4,10 +4,10 @@ import { resolve } from "path";
 import {
   AccessRole,
   USER_ROLES,
-} from "../access-control/capability-registry";
-import { BASELINE_CAPABILITY_ROLES } from "../access-control/capability-route-policy";
-import { halfOpenIntervalsOverlap } from "../crm/schedule/constraint-engine.rules";
-import { resolveV4DomainRollout } from "./v4-domain-flags";
+} from "../../../access-control/capability-registry";
+import { BASELINE_CAPABILITY_ROLES } from "../../../access-control/capability-route-policy";
+import { halfOpenIntervalsOverlap } from "../../../crm/schedule/constraint-engine.rules";
+import { resolveV4DomainRollout } from "./domain-flags";
 
 type ShadowStatus = "parity" | "legacy-stricter" | "capability-stricter";
 
@@ -51,7 +51,7 @@ interface ShadowReport {
   };
 }
 
-const serverRoot = resolve(__dirname, "..", "..");
+const serverRoot = resolve(__dirname, "..", "..", "..", "..");
 const repoRoot = resolve(serverRoot, "..");
 const accessCoveragePath = resolve(
   repoRoot,

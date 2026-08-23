@@ -2,7 +2,7 @@ import { ServiceUnavailableException } from "@nestjs/common";
 import {
   resolveV4DomainRollout,
   V4DomainFlagsService,
-} from "./v4-domain-flags";
+} from "./domain-flags";
 
 describe("T8.3.3 domain compatibility flags", () => {
   it("defaults to legacy execution with shadow comparison", () => {

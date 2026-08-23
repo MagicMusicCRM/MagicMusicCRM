@@ -18,7 +18,7 @@ import {
   ScheduleReferenceQuery,
 } from "./availability.dto";
 import { AvailabilityService } from "./availability.service";
-import { V4DomainFlagsService } from "../../platform/v4-domain-flags";
+import { V4DomainFlagsService } from "../../platform/rollout/v4/domain-flags";
 
 @UseGuards(JwtAuthGuard)
 @Controller("crm/schedule-reference")

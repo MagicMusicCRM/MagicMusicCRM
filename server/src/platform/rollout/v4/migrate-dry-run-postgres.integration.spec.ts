@@ -1,5 +1,5 @@
 import { Pool } from "pg";
-import { requiredMigrations, runMigrationDryRun } from "./v4-migrate-dry-run";
+import { requiredMigrations, runMigrationDryRun } from "./migrate-dry-run";
 
 const databaseUrl = process.env.V4_PLATFORM_TEST_DATABASE_URL
   ?? process.env.DATABASE_URL

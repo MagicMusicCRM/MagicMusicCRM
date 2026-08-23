@@ -4,7 +4,7 @@ import { NotificationsModule } from "../notifications/notifications.module";
 import { PlatformIntegrityRepository } from "./platform-integrity.repository";
 import { PlatformIntegrityService } from "./platform-integrity.service";
 import { PlatformOutboxWorker } from "./platform-outbox.worker";
-import { V4DomainFlagsService } from "./v4-domain-flags";
+import { V4DomainFlagsService } from "./rollout/v4/domain-flags";
 
 @Global()
 @Module({

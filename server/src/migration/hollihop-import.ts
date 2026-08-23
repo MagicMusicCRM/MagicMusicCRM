@@ -33,7 +33,7 @@ import {
 import { join, resolve } from "node:path";
 import { Pool, PoolClient } from "pg";
 import { normalizePhoneRu } from "../crm/phone.util";
-import { deterministicUuid, sha256Hex } from "./v3-import-utils";
+import { deterministicUuid, sha256Hex } from "./import/v3/v3-import-utils";
 import { disciplineEntries, contactEntries, primaryBranchId } from "./hollihop-mappers";
 import { appendMoscowOffset, historyEntryFromRow } from "./hollihop-history-mappers";
 import { lessonRunsForDay, type LessonRun, type ScheduleSlot } from "./hollihop-lesson-days";

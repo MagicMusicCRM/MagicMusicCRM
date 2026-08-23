@@ -1,11 +1,13 @@
 import { readFileSync } from "fs";
 import { resolve } from "path";
-import { runShadowCompare } from "./v4-shadow-compare";
+import { runShadowCompare } from "./shadow-compare";
 
 describe("T8.3.3 shadow compare", () => {
   it("explains every access difference and keeps schedule parity", () => {
     const coverage = JSON.parse(readFileSync(resolve(
       __dirname,
+      "..",
+      "..",
       "..",
       "..",
       "..",

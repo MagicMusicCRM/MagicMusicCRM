@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
  * This is what makes the import idempotent: the same export row always yields
  * the same id, so `on conflict (id) do nothing` turns a re-run into a no-op
  * instead of a second copy of every task. Recovered from the retired
- * server/src/migration/v3-import-utils.ts (commit 7f2a3fd7^) so the ids match
+ * server/src/migration/import/v3/v3-import-utils.ts (commit 7f2a3fd7^) so the ids match
  * the rows already in production — a different scheme would duplicate all 514.
  */
 export function deterministicUuid(namespace: string, key: string): string {

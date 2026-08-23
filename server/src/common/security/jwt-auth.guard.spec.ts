@@ -5,7 +5,7 @@ import { DatabaseService } from '../../db/database.service';
 import {
   V4DomainFlagsService,
   V4DomainRollout,
-} from '../../platform/v4-domain-flags';
+} from '../../platform/rollout/v4/domain-flags';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
 function flags(rollout: Partial<V4DomainRollout>): V4DomainFlagsService {

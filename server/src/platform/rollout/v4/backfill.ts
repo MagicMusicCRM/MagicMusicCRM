@@ -88,7 +88,7 @@ interface BackfillReport {
   };
 }
 
-const serverRoot = resolve(__dirname, "..", "..");
+const serverRoot = resolve(__dirname, "..", "..", "..", "..");
 const repoRoot = resolve(serverRoot, "..");
 
 function loadDatabaseUrl(): string {

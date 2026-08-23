@@ -21,7 +21,7 @@ import {
 } from "./dto/access-mutation.dto";
 import { AccessMutationsService } from "./access-mutations.service";
 import { AccessRole, USER_ROLES } from "./capability-registry";
-import { V4DomainFlagsService } from "../platform/v4-domain-flags";
+import { V4DomainFlagsService } from "../platform/rollout/v4/domain-flags";
 
 function parseRole(value: string): AccessRole {
   if (!(USER_ROLES as readonly string[]).includes(value)) {

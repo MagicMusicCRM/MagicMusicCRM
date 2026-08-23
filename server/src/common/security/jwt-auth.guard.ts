@@ -18,7 +18,7 @@ import {
 import { DatabaseService } from '../../db/database.service';
 import { CapabilityRequestAuthorizer } from '../../access-control/capability-request-authorizer';
 import { resolveCapabilityRoutePolicy } from '../../access-control/capability-route-policy';
-import { V4DomainFlagsService } from '../../platform/v4-domain-flags';
+import { V4DomainFlagsService } from '../../platform/rollout/v4/domain-flags';
 
 interface AccessTokenPayload {
   sub?: string;

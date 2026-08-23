@@ -1,5 +1,5 @@
 import { ServiceUnavailableException } from "@nestjs/common";
-import { V4DomainFlagsService } from "../platform/v4-domain-flags";
+import { V4DomainFlagsService } from "../platform/rollout/v4/domain-flags";
 import { CrmScheduleController } from "./crm-schedule.controller";
 
 describe("CrmScheduleController rollout boundary", () => {

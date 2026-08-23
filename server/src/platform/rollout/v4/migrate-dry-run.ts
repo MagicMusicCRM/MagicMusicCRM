@@ -37,7 +37,7 @@ interface MigrationDryRunReport {
   };
 }
 
-const serverRoot = resolve(__dirname, "..", "..");
+const serverRoot = resolve(__dirname, "..", "..", "..", "..");
 const repoRoot = resolve(serverRoot, "..");
 const requiredMigrations = [
   "0076_capability_registry",

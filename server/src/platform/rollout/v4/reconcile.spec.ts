@@ -3,7 +3,7 @@ import {
   canonicalJson,
   invariants,
   signReport,
-} from "./v4-reconcile";
+} from "./reconcile";
 
 describe("v4 reconciliation report", () => {
   it("defines unique named invariants across all required systems", () => {

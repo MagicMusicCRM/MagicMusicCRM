@@ -3,11 +3,11 @@ import { basename, dirname, resolve } from "path";
 import {
   BASELINE_CAPABILITY_ROLES,
   resolveCapabilityRoutePolicy,
-} from "./capability-route-policy";
+} from "../../capability-route-policy";
 import {
   AccessRole,
   CAPABILITY_DEFINITIONS,
-} from "./capability-registry";
+} from "../../capability-registry";
 
 interface InventoryRoute {
   id: string;

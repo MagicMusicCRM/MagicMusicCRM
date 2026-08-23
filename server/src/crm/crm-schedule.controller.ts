@@ -43,7 +43,7 @@ import {
 import { LessonCommandService } from "./schedule/lesson-command.service";
 import { LessonSeriesCommandService } from "./schedule/lesson-series-command.service";
 import { LessonTransitionService } from "./schedule/lesson-transition.service";
-import { V4DomainFlagsService } from "../platform/v4-domain-flags";
+import { V4DomainFlagsService } from "../platform/rollout/v4/domain-flags";
 import { assertLessonPatchUsesTransition } from "./schedule/lesson-protected-patch.guard";
 import {
   CreateSchedulePlanDto,
