@@ -8,9 +8,12 @@ void main() {
       'lib/features/admin/presentation/widgets/schedule_widget.dart',
     ).readAsStringSync();
     expect(owner, isNot(contains("part 'schedule_widget_views_a.dart';")));
+    expect(owner, isNot(contains("part 'schedule_widget_views_b.dart';")));
     expect(owner, contains("part 'schedule_widget_toolbar.dart';"));
     expect(owner, contains("part 'schedule_widget_week_view.dart';"));
     expect(owner, contains("part 'schedule_widget_room_day_view.dart';"));
+    expect(owner, contains("part 'schedule_widget_focus.dart';"));
+    expect(owner, contains("part 'schedule_widget_teacher_day_view.dart';"));
   });
 
   test('schedule route and UI inventory contains no attendance mutations', () {

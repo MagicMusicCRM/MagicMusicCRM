@@ -38,7 +38,8 @@ part 'schedule_widget_toolbar.dart';
 part 'schedule_widget_week_view.dart';
 part 'schedule_widget_room_day_view.dart';
 part 'schedule_widget_context_banners.dart';
-part 'schedule_widget_views_b.dart';
+part 'schedule_widget_focus.dart';
+part 'schedule_widget_teacher_day_view.dart';
 
 // ── Color palette for rooms / teachers ──────────────────────────────────────
 // Muted, token-aligned palette (gold + status hues, no neon) so room dots read

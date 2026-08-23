@@ -1,6 +1,390 @@
 part of 'schedule_widget.dart';
 
 extension _ScheduleActions on _ScheduleWidgetState {
+  Future<void> _openLeadCreateFromSchedule(
+    ScheduleFocusState focus,
+    DateTime day,
+  ) async {
+    if (!widget.canWrite) return;
+    await Future<void>.delayed(Duration.zero);
+    if (!mounted) return;
+    final created = await CreateLessonDialog.show(
+      context,
+      initialDate: day,
+      initialBranchId: _selectedBranchId,
+      leadId: focus.leadId,
+      leadName: focus.leadName,
+      initialIsTrial: true,
+    );
+    if (created == true && mounted) await _fetchDayLessons(day);
+  }
+
+  Future<void> _openQuickCreate(
+    String columnId,
+    DateTime startLocal,
+    int durationMinutes,
+  ) async {
+    if (!widget.canWrite) return;
+    final roomId = (columnId == kUnassignedColumnId || columnId.isEmpty)
+        ? null
+        : columnId;
+    final created = await CreateLessonDialog.show(
+      context,
+      initialDate: startLocal,
+      initialRoomId: roomId,
+      initialBranchId: _selectedBranchId,
+      initialDurationMinutes: durationMinutes,
+      clientType: _contextClientType,
+      clientId: _contextClientId,
+      clientName: _contextClientName,
+    );
+    if (created == true && mounted) {
+      _fetchDayLessons(_selectedDate);
+    }
+  }
+
+  Future<void> _openWeekCreate(DateTime startLocal, int durationMinutes) async {
+    if (!widget.canWrite) return;
+    final created = await CreateLessonDialog.show(
+      context,
+      initialDate: startLocal,
+      initialBranchId: _selectedBranchId,
+      initialDurationMinutes: durationMinutes,
+      clientType: _contextClientType,
+      clientId: _contextClientId,
+      clientName: _contextClientName,
+    );
+    if (created == true && mounted) await _fetchAll();
+  }
+
+  Future<void> _refreshEditedSchedule() {
+    return _currentView == ScheduleView.week
+        ? _fetchAll()
+        : _fetchDayLessons(_selectedDate);
+  }
+
+  Future<void> _showLessonDetails(Map<String, dynamic> lesson) async {
+    final start = _parseLessonTime(lesson);
+    if (start == null) return;
+
+    final duration = _durationMinutes(lesson);
+    final end = start.add(Duration(minutes: duration));
+
+    final teacherName =
+        _teacherNames[lesson['teacher_id']?.toString()] ?? 'Не назначен';
+    // Занятие лида (пробное): ученика нет, показываем имя лида вместо
+    // ложного «Не назначен».
+    final leadName = lesson['lead_name']?.toString().trim() ?? '';
+    final studentName =
+        _studentNames[lesson['student_id']?.toString()] ??
+        (leadName.isNotEmpty ? '$leadName (лид)' : 'Не назначен');
+    final roomId = lesson['room_id']?.toString();
+    final roomName = roomId != null
+        ? (_roomNames[roomId] ?? 'Аудитория')
+        : 'Без аудитории';
+    final conflicts = conflictTypes(lesson['conflict_types']);
+    final lessonId = lesson['id']?.toString();
+    final currentStatus = lesson['status']?.toString() ?? 'scheduled';
+    final lifecycleState =
+        lesson['lifecycle_state']?.toString() ??
+        lesson['lifecycleState']?.toString() ??
+        currentStatus;
+    final settlementIssue = lifecycleState == 'settlement_pending'
+        ? lessonSettlementIssueLabel(
+            lesson['settlement_failure_code']?.toString(),
+          )
+        : null;
+    var settlementHistory = <Map<String, dynamic>>[];
+    if (widget.canWrite && lessonId?.isNotEmpty == true) {
+      try {
+        final response = await ref
+            .read(magicApiClientProvider)
+            .get<Map<String, dynamic>>(
+              '/crm/lessons/$lessonId/settlement-history',
+            );
+        settlementHistory = [
+          for (final item in response['items'] as List? ?? const [])
+            if (item is Map) Map<String, dynamic>.from(item),
+        ];
+      } catch (_) {
+        // Детали занятия остаются доступны; мутация всё равно потребует
+        // актуальный подписанный preview с сервера.
+      }
+    }
+    CapabilitySnapshot? snapshot;
+    try {
+      snapshot = await ref.read(capabilitySnapshotProvider.future);
+    } catch (_) {
+      // Linked rows fail closed below; lesson details themselves remain useful.
+    }
+    if (!mounted) return;
+    final registry = EntityRouteRegistry();
+    LessonEntityReference reference({
+      required IconData icon,
+      required String label,
+      required String value,
+      required EntityLink? link,
+    }) => LessonEntityReference(
+      icon: icon,
+      label: label,
+      value: value,
+      link: link,
+      available:
+          link == null ||
+          (snapshot != null && registry.resolve(link, snapshot).canOpen),
+    );
+    final studentId = lesson['student_id']?.toString();
+    final leadId = lesson['lead_id']?.toString();
+    final teacherId = lesson['teacher_id']?.toString();
+    final groupId = lesson['group_id']?.toString();
+    final branchId = lesson['branch_id']?.toString();
+    final branchName = lesson['branch_name']?.toString() ?? 'Филиал';
+    final groupName = lesson['group_name']?.toString() ?? 'Группа';
+    final dateFilter = DateTime(
+      start.year,
+      start.month,
+      start.day,
+    ).toIso8601String();
+    final references = [
+      if (lessonId?.isNotEmpty == true)
+        reference(
+          icon: Icons.event_note_rounded,
+          label: 'Занятие',
+          value: studentName,
+          link: EntityLink.typed(
+            entityType: EntityLinkType.lesson,
+            entityId: lessonId!,
+            presentation: EntityPresentationReference(
+              primary: studentName,
+              context: branchName,
+            ),
+            optionalFocus: EntityLinkFocus(
+              focus: 'lesson',
+              filter: {
+                'date': dateFilter,
+                if (branchId?.isNotEmpty == true) 'branchId': branchId,
+                if (studentId?.isNotEmpty == true) 'clientType': 'student',
+                if (leadId?.isNotEmpty == true) 'clientType': 'lead',
+                if (studentId?.isNotEmpty == true) 'clientId': studentId,
+                if (leadId?.isNotEmpty == true) 'clientId': leadId,
+              },
+            ),
+          ),
+        ),
+      reference(
+        icon: Icons.person_rounded,
+        label: leadId?.isNotEmpty == true ? 'Лид' : 'Ученик',
+        value: studentName,
+        link: (studentId?.isNotEmpty == true || leadId?.isNotEmpty == true)
+            ? EntityLink.typed(
+                entityType: EntityLinkType.client,
+                entityId: leadId?.isNotEmpty == true ? leadId! : studentId!,
+                variant: leadId?.isNotEmpty == true ? 'lead' : 'student',
+                presentation: EntityPresentationReference(
+                  primary: studentName,
+                  context: branchName,
+                ),
+              )
+            : null,
+      ),
+      reference(
+        icon: Icons.school_rounded,
+        label: 'Педагог',
+        value: teacherName,
+        link: teacherId?.isNotEmpty == true
+            ? EntityLink.typed(
+                entityType: EntityLinkType.teacher,
+                entityId: teacherId!,
+                presentation: EntityPresentationReference(
+                  primary: teacherName,
+                  context: branchName,
+                ),
+                optionalFocus: EntityLinkFocus(
+                  focus: 'schedule',
+                  filter: {'teacherId': teacherId, 'date': dateFilter},
+                ),
+              )
+            : null,
+      ),
+      reference(
+        icon: Icons.room_rounded,
+        label: 'Аудитория',
+        value: roomName,
+        link: roomId?.isNotEmpty == true
+            ? EntityLink.typed(
+                entityType: EntityLinkType.room,
+                entityId: roomId!,
+                presentation: EntityPresentationReference(
+                  primary: roomName,
+                  context: branchName,
+                ),
+                optionalFocus: EntityLinkFocus(
+                  focus: 'schedule',
+                  filter: {'roomId': roomId, 'date': dateFilter},
+                ),
+              )
+            : null,
+      ),
+      if (groupId?.isNotEmpty == true)
+        reference(
+          icon: Icons.groups_rounded,
+          label: 'Группа',
+          value: groupName,
+          link: EntityLink.typed(
+            entityType: EntityLinkType.group,
+            entityId: groupId!,
+            presentation: EntityPresentationReference(
+              primary: groupName,
+              context: branchName,
+            ),
+            optionalFocus: EntityLinkFocus(
+              focus: 'schedule',
+              filter: {'date': dateFilter},
+            ),
+          ),
+        ),
+      if (branchId?.isNotEmpty == true)
+        reference(
+          icon: Icons.apartment_rounded,
+          label: 'Филиал',
+          value: branchName,
+          link: EntityLink.typed(
+            entityType: EntityLinkType.branch,
+            entityId: branchId!,
+            presentation: EntityPresentationReference(primary: branchName),
+            optionalFocus: EntityLinkFocus(
+              focus: 'schedule',
+              filter: {'branchId': branchId, 'date': dateFilter},
+            ),
+          ),
+        ),
+    ];
+
+    final timeRange =
+        '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')} - '
+        '${end.hour.toString().padLeft(2, '0')}:${end.minute.toString().padLeft(2, '0')}';
+    await showLessonDetailsSheet(
+      context,
+      teacherName: teacherName,
+      studentName: studentName,
+      roomName: roomName,
+      references: references,
+      onOpenReference: (link, target) {
+        Future.microtask(() {
+          if (!mounted) return;
+          unawaited(
+            openEntityLink(
+              context,
+              ref,
+              link,
+              target: target,
+              sourceViewState: _scheduleViewState(),
+            ),
+          );
+        });
+      },
+      timeRange: timeRange,
+      currentStatus: lifecycleState,
+      conflicts: conflicts,
+      settlementIssue: settlementIssue,
+      settlementHistory: settlementHistory,
+      lessonId: widget.canWrite ? lessonId : null,
+      onEdit: () => _editLesson(lesson),
+      onCancel: () => _cancelLesson(lesson),
+      onSettle: lifecycleState == 'settlement_pending'
+          ? () => _settleLesson(lesson)
+          : null,
+      onAdjustSettlement:
+          lifecycleState == 'successfully_completed' ||
+              currentStatus == 'completed' ||
+              currentStatus == 'done'
+          ? () => _adjustLessonSettlement(
+              lesson,
+              LessonDecisionOperation.correction,
+            )
+          : lifecycleState == 'scheduled' && start.isAfter(DateTime.now())
+          ? () => _adjustLessonSettlement(
+              lesson,
+              LessonDecisionOperation.plannedSettlement,
+            )
+          : null,
+      adjustSettlementLabel:
+          lifecycleState == 'successfully_completed' ||
+              currentStatus == 'completed' ||
+              currentStatus == 'done'
+          ? 'Исправить расчёт'
+          : 'Изменить расчёт',
+    );
+  }
+
+  Future<void> _editLesson(Map<String, dynamic> lesson) async {
+    if (!widget.canWrite) return;
+    final changed = await CreateLessonDialog.show(context, lesson: lesson);
+    if (changed == true && mounted) await _fetchAll();
+  }
+
+  Future<void> _cancelLesson(Map<String, dynamic> lesson) async {
+    if (!widget.canWrite) return;
+    final changed = await showLessonDecisionFlow(
+      context,
+      api: ref.read(magicApiClientProvider),
+      operation: LessonDecisionOperation.cancel,
+      lesson: lesson,
+    );
+    if (changed == true && mounted) {
+      await _refreshEditedSchedule();
+      if (!mounted) return;
+      MagicToast.show(
+        context,
+        'Занятие отменено',
+        type: MagicToastType.success,
+      );
+    }
+  }
+
+  Future<void> _settleLesson(Map<String, dynamic> lesson) async {
+    if (!widget.canWrite) return;
+    final changed = await showLessonDecisionFlow(
+      context,
+      api: ref.read(magicApiClientProvider),
+      operation: LessonDecisionOperation.settle,
+      lesson: lesson,
+    );
+    if (changed == true && mounted) {
+      await _refreshEditedSchedule();
+      if (!mounted) return;
+      MagicToast.show(
+        context,
+        'Расчёт занятия исправлен',
+        type: MagicToastType.success,
+      );
+    }
+  }
+
+  Future<void> _adjustLessonSettlement(
+    Map<String, dynamic> lesson,
+    LessonDecisionOperation operation,
+  ) async {
+    if (!widget.canWrite) return;
+    final changed = await showLessonDecisionFlow(
+      context,
+      api: ref.read(magicApiClientProvider),
+      operation: operation,
+      lesson: lesson,
+    );
+    if (changed == true && mounted) {
+      await _refreshEditedSchedule();
+      if (!mounted) return;
+      MagicToast.show(
+        context,
+        operation == LessonDecisionOperation.correction
+            ? 'Расчёт занятия исправлен'
+            : 'Расчёт занятия изменён',
+        type: MagicToastType.success,
+      );
+    }
+  }
+
   // ── Data fetching ─────────────────────────────────────────────────────────
   Future<void> _fetchAll() async {
     _emitState(() {

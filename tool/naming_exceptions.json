@@ -175,20 +175,6 @@
     "remove_when": "Analytics V4 API contract is retired through an approved migration."
   },
   {
-    "target": "lib/features/admin/presentation/widgets/schedule_widget_views_a.dart",
-    "category": "cleanup-debt",
-    "reason": "The schedule view part has a mechanical suffix.",
-    "owner": "flutter",
-    "remove_when": "Cohesion milestone gives schedule views capability names."
-  },
-  {
-    "target": "lib/features/admin/presentation/widgets/schedule_widget_views_b.dart",
-    "category": "cleanup-debt",
-    "reason": "The schedule view part has a mechanical suffix.",
-    "owner": "flutter",
-    "remove_when": "Cohesion milestone gives schedule views capability names."
-  },
-  {
     "target": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
     "category": "cleanup-debt",
     "reason": "The client-card part has a mechanical suffix.",
