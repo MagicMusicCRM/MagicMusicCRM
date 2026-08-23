@@ -34,7 +34,10 @@ import 'schedule_teacher_timeline.dart';
 
 part 'schedule_widget_widgets.dart';
 part 'schedule_widget_actions.dart';
-part 'schedule_widget_views_a.dart';
+part 'schedule_widget_toolbar.dart';
+part 'schedule_widget_week_view.dart';
+part 'schedule_widget_room_day_view.dart';
+part 'schedule_widget_context_banners.dart';
 part 'schedule_widget_views_b.dart';
 
 // ── Color palette for rooms / teachers ──────────────────────────────────────

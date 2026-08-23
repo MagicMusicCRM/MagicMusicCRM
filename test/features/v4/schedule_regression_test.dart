@@ -3,6 +3,16 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('schedule parts are named by surface', () {
+    final owner = File(
+      'lib/features/admin/presentation/widgets/schedule_widget.dart',
+    ).readAsStringSync();
+    expect(owner, isNot(contains("part 'schedule_widget_views_a.dart';")));
+    expect(owner, contains("part 'schedule_widget_toolbar.dart';"));
+    expect(owner, contains("part 'schedule_widget_week_view.dart';"));
+    expect(owner, contains("part 'schedule_widget_room_day_view.dart';"));
+  });
+
   test('schedule route and UI inventory contains no attendance mutations', () {
     final sourceFiles =
         Directory('lib')
