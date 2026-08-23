@@ -78,6 +78,16 @@ void main() {
     );
   });
 
+  test('rejects phase-prefixed test basenames inside a capability directory', () {
+    expect(
+      findNamingViolations(
+        paths: const ['test/features/workspace/s8_example_test.dart'],
+        exceptions: const [],
+      ).map((item) => item.rule),
+      contains('test-generation-bucket'),
+    );
+  });
+
   test('ignores generation-like contract strings and comments', () {
     final violations = findSymbolViolations(
       sources: const {

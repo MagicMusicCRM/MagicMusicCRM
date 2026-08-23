@@ -58,7 +58,9 @@ List<NamingViolation> findNamingViolations({
     r'(^|[/_])(old|new|temp|tmp)([/_.-]|$)',
     caseSensitive: false,
   );
-  final testBucket = RegExp(r'^test/features/(?:v\d+/|s\d+(?:/|_))');
+  final testBucket = RegExp(
+    r'^test/features/(?:v\d+/|s\d+(?:/|_)|(?:[^/]+/)+(?:v\d+|s\d+|stage\d+)_)',
+  );
   bool productionSource(String path) =>
       path.startsWith('lib/') || path.startsWith('server/src/');
 
