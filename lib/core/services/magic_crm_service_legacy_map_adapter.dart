@@ -1,7 +1,8 @@
 part of 'magic_crm_service.dart';
 
-// Response mappers: normalize backend payloads into the legacy map shape the
-// widgets expect. Pure functions (no _api / no this) — shared across domains.
+/// Compatibility boundary for presentation consumers that still expect the
+/// historical snake_case map contract.
+/// Remove when every MagicCrmService consumer reads typed domain models.
 List<Map<String, dynamic>> _items(Map<String, dynamic> response) {
   final items = response['items'];
   if (items is! List) return const <Map<String, dynamic>>[];
@@ -800,6 +801,31 @@ Map<String, dynamic> _legacyStudentBalance(Map<String, dynamic> item) {
     },
   };
 }
+
+@visibleForTesting
+Map<String, dynamic> legacyLeadForTesting(Map<String, dynamic> item) =>
+    _legacyLead(item);
+
+@visibleForTesting
+Map<String, dynamic> legacyLessonForTesting(Map<String, dynamic> item) =>
+    _legacyLesson(item);
+
+@visibleForTesting
+Map<String, dynamic> legacyPaymentForTesting(Map<String, dynamic> item) =>
+    _legacyPayment(item);
+
+@visibleForTesting
+Map<String, dynamic> legacySubscriptionForTesting(Map<String, dynamic> item) =>
+    _legacySubscription(item);
+
+@visibleForTesting
+Map<String, dynamic> legacyStudentBalanceForTesting(
+  Map<String, dynamic> item,
+) => _legacyStudentBalance(item);
+
+@visibleForTesting
+Map<String, dynamic> legacyFamilyMemberForTesting(Map<String, dynamic> item) =>
+    _legacyFamilyMember(item);
 
 (String, String) _splitName(String value) {
   final parts = value.trim().split(RegExp(r'\s+'));

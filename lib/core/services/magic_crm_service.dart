@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // StateProvider lives in the legacy export under Riverpod 3.x; it backs the
 // portal's per-child switcher selection (selectedStudentIdProvider, KVA-156).
@@ -17,7 +18,7 @@ part 'magic_crm_service_org.dart';
 part 'magic_crm_service_leads.dart';
 part 'magic_crm_service_schedule.dart';
 part 'magic_crm_service_finance.dart';
-part 'magic_crm_service_mappers.dart';
+part 'magic_crm_service_legacy_map_adapter.dart';
 
 final magicCrmServiceProvider = Provider<MagicCrmService>((ref) {
   return MagicCrmService(ref.watch(magicApiClientProvider));

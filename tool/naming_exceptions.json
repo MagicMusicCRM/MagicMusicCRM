@@ -327,5 +327,12 @@
     "reason": "The Windows updater must keep the latest-v2.json release manifest path.",
     "owner": "release",
     "remove_when": "Updater bridge migration is approved and deployed."
+  },
+  {
+    "target": "lib/core/services/magic_crm_service_legacy_map_adapter.dart",
+    "category": "compatibility-boundary",
+    "reason": "The CRM presentation layer still consumes historical snake_case maps.",
+    "owner": "crm",
+    "remove_when": "All MagicCrmService consumers use typed domain models directly."
   }
 ]
