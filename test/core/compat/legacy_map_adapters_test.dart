@@ -1,7 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:magic_music_crm/core/api/magic_api_client.dart';
+import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/compat/messenger_legacy_map_adapter.dart';
 import 'package:magic_music_crm/core/compat/profile_admin_legacy_map_adapter.dart';
 import 'package:magic_music_crm/core/models/commerce_projection.dart';
+import 'package:magic_music_crm/core/services/magic_messenger_service.dart';
 
 void main() {
   const messenger = DefaultMessengerLegacyMapAdapter();
@@ -37,9 +40,6 @@ void main() {
       'branchId': 'branch-1',
       'branchName': 'Центральный',
     };
-    final realtimeSummary = Map<String, dynamic>.from(restChat);
-
-    expect(messenger.chat(realtimeSummary), messenger.chat(restChat));
     expect(messenger.chat(restChat), <String, dynamic>{
       'id': 'chat-1',
       'type': 'direct',
@@ -172,6 +172,69 @@ void main() {
       },
     );
   });
+
+  test(
+    'realtime chat summary uses the public entry point without partner data',
+    () {
+      final realtimeSummary = <String, dynamic>{
+        'id': 'chat-realtime-1',
+        'type': 'administration',
+        'title': 'Администрация',
+        'createdBy': 'manager-1',
+        'lastMessageId': 'message-realtime-1',
+        'lastMessageContent': 'Добрый день',
+        'lastMessageCreatedAt': '2026-08-22T12:00:00.000Z',
+        'partnerId': 'client-1',
+        'unreadCount': 4,
+        'isMuted': false,
+        'createdAt': '2026-08-20T10:00:00.000Z',
+        'updatedAt': '2026-08-22T12:00:00.000Z',
+        'ownerName': 'Мария Петрова',
+        'assignedTo': <String, dynamic>{'id': 'manager-1', 'name': 'Мария'},
+        'folder': 'leads',
+        'archived': false,
+        'branchId': 'branch-1',
+        'branchName': 'Центральный',
+        'slug': 'administration',
+        'isSystem': true,
+        'canWrite': true,
+      };
+      final restChat = <String, dynamic>{
+        'id': 'chat-realtime-1',
+        'type': 'administration',
+        'title': 'Администрация',
+        'createdBy': 'manager-1',
+        'lastMessageId': 'message-realtime-1',
+        'lastMessageContent': 'Добрый день',
+        'lastMessageCreatedAt': '2026-08-22T12:00:00.000Z',
+        'partnerId': 'client-1',
+        'partner': null,
+        'unreadCount': 4,
+        'isMuted': false,
+        'createdAt': '2026-08-20T10:00:00.000Z',
+        'updatedAt': '2026-08-22T12:00:00.000Z',
+        'ownerName': 'Мария Петрова',
+        'assignedTo': <String, dynamic>{'id': 'manager-1', 'name': 'Мария'},
+        'folder': 'leads',
+        'archived': false,
+        'branchId': 'branch-1',
+        'branchName': 'Центральный',
+        'slug': 'administration',
+        'isSystem': true,
+      };
+      final service = MagicMessengerService(
+        MagicApiClient(
+          baseUrl: 'https://api.example.test',
+          tokenStore: MemoryMagicTokenStore(),
+        ),
+      );
+
+      expect(
+        service.legacyChatFromSummary(realtimeSummary),
+        messenger.chat(restChat),
+      );
+    },
+  );
 
   test(
     'messenger adapter preserves channel, permission, and post map shapes',
