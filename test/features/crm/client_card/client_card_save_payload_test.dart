@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -17,6 +19,22 @@ import 'card_fake_api.dart';
 /// и весь PATCH (включая правки телефона) падал с 400 у ~22% лидов.
 void main() {
   setUpAll(() => initializeDateFormatting('ru', null));
+
+  test('client card data responsibilities have semantic parts', () {
+    final owner = File(
+      'lib/features/crm/presentation/client_card/client_card.dart',
+    ).readAsStringSync();
+    expect(owner, isNot(contains("part 'client_card_data.dart';")));
+    for (final part in const [
+      'client_card_internal_context.dart',
+      'client_card_counterpart_resolution.dart',
+      'client_card_loaders.dart',
+      'client_card_realtime.dart',
+      'client_card_persistence.dart',
+    ]) {
+      expect(owner, contains("part '$part';"));
+    }
+  });
 
   const uuid = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
   const statuses = <StatusRecord>[
