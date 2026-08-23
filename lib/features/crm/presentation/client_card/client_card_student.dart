@@ -524,7 +524,7 @@ extension _ClientCardStudent on _ClientCardState {
   }
 
   // ── Student action bar (overflow menu hosts the v7 student actions) ───────
-  // #13: Align + Wrap (как у лид-бара в tabs_a) вместо жёсткого Row: на
+  // #13: Align + Wrap (как у панели действий лида) вместо жёсткого Row: на
   // телефоне карточка — bottom sheet во всю ширину, и три кнопки с отступами
   // не влезали в 320–360dp — правый край переполнялся. Wrap переносит кнопки
   // на вторую строку.
