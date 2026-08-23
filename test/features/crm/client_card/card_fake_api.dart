@@ -96,7 +96,7 @@ class FakeCardApiClient extends MagicApiClient {
   /// Сырой ученик для GET /crm/students/:id/card.
   final Map<String, dynamic>? student;
 
-  /// Сырые задачи лид-карточки (camelCase, как toTaskDto).
+  /// Сырые задачи лид-карточки (camelCase, как с сервера).
   final List<Map<String, dynamic>> leadTasks;
   final List<Map<String, dynamic>> sharedTasks;
   final List<Map<String, dynamic>> sharedTaskHistory;
