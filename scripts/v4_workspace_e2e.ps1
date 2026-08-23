@@ -59,12 +59,10 @@ try {
   if (-not $SkipHostRegression) {
     Invoke-WorkspaceStep "Workspace widget and navigation regression" {
       & $flutter test `
-        test/features/v4/desktop_workspace_controller_test.dart `
-        test/features/v4/desktop_tab_controls_test.dart `
-        test/features/v4/workspace_persistence_logout_test.dart `
-        test/features/v4/cross_tab_conflict_test.dart `
-        test/features/v4/mobile_context_navigation_test.dart `
-        test/features/v4/context_transition_matrix_test.dart
+        test/features/workspace/desktop_workspace_controller_test.dart `
+        test/features/workspace/desktop_tab_controls_test.dart `
+        test/features/workspace/workspace_persistence_logout_test.dart `
+        test/features/workspace/context_transition_matrix_test.dart
     }
   }
 
@@ -77,7 +75,7 @@ try {
       throw "A Windows device is not available."
     }
     Invoke-WorkspaceStep "Windows workspace device E2E" {
-      & $flutter test integration_test/v4_workspace_device_test.dart `
+      & $flutter test integration_test/workspace_device_test.dart `
         -d $windowsDevice.id
     }
   }
@@ -96,7 +94,7 @@ try {
       )
     }
     Invoke-WorkspaceStep "Android context-stack device E2E" {
-      & $flutter test integration_test/v4_workspace_device_test.dart `
+      & $flutter test integration_test/workspace_device_test.dart `
         -d $androidDevice.id
     }
   }

@@ -168,34 +168,6 @@
     "remove_when": "Analytics V4 API contract is retired through an approved migration."
   },
   {
-    "target": "test/features/v4/",
-    "category": "historical-test-bucket",
-    "reason": "V4 tests await capability-based placement with their production clusters.",
-    "owner": "flutter",
-    "remove_when": "Closure milestone reorganizes historical test buckets."
-  },
-  {
-    "target": "test/features/v6/",
-    "category": "historical-test-bucket",
-    "reason": "V6 tests await capability-based placement with their production clusters.",
-    "owner": "flutter",
-    "remove_when": "Closure milestone reorganizes historical test buckets."
-  },
-  {
-    "target": "test/features/v7/",
-    "category": "historical-test-bucket",
-    "reason": "V7 tests await capability-based placement with their production clusters.",
-    "owner": "flutter",
-    "remove_when": "Closure milestone reorganizes historical test buckets."
-  },
-  {
-    "target": "test/features/s8_desktop_ux_states_test.dart",
-    "category": "historical-test-bucket",
-    "reason": "S8 tests await capability-based placement with their production clusters.",
-    "owner": "flutter",
-    "remove_when": "Closure milestone reorganizes historical test buckets."
-  },
-  {
     "target": "server/src/migration/import/v3/v3-import-utils.spec.ts",
     "category": "migration",
     "reason": "The import utility preserves versioned migration identifiers.",

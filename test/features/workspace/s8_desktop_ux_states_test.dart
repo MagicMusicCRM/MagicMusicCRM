@@ -9,7 +9,7 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_wid
 
 /// Fake API client that funnels every read through [get]. All CRM/profile
 /// services in the app build on top of `magicApiClientProvider`, so overriding
-/// this one provider exercises the S8 loading/empty/error state machines
+/// this one provider exercises the loading/empty/error state machines
 /// without a backend.
 class _FakeApiClient extends MagicApiClient {
   _FakeApiClient({this.fail = false})
@@ -43,21 +43,21 @@ void main() {
   // main.dart initialises the locale.
   setUpAll(() => initializeDateFormatting('ru', null));
 
-  group('S8 desktop UX states', () {
-    testWidgets('T8.1 schedule renders the calendar grid even with no lessons', (
+  group('desktop UX states', () {
+    testWidgets('schedule renders the calendar grid even with no lessons', (
       tester,
     ) async {
       await tester.pumpWidget(_host(const ScheduleWidget()));
       await tester.pumpAndSettle();
 
-      // Like the v7 prototype, an empty period shows an EMPTY calendar (weekday
+      // An empty period shows an EMPTY calendar (weekday
       // headers + cells), never a "занятий нет" text card that replaces the grid.
       expect(find.text('На выбранный период занятий нет'), findsNothing);
       expect(find.text('Пн'), findsOneWidget);
       expect(find.text('Вс'), findsOneWidget);
     });
 
-    testWidgets('T8.1 schedule shows an error state with retry on failure', (
+    testWidgets('schedule shows an error state with retry on failure', (
       tester,
     ) async {
       await tester.pumpWidget(_host(const ScheduleWidget(), fail: true));

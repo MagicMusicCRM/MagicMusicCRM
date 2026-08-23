@@ -19,7 +19,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() => initializeDateFormatting('ru', null));
 
-  testWidgets('stage 7 analytics IA and capability projection work on device', (
+  testWidgets('analytics IA and capability projection work on device', (
     tester,
   ) async {
     final directorApi = _DeviceApi();

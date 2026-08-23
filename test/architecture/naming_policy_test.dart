@@ -267,13 +267,17 @@ void main() {
     );
   });
 
-  test('guards the live S8 historical test item', () {
+  test('tracked active tests are grouped by capability', () {
+    final testPaths = trackedPaths().where(
+      (path) => path.startsWith('test/features/') && path.endsWith('.dart'),
+    );
+
     expect(
       findNamingViolations(
-        paths: const ['test/features/s8_desktop_ux_states_test.dart'],
+        paths: testPaths,
         exceptions: const [],
-      ).single.rule,
-      'test-generation-bucket',
+      ),
+      isEmpty,
     );
   });
 

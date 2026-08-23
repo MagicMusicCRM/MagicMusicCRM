@@ -6,7 +6,7 @@ import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_details_sheet.dart';
 
 void main() {
-  test('production bottom sheets route through the v7 surface', () {
+  test('production bottom sheets route through the adaptive sheet', () {
     final directCalls = <String>[];
     for (final file
         in Directory('lib')
@@ -26,7 +26,7 @@ void main() {
     expect(
       directCalls,
       isEmpty,
-      reason: 'Use the v7 adaptive sheet: $directCalls',
+      reason: 'Use the adaptive sheet: $directCalls',
     );
   });
 
