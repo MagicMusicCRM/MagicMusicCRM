@@ -12,10 +12,10 @@
 // потому что вопрос один и тот же.
 
 /** Дата рождения. Считает возраст сама и не устаревает. */
-export const BIRTHDAY_KEY = "birthday";
+const BIRTHDAY_KEY = "birthday";
 
 /** Возраст, вписанный руками, — когда дня рождения не знают. */
-export const AGE_KEY = "age";
+const AGE_KEY = "age";
 
 export interface ResolvedAge {
   /** Полных лет. */

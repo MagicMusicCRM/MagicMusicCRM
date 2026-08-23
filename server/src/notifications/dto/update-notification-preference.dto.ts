@@ -1,7 +1,7 @@
 import { ArrayUnique, IsArray, IsBoolean, IsIn } from 'class-validator';
 
 /** Event types a role can subscribe to. Mirrors the seed in migration 0062. */
-export const NOTIFICATION_EVENT_TYPES = [
+const NOTIFICATION_EVENT_TYPES = [
   'new_lead',
   'task_reminder_day',
   'task_reminder_hour',
@@ -15,7 +15,7 @@ export const NOTIFICATION_EVENT_TYPES = [
  * data leak one careless toggle away. system_admin is absent because it is an
  * operations account, not a recipient.
  */
-export const NOTIFICATION_PREFERENCE_ROLES = [
+const NOTIFICATION_PREFERENCE_ROLES = [
   'admin',
   'manager',
   'director',

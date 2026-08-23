@@ -144,8 +144,8 @@ interface CommentRow {
 
 // ponytail: toStudentDto/toNumericStat/listChatWorkTimeline are still copied from
 // crm.service — the retained student aggregators (getMySummary/getStudentCard)
-// still own them. The DTO mappers (LessonRow/TaskRow/TimelineRow + toLessonDto/
-// toTaskDto/toTimelineDto) and presentableEmail now live in ./crm-mappers.
+// still own them. The DTO mappers (LessonRow/TimelineRow + toLessonDto/
+// toTimelineDto) and presentableEmail now live in ./crm-mappers.
 
 /**
  * Lead pipeline (app.leads): board/card/list, CRUD, status history,

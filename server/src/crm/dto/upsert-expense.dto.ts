@@ -8,18 +8,6 @@ import {
   Min,
 } from "class-validator";
 
-/** Suggested expense categories surfaced by the v7 «Добавить расход» sheet. */
-export const EXPENSE_CATEGORIES = [
-  "rent",
-  "salary",
-  "utilities",
-  "marketing",
-  "equipment",
-  "supplies",
-  "tax",
-  "other",
-] as const;
-
 export class UpsertExpenseDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })

@@ -11,7 +11,7 @@
 // вопрос один и тот же, и две копии этого правила разъехались бы.
 
 /** Ключ, которым импорт HolliHop клал исходную дату обращения (`AddressDate`). */
-export const HOLLIHOP_APPEAL_KEY = "addressDate";
+const HOLLIHOP_APPEAL_KEY = "addressDate";
 
 /** Явное поле «Дата обращения» — правка руками или перенос при конвертации. */
 export const APPEAL_KEY = "appealAt";

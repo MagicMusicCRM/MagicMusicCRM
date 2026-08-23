@@ -1,6 +1,6 @@
 import { Injectable, ServiceUnavailableException } from "@nestjs/common";
 
-export const V4_DOMAINS = ["access", "schedule"] as const;
+const V4_DOMAINS = ["access", "schedule"] as const;
 
 export type V4Domain = (typeof V4_DOMAINS)[number];
 export type V4CompatibilityMode = "legacy" | "shadow" | "v4";

@@ -15,28 +15,13 @@ import {
   ValidateNested,
 } from "class-validator";
 
-export const CLIENT_PIPELINE_TYPES = ["lead", "student"] as const;
+const CLIENT_PIPELINE_TYPES = ["lead", "student"] as const;
 export type ClientPipelineType = (typeof CLIENT_PIPELINE_TYPES)[number];
-
-export const CLIENT_PIPELINE_STYLES = [
-  "cyan",
-  "green",
-  "amber",
-  "slate",
-  "gray",
-  "red",
-] as const;
 
 export class ClientPipelineQuery {
   @IsIn(CLIENT_PIPELINE_TYPES)
   clientType: ClientPipelineType;
 
-  @IsOptional()
-  @IsUUID()
-  branchId?: string;
-}
-
-export class StudentFunnelQuery {
   @IsOptional()
   @IsUUID()
   branchId?: string;

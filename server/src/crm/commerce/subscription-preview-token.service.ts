@@ -32,7 +32,7 @@ import {
   verifySubscriptionReplacePreview,
 } from "./subscription-preview-token";
 
-export const SUBSCRIPTION_PREVIEW_TTL_SECONDS = 300;
+const SUBSCRIPTION_PREVIEW_TTL_SECONDS = 300;
 
 @Injectable()
 export class SubscriptionPreviewTokenService {

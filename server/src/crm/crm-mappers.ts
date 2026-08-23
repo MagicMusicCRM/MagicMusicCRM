@@ -1,8 +1,8 @@
 /**
  * Shared CRM row shapes + row→DTO mappers.
  *
- * Before this module the same `LessonRow`/`toLessonDto`, `TaskRow`/`toTaskDto`,
- * `TimelineRow`/`toTimelineDto` and `PaymentRow`/`toPaymentDto` lived byte-for-byte
+ * Before this module the same `LessonRow`/`toLessonDto`, `TimelineRow`/`toTimelineDto`
+ * and `PaymentRow`/`toPaymentDto` lived byte-for-byte
  * in 2–3 services each (CrmService, LeadsService, ScheduleService,
  * TimelineService, FinanceService), so a change to a DTO shape meant editing every
  * copy. They are pure functions (no `this`), so the extraction is behaviour-preserving:
@@ -124,112 +124,6 @@ const toIsoOrNull = (value: Date | string | null): string | null => {
   return Number.isNaN(date.getTime()) ? String(value) : date.toISOString();
 };
 
-/**
- * Field-level diff between a task before and after an update, in the shape the
- * AmoCRM-style feed renders. Only actually-changed fields produce a row: the
- * PATCH is a coalesce-update, so an unmentioned field arrives as null and must
- * not be logged as «изменено на пусто».
- */
-export function diffTaskRows(before: TaskRow, after: TaskRow): TaskChange[] {
-  const changes: TaskChange[] = [];
-
-  if (before.status !== after.status) {
-    changes.push({
-      field: "status",
-      oldValue: before.status,
-      newValue: after.status,
-    });
-  }
-
-  if ((before.priority ?? null) !== (after.priority ?? null)) {
-    changes.push({
-      field: "priority",
-      oldValue: before.priority ?? null,
-      newValue: after.priority ?? null,
-    });
-  }
-
-  // Compared as instants, not strings: the same moment can arrive as a Date
-  // from one driver path and an ISO string from another, and a string compare
-  // would log a phantom reschedule.
-  const dueBefore = toIsoOrNull(before.due_at);
-  const dueAfter = toIsoOrNull(after.due_at);
-  if (dueBefore !== dueAfter) {
-    changes.push({ field: "due_at", oldValue: dueBefore, newValue: dueAfter });
-  }
-
-  if (before.assigned_to !== after.assigned_to) {
-    changes.push({
-      field: "assigned_to",
-      // Names are NOT frozen here — the feed joins profiles at read time, so a
-      // later rename reads correctly in old events.
-      oldValue: null,
-      newValue: null,
-      oldUserId: before.assigned_to,
-      newUserId: after.assigned_to,
-    });
-  }
-
-  if (before.title !== after.title) {
-    changes.push({
-      field: "title",
-      oldValue: before.title,
-      newValue: after.title,
-    });
-  }
-
-  if ((before.description ?? null) !== (after.description ?? null)) {
-    changes.push({
-      field: "description",
-      oldValue: before.description ?? null,
-      newValue: after.description ?? null,
-    });
-  }
-
-  if (
-    before.entity_type !== after.entity_type ||
-    before.entity_id !== after.entity_id
-  ) {
-    changes.push({
-      field: "entity",
-      oldValue: `${before.entity_type}:${before.entity_id}`,
-      newValue: `${after.entity_type}:${after.entity_id}`,
-    });
-  }
-
-  return changes;
-}
-
-export function toTaskHistoryDto(row: TaskHistoryRow) {
-  const name = (first: string | null, last: string | null) =>
-    `${first ?? ""} ${last ?? ""}`.trim() || null;
-  const entry: Record<string, unknown> = {
-    id: row.id,
-    field: row.field,
-    oldValue: row.old_value,
-    newValue: row.new_value,
-    changedAt:
-      row.changed_at instanceof Date
-        ? row.changed_at.toISOString()
-        : row.changed_at,
-    source: row.source,
-    changedBy: row.changed_by,
-    authorProfileId: row.author_profile_id,
-    authorName: name(row.author_first_name, row.author_last_name),
-    oldUserId: row.old_user_id,
-    oldUserName: name(row.old_user_first_name, row.old_user_last_name),
-    newUserId: row.new_user_id,
-    newUserName: name(row.new_user_first_name, row.new_user_last_name),
-  };
-  if (row.task_id) {
-    entry.taskId = row.task_id;
-    entry.taskTitle = row.task_title ?? null;
-    entry.taskEntityType = row.task_entity_type ?? null;
-    entry.taskEntityId = row.task_entity_id ?? null;
-  }
-  return entry;
-}
-
 export interface TimelineRow {
   id: string;
   type: string;
@@ -330,48 +224,6 @@ export function toLessonDto(row: LessonRow) {
     reservationState: row.reservation_state ?? null,
     settlementFailureCode: row.settlement_failure_code ?? null,
   };
-}
-
-export function toTaskDto(row: TaskRow) {
-  const assignedName =
-    `${row.assigned_first_name ?? ""} ${row.assigned_last_name ?? ""}`.trim();
-  const creatorName =
-    `${row.creator_first_name ?? ""} ${row.creator_last_name ?? ""}`.trim();
-  const personName =
-    `${row.entity_first_name ?? ""} ${row.entity_last_name ?? ""}`.trim();
-  const task: Record<string, unknown> = {
-    id: row.id,
-    entityType: row.entity_type,
-    entityId: row.entity_id,
-    assignedTo: row.assigned_to,
-    assignedName: assignedName || null,
-    assignedProfileId: row.assigned_profile_id ?? null,
-    creatorProfileId: row.creator_profile_id ?? null,
-    entityName: personName || row.entity_name?.trim() || null,
-    title: row.title,
-    description: row.description,
-    status: row.status,
-    // Default so a row from a query that doesn't select priority (the client
-    // self-view) still hands the UI a usable value.
-    priority: row.priority ?? "medium",
-    dueAt: row.due_at,
-    dueAllDay: row.due_all_day ?? false,
-    createdBy: row.created_by,
-    createdAt: row.created_at,
-  };
-  if (
-    row.creator_first_name !== undefined ||
-    row.creator_last_name !== undefined
-  ) {
-    task.creatorName = creatorName || null;
-  }
-  if (row.branch_id !== undefined) {
-    task.branchId = row.branch_id;
-  }
-  if (row.branch_name !== undefined) {
-    task.branchName = row.branch_name;
-  }
-  return task;
 }
 
 /** One edited field, as stored in audit_events.metadata.changes. */
