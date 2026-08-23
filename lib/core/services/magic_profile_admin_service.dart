@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
+import 'package:magic_music_crm/core/compat/profile_admin_legacy_map_adapter.dart';
 
 final magicProfileAdminServiceProvider = Provider<MagicProfileAdminService>((
   ref,
@@ -10,8 +11,13 @@ final magicProfileAdminServiceProvider = Provider<MagicProfileAdminService>((
 
 class MagicProfileAdminService {
   final MagicApiClient _api;
+  final ProfileAdminLegacyMapAdapter _legacyMapAdapter;
 
-  const MagicProfileAdminService(this._api);
+  const MagicProfileAdminService(
+    this._api, {
+    ProfileAdminLegacyMapAdapter legacyMapAdapter =
+        const DefaultProfileAdminLegacyMapAdapter(),
+  }) : _legacyMapAdapter = legacyMapAdapter;
 
   Future<List<Map<String, dynamic>>> listProfiles({
     String? q,
@@ -154,32 +160,8 @@ class MagicProfileAdminService {
     return _legacyProfileNote(response);
   }
 
-  Map<String, dynamic> _legacyProfile(Map<String, dynamic> item) {
-    return {
-      'id': item['id'],
-      'user_id': item['userId'],
-      'email': item['email'],
-      'role': item['role'],
-      'first_name': item['firstName'],
-      'last_name': item['lastName'],
-      'phone': item['phone'],
-      'dob': item['dob'],
-      'avatar_file_id': item['avatarFileId'],
-      'email_otp_2fa_enabled': item['emailOtp2faEnabled'],
-      'is_app_account': item['isAppAccount'],
-      'phone_verified_at': item['phoneVerifiedAt'],
-      'linked_students': item['linkedStudents'] ?? 0,
-      'linked_leads': item['linkedLeads'] ?? 0,
-      'linked_teachers': item['linkedTeachers'] ?? 0,
-      'linked_staff': item['linkedStaff'] ?? 0,
-      'candidate_students': item['candidateStudents'] ?? 0,
-      'candidate_leads': item['candidateLeads'] ?? 0,
-      'candidate_teachers': item['candidateTeachers'] ?? 0,
-      'candidate_staff': item['candidateStaff'] ?? 0,
-      'created_at': item['createdAt'],
-      'updated_at': item['updatedAt'],
-    };
-  }
+  Map<String, dynamic> _legacyProfile(Map<String, dynamic> item) =>
+      _legacyMapAdapter.profile(item);
 
   List<Map<String, dynamic>> _legacyCandidates(Object? items) {
     if (items is! List) return const <Map<String, dynamic>>[];
@@ -197,25 +179,6 @@ class MagicProfileAdminService {
     }).toList();
   }
 
-  Map<String, dynamic> _legacyProfileNote(Map<String, dynamic> item) {
-    final author = item['author'];
-    final legacyAuthor = author is Map<String, dynamic>
-        ? {
-            'id': author['id'],
-            'email': author['email'],
-            'first_name': author['firstName'],
-            'last_name': author['lastName'],
-          }
-        : null;
-
-    return {
-      'id': item['id'],
-      'profile_id': item['profileId'],
-      'author_id': item['authorId'],
-      'body': item['body'],
-      'content': item['body'],
-      'created_at': item['createdAt'],
-      'author': legacyAuthor,
-    };
-  }
+  Map<String, dynamic> _legacyProfileNote(Map<String, dynamic> item) =>
+      _legacyMapAdapter.profileNote(item);
 }

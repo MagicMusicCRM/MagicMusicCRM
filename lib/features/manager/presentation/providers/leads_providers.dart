@@ -223,8 +223,8 @@ final leadBoardProvider = FutureProvider.autoDispose
       return filters.fetchBoard(service);
     });
 
-/// Kept as the legacy provider name while the data source is v3 REST.
-final leadsStreamProvider = FutureProvider<List<Map<String, dynamic>>>((
+/// Board items are loaded from the current CRM REST capability.
+final leadBoardItemsProvider = FutureProvider<List<Map<String, dynamic>>>((
   ref,
 ) async {
   final board = await ref.watch(

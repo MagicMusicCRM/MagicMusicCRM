@@ -6,7 +6,8 @@
 /// (P1–P7) build every screen on, so the running app converges on a single
 /// design language instead of per-screen ad-hoc literals.
 ///
-/// Backward compatibility: the existing palette already lives in
+/// Deep Charcoal & Sophisticated Gold token source. The historical prototype
+/// path is preserved exactly for active consumers; the existing palette lives in
 /// [TelegramColors]; these tokens reuse those exact constants where they match
 /// and only ADD the v7 tokens that were missing (gold-soft / gold-line, overlay
 /// surface, skeleton shimmer, scrim, on-gold text, etc.). Nothing here is

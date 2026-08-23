@@ -2,6 +2,8 @@ import 'package:magic_music_crm/core/models/payment.dart';
 import 'package:magic_music_crm/core/models/student_balance.dart';
 import 'package:magic_music_crm/core/models/subscription.dart';
 
+part '../compat/commerce_legacy_map_adapter.dart';
+
 /// Actor-specific shape returned by the v4 commerce projection endpoints.
 enum CommerceProjectionProfile {
   clientSelf('client_self'),
@@ -203,12 +205,8 @@ class CommerceAccount {
     );
   }
 
-  Map<String, dynamic> toLegacyBalance(String studentId) => {
-    'student_id': studentId,
-    'balance': _commerceMajor(balanceMinor),
-    'total_paid': _commerceMajor(actualPaymentsMinor),
-    'total_cost': _commerceMajor(writeOffsMinor),
-  };
+  Map<String, dynamic> toLegacyBalance(String studentId) =>
+      const CommerceLegacyMapAdapter().balance(this, studentId);
 }
 
 class CommerceSubscription {
@@ -255,28 +253,8 @@ class CommerceSubscription {
     );
   }
 
-  Map<String, dynamic> toLegacyMap(String studentId) => {
-    'id': id,
-    'student_id': studentId,
-    'lessons_total': units.total,
-    'lessons_used': units.used,
-    'lessons_remaining': units.remaining,
-    'starts_at': startsAt.toIso8601String(),
-    'expires_at': expiresAt?.toIso8601String(),
-    'valid_until': expiresAt?.toIso8601String(),
-    'status': status,
-    'type': status == 'active' ? 'Абонемент' : status,
-    'package_name': terms.displayName,
-    'package_price': _commerceMajor(terms.finalPriceMinor),
-    'paid_amount': _commerceMajor(financial.actualPaidMinor),
-    'actual_paid_minor': financial.actualPaidMinor.toString(),
-    'debt_minor': financial.debtMinor.toString(),
-    'pending_minor': financial.pendingMinor.toString(),
-    'overpayment_minor': financial.overpaymentMinor.toString(),
-    'next_payment_at': financial.nextPaymentAt?.toIso8601String(),
-    'base_price': _commerceMajor(terms.basePriceMinor),
-    'currency_code': terms.currencyCode,
-  };
+  Map<String, dynamic> toLegacyMap(String studentId) =>
+      const CommerceLegacyMapAdapter().subscription(this, studentId);
 }
 
 class CommerceSubscriptionUnits {
@@ -604,23 +582,8 @@ class CommerceMovement {
     );
   }
 
-  Map<String, dynamic> toLegacyPayment(String studentId) => {
-    'id': id,
-    'student_id': studentId,
-    'amount': _commerceMajor(amountMinor),
-    'currency': currencyCode,
-    'payment_date': occurredAt.toIso8601String(),
-    'method': method,
-    'type': method,
-    'description': factType ?? chargeType,
-    'branch_id': branchId,
-    'branch_name': branchName,
-    'notes': comment ?? factType ?? chargeType,
-    'external_id': invoiceIdentifier,
-    'status': status,
-    'accepted_by_name': acceptedByName,
-    'students': {'id': studentId, 'first_name': '', 'last_name': ''},
-  };
+  Map<String, dynamic> toLegacyPayment(String studentId) =>
+      const CommerceLegacyMapAdapter().payment(this, studentId);
 }
 
 class CommerceTechnicalFinanceEvent {

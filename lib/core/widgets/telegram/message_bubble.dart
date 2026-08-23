@@ -418,7 +418,7 @@ class MessageBubble extends StatelessWidget {
   List<Widget> _buildReactionWidgets(BuildContext context, bool isDark) {
     if (reactions == null) return [];
     // Aggregated shape [{emoji, count, reactedByMe}] from the backend; tolerate
-    // a legacy per-user [{emoji, user_id}] list by counting occurrences.
+    // a retained per-user [{emoji, user_id}] fallback list by counting occurrences.
     final Map<String, int> counts = {};
     final Map<String, bool> mine = {};
     final List<String> order = [];

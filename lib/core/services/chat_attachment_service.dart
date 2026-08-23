@@ -73,7 +73,8 @@ class ChatAttachmentService {
   }
 
   /// Delete an avatar file object when it is already a v3 file id.
-  /// Legacy Supabase storage references are ignored during v3 cutover.
+  /// Backend storage is owned here; historical Supabase references are ignored
+  /// during the active cutover while their wire-format parsing remains live.
   Future<void> deleteAvatar(String? value) async {
     if (!_looksLikeBackendFileId(value)) return;
     try {

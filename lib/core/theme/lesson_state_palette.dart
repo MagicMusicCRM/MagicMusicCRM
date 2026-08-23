@@ -26,7 +26,7 @@ class LessonStateProjection {
       lifecycleState:
           lesson['lifecycle_state']?.toString() ??
           lesson['lifecycleState']?.toString(),
-      legacyStatus: lesson['status']?.toString(),
+      rawStatus: lesson['status']?.toString(),
       hasConflict: hasConflict ?? _mapHasConflicts(lesson),
     );
   }
@@ -34,10 +34,10 @@ class LessonStateProjection {
 
 LessonStateProjection lessonStateProjection({
   String? lifecycleState,
-  String? legacyStatus,
+  String? rawStatus,
   bool hasConflict = false,
 }) {
-  final state = _normalizeState(lifecycleState, legacyStatus);
+  final state = _normalizeState(lifecycleState, rawStatus);
   final token =
       hasConflict ||
           state == 'settlement_pending' ||
@@ -59,10 +59,10 @@ bool _mapHasConflicts(Map<String, dynamic> lesson) {
   };
 }
 
-String _normalizeState(String? lifecycleState, String? legacyStatus) {
+String _normalizeState(String? lifecycleState, String? rawStatus) {
   final state = lifecycleState?.trim();
   if (state != null && state.isNotEmpty) return state;
-  return switch (legacyStatus?.trim()) {
+  return switch (rawStatus?.trim()) {
     'settlement_pending' => 'settlement_pending',
     'completed' => 'successfully_completed',
     'rescheduled' => 'rescheduled',

@@ -365,7 +365,8 @@ class NotificationService {
     // Custom implementation depends on how you want to show it
   }
 
-  /// Static method kept for backward compatibility, now properly initializes plugin.
+  /// Used by the live messenger realtime consumer; remove only after it calls
+  /// the instance notification path. It initializes the plugin before showing.
   static Future<void> showLocalNotification({
     required String title,
     required String body,

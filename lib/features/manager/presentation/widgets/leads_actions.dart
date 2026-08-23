@@ -190,7 +190,7 @@ extension _LeadsActions on _LeadsWidgetState {
   void _refreshBoard() {
     _resetLoadedPages();
     ref.invalidate(leadBoardProvider(_filters));
-    ref.invalidate(leadsStreamProvider);
+    ref.invalidate(leadBoardItemsProvider);
   }
 
   void _resetLoadedPages() {

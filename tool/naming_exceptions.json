@@ -329,6 +329,27 @@
     "remove_when": "Updater bridge migration is approved and deployed."
   },
   {
+    "target": "lib/core/compat/messenger_legacy_map_adapter.dart",
+    "category": "compatibility-boundary",
+    "reason": "Messenger presentation consumers still require historical snake_case maps.",
+    "owner": "messenger",
+    "remove_when": "All messenger presentation consumers use typed models directly."
+  },
+  {
+    "target": "lib/core/compat/profile_admin_legacy_map_adapter.dart",
+    "category": "compatibility-boundary",
+    "reason": "Profile administration presentation consumers still require historical snake_case maps.",
+    "owner": "profile",
+    "remove_when": "All profile administration consumers use typed models directly."
+  },
+  {
+    "target": "lib/core/compat/commerce_legacy_map_adapter.dart",
+    "category": "compatibility-boundary",
+    "reason": "Commerce presentation consumers still require historical finance maps.",
+    "owner": "commerce",
+    "remove_when": "All commerce presentation consumers use typed projection models directly."
+  },
+  {
     "target": "lib/core/services/magic_crm_service_legacy_map_adapter.dart",
     "category": "compatibility-boundary",
     "reason": "The CRM presentation layer still consumes historical snake_case maps.",

@@ -256,7 +256,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               );
       }
 
-      // Proactive role-path enforcement. Legacy shared paths were already
+      // Proactive role-path enforcement. Historical shared paths remain a live
       // normalized above, so only the canonical role shells reach this gate.
       if (loc.startsWith('/admin') &&
           role != 'admin' &&
@@ -648,7 +648,7 @@ class _AppGateLoadingScreenState extends ConsumerState<_AppGateLoadingScreen> {
   }
 }
 
-/// Unreachable safety placeholder while a legacy URL redirect resolves.
+/// Unreachable safety placeholder while a retained URL redirect resolves.
 class _DeepLinkScaffold extends StatelessWidget {
   const _DeepLinkScaffold();
 

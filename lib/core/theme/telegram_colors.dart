@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-/// Legacy color palette mapped to the MagicMusic CRM dark operational palette.
+/// Retained presentation aliases map to the live Deep Charcoal & Sophisticated
+/// Gold palette and are removed only after their consumers use AppColor directly.
 class TelegramColors {
   TelegramColors._();
 
@@ -10,9 +11,8 @@ class TelegramColors {
   static const Color premiumGold = Color(0xFFC9A85E);
   static const Color softGold = Color(0xFFD6B778);
 
-  // Backward compatibility aliases
+  // Live presentation aliases; remove only after all consumers use AppColor.
   static const Color brandGold = primaryGold;
-  static const Color brandGoldLight = secondaryGold;
 
   // ── Work accents ───────────────────────────────────────────────────────────
   static const Color actionBlue = Color(0xFF3B82F6);

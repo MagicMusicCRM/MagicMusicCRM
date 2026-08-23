@@ -3,7 +3,7 @@ import 'design_tokens.dart';
 import 'telegram_colors.dart';
 
 class AppTheme {
-  // ── Legacy brand references (kept for compatibility) ────────────────────
+  // ── Live presentation aliases; remove after consumers use AppColor. ──────
   static const Color primaryGold = TelegramColors.primaryGold;
   static const Color secondaryGold = TelegramColors.secondaryGold;
   static const Color softGold = TelegramColors.softGold;

@@ -114,7 +114,7 @@ extension _ClientCardPersistence on _ClientCardState {
       // every cached filter variant here after the successful mutation.
       if (_mode.hasLeadHalf) {
         ref.invalidate(leadBoardProvider);
-        ref.invalidate(leadsStreamProvider);
+        ref.invalidate(leadBoardItemsProvider);
       }
       if (_mode.hasStudentHalf) ref.invalidate(studentBoardProvider);
       if (mounted) {
