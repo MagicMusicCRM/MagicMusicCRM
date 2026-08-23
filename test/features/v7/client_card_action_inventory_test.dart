@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -13,6 +15,20 @@ const _student = <String, dynamic>{
 };
 
 void main() {
+  test('client card tabs are named by surface', () {
+    final clientCardSource = File(
+      'lib/features/crm/presentation/client_card/client_card.dart',
+    ).readAsStringSync();
+
+    expect(clientCardSource, isNot(contains('client_card_tabs_a.dart')));
+    expect(clientCardSource, isNot(contains('client_card_tabs_b.dart')));
+    expect(clientCardSource, contains('client_card_header.dart'));
+    expect(clientCardSource, contains('client_card_overview_tab.dart'));
+    expect(clientCardSource, contains('client_card_tasks_tab.dart'));
+    expect(clientCardSource, contains('client_card_collaboration_tabs.dart'));
+    expect(clientCardSource, contains('client_card_presentation.dart'));
+  });
+
   testWidgets('desktop owns one action per section and collapses finance', (
     tester,
   ) async {

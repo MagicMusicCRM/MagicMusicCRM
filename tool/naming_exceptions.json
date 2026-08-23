@@ -1,12 +1,5 @@
 [
   {
-    "target": "lib/features/crm/presentation/client_card/client_card_tabs_a.dart",
-    "category": "cleanup-debt",
-    "reason": "The client-card part file retains a mechanical suffix.",
-    "owner": "flutter",
-    "remove_when": "Cohesion milestone gives client-card tabs capability names."
-  },
-  {
     "target": "lib/features/manager/presentation/reporting/reporting_data_source.dart::getV4ClientStatusSummary",
     "category": "api-contract",
     "reason": "The reporting data source adapter calls a live V4 analytics route method.",
@@ -173,13 +166,6 @@
     "reason": "The method is bound to a live V4 analytics route.",
     "owner": "platform",
     "remove_when": "Analytics V4 API contract is retired through an approved migration."
-  },
-  {
-    "target": "lib/features/crm/presentation/client_card/client_card_tabs_b.dart",
-    "category": "cleanup-debt",
-    "reason": "The client-card part has a mechanical suffix.",
-    "owner": "flutter",
-    "remove_when": "Cohesion milestone gives client-card tabs capability names."
   },
   {
     "target": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
