@@ -49,8 +49,11 @@ part 'messenger_screen_widgets.dart';
 part 'messenger_screen_actions.dart';
 part 'messenger_screen_realtime.dart';
 part 'messenger_screen_messaging.dart';
-part 'messenger_screen_builders_a.dart';
-part 'messenger_screen_builders_b.dart';
+part 'messenger_screen_shell.dart';
+part 'messenger_screen_chat_list.dart';
+part 'messenger_screen_conversation_view.dart';
+part 'messenger_screen_pinned_messages.dart';
+part 'messenger_screen_search.dart';
 
 void _logMessenger(String message) {
   if (kDebugMode) {

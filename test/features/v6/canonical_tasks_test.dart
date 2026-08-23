@@ -33,7 +33,7 @@ void main() {
 
     final messenger = File(
       'lib/features/messenger/presentation/screens/'
-      'messenger_screen_builders_a.dart',
+      'messenger_screen_shell.dart',
     ).readAsStringSync();
     expect(messenger, isNot(contains('SharedTasksPanel(')));
 

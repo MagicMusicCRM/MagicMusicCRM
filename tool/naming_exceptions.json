@@ -168,20 +168,6 @@
     "remove_when": "Analytics V4 API contract is retired through an approved migration."
   },
   {
-    "target": "lib/features/messenger/presentation/screens/messenger_screen_builders_a.dart",
-    "category": "cleanup-debt",
-    "reason": "The messenger builder part has a mechanical suffix.",
-    "owner": "flutter",
-    "remove_when": "Cohesion milestone gives messenger builders capability names."
-  },
-  {
-    "target": "lib/features/messenger/presentation/screens/messenger_screen_builders_b.dart",
-    "category": "cleanup-debt",
-    "reason": "The messenger builder part has a mechanical suffix.",
-    "owner": "flutter",
-    "remove_when": "Cohesion milestone gives messenger builders capability names."
-  },
-  {
     "target": "test/features/v4/",
     "category": "historical-test-bucket",
     "reason": "V4 tests await capability-based placement with their production clusters.",

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/features/messenger/inbox_logic.dart';
 
@@ -17,6 +19,17 @@ Map<String, dynamic> admin(
 };
 
 void main() {
+  test('messenger parts are named by responsibility', () {
+    final source = File(
+      'lib/features/messenger/presentation/screens/messenger_screen.dart',
+    ).readAsStringSync();
+
+    expect(source, isNot(contains('messenger_screen_builders_a.dart')));
+    expect(source, isNot(contains('messenger_screen_builders_b.dart')));
+    expect(source, contains('messenger_screen_conversation_view.dart'));
+    expect(source, contains('messenger_screen_search.dart'));
+  });
+
   test('folderOf buckets administration chats; null folder → leads', () {
     expect(folderOf(admin('a', folder: 'students')), InboxFolder.students);
     expect(folderOf(admin('a', folder: 'leads')), InboxFolder.leads);

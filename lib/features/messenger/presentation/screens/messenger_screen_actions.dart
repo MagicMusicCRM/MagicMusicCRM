@@ -614,4 +614,123 @@ extension _MessengerActions on _MessengerScreenState {
       _joinAnnouncementChannels();
     }
   }
+
+  void _onForwardMessage(Map<String, dynamic> msg) async {
+    final targetChat = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Переслать...'),
+        content: SizedBox(
+          width: 400,
+          height: 500,
+          child: Column(
+            children: [
+              Expanded(
+                child: ListView.builder(
+                  itemCount: _chatItems.length,
+                  itemBuilder: (context, index) {
+                    final item = _chatItems[index];
+                    // Robust name resolution
+                    String name = 'Чат';
+                    if (item['_display_name'] != null &&
+                        item['_display_name'].toString().isNotEmpty) {
+                      name = item['_display_name'].toString();
+                    } else if (item['display_name'] != null &&
+                        item['display_name'].toString().isNotEmpty) {
+                      name = item['display_name'].toString();
+                    } else if (item['profiles'] != null) {
+                      final p = item['profiles'];
+                      name = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'
+                          .trim();
+                    } else if (item['_partner_data'] != null) {
+                      final p = item['_partner_data'];
+                      name = '${p['first_name'] ?? ''} ${p['last_name'] ?? ''}'
+                          .trim();
+                    } else if (item['name'] != null) {
+                      name = item['name'].toString();
+                    }
+                    if (name.trim().isEmpty) name = 'Без имени';
+
+                    return ListTile(
+                      leading: TelegramAvatar(
+                        name: name,
+                        avatarUrl: item['_avatar_url'] ?? item['avatar_url'],
+                        uniqueId: item['id'].toString(),
+                        radius: 18,
+                      ),
+                      title: Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      onTap: () => Navigator.pop(context, {
+                        ...item,
+                        'resolved_name': name,
+                      }),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Отмена'),
+          ),
+        ],
+      ),
+    );
+
+    if (targetChat != null) {
+      if (!mounted) return;
+      final targetName = targetChat['resolved_name'] ?? 'Чат';
+
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Переслать сообщение?'),
+          content: Text('Переслать сообщение в чат "$targetName"?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Отмена'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColor.gold,
+                foregroundColor: AppColor.onGold,
+                elevation: 0,
+                shadowColor: Colors.transparent,
+              ),
+              child: const Text(
+                'Переслать',
+                style: TextStyle(color: AppColor.onGold),
+              ),
+            ),
+          ],
+        ),
+      );
+
+      if (confirm != true) return;
+
+      final targetId = targetChat['id'].toString();
+      await ref
+          .read(magicMessengerServiceProvider)
+          .sendMessage(
+            targetId,
+            content: msg['content'] ?? '',
+            messageType: 'text',
+            forwardedFromId: msg['id']?.toString(),
+          );
+
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Сообщение переслано')));
+      }
+    }
+  }
 }
