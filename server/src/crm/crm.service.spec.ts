@@ -86,7 +86,16 @@ describe("CrmService", () => {
       } as unknown as StudentFunnelService,
     );
 
-    return { service, query, audit, policy, tasks, notifications, database };
+    return {
+      service,
+      query,
+      audit,
+      policy,
+      tasks,
+      notifications,
+      database,
+      scheduleRead,
+    };
   };
 
   const createServiceWithQueryResults = (
@@ -462,7 +471,7 @@ describe("CrmService", () => {
   it("keeps the teacher student card free of embedded commerce sections", async () => {
     // findStudent is now a shared db read (student-read.ts) — seed its row via
     // the query mock instead of spying a method.
-    const { service } = createService([
+    const { service, scheduleRead } = createService([
       {
         id: "student-a",
         profile_user_id: "user-a",
@@ -470,12 +479,57 @@ describe("CrmService", () => {
       },
     ]);
     stubCardSections(service);
+    const lesson = {
+      id: "lesson-from-schedule-read",
+      version: 4,
+      lifecycleState: "scheduled",
+      studentId: "student-a",
+      groupId: null,
+      leadId: null,
+      teacherId: "teacher-a",
+      branchId: "branch-a",
+      roomId: "room-a",
+      scheduledAt: "2026-06-16T09:00:00.000Z",
+      durationMinutes: 60,
+      status: "scheduled",
+      isTrial: true,
+      notes: "Distinctive card lesson",
+      teacherRate: null,
+      appliedTeacherRate: null,
+      paidAmount: null,
+      studentName: "Анна Иванова",
+      leadName: null,
+      teacherName: "Иван Петров",
+      branchName: "Центральный",
+      roomName: "Класс A",
+      groupName: null,
+      groupPricePerLesson: null,
+      completionType: null,
+      clientChargeType: null,
+      clientChargeValue: null,
+      teacherCompensationType: null,
+      teacherCompensationValue: null,
+      settlementTypeKey: null,
+      teacherCompensationRuleKey: null,
+      teacherCompensationValueMinor: null,
+      subscriptionId: null,
+      snapshotTrial: true,
+      snapshotValidationState: null,
+      reservationState: null,
+      settlementFailureCode: null,
+    };
+    scheduleRead.listLessons.mockResolvedValue({ items: [lesson] });
 
     const card = await service.getStudentCard(
       { userId: "teacher-a", role: "teacher" },
       "student-a",
     );
 
+    expect(card.lessons).toEqual([lesson]);
+    expect(scheduleRead.listLessons).toHaveBeenCalledWith(
+      { userId: "teacher-a", role: "teacher" },
+      { studentId: "student-a", limit: 100 },
+    );
     expect(card).not.toHaveProperty("balance");
     expect(card).not.toHaveProperty("payments");
     expect(card).not.toHaveProperty("expectedPayments");

@@ -212,6 +212,59 @@ describe("schedule read contract", () => {
     ]);
   });
 
+  it("fails closed for an unknown role bound through $1", async () => {
+    const { service, query } = createService([]);
+    const unknownActor = {
+      userId: "00000000-0000-4000-8000-000000000099",
+      role: "unknown-role" as never,
+    };
+
+    await expect(service.listLessons(unknownActor, { limit: 10 })).resolves.toEqual({
+      items: [],
+    });
+
+    const [rawSql, params] = query.mock.calls[0];
+    const sql = String(rawSql);
+    const predicateStart = sql.indexOf("$1::text in (");
+    const predicateEnd = sql.indexOf(
+      "\n        order by l.scheduled_at",
+      predicateStart,
+    );
+    const rolePredicate = sql.slice(predicateStart, predicateEnd).trim();
+    const branches: string[] = [];
+    let depth = 0;
+    let branchStart = 0;
+
+    for (let index = 0; index < rolePredicate.length; index += 1) {
+      if (rolePredicate[index] === "(") depth += 1;
+      if (rolePredicate[index] === ")") depth -= 1;
+      const separator = rolePredicate.slice(index).match(/^\s+or\s+/);
+      if (depth === 0 && separator) {
+        branches.push(rolePredicate.slice(branchStart, index).trim());
+        index += separator[0].length - 1;
+        branchStart = index + 1;
+      }
+    }
+    branches.push(rolePredicate.slice(branchStart, -1).trim());
+
+    expect(params).toEqual([
+      "unknown-role",
+      "00000000-0000-4000-8000-000000000099",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      10,
+    ]);
+    expect(branches).toEqual([
+      "$1::text in ('manager', 'director', 'admin', 'system_admin')",
+      "($1::text = 'teacher' and tp.user_id = $2)",
+      expect.stringMatching(/^\(\$1::text = 'client' and \([\s\S]+\)\)$/),
+    ]);
+  });
+
   it("loads one exact terminal lesson without weakening actor scope", async () => {
     const { service, query } = createService([]);
     const lessonId = "11111111-1111-4111-8111-111111111111";
@@ -245,16 +298,28 @@ describe("schedule read contract", () => {
 
     await expect(
       service.getScheduleMonthSummary(actor, {
-        from: "2026-06-01T00:00:00.000Z",
-        to: "2026-07-01T00:00:00.000Z",
+        from: "2026-06-01T00:00:00.000+03:00",
+        to: "2026-07-01T00:00:00.000+03:00",
       }),
     ).resolves.toMatchObject({
       items: [{ day: "2026-06-15", count: 2, roomIds: ["room-a"] }],
     });
 
-    expect(String(query.mock.calls[0][0])).toContain(
+    const [rawSql, params] = query.mock.calls[0];
+    const sql = String(rawSql);
+    expect(sql).toContain(
       "l.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')",
     );
+    expect(sql).toContain(
+      "to_char((l.scheduled_at at time zone 'Europe/Moscow')::date, 'YYYY-MM-DD') as day",
+    );
+    expect(params).toEqual([
+      "2026-05-31T21:00:00.000Z",
+      "2026-06-30T21:00:00.000Z",
+      null,
+      "manager",
+      "manager-a",
+    ]);
     expect(policy.assertCanReadOperationalData).toHaveBeenCalledWith(actor);
   });
 
