@@ -167,3 +167,32 @@ The package is accepted only when the original file and god-class span shrink
 materially, all behavior gates pass, RepoWise reports no new cycle or missing
 consumer, and the measured module/global health moves toward the approved
 contract. Exact score gain is measured rather than promised.
+
+## Package 1 verified outcome
+
+The recurring-schedule presentation package is implemented and verified at
+`7347300849b5`. It landed as five rollback-safe implementation commits:
+`7425bc21`, `3649def3`, `1cbea79b`, `03d70353`, and `73473008`.
+
+- Fresh verification passed: focused cross-boundary tests `78/78`, full Flutter
+  tests `997/997`, full `flutter analyze` with zero issues, and a clean diff.
+- RepoWise is exact at `7347300849b5` with `index_behind=false`. The original
+  coordinator improved from health `1.00`, `1,947` NLOC, max CCN `20`, and
+  weighted deficit `13,629` to health `4.98`, `214` NLOC, max CCN `9`, and
+  weighted deficit `646`. The extracted interpreter, review, view, mutation,
+  and end boundaries score `7.41`, `7.41`, `7.41`, `8.35`, and `8.43`.
+- The Flutter module moved from `4.56` to `4.70`; repository code-only health
+  moved from `5.93` to `5.99`. Backend health remained `6.64` because this
+  package changed no backend production code.
+- Sentrux reports quality `4974`, acyclicity raw `1`, depth raw `13`, modularity
+  `5362`, redundancy `4826`, and both architectural rules passing. The
+  design-token cut removed the historical `design_tokens -> telegram_colors`
+  forwarding edge without changing any locked ARGB value.
+- RepoWise classifies the full package change as `Elevated`, risk percentile
+  `100`, because it spans 20 files and 5,170 changed lines. The authoritative
+  full Flutter suite covers the package where line-level attribution is absent.
+
+The global success contract remains open: `lib 4.70 < 7.0`,
+`server 6.64 < 7.0`, and code-only `5.99 < 7.5`. Fresh RepoWise re-ranking
+selects `server/src/crm/schedule.service.ts` as package 2: its god-class cut is
+the current directive and represents `11,346` recoverable weighted points.
