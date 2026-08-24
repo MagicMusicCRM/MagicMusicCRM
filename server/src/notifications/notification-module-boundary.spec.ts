@@ -1,4 +1,5 @@
 import { MODULE_METADATA } from "@nestjs/common/constants";
+import { DatabaseModule } from "../db/database.module";
 import { NotificationDeliveryModule } from "./notification-delivery.module";
 import { NotificationWorker } from "./notification-worker.service";
 import { NotificationsController } from "./notifications.controller";
@@ -21,11 +22,17 @@ describe("notification module boundary", () => {
     expect(metadata(MODULE_METADATA.IMPORTS, NotificationsModule)).toContain(
       NotificationDeliveryModule,
     );
+    expect(metadata(MODULE_METADATA.IMPORTS, NotificationsModule)).toContain(
+      DatabaseModule,
+    );
     expect(metadata(MODULE_METADATA.CONTROLLERS, NotificationsModule)).toContain(
       NotificationsController,
     );
     expect(metadata(MODULE_METADATA.PROVIDERS, NotificationsModule)).not.toContain(
       NotificationsService,
+    );
+    expect(metadata(MODULE_METADATA.PROVIDERS, NotificationsModule)).not.toContain(
+      NotificationWorker,
     );
   });
 });
