@@ -93,7 +93,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.textContaining('Пакет роли'), findsOneWidget);
+    expect(find.text('Версия набора прав: 4'), findsOneWidget);
     expect(find.byKey(const Key('access-reason')), findsOneWidget);
     await captureEvidence(tester, 'settings-manager-capability-access');
   });
