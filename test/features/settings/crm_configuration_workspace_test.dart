@@ -20,6 +20,7 @@ class ConfigurationTestApi extends MagicApiClient {
   final Map<String, dynamic> snapshot;
   int baseVersion;
   int configurationReads = 0;
+  final List<String?> configurationScopeReads = [];
   int publishes = 0;
   int draftSaves = 0;
   int rollbacks = 0;
@@ -55,6 +56,7 @@ class ConfigurationTestApi extends MagicApiClient {
       return <String, dynamic>{'items': sources} as T;
     }
     if (path == '/crm/configuration/draft') {
+      configurationScopeReads.add(queryParameters?['branchId']?.toString());
       configurationReads++;
       return <String, dynamic>{
             'baseVersion': baseVersion,
@@ -767,6 +769,32 @@ void main() {
     expect(find.byKey(const ValueKey('add-settlement-type')), findsNothing);
     expect(find.byKey(const ValueKey('configuration-publish')), findsNothing);
     expect(api.configurationReads, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('director changing scope reloads the selected branch draft', (
+    tester,
+  ) async {
+    final api = ConfigurationTestApi(
+      role: 'director',
+      capabilities: const [
+        'config.crm.read',
+        'config.crm.edit',
+        'config.crm.publish',
+      ],
+    );
+    await _pump(tester, api);
+
+    await tester.tap(find.byKey(const ValueKey('configuration-scope')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Сокол').last);
+    await tester.pumpAndSettle();
+
+    expect(api.configurationScopeReads, [
+      null,
+      '20000000-0000-4000-8000-000000000001',
+    ]);
+    expect(find.text('Сокол'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

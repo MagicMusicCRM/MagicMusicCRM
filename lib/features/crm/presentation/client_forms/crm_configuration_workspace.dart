@@ -14,6 +14,7 @@ import 'crm_configuration_snapshot.dart';
 
 part 'crm_configuration_workspace_schema.dart';
 part 'crm_configuration_workspace_commerce.dart';
+part 'crm_configuration_workspace_shell.dart';
 
 class CrmConfigurationRouteScreen extends ConsumerWidget {
   const CrmConfigurationRouteScreen({super.key});
@@ -222,7 +223,7 @@ class _CrmConfigurationWorkspaceState
           );
       if (!mounted) return;
       setState(() => _busy = false);
-      final reason = await _showImpact(impact);
+      final reason = await _showCrmConfigurationImpactDialog(context, impact);
       if (reason == null || !mounted) return;
       setState(() => _busy = true);
       await ref
@@ -241,88 +242,12 @@ class _CrmConfigurationWorkspaceState
     }
   }
 
-  Future<String?> _showImpact(Map<String, dynamic> impact) async {
-    var reason = '';
-    final valid = impact['valid'] == true;
-    final changes = impact['changes'] as Map? ?? const {};
-    final screens = (impact['affectedScreens'] as List? ?? const []).join(', ');
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          valid ? 'Предпросмотр публикации' : 'Публикация заблокирована',
-        ),
-        content: SizedBox(
-          width: 520,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Новых полей: ${changes['fieldsCreated'] ?? 0} · '
-                  'изменено: ${changes['fieldsUpdated'] ?? 0} · '
-                  'архивировано: ${changes['fieldsArchived'] ?? 0}',
-                ),
-                const SizedBox(height: AppSpace.xs),
-                Text(
-                  'Типов списания изменено: '
-                  '${changes['settlementTypesChanged'] ?? 0} · '
-                  'типов оплаты преподавателю: '
-                  '${changes['compensationRulesChanged'] ?? 0}',
-                ),
-                const SizedBox(height: AppSpace.sm),
-                Text('Затронутые экраны: ${screens.isEmpty ? 'нет' : screens}'),
-                for (final warning in (impact['warnings'] as List? ?? const []))
-                  Padding(
-                    padding: const EdgeInsets.only(top: AppSpace.sm),
-                    child: Text('• $warning'),
-                  ),
-                for (final issue
-                    in (impact['blockingIssues'] as List? ?? const []))
-                  Padding(
-                    padding: const EdgeInsets.only(top: AppSpace.sm),
-                    child: Text(
-                      '• ${(issue as Map)['message']}',
-                      style: const TextStyle(color: AppColor.danger),
-                    ),
-                  ),
-                if (valid) ...[
-                  const SizedBox(height: AppSpace.md),
-                  TextField(
-                    onChanged: (value) => reason = value,
-                    maxLength: 500,
-                    decoration: const InputDecoration(
-                      labelText: 'Причина публикации *',
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Закрыть'),
-          ),
-          if (valid)
-            FilledButton(
-              onPressed: () {
-                final value = reason.trim();
-                if (value.isNotEmpty) Navigator.pop(context, value);
-              },
-              child: const Text('Опубликовать'),
-            ),
-        ],
-      ),
-    );
-    return result;
-  }
-
   Future<void> _rollback(Map<String, dynamic> revision) async {
     if (!_canPublish) return;
-    final reason = await _askReason('Откат к версии ${revision['version']}');
+    final reason = await _askCrmConfigurationReason(
+      context,
+      'Откат к версии ${revision['version']}',
+    );
     if (reason == null) return;
     setState(() => _busy = true);
     try {
@@ -342,213 +267,57 @@ class _CrmConfigurationWorkspaceState
     }
   }
 
-  Future<String?> _askReason(String title) async {
-    var reason = '';
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: TextField(
-          onChanged: (value) => reason = value,
-          decoration: const InputDecoration(labelText: 'Причина *'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (reason.trim().isNotEmpty) {
-                Navigator.pop(context, reason.trim());
-              }
-            },
-            child: const Text('Продолжить'),
-          ),
-        ],
-      ),
-    );
-    return result;
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(_error!, textAlign: TextAlign.center),
-            const SizedBox(height: AppSpace.sm),
-            OutlinedButton(
-              onPressed: _loadInitial,
-              child: const Text('Повторить'),
-            ),
-          ],
-        ),
-      );
-    }
-    return DirtyFormExitScope(
-      controller: _exitController,
-      child: Column(
-        children: [
-          _toolbar(),
-          if (_busy) const LinearProgressIndicator(minHeight: 2),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) =>
-                  constraints.maxWidth >= 900 ? _desktop() : _compact(),
-            ),
-          ),
-        ],
-      ),
+    return _CrmConfigurationShell(
+      exitController: _exitController,
+      loading: _loading,
+      busy: _busy,
+      error: _error,
+      branches: _branches,
+      branchId: _branchId,
+      isManager: _isManager,
+      areas: _areas,
+      area: _area,
+      selectedKey: _selectedKey,
+      baseVersion: _baseVersion,
+      dirty: _dirty,
+      initialSchoolSetup: _isInitialSchoolSetup,
+      canEdit: _canEdit,
+      canPublish: _canPublish,
+      listPane: _areaContent(),
+      editorPane: _editorPane(),
+      onRetry: _loadInitial,
+      onScopeChanged: _changeScope,
+      onAreaChanged: _changeArea,
+      onSaveDraft: _saveDraft,
+      onPublish: _previewAndPublish,
     );
   }
 
-  Widget _toolbar() {
-    return Material(
-      color: Theme.of(context).colorScheme.surfaceContainerLow,
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpace.md),
-        child: Wrap(
-          spacing: AppSpace.sm,
-          runSpacing: AppSpace.sm,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            SizedBox(
-              width: 270,
-              child: DropdownButtonFormField<String?>(
-                menuMaxHeight: 256,
-                key: const ValueKey('configuration-scope'),
-                initialValue: _branchId,
-                decoration: const InputDecoration(
-                  labelText: 'Область действия',
-                ),
-                items: [
-                  if (!_isManager)
-                    const DropdownMenuItem<String?>(
-                      value: null,
-                      child: Text('Вся школа'),
-                    ),
-                  ..._branches.map(
-                    (branch) => DropdownMenuItem<String?>(
-                      value: branch['id']?.toString(),
-                      child: Text(branch['name']?.toString() ?? 'Филиал'),
-                    ),
-                  ),
-                ],
-                onChanged: _busy
-                    ? null
-                    : (value) {
-                        setState(() => _branchId = value);
-                        _load();
-                      },
-              ),
-            ),
-            Chip(
-              avatar: Icon(
-                _isInitialSchoolSetup
-                    ? Icons.rocket_launch_outlined
-                    : _dirty
-                    ? Icons.edit_note_rounded
-                    : Icons.verified_outlined,
-                size: 18,
-              ),
-              label: Text(
-                '${_isInitialSchoolSetup
-                    ? 'Начальная настройка'
-                    : _dirty
-                    ? 'Черновик'
-                    : 'Опубликовано'} · версия $_baseVersion',
-              ),
-            ),
-            if (_canEdit)
-              OutlinedButton.icon(
-                onPressed: _busy || !_dirty ? null : _saveDraft,
-                icon: const Icon(Icons.save_outlined),
-                label: const Text('Сохранить черновик'),
-              ),
-            if (_canPublish)
-              FilledButton.icon(
-                key: const ValueKey('configuration-publish'),
-                onPressed: _busy || (!_dirty && !_isInitialSchoolSetup)
-                    ? null
-                    : _previewAndPublish,
-                icon: const Icon(Icons.publish_rounded),
-                label: const Text('Проверить и опубликовать'),
-              ),
-          ],
-        ),
-      ),
-    );
+  void _changeScope(String? branchId) {
+    setState(() => _branchId = branchId);
+    _load();
   }
 
-  Widget _desktop() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SizedBox(width: 230, child: _areaList()),
-        const VerticalDivider(width: 1),
-        SizedBox(width: 360, child: _areaContent()),
-        const VerticalDivider(width: 1),
-        Expanded(child: _editorPane()),
-      ],
-    );
-  }
-
-  Widget _compact() {
-    return Column(
-      children: [
-        SizedBox(
-          height: 52,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm),
-            children: [
-              for (final area in _areas)
-                Padding(
-                  padding: const EdgeInsets.only(right: AppSpace.xs),
-                  child: ChoiceChip(
-                    label: Text(area.$2),
-                    selected: _area == area.$1,
-                    onSelected: (_) => setState(() {
-                      _area = area.$1;
-                      _selectedKey = null;
-                    }),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        Expanded(child: _selectedKey == null ? _areaContent() : _editorPane()),
-      ],
-    );
-  }
-
-  Widget _areaList() {
-    return ListView(
-      padding: const EdgeInsets.all(AppSpace.sm),
-      children: [
-        for (final area in _areas)
-          ListTile(
-            selected: _area == area.$1,
-            leading: Icon(area.$3),
-            title: Text(area.$2),
-            onTap: () => setState(() {
-              _area = area.$1;
-              _selectedKey = null;
-            }),
-          ),
-      ],
-    );
+  void _changeArea(String area) {
+    setState(() {
+      _area = area;
+      _selectedKey = null;
+    });
   }
 
   Widget _areaContent() => switch (_area) {
     'fields' => _fieldList(),
     'options' => _optionSetList(),
     'settings' => _settingList(),
-    'funnel' => _funnelEntry(),
+    'funnel' => _CrmFunnelEntry(
+      onOpen: () => showClientPipelineEditor(
+        context,
+        branches: _branches,
+        initialBranchId: _branchId,
+      ),
+    ),
     'commerce' => _CrmCommerceCatalogList(
       settlementTypes: _items('lessonSettlementTypes'),
       compensationRules: _items('teacherCompensationRules'),
@@ -558,7 +327,11 @@ class _CrmConfigurationWorkspaceState
       onAdd: (listKey) => _editCommerceCatalog(listKey, null),
       onReorder: _reorderCommerceCatalog,
     ),
-    'history' => _historyList(),
+    'history' => _CrmConfigurationHistoryList(
+      revisions: _revisions,
+      canPublish: _canPublish,
+      onRollback: _rollback,
+    ),
     _ => const SizedBox.shrink(),
   };
 
@@ -637,81 +410,6 @@ class _CrmConfigurationWorkspaceState
       delta: delta,
     );
     if (reordered != null) _replaceItems(listKey, reordered);
-  }
-
-  Widget _funnelEntry() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpace.lg),
-        child: FilledButton.icon(
-          onPressed: () => showClientPipelineEditor(
-            context,
-            branches: _branches,
-            initialBranchId: _branchId,
-          ),
-          icon: const Icon(Icons.view_kanban_outlined),
-          label: const Text('Настроить воронки лидов и учеников'),
-        ),
-      ),
-    );
-  }
-
-  Widget _historyList() {
-    return _listPane(
-      title: 'Неизменяемые версии',
-      children: _revisions
-          .map(
-            (revision) => ListTile(
-              title: Text('Версия ${revision['version']}'),
-              subtitle: Text(revision['reason']?.toString() ?? ''),
-              trailing: _canPublish && revision['version'] != _baseVersion
-                  ? IconButton(
-                      tooltip: 'Опубликовать откат к этой версии',
-                      onPressed: _busy ? null : () => _rollback(revision),
-                      icon: const Icon(Icons.restore_rounded),
-                    )
-                  : null,
-            ),
-          )
-          .toList(),
-    );
-  }
-
-  Widget _listPane({
-    required String title,
-    String? addLabel,
-    VoidCallback? onAdd,
-    required List<Widget> children,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(AppSpace.md),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-              if (addLabel != null)
-                IconButton(
-                  tooltip: addLabel,
-                  onPressed: onAdd,
-                  icon: const Icon(Icons.add_rounded),
-                ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: children.isEmpty
-              ? const Center(child: Text('Пока нет элементов'))
-              : ListView(children: children),
-        ),
-      ],
-    );
   }
 
   Widget _editorPane() {
@@ -913,19 +611,19 @@ class _CrmConfigurationWorkspaceState
     setState(() => _selectedKey = draft['key']?.toString());
   }
 
+  String _message(Object error) {
+    if (error is MagicApiException && error.statusCode == 403) {
+      return 'Недостаточно делегированных прав или филиал вне области доступа.';
+    }
+    if (error is MagicApiException && error.statusCode == 409) {
+      return 'Конфигурация изменилась в другой вкладке. Обновите данные.';
+    }
+    return userErrorMessage(error);
+  }
+
   void _toast(String message) {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
   }
-}
-
-String _message(Object error) {
-  if (error is MagicApiException && error.statusCode == 403) {
-    return 'Недостаточно делегированных прав или филиал вне области доступа.';
-  }
-  if (error is MagicApiException && error.statusCode == 409) {
-    return 'Конфигурация изменилась в другой вкладке. Обновите данные.';
-  }
-  return userErrorMessage(error);
 }

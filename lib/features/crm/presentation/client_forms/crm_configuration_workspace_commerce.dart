@@ -96,28 +96,9 @@ class _CrmCommerceCatalogList extends StatelessWidget {
           count: sortedCompensationRules.length,
         ),
     ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(AppSpace.md),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Занятия и оплата преподавателю',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: children.isEmpty
-              ? const Center(child: Text('Пока нет элементов'))
-              : ListView(children: children),
-        ),
-      ],
+    return _CrmConfigurationListPane(
+      title: 'Занятия и оплата преподавателю',
+      children: children,
     );
   }
 
@@ -238,25 +219,33 @@ class _CrmCommerceCatalogPreview extends StatelessWidget {
           ],
         ),
         const SizedBox(height: AppSpace.lg),
-        _property('Стабильный ключ', item['stableKey']),
-        _property('Состояние', item['active'] == true ? 'Активно' : 'В архиве'),
+        _CrmConfigurationProperty(
+          label: 'Стабильный ключ',
+          value: item['stableKey'],
+        ),
+        _CrmConfigurationProperty(
+          label: 'Состояние',
+          value: item['active'] == true ? 'Активно' : 'В архиве',
+        ),
         if (settlement) ...[
-          _property(
-            'Цветовая метка',
-            _decisionColorLabels[item['colorToken']] ?? item['colorToken'],
+          _CrmConfigurationProperty(
+            label: 'Цветовая метка',
+            value:
+                _decisionColorLabels[item['colorToken']] ?? item['colorToken'],
           ),
-          _property(
-            'Доля списания',
-            '${((item['hourShareBasisPoints'] as num?) ?? 0) / 100}%',
+          _CrmConfigurationProperty(
+            label: 'Доля списания',
+            value: '${((item['hourShareBasisPoints'] as num?) ?? 0) / 100}%',
           ),
           if (item['fixedPenaltyMinor'] != null)
-            _property(
-              'Дополнительное списание',
-              '${CrmConfigurationSnapshotOps.minorToMajor(item['fixedPenaltyMinor'])} ₽',
+            _CrmConfigurationProperty(
+              label: 'Дополнительное списание',
+              value:
+                  '${CrmConfigurationSnapshotOps.minorToMajor(item['fixedPenaltyMinor'])} ₽',
             ),
-          _property(
-            'Сценарии',
-            (item['allowedContexts'] as List? ?? const [])
+          _CrmConfigurationProperty(
+            label: 'Сценарии',
+            value: (item['allowedContexts'] as List? ?? const [])
                 .map((value) => _settlementContextLabels[value] ?? value)
                 .join(', '),
           ),
@@ -277,13 +266,13 @@ class _CrmCommerceCatalogPreview extends StatelessWidget {
             ),
           ),
         ] else ...[
-          _property(
-            'Расчёт',
-            _compensationModeLabels[item['mode']] ?? item['mode'],
+          _CrmConfigurationProperty(
+            label: 'Расчёт',
+            value: _compensationModeLabels[item['mode']] ?? item['mode'],
           ),
-          _property(
-            'Значение',
-            CrmConfigurationSnapshotOps.compensationValueLabel(item),
+          _CrmConfigurationProperty(
+            label: 'Значение',
+            value: CrmConfigurationSnapshotOps.compensationValueLabel(item),
           ),
           const SizedBox(height: AppSpace.md),
           const Text(

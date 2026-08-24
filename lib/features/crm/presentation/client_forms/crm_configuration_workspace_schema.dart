@@ -51,7 +51,7 @@ class _CrmFieldList extends StatelessWidget {
   final void Function(int from, int delta) onReorderCategory;
 
   @override
-  Widget build(BuildContext context) => _CrmListPane(
+  Widget build(BuildContext context) => _CrmConfigurationListPane(
     title: 'Поля форм и карточек',
     addLabel: 'Добавить поле',
     onAdd: canManageStructure ? onAddField : null,
@@ -218,7 +218,7 @@ class _CrmOptionSetList extends StatelessWidget {
   final VoidCallback onAdd;
 
   @override
-  Widget build(BuildContext context) => _CrmListPane(
+  Widget build(BuildContext context) => _CrmConfigurationListPane(
     title: 'Наборы вариантов для полей',
     addLabel: 'Добавить набор',
     onAdd: canManageStructure ? onAdd : null,
@@ -250,6 +250,19 @@ class _CrmOptionSetList extends StatelessWidget {
         ),
     ],
   );
+
+  String _optionCountLabel(int count) {
+    final lastTwo = count % 100;
+    final last = count % 10;
+    final noun = lastTwo >= 11 && lastTwo <= 14
+        ? 'вариантов'
+        : last == 1
+        ? 'вариант'
+        : last >= 2 && last <= 4
+        ? 'варианта'
+        : 'вариантов';
+    return '$count $noun';
+  }
 }
 
 class _CrmBusinessSettingsList extends StatelessWidget {
@@ -264,7 +277,7 @@ class _CrmBusinessSettingsList extends StatelessWidget {
   final ValueChanged<String> onSelect;
 
   @override
-  Widget build(BuildContext context) => _CrmListPane(
+  Widget build(BuildContext context) => _CrmConfigurationListPane(
     title: 'Безопасные бизнес-параметры',
     children: [
       for (final setting in settings)
@@ -312,25 +325,37 @@ class _CrmFieldPreview extends StatelessWidget {
         ],
       ),
       const SizedBox(height: AppSpace.lg),
-      _property('Стабильный ключ', field['key']),
-      _property('Видимость', _fieldVisibilityLabel(field)),
-      _property('Тип', _fieldTypes[field['valueType']] ?? field['valueType']),
+      _CrmConfigurationProperty(label: 'Стабильный ключ', value: field['key']),
+      _CrmConfigurationProperty(
+        label: 'Видимость',
+        value: _fieldVisibilityLabel(field),
+      ),
+      _CrmConfigurationProperty(
+        label: 'Тип',
+        value: _fieldTypes[field['valueType']] ?? field['valueType'],
+      ),
       if (CrmConfigurationSnapshotOps.selectionFieldTypes.contains(
         field['valueType'],
       ))
-        _property(
-          'Набор вариантов',
-          field['key'] == 'sourceId'
+        _CrmConfigurationProperty(
+          label: 'Набор вариантов',
+          value: field['key'] == 'sourceId'
               ? 'Рекламный источник · раздел «Варианты для полей»'
               : field['optionSetKey'],
         ),
-      _property('Категория', field['categoryKey']),
-      _property('Ширина', field['width']),
-      _property(
-        'Размещения',
-        (field['placements'] as List? ?? const []).join(', '),
+      _CrmConfigurationProperty(
+        label: 'Категория',
+        value: field['categoryKey'],
       ),
-      _property('Состояние', field['active'] == true ? 'Активно' : 'В архиве'),
+      _CrmConfigurationProperty(label: 'Ширина', value: field['width']),
+      _CrmConfigurationProperty(
+        label: 'Размещения',
+        value: (field['placements'] as List? ?? const []).join(', '),
+      ),
+      _CrmConfigurationProperty(
+        label: 'Состояние',
+        value: field['active'] == true ? 'Активно' : 'В архиве',
+      ),
       const SizedBox(height: AppSpace.lg),
       Text('Предпросмотр', style: Theme.of(context).textTheme.titleMedium),
       const SizedBox(height: AppSpace.sm),
@@ -376,11 +401,14 @@ class _CrmOptionSetPreview extends StatelessWidget {
         ],
       ),
       const SizedBox(height: AppSpace.md),
-      _property('Используется в', _optionSetUsageLabel(usage)),
+      _CrmConfigurationProperty(
+        label: 'Используется в',
+        value: _optionSetUsageLabel(usage),
+      ),
       if (usage.isNotEmpty)
-        _property(
-          'Поля',
-          usage
+        _CrmConfigurationProperty(
+          label: 'Поля',
+          value: usage
               .map((field) => field['label']?.toString() ?? 'Поле')
               .toSet()
               .join(', '),
@@ -440,51 +468,6 @@ class _CrmBusinessSettingEditor extends StatelessWidget {
   );
 }
 
-class _CrmListPane extends StatelessWidget {
-  const _CrmListPane({
-    required this.title,
-    this.addLabel,
-    this.onAdd,
-    required this.children,
-  });
-
-  final String title;
-  final String? addLabel;
-  final VoidCallback? onAdd;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Padding(
-        padding: const EdgeInsets.all(AppSpace.md),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                title,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            ),
-            if (addLabel != null)
-              IconButton(
-                tooltip: addLabel,
-                onPressed: onAdd,
-                icon: const Icon(Icons.add_rounded),
-              ),
-          ],
-        ),
-      ),
-      Expanded(
-        child: children.isEmpty
-            ? const Center(child: Text('Пока нет элементов'))
-            : ListView(children: children),
-      ),
-    ],
-  );
-}
-
 List<Map<String, dynamic>> _optionSetUsage(
   List<Map<String, dynamic>> fields,
   String optionSetKey,
@@ -514,33 +497,6 @@ String _fieldVisibilityLabel(Map<String, dynamic> field) {
   if (student) return 'Только ученик';
   return 'Скрыто';
 }
-
-String _optionCountLabel(int count) {
-  final lastTwo = count % 100;
-  final last = count % 10;
-  final noun = lastTwo >= 11 && lastTwo <= 14
-      ? 'вариантов'
-      : last == 1
-      ? 'вариант'
-      : last >= 2 && last <= 4
-      ? 'варианта'
-      : 'вариантов';
-  return '$count $noun';
-}
-
-Widget _property(String label, Object? value) => Padding(
-  padding: const EdgeInsets.only(bottom: AppSpace.sm),
-  child: Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      SizedBox(
-        width: 150,
-        child: Text(label, style: const TextStyle(color: AppColor.text2)),
-      ),
-      Expanded(child: Text(value?.toString() ?? 'Не указано')),
-    ],
-  ),
-);
 
 class _FieldEditorDialog extends StatefulWidget {
   const _FieldEditorDialog({
