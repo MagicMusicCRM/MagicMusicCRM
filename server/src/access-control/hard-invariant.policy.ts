@@ -4,6 +4,7 @@ import {
   CapabilityEffect,
   CapabilityKey,
   CapabilityOverrideMode,
+  resolveCapabilityHardInvariant,
 } from "./capability-registry";
 
 export interface InvariantDecision {
@@ -59,37 +60,6 @@ const ROLE_LEVEL: Readonly<
   director: 4,
 };
 
-const TEACHER_HARD_DENIES = new Set<CapabilityKey>([
-  "crm.client.read.contacts",
-  "crm.client.write",
-  "schedule.lesson.write",
-  "schedule.attendance.write",
-  "schedule.lesson.complete",
-  "commerce.client_finance.read",
-  "commerce.client_finance.write",
-  "commerce.package.read",
-  "commerce.subscription.issue",
-]);
-
-const DIRECTOR_ONLY_CAPABILITIES = new Set<CapabilityKey>([
-  "access.user.role.assign",
-  "access.user.override.manage",
-  "commerce.school_finance.read",
-  "commerce.package.manage",
-  "config.commerce.manage",
-]);
-
-const CONFIG_CAPABILITIES = new Set<CapabilityKey>([
-  "config.crm.read",
-  "config.crm.edit",
-  "config.crm.publish",
-  "config.commerce.manage",
-]);
-
-const ADMIN_PERSONA_DENIED_CAPABILITIES = new Set<CapabilityKey>([
-  "workflow.task.write",
-]);
-
 function allow(reason: string): InvariantDecision {
   return { allowed: true, reason };
 }
@@ -104,33 +74,7 @@ export class HardInvariantPolicy {
     role: AccessRole,
     capabilityKey: CapabilityKey,
   ): InvariantDecision | null {
-    if (role === "system_admin") {
-      return null;
-    }
-
-    if (role === "teacher" && TEACHER_HARD_DENIES.has(capabilityKey)) {
-      return deny("teacher_hard_deny");
-    }
-
-    if (
-      (role === "client" || role === "teacher" || role === "admin") &&
-      CONFIG_CAPABILITIES.has(capabilityKey)
-    ) {
-      return deny("config_role_hard_deny");
-    }
-
-    if (
-      role === "admin" &&
-      ADMIN_PERSONA_DENIED_CAPABILITIES.has(capabilityKey)
-    ) {
-      return deny("admin_persona_hard_deny");
-    }
-
-    if (DIRECTOR_ONLY_CAPABILITIES.has(capabilityKey) && role !== "director") {
-      return deny("director_or_system_admin_required");
-    }
-
-    return null;
+    return resolveCapabilityHardInvariant(role, capabilityKey);
   }
 
   roleAssignmentDecision(

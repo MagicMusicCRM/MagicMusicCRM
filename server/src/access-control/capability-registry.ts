@@ -221,3 +221,62 @@ const capabilityKeySet = new Set<string>(
 export function isCapabilityKey(value: string): value is CapabilityKey {
   return capabilityKeySet.has(value);
 }
+
+const TEACHER_HARD_DENIES = new Set<CapabilityKey>([
+  "crm.client.read.contacts",
+  "crm.client.write",
+  "schedule.lesson.write",
+  "schedule.attendance.write",
+  "schedule.lesson.complete",
+  "commerce.client_finance.read",
+  "commerce.client_finance.write",
+  "commerce.package.read",
+  "commerce.subscription.issue",
+]);
+
+const DIRECTOR_ONLY_CAPABILITIES = new Set<CapabilityKey>([
+  "access.user.role.assign",
+  "access.user.override.manage",
+  "commerce.school_finance.read",
+  "commerce.package.manage",
+  "config.commerce.manage",
+]);
+
+const CONFIG_CAPABILITIES = new Set<CapabilityKey>([
+  "config.crm.read",
+  "config.crm.edit",
+  "config.crm.publish",
+  "config.commerce.manage",
+]);
+
+const ADMIN_PERSONA_DENIED_CAPABILITIES = new Set<CapabilityKey>([
+  "workflow.task.write",
+]);
+
+export interface CapabilityHardInvariantDecision {
+  allowed: false;
+  reason: string;
+}
+
+export function resolveCapabilityHardInvariant(
+  role: AccessRole,
+  capabilityKey: CapabilityKey,
+): CapabilityHardInvariantDecision | null {
+  if (role === "system_admin") return null;
+  if (role === "teacher" && TEACHER_HARD_DENIES.has(capabilityKey)) {
+    return { allowed: false, reason: "teacher_hard_deny" };
+  }
+  if (
+    (role === "client" || role === "teacher" || role === "admin") &&
+    CONFIG_CAPABILITIES.has(capabilityKey)
+  ) {
+    return { allowed: false, reason: "config_role_hard_deny" };
+  }
+  if (role === "admin" && ADMIN_PERSONA_DENIED_CAPABILITIES.has(capabilityKey)) {
+    return { allowed: false, reason: "admin_persona_hard_deny" };
+  }
+  if (DIRECTOR_ONLY_CAPABILITIES.has(capabilityKey) && role !== "director") {
+    return { allowed: false, reason: "director_or_system_admin_required" };
+  }
+  return null;
+}
