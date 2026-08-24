@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -12,13 +10,7 @@ import 'package:magic_music_crm/features/manager/presentation/widgets/student_fu
 
 import 'client_forms_api.dart';
 import 'client_sources_editor.dart';
-
-const _selectionFieldTypes = {
-  'select',
-  'radio',
-  'multi_select',
-  'checkbox_group',
-};
+import 'crm_configuration_snapshot.dart';
 
 const _decisionColorLabels = <String, String>{
   'neutral': 'Серый',
@@ -185,11 +177,13 @@ class _CrmConfigurationWorkspaceState
       ]);
       final draft = results[0] as Map<String, dynamic>;
       if (!mounted) return;
-      final snapshot = _copyMap(draft['snapshot']);
+      final snapshot = CrmConfigurationSnapshotOps.deepCopy(draft['snapshot']);
       final migratedLegacyFields =
-          _branchId == null && _migrateLegacyFieldCopies(snapshot);
+          _branchId == null &&
+          CrmConfigurationSnapshotOps.migrateLegacyFieldCopies(snapshot);
       final migratedInlineOptions =
-          _branchId == null && _migrateInlineFieldOptions(snapshot);
+          _branchId == null &&
+          CrmConfigurationSnapshotOps.migrateInlineFieldOptions(snapshot);
       final migratedConfiguration =
           migratedLegacyFields || migratedInlineOptions;
       setState(() {
@@ -772,9 +766,9 @@ class _CrmConfigurationWorkspaceState
 
   Widget _commerceCatalogList() {
     final settlementTypes = _items('lessonSettlementTypes')
-      ..sort(_byCatalogOrder);
+      ..sort(CrmConfigurationSnapshotOps.compareCatalogOrder);
     final compensationRules = _items('teacherCompensationRules')
-      ..sort(_byCatalogOrder);
+      ..sort(CrmConfigurationSnapshotOps.compareCatalogOrder);
     return _listPane(
       title: 'Занятия и оплата преподавателю',
       children: [
@@ -934,7 +928,7 @@ class _CrmConfigurationWorkspaceState
           if (item['fixedPenaltyMinor'] != null)
             _property(
               'Дополнительное списание',
-              '${_minorToMajor(item['fixedPenaltyMinor'])} ₽',
+              '${CrmConfigurationSnapshotOps.minorToMajor(item['fixedPenaltyMinor'])} ₽',
             ),
           _property(
             'Сценарии',
@@ -963,7 +957,10 @@ class _CrmConfigurationWorkspaceState
             'Расчёт',
             _compensationModeLabels[item['mode']] ?? item['mode'],
           ),
-          _property('Значение', _compensationValueLabel(item)),
+          _property(
+            'Значение',
+            CrmConfigurationSnapshotOps.compensationValueLabel(item),
+          ),
           const SizedBox(height: AppSpace.md),
           const Text(
             'Тип выбирается сотрудником вручную для каждого решения по занятию.',
@@ -978,7 +975,8 @@ class _CrmConfigurationWorkspaceState
     Map<String, dynamic>? current,
   ) async {
     if (!_canManageCommerceCatalogs) return;
-    final items = _items(listKey)..sort(_byCatalogOrder);
+    final items = _items(listKey)
+      ..sort(CrmConfigurationSnapshotOps.compareCatalogOrder);
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (_) => _CommerceCatalogEditorDialog(
@@ -1004,16 +1002,15 @@ class _CrmConfigurationWorkspaceState
   }
 
   void _reorderCommerceCatalog(String listKey, String stableKey, int delta) {
-    final items = _items(listKey)..sort(_byCatalogOrder);
+    final items = _items(listKey)
+      ..sort(CrmConfigurationSnapshotOps.compareCatalogOrder);
     final from = items.indexWhere((item) => item['stableKey'] == stableKey);
-    final to = from + delta;
-    if (from < 0 || to < 0 || to >= items.length) return;
-    final moved = items.removeAt(from);
-    items.insert(to, moved);
-    for (var index = 0; index < items.length; index++) {
-      items[index] = {...items[index], 'order': index};
-    }
-    _replaceItems(listKey, items);
+    final reordered = CrmConfigurationSnapshotOps.reorderItems(
+      items,
+      from: from,
+      delta: delta,
+    );
+    if (reordered != null) _replaceItems(listKey, reordered);
   }
 
   Widget _funnelEntry() {
@@ -1181,7 +1178,9 @@ class _CrmConfigurationWorkspaceState
         _property('Стабильный ключ', field['key']),
         _property('Видимость', _fieldVisibilityLabel(field)),
         _property('Тип', _fieldTypes[field['valueType']] ?? field['valueType']),
-        if (_selectionFieldTypes.contains(field['valueType']))
+        if (CrmConfigurationSnapshotOps.selectionFieldTypes.contains(
+          field['valueType'],
+        ))
           _property(
             'Набор вариантов',
             field['key'] == 'sourceId'
@@ -1407,14 +1406,12 @@ class _CrmConfigurationWorkspaceState
           (right['order'] as num?)?.toInt() ?? 0,
         ),
       );
-    final to = from + delta;
-    if (from < 0 || to < 0 || to >= categories.length) return;
-    final moved = categories.removeAt(from);
-    categories.insert(to, moved);
-    for (var index = 0; index < categories.length; index++) {
-      categories[index] = {...categories[index], 'order': index};
-    }
-    _replaceItems('categories', categories);
+    final reordered = CrmConfigurationSnapshotOps.reorderItems(
+      categories,
+      from: from,
+      delta: delta,
+    );
+    if (reordered != null) _replaceItems('categories', reordered);
   }
 
   Future<void> _editOptionSet(Map<String, dynamic>? current) async {
@@ -1482,15 +1479,21 @@ class _CommerceCatalogEditorDialogState
     text: widget.item?['label']?.toString() ?? '',
   );
   late final _share = TextEditingController(
-    text: _hundredthsToDecimal(widget.item?['hourShareBasisPoints'] ?? 10000),
+    text: CrmConfigurationSnapshotOps.hundredthsToDecimal(
+      widget.item?['hourShareBasisPoints'] ?? 10000,
+    ),
   );
   late final _penalty = TextEditingController(
     text: widget.item?['fixedPenaltyMinor'] == null
         ? ''
-        : _hundredthsToDecimal(widget.item!['fixedPenaltyMinor']),
+        : CrmConfigurationSnapshotOps.hundredthsToDecimal(
+            widget.item!['fixedPenaltyMinor'],
+          ),
   );
   late final _value = TextEditingController(
-    text: _hundredthsToDecimal(widget.item?['value'] ?? '0'),
+    text: CrmConfigurationSnapshotOps.hundredthsToDecimal(
+      widget.item?['value'] ?? '0',
+    ),
   );
   late String _color = widget.item?['colorToken']?.toString() ?? 'neutral';
   late String _mode = widget.item?['mode']?.toString() ?? 'none';
@@ -1681,10 +1684,12 @@ class _CommerceCatalogEditorDialogState
       return;
     }
     if (widget.settlement) {
-      final share = _decimalToHundredths(_share.text);
+      final share = CrmConfigurationSnapshotOps.decimalToHundredths(
+        _share.text,
+      );
       final penalty = _penalty.text.trim().isEmpty
           ? null
-          : _decimalToHundredths(_penalty.text);
+          : CrmConfigurationSnapshotOps.decimalToHundredths(_penalty.text);
       if (share == null ||
           BigInt.parse(share) > BigInt.from(20000) ||
           (penalty == null && _penalty.text.trim().isNotEmpty) ||
@@ -1710,7 +1715,7 @@ class _CommerceCatalogEditorDialogState
     }
     final rawValue = const {'none', 'standard'}.contains(_mode)
         ? '0'
-        : _decimalToHundredths(_value.text);
+        : CrmConfigurationSnapshotOps.decimalToHundredths(_value.text);
     if (rawValue == null ||
         (_mode == 'percent' && BigInt.parse(rawValue) > BigInt.from(20000))) {
       setState(() => _error = 'Укажите корректное значение от 0 до 200%.');
@@ -1787,7 +1792,9 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
   @override
   Widget build(BuildContext context) {
     final system = widget.field?['system'] == true;
-    final selection = _selectionFieldTypes.contains(_type);
+    final selection = CrmConfigurationSnapshotOps.selectionFieldTypes.contains(
+      _type,
+    );
     final compatibleOptionSets = _optionSets
         .where(
           (set) =>
@@ -1834,7 +1841,8 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
                     ? null
                     : (v) => setState(() {
                         _type = v!;
-                        if (!_selectionFieldTypes.contains(_type) ||
+                        if (!CrmConfigurationSnapshotOps.selectionFieldTypes
+                                .contains(_type) ||
                             !_optionSetMatchesType(_optionSetKey)) {
                           _optionSetKey = null;
                           _optionSetError = null;
@@ -2040,7 +2048,9 @@ class _FieldEditorDialogState extends State<_FieldEditorDialog> {
         label.isEmpty) {
       return;
     }
-    final selection = _selectionFieldTypes.contains(_type);
+    final selection = CrmConfigurationSnapshotOps.selectionFieldTypes.contains(
+      _type,
+    );
     if (selection && _optionSetKey == null) {
       setState(
         () => _optionSetError =
@@ -2388,7 +2398,12 @@ class _OptionSetEditorDialogState extends State<_OptionSetEditorDialog> {
       'options': [
         for (var i = 0; i < labels.length; i++)
           {
-            'key': _optionKey(_options[i].key, labels[i], i, usedKeys),
+            'key': CrmConfigurationSnapshotOps.optionKey(
+              _options[i].key,
+              labels[i],
+              i,
+              usedKeys,
+            ),
             'label': labels[i],
             'order': i,
             'active': _options[i].active,
@@ -2428,213 +2443,6 @@ class _OptionDraft {
 
   void dispose() => label.dispose();
 }
-
-String _optionKey(
-  String? existing,
-  String label,
-  int index,
-  Set<String> usedKeys,
-) {
-  if (existing != null && existing.isNotEmpty) {
-    usedKeys.add(existing);
-    return existing;
-  }
-  final base = _stableOptionKey(label, index);
-  var candidate = base;
-  for (var suffix = 2; usedKeys.contains(candidate); suffix++) {
-    final tail = '_$suffix';
-    candidate =
-        '${base.substring(0, base.length.clamp(0, 64 - tail.length))}$tail';
-  }
-  usedKeys.add(candidate);
-  return candidate;
-}
-
-Map<String, dynamic> _copyMap(Object? value) {
-  if (value is! Map) return <String, dynamic>{};
-  return Map<String, dynamic>.from(jsonDecode(jsonEncode(value)) as Map);
-}
-
-bool _migrateLegacyFieldCopies(Map<String, dynamic> snapshot) {
-  final fields = (snapshot['fields'] as List? ?? const [])
-      .whereType<Map>()
-      .map((field) => Map<String, dynamic>.from(field))
-      .toList();
-  final merged = <String, Map<String, dynamic>>{};
-  var changed = false;
-  for (final field in fields) {
-    final legacyEntity = field.remove('entityType')?.toString();
-    var visibility = field['visibility'] is Map
-        ? Map<String, dynamic>.from(field['visibility'] as Map)
-        : <String, dynamic>{
-            'lead': legacyEntity == null || legacyEntity == 'lead',
-            'student': legacyEntity == null || legacyEntity == 'student',
-          };
-    if (legacyEntity != null || field['visibility'] is! Map) changed = true;
-    field['visibility'] = visibility;
-    final key = field['key']?.toString();
-    if (key == null || key.isEmpty) continue;
-    final current = merged[key];
-    if (current == null) {
-      merged[key] = field;
-      continue;
-    }
-    if (current['valueType'] != field['valueType']) {
-      throw FormatException(
-        'Поле «$key» имеет несовместимые типы в карточках лида и ученика.',
-      );
-    }
-    changed = true;
-    final currentVisibility = Map<String, dynamic>.from(
-      current['visibility'] as Map,
-    );
-    visibility = Map<String, dynamic>.from(field['visibility'] as Map);
-    current['visibility'] = {
-      'lead': currentVisibility['lead'] == true || visibility['lead'] == true,
-      'student':
-          currentVisibility['student'] == true || visibility['student'] == true,
-    };
-    current['required'] =
-        current['required'] == true || field['required'] == true;
-    current['active'] = current['active'] == true || field['active'] == true;
-    current['system'] = current['system'] == true || field['system'] == true;
-    current['order'] = [
-      (current['order'] as num?)?.toInt() ?? 0,
-      (field['order'] as num?)?.toInt() ?? 0,
-    ].reduce((left, right) => left < right ? left : right);
-    current['options'] = {
-      ...(current['options'] as List? ?? const []).whereType<String>(),
-      ...(field['options'] as List? ?? const []).whereType<String>(),
-    }.toList();
-    final currentSet = current['optionSetKey']?.toString();
-    final nextSet = field['optionSetKey']?.toString();
-    if (currentSet != null && nextSet != null && currentSet != nextSet) {
-      current.remove('optionSetKey');
-    } else if (currentSet == null && nextSet != null) {
-      current['optionSetKey'] = nextSet;
-    }
-  }
-  if (changed) snapshot['fields'] = merged.values.toList();
-  return changed;
-}
-
-bool _migrateInlineFieldOptions(Map<String, dynamic> snapshot) {
-  final fields = (snapshot['fields'] as List? ?? const [])
-      .whereType<Map>()
-      .map((field) => Map<String, dynamic>.from(field))
-      .toList();
-  final optionSets = (snapshot['optionSets'] as List? ?? const [])
-      .whereType<Map>()
-      .map((set) => Map<String, dynamic>.from(set))
-      .toList();
-  final usedKeys = optionSets
-      .map((set) => set['key']?.toString())
-      .whereType<String>()
-      .toSet();
-  var changed = false;
-  for (final field in fields) {
-    final labels = (field['options'] as List? ?? const [])
-        .whereType<String>()
-        .where((label) => label.trim().isNotEmpty)
-        .toList();
-    if (!_selectionFieldTypes.contains(field['valueType']) ||
-        field['optionSetKey'] != null ||
-        labels.isEmpty) {
-      continue;
-    }
-    final base = '${field['key']}_options';
-    var optionSetKey = base.substring(0, base.length.clamp(0, 64));
-    for (var suffix = 2; usedKeys.contains(optionSetKey); suffix++) {
-      final tail = '_$suffix';
-      optionSetKey =
-          '${base.substring(0, base.length.clamp(0, 64 - tail.length))}$tail';
-    }
-    usedKeys.add(optionSetKey);
-    final rawLabel = '${field['label']}: варианты';
-    optionSets.add({
-      'key': optionSetKey,
-      'label': rawLabel.substring(0, rawLabel.length.clamp(0, 120)),
-      'multiple': const {
-        'multi_select',
-        'checkbox_group',
-      }.contains(field['valueType']),
-      'options': [
-        for (var index = 0; index < labels.length; index++)
-          {
-            'key': _stableOptionKey(labels[index], index),
-            'label': labels[index],
-            'order': index,
-            'active': true,
-          },
-      ],
-    });
-    field['optionSetKey'] = optionSetKey;
-    changed = true;
-  }
-  if (changed) {
-    final referencedSets = fields
-        .map((field) => field['optionSetKey']?.toString())
-        .whereType<String>()
-        .toSet();
-    optionSets.removeWhere((set) {
-      final key = set['key']?.toString() ?? '';
-      return !referencedSets.contains(key) &&
-          RegExp(r'^(lead|student)_.+_options$').hasMatch(key);
-    });
-    snapshot['fields'] = fields;
-    snapshot['optionSets'] = optionSets;
-  }
-  return changed;
-}
-
-String _stableOptionKey(String label, int index) {
-  final normalized = label
-      .toLowerCase()
-      .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
-      .replaceAll(RegExp(r'^_+|_+$'), '');
-  final suffix = '_${index + 1}';
-  final base = normalized.isEmpty ? 'option' : normalized;
-  return '${base.substring(0, base.length.clamp(0, 64 - suffix.length))}$suffix';
-}
-
-int _byCatalogOrder(Map<String, dynamic> left, Map<String, dynamic> right) {
-  final order = ((left['order'] as num?)?.toInt() ?? 0).compareTo(
-    (right['order'] as num?)?.toInt() ?? 0,
-  );
-  return order != 0
-      ? order
-      : (left['stableKey']?.toString() ?? '').compareTo(
-          right['stableKey']?.toString() ?? '',
-        );
-}
-
-String? _decimalToHundredths(String raw) {
-  final normalized = raw.trim().replaceAll(',', '.');
-  final match = RegExp(r'^(\d+)(?:\.(\d{1,2}))?$').firstMatch(normalized);
-  if (match == null) return null;
-  final whole = BigInt.parse(match.group(1)!);
-  final fraction = (match.group(2) ?? '').padRight(2, '0');
-  return (whole * BigInt.from(100) + BigInt.parse(fraction)).toString();
-}
-
-String _hundredthsToDecimal(Object? raw) {
-  final value = BigInt.tryParse(raw?.toString() ?? '') ?? BigInt.zero;
-  final whole = value ~/ BigInt.from(100);
-  final fraction = (value.remainder(BigInt.from(100)).abs()).toString().padLeft(
-    2,
-    '0',
-  );
-  return fraction == '00' ? '$whole' : '$whole.$fraction';
-}
-
-String _minorToMajor(Object? raw) => _hundredthsToDecimal(raw);
-
-String _compensationValueLabel(Map<String, dynamic> item) =>
-    switch (item['mode']?.toString()) {
-      'percent' => '${_hundredthsToDecimal(item['value'])}%',
-      'fixed' || 'hourly' => '${_hundredthsToDecimal(item['value'])} ₽',
-      _ => 'Не требуется',
-    };
 
 String _message(Object error) {
   if (error is MagicApiException && error.statusCode == 403) {
