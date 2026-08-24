@@ -4,7 +4,6 @@ import { randomUUID } from "crypto";
 import { Pool } from "pg";
 import { AccessMutationsRepository } from "../../access-control/access-mutations.repository";
 import { EffectiveAccessEvaluator } from "../../access-control/effective-access-evaluator";
-import { HardInvariantPolicy } from "../../access-control/hard-invariant.policy";
 import { ActorContext, UserRole } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
 import { MigrationRunner } from "../../db/migration-runner";
@@ -234,7 +233,7 @@ describe("ClientCardReadService (PostgreSQL)", () => {
       database,
       references,
       access,
-      new EffectiveAccessEvaluator(new HardInvariantPolicy()),
+      new EffectiveAccessEvaluator(),
     );
   });
 

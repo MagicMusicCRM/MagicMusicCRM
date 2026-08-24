@@ -89,7 +89,7 @@ export class AccessMutationsService {
   async getMyAccessSnapshot(actor: ActorContext) {
     const rows = await this.repository.getEffectiveAccessSnapshot(actor.userId);
     const first = rows[0];
-    const evaluator = new EffectiveAccessEvaluator(this.hardInvariants);
+    const evaluator = new EffectiveAccessEvaluator();
     const capabilities = rows
       .filter((row) => {
         const decision = evaluator.evaluate({
@@ -173,7 +173,7 @@ export class AccessMutationsService {
         override.effect,
       ]),
     );
-    const evaluator = new EffectiveAccessEvaluator(this.hardInvariants);
+    const evaluator = new EffectiveAccessEvaluator();
     const definitions = CAPABILITY_DEFINITIONS.map((definition) => {
       const packageEffect = rolePackage.effects[definition.key] ?? "deny";
       const overrideEffect = overrides.get(definition.key) ?? null;

@@ -12,7 +12,6 @@ import {
   CapabilityOverrideMode,
 } from "./capability-registry";
 import { EffectiveAccessEvaluator } from "./effective-access-evaluator";
-import { HardInvariantPolicy } from "./hard-invariant.policy";
 import {
   CapabilityRoutePolicy,
   resolveCapabilityRoutePolicy,
@@ -114,9 +113,7 @@ export async function authorizeCurrentCapability(
     [tokenActor.userId, capabilityKey, definition.version],
   );
   const row = result.rows[0];
-  const decision = new EffectiveAccessEvaluator(
-    new HardInvariantPolicy(),
-  ).evaluate({
+  const decision = new EffectiveAccessEvaluator().evaluate({
     actor: {
       userId: tokenActor.userId,
       role: row?.role ?? tokenActor.role,

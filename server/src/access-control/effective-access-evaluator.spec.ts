@@ -5,10 +5,8 @@ import {
   CapabilityKey,
 } from "./capability-registry";
 import { EffectiveAccessEvaluator } from "./effective-access-evaluator";
-import { HardInvariantPolicy } from "./hard-invariant.policy";
 
-const hardInvariants = new HardInvariantPolicy();
-const evaluator = new EffectiveAccessEvaluator(hardInvariants);
+const evaluator = new EffectiveAccessEvaluator();
 
 const packageAllows: Readonly<Record<CapabilityKey, readonly AccessRole[]>> = {
   "access.user.role.assign": ["director", "system_admin"],
@@ -297,6 +295,13 @@ describe("EffectiveAccessEvaluator", () => {
 });
 
 describe("HardInvariantPolicy access mutations", () => {
+  let hardInvariants: import("./hard-invariant.policy").HardInvariantPolicy;
+
+  beforeAll(async () => {
+    const { HardInvariantPolicy } = await import("./hard-invariant.policy");
+    hardInvariants = new HardInvariantPolicy();
+  });
+
   const roleAssignment = {
     actorUserId: "director-1",
     actorRole: "director" as const,

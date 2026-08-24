@@ -5,8 +5,8 @@ import {
   CapabilityEffect,
   CapabilityOverrideMode,
   isCapabilityKey,
+  resolveCapabilityHardInvariant,
 } from "./capability-registry";
-import { HardInvariantPolicy } from "./hard-invariant.policy";
 
 export type AccessDecisionSource =
   | "actor"
@@ -53,8 +53,6 @@ function decision(
 
 @Injectable()
 export class EffectiveAccessEvaluator {
-  constructor(private readonly hardInvariants: HardInvariantPolicy) {}
-
   evaluate(input: EffectiveAccessInput): EffectiveAccessDecision {
     if (!input.actor.active) {
       return decision(false, "actor", "inactive_actor");
@@ -85,7 +83,7 @@ export class EffectiveAccessEvaluator {
       return decision(true, "root", "system_admin_root_allow");
     }
 
-    const invariant = this.hardInvariants.capabilityDecision(
+    const invariant = resolveCapabilityHardInvariant(
       input.actor.role,
       input.capability.key,
     );
