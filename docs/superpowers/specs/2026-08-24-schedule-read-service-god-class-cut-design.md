@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-24
 
-**Status:** Owner-approved design; implementation plan pending
+**Status:** Implemented and verified at `e600c025`
 
 ## Context
 

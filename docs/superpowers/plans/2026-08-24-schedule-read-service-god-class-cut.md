@@ -380,8 +380,9 @@ return this.scheduleRead.getScheduleMatrix(actor, query);
 return this.scheduleRead.getScheduleMonthSummary(actor, query);
 ```
 
-In `CrmService`, replace its sole `ScheduleService` dependency with the new read
-owner and update the student-card call and nearby ownership comment:
+In `CrmService`, add the new read owner and route the student-card lesson query
+through it. Keep the existing `ScheduleService` dependency only for the
+out-of-scope `listUpcomingLessonsForStudents` projection:
 
 ```ts
 import { ScheduleReadService } from "./schedule/schedule-read.service";
@@ -391,14 +392,17 @@ private readonly scheduleRead: ScheduleReadService,
 this.scheduleRead.listLessons(actor, { studentId, limit: 100 });
 ```
 
-Do not add both schedule services to `CrmService`; it has no command caller.
+The dual dependency is intentional and bounded: `ScheduleReadService` owns the
+three methods extracted by this cut, while `ScheduleService` continues to own
+`listUpcomingLessonsForStudents` until a separate approved cut moves it.
 
 - [ ] **Step 6: Update constructor fixtures without weakening assertions**
 
 Update `crm-schedule.controller.spec.ts` as defined in Step 1. In
-`crm.service.spec.ts`, rename the `schedule` mock to `scheduleRead`, cast it to
-`ScheduleReadService`, and keep the existing `listLessons` behavior and student
-card assertions. Apply the same constructor substitution in
+`crm.service.spec.ts`, add a distinct `scheduleRead` mock cast to
+`ScheduleReadService`, move the existing `listLessons` behavior and student-card
+assertions to it, and retain the bounded `ScheduleService` mock for
+`listUpcomingLessonsForStudents`. Apply the same dual-constructor fixture in
 `student-funnel-postgres.integration.spec.ts`.
 
 The constructor fragments become:
@@ -407,8 +411,8 @@ The constructor fragments become:
 scheduleRead as unknown as ScheduleReadService
 ```
 
-No `ScheduleService` mock remains in `crm.service.spec.ts` or
-`student-funnel-postgres.integration.spec.ts` after the replacement.
+No extracted read method remains on the `ScheduleService` mock in
+`crm.service.spec.ts` or `student-funnel-postgres.integration.spec.ts`.
 
 - [ ] **Step 7: Run focused routing, read, command, and composition tests**
 
@@ -460,12 +464,19 @@ rules pass = true
 
 Record root metrics and do not expand into the known Flutter depth chain.
 
-- [ ] **Step 11: Commit the direct read ownership cut**
+- [x] **Step 11: Commit the direct read ownership cut in two rollback-safe production commits**
 
 ```powershell
-git add -- server/src/crm/schedule/schedule-read.service.ts server/src/crm/schedule/schedule-read.service.spec.ts server/src/crm/schedule.service.ts server/src/crm/crm-schedule.controller.ts server/src/crm/crm-schedule.controller.spec.ts server/src/crm/crm.service.ts server/src/crm/crm.service.spec.ts server/src/crm/student-funnel-postgres.integration.spec.ts server/src/crm/crm.module.ts server/src/app.module.spec.ts
+git add -- server/src/crm/schedule/schedule-read.service.ts server/src/crm/schedule/schedule-read.service.spec.ts
 git commit -m "refactor(schedule): extract read service"
+
+git add -- server/src/crm/schedule.service.ts server/src/crm/crm-schedule.controller.ts server/src/crm/crm-schedule.controller.spec.ts server/src/crm/crm.service.ts server/src/crm/crm.service.spec.ts server/src/crm/student-funnel-postgres.integration.spec.ts server/src/crm/crm.module.ts server/src/app.module.spec.ts
+git commit -m "refactor(schedule): route reads to read service"
 ```
+
+Accepted implementation commits: `ab424f48` extracts the service and
+`aa627509` switches production ownership. `e600c025` subsequently hardens the
+ownership tests without changing production behavior.
 
 - [ ] **Step 12: Update RepoWise and inspect the committed change**
 
@@ -483,8 +494,9 @@ disappear in one refactor.
 
 ## Rollback
 
-If Task 2 fails before its commit, keep the Task 1 characterization split and
-revert only the uncommitted Task 2 files. If a regression is found immediately
-after Task 2 is committed, use a normal Git revert of
-`refactor(schedule): extract read service`; do not hand-edit SQL or restore a
-compatibility façade. The test-only Task 1 commit remains valid in both cases.
+If the routing commit fails before it is committed, keep the characterization
+and extraction commits and revert only the uncommitted routing files. If a
+regression is found after both production commits land, revert `aa627509` first
+and then `ab424f48` with normal Git reverts; do not hand-edit SQL or restore a
+compatibility façade. Revert the test-only `e600c025` only if its assertions no
+longer match the restored production ownership.
