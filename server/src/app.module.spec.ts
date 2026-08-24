@@ -5,6 +5,7 @@ import type { Module as CompiledModule } from "@nestjs/core/injector/module";
 import { Test, TestingModule } from "@nestjs/testing";
 import { AuthModule } from "./auth/auth.module";
 import { CrmModule } from "./crm/crm.module";
+import { ScheduleReadService } from "./crm/schedule/schedule-read.service";
 import { DatabaseService } from "./db/database.service";
 import { NotificationDeliveryModule } from "./notifications/notification-delivery.module";
 import { NotificationWorker } from "./notifications/notification-worker.service";
@@ -129,6 +130,10 @@ describe("AppModule", () => {
 
   afterAll(async () => {
     await moduleRef.close();
+  });
+
+  it("resolves the dedicated schedule read service", () => {
+    expect(moduleRef.get(ScheduleReadService, { strict: false })).toBeDefined();
   });
 
   it("mounts the notification API shell directly", () => {

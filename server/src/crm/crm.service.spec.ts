@@ -12,6 +12,7 @@ import { StudentFunnelService } from "./student-funnel.service";
 import { SharedTaskService } from "./tasks/shared-task.service";
 import { CrmPolicy } from "./crm.policy";
 import { ChatWorkTimelineService } from "../messenger/chat-work-timeline.service";
+import { ScheduleReadService } from "./schedule/schedule-read.service";
 import { ScheduleService } from "./schedule.service";
 import { TimelineService } from "./timeline.service";
 import { CrmService } from "./crm.service";
@@ -55,8 +56,10 @@ describe("CrmService", () => {
       list: jest.fn().mockResolvedValue({ items: [], counters: {} }),
     };
     const schedule = {
-      listLessons: jest.fn().mockResolvedValue({ items: [] }),
       listUpcomingLessonsForStudents: jest.fn().mockResolvedValue([]),
+    };
+    const scheduleRead = {
+      listLessons: jest.fn().mockResolvedValue({ items: [] }),
     };
     const timeline = {
       listComments: jest.fn().mockResolvedValue({ items: [] }),
@@ -70,6 +73,7 @@ describe("CrmService", () => {
       policy as unknown as CrmPolicy,
       tasks as unknown as SharedTaskService,
       schedule as unknown as ScheduleService,
+      scheduleRead as unknown as ScheduleReadService,
       timeline as unknown as TimelineService,
       notifications as unknown as NotificationsService,
       {
@@ -122,8 +126,10 @@ describe("CrmService", () => {
       list: jest.fn().mockResolvedValue({ items: [], counters: {} }),
     };
     const schedule = {
-      listLessons: jest.fn().mockResolvedValue({ items: [] }),
       listUpcomingLessonsForStudents: jest.fn().mockResolvedValue([]),
+    };
+    const scheduleRead = {
+      listLessons: jest.fn().mockResolvedValue({ items: [] }),
     };
     const timeline = {
       listComments: jest.fn().mockResolvedValue({ items: [] }),
@@ -137,6 +143,7 @@ describe("CrmService", () => {
       policy as unknown as CrmPolicy,
       tasks as unknown as SharedTaskService,
       schedule as unknown as ScheduleService,
+      scheduleRead as unknown as ScheduleReadService,
       timeline as unknown as TimelineService,
       notifications as unknown as NotificationsService,
       {
