@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-24
 
-**Status:** Implemented and verified at `fb0e3bd3350ea37c4116e90a3e8bb622edbd4746`
+**Status:** Implemented and verified at `a54eaf8d34434a994c72c3f7498f3734ba63978f`
 
 ## Context
 
@@ -173,6 +173,10 @@ The publish sequence remains:
 
 Rollback continues publishing a new revision using `expectedVersion` and
 `targetVersion`; it never rewrites or deletes history.
+The history view identifies the current revision only from the coordinator's
+`baseVersion`, keeps rollback actions visible but disabled while any
+configuration command is busy, and the coordinator rejects rollback before
+and after reason collection when another command is in flight.
 
 ## Permission and scope invariants
 
@@ -251,31 +255,35 @@ extraction begins.
 
 ## Verified outcome
 
-- Product gates: the focused snapshot/workspace suite passed `23/23`, the full
-  Flutter suite passed `988/988`, and `flutter analyze` reported zero issues at
-  `c24454c5`. The verification-only label correction then passed the access
-  editor unit suite `5/5`; the full Windows configuration/settings device file
-  passed `3/3` at `fb0e3bd3`. `git diff --check` was silent. The focused, full,
-  and analyzer results remain valid because the correction changed only one
-  stale integration-test text expectation and no runtime code.
+- Product gates were rerun at `a54eaf8d`: the delayed rollback characterization
+  passed `1/1`, the focused snapshot/workspace suite passed `23/23`, the full
+  Flutter suite passed `988/988`, `flutter analyze` reported zero issues, and
+  the full Windows configuration/settings device file passed `3/3`.
+  `git diff --check` was silent. The existing rollback test now proves the
+  coordinator's `baseVersion` selects the current revision, records exactly one
+  target-version request, and disables the remaining rollback action while that
+  request is pending.
 - Source boundaries are intact: only the coordinator reads
   `capabilitySnapshotProvider` and `clientFormsApiProvider`; it declares the
   schema, commerce, and shell parts and imports the internal snapshot library;
   `client_forms.dart` exports none of those internal files.
-- RepoWise is current at `fb0e3bd3350e` with `index_behind=false`. File health
-  is coordinator `3.90` (`590` NLOC, max CCN `8`), snapshot `8.38` (`264`, `9`),
+- RepoWise is current at `a54eaf8d3443` with `index_behind=false`. File health
+  is coordinator `3.90` (`592` NLOC, max CCN `8`), snapshot `8.38` (`264`, `9`),
   schema `8.80` (`1153`, `16`), commerce `8.72` (`558`, `14`), and shell `9.85`
-  (`527`, `8`). The state span is `543` nonblank/non-comment NLOC and has no
-  god-class finding. The maximum CCN among methods whose control flow changed
-  is `9`; the higher schema/commerce file maxima are unchanged editor/build
+  before the fix and `9.35` (`530`, `8`) after it. The state span is `545`
+  nonblank/non-comment NLOC and has no god-class finding. Both changed
+  production files have maximum CCN `8`; the higher schema/commerce file maxima
+  are unchanged editor/build
   bodies moved verbatim by the cut. Production callers remain present and the
-  risk result reports no breaking consumer or dependency cycle.
-- RepoWise change risk for primary range `825a5762..fb0e3bd3` is score `9.8`,
-  probability `0.9757`, percentile `99.5`, `Elevated`; the full branch range
-  `a0cfc008..fb0e3bd3`, which includes the large plan documents, is score `9.8`,
-  probability `0.9825`, percentile `99.5`, `Elevated`.
+  risk result reports no breaking consumer or dependency cycle. Its stale
+  coverage map does not map the new shell path, so the focused and full suites
+  above are the authoritative test evidence.
+- RepoWise change risk for the fix range `7f678f41..a54eaf8d` is score `6.3`,
+  probability `0.6342`, percentile `35.4`, `Typical`; the full branch range
+  `a0cfc008..a54eaf8d`, which includes the large plan documents, is score `9.8`,
+  probability `0.9829`, percentile `100`, `Elevated`.
 - The final tracked Sentrux scan covers `2295` files and `4337` import edges.
-  The Task 5 same-session before/after values are unchanged: quality
+  The post-fix same-session before/after values are unchanged: quality
   `4974 -> 4974`, modularity `5358 -> 5358` (raw
   `0.30363768266582153`), acyclicity raw `1 -> 1`, depth raw `13 -> 13`
   (score `3810`), redundancy `4833 -> 4833` (raw
@@ -287,7 +295,8 @@ extraction begins.
 - Runtime commits are `86a4f97d1aaac610bb889eab021e0567107e9e42`,
   `7b86abee31d24c840c7513b5f043c5c816f45355`,
   `142a98e227105a0a5a093eb8a0f600f90d6ab906`, and
-  `537e5249df39749d5de87740cd58427d88e75fe2`. The approved exception is
+  `537e5249df39749d5de87740cd58427d88e75fe2`. The rollback concurrency fix is
+  `a54eaf8d34434a994c72c3f7498f3734ba63978f`. The approved exception is
   documented by `c24454c5dd7636b25dfe64ffd51388d18b86b3c6`; the separate
   verification-only test correction is
   `fb0e3bd3350ea37c4116e90a3e8bb622edbd4746`.

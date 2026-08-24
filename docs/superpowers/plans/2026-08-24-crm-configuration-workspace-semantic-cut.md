@@ -1,5 +1,7 @@
 # CRM Configuration Workspace Semantic Cut Implementation Plan
 
+**Status:** Implemented and verified at `a54eaf8d34434a994c72c3f7498f3734ba63978f`
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the 2,543-line CRM configuration workspace god class with one stateful coordinator, three semantic private UI parts, and one directly tested snapshot-operations library without changing behavior.
@@ -1144,13 +1146,24 @@ Their constructor contracts are:
 ```dart
 _CrmConfigurationListPane(title, addLabel, onAdd, children)
 _CrmConfigurationProperty(label, value)
-_CrmConfigurationHistoryList(revisions, canPublish, onRollback)
+_CrmConfigurationHistoryList(
+  revisions,
+  canPublish,
+  busy,
+  baseVersion,
+  onRollback,
+)
 _CrmFunnelEntry(onOpen)
 ```
 
 Use named parameters in production code. `onRollback` is
 `ValueChanged<Map<String, dynamic>>`; `onOpen` and nullable `onAdd` are
 `VoidCallback`.
+
+The history widget must compare each revision version with the coordinator's
+`baseVersion`, never assume the first revision is current, and keep rollback
+buttons present but disabled while `busy`. The coordinator must reject rollback
+when busy both before opening the reason dialog and after reason collection.
 
 Move `_showImpact` and `_askReason` visual bodies into top-level functions:
 
@@ -1304,6 +1317,26 @@ git status --short --branch
 ```
 
 Expected: the documentation commit succeeds and the working tree is clean.
+
+## Verified outcome
+
+- The rollback fix commit is
+  `a54eaf8d34434a994c72c3f7498f3734ba63978f`. Its existing rollback widget
+  test was extended through a RED/GREEN cycle without adding a test function:
+  current revision selection comes from `baseVersion`, the pending request
+  targets version `1` exactly once, and its visible rollback button is disabled.
+- Fresh product gates at the pre-doc HEAD passed: rollback `1/1`, focused
+  snapshot/workspace `23/23`, full Flutter `988/988`, analyzer zero issues,
+  Windows configuration/settings `3/3`, and `git diff --check`.
+- RepoWise is exact at `a54eaf8d3443` with `index_behind=false`: coordinator
+  `592` NLOC / max CCN `8`, shell `530` / `8`, and live state `545` NLOC.
+  Callers remain present; breaking consumers and dependency cycles are empty.
+  Fix change risk is score `6.3`, probability `0.6342`, percentile `35.4`,
+  `Typical`; full-branch risk is score `9.8`, probability `0.9829`, percentile
+  `100`, `Elevated`.
+- Tracked Sentrux remained within the owner-approved exception: `2295` files,
+  quality `4974 -> 4974`, modularity `5358`, acyclicity raw `1`, depth raw `13`,
+  redundancy `4833`, rules `2/2`, and session end PASS with zero signal delta.
 
 ## Rollback
 
