@@ -13,7 +13,7 @@ import 'package:magic_music_crm/core/widgets/no_open_tasks_highlight.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/core/widgets/magic_desktop_scrollbar.dart';
 import 'package:magic_music_crm/core/utils/client_custom_field_display.dart';
-import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_card/client_card_launcher.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_forms/client_forms.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/client_board_toolbar.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/students_board_providers.dart';

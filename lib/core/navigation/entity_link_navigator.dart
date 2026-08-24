@@ -5,8 +5,7 @@ import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
-import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
-import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
+import 'package:magic_music_crm/core/workspace/entity_navigation_scope.dart';
 
 enum EntityOpenTarget { current, newTab }
 
@@ -54,22 +53,16 @@ Future<EntityRouteResolution> navigateEntityLink(
   );
   if (!context.mounted) return resolution;
   if (resolution.canOpen) {
-    final workspace = WorkspaceNavigationScope.maybeOf(context);
+    final workspace = EntityNavigationScope.maybeOf(context);
     if (workspace?.isDesktop == true) {
-      try {
-        final controller = workspace!.controller;
-        if (sourceViewState != null) {
-          controller.updateCurrentView(
-            controller.state.activeTabId,
-            sourceViewState,
-          );
-        }
-        controller.open(
-          link,
-          titleHint: resolution.canonicalLocation?.title,
-          explicitNew: true,
-        );
-      } on WorkspaceLimitReached {
+      if (sourceViewState != null) {
+        workspace!.preserveCurrentView(sourceViewState);
+      }
+      final openResult = workspace!.open(
+        link,
+        titleHint: resolution.canonicalLocation?.title,
+      );
+      if (openResult == EntityNavigationOpenResult.limitReached) {
         _showMessage(context, 'Можно открыть не больше 10 вкладок.');
       }
       return resolution;

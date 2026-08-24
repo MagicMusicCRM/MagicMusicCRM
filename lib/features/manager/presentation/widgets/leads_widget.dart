@@ -7,7 +7,7 @@ import 'package:magic_music_crm/core/providers/crm_section_focus_provider.dart';
 import 'package:magic_music_crm/core/providers/crm_navigation_provider.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
-import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_card/client_card_launcher.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';

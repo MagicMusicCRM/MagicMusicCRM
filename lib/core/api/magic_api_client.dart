@@ -3,8 +3,7 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
-import 'package:magic_music_crm/core/api/magic_api_tokens.dart';
-import 'package:magic_music_crm/core/api/magic_token_store.dart';
+import 'package:magic_music_crm/core/api/magic_token_store_contract.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
 /// Caller-owned metadata for a command that may be retried after an ambiguous

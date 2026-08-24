@@ -38,7 +38,7 @@ import 'package:magic_music_crm/core/widgets/telegram/avatar_widget.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/providers/chat_providers.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
-import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_card/client_card_launcher.dart';
 import 'package:mime/mime.dart';
 import 'package:magic_music_crm/features/messenger/data/chat_archive_api.dart';
 import 'package:magic_music_crm/features/messenger/inbox_logic.dart';

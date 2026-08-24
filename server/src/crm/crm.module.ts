@@ -7,7 +7,7 @@ import { LEAD_INTAKE_PORT } from "../common/lead-intake.port";
 import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
 import { RolesGuard } from "../common/security/roles.guard";
 import { DatabaseModule } from "../db/database.module";
-import { NotificationsModule } from "../notifications/notifications.module";
+import { NotificationDeliveryModule } from "../notifications/notification-delivery.module";
 import { ChatWorkTimelineModule } from "../messenger/chat-work-timeline.module";
 import { PlatformModule } from "../platform/platform.module";
 import { AdminStaffController } from "./admin-staff.controller";
@@ -35,6 +35,7 @@ import { TeachersService } from "./teachers.service";
 import { PersonAccountService } from "./person-account.service";
 import { PersonLifecycleService } from "./person-lifecycle.service";
 import { ScheduleService } from "./schedule.service";
+import { ScheduleReadService } from "./schedule/schedule-read.service";
 import { SectionViewsService } from "./section-views.service";
 import { TimelineService } from "./timeline.service";
 import { DashboardService } from "./dashboard.service";
@@ -121,7 +122,7 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     AccessControlModule,
     DatabaseModule,
     JwtModule.register({}),
-    NotificationsModule,
+    NotificationDeliveryModule,
     ChatWorkTimelineModule,
     PlatformModule,
   ],
@@ -159,6 +160,7 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     TeachersService,
     PersonAccountService,
     PersonLifecycleService,
+    ScheduleReadService,
     ScheduleService,
     TimelineService,
     SectionViewsService,

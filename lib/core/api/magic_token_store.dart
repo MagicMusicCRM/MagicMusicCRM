@@ -1,13 +1,10 @@
 import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:magic_music_crm/core/api/magic_api_tokens.dart';
+import 'package:magic_music_crm/core/api/magic_token_store_contract.dart';
 
-abstract class MagicTokenStore {
-  Future<MagicApiTokens?> read();
-  Future<void> write(MagicApiTokens tokens);
-  Future<void> clear();
-}
+export 'package:magic_music_crm/core/api/magic_token_store_contract.dart'
+    show MagicTokenStore, MemoryMagicTokenStore;
 
 class SecureMagicTokenStore implements MagicTokenStore {
   /// Optional per-instance namespace. Empty keeps the original shared keys
@@ -36,8 +33,8 @@ class SecureMagicTokenStore implements MagicTokenStore {
     FlutterSecureStorage storage = const FlutterSecureStorage(
       aOptions: AndroidOptions(encryptedSharedPreferences: true),
     ),
-  })  : _namespace = namespace,
-        _storage = storage;
+  }) : _namespace = namespace,
+       _storage = storage;
 
   String get _prefix =>
       _namespace.isEmpty ? 'mmcrm.v3.' : 'mmcrm.v3.$_namespace.';
@@ -114,7 +111,10 @@ class SecureMagicTokenStore implements MagicTokenStore {
     await _storage.write(key: _accessTokenKey, value: tokens.accessToken);
     await _storage.write(key: _refreshTokenKey, value: tokens.refreshToken);
     await _storage.write(key: _tokenTypeKey, value: tokens.tokenType);
-    await _storage.write(key: _expiresInKey, value: tokens.expiresIn.toString());
+    await _storage.write(
+      key: _expiresInKey,
+      value: tokens.expiresIn.toString(),
+    );
   }
 
   @override
@@ -128,24 +128,5 @@ class SecureMagicTokenStore implements MagicTokenStore {
     await _storage.delete(key: _refreshTokenKey);
     await _storage.delete(key: _tokenTypeKey);
     await _storage.delete(key: _expiresInKey);
-  }
-}
-
-class MemoryMagicTokenStore implements MagicTokenStore {
-  MagicApiTokens? _tokens;
-
-  MemoryMagicTokenStore([this._tokens]);
-
-  @override
-  Future<MagicApiTokens?> read() async => _tokens;
-
-  @override
-  Future<void> write(MagicApiTokens tokens) async {
-    _tokens = tokens;
-  }
-
-  @override
-  Future<void> clear() async {
-    _tokens = null;
   }
 }

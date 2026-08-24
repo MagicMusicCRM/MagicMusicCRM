@@ -16,6 +16,7 @@ import { ActorContext } from "../common/security/actor-context";
 import { CurrentActor } from "../common/security/current-actor.decorator";
 import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
 import { ScheduleService } from "./schedule.service";
+import { ScheduleReadService } from "./schedule/schedule-read.service";
 import { BulkLessonRateDto } from "./dto/bulk-lesson-rate.dto";
 import {
   CreateScheduleSeriesDto,
@@ -70,6 +71,7 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
 export class CrmScheduleController {
   constructor(
     private readonly schedule: ScheduleService,
+    private readonly scheduleRead: ScheduleReadService,
     private readonly lessonCommands: LessonCommandService,
     private readonly lessonSeriesCommands: LessonSeriesCommandService,
     private readonly lessonTransitions: LessonTransitionService,
@@ -216,7 +218,7 @@ export class CrmScheduleController {
     @CurrentActor() actor: ActorContext,
     @Query() query: LessonQuery,
   ) {
-    return this.schedule.listLessons(actor, query);
+    return this.scheduleRead.listLessons(actor, query);
   }
 
   @Get("schedule/matrix")
@@ -224,7 +226,7 @@ export class CrmScheduleController {
     @CurrentActor() actor: ActorContext,
     @Query() query: ScheduleMatrixQuery,
   ) {
-    return this.schedule.getScheduleMatrix(actor, query);
+    return this.scheduleRead.getScheduleMatrix(actor, query);
   }
 
   @Get("schedule/month-summary")
@@ -232,7 +234,7 @@ export class CrmScheduleController {
     @CurrentActor() actor: ActorContext,
     @Query() query: ScheduleMatrixQuery,
   ) {
-    return this.schedule.getScheduleMonthSummary(actor, query);
+    return this.scheduleRead.getScheduleMonthSummary(actor, query);
   }
 
   // Contract 1 (правки №2): busy-slot pre-flight for the lesson dialog.

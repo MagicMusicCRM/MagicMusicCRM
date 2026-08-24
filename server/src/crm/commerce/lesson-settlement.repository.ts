@@ -5,10 +5,10 @@ import {
   UnprocessableEntityException,
 } from "@nestjs/common";
 import { PoolClient } from "pg";
-import {
+import type {
   LessonSettlementTypeConfig,
   TeacherCompensationRuleConfig,
-} from "../crm-configuration.service";
+} from "../crm-configuration.contracts";
 import {
   ClientChargeFactType,
   LessonSettlementInput,

@@ -11,6 +11,11 @@ describe("CrmScheduleController rollout boundary", () => {
       updateLesson: jest.fn().mockResolvedValue({ path: "legacy" }),
       createScheduleSeries: jest.fn().mockResolvedValue({ path: "legacy" }),
     };
+    const scheduleRead = {
+      listLessons: jest.fn().mockResolvedValue({ items: [] }),
+      getScheduleMatrix: jest.fn().mockResolvedValue({ items: [], groups: [] }),
+      getScheduleMonthSummary: jest.fn().mockResolvedValue({ items: [] }),
+    };
     const lessonCommands = {
       create: jest.fn().mockResolvedValue({ path: "v4" }),
       update: jest.fn().mockResolvedValue({ path: "v4" }),
@@ -39,6 +44,7 @@ describe("CrmScheduleController rollout boundary", () => {
     return {
       controller: new CrmScheduleController(
         schedule as never,
+        scheduleRead as never,
         lessonCommands as never,
         lessonSeriesCommands as never,
         lessonTransitions as never,
@@ -47,6 +53,7 @@ describe("CrmScheduleController rollout boundary", () => {
         {} as never,
       ),
       schedule,
+      scheduleRead,
       lessonCommands,
       schedulePlans,
     };
@@ -116,5 +123,19 @@ describe("CrmScheduleController rollout boundary", () => {
       "plan-a",
       dto,
     );
+  });
+
+  it("routes schedule reads through the dedicated read service", async () => {
+    const { controller: subject, scheduleRead } = controller("v4");
+
+    await subject.listLessons(actor, { limit: 10 } as never);
+    await subject.getScheduleMatrix(actor, { groupBy: "room" } as never);
+    await subject.getScheduleMonthSummary(actor, {} as never);
+
+    expect(scheduleRead.listLessons).toHaveBeenCalledWith(actor, { limit: 10 });
+    expect(scheduleRead.getScheduleMatrix).toHaveBeenCalledWith(actor, {
+      groupBy: "room",
+    });
+    expect(scheduleRead.getScheduleMonthSummary).toHaveBeenCalledWith(actor, {});
   });
 });

@@ -74,6 +74,7 @@ import { UpdateStudentDto } from "./dto/update-student.dto";
 import { CrmPolicy } from "./crm.policy";
 import { SharedTaskService } from "./tasks/shared-task.service";
 import { ScheduleService } from "./schedule.service";
+import { ScheduleReadService } from "./schedule/schedule-read.service";
 import { TimelineService } from "./timeline.service";
 import { StudentFunnelService } from "./student-funnel.service";
 import { assertGroupBranchScope } from "./group-branch-scope";
@@ -118,6 +119,7 @@ export class CrmService {
     private readonly policy: CrmPolicy,
     private readonly tasks: SharedTaskService,
     private readonly schedule: ScheduleService,
+    private readonly scheduleRead: ScheduleReadService,
     private readonly timeline: TimelineService,
     private readonly notifications: NotificationsService,
     private readonly chatWork: ChatWorkTimelineService,
@@ -525,12 +527,14 @@ export class CrmService {
 
     // Commerce is projected separately at /crm/students/:id/commerce. Keeping
     // the base card finance-free prevents mixed-scope DTOs and cache entries.
+    // ScheduleReadService owns the detailed actor-scoped lesson list; the
+    // legacy schedule dependency remains only for the distinct upcoming query.
     const emptyList = { items: [] as never[] };
 
     const [groups, lessons, tasks, comments, links, chatWork, fieldAudit] =
       await Promise.all([
         this.listStudentGroups(actor, studentId, { limit: 100 }),
-        this.schedule.listLessons(actor, { studentId, limit: 100 }),
+        this.scheduleRead.listLessons(actor, { studentId, limit: 100 }),
         this.tasks.list(actor, {
           linkedEntityType: "student",
           linkedEntityId: studentId,
