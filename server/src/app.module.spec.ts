@@ -1,5 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { DatabaseService } from './db/database.service';
+import { NotificationWorker } from './notifications/notification-worker.service';
+import { NotificationsService } from './notifications/notifications.service';
 
 describe('AppModule', () => {
   it('compiles the production module graph', async () => {
@@ -16,6 +18,9 @@ describe('AppModule', () => {
         onModuleDestroy: jest.fn()
       })
       .compile();
+
+    expect(moduleRef.get(NotificationsService, { strict: false })).toBeDefined();
+    expect(moduleRef.get(NotificationWorker, { strict: false })).toBeDefined();
 
     await moduleRef.close();
   });

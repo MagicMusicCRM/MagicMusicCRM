@@ -1,5 +1,8 @@
 import { MODULE_METADATA } from "@nestjs/common/constants";
+import { AuthModule } from "../auth/auth.module";
+import { CrmModule } from "../crm/crm.module";
 import { DatabaseModule } from "../db/database.module";
+import { PlatformModule } from "../platform/platform.module";
 import { NotificationDeliveryModule } from "./notification-delivery.module";
 import { NotificationWorker } from "./notification-worker.service";
 import { NotificationsController } from "./notifications.controller";
@@ -35,4 +38,31 @@ describe("notification module boundary", () => {
       NotificationWorker,
     );
   });
+
+  it.each([AuthModule, CrmModule, PlatformModule])(
+    "%p imports delivery without mounting notification controllers",
+    (consumer) => {
+      const imports = metadata(MODULE_METADATA.IMPORTS, consumer);
+      expect(imports).toContain(NotificationDeliveryModule);
+      expect(imports).not.toContain(NotificationsModule);
+    },
+  );
+
+  it.each([NotificationsService, NotificationWorker])(
+    "%p has exactly one provider owner",
+    (provider) => {
+      const modules = [
+        NotificationDeliveryModule,
+        NotificationsModule,
+        AuthModule,
+        CrmModule,
+        PlatformModule,
+      ];
+      const owners = modules.filter((module) =>
+        metadata(MODULE_METADATA.PROVIDERS, module).includes(provider),
+      );
+
+      expect(owners).toEqual([NotificationDeliveryModule]);
+    },
+  );
 });

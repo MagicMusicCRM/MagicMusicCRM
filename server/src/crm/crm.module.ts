@@ -7,7 +7,7 @@ import { LEAD_INTAKE_PORT } from "../common/lead-intake.port";
 import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
 import { RolesGuard } from "../common/security/roles.guard";
 import { DatabaseModule } from "../db/database.module";
-import { NotificationsModule } from "../notifications/notifications.module";
+import { NotificationDeliveryModule } from "../notifications/notification-delivery.module";
 import { ChatWorkTimelineModule } from "../messenger/chat-work-timeline.module";
 import { PlatformModule } from "../platform/platform.module";
 import { AdminStaffController } from "./admin-staff.controller";
@@ -121,7 +121,7 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     AccessControlModule,
     DatabaseModule,
     JwtModule.register({}),
-    NotificationsModule,
+    NotificationDeliveryModule,
     ChatWorkTimelineModule,
     PlatformModule,
   ],
