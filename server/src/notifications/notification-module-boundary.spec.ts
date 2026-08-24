@@ -5,7 +5,10 @@ import { DatabaseModule } from "../db/database.module";
 import { PlatformModule } from "../platform/platform.module";
 import { NotificationDeliveryModule } from "./notification-delivery.module";
 import { NotificationWorker } from "./notification-worker.service";
-import { NotificationsController } from "./notifications.controller";
+import {
+  AdminNotificationsController,
+  NotificationsController,
+} from "./notifications.controller";
 import { NotificationsModule } from "./notifications.module";
 import { NotificationsService } from "./notifications.service";
 
@@ -28,8 +31,11 @@ describe("notification module boundary", () => {
     expect(metadata(MODULE_METADATA.IMPORTS, NotificationsModule)).toContain(
       DatabaseModule,
     );
-    expect(metadata(MODULE_METADATA.CONTROLLERS, NotificationsModule)).toContain(
-      NotificationsController,
+    expect(metadata(MODULE_METADATA.CONTROLLERS, NotificationsModule)).toEqual(
+      expect.arrayContaining([
+        NotificationsController,
+        AdminNotificationsController,
+      ]),
     );
     expect(metadata(MODULE_METADATA.PROVIDERS, NotificationsModule)).not.toContain(
       NotificationsService,
