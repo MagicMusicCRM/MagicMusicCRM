@@ -16,12 +16,21 @@ import {
   buildCrmConfigurationBaseline,
   ClientFieldDefinitionRow,
 } from "./crm-configuration-baseline";
+import type {
+  LessonSettlementTypeConfig,
+  TeacherCompensationRuleConfig,
+} from "./crm-configuration.contracts";
 import { CrmPolicy } from "./crm.policy";
 import {
   PublishCrmConfigurationDto,
   RollbackCrmConfigurationDto,
   SaveCrmConfigurationDraftDto,
 } from "./dto/crm-configuration.dto";
+
+export type {
+  LessonSettlementTypeConfig,
+  TeacherCompensationRuleConfig,
+} from "./crm-configuration.contracts";
 
 const valueTypes = new Set([
   "text",
@@ -104,26 +113,6 @@ export interface ConfigSetting {
   max: number;
   value: number;
   branchOverridable: boolean;
-}
-
-export interface LessonSettlementTypeConfig {
-  stableKey: string;
-  label: string;
-  colorToken: string;
-  hourShareBasisPoints: number;
-  fixedPenaltyMinor?: string;
-  allowedContexts: string[];
-  active: boolean;
-  order: number;
-}
-
-export interface TeacherCompensationRuleConfig {
-  stableKey: string;
-  label: string;
-  mode: "none" | "standard" | "percent" | "fixed" | "hourly";
-  value: string;
-  active: boolean;
-  order: number;
 }
 
 export interface ConfigSnapshot {
