@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:magic_music_crm/core/api/magic_token_store_contract.dart';
 
-export 'package:magic_music_crm/core/api/magic_token_store_contract.dart';
+export 'package:magic_music_crm/core/api/magic_token_store_contract.dart'
+    show MagicTokenStore, MemoryMagicTokenStore;
 
 class SecureMagicTokenStore implements MagicTokenStore {
   /// Optional per-instance namespace. Empty keeps the original shared keys
