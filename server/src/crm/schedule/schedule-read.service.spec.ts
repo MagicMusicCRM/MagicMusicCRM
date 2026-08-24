@@ -1,45 +1,31 @@
-import { AuditService } from "../../audit/audit.service";
 import { DatabaseService } from "../../db/database.service";
-import { NotificationsService } from "../../notifications/notifications.service";
-import { RealtimeBus } from "../../realtime/realtime-bus";
 import { CrmPolicy } from "../crm.policy";
-import { ScheduleService } from "../schedule.service";
-import { ScheduleConstraintEngine } from "./constraint-engine.service";
+import { ScheduleReadService } from "./schedule-read.service";
 
 describe("schedule read contract", () => {
   const actor = { userId: "manager-a", role: "manager" as const };
 
-  const buildDeps = () => ({
-    audit: { record: jest.fn().mockResolvedValue(undefined) },
-    notifications: {
-      notifyUser: jest.fn().mockResolvedValue({ notificationId: "notif-test" }),
-    },
-    policy: {
+  const createService = (rows: Record<string, unknown>[] = []) => {
+    const query = jest.fn().mockResolvedValue({ rows });
+    const policy = {
       assertCanReadOperationalData: jest.fn(),
-      assertCanWriteCrm: jest.fn(),
-      assertManagerOnly: jest.fn(),
       canReadTeacherRates: jest.fn().mockReturnValue(false),
       canReadSchoolFinance: jest.fn().mockReturnValue(false),
       canReadStudentFinance: jest.fn().mockReturnValue(false),
-    },
-    constraints: {
-      validate: jest.fn().mockResolvedValue({ valid: true, violations: [] }),
-    },
-  });
-
-  const createService = (rows: Record<string, unknown>[] = []) => {
-    const query = jest.fn().mockResolvedValue({ rows });
-    const deps = buildDeps();
-    const service = new ScheduleService(
+    };
+    const service = new ScheduleReadService(
       { query } as unknown as DatabaseService,
-      deps.audit as unknown as AuditService,
-      deps.policy as unknown as CrmPolicy,
-      deps.notifications as unknown as NotificationsService,
-      { emitCrmChanged: () => undefined } as unknown as RealtimeBus,
-      deps.constraints as unknown as ScheduleConstraintEngine,
+      policy as unknown as CrmPolicy,
     );
-    return { service, query, ...deps };
+    return { service, query, policy };
   };
+
+  it("depends only on database and CRM policy", () => {
+    expect(Reflect.getMetadata("design:paramtypes", ScheduleReadService)).toEqual([
+      DatabaseService,
+      CrmPolicy,
+    ]);
+  });
 
   describe("«оплаты по дням» (✔ владелец 17.07)", () => {
     it("sums the payments tied to each lesson", async () => {
