@@ -243,12 +243,12 @@ class _CrmConfigurationWorkspaceState
   }
 
   Future<void> _rollback(Map<String, dynamic> revision) async {
-    if (!_canPublish) return;
+    if (!_canPublish || _busy) return;
     final reason = await _askCrmConfigurationReason(
       context,
       'Откат к версии ${revision['version']}',
     );
-    if (reason == null) return;
+    if (reason == null || !mounted || _busy) return;
     setState(() => _busy = true);
     try {
       await ref
@@ -330,6 +330,8 @@ class _CrmConfigurationWorkspaceState
     'history' => _CrmConfigurationHistoryList(
       revisions: _revisions,
       canPublish: _canPublish,
+      busy: _busy,
+      baseVersion: _baseVersion,
       onRollback: _rollback,
     ),
     _ => const SizedBox.shrink(),

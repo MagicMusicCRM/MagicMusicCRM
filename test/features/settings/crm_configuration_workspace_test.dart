@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -24,6 +26,8 @@ class ConfigurationTestApi extends MagicApiClient {
   int publishes = 0;
   int draftSaves = 0;
   int rollbacks = 0;
+  Completer<void>? rollbackGate;
+  final List<int> rollbackTargetVersions = [];
   int sourceCreates = 0;
   Map<String, dynamic>? submittedSnapshot;
   final List<Map<String, dynamic>> sources = [];
@@ -126,7 +130,10 @@ class ConfigurationTestApi extends MagicApiClient {
       return <String, dynamic>{'version': baseVersion} as T;
     }
     if (path == '/crm/configuration/rollback') {
+      final payload = Map<String, dynamic>.from(data! as Map);
       rollbacks++;
+      rollbackTargetVersions.add((payload['targetVersion'] as num).toInt());
+      await rollbackGate?.future;
       return <String, dynamic>{'version': 2, 'rollbackFromVersion': 0} as T;
     }
     throw StateError('Unexpected POST $path');
@@ -738,19 +745,44 @@ void main() {
         'config.crm.edit',
         'config.crm.publish',
       ],
-    );
+      baseVersion: 0,
+    )..rollbackGate = Completer<void>();
     await _pump(tester, api);
     await tester.tap(find.text('История версий'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Опубликовать откат к этой версии'));
+
+    final versionOneTile = find.ancestor(
+      of: find.text('Версия 1'),
+      matching: find.byType(ListTile),
+    );
+    final versionZeroTile = find.ancestor(
+      of: find.text('Версия 0'),
+      matching: find.byType(ListTile),
+    );
+    final versionOneRollback = find.descendant(
+      of: versionOneTile,
+      matching: find.byType(IconButton),
+    );
+    expect(versionOneRollback, findsOneWidget);
+    expect(
+      find.descendant(of: versionZeroTile, matching: find.byType(IconButton)),
+      findsNothing,
+    );
+
+    await tester.tap(versionOneRollback);
     await tester.pumpAndSettle();
     await tester.enterText(
       find.widgetWithText(TextField, 'Причина *'),
       'Возвращаем утверждённую версию',
     );
     await tester.tap(find.text('Продолжить'));
-    await tester.pumpAndSettle();
+    await tester.pump();
     expect(api.rollbacks, 1);
+    expect(api.rollbackTargetVersions, [1]);
+    expect(tester.widget<IconButton>(versionOneRollback).onPressed, isNull);
+
+    api.rollbackGate!.complete();
+    await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
 

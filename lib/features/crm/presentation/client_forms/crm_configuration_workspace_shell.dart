@@ -373,16 +373,19 @@ class _CrmConfigurationHistoryList extends StatelessWidget {
   const _CrmConfigurationHistoryList({
     required this.revisions,
     required this.canPublish,
+    required this.busy,
+    required this.baseVersion,
     required this.onRollback,
   });
 
   final List<Map<String, dynamic>> revisions;
   final bool canPublish;
+  final bool busy;
+  final int baseVersion;
   final ValueChanged<Map<String, dynamic>> onRollback;
 
   @override
   Widget build(BuildContext context) {
-    final currentVersion = revisions.firstOrNull?['version'];
     return _CrmConfigurationListPane(
       title: 'Неизменяемые версии',
       children: revisions
@@ -390,10 +393,10 @@ class _CrmConfigurationHistoryList extends StatelessWidget {
             (revision) => ListTile(
               title: Text('Версия ${revision['version']}'),
               subtitle: Text(revision['reason']?.toString() ?? ''),
-              trailing: canPublish && revision['version'] != currentVersion
+              trailing: canPublish && revision['version'] != baseVersion
                   ? IconButton(
                       tooltip: 'Опубликовать откат к этой версии',
-                      onPressed: () => onRollback(revision),
+                      onPressed: busy ? null : () => onRollback(revision),
                       icon: const Icon(Icons.restore_rounded),
                     )
                   : null,
