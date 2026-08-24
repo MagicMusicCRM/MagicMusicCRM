@@ -27,6 +27,15 @@ god class, change scatter, and concentrated complexity. It does not claim to
 lower the repository-wide dependency depth because the selected workspace is
 not on the current longest chain.
 
+The original Sentrux target remains 0.4976. For this semantic cut only, the
+owner approved a final value of at least 0.4974 after same-scanner evidence
+showed that Sentrux's Dart tags query counts identical
+`build(BuildContext)` signatures as duplicate waste. The exception is valid
+only while that recorded duplicate-signature effect is the sole quality
+regression and all behavioral, complexity, acyclicity, depth, and architecture
+rule gates below pass. Unrelated cleanup, scanner exclusions, ignored files,
+signature renaming, and any other metric gaming are prohibited.
+
 RepoWise's automatic split groups are rejected. Names such as
 `magic_api_error.dart`, `crm_configuration_workspace_part2.dart`, and
 `lesson_state_palette.dart` do not describe the responsibilities they would
@@ -226,8 +235,14 @@ extraction begins.
 - Extracted presentation widgets do not read providers or call the API.
 - Snapshot transformation tests and the existing CRM configuration widget suite
   pass; final Flutter analysis and the relevant device smoke test pass.
-- Sentrux quality is at least 0.4976, acyclicity remains 1.0, depth is no higher
-  than 13, and both architectural rules pass.
+- The original Sentrux goal is at least 0.4976. The owner-approved exception
+  for this cut permits at least 0.4974 only when acyclicity remains 1.0, depth
+  is no higher than 13, both architectural rules pass, focused tests and full
+  Flutter analysis pass, the state remains at most 600 NLOC, no changed method
+  exceeds CCN 10, and the recorded Dart duplicate-signature effect remains the
+  sole quality regression.
+- No unrelated cleanup, exclusions, ignored scanner inputs, signature renaming,
+  or metric gaming may be used to reach either Sentrux threshold.
 - RepoWise is indexed at implementation HEAD. Changed-file health reports no
   critical god class, and change-risk inspection finds no missing production
   caller or untested mutation path.

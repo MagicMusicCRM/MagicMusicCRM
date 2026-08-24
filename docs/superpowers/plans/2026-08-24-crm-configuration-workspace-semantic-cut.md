@@ -19,7 +19,8 @@
 - Preserve manager branch-only behavior, school-only structural editing and migration, commerce visibility for Director/system_admin, and edit-plus-publish requirements for commerce mutation.
 - Do not create a second provider, controller, repository, service, configuration model, API route, database migration, or compatibility facade.
 - Keep one logical task per commit. After every structural task, run focused tests and Sentrux `rescan`, `health`, and `check_rules` before proceeding.
-- Final acceptance: Sentrux `quality_signal >= 4976` (`0.4976` normalized), acyclicity raw `1`, depth `<= 13`, both rules pass, `_CrmConfigurationWorkspaceState <= 600` NLOC, and no method in the changed workspace files exceeds CCN 10.
+- Original final target: Sentrux `quality_signal >= 4976` (`0.4976` normalized). For this semantic cut only, the owner-approved exception permits `quality_signal >= 4974` when acyclicity raw is `1`, depth is `<= 13`, both rules pass, focused tests and full analysis pass, `_CrmConfigurationWorkspaceState <= 600` NLOC, no method in the changed workspace files exceeds CCN 10, and the recorded Dart duplicate-`build(BuildContext)`-signature effect is the sole quality regression.
+- Do not use unrelated cleanup, exclusions, ignored scanner inputs, signature renaming, or any other metric gaming to satisfy the original target or its narrow exception.
 
 ## File Structure
 
@@ -1206,9 +1207,10 @@ Expected: both test suites and analysis PASS. Confirm the state size and method
 complexity from live source and RepoWise after reindexing; do not infer success
 only from the main file's physical line count.
 
-Call Sentrux `rescan`, `health`, and `check_rules`. Require quality
-`quality_signal >= 4976`, acyclicity raw `1`, depth `<= 13`, both rules passing, and no new
-cycle.
+Call Sentrux `rescan`, `health`, and `check_rules`. The original quality target
+is `quality_signal >= 4976`; the owner-approved exception for this cut permits
+`quality_signal >= 4974` only under every condition in Global Constraints.
+Require acyclicity raw `1`, depth `<= 13`, both rules passing, and no new cycle.
 
 - [ ] **Step 7: Commit the shell cut**
 
@@ -1273,7 +1275,7 @@ critical god-class finding on `_CrmConfigurationWorkspaceState`, state NLOC
 Call Sentrux `rescan`, `health`, `check_rules`, and `session_end`. Acceptance:
 
 ```text
-quality_signal >= 4976
+quality_signal >= 4976, or >= 4974 under the owner-approved exception
 acyclicity.raw = 1
 depth.raw <= 13
 rules pass = true
@@ -1281,7 +1283,12 @@ new dependency cycles = 0
 ```
 
 Record the exact before/after quality, modularity, depth, redundancy, and rule
-values. Do not claim a gain that the scanner does not report.
+values. The exception is valid only when focused tests and full analysis pass,
+the state is at most 600 NLOC, no changed method exceeds CCN 10, and the
+recorded Dart duplicate-`build(BuildContext)`-signature effect is the sole
+quality regression. Do not claim a gain that the scanner does not report, and
+do not use unrelated cleanup, exclusions, ignored scanner inputs, signature
+renaming, or metric gaming.
 
 - [ ] **Step 5: Record verified status and commit documentation**
 
