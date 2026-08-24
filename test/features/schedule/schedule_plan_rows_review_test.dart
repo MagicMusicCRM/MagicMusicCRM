@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:magic_music_crm/features/crm/presentation/client_card/preferred_schedule_editor.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_card/preferred_schedule_draft.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/schedule_plan_rows_review.dart';
 
 void main() {
@@ -28,21 +28,8 @@ void main() {
           home: Scaffold(
             body: SchedulePlanRowsReview(
               initialRows: [row],
-              branches: const [
-                {'id': 'branch-a', 'name': 'Главный'},
-              ],
-              teachers: const [
-                {
-                  'id': 'teacher-a',
-                  'first_name': 'Анна',
-                  'last_name': 'Петрова',
-                },
-              ],
-              rooms: const [
-                {'id': 'room-a', 'name': 'Зал 1'},
-              ],
-              defaultBranchId: 'branch-a',
-              decisionCatalogs: const {},
+              rowSummary: (_) => 'Педагог · Аудитория · Филиал · 60 мин',
+              onEditDraft: (_, _, _) async => null,
               onValidate: (rows) async {
                 validationCalls += 1;
                 expect(rows, hasLength(1));
@@ -55,7 +42,7 @@ void main() {
     );
 
     expect(find.byKey(const ValueKey('schedule-plan-row-group-0')), findsOne);
-    expect(find.textContaining('Анна Петрова'), findsOne);
+    expect(find.textContaining('10:00'), findsOne);
 
     await tester.tap(find.byKey(const Key('schedule-plan-preview-and-create')));
     await tester.pumpAndSettle();

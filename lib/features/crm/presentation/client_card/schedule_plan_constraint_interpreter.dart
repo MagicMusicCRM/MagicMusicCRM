@@ -1,5 +1,6 @@
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_conflicts_api.dart';
-import 'package:magic_music_crm/features/crm/presentation/client_card/preferred_schedule_editor.dart';
+
+import 'preferred_schedule_draft.dart';
 
 class SchedulePlanConstraintIssue {
   SchedulePlanConstraintIssue({

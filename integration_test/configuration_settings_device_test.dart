@@ -10,7 +10,7 @@ import 'package:magic_music_crm/features/manager/presentation/widgets/access_edi
 
 import '../test/features/access/access_editor_roles_test.dart';
 import '../test/features/settings/crm_configuration_workspace_test.dart';
-import '../test/features/settings/system_settings_workspace_test.dart';
+import '../test/support/settings_test_api.dart';
 import 'evidence_screenshot.dart';
 
 void main() {

@@ -13,6 +13,12 @@ import 'schedule_plan_rows_review.dart';
 
 enum SchedulePlanMutationResult { committed, cancelled }
 
+typedef _SchedulePlanReferences = ({
+  List<Map<String, dynamic>> teachers,
+  List<Map<String, dynamic>> rooms,
+  Map<String, LessonDecisionCatalog> decisionCatalogs,
+});
+
 class SchedulePlanMutationFlow {
   const SchedulePlanMutationFlow({
     required this.service,
@@ -95,11 +101,13 @@ class SchedulePlanMutationFlow {
       icon: Icons.rule_rounded,
       builder: (_) => SchedulePlanRowsReview(
         initialRows: [draft],
-        branches: branches,
-        teachers: references.teachers,
-        rooms: references.rooms,
-        defaultBranchId: defaultBranchId,
-        decisionCatalogs: references.decisionCatalogs,
+        rowSummary: (row) => _draftSummary(row, references),
+        onEditDraft: (editorContext, seed, adding) => _editReviewedDraft(
+          editorContext,
+          seed,
+          adding: adding,
+          references: references,
+        ),
         participantLabels: _participantLabels,
         onValidate: (rows) => service.previewSchedulePlanConstraints(
           title: draft.title!,
@@ -202,11 +210,13 @@ class SchedulePlanMutationFlow {
       icon: Icons.rule_rounded,
       builder: (_) => SchedulePlanRowsReview(
         initialRows: rows,
-        branches: branches,
-        teachers: references.teachers,
-        rooms: references.rooms,
-        defaultBranchId: defaultBranchId,
-        decisionCatalogs: references.decisionCatalogs,
+        rowSummary: (row) => _draftSummary(row, references),
+        onEditDraft: (editorContext, seed, adding) => _editReviewedDraft(
+          editorContext,
+          seed,
+          adding: adding,
+          references: references,
+        ),
         participantLabels: _participantLabels,
         submitLabel: 'Проверить и сохранить',
         onValidate: (reviewRows) =>
@@ -287,11 +297,13 @@ class SchedulePlanMutationFlow {
       icon: Icons.rule_rounded,
       builder: (_) => SchedulePlanRowsReview(
         initialRows: rows,
-        branches: branches,
-        teachers: references.teachers,
-        rooms: references.rooms,
-        defaultBranchId: defaultBranchId,
-        decisionCatalogs: references.decisionCatalogs,
+        rowSummary: (row) => _draftSummary(row, references),
+        onEditDraft: (editorContext, seed, adding) => _editReviewedDraft(
+          editorContext,
+          seed,
+          adding: adding,
+          references: references,
+        ),
         participantLabels: _participantLabels,
         submitLabel: 'Проверить и сохранить',
         onValidate: (reviewRows) =>
@@ -344,14 +356,55 @@ class SchedulePlanMutationFlow {
         : SchedulePlanMutationResult.cancelled;
   }
 
-  Future<
-    ({
-      List<Map<String, dynamic>> teachers,
-      List<Map<String, dynamic>> rooms,
-      Map<String, LessonDecisionCatalog> decisionCatalogs,
-    })
-  >
-  _references() async {
+  Future<PreferredScheduleDraft?> _editReviewedDraft(
+    BuildContext context,
+    PreferredScheduleDraft seed, {
+    required bool adding,
+    required _SchedulePlanReferences references,
+  }) => showMagicSheet<PreferredScheduleDraft>(
+    context,
+    title: adding ? 'Добавить набор дней' : 'Изменить набор дней',
+    subtitle: 'Для выбранных дней педагог и аудитория обязательны',
+    icon: Icons.edit_calendar_outlined,
+    builder: (_) => PreferredScheduleEditor(
+      branches: branches,
+      teachers: references.teachers,
+      rooms: references.rooms,
+      defaultBranchId: defaultBranchId,
+      initialDraft: seed,
+      showPeriod: false,
+      requireFinancialDecision: true,
+      decisionCatalogs: references.decisionCatalogs,
+    ),
+  );
+
+  String _draftSummary(
+    PreferredScheduleDraft row,
+    _SchedulePlanReferences references,
+  ) {
+    final teacher = references.teachers
+        .cast<Map<String, dynamic>?>()
+        .firstWhere(
+          (item) => item?['id']?.toString() == row.teacherId,
+          orElse: () => null,
+        );
+    final room = references.rooms.cast<Map<String, dynamic>?>().firstWhere(
+      (item) => item?['id']?.toString() == row.roomId,
+      orElse: () => null,
+    );
+    final branch = branches.cast<Map<String, dynamic>?>().firstWhere(
+      (item) => item?['id']?.toString() == row.branchId,
+      orElse: () => null,
+    );
+    final teacherName =
+        '${teacher?['first_name'] ?? ''} ${teacher?['last_name'] ?? ''}'.trim();
+    return '${teacherName.isEmpty ? 'Педагог не выбран' : teacherName} · '
+        '${room?['name'] ?? 'Аудитория не выбрана'} · '
+        '${branch?['name'] ?? 'Филиал'} · ${row.durationMinutes} мин'
+        '${row.lessonsPerDay > 1 ? ' × ${row.lessonsPerDay}' : ''}';
+  }
+
+  Future<_SchedulePlanReferences> _references() async {
     final teachersFuture = service.listTeachers(limit: 100);
     final roomsFuture = service.listRooms(limit: 100);
     final catalogsFuture = Future.wait<Map<String, dynamic>>([

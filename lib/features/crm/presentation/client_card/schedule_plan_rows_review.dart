@@ -5,20 +5,24 @@ import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_text.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
-import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision_flow.dart';
 
-import 'preferred_schedule_editor.dart';
+import 'preferred_schedule_draft.dart';
 import 'schedule_plan_constraint_interpreter.dart';
+
+typedef SchedulePlanDraftEditor =
+    Future<PreferredScheduleDraft?> Function(
+      BuildContext context,
+      PreferredScheduleDraft seed,
+      bool adding,
+    );
+
+typedef SchedulePlanDraftSummary = String Function(PreferredScheduleDraft row);
 
 class SchedulePlanRowsReview extends ConsumerStatefulWidget {
   const SchedulePlanRowsReview({
     required this.initialRows,
-    required this.branches,
-    required this.teachers,
-    required this.rooms,
-    required this.defaultBranchId,
-    required this.decisionCatalogs,
+    required this.onEditDraft,
+    required this.rowSummary,
     required this.onValidate,
     this.participantLabels = const {},
     this.submitLabel = 'Проверить и создать',
@@ -26,11 +30,8 @@ class SchedulePlanRowsReview extends ConsumerStatefulWidget {
   });
 
   final List<PreferredScheduleDraft> initialRows;
-  final List<Map<String, dynamic>> branches;
-  final List<Map<String, dynamic>> teachers;
-  final List<Map<String, dynamic>> rooms;
-  final String? defaultBranchId;
-  final Map<String, LessonDecisionCatalog> decisionCatalogs;
+  final SchedulePlanDraftEditor onEditDraft;
+  final SchedulePlanDraftSummary rowSummary;
   final Map<String, String> participantLabels;
   final String submitLabel;
   final Future<Map<String, dynamic>> Function(List<PreferredScheduleDraft> rows)
@@ -52,22 +53,7 @@ class _SchedulePlanRowsReviewState
 
   Future<void> _edit([int? index]) async {
     final seed = index == null ? _rows.last : _rows[index];
-    final result = await showMagicSheet<PreferredScheduleDraft>(
-      context,
-      title: index == null ? 'Добавить набор дней' : 'Изменить набор дней',
-      subtitle: 'Для выбранных дней педагог и аудитория обязательны',
-      icon: Icons.edit_calendar_outlined,
-      builder: (_) => PreferredScheduleEditor(
-        branches: widget.branches,
-        teachers: widget.teachers,
-        rooms: widget.rooms,
-        defaultBranchId: widget.defaultBranchId,
-        initialDraft: seed,
-        showPeriod: false,
-        requireFinancialDecision: true,
-        decisionCatalogs: widget.decisionCatalogs,
-      ),
-    );
+    final result = await widget.onEditDraft(context, seed, index == null);
     if (result == null || !mounted) return;
     setState(() {
       if (index == null) {
@@ -165,20 +151,6 @@ class _SchedulePlanRowsReviewState
 
   Widget _rowCard(int index, PreferredScheduleDraft row) {
     final days = row.weekdays.toList()..sort();
-    final teacher = widget.teachers.cast<Map<String, dynamic>?>().firstWhere(
-      (item) => item?['id']?.toString() == row.teacherId,
-      orElse: () => null,
-    );
-    final room = widget.rooms.cast<Map<String, dynamic>?>().firstWhere(
-      (item) => item?['id']?.toString() == row.roomId,
-      orElse: () => null,
-    );
-    final branch = widget.branches.cast<Map<String, dynamic>?>().firstWhere(
-      (item) => item?['id']?.toString() == row.branchId,
-      orElse: () => null,
-    );
-    final teacherName =
-        '${teacher?['first_name'] ?? ''} ${teacher?['last_name'] ?? ''}'.trim();
     return Container(
       key: ValueKey('schedule-plan-row-group-$index'),
       padding: const EdgeInsets.all(AppSpace.md),
@@ -198,12 +170,7 @@ class _SchedulePlanRowsReviewState
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  '${teacherName.isEmpty ? 'Педагог не выбран' : teacherName} · '
-                  '${room?['name'] ?? 'Аудитория не выбрана'} · '
-                  '${branch?['name'] ?? 'Филиал'} · ${row.durationMinutes} мин'
-                  '${row.lessonsPerDay > 1 ? ' × ${row.lessonsPerDay}' : ''}',
-                ),
+                Text(widget.rowSummary(row)),
               ],
             ),
           ),

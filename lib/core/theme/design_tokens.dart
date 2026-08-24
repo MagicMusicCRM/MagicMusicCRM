@@ -7,12 +7,10 @@
 /// design language instead of per-screen ad-hoc literals.
 ///
 /// Deep Charcoal & Sophisticated Gold token source. The historical prototype
-/// path is preserved exactly for active consumers; the existing palette lives in
-/// [TelegramColors]; these tokens reuse those exact constants where they match
-/// and only ADD the v7 tokens that were missing (gold-soft / gold-line, overlay
-/// surface, skeleton shimmer, scrim, on-gold text, etc.). Nothing here is
-/// mounted by itself — it is consumed by [AppTheme] and the shared component
-/// library, both additive in P0.
+/// path is preserved exactly for active consumers. The values live here rather
+/// than forwarding through a historical palette, so shared widgets depend on
+/// one canonical token layer. Nothing here is mounted by itself — it is
+/// consumed by [AppTheme] and the shared component library.
 ///
 /// The token test `test/theme/design_tokens_test.dart` golden-locks every value
 /// below against the prototype `:root`, per the migration plan §0 / §5a.
@@ -20,35 +18,39 @@ library;
 
 import 'package:flutter/material.dart';
 
-import 'telegram_colors.dart';
-
 /// v7 color tokens (`:root` `--*` + component colors).
 class AppColor {
   AppColor._();
 
-  // ── Core surfaces (match TelegramColors dark palette 1:1) ────────────────
+  // ── Core surfaces ────────────────────────────────────────────────────────
   /// `--bg:#101114`
-  static const Color bg = TelegramColors.darkBg; // 0xFF101114
+  static const Color bg = Color(0xFF101114);
+
   /// `--surface:#181B20`
-  static const Color surface = TelegramColors.darkSurface; // 0xFF181B20
+  static const Color surface = Color(0xFF181B20);
+
   /// `--sidebar:#14161A`
-  static const Color sidebar = TelegramColors.darkSidebar; // 0xFF14161A
+  static const Color sidebar = Color(0xFF14161A);
+
   /// `--input:#20242B`
-  static const Color input = TelegramColors.darkInputBg; // 0xFF20242B
+  static const Color input = Color(0xFF20242B);
+
   /// `--divider:#313741`
-  static const Color divider = TelegramColors.darkDivider; // 0xFF313741
+  static const Color divider = Color(0xFF313741);
 
   // ── Text ─────────────────────────────────────────────────────────────────
   /// `--text:#F1F3F5`
-  static const Color text = TelegramColors.darkTextPrimary; // 0xFFF1F3F5
+  static const Color text = Color(0xFFF1F3F5);
+
   /// `--text-2:#AAB2BF`
-  static const Color text2 = TelegramColors.darkTextSecondary; // 0xFFAAB2BF
+  static const Color text2 = Color(0xFFAAB2BF);
 
   // ── Brand gold ─────────────────────────────────────────────────────────────
   /// `--gold:#C9A85E`
-  static const Color gold = TelegramColors.primaryGold; // 0xFFC9A85E
+  static const Color gold = Color(0xFFC9A85E);
+
   /// `--gold-2:#D6B778`
-  static const Color gold2 = TelegramColors.secondaryGold; // 0xFFD6B778
+  static const Color gold2 = Color(0xFFD6B778);
 
   /// `--gold-soft:rgba(201,168,94,.14)` — active row / chip-on / hover fills.
   static const Color goldSoft = Color(0x24C9A85E); // alpha .14 ≈ 0x24
@@ -60,19 +62,23 @@ class AppColor {
 
   // ── Work accents ───────────────────────────────────────────────────────────
   /// Work action blue: primary actions, filters, links, focused inputs.
-  static const Color actionBlue = TelegramColors.actionBlue; // 0xFF3B82F6
+  static const Color actionBlue = Color(0xFF3B82F6);
+
   /// Transfer cyan: lead-to-student conversion and sync/transfer surfaces.
-  static const Color transferCyan = TelegramColors.transferCyan; // 0xFF14B8A6
+  static const Color transferCyan = Color(0xFF14B8A6);
+
   /// Info violet: role/admin metadata and non-critical informational states.
-  static const Color infoViolet = TelegramColors.infoViolet; // 0xFF8B5CF6
+  static const Color infoViolet = Color(0xFF8B5CF6);
 
   // ── Status ─────────────────────────────────────────────────────────────────
   /// `--success:#22C55E`
-  static const Color success = TelegramColors.success; // 0xFF22C55E
+  static const Color success = Color(0xFF22C55E);
+
   /// `--warning:#F59E0B`
-  static const Color warning = TelegramColors.warning; // 0xFFF59E0B
+  static const Color warning = Color(0xFFF59E0B);
+
   /// `--danger:#EF4444`
-  static const Color danger = TelegramColors.danger; // 0xFFEF4444
+  static const Color danger = Color(0xFFEF4444);
 
   // ── Overlay chrome (toast / pop-menu share `#20242B`) ──────────────────────
   /// `.toast` / `.popmenu` background `#20242B` — one notch above [surface].

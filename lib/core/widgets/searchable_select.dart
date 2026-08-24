@@ -1,9 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
-import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
+import 'package:magic_music_crm/core/widgets/adaptive_surface_kind.dart';
 
 class SearchableSelectItem {
   final String id;
@@ -326,12 +326,12 @@ class _SearchableSelectState extends State<SearchableSelect> {
                           margin: const EdgeInsets.symmetric(vertical: 4),
                           decoration: BoxDecoration(
                             color: isSelected
-                                ? AppTheme.primaryGold.withAlpha(30)
+                                ? AppColor.gold.withAlpha(30)
                                 : Colors.transparent,
                             borderRadius: BorderRadius.circular(12),
                             border: isSelected
                                 ? Border.all(
-                                    color: AppTheme.primaryGold.withAlpha(100),
+                                    color: AppColor.gold.withAlpha(100),
                                   )
                                 : null,
                           ),
@@ -344,15 +344,13 @@ class _SearchableSelectState extends State<SearchableSelect> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             leading: CircleAvatar(
-                              backgroundColor: AppTheme.primaryGold.withAlpha(
-                                50,
-                              ),
+                              backgroundColor: AppColor.gold.withAlpha(50),
                               child: Text(
                                 item.label.isNotEmpty
                                     ? item.label[0].toUpperCase()
                                     : '?',
                                 style: const TextStyle(
-                                  color: AppTheme.primaryGold,
+                                  color: AppColor.gold,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -361,7 +359,7 @@ class _SearchableSelectState extends State<SearchableSelect> {
                               item.label.isEmpty ? 'Без имени' : item.label,
                               style: TextStyle(
                                 color: isSelected
-                                    ? AppTheme.primaryGold
+                                    ? AppColor.gold
                                     : Theme.of(context).colorScheme.onSurface,
                                 fontWeight: isSelected
                                     ? FontWeight.bold
@@ -382,7 +380,7 @@ class _SearchableSelectState extends State<SearchableSelect> {
                             trailing: isSelected
                                 ? const Icon(
                                     Icons.check_circle_rounded,
-                                    color: AppTheme.primaryGold,
+                                    color: AppColor.gold,
                                   )
                                 : null,
                           ),

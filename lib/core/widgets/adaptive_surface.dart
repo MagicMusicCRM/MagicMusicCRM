@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
+import 'package:magic_music_crm/core/widgets/adaptive_surface_kind.dart';
 import 'package:magic_music_crm/core/widgets/magic_drawer.dart';
 import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 

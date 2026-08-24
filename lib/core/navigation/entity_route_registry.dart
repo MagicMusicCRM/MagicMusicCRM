@@ -2,14 +2,14 @@ import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/navigation/entity_presentation_resolver.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot_model.dart';
+import 'package:magic_music_crm/core/widgets/adaptive_surface_kind.dart';
 
 export 'package:magic_music_crm/core/navigation/entity_presentation_resolver.dart';
+export 'package:magic_music_crm/core/widgets/adaptive_surface_kind.dart';
 
 enum EntityLifecycleState { active, archived, deleted }
 
 enum EntityProjection { full, limited }
-
-enum AppSurfaceKind { primary, quickView, selection, confirmation, comparison }
 
 class AppBreadcrumbNode {
   const AppBreadcrumbNode({
