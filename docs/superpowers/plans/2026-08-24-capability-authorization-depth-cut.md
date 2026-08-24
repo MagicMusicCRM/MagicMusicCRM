@@ -241,4 +241,3 @@ cycle, `quality_signal >= 4975`; depth may remain 13 until the notification cut.
 git add -- server/src/access-control/effective-access-evaluator.ts server/src/access-control/effective-access-evaluator.spec.ts server/src/access-control/capability-request-authorizer.ts server/src/access-control/access-mutations.service.ts server/src/crm/clients/client-card.integration.spec.ts
 git commit -m "refactor(access): flatten effective access evaluation"
 ```
-

@@ -1,7 +1,7 @@
 # Sentrux Depth Double Cut Design
 
-**Date:** 2026-08-24  
-**Status:** Owner approved  
+**Date:** 2026-08-24<br>
+**Status:** Owner approved; implementation correction accepted<br>
 **Scope:** Backend access-control and notification module boundaries
 
 ## Context
@@ -29,7 +29,8 @@ Removing any single outer module edge does not improve the metric: equally
 long paths exist through `HealthModule`, `MessengerModule`, `ProfileModule`,
 CRM controllers, and notification delivery internals. A virtual import-graph
 simulation shows that both cuts below are required to reduce the maximum
-source depth from 13 to 12.
+production-source depth from 13 to 12. This was the pre-implementation forecast;
+the accepted observed outcome is recorded below.
 
 RepoWise reports no governing ADR for these boundaries. Git archaeology shows
 that the platform outbox and notification delivery path has recent correctness
@@ -51,6 +52,8 @@ fixes, so runtime ownership and worker singleton semantics must remain intact.
 - No rewrite of `NotificationsService`, `NotificationWorker`, or platform outbox
   orchestration.
 - No broad split of `CrmModule`, `CrmPolicy`, or `DashboardService` in this task.
+- No hiding or exclusion of tests to improve Sentrux metrics, and no Flutter cut
+  without separate owner approval.
 
 ## Cut 1: capability authorization policy
 
@@ -89,8 +92,11 @@ A new `NotificationDeliveryModule` will own exactly one shared runtime graph:
 
 The existing `NotificationsModule` becomes the HTTP composition shell. It will
 import and re-export `NotificationDeliveryModule`, register both notification
-controllers, and provide only the authentication/role guards needed by those
-controllers.
+controllers, provide only the authentication/role guards needed by those
+controllers, and directly import `DatabaseModule`. The direct database import is
+required because `JwtAuthGuard` uses optional `DatabaseService` injection and
+`NotificationDeliveryModule` does not export that service; without the API-shell
+dependency, capability authorization on notification routes would be skipped.
 
 `AuthModule`, `CrmModule`, and `PlatformModule` will import
 `NotificationDeliveryModule` directly. `AppModule` will continue importing
@@ -99,7 +105,7 @@ deduplication will preserve one delivery-module instance and therefore one set
 of worker/reminder timers.
 
 ```text
-AppModule -> NotificationsModule (controllers + guards)
+AppModule -> NotificationsModule (controllers + guards + direct DatabaseModule)
                          |
                          v
              NotificationDeliveryModule (service + workers + providers)
@@ -133,14 +139,16 @@ After cut 2:
 1. Run notification service/worker, platform outbox, auth, health, and app-module
    composition tests.
 2. Run the full backend test suite and build.
-3. Run Sentrux rescan, health, and rules. Acceptance requires `depth.raw <= 12`,
+3. Run Sentrux rescan, health, and rules. The original forecast targeted root
+   `depth.raw <= 12`; active acceptance uses the observed correction below,
    `quality_signal >= 4975`, no new cycle, and passing rules.
 4. Run `repowise update --index-only`, then inspect changed-file health and
    change risk against the updated index.
 
 ## Expected graph result
 
-The virtual source-graph result is depth 12. The expected next longest chain is:
+The pre-implementation virtual production-source graph forecast depth 12. Its
+expected next longest chain was:
 
 ```text
 main -> AppModule -> AnalyticsModule -> CrmModule -> AuthModule
@@ -149,8 +157,22 @@ main -> AppModule -> AnalyticsModule -> CrmModule -> AuthModule
   -> redact.util
 ```
 
-This new chain is evidence for the next task only; it is not expanded in the
-current double-cut scope.
+This forecast remains historical context; it is not evidence that the root scan
+actually reached 12.
+
+## Accepted observed outcome
+
+The implemented backend/server graph reached depth 11 edges / 12 nodes, so the
+approved notification consumer cut achieved its production-graph objective. The
+repository-root Sentrux scan remains at `depth.raw=13` only because of the
+pre-existing Flutter integration-test chain beginning at
+`integration_test/app_launch_smoke_test.dart` and passing through `lib/main.dart`
+to `magic_api_error.dart`.
+
+This observed result supersedes the original root `depth.raw <= 12` forecast as
+the final structural acceptance gate. It does not authorize hiding or excluding
+tests to lower the metric, nor does it authorize an additional Flutter cut. Any
+Flutter depth work requires a separately approved scope.
 
 ## Rollback
 
