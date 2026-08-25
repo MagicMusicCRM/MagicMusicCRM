@@ -76,6 +76,7 @@ part 'client_card_collaboration_tabs.dart';
 part 'client_card_presentation.dart';
 part 'client_card_student.dart';
 part 'client_card_custom_fields.dart';
+part 'client_card_custom_field_inputs.dart';
 part 'client_card_moderation.dart';
 part 'client_card_contact_editors.dart';
 part 'client_card_assignment_editors.dart';

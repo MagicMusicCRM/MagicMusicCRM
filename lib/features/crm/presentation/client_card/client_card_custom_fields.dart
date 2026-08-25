@@ -95,148 +95,42 @@ extension _ClientCardCustomFields on _ClientCardState {
     if (!field.placements.contains('edit')) {
       return _buildReadOnlyCustomField(cs, field);
     }
+    final rawValue = _customFieldRawValue(field);
+    final label = field.required ? '${field.label} *' : field.label;
+    return switch (field.type) {
+      'select' ||
+      'radio' => _buildSingleChoiceCustomField(cs, field, label, rawValue),
+      'boolean' || 'toggle' => _buildBooleanCustomField(field, label, rawValue),
+      'date' => _buildDateCustomField(cs, field, rawValue?.toString()),
+      'datetime' => _buildDateTimeCustomField(cs, field, rawValue?.toString()),
+      'multi_select' || 'checkbox_group' => _buildMultiChoiceCustomField(
+        cs,
+        field,
+        label,
+        rawValue,
+      ),
+      _ => _buildCustomTextField(
+        cs,
+        label,
+        field,
+        rawValue?.toString(),
+        keyboard: _keyboardForCustomField(field.type),
+      ),
+    };
+  }
+
+  Object? _customFieldRawValue(CrmCustomFieldDefinition field) {
     final customData = _customDataForEntity(field.entity);
     final alias = _customFieldReadAliases[field.key];
-    final rawValue =
-        customData[field.key] ?? (alias == null ? null : customData[alias]);
-    final label = field.required ? '${field.label} *' : field.label;
-
-    if (field.type == 'select' || field.type == 'radio') {
-      final current = rawValue?.toString() ?? '';
-      final selectedId = field.options.contains(current) ? current : null;
-      if (field.type == 'radio') {
-        return Padding(
-          padding: const EdgeInsets.only(bottom: AppSpace.md),
-          child: InputDecorator(
-            decoration: _inputDecoration(cs, label: label, isDense: true),
-            child: Wrap(
-              spacing: AppSpace.xs,
-              runSpacing: AppSpace.xs,
-              children: [
-                for (final option in field.options)
-                  ChoiceChip(
-                    label: Text(option),
-                    selected: selectedId == option,
-                    onSelected: (selected) {
-                      if (selected) {
-                        _updateCustomDataForEntity(
-                          field.entity,
-                          field.key,
-                          option,
-                        );
-                      }
-                    },
-                  ),
-              ],
-            ),
-          ),
-        );
-      }
-      return Padding(
-        padding: const EdgeInsets.only(bottom: AppSpace.md),
-        child: SearchablePickerField(
-          label: label,
-          selectedId: selectedId,
-          placeholder: 'Выберите значение',
-          hintText: field.hint ?? 'Введите значение для поиска',
-          items: [
-            for (final option in field.options)
-              SearchableSelectItem(id: option, label: option),
-          ],
-          onSelected: (item) =>
-              _updateCustomDataForEntity(field.entity, field.key, item?.id),
-        ),
-      );
-    }
-
-    if (field.type == 'boolean' || field.type == 'toggle') {
-      final control = SwitchListTile(
-        value: rawValue == true || rawValue?.toString() == 'true',
-        activeThumbColor: AppColor.gold,
-        onChanged: (value) =>
-            _updateCustomDataForEntity(field.entity, field.key, value),
-        title: Text(label),
-        subtitle: field.hint == null ? null : Text(field.hint!),
-        contentPadding: EdgeInsets.zero,
-      );
-      if (field.type == 'toggle') return control;
-      return CheckboxListTile(
-        value: rawValue == true || rawValue?.toString() == 'true',
-        onChanged: (value) =>
-            _updateCustomDataForEntity(field.entity, field.key, value == true),
-        title: Text(label),
-        subtitle: field.hint == null ? null : Text(field.hint!),
-        contentPadding: EdgeInsets.zero,
-      );
-    }
-
-    if (field.type == 'date') {
-      return _buildDateCustomField(cs, field, rawValue?.toString());
-    }
-
-    if (field.type == 'datetime') {
-      return _buildDateTimeCustomField(cs, field, rawValue?.toString());
-    }
-
-    if (field.type == 'multi_select' || field.type == 'checkbox_group') {
-      final selected = (rawValue as List? ?? const [])
-          .map((value) => value.toString())
-          .toSet();
-      return Padding(
-        padding: const EdgeInsets.only(bottom: AppSpace.md),
-        child: InputDecorator(
-          decoration: _inputDecoration(cs, label: label, isDense: true),
-          child: Wrap(
-            spacing: AppSpace.xs,
-            runSpacing: AppSpace.xs,
-            children: [
-              for (final option in field.options)
-                FilterChip(
-                  label: Text(option),
-                  selected: selected.contains(option),
-                  onSelected: (checked) {
-                    final next = {...selected};
-                    checked ? next.add(option) : next.remove(option);
-                    _updateCustomDataForEntity(
-                      field.entity,
-                      field.key,
-                      next.toList(growable: false),
-                    );
-                  },
-                ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return _buildCustomTextField(
-      cs,
-      label,
-      field,
-      rawValue?.toString(),
-      keyboard: _keyboardForCustomField(field.type),
-    );
+    return customData[field.key] ?? (alias == null ? null : customData[alias]);
   }
 
   Widget _buildReadOnlyCustomField(
     ColorScheme cs,
     CrmCustomFieldDefinition field,
   ) {
-    final customData = _customDataForEntity(field.entity);
-    final alias = _customFieldReadAliases[field.key];
-    final rawValue =
-        customData[field.key] ?? (alias == null ? null : customData[alias]);
-    final value = switch (field.type) {
-      'boolean' || 'toggle' => rawValue == true ? 'Да' : 'Нет',
-      'multi_select' || 'checkbox_group' when rawValue is Iterable =>
-        rawValue.map((item) => item.toString()).join(', '),
-      'date' => _formatCustomDate(rawValue, withTime: false),
-      'datetime' => _formatCustomDate(rawValue, withTime: true),
-      'money' when rawValue != null => '$rawValue ₽',
-      'duration' when rawValue != null => '$rawValue мин.',
-      _ => rawValue?.toString() ?? '',
-    };
+    final rawValue = _customFieldRawValue(field);
+    final value = _readOnlyCustomFieldValue(field.type, rawValue);
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.md),
       child: InputDecorator(
@@ -250,6 +144,22 @@ extension _ClientCardCustomFields on _ClientCardState {
         ),
       ),
     );
+  }
+
+  String _readOnlyCustomFieldValue(String type, Object? rawValue) {
+    if (type == 'date') return _formatCustomDate(rawValue, withTime: false);
+    if (type == 'datetime') return _formatCustomDate(rawValue, withTime: true);
+    if (type == 'boolean' || type == 'toggle') {
+      return rawValue == true ? 'Да' : 'Нет';
+    }
+    if ((type == 'multi_select' || type == 'checkbox_group') &&
+        rawValue is Iterable) {
+      return rawValue.map((item) => item.toString()).join(', ');
+    }
+    if (rawValue == null) return '';
+    if (type == 'money') return '$rawValue ₽';
+    if (type == 'duration') return '$rawValue мин.';
+    return rawValue.toString();
   }
 
   String _formatCustomDate(Object? rawValue, {required bool withTime}) {
@@ -274,177 +184,6 @@ extension _ClientCardCustomFields on _ClientCardState {
     return Map<String, dynamic>.from(_leadData['custom_data'] as Map? ?? {});
   }
 
-  Widget _buildCustomTextField(
-    ColorScheme cs,
-    String label,
-    CrmCustomFieldDefinition field,
-    String? value, {
-    TextInputType? keyboard,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpace.md),
-      child: TextFormField(
-        // Epoch key, not value key — see _buildClientTextField.
-        key: ValueKey('${field.entity}-${field.key}-$_editorEpoch'),
-        initialValue: value ?? '',
-        maxLines: field.type == 'textarea' ? 4 : 1,
-        decoration: _inputDecoration(
-          cs,
-          label: label,
-          helperText: field.hint,
-          isDense: true,
-        ),
-        keyboardType: keyboard,
-        onChanged: (v) {
-          final trimmed = v.trim();
-          final numeric = const {
-            'number',
-            'money',
-            'duration',
-          }.contains(field.type);
-          _updateCustomDataForEntity(
-            field.entity,
-            field.key,
-            trimmed.isEmpty
-                ? null
-                : numeric
-                ? num.tryParse(trimmed.replaceAll(',', '.'))
-                : v,
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildDateCustomField(
-    ColorScheme cs,
-    CrmCustomFieldDefinition field,
-    String? value,
-  ) {
-    final dt = value == null ? null : DateTime.tryParse(value);
-    final display = dt != null
-        ? DateFormat('dd.MM.yyyy', 'ru').format(dt)
-        : 'Не выбрано';
-    final label = field.required ? '${field.label} *' : field.label;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpace.md),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppRadius.control),
-        onTap: () async {
-          final picked = await showDatePicker(
-            context: context,
-            initialDate: dt ?? DateTime.now(),
-            firstDate: DateTime(1950),
-            lastDate: DateTime(2100),
-            // Dates here are often far away (birthdates) — allow typing.
-            initialEntryMode: DatePickerEntryMode.input,
-          );
-          if (picked != null) {
-            _updateCustomDataForEntity(
-              field.entity,
-              field.key,
-              DateFormat('yyyy-MM-dd').format(picked),
-            );
-          }
-        },
-        child: InputDecorator(
-          decoration: _inputDecoration(
-            cs,
-            label: label,
-            helperText: field.hint,
-            isDense: true,
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(display),
-              const Icon(
-                Icons.calendar_today_rounded,
-                size: 16,
-                color: AppColor.gold,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDateTimeCustomField(
-    ColorScheme cs,
-    CrmCustomFieldDefinition field,
-    String? value,
-  ) {
-    final current = value == null ? null : DateTime.tryParse(value)?.toLocal();
-    final label = field.required ? '${field.label} *' : field.label;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpace.md),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppRadius.control),
-        onTap: () async {
-          final pickerContext = context;
-          final date = await showDatePicker(
-            context: pickerContext,
-            initialDate: current ?? DateTime.now(),
-            firstDate: DateTime(1950),
-            lastDate: DateTime(2100),
-            initialEntryMode: DatePickerEntryMode.input,
-          );
-          if (date == null || !pickerContext.mounted) return;
-          final time = await showTimePicker(
-            context: pickerContext,
-            initialTime: current == null
-                ? TimeOfDay.now()
-                : TimeOfDay.fromDateTime(current),
-          );
-          if (time == null) return;
-          _updateCustomDataForEntity(
-            field.entity,
-            field.key,
-            DateTime(
-              date.year,
-              date.month,
-              date.day,
-              time.hour,
-              time.minute,
-            ).toIso8601String(),
-          );
-        },
-        child: InputDecorator(
-          decoration: _inputDecoration(
-            cs,
-            label: label,
-            helperText: field.hint,
-            isDense: true,
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                current == null
-                    ? 'Не выбрано'
-                    : DateFormat('dd.MM.yyyy HH:mm', 'ru').format(current),
-              ),
-              const Icon(Icons.event_rounded, size: 16, color: AppColor.gold),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Редактор возраста.
-  ///
-  /// ✔ Решение владельца 17.07: возраст можно вписать руками, а можно поставить
-  /// дату рождения — и тогда он считается сам. Отсюда два вида этого поля:
-  ///
-  ///  - дата рождения стоит → возраст **только показываем**. Считает его сервер
-  ///    (`age.ts`), и он сам меняется с годами. Поле для ввода здесь было бы
-  ///    обманом: вписанное в него число не читается никем;
-  ///  - даты рождения нет → обычное числовое поле.
-  ///
-  /// Условие — наличие даты рождения, а не повторение правила расчёта: сам
-  /// возраст здесь не вычисляется, иначе правило разъехалось бы с сервером.
   Widget _buildAgeCustomField(ColorScheme cs, String entity) {
     final matches = _customFieldSchema.where(
       (f) => f.entity == entity && f.key == 'age',

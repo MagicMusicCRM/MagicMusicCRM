@@ -43,6 +43,7 @@ void main() {
     expect(owner, isNot(contains("part 'client_card_editors.dart';")));
     for (final part in const [
       'client_card_custom_fields.dart',
+      'client_card_custom_field_inputs.dart',
       'client_card_moderation.dart',
       'client_card_contact_editors.dart',
       'client_card_assignment_editors.dart',
