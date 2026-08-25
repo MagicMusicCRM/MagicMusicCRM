@@ -3294,6 +3294,57 @@ void main() {
         expect(adapter.requests[3].body, isNot(contains('subscriptionId')));
       },
     );
+    test('owns lesson analysis, catalog, preview and create routes', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/crm/lessons/constraints/preview',
+          statusCode: 200,
+          body: {'valid': true, 'violations': [], 'suggestions': []},
+        ),
+        _FakeResponse(
+          path: '/crm/configuration/lesson-decisions',
+          statusCode: 200,
+          body: {'settlementTypes': [], 'teacherCompensationRules': []},
+        ),
+        _FakeResponse(
+          path: '/crm/lessons/lesson-a/reschedule/preview',
+          statusCode: 200,
+          body: {'canConfirm': true, 'previewToken': 'token-a'},
+        ),
+        _FakeResponse(
+          path: '/crm/lessons',
+          statusCode: 201,
+          body: {'id': 'lesson-created'},
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      await service.analyzeLessonSchedule(
+        clientType: 'student',
+        clientId: 'student-a',
+        teacherId: 'teacher-a',
+        branchId: 'branch-a',
+        roomId: 'room-a',
+        scheduledAt: '2026-08-26T10:00:00.000Z',
+        durationMinutes: 60,
+      );
+      await service.getLessonDecisionCatalog(branchId: 'branch-a');
+      await service.previewLessonDecision(
+        lessonId: 'lesson-a',
+        operationKey: 'reschedule',
+        data: {'expectedVersion': 2},
+      );
+      await service.createLessonRaw({
+        'clientRef': {'type': 'student', 'id': 'student-a'},
+      });
+
+      expect(adapter.requests.map((request) => request.path), [
+        '/crm/lessons/constraints/preview',
+        '/crm/configuration/lesson-decisions',
+        '/crm/lessons/lesson-a/reschedule/preview',
+        '/crm/lessons',
+      ]);
+    });
   });
 }
 
@@ -3324,12 +3375,14 @@ class _FakeResponse {
 }
 
 class _CapturedRequest {
+  final String path;
   final String method;
   final Map<String, dynamic> queryParameters;
   final Map<String, dynamic> body;
   final Map<String, dynamic> headers;
 
   const _CapturedRequest({
+    required this.path,
     required this.method,
     required this.queryParameters,
     required this.body,
@@ -3363,6 +3416,7 @@ class _FakeAdapter implements HttpClientAdapter {
         : <String, dynamic>{};
     requests.add(
       _CapturedRequest(
+        path: options.uri.path,
         method: options.method,
         queryParameters: Map<String, dynamic>.from(options.queryParameters),
         body: requestBody,

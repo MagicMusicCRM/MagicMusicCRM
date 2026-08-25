@@ -12,7 +12,7 @@ import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/create_lesson_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision_flow.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_conflicts_api.dart';
+import 'package:magic_music_crm/core/models/lesson_schedule_analysis.dart';
 
 const _teacherId = '22222222-2222-2222-2222-222222222222';
 const _replacementTeacherId = '22222222-2222-4222-8222-222222222223';

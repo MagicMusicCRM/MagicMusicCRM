@@ -1,11 +1,4 @@
-import 'package:magic_music_crm/core/api/magic_api_client.dart';
-import 'package:magic_music_crm/core/api/magic_api_error.dart';
-
 /// v4 structured constraint contract for lesson creation.
-///
-/// Живёт расширением на [MagicApiClient] рядом с расписанием, а не в общем
-/// ядре сервисов: единственные потребители — диалог занятия и дневная сетка.
-
 class LessonConstraintViolation {
   final String code;
   final String resourceType;
@@ -146,13 +139,9 @@ class LessonScheduleAnalysis {
   }
 }
 
-/// Parses the authoritative v4 create/edit/drag response. Unlike the old
-/// `conflicts` payload, all violations can arrive together and every overlap
-/// contains stable lesson ids suitable for a UI link.
-List<LessonConstraintViolation>? lessonConstraintViolations(
-  MagicApiException error,
+List<LessonConstraintViolation>? lessonConstraintViolationsFromDetails(
+  Object? details,
 ) {
-  final details = error.details;
   if (details is! Map) return null;
   final raw = details['violations'];
   if (raw is! List) return null;
@@ -161,60 +150,4 @@ List<LessonConstraintViolation>? lessonConstraintViolations(
       if (item is Map)
         LessonConstraintViolation.fromJson(Map<String, dynamic>.from(item)),
   ];
-}
-
-extension ScheduleConflictsApi on MagicApiClient {
-  Future<LessonScheduleAnalysis> analyzeLessonSchedule({
-    required String clientType,
-    required String clientId,
-    required String teacherId,
-    required String branchId,
-    required String roomId,
-    required String scheduledAt,
-    required int durationMinutes,
-    String? excludeLessonId,
-  }) async {
-    final response = await post<Map<String, dynamic>>(
-      '/crm/lessons/constraints/preview',
-      data: {
-        'clientRef': {'type': clientType, 'id': clientId},
-        'teacherId': teacherId,
-        'branchId': branchId,
-        'roomId': roomId,
-        'scheduledAt': scheduledAt,
-        'durationMinutes': durationMinutes,
-        'excludeLessonId': ?excludeLessonId,
-      },
-    );
-    return LessonScheduleAnalysis.fromJson(response);
-  }
-
-  Future<List<LessonConstraintViolation>> previewLessonConstraints({
-    required String clientType,
-    required String clientId,
-    required String teacherId,
-    required String branchId,
-    required String roomId,
-    required String scheduledAt,
-    required int durationMinutes,
-    String? excludeLessonId,
-  }) async {
-    final analysis = await analyzeLessonSchedule(
-      clientType: clientType,
-      clientId: clientId,
-      teacherId: teacherId,
-      branchId: branchId,
-      roomId: roomId,
-      scheduledAt: scheduledAt,
-      durationMinutes: durationMinutes,
-      excludeLessonId: excludeLessonId,
-    );
-    return analysis.violations;
-  }
-
-  /// POST /crm/lessons with a complete v4 draft. Mutation metadata is attached
-  /// centrally by [MagicApiClient] and no business role can bypass violations.
-  Future<Map<String, dynamic>> createLessonRaw(Map<String, dynamic> data) {
-    return post<Map<String, dynamic>>('/crm/lessons', data: data);
-  }
 }

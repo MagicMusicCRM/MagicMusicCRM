@@ -1,4 +1,4 @@
-import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_conflicts_api.dart';
+import 'package:magic_music_crm/core/models/lesson_schedule_analysis.dart';
 
 import 'preferred_schedule_draft.dart';
 

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
+import 'package:magic_music_crm/core/models/lesson_schedule_analysis.dart';
 import 'package:magic_music_crm/core/navigation/app_back_policy.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_text.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -12,7 +13,6 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_conflicts_api.dart';
 import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
 
 import 'lesson_decision_flow.dart';
@@ -481,12 +481,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     final revision = ++_decisionCatalogRequestRevision;
     late final Map<String, dynamic> response;
     try {
-      response = await ref
-          .read(magicApiClientProvider)
-          .get<Map<String, dynamic>>(
-            '/crm/configuration/lesson-decisions',
-            queryParameters: {'branchId': branchId},
-          );
+      response = await _crm.getLessonDecisionCatalog(branchId: branchId);
     } catch (_) {
       if (!mounted ||
           revision != _decisionCatalogRequestRevision ||
@@ -730,7 +725,6 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     String clientType,
     String clientId,
   ) async {
-    final api = ref.read(magicApiClientProvider);
     final canSave = await _previewConstraintsBeforeSave(
       startsAt,
       clientType,
@@ -738,9 +732,9 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     );
     if (!canSave || !mounted) return false;
     try {
-      await api.createLessonRaw(payload);
+      await _crm.createLessonRaw(payload);
     } on MagicApiException catch (error) {
-      final violations = lessonConstraintViolations(error);
+      final violations = lessonConstraintViolationsFromDetails(error.details);
       if (violations == null || violations.isEmpty) rethrow;
       if (mounted) {
         setState(() {
@@ -958,18 +952,16 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
     String clientId,
   ) async {
     try {
-      final analysis = await ref
-          .read(magicApiClientProvider)
-          .analyzeLessonSchedule(
-            clientType: clientType,
-            clientId: clientId,
-            teacherId: _selectedTeacherId!,
-            branchId: _selectedBranchId!,
-            roomId: _selectedRoomId!,
-            scheduledAt: startsAt.toIso8601String(),
-            durationMinutes: _durationMinutes,
-            excludeLessonId: _isEdit ? widget.lesson!['id']?.toString() : null,
-          );
+      final analysis = await _crm.analyzeLessonSchedule(
+        clientType: clientType,
+        clientId: clientId,
+        teacherId: _selectedTeacherId!,
+        branchId: _selectedBranchId!,
+        roomId: _selectedRoomId!,
+        scheduledAt: startsAt.toIso8601String(),
+        durationMinutes: _durationMinutes,
+        excludeLessonId: _isEdit ? widget.lesson!['id']?.toString() : null,
+      );
       if (mounted) {
         setState(() {
           _scheduleAnalysis = analysis;
@@ -1014,18 +1006,16 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
       _scheduleAnalysisError = null;
     });
     try {
-      final analysis = await ref
-          .read(magicApiClientProvider)
-          .analyzeLessonSchedule(
-            clientType: clientType,
-            clientId: clientId,
-            teacherId: _selectedTeacherId!,
-            branchId: _selectedBranchId!,
-            roomId: _selectedRoomId!,
-            scheduledAt: startsAt.toIso8601String(),
-            durationMinutes: _durationMinutes,
-            excludeLessonId: _isEdit ? widget.lesson!['id']?.toString() : null,
-          );
+      final analysis = await _crm.analyzeLessonSchedule(
+        clientType: clientType,
+        clientId: clientId,
+        teacherId: _selectedTeacherId!,
+        branchId: _selectedBranchId!,
+        roomId: _selectedRoomId!,
+        scheduledAt: startsAt.toIso8601String(),
+        durationMinutes: _durationMinutes,
+        excludeLessonId: _isEdit ? widget.lesson!['id']?.toString() : null,
+      );
       if (mounted) setState(() => _scheduleAnalysis = analysis);
     } catch (error) {
       if (mounted) {

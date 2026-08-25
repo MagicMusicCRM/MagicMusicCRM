@@ -3,6 +3,68 @@ part of 'magic_crm_service.dart';
 /// Schedule & lessons: matrix, lessons, tasks, comments,
 /// timeline, progress notes, subscriptions, ledger, schedule series.
 extension MagicCrmSchedule on MagicCrmService {
+  Future<Map<String, dynamic>> getLessonDecisionCatalog({String? branchId}) =>
+      _api.get<Map<String, dynamic>>(
+        '/crm/configuration/lesson-decisions',
+        queryParameters: {'branchId': branchId},
+      );
+
+  Future<LessonScheduleAnalysis> analyzeLessonSchedule({
+    required String clientType,
+    required String clientId,
+    required String teacherId,
+    required String branchId,
+    required String roomId,
+    required String scheduledAt,
+    required int durationMinutes,
+    String? excludeLessonId,
+  }) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/crm/lessons/constraints/preview',
+      data: {
+        'clientRef': {'type': clientType, 'id': clientId},
+        'teacherId': teacherId,
+        'branchId': branchId,
+        'roomId': roomId,
+        'scheduledAt': scheduledAt,
+        'durationMinutes': durationMinutes,
+        'excludeLessonId': ?excludeLessonId,
+      },
+    );
+    return LessonScheduleAnalysis.fromJson(response);
+  }
+
+  Future<Map<String, dynamic>> createLessonRaw(Map<String, dynamic> data) =>
+      _api.post<Map<String, dynamic>>('/crm/lessons', data: data);
+
+  Future<Map<String, dynamic>> previewLessonDecision({
+    required String lessonId,
+    required String operationKey,
+    required Map<String, dynamic> data,
+  }) => _api.post<Map<String, dynamic>>(
+    '/crm/lessons/$lessonId/$operationKey/preview',
+    data: data,
+  );
+
+  Future<Map<String, dynamic>> commitLessonDecision({
+    required String lessonId,
+    required String operationKey,
+    required Map<String, dynamic> data,
+    required MagicMutationIdentity identity,
+    required bool usePut,
+  }) => usePut
+      ? _api.request<Map<String, dynamic>>(
+          'PUT',
+          '/crm/lessons/$lessonId/$operationKey',
+          data: data,
+          mutationIdentity: identity,
+        )
+      : _api.postIdempotent<Map<String, dynamic>>(
+          '/crm/lessons/$lessonId/$operationKey',
+          data: data,
+          identity: identity,
+        );
+
   Future<Map<String, dynamic>> getBranchScheduleHours(String branchId) {
     return _api.get<Map<String, dynamic>>(
       '/crm/schedule-reference/branches/$branchId/hours',
