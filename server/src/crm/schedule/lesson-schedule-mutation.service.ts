@@ -518,47 +518,57 @@ export class LessonScheduleMutationService {
       return;
     }
 
-    const attemptsRestrictedEdit =
-      dto.studentId !== undefined ||
-      dto.groupId !== undefined ||
-      dto.leadId !== undefined ||
-      dto.teacherId !== undefined ||
-      dto.branchId !== undefined ||
-      dto.roomId !== undefined ||
-      dto.scheduledAt !== undefined ||
-      dto.durationMinutes !== undefined ||
-      // teacher_rate is what the school PAYS the teacher. Without this a
-      // teacher could set the rate on their own lesson — a self-granted raise —
-       // even though the read service will not let them READ the applied rate
-      // (canReadSchoolFinance is director/system_admin only).
-      dto.teacherRate !== undefined ||
-      dto.isTrial !== undefined;
-    if (attemptsRestrictedEdit) {
+    if (this.hasRestrictedTeacherFields(dto)) {
       this.policy.assertCanWriteCrm(actor);
       return;
     }
 
-    let row: { teacher_user_id: string | null } | null | undefined =
-      lockedSnapshot;
-    if (lockedSnapshot === undefined) {
-      const result = await this.database.query<{
-        teacher_user_id: string | null;
-      }>(
-        `
-          select tp.user_id as teacher_user_id
-          from app.lessons l
-          left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
-          left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
-          where l.id = $1 and l.deleted_at is null
-          limit 1
-        `,
-        [lessonId],
-      );
-      row = result.rows[0] ?? null;
-    }
-    if (!row) throw new NotFoundException("Урок не найден.");
-    if (row.teacher_user_id === actor.userId) return;
+    const teacherUserId = await this.resolveLessonTeacherUserId(
+      lessonId,
+      lockedSnapshot,
+    );
+    if (teacherUserId === actor.userId) return;
     throw new NotFoundException("Урок не найден.");
+  }
+
+  private hasRestrictedTeacherFields(dto: UpsertLessonDto): boolean {
+    // teacherRate is what the school pays the teacher. Treating it as an
+    // unrestricted self-edit would allow a teacher to grant their own raise.
+    return [
+      dto.studentId,
+      dto.groupId,
+      dto.leadId,
+      dto.teacherId,
+      dto.branchId,
+      dto.roomId,
+      dto.scheduledAt,
+      dto.durationMinutes,
+      dto.teacherRate,
+      dto.isTrial,
+    ].some((value) => value !== undefined);
+  }
+
+  private async resolveLessonTeacherUserId(
+    lessonId: string,
+    lockedSnapshot?: RescheduleSnapshotRow | null,
+  ): Promise<string | null> {
+    if (lockedSnapshot !== undefined) {
+      return lockedSnapshot?.teacher_user_id ?? null;
+    }
+    const result = await this.database.query<{
+      teacher_user_id: string | null;
+    }>(
+      `
+        select tp.user_id as teacher_user_id
+        from app.lessons l
+        left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
+        left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
+        where l.id = $1 and l.deleted_at is null
+        limit 1
+      `,
+      [lessonId],
+    );
+    return result.rows[0]?.teacher_user_id ?? null;
   }
 
 
@@ -593,4 +603,3 @@ export class LessonScheduleMutationService {
     }
   }
 }
-
