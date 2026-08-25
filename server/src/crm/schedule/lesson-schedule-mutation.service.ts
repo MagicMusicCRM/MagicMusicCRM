@@ -146,32 +146,9 @@ export class LessonScheduleMutationService {
       );
     }
     this.assertLeadLessonIsTrial(dto.leadId, dto.isTrial);
-    // Resource locks, conflict check and insert share one transaction.
-    const result = await this.database.transaction(async (client) => {
-      if (dto.leadId) {
-        const conversion = await client.query<{ converted: boolean }>(
-          `
-            with locked_lead as (
-              select pg_advisory_xact_lock(
-                hashtextextended($1::uuid::text, 0)
-              )
-            )
-            select exists (
-              select 1
-              from app.students student
-              where student.lead_id = $1
-                and student.deleted_at is null
-            ) as converted
-            from locked_lead
-          `,
-          [dto.leadId],
-        );
-        if (conversion.rows[0]?.converted) {
-          throw new ConflictException(
-            "Лид уже стал учеником; назначьте обычное занятие ученику.",
-          );
-        }
-      }
+    const lesson = await this.database.transaction(async (client) => {
+      const executor = client as unknown as ScheduleQueryExecutor;
+      await this.assertLeadNotConverted(executor, dto.leadId);
       await this.conflicts.assertNoScheduleConflicts(
         {
           teacherId: dto.teacherId ?? null,
@@ -180,37 +157,10 @@ export class LessonScheduleMutationService {
           durationMinutes: dto.durationMinutes ?? 60,
           groupId: dto.groupId ?? null,
         },
-        client as unknown as ScheduleQueryExecutor,
+        executor,
       );
-      return client.query<LessonRow>(
-        `
-        insert into app.lessons (
-          student_id, group_id, lead_id, teacher_id, branch_id, room_id, scheduled_at, duration_minutes,
-          status, is_trial, notes, teacher_rate
-        )
-        values ($1, $2, $3, $4, $5, $6, $7, coalesce($8, 60), coalesce($9, 'scheduled'), coalesce($10, false), $11, $12::numeric)
-        returning id, student_id, group_id, lead_id, teacher_id, branch_id, room_id, scheduled_at, duration_minutes,
-          status, is_trial, notes, teacher_rate, null::uuid as student_user_id, null::uuid as teacher_user_id,
-          null::text as student_name, null::text as lead_name, null::text as teacher_name, null::text as branch_name,
-          null::text as room_name, null::text as group_name, null::numeric as group_price_per_lesson
-      `,
-        [
-          dto.studentId ?? null,
-          dto.groupId ?? null,
-          dto.leadId ?? null,
-          dto.teacherId ?? null,
-          dto.branchId ?? null,
-          dto.roomId ?? null,
-          dto.scheduledAt,
-          dto.durationMinutes ?? null,
-          dto.status ?? null,
-          dto.isTrial ?? null,
-          dto.notes?.trim() || null,
-          dto.teacherRate ?? null,
-        ],
-      );
+      return this.insertLesson(executor, dto);
     });
-    const lesson = result.rows[0];
     await this.recordAuditSafe({
       actor,
       action: "crm.lesson_created",
@@ -239,6 +189,69 @@ export class LessonScheduleMutationService {
       await this.notifyTrialBooked(lesson, affectedUserIds);
     }
     return toLessonDto(lesson);
+  }
+
+  private async assertLeadNotConverted(
+    executor: ScheduleQueryExecutor,
+    leadId: string | null | undefined,
+  ): Promise<void> {
+    if (!leadId) return;
+    const conversion = await executor.query<{ converted: boolean }>(
+      `
+        with locked_lead as (
+          select pg_advisory_xact_lock(
+            hashtextextended($1::uuid::text, 0)
+          )
+        )
+        select exists (
+          select 1
+          from app.students student
+          where student.lead_id = $1
+            and student.deleted_at is null
+        ) as converted
+        from locked_lead
+      `,
+      [leadId],
+    );
+    if (conversion.rows[0]?.converted) {
+      throw new ConflictException(
+        "Лид уже стал учеником; назначьте обычное занятие ученику.",
+      );
+    }
+  }
+
+  private async insertLesson(
+    executor: ScheduleQueryExecutor,
+    dto: UpsertLessonDto,
+  ): Promise<LessonRow> {
+    const result = await executor.query<LessonRow>(
+      `
+        insert into app.lessons (
+          student_id, group_id, lead_id, teacher_id, branch_id, room_id, scheduled_at, duration_minutes,
+          status, is_trial, notes, teacher_rate
+        )
+        values ($1, $2, $3, $4, $5, $6, $7, coalesce($8, 60), coalesce($9, 'scheduled'), coalesce($10, false), $11, $12::numeric)
+        returning id, student_id, group_id, lead_id, teacher_id, branch_id, room_id, scheduled_at, duration_minutes,
+          status, is_trial, notes, teacher_rate, null::uuid as student_user_id, null::uuid as teacher_user_id,
+          null::text as student_name, null::text as lead_name, null::text as teacher_name, null::text as branch_name,
+          null::text as room_name, null::text as group_name, null::numeric as group_price_per_lesson
+      `,
+      [
+        dto.studentId ?? null,
+        dto.groupId ?? null,
+        dto.leadId ?? null,
+        dto.teacherId ?? null,
+        dto.branchId ?? null,
+        dto.roomId ?? null,
+        dto.scheduledAt,
+        dto.durationMinutes ?? null,
+        dto.status ?? null,
+        dto.isTrial ?? null,
+        dto.notes?.trim() || null,
+        dto.teacherRate ?? null,
+      ],
+    );
+    return result.rows[0];
   }
 
   async updateLesson(
