@@ -1,8 +1,41 @@
+import 'package:intl/intl.dart';
+
 String formatCompensationMinorInput(String? valueMinor) {
   final value = BigInt.tryParse(valueMinor ?? '') ?? BigInt.zero;
   final whole = value ~/ BigInt.from(100);
   final fraction = (value % BigInt.from(100)).toString().padLeft(2, '0');
   return fraction == '00' ? '$whole' : '$whole,$fraction';
+}
+
+String formatLessonSnapshotNumber(num value) =>
+    NumberFormat('#,##0.##', 'ru').format(value);
+
+String formatClientChargeSnapshotLabel({
+  required String clientChargeType,
+  required num compatibilityValue,
+}) => switch (clientChargeType) {
+  'subscription' => '${formatLessonSnapshotNumber(compatibilityValue)} ч',
+  'personal_account' => '${formatLessonSnapshotNumber(compatibilityValue)} ₽',
+  _ => '0 ₽',
+};
+
+String formatTeacherCompensationSnapshotLabel({
+  required String? mode,
+  required String compensationInput,
+  required String compatibilityRateType,
+  required num compatibilityRate,
+}) {
+  if (mode == null) return 'Не выбрано';
+  if (mode == 'none') return '0 ₽';
+  if (mode == 'standard') {
+    return compatibilityRateType == 'none'
+        ? 'Стандартная ставка преподавателя · 0 ₽'
+        : 'Стандартная ставка преподавателя · '
+              '${formatLessonSnapshotNumber(compatibilityRate)} ₽/ч';
+  }
+  if (mode == 'percent') return '$compensationInput% от стандартной ставки';
+  if (mode == 'hourly') return '$compensationInput ₽/ч';
+  return '$compensationInput ₽ за занятие';
 }
 
 String? parseCompensationValueMinor({
