@@ -310,3 +310,33 @@ The global success contract remains open: code-only health is `6.21 < 7.5`.
 Fresh production-first ranking selects `server/src/crm/leads.service.ts` as
 package 6: health `1.90`, `1,376` NLOC, max CCN `26`, and weighted deficit
 `8,394`. The remaining CRM and Flutter god classes stay in the mandatory queue.
+
+## Package 6 verified outcome
+
+The Leads application ownership split is implemented and verified at
+`1ee213707149`.
+
+- The former `1,376`-NLOC god class with max CCN `26` is now a SQL-free stable
+  facade of `63` NLOC and max CCN `1`. Board query/filter/assembly, card
+  aggregation, directory reads, transactional persistence, commands, and DTO
+  mapping each have a named production owner.
+- New owner health ranges from `7.44` to `9.65`, max CCN is `8`, max NLOC is
+  `346`, and no god/brain finding remains. Combined facade/replacement weighted
+  deficit is `247` versus `8,394`, a `97.1%` reduction.
+- Full backend verification passed `211/211` suites and `1,537/1,537` tests,
+  typecheck, Nest build, and diff checks. Eight final paired owner tests also
+  pass; exact RepoWise risk reports `missing_tests=[]`, no new cycle, no
+  conformance violation, no broken consumer, and no breaking API change.
+- Sentrux improved `5730 → 5745`, with acyclicity `10000`/raw `0`, depth `13`,
+  equality `6249`, modularity `5369`, redundancy `4896`, and both rules passing.
+
+Backend module health is `7.02`, so the server-side program gate is achieved.
+Repository code-only health is `6.26`; Flutter `4.82` and the overall `7.5`
+contract remain open. The literal dashboard directive is still the large
+subscription integration suite whose primary signal is historical co-change.
+Under the approved production-first ranking, package 7 targets
+`lib/features/admin/presentation/widgets/teacher_detail_dialog.dart`: health
+`1.00`, `1,158` NLOC, max CCN `19`, weighted deficit `8,106`, zero attributed
+line coverage, and ten dependents. `create_lesson_dialog.dart`,
+`crm.service.ts`, `client_card_student.dart`, and `lesson_decision_flow.dart`
+remain in the mandatory god-file cleanup queue.

@@ -77,3 +77,36 @@ NestJS behavior remain unchanged.
 Land model/filter/assembler, each read owner, write ownership, and facade wiring
 as separate commits. Revert in reverse order. No database or production-state
 rollback is required because the package preserves all persistence contracts.
+
+## Verified outcome
+
+The semantic split is implemented and verified at `1ee213707149` as eight
+independently revertible implementation, correction, and test-ownership
+commits. `LeadsService` remains the stable NestJS application port but now has
+only `63` NLOC, max CCN `1`, and no SQL, transaction, mapping, or domain branch.
+
+- RepoWise is exact with `index_behind=false`. The eight new production owners
+  score `7.44–9.65`, max CCN is `8`, max NLOC is `346`, and none has a god/brain
+  finding. Including the historically co-changed facade, combined weighted
+  deficit is `247` versus `8,394`, a `97.1%` reduction.
+- The facade score is `5.44` solely because its retained public filename still
+  carries co-change history with 32 files; its current maintainability score is
+  `7.60`, max CCN is `1`, and structural tests enforce the SQL-free `120`-NLOC
+  ceiling. Replacing the public port would discard compatibility without
+  reducing current code risk.
+- The code HEAD passed all `211` backend suites and `1,537` tests, typecheck,
+  Nest build, and diff checks. The final test-only commits add eight direct
+  semantic-owner tests; all nine focused owner suites pass `36/36`. RepoWise
+  now reports `missing_tests=[]`, no cycle, no conformance violation, no broken
+  consumer, and no breaking API change.
+- Change risk is `Elevated`, percentile `100`, because the ownership move spans
+  22 TypeScript files and `3,836` changed lines. Four coverage-backed suites
+  guard the external surface, `untested_changes` is empty, and the complete
+  backend suite was therefore used as the authoritative behavior gate.
+- Sentrux improved from package baseline `5730` to `5745`: acyclicity `10000`
+  with raw `0`, depth `13`, equality `6249`, modularity `5369`, redundancy
+  `4896`, and both architecture rules passing.
+
+Backend module health is now `7.02`, crossing the program target of `7.0`.
+Repository code-only health moved from `6.21` to `6.26`; the overall `7.5`
+contract and Flutter `7.0` contract remain open.
