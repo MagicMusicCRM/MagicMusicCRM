@@ -87,6 +87,15 @@ extension _ClientCardCustomFields on _ClientCardState {
     'requestType': 'addressType',
     'responsible': 'responsibleName',
   };
+  static const Set<String> _booleanCustomFieldTypes = {'boolean', 'toggle'};
+  static const Set<String> _multiCustomFieldTypes = {
+    'multi_select',
+    'checkbox_group',
+  };
+  static const Map<String, String> _customFieldValueSuffixes = {
+    'money': ' ₽',
+    'duration': ' мин.',
+  };
 
   Widget _buildCustomFieldControl(
     ColorScheme cs,
@@ -147,19 +156,22 @@ extension _ClientCardCustomFields on _ClientCardState {
   }
 
   String _readOnlyCustomFieldValue(String type, Object? rawValue) {
-    if (type == 'date') return _formatCustomDate(rawValue, withTime: false);
-    if (type == 'datetime') return _formatCustomDate(rawValue, withTime: true);
-    if (type == 'boolean' || type == 'toggle') {
+    if (type == 'date' || type == 'datetime') {
+      return _formatCustomDate(rawValue, withTime: type == 'datetime');
+    }
+    if (_booleanCustomFieldTypes.contains(type)) {
       return rawValue == true ? 'Да' : 'Нет';
     }
-    if ((type == 'multi_select' || type == 'checkbox_group') &&
-        rawValue is Iterable) {
-      return rawValue.map((item) => item.toString()).join(', ');
+    if (_multiCustomFieldTypes.contains(type)) {
+      return _formatMultiCustomFieldValue(rawValue);
     }
     if (rawValue == null) return '';
-    if (type == 'money') return '$rawValue ₽';
-    if (type == 'duration') return '$rawValue мин.';
-    return rawValue.toString();
+    return '${rawValue.toString()}${_customFieldValueSuffixes[type] ?? ''}';
+  }
+
+  String _formatMultiCustomFieldValue(Object? rawValue) {
+    if (rawValue is! Iterable) return rawValue?.toString() ?? '';
+    return rawValue.map((item) => item.toString()).join(', ');
   }
 
   String _formatCustomDate(Object? rawValue, {required bool withTime}) {
