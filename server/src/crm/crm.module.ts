@@ -36,6 +36,7 @@ import { PersonAccountService } from "./person-account.service";
 import { PersonLifecycleService } from "./person-lifecycle.service";
 import { ScheduleService } from "./schedule.service";
 import { ScheduleReadService } from "./schedule/schedule-read.service";
+import { ScheduleConflictService } from "./schedule/schedule-conflict.service";
 import { SectionViewsService } from "./section-views.service";
 import { TimelineService } from "./timeline.service";
 import { DashboardService } from "./dashboard.service";
@@ -161,6 +162,7 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     PersonAccountService,
     PersonLifecycleService,
     ScheduleReadService,
+    ScheduleConflictService,
     ScheduleService,
     TimelineService,
     SectionViewsService,

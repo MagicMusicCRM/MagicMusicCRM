@@ -17,6 +17,7 @@ import { CurrentActor } from "../common/security/current-actor.decorator";
 import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
 import { ScheduleService } from "./schedule.service";
 import { ScheduleReadService } from "./schedule/schedule-read.service";
+import { ScheduleConflictService } from "./schedule/schedule-conflict.service";
 import { BulkLessonRateDto } from "./dto/bulk-lesson-rate.dto";
 import {
   CreateScheduleSeriesDto,
@@ -72,6 +73,7 @@ export class CrmScheduleController {
   constructor(
     private readonly schedule: ScheduleService,
     private readonly scheduleRead: ScheduleReadService,
+    private readonly scheduleConflicts: ScheduleConflictService,
     private readonly lessonCommands: LessonCommandService,
     private readonly lessonSeriesCommands: LessonSeriesCommandService,
     private readonly lessonTransitions: LessonTransitionService,
@@ -243,7 +245,7 @@ export class CrmScheduleController {
     @CurrentActor() actor: ActorContext,
     @Query() query: ScheduleConflictsQuery,
   ) {
-    return this.schedule.getScheduleConflicts(actor, query);
+    return this.scheduleConflicts.getScheduleConflicts(actor, query);
   }
 
   @Post("lessons")

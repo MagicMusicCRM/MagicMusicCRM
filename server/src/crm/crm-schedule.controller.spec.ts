@@ -16,6 +16,13 @@ describe("CrmScheduleController rollout boundary", () => {
       getScheduleMatrix: jest.fn().mockResolvedValue({ items: [], groups: [] }),
       getScheduleMonthSummary: jest.fn().mockResolvedValue({ items: [] }),
     };
+    const scheduleConflicts = {
+      getScheduleConflicts: jest.fn().mockResolvedValue({
+        teacherBusy: false,
+        roomBusy: false,
+        conflicts: [],
+      }),
+    };
     const lessonCommands = {
       create: jest.fn().mockResolvedValue({ path: "v4" }),
       update: jest.fn().mockResolvedValue({ path: "v4" }),
@@ -45,6 +52,7 @@ describe("CrmScheduleController rollout boundary", () => {
       controller: new CrmScheduleController(
         schedule as never,
         scheduleRead as never,
+        scheduleConflicts as never,
         lessonCommands as never,
         lessonSeriesCommands as never,
         lessonTransitions as never,
@@ -54,6 +62,7 @@ describe("CrmScheduleController rollout boundary", () => {
       ),
       schedule,
       scheduleRead,
+      scheduleConflicts,
       lessonCommands,
       schedulePlans,
     };
@@ -137,5 +146,21 @@ describe("CrmScheduleController rollout boundary", () => {
       groupBy: "room",
     });
     expect(scheduleRead.getScheduleMonthSummary).toHaveBeenCalledWith(actor, {});
+  });
+
+  it("routes conflict preflight through the dedicated conflict service", async () => {
+    const { controller: subject, scheduleConflicts } = controller("v4");
+    const query = {
+      teacherId: "teacher-a",
+      startsAt: "2026-08-05T09:00:00.000Z",
+      endsAt: "2026-08-05T10:00:00.000Z",
+    } as never;
+
+    await subject.getScheduleConflicts(actor, query);
+
+    expect(scheduleConflicts.getScheduleConflicts).toHaveBeenCalledWith(
+      actor,
+      query,
+    );
   });
 });

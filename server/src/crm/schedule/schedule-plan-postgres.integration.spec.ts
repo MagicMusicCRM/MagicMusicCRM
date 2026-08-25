@@ -16,6 +16,7 @@ import { ScheduleService } from "../schedule.service";
 import { AvailabilityRepository } from "./availability.repository";
 import { ConstraintEngineRepository } from "./constraint-engine.repository";
 import { ScheduleConstraintEngine } from "./constraint-engine.service";
+import { ScheduleConflictService } from "./schedule-conflict.service";
 import { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
 import { LessonRequiredFieldValidator } from "./lesson-required-field.validator";
 import { LessonSeriesCommandService } from "./lesson-series-command.service";
@@ -70,6 +71,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       {} as never,
       realtime,
       constraints,
+      new ScheduleConflictService(database, policy),
       reservations,
     );
     const availability = new AvailabilityRepository(database);

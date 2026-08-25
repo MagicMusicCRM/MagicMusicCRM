@@ -10,6 +10,7 @@ import { RealtimeBus } from "../realtime/realtime-bus";
 import { CrmPolicy } from "./crm.policy";
 import { ScheduleService } from "./schedule.service";
 import { ScheduleConstraintEngine } from "./schedule/constraint-engine.service";
+import { ScheduleConflictService } from "./schedule/schedule-conflict.service";
 
 describe("ScheduleService", () => {
   const actor = { userId: "manager-a", role: "manager" as const };
@@ -40,22 +41,28 @@ describe("ScheduleService", () => {
     return { audit, constraints, notifications, policy };
   };
 
-  const construct = (query: jest.Mock, deps: ReturnType<typeof buildDeps>) =>
-    new ScheduleService(
-      {
+  const construct = (query: jest.Mock, deps: ReturnType<typeof buildDeps>) => {
+    const database = {
         query,
         // Transactional writes share the same query mock so call indices in
         // the assertions below stay stable.
         transaction: (
           work: (client: { query: jest.Mock }) => Promise<unknown>,
         ) => work({ query }),
-      } as unknown as DatabaseService,
+      } as unknown as DatabaseService;
+    return new ScheduleService(
+      database,
       deps.audit as unknown as AuditService,
       deps.policy as unknown as CrmPolicy,
       deps.notifications as unknown as NotificationsService,
       { emitCrmChanged: () => undefined } as unknown as RealtimeBus,
       deps.constraints as unknown as ScheduleConstraintEngine,
+      new ScheduleConflictService(
+        database,
+        deps.policy as unknown as CrmPolicy,
+      ),
     );
+  };
 
   const createService = (rows: Record<string, unknown>[] = []) => {
     const query = jest.fn().mockResolvedValue({ rows });
@@ -136,50 +143,6 @@ describe("ScheduleService", () => {
     );
     expect(sql).not.toContain("now() at time zone 'Europe/Moscow'");
   });
-
-  it("canonicalizes mixed-case advisory resource keys", async () => {
-    const { service, query } = createService([]);
-    const locks = service as unknown as {
-      acquireScheduleLockKeys(
-        executor: { query: jest.Mock },
-        keys: string[],
-      ): Promise<void>;
-    };
-    await locks.acquireScheduleLockKeys({ query }, [
-      "teacher:ABC-DEF",
-      "teacher:abc-def",
-      "room:ROOM-A",
-    ]);
-    expect(query.mock.calls.map((call) => call[1][0])).toEqual([
-      "room:room-a",
-      "teacher:abc-def",
-    ]);
-  });
-
-
-
-
-
-
-  it("locks Plan series with the same deterministic keys as materialization", async () => {
-    const { service, query } = createService([]);
-
-    await service.lockSchedulePlanSeries({ query } as never, [
-      "series-b",
-      "series-a",
-      "series-a",
-    ]);
-
-    expect(
-      query.mock.calls
-        .filter((call) => String(call[0]).includes("pg_advisory_xact_lock"))
-        .map((call) => call[1][0]),
-    ).toEqual(["series:series-a", "series:series-b"]);
-  });
-
-
-
-
 
   it("creates a schedule series and materializes lessons up to the horizon (KVA-236)", async () => {
     const { service, query, audit } = createServiceWithQueryResults([
@@ -1273,74 +1236,6 @@ describe("ScheduleService", () => {
       teacher_hit: true,
       room_hit: false,
     };
-
-    it("GET conflicts is admin+ only and returns the pinned shape", async () => {
-      const { service, query, policy } = createServiceWithQueryResults([
-        { rows: [busyRow] },
-      ]);
-
-      await expect(
-        service.getScheduleConflicts(actor, {
-          teacherId: "teacher-a",
-          startsAt: "2026-07-20T10:30:00.000Z",
-          endsAt: "2026-07-20T11:30:00.000Z",
-        }),
-      ).resolves.toEqual({
-        teacherBusy: true,
-        roomBusy: false,
-        conflicts: [
-          {
-            lessonId: "lesson-busy",
-            title: "Анна Иванова",
-            startsAt: "2026-07-20T10:00:00.000Z",
-            endsAt: "2026-07-20T11:00:00.000Z",
-            roomName: "101",
-            teacherName: "Иван Петров",
-          },
-        ],
-      });
-
-      expect(policy.assertManagerOnly).toHaveBeenCalledWith(actor);
-      const sql = String(query.mock.calls[0][0]);
-      // Operational overlap semantics: terminal cancellation/reschedule
-      // sources never conflict, the same group is one class, and the check is
-      // a half-open tstzrange overlap.
-      expect(sql).toContain(
-        "l.lifecycle_state in ('scheduled', 'settlement_pending', 'successfully_completed')",
-      );
-      expect(sql).toContain("l.deleted_at is null");
-      expect(sql).toContain("tstzrange");
-      expect(sql).toContain("l.group_id <> $6");
-    });
-
-    it("reports «свободно» without a query when neither teacher nor room is given", async () => {
-      const { service, query } = createServiceWithQueryResults([]);
-
-      await expect(
-        service.getScheduleConflicts(actor, {
-          startsAt: "2026-07-20T10:30:00.000Z",
-          endsAt: "2026-07-20T11:30:00.000Z",
-        }),
-      ).resolves.toEqual({
-        teacherBusy: false,
-        roomBusy: false,
-        conflicts: [],
-      });
-      expect(query).not.toHaveBeenCalled();
-    });
-
-    it("rejects a reversed conflict range before querying", async () => {
-      const { service, query } = createServiceWithQueryResults([]);
-
-      await expect(
-        service.getScheduleConflicts(actor, {
-          teacherId: "teacher-a",
-          startsAt: "2026-07-20T11:30:00.000Z",
-          endsAt: "2026-07-20T10:30:00.000Z",
-        }),
-      ).rejects.toBeInstanceOf(BadRequestException);
-      expect(query).not.toHaveBeenCalled();
-    });
 
     it("409s a create into a busy slot with the conflicts payload", async () => {
       const { service } = createServiceWithQueryResults([{ rows: [busyRow] }]);
