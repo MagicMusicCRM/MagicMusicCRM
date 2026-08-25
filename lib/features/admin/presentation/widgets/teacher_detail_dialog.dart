@@ -71,41 +71,19 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
     super.dispose();
   }
 
-  Future<void> _save() async {
-    if (_nameController.text.trim().isEmpty) {
-      _showMessage('Укажите имя преподавателя.');
-      return;
-    }
-    final employment = _employmentKey.currentState?.validateAndRead();
-    if (employment == null) return;
-    final payrollChanged = employment.salaryChanged || employment.rateChanged;
-    int? payrollExpectedVersion;
-    String? payrollReasonText;
-    if (payrollChanged) {
-      payrollExpectedVersion = _payrollController.expectedVersion;
-      if (payrollExpectedVersion == null || _payrollController.error != null) {
-        _showMessage(
-          'Не удалось проверить версию расчётов. '
-          'Обновите блок оплат и повторите.',
-        );
-        return;
-      }
-      payrollReasonText = await showTeacherEmploymentChangeReasonDialog(
-        context,
-        employment: employment,
-        initial: _employmentInitial,
-      );
-      if (payrollReasonText == null || !mounted) return;
-    }
+  Future<String?> _requestPayrollChangeReason(
+    TeacherEmploymentValue employment,
+  ) {
+    return showTeacherEmploymentChangeReasonDialog(
+      context,
+      employment: employment,
+      initial: _employmentInitial,
+    );
+  }
+
+  Future<void> _executeSave(TeacherDetailSaveCommand command) async {
     setState(() => _saving = true);
     try {
-      final command = TeacherDetailSaveCommand.fromEditor(
-        name: _nameController.text,
-        phone: _canonicalPhone,
-        employment: employment,
-        payrollExpectedVersion: payrollExpectedVersion,
-        payrollReasonText: payrollReasonText,
-      );
       await command.execute(ref.read(magicCrmServiceProvider), _teacherId);
       if (!mounted) return;
       Navigator.pop(context, true);
@@ -122,6 +100,28 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Future<void> _save() async {
+    final employment = _employmentKey.currentState?.validateAndRead();
+    if (employment == null) return;
+    final preparation = await TeacherDetailSaveCommand.prepare(
+      name: _nameController.text,
+      phone: _canonicalPhone,
+      employment: employment,
+      expectedVersion: _payrollController.expectedVersion,
+      payrollAvailable: _payrollController.error == null,
+      requestPayrollReason: _requestPayrollChangeReason,
+    );
+    if (!mounted) return;
+    final message = preparation.message;
+    if (message != null) {
+      _showMessage(message);
+      return;
+    }
+    final command = preparation.command;
+    if (command == null) return;
+    await _executeSave(command);
   }
 
   Future<void> _provisionAccess() async {

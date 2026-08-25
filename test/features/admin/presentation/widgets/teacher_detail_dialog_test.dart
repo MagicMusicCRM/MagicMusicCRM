@@ -29,9 +29,18 @@ void main() {
     }
 
     final shell = File('$root/teacher_detail_dialog.dart').readAsStringSync();
+    final saveBody = shell.substring(
+      shell.indexOf('Future<void> _save()'),
+      shell.indexOf('Future<void> _provisionAccess()'),
+    );
     expect(shell, isNot(contains("part '")));
     expect(shell, isNot(contains('part of')));
     expect(shell.split('\n').length, lessThanOrEqualTo(430));
+    expect(
+      saveBody,
+      isNot(contains('showTeacherEmploymentChangeReasonDialog')),
+    );
+    expect(saveBody, isNot(contains('payrollExpectedVersion')));
     expect(shell, isNot(contains('createTeacherPayout(')));
     expect(shell, isNot(contains('updateTeacherRateEntry(')));
     expect(shell, isNot(contains('updateTeacherPayoutEntry(')));
