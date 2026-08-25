@@ -113,7 +113,7 @@ class _ClientField extends StatelessWidget {
             id: item.id,
             label: item.label,
             subtitle: _clientType(item) == 'lead' ? 'Lead' : 'Student',
-            data: item.raw,
+            data: _clientData(item),
           ),
       ],
       onSearch: (query) async => [
@@ -315,11 +315,29 @@ LessonClientRef _storedClientReference(LessonEditorReferenceItem reference) {
 }
 
 String _clientType(LessonEditorReferenceItem item) {
+  final separator = item.id.indexOf(':');
+  if (separator >= 0) return item.id.substring(0, separator);
   final ref = item.raw['ref'];
   if (ref is Map && ref['type'] != null) return ref['type'].toString();
-  final separator = item.id.indexOf(':');
-  return separator < 0 ? 'student' : item.id.substring(0, separator);
+  return 'student';
 }
+
+String _clientId(LessonEditorReferenceItem item) {
+  final separator = item.id.indexOf(':');
+  if (separator >= 0) return item.id.substring(separator + 1);
+  final ref = item.raw['ref'];
+  if (ref is Map && ref['id'] != null) return ref['id'].toString();
+  return item.id;
+}
+
+Map<String, dynamic> _clientData(LessonEditorReferenceItem item) => {
+  ...item.raw,
+  'ref': {'type': _clientType(item), 'id': _clientId(item)},
+  'type': _clientType(item),
+  'id': _clientId(item),
+  'branchId': item.branchId,
+  'label': item.label,
+};
 
 String? _labelById(List<LessonEditorReferenceItem> items, String? id) {
   if (id == null) return null;

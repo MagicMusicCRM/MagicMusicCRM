@@ -231,6 +231,45 @@ const _lessonEditorPresentationFiles = [
   'lib/features/admin/presentation/widgets/lesson_editor/lesson_editor_feedback.dart',
 ];
 
+final _forbiddenPresentationUses = <String, RegExp>{
+  'Navigator static API': RegExp(r'\bNavigator\s*\.'),
+  'context navigation extension': RegExp(
+    r'\bcontext\s*\.\s*(?:(?:router|navigation)\s*\.\s*)?'
+    r'(?:push|pushNamed|pushReplacement|go|goNamed|pop)\s*\(',
+  ),
+  'router variable navigation': RegExp(
+    r'\brouter\s*\.\s*(?:push|pushNamed|pushReplacement|go|goNamed|pop)\s*\(',
+  ),
+  'GoRouter ownership': RegExp(r'\bGoRouter\b'),
+  'Router lookup': RegExp(r'\bRouter\s*\.\s*of\s*\('),
+  'provider ref access': RegExp(
+    r'\b(?:ref|widgetRef|providerRef)\s*\.\s*'
+    r'(?:read|watch|listen|invalidate|refresh)\s*\(',
+  ),
+  'provider widget ownership': RegExp(
+    r'\b(?:ProviderScope|ProviderContainer|ConsumerWidget|'
+    r'ConsumerStatefulWidget|ConsumerState|WidgetRef)\b',
+  ),
+  'stateful widget ownership': RegExp(r'\bStatefulWidget\b'),
+  'State ownership': RegExp(r'\bState\s*<'),
+  'setState ownership': RegExp(r'\bsetState\s*\('),
+  'notifier type ownership': RegExp(
+    r'\b(?:ChangeNotifier|ValueNotifier|StateNotifier|AsyncNotifier|Notifier)\b',
+  ),
+  'controller or notifier construction': RegExp(
+    r'\b[A-Z]\w*(?:Controller|Notifier)\s*(?:<[^;(){}]+>\s*)?\(',
+  ),
+  'focus ownership construction': RegExp(
+    r'\b(?:FocusNode|FocusScopeNode)\s*\(',
+  ),
+  'restorable state construction': RegExp(r'\bRestorable[A-Z]\w*\s*\('),
+};
+
+List<String> _forbiddenUsesIn(String source) => [
+  for (final entry in _forbiddenPresentationUses.entries)
+    if (entry.value.hasMatch(source)) entry.key,
+];
+
 void main() {
   testWidgets('schedule section emits analyzer and suggestion intents', (
     tester,
@@ -508,6 +547,71 @@ void main() {
     );
     expect(find.byKey(const ValueKey('lesson-client-field')), findsNothing);
   });
+
+  testWidgets(
+    'participant preserves canonical metadata for a preloaded client',
+    (tester) async {
+      final baseReferences = _references();
+      final draft = _draft().copyWith(
+        client: const LessonClientRef(
+          type: 'lead',
+          id: 'lead-a',
+          label: 'Олег',
+        ),
+      );
+      final references = LessonEditorReferenceState(
+        teachers: baseReferences.teachers,
+        clients: [
+          const LessonEditorReferenceItem(
+            id: 'student:student-preloaded',
+            label: 'Мария Каноническая',
+            raw: {
+              'ref': {'type': 'lead', 'id': 'stale-client'},
+            },
+            branchId: 'branch-canonical',
+          ),
+          baseReferences.clients.last,
+        ],
+        branches: baseReferences.branches,
+        rooms: baseReferences.rooms,
+        subscriptions: baseReferences.subscriptions,
+        catalog: baseReferences.catalog,
+      );
+      LessonClientRef? selected;
+      await tester.pumpWidget(
+        _host(
+          LessonParticipantSection(
+            model: LessonParticipantSectionModel(
+              session: _session(draft: draft),
+              draft: draft,
+              references: references,
+            ),
+            onSearchClients: (_) async => const [],
+            onClientChanged: (value) => selected = value,
+            onBranchChanged: (_) {},
+            onRoomChanged: (_) {},
+            onTeacherChanged: (_) {},
+          ),
+        ),
+      );
+
+      final clientField = find.byKey(const ValueKey('lesson-client-field'));
+      tester
+          .widget<DropdownMenu<String>>(
+            find.descendant(
+              of: clientField,
+              matching: find.byType(DropdownMenu<String>),
+            ),
+          )
+          .onSelected!('student:student-preloaded');
+      await tester.pumpAndSettle();
+
+      expect(selected?.type, 'student');
+      expect(selected?.id, 'student-preloaded');
+      expect(selected?.label, 'Мария Каноническая');
+      expect(selected?.branchId, 'branch-canonical');
+    },
+  );
 
   testWidgets(
     'participant remote search exposes and selects a typed client outside preload',
@@ -1353,34 +1457,6 @@ void main() {
           },
     };
     final importPattern = RegExp(r"^import '([^']+)';$", multiLine: true);
-    final forbiddenUses = <String, RegExp>{
-      'Navigator static API': RegExp(r'\bNavigator\s*\.'),
-      'context navigation extension': RegExp(
-        r'\bcontext\s*\.\s*(?:(?:router|navigation)\s*\.\s*)?'
-        r'(?:push|pushNamed|pushReplacement|go|goNamed|pop)\s*\(',
-      ),
-      'router variable navigation': RegExp(
-        r'\brouter\s*\.\s*(?:push|pushNamed|pushReplacement|go|goNamed|pop)\s*\(',
-      ),
-      'GoRouter ownership': RegExp(r'\bGoRouter\b'),
-      'Router lookup': RegExp(r'\bRouter\s*\.\s*of\s*\('),
-      'provider ref access': RegExp(
-        r'\b(?:ref|widgetRef|providerRef)\s*\.\s*'
-        r'(?:read|watch|listen|invalidate|refresh)\s*\(',
-      ),
-      'provider widget ownership': RegExp(
-        r'\b(?:ProviderScope|ProviderContainer|ConsumerWidget|'
-        r'ConsumerStatefulWidget|ConsumerState|WidgetRef)\b',
-      ),
-      'stateful widget ownership': RegExp(r'\bStatefulWidget\b'),
-      'State ownership': RegExp(r'\bState\s*<'),
-      'setState ownership': RegExp(r'\bsetState\s*\('),
-      'notifier ownership': RegExp(
-        r'\b(?:ChangeNotifier|ValueNotifier|StateNotifier|AsyncNotifier|Notifier)\b',
-      ),
-      'text controller ownership': RegExp(r'\bTextEditingController\b'),
-      'animation controller ownership': RegExp(r'\bAnimationController\b'),
-    };
     for (final path in _lessonEditorPresentationFiles) {
       final source = File(path).readAsStringSync();
       expect(
@@ -1391,14 +1467,35 @@ void main() {
         allowedImports[path],
         reason: path,
       );
-      for (final forbiddenUse in forbiddenUses.entries) {
-        expect(
-          forbiddenUse.value.hasMatch(source),
-          isFalse,
-          reason: '$path: ${forbiddenUse.key}',
-        );
-      }
+      expect(_forbiddenUsesIn(source), isEmpty, reason: path);
     }
+  });
+
+  test('state ownership guard rejects construction but permits injection', () {
+    const forbiddenFixtures = <String, String>{
+      'final owner = ScrollController();':
+          'controller or notifier construction',
+      'final owner = PageController();': 'controller or notifier construction',
+      'final owner = TabController(length: 2, vsync: this);':
+          'controller or notifier construction',
+      'final owner = FocusNode();': 'focus ownership construction',
+      'final owner = StreamController<int>();':
+          'controller or notifier construction',
+      'final owner = ValueNotifier<int>(0);':
+          'controller or notifier construction',
+    };
+    for (final fixture in forbiddenFixtures.entries) {
+      expect(
+        _forbiddenUsesIn(fixture.key),
+        contains(fixture.value),
+        reason: fixture.key,
+      );
+    }
+
+    expect(
+      _forbiddenUsesIn('final ScrollController? scrollController;'),
+      isEmpty,
+    );
   });
 }
 
