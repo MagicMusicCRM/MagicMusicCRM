@@ -275,6 +275,8 @@ LessonClientRef _clientReference(
   SearchableSelectItem selected,
   List<LessonEditorReferenceItem> references,
 ) {
+  final selectedReference = _selectedClientReference(selected);
+  if (selectedReference != null) return selectedReference;
   final reference = references.firstWhere(
     (item) => item.id == selected.id,
     orElse: () => LessonEditorReferenceItem(
@@ -284,6 +286,22 @@ LessonClientRef _clientReference(
       branchId: selected.data?['branchId']?.toString(),
     ),
   );
+  return _storedClientReference(reference);
+}
+
+LessonClientRef? _selectedClientReference(SearchableSelectItem selected) {
+  final data = selected.data;
+  final ref = data?['ref'];
+  if (ref is! Map || ref['type'] == null || ref['id'] == null) return null;
+  return LessonClientRef(
+    type: ref['type'].toString(),
+    id: ref['id'].toString(),
+    label: selected.label,
+    branchId: data?['branchId']?.toString(),
+  );
+}
+
+LessonClientRef _storedClientReference(LessonEditorReferenceItem reference) {
   final ref = reference.raw['ref'];
   final type = ref is Map ? ref['type']?.toString() : null;
   final id = ref is Map ? ref['id']?.toString() : null;

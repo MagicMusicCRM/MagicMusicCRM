@@ -590,6 +590,80 @@ void main() {
   );
 
   testWidgets(
+    'participant trusts fresh remote client data when preload has the same id',
+    (tester) async {
+      final baseReferences = _references();
+      final draft = _draft().copyWith(
+        client: const LessonClientRef(
+          type: 'lead',
+          id: 'lead-a',
+          label: 'Олег',
+        ),
+      );
+      final references = LessonEditorReferenceState(
+        teachers: baseReferences.teachers,
+        clients: [
+          LessonEditorReferenceItem(
+            id: 'student:student-a',
+            label: 'Анна Старое Имя',
+            raw: const {
+              'ref': {'type': 'student', 'id': 'student-a'},
+            },
+            branchId: 'branch-old',
+          ),
+          baseReferences.clients.last,
+        ],
+        branches: baseReferences.branches,
+        rooms: baseReferences.rooms,
+        subscriptions: baseReferences.subscriptions,
+        catalog: baseReferences.catalog,
+      );
+      final actions = _RecordingActions(
+        searchResults: const [
+          LessonClientRef(
+            type: 'student',
+            id: 'student-a',
+            label: 'Анна Новое Имя',
+            branchId: 'branch-fresh',
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        _host(
+          LessonParticipantSection(
+            model: LessonParticipantSectionModel(
+              session: _session(draft: draft),
+              draft: draft,
+              references: references,
+            ),
+            onSearchClients: actions.searchClients,
+            onClientChanged: actions.selectClient,
+            onBranchChanged: actions.selectBranch,
+            onRoomChanged: actions.selectRoom,
+            onTeacherChanged: actions.selectTeacher,
+          ),
+        ),
+      );
+
+      final clientField = find.byKey(const ValueKey('lesson-client-field'));
+      await tester.tap(clientField);
+      await tester.enterText(
+        find.descendant(of: clientField, matching: find.byType(TextField)),
+        'Новое Имя',
+      );
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Анна Новое Имя').last);
+      await tester.pumpAndSettle();
+
+      expect(actions.client?.type, 'student');
+      expect(actions.client?.id, 'student-a');
+      expect(actions.client?.label, 'Анна Новое Имя');
+      expect(actions.client?.branchId, 'branch-fresh');
+    },
+  );
+
+  testWidgets(
     'edit keeps an ineligible current teacher label out of replacement items',
     (tester) async {
       final draft = _draft().copyWith(teacherId: 'teacher-old');
@@ -1279,6 +1353,34 @@ void main() {
           },
     };
     final importPattern = RegExp(r"^import '([^']+)';$", multiLine: true);
+    final forbiddenUses = <String, RegExp>{
+      'Navigator static API': RegExp(r'\bNavigator\s*\.'),
+      'context navigation extension': RegExp(
+        r'\bcontext\s*\.\s*(?:(?:router|navigation)\s*\.\s*)?'
+        r'(?:push|pushNamed|pushReplacement|go|goNamed|pop)\s*\(',
+      ),
+      'router variable navigation': RegExp(
+        r'\brouter\s*\.\s*(?:push|pushNamed|pushReplacement|go|goNamed|pop)\s*\(',
+      ),
+      'GoRouter ownership': RegExp(r'\bGoRouter\b'),
+      'Router lookup': RegExp(r'\bRouter\s*\.\s*of\s*\('),
+      'provider ref access': RegExp(
+        r'\b(?:ref|widgetRef|providerRef)\s*\.\s*'
+        r'(?:read|watch|listen|invalidate|refresh)\s*\(',
+      ),
+      'provider widget ownership': RegExp(
+        r'\b(?:ProviderScope|ProviderContainer|ConsumerWidget|'
+        r'ConsumerStatefulWidget|ConsumerState|WidgetRef)\b',
+      ),
+      'stateful widget ownership': RegExp(r'\bStatefulWidget\b'),
+      'State ownership': RegExp(r'\bState\s*<'),
+      'setState ownership': RegExp(r'\bsetState\s*\('),
+      'notifier ownership': RegExp(
+        r'\b(?:ChangeNotifier|ValueNotifier|StateNotifier|AsyncNotifier|Notifier)\b',
+      ),
+      'text controller ownership': RegExp(r'\bTextEditingController\b'),
+      'animation controller ownership': RegExp(r'\bAnimationController\b'),
+    };
     for (final path in _lessonEditorPresentationFiles) {
       final source = File(path).readAsStringSync();
       expect(
@@ -1289,9 +1391,13 @@ void main() {
         allowedImports[path],
         reason: path,
       );
-      expect(source, isNot(contains('extends StatefulWidget')), reason: path);
-      expect(source, isNot(contains('State<')), reason: path);
-      expect(source, isNot(contains('setState(')), reason: path);
+      for (final forbiddenUse in forbiddenUses.entries) {
+        expect(
+          forbiddenUse.value.hasMatch(source),
+          isFalse,
+          reason: '$path: ${forbiddenUse.key}',
+        );
+      }
     }
   });
 }
