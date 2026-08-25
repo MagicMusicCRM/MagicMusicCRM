@@ -13,10 +13,13 @@ class TeacherPayrollController extends ChangeNotifier {
 
   Map<String, dynamic>? _payroll;
   Object? _error;
+  Object? _mutationError;
   bool _mutating = false;
+  bool _disposed = false;
 
   Map<String, dynamic>? get payroll => _payroll;
   Object? get error => _error;
+  Object? get mutationError => _mutationError;
   bool get mutating => _mutating;
   bool get loading => _payroll == null && _error == null;
   num get debt => teacherDetailNum(_payroll?['debt']);
@@ -25,13 +28,13 @@ class TeacherPayrollController extends ChangeNotifier {
 
   Future<void> load() async {
     _error = null;
-    notifyListeners();
+    _notify();
     try {
       _payroll = await _service.getTeacherPayroll(teacherId);
     } catch (error) {
       _error = error;
     }
-    notifyListeners();
+    _notify();
   }
 
   Future<void> payAllDebt() async {
@@ -142,16 +145,26 @@ class TeacherPayrollController extends ChangeNotifier {
     Future<Map<String, dynamic>> Function() mutation,
   ) async {
     _mutating = true;
-    _error = null;
-    notifyListeners();
+    _mutationError = null;
+    _notify();
     try {
       await mutation();
       await load();
     } catch (error) {
-      _error = error;
+      _mutationError = error;
     } finally {
       _mutating = false;
-      notifyListeners();
+      _notify();
     }
+  }
+
+  void _notify() {
+    if (!_disposed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
   }
 }
