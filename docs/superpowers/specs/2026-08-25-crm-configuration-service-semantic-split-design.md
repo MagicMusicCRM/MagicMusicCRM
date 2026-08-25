@@ -205,3 +205,26 @@ functions. That cut is conditional on measured evidence, not speculative.
 Contracts, snapshot normalization, branch policy, impact policy, and service
 rewiring land as separate commits. Revert in reverse order. No database,
 migration, production-state, or data-repair rollback is required.
+
+## Verified implementation outcome
+
+The package is implemented and verified at `650960b1940c`. RepoWise is exact
+at that commit with `index_behind=false`.
+
+- `CrmConfigurationService` improved from health `1.06`, `1,444` NLOC, max
+  CCN `53`, and weighted deficit `10,021` to health `8.00`, `412` NLOC, max
+  CCN `9`, and zero weighted deficit. The god-class finding is gone.
+- Extracted production owners score: snapshot normalizer `8.15`, persistence
+  `9.85`, impact policy `8.50`, branch policy `10.00`, and contracts `9.85`.
+  Their combined weighted deficit with the facade is zero.
+- Full backend verification passed: `204/204` suites, `1,516/1,516` tests,
+  TypeScript typecheck, Nest build, and a clean diff. The focused CRM package
+  passed `32/32` tests, including the PostgreSQL integration suite.
+- Sentrux closed at quality `5720`, acyclicity raw `0` / score `10000` (no
+  cycles), depth `13`, equality `6202`, modularity `5355`, redundancy `4841`,
+  and both architecture rules passing.
+
+Every package acceptance threshold passed. The conditional persistence cut
+was evidence-triggered after the intermediate service remained at health
+`6.44`; caller-owned `DatabaseService`/`PoolClient` execution was preserved,
+and no schema, API, or product behavior changed.

@@ -227,3 +227,31 @@ The global success contract remains open: backend `6.74 < 7.0`, Flutter
 Fresh RepoWise re-ranking selects
 `server/src/crm/crm-configuration.service.ts` as the next directive: an
 untested five-dependent hotspot with `10,021` recoverable weighted points.
+
+## Package 3 verified outcome
+
+The CRM configuration semantic split is implemented and verified at
+`650960b1940c`.
+
+- RepoWise is exact with `index_behind=false`. The original service moved from
+  health `1.06`, `1,444` NLOC, max CCN `53`, and weighted deficit `10,021` to
+  health `8.00`, `412` NLOC, max CCN `9`, and zero weighted deficit. The
+  god-class finding is removed.
+- All extracted production owners exceed the `7.0` floor: normalizer `8.15`,
+  persistence `9.85`, impact policy `8.50`, branch policy `10.00`, and
+  contracts `9.85`. The whole configuration package now has zero weighted
+  deficit.
+- Full backend verification passed with `204` suites and `1,516` tests, plus
+  typecheck, Nest build, focused CRM `32/32`, and a clean diff. Sentrux reports
+  quality `5720`, acyclicity score `10000` with raw `0`, depth `13`, equality
+  `6202`, modularity `5355`, redundancy `4841`, and both rules passing.
+- Backend module health is now `6.86`; repository code-only health is `6.12`.
+  The global contract remains open, so the recovery program continues.
+
+The literal dashboard directive is a large integration test whose primary
+signal is historical co-change scatter. Applying the approved production-first
+ranking instead selects
+`server/src/crm/commerce/lesson-settlement.repository.ts`: health `1.00`,
+`1,264` NLOC, max CCN `21`, weighted deficit `8,848`, nine dependents, and an
+untested financial hotspot. It is package 4; characterization must precede any
+structural change.
