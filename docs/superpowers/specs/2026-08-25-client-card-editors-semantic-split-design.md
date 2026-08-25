@@ -16,11 +16,13 @@ the remaining god files from the mandatory cleanup queue.
 
 ## Decision
 
-Delete the generic editor part and replace it with six semantic extension
+Delete the generic editor part and replace it with seven semantic extension
 parts in the existing `client_card.dart` library:
 
-- `client_card_custom_fields.dart` owns configured field rendering, typed
-  editing, date controls, aliases, and age behavior.
+- `client_card_custom_fields.dart` owns configured field layout, aliases,
+  read-only policy, and type dispatch.
+- `client_card_custom_field_inputs.dart` owns typed input controls, date
+  controls, value normalization, and age behavior.
 - `client_card_moderation.dart` owns blacklist presentation, reason capture,
   and immediate mutation.
 - `client_card_contact_editors.dart` owns disciplines and contact persons.
@@ -67,7 +69,7 @@ The helpers must expose domain intent rather than generic `helper`, `utils`,
 
 ## Verification and acceptance
 
-Add a structural test that requires all six semantic parts and rejects the old
+Add a structural test that requires all seven semantic parts and rejects the old
 generic owner before moving code. Keep the focused client-card widget suite as
 the behavior characterization gate.
 
@@ -88,3 +90,26 @@ the behavior characterization gate.
 Land the structural ownership split and each complexity family as separate
 commits. Revert them in reverse order. No backend, database, migration,
 environment, production-state, or data-repair rollback is required.
+
+## Verified outcome
+
+The split is implemented at `d6da59b19396` as five independently revertible
+implementation commits. The generic `client_card_editors.dart` owner is deleted
+without a compatibility part, and the live library now composes the seven
+semantic owners specified above.
+
+- RepoWise is exact with `index_behind=false`. Replacement health ranges from
+  `8.80` to `10.00`, max CCN is `10`, max NLOC is `274`, no god/brain finding
+  remains, and combined weighted deficit is `0` versus the `9,068` baseline.
+- The full Flutter gate passes `999/999`; `flutter analyze` reports zero issues,
+  `git diff --check` is clean, and the working tree is clean.
+- Change risk is `Elevated` at percentile `96.4` because the semantic move
+  spans 11 Dart files and `3,154` changed lines. RepoWise reports 12 impacted
+  tests and no `untested_changes`; the full suite covers the new part files for
+  which line-level attribution has not yet been ingested.
+- Sentrux closes at quality `5730`, acyclicity `10000` with raw `0`, depth `13`,
+  equality `6228`, modularity `5360`, redundancy `4857`, and both rules passing.
+  The package-local quality floor misses by two points because seven direct
+  semantic owners reduce the redundancy subscore by 13 points. This measured
+  variance is retained instead of recombining responsibilities to optimize the
+  graph score; the program baseline remains improved by `756` points.

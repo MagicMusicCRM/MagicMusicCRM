@@ -283,3 +283,30 @@ coverage, and co-change with 30 files. The next god-class owners remain
 `server/src/crm/leads.service.ts` (`8,394`) and
 `server/src/crm/crm.service.ts` (`7,381`); both stay in the mandatory cleanup
 queue rather than being displaced by the package-5 choice.
+
+## Package 5 verified outcome
+
+The Client Card editor ownership split is implemented and verified at
+`d6da59b19396`.
+
+- The former `1,376`-NLOC editor part with health `1.41`, max CCN `24`, and
+  weighted deficit `9,068` is deleted without a compatibility owner. Seven
+  semantic parts now own custom-field policy and inputs, moderation, contacts,
+  assignments, comments, and family/access behavior.
+- Every replacement exceeds the `7.0` health floor: scores range from `8.80`
+  to `10.00`, max CCN is `10`, max NLOC is `274`, and combined weighted deficit
+  is zero. Repository code-only health moved from `6.15` to `6.21`.
+- Full Flutter verification passed `999/999`, `flutter analyze` found no issues,
+  and diff checks are clean. RepoWise change risk is percentile `96.4` due to
+  the size of the semantic move, with 12 impacted tests and no untested changed
+  line category.
+- Sentrux reports quality `5730`, acyclicity `10000` with raw `0`, depth `13`,
+  equality `6228`, modularity `5360`, redundancy `4857`, and both rules passing.
+  The two-point package-local variance is caused by the seven-owner graph; the
+  overall recovery-program quality remains `756` points above its `4974`
+  baseline and no graph invariant regressed.
+
+The global success contract remains open: code-only health is `6.21 < 7.5`.
+Fresh production-first ranking selects `server/src/crm/leads.service.ts` as
+package 6: health `1.90`, `1,376` NLOC, max CCN `26`, and weighted deficit
+`8,394`. The remaining CRM and Flutter god classes stay in the mandatory queue.
