@@ -35,13 +35,22 @@ commit:
 - RepoWise `lib` average health is at least `7.0`;
 - RepoWise `server` average health is at least `7.0`;
 - combined production-code health is at least `7.5`;
+- RepoWise reports zero `god_class` findings in live `lib/` and `server/src/`
+  production code;
+- every replacement owner created by the program scores at least `7.0`, has no
+  god/brain owner finding, and keeps max CCN at or below `10` unless an explicit
+  transaction-preservation exception is recorded with focused coverage;
 - Sentrux acyclicity remains raw `1`, architectural rules pass, and quality
   does not regress from the baseline;
 - Flutter and backend full verification gates pass.
 
-These are module-level weighted gates. The program does not require every
-individual production file to score 7: that would reward artificial file
-splitting and test relocation rather than reducing architectural risk.
+The module scores are weighted gates, while zero production god classes is an
+absolute gate. Files below `7.0` must also be triaged before completion: current
+structural causes are fixed, while history-only or coverage-attribution signals
+receive truthful tests/decisions instead of artificial file splitting or test
+relocation. Therefore an average above target cannot hide an unresolved god
+owner, and a volatile but cohesive boundary is not split solely to game the
+metric.
 
 ## Considered approaches
 
@@ -368,3 +377,54 @@ dashboard directive remains the subscription integration suite whose leading
 signal is historical co-change scatter. `server/src/crm/crm.service.ts`,
 `client_card_student.dart`, and `lesson_decision_flow.dart` remain mandatory
 follow-up packages.
+
+## Live global god-owner audit after Package 7
+
+A full in-process `repowise health --format json` run at `d1ce1b443b8d`
+analyzed 1,670 files. Repository average health is `6.77`, hotspot health is
+`4.61`, and the production-only filter finds `239` files below `7.0` plus `26`
+live `god_class` findings. The filter includes `lib/**` and `server/src/**` and
+excludes specs, tests, integration fixtures, generated platform code, docs, and
+outputs. This is the authoritative baseline for the owner's all-god-files
+requirement; dashboard test-file directives do not displace it.
+
+| # | Production owner | RepoWise | NLOC |
+|---:|---|---:|---:|
+| 1 | `lib/core/widgets/telegram/chat_info_dialog.dart::_ChatInfoDialogState` | 1.00 | 807 |
+| 2 | `lib/features/manager/presentation/widgets/finance_widget.dart::_FinanceWidgetState` | 1.00 | 668 |
+| 3 | `lib/features/manager/presentation/widgets/student_funnel_editor.dart::_StudentFunnelEditorState` | 1.00 | 665 |
+| 4 | `lib/features/manager/presentation/widgets/students_board_widget.dart::_StudentsBoardWidgetState` | 1.00 | 662 |
+| 5 | `server/src/crm/commerce/subscription-lifecycle.service.ts::SubscriptionLifecycleService` | 1.04 | 1,350 |
+| 6 | `lib/features/admin/presentation/widgets/schedule_reference_settings.dart::_ScheduleReferenceSettingsState` | 1.05 | 764 |
+| 7 | `lib/features/manager/presentation/widgets/teacher_stats_widget.dart::_TeacherStatsWidgetState` | 1.09 | 1,074 |
+| 8 | `lib/features/crm/presentation/client_card/preferred_schedule_editor.dart::_PreferredScheduleEditorState` | 1.12 | 668 |
+| 9 | `lib/features/admin/presentation/widgets/staff_detail_dialog.dart::_StaffDetailDialogState` | 1.28 | 662 |
+| 10 | `lib/features/crm/presentation/client_card/client_card.dart::_ClientCardState` | 1.70 | 620 |
+| 11 | `lib/features/admin/presentation/widgets/create_lesson_dialog.dart::_CreateLessonDialogState` | 1.86 | 1,099 |
+| 12 | `server/src/crm/crm.service.ts::CrmService` | 1.90 | 1,210 |
+| 13 | `server/src/auth/auth.service.ts::AuthService` | 1.90 | 865 |
+| 14 | `lib/features/manager/presentation/tasks/shared_task_editor.dart::_SharedTaskEditorState` | 2.02 | 790 |
+| 15 | `server/src/messenger/messenger.service.ts::MessengerService` | 2.15 | 1,043 |
+| 16 | `server/src/crm/finance.service.ts::FinanceService` | 2.34 | 815 |
+| 17 | `server/src/crm/commerce/subscription-issue.service.ts::SubscriptionIssueService` | 2.47 | 1,008 |
+| 18 | `lib/features/crm/presentation/client_card/subscription_issue_sheet.dart::_SubscriptionIssueFormState` | 2.56 | 1,115 |
+| 19 | `lib/core/workspace/production_workspace_host.dart::_ProductionWorkspaceHostState` | 2.68 | 425 |
+| 20 | `server/src/crm/schedule/lesson-command.service.ts::LessonCommandService` | 2.83 | 741 |
+| 21 | `server/src/crm/schedule/schedule-plan.service.ts::SchedulePlanService` | 3.22 | 1,148 |
+| 22 | `server/src/crm/schedule/lesson-transition.service.ts::LessonTransitionService` | 3.39 | 1,535 |
+| 23 | `server/src/crm/student-funnel.service.ts::StudentFunnelService` | 4.04 | 775 |
+| 24 | `server/src/crm/payroll.service.ts::PayrollService` | 4.79 | 1,178 |
+| 25 | `server/src/profile/profile.service.ts::ProfileService` | 5.37 | 656 |
+| 26 | `lib/features/admin/presentation/widgets/reference_catalog_lifecycle_dialog.dart::_ReferenceCatalogLifecycleDialogState` | 5.62 | 378 |
+
+The queue is not executed by raw score alone. Every package is selected by
+recoverable weighted deficit, production reachability, transaction risk, and
+the ability to land rollback-safe semantic owners. `lesson_decision_flow.dart`
+is also mandatory even though its large file contains several classes rather
+than one RepoWise `god_class`: it scores `2.02`, spans 1,025 NLOC, has a
+175-line/CCN-28 brain `build`, and carries 7,175 weighted-deficit points.
+
+After every structural package the full production filter is rerun. Completion
+requires the god-class count to reach zero, all replacement owners to satisfy
+the per-owner floor, all remaining sub-7 files to be classified and remediated,
+and the existing RepoWise/Sentrux/test gates to pass on the same indexed commit.
