@@ -7,142 +7,9 @@ import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_models.dart';
 
-enum LessonDecisionOperation {
-  reschedule,
-  cancel,
-  settle,
-  plannedSettlement,
-  correction,
-}
-
-extension on LessonDecisionOperation {
-  String get key => switch (this) {
-    LessonDecisionOperation.reschedule => 'reschedule',
-    LessonDecisionOperation.cancel => 'cancel',
-    LessonDecisionOperation.settle => 'settle',
-    LessonDecisionOperation.plannedSettlement => 'planned-settlement',
-    LessonDecisionOperation.correction => 'settlement-correction',
-  };
-
-  String get title => switch (this) {
-    LessonDecisionOperation.reschedule => 'Перенос занятия',
-    LessonDecisionOperation.cancel => 'Отмена занятия',
-    LessonDecisionOperation.settle => 'Исправление расчёта',
-    LessonDecisionOperation.plannedSettlement => 'Изменение расчёта',
-    LessonDecisionOperation.correction => 'Корректировка расчёта',
-  };
-
-  String get action => switch (this) {
-    LessonDecisionOperation.reschedule => 'Перенести',
-    LessonDecisionOperation.cancel => 'Отменить занятие',
-    LessonDecisionOperation.settle => 'Исправить расчёт',
-    LessonDecisionOperation.plannedSettlement => 'Изменить расчёт',
-    LessonDecisionOperation.correction => 'Сохранить корректировку',
-  };
-
-  String get catalogContext => switch (this) {
-    LessonDecisionOperation.plannedSettlement ||
-    LessonDecisionOperation.correction => 'settle',
-    _ => key,
-  };
-}
-
-class LessonDecisionCatalogItem {
-  const LessonDecisionCatalogItem({
-    required this.key,
-    required this.label,
-    required this.order,
-    this.colorToken,
-    this.allowedContexts = const [],
-    this.mode,
-    this.value = '0',
-    this.hourShareBasisPoints = 0,
-    this.fixedPenaltyMinor = '0',
-  });
-
-  final String key;
-  final String label;
-  final int order;
-  final String? colorToken;
-  final List<String> allowedContexts;
-  final String? mode;
-  final String value;
-  final int hourShareBasisPoints;
-  final String fixedPenaltyMinor;
-
-  factory LessonDecisionCatalogItem.fromJson(Map<String, dynamic> json) {
-    return LessonDecisionCatalogItem(
-      key: json['stableKey']?.toString() ?? '',
-      label: json['label']?.toString() ?? '',
-      order: (json['order'] as num?)?.toInt() ?? 0,
-      colorToken: json['colorToken']?.toString(),
-      allowedContexts: [
-        for (final value in json['allowedContexts'] as List? ?? const [])
-          value.toString(),
-      ],
-      mode: json['mode']?.toString(),
-      value: json['value']?.toString() ?? '0',
-      hourShareBasisPoints:
-          (json['hourShareBasisPoints'] as num?)?.toInt() ?? 0,
-      fixedPenaltyMinor: json['fixedPenaltyMinor']?.toString() ?? '0',
-    );
-  }
-}
-
-class LessonDecisionCatalog {
-  const LessonDecisionCatalog({
-    required this.settlementTypes,
-    required this.compensationRules,
-  });
-
-  final List<LessonDecisionCatalogItem> settlementTypes;
-  final List<LessonDecisionCatalogItem> compensationRules;
-
-  factory LessonDecisionCatalog.fromJson(
-    Map<String, dynamic> json,
-    LessonDecisionOperation operation,
-  ) {
-    List<LessonDecisionCatalogItem> parse(String key) => [
-      for (final item in json[key] as List? ?? const [])
-        if (item is Map)
-          LessonDecisionCatalogItem.fromJson(Map<String, dynamic>.from(item)),
-    ]..sort((left, right) => left.order.compareTo(right.order));
-
-    return LessonDecisionCatalog(
-      settlementTypes: parse('settlementTypes')
-          .where(
-            (item) => item.allowedContexts.contains(operation.catalogContext),
-          )
-          .toList(),
-      compensationRules: parse('teacherCompensationRules'),
-    );
-  }
-}
-
-class LessonDecisionPreview {
-  const LessonDecisionPreview(this.raw);
-
-  final Map<String, dynamic> raw;
-
-  bool get canConfirm => raw['canConfirm'] == true;
-  String? get token => raw['previewToken']?.toString();
-  Map<String, dynamic> get source => _map(raw['source']);
-  Map<String, dynamic> get successor => _map(raw['successor']);
-  Map<String, dynamic> get financial => _map(raw['financialPreview']);
-  List<Map<String, dynamic>> get violations => _maps(raw['violations']);
-  List<String> get warnings => [
-    for (final warning in raw['warnings'] as List? ?? const [])
-      warning.toString(),
-  ];
-}
-
-class LessonDecisionParticipant {
-  const LessonDecisionParticipant({required this.id, required this.name});
-
-  final String id;
-  final String name;
-}
+export 'lesson_decision/lesson_decision_models.dart';
 
 class LessonDecisionController {
   LessonDecisionController({
@@ -298,12 +165,12 @@ class LessonDecisionController {
         'successor': successor ?? const <String, dynamic>{},
     };
     final response = await _api.post<Map<String, dynamic>>(
-      '/crm/lessons/${lesson['id']}/${operation.key}/preview',
+      '/crm/lessons/${lesson['id']}/${operation.apiKey}/preview',
       data: payload,
     );
     _previewPayload = payload;
     _commitIdentity = MagicMutationIdentity.create(
-      'lesson-${operation.key}-${lesson['id']}',
+      'lesson-${operation.apiKey}-${lesson['id']}',
     );
     return LessonDecisionPreview(response);
   }
@@ -322,13 +189,13 @@ class LessonDecisionController {
     if (operation == LessonDecisionOperation.plannedSettlement) {
       return _api.request<Map<String, dynamic>>(
         'PUT',
-        '/crm/lessons/${lesson['id']}/${operation.key}',
+        '/crm/lessons/${lesson['id']}/${operation.apiKey}',
         data: data,
         mutationIdentity: identity,
       );
     }
     return _api.postIdempotent<Map<String, dynamic>>(
-      '/crm/lessons/${lesson['id']}/${operation.key}',
+      '/crm/lessons/${lesson['id']}/${operation.apiKey}',
       identity: identity,
       data: data,
     );
@@ -736,7 +603,7 @@ class _LessonDecisionFormState extends State<LessonDecisionForm> {
                           _preview?.canConfirm == true
                               ? _commitAttempted
                                     ? 'Повторить'
-                                    : widget.controller.operation.action
+                                    : widget.controller.operation.actionLabel
                               : _preview == null
                               ? 'Рассчитать'
                               : 'Повторить расчёт',
