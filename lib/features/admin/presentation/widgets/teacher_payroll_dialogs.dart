@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_employment_fields.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_payroll_dialog_controller_owner.dart';
 
 class TeacherPayoutDraft {
   const TeacherPayoutDraft({
@@ -32,52 +33,54 @@ Future<String?> showTeacherEmploymentChangeReasonDialog(
   ];
   final reason = await showDialog<String>(
     context: context,
-    builder: (dialogContext) => StatefulBuilder(
-      builder: (context, setDialogState) => AlertDialog(
-        title: const Text('Подтвердите финансовые условия'),
-        content: SizedBox(
-          width: 440,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(changes.join('\n')),
-              const SizedBox(height: 16),
-              TextField(
-                controller: controller,
-                autofocus: true,
-                maxLength: 500,
-                maxLines: 3,
-                decoration: InputDecoration(
-                  labelText: 'Причина изменения',
-                  hintText: 'Например: новые условия с 1 сентября',
-                  errorText: errorText,
+    builder: (dialogContext) => TeacherPayrollDialogControllerOwner(
+      controllers: [controller],
+      builder: (_) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Подтвердите финансовые условия'),
+          content: SizedBox(
+            width: 440,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(changes.join('\n')),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  maxLength: 500,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    labelText: 'Причина изменения',
+                    hintText: 'Например: новые условия с 1 сентября',
+                    errorText: errorText,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Отмена'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final value = controller.text.trim();
+                if (value.isEmpty) {
+                  setDialogState(() => errorText = 'Укажите причину');
+                  return;
+                }
+                Navigator.pop(dialogContext, value);
+              },
+              child: const Text('Подтвердить и сохранить'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final value = controller.text.trim();
-              if (value.isEmpty) {
-                setDialogState(() => errorText = 'Укажите причину');
-                return;
-              }
-              Navigator.pop(dialogContext, value);
-            },
-            child: const Text('Подтвердить и сохранить'),
-          ),
-        ],
       ),
     ),
   );
-  controller.dispose();
   return reason;
 }
 
@@ -88,32 +91,34 @@ Future<String?> showTeacherPayrollDeleteDialog(
   final controller = TextEditingController();
   final confirmed = await showDialog<bool>(
     context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: Text(rate ? 'Удалить запись ставки?' : 'Удалить выплату?'),
-      content: TextField(
-        controller: controller,
-        autofocus: true,
-        maxLength: 500,
-        maxLines: 3,
-        decoration: const InputDecoration(labelText: 'Причина удаления *'),
+    builder: (dialogContext) => TeacherPayrollDialogControllerOwner(
+      controllers: [controller],
+      builder: (_) => AlertDialog(
+        title: Text(rate ? 'Удалить запись ставки?' : 'Удалить выплату?'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 500,
+          maxLines: 3,
+          decoration: const InputDecoration(labelText: 'Причина удаления *'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (controller.text.trim().isEmpty) return;
+              Navigator.pop(dialogContext, true);
+            },
+            child: const Text('Удалить'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(dialogContext, false),
-          child: const Text('Отмена'),
-        ),
-        FilledButton(
-          onPressed: () {
-            if (controller.text.trim().isEmpty) return;
-            Navigator.pop(dialogContext, true);
-          },
-          child: const Text('Удалить'),
-        ),
-      ],
     ),
   );
   final reason = controller.text.trim();
-  controller.dispose();
   return confirmed == true ? reason : null;
 }
 
