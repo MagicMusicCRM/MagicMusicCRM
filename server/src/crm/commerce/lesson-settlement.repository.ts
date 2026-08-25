@@ -5,10 +5,6 @@ import {
   UnprocessableEntityException,
 } from "@nestjs/common";
 import { PoolClient } from "pg";
-import type {
-  LessonSettlementTypeConfig,
-  TeacherCompensationRuleConfig,
-} from "../crm-configuration.contracts";
 import {
   ClientChargeFactType,
   LessonSettlementInput,
@@ -22,9 +18,14 @@ import {
 import {
   calculateClientSettlement,
   calculateTeacherCompensation,
-  LessonSettlementCalculationError,
   rublesToMinor,
 } from "./lesson-settlement.calculation";
+import {
+  assertPlannedLessonSettlementDecision,
+  invalidLessonSettlementDecision,
+  loadLessonSettlementCatalog,
+  rethrowLessonSettlementCalculation,
+} from "./lesson-settlement-catalog";
 
 interface SettlementSourceRow {
   lesson_id: string;
@@ -54,13 +55,6 @@ interface ChargeSourceRow {
   subscription_id: string | null;
 }
 
-interface CommerceCatalogRow {
-  settlement_revision_id: string;
-  compensation_revision_id: string;
-  settlement_types: LessonSettlementTypeConfig[];
-  compensation_rules: TeacherCompensationRuleConfig[];
-}
-
 @Injectable()
 export class LessonSettlementRepository {
   async preparePlan(
@@ -68,8 +62,8 @@ export class LessonSettlementRepository {
     branchId: string,
     decision: LessonFinancialDecision,
   ): Promise<PreparedLessonSettlementPlan> {
-    const catalog = await this.loadCatalog(client, branchId);
-    this.assertPlannedDecision(catalog, decision);
+    const catalog = await loadLessonSettlementCatalog(client, branchId);
+    assertPlannedLessonSettlementDecision(catalog, decision);
     return {
       decision: JSON.parse(JSON.stringify(decision)) as LessonFinancialDecision,
       settlementRevisionId: catalog.settlement_revision_id,
@@ -194,11 +188,11 @@ export class LessonSettlementRepository {
     lessonId: string,
     plan: PreparedLessonSettlementPlan,
   ): Promise<PlannedSubscriptionAllocation[]> {
-    const catalog = await this.loadCatalog(client, "", {
+    const catalog = await loadLessonSettlementCatalog(client, "", {
       settlementRevisionId: plan.settlementRevisionId,
       compensationRevisionId: plan.compensationRevisionId,
     });
-    this.assertPlannedDecision(catalog, plan.decision);
+    assertPlannedLessonSettlementDecision(catalog, plan.decision);
     const duration = await client.query<{ duration_minutes: number }>(
       `select duration_minutes from app.lessons
        where id = $1 and deleted_at is null`,
@@ -239,7 +233,10 @@ export class LessonSettlementRepository {
         selected?.settlementTypeKey ?? plan.decision.settlementTypeKey,
       );
       if (!settlement) {
-        this.invalidDecision("SETTLEMENT_TYPE_NOT_ALLOWED", "settlementTypeKey");
+        invalidLessonSettlementDecision(
+          "SETTLEMENT_TYPE_NOT_ALLOWED",
+          "settlementTypeKey",
+        );
       }
       const chargeType: ClientChargeFactType = subscriptionId
         ? "subscription"
@@ -256,7 +253,7 @@ export class LessonSettlementRepository {
             : 0n,
         });
       } catch (error) {
-        this.rethrowCalculation(error);
+        rethrowLessonSettlementCalculation(error);
       }
       if (chargeType !== "subscription" || !subscriptionId) return [];
       const units = Number(calculated.units);
@@ -723,9 +720,9 @@ export class LessonSettlementRepository {
     input: LessonSettlementInput,
   ): Promise<void> {
     if (input.reasonText && input.reasonText.trim().length > 500) {
-      this.invalidDecision("REASON_TOO_LONG", "reasonText");
+      invalidLessonSettlementDecision("REASON_TOO_LONG", "reasonText");
     }
-    const catalog = await this.loadCatalog(
+    const catalog = await loadLessonSettlementCatalog(
       client,
       source.branch_id,
       input.configurationRevisionIds,
@@ -743,7 +740,10 @@ export class LessonSettlementRepository {
     >[number]>();
     for (const decision of input.decision.clientDecisions ?? []) {
       if (clientDecisions.has(decision.clientId)) {
-        this.invalidDecision("DUPLICATE_CLIENT_DECISION", "clientDecisions");
+        invalidLessonSettlementDecision(
+          "DUPLICATE_CLIENT_DECISION",
+          "clientDecisions",
+        );
       }
       clientDecisions.set(decision.clientId, decision);
     }
@@ -778,7 +778,10 @@ export class LessonSettlementRepository {
     );
     if ([...clientDecisions.keys()].some((id) =>
       !knownClients.has(id) && !excludedClients.has(id))) {
-      this.invalidDecision("UNKNOWN_LESSON_CLIENT", "clientDecisions");
+      invalidLessonSettlementDecision(
+        "UNKNOWN_LESSON_CLIENT",
+        "clientDecisions",
+      );
     }
 
     const facts = chargesResult.rows.map((charge) => {
@@ -787,7 +790,10 @@ export class LessonSettlementRepository {
         input.decision.settlementTypeKey;
       const settlement = settlementTypes.get(settlementKey);
       if (!settlement || !settlement.allowedContexts.includes(input.context)) {
-        this.invalidDecision("SETTLEMENT_TYPE_NOT_ALLOWED", "settlementTypeKey");
+        invalidLessonSettlementDecision(
+          "SETTLEMENT_TYPE_NOT_ALLOWED",
+          "settlementTypeKey",
+        );
       }
       const subscriptionId = decision?.subscriptionId ?? charge.subscription_id;
       const chargeType: ClientChargeFactType = subscriptionId
@@ -805,7 +811,7 @@ export class LessonSettlementRepository {
             : 0n,
         });
       } catch (error) {
-        this.rethrowCalculation(error);
+        rethrowLessonSettlementCalculation(error);
       }
       return {
         charge,
@@ -883,7 +889,7 @@ export class LessonSettlementRepository {
       input.decision.teacherCompensationRuleKey,
     );
     if (!rule) {
-      this.invalidDecision(
+      invalidLessonSettlementDecision(
         "TEACHER_COMPENSATION_RULE_NOT_FOUND",
         "teacherCompensationRuleKey",
       );
@@ -900,7 +906,7 @@ export class LessonSettlementRepository {
         overrideReason: input.reasonText,
       });
     } catch (error) {
-      this.rethrowCalculation(error);
+      rethrowLessonSettlementCalculation(error);
     }
     await client.query(
       `
@@ -936,103 +942,6 @@ export class LessonSettlementRepository {
     );
   }
 
-  private async loadCatalog(
-    client: PoolClient,
-    branchId: string,
-    revisions?: {
-      settlementRevisionId: string;
-      compensationRevisionId: string;
-    },
-  ): Promise<CommerceCatalogRow> {
-    if (revisions) {
-      const frozen = await client.query<CommerceCatalogRow>(
-        `select settlement.id as settlement_revision_id,
-           compensation.id as compensation_revision_id,
-           settlement.effective_snapshot->'lessonSettlementTypes'
-             as settlement_types,
-           compensation.effective_snapshot->'teacherCompensationRules'
-             as compensation_rules
-         from app.crm_configuration_revisions settlement
-         join app.crm_configuration_revisions compensation
-           on compensation.id = $2
-         where settlement.id = $1`,
-        [revisions.settlementRevisionId, revisions.compensationRevisionId],
-      );
-      const catalog = frozen.rows[0];
-      if (!catalog || !Array.isArray(catalog.settlement_types) ||
-          !Array.isArray(catalog.compensation_rules)) {
-        throw new ConflictException({ code: "COMMERCE_CATALOG_REVISION_MISSING" });
-      }
-      return catalog;
-    }
-    const result = await client.query<CommerceCatalogRow>(
-      `
-        with school as (
-          select id, effective_snapshot
-          from app.crm_configuration_revisions
-          where branch_id is null order by version desc limit 1
-        ), branch as (
-          select id, patch
-          from app.crm_configuration_revisions
-          where branch_id = $1 order by version desc limit 1
-        )
-        select
-          case when branch.patch ? 'lessonSettlementTypes'
-            then branch.id else school.id end as settlement_revision_id,
-          case when branch.patch ? 'teacherCompensationRules'
-            then branch.id else school.id end as compensation_revision_id,
-          coalesce(
-            branch.patch->'lessonSettlementTypes',
-            school.effective_snapshot->'lessonSettlementTypes'
-          ) as settlement_types,
-          coalesce(
-            branch.patch->'teacherCompensationRules',
-            school.effective_snapshot->'teacherCompensationRules'
-          ) as compensation_rules
-        from school left join branch on true
-      `,
-      [branchId],
-    );
-    const catalog = result.rows[0];
-    if (!catalog || !Array.isArray(catalog.settlement_types) ||
-        !Array.isArray(catalog.compensation_rules)) {
-      throw new ConflictException({ code: "COMMERCE_CATALOG_NOT_PUBLISHED" });
-    }
-    return catalog;
-  }
-
-  private assertPlannedDecision(
-    catalog: CommerceCatalogRow,
-    decision: LessonFinancialDecision,
-  ) {
-    const settlement = catalog.settlement_types.find(
-      (item) => item.active && item.stableKey === decision.settlementTypeKey,
-    );
-    if (!settlement || !settlement.allowedContexts.includes("settle")) {
-      this.invalidDecision("SETTLEMENT_TYPE_NOT_ALLOWED", "settlementTypeKey");
-    }
-    const rule = catalog.compensation_rules.find(
-      (item) =>
-        item.active && item.stableKey === decision.teacherCompensationRuleKey,
-    );
-    if (!rule) {
-      this.invalidDecision(
-        "TEACHER_COMPENSATION_RULE_NOT_FOUND",
-        "teacherCompensationRuleKey",
-      );
-    }
-    const value = decision.teacherCompensationValueMinor;
-    if (value !== undefined && !/^\d{1,19}$/.test(value)) {
-      this.invalidDecision("INVALID_TEACHER_VALUE", "teacherCompensationValueMinor");
-    }
-    if ((rule.mode === "none" || rule.mode === "standard") && value !== undefined) {
-      this.invalidDecision("TEACHER_OVERRIDE_NOT_ALLOWED", "teacherCompensationValueMinor");
-    }
-    if (rule.mode === "percent" && value !== undefined && BigInt(value) > 20_000n) {
-      this.invalidDecision("INVALID_TEACHER_PERCENT", "teacherCompensationValueMinor");
-    }
-  }
-
   private async lockAndReserveSubscriptions(
     client: PoolClient,
     lessonId: string,
@@ -1048,7 +957,10 @@ export class LessonSettlementRepository {
     );
     if (chargeBySubscription.size !==
         facts.filter((fact) => fact.subscriptionId).length) {
-      this.invalidDecision("DUPLICATE_SUBSCRIPTION_SELECTION", "clientDecisions");
+      invalidLessonSettlementDecision(
+        "DUPLICATE_SUBSCRIPTION_SELECTION",
+        "clientDecisions",
+      );
     }
     for (const subscriptionId of [...chargeBySubscription.keys()].sort()) {
       const fact = chargeBySubscription.get(subscriptionId)!;
@@ -1146,7 +1058,10 @@ export class LessonSettlementRepository {
     );
     if (new Set(selected.map((fact) => fact.subscriptionId)).size !==
         selected.length) {
-      this.invalidDecision("DUPLICATE_SUBSCRIPTION_SELECTION", "clientDecisions");
+      invalidLessonSettlementDecision(
+        "DUPLICATE_SUBSCRIPTION_SELECTION",
+        "clientDecisions",
+      );
     }
     for (const fact of selected.sort((left, right) =>
       left.subscriptionId!.localeCompare(right.subscriptionId!))) {
@@ -1246,17 +1161,6 @@ export class LessonSettlementRepository {
       [lessonId],
     );
     return new Set(result.rows.map((row) => row.student_id));
-  }
-
-  private invalidDecision(code: string, field?: string): never {
-    throw new UnprocessableEntityException({ code, field });
-  }
-
-  private rethrowCalculation(error: unknown): never {
-    if (error instanceof LessonSettlementCalculationError) {
-      this.invalidDecision(error.code);
-    }
-    throw error;
   }
 
   private assertSettleable(
