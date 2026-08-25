@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_model.dart';
 
 class TeacherPayrollHistory extends StatelessWidget {
   const TeacherPayrollHistory({
@@ -25,14 +24,14 @@ class TeacherPayrollHistory extends StatelessWidget {
     return Column(
       children: [
         _RateHistory(
-          rows: teacherDetailMapList(payroll['rateHistory']).reversed.toList(),
+          rows: _mapList(payroll['rateHistory']).reversed.toList(),
           canManage: canManage,
           mutating: mutating,
           onEdit: onEditRate,
           onDelete: (row) => onDelete(row, rate: true),
         ),
         _PayoutHistory(
-          rows: teacherDetailMapList(payroll['payouts']),
+          rows: _mapList(payroll['payouts']),
           canManage: canManage,
           mutating: mutating,
           onEdit: onEditPayout,
@@ -79,12 +78,12 @@ class _RateHistory extends StatelessWidget {
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                   title: Text(
-                    teacherDetailNum(row['rate']) == 0
+                    _number(row['rate']) == 0
                         ? 'Входит в оклад'
-                        : '${money.format(teacherDetailNum(row['rate']))} ₽/астр.ч.',
+                        : '${money.format(_number(row['rate']))} ₽/астр.ч.',
                   ),
                   subtitle: Text(
-                    'с ${teacherDetailShortDay(row['effectiveFrom']?.toString() ?? '')}'
+                    'с ${_shortDay(row['effectiveFrom']?.toString() ?? '')}'
                     '${row['authorName'] == null ? '' : ' · ${row['authorName']}'}',
                   ),
                   trailing: canManage
@@ -137,10 +136,10 @@ class _PayoutHistory extends StatelessWidget {
                   contentPadding: EdgeInsets.zero,
                   title: Text(
                     '${_kindLabel(row['kind']?.toString())}: '
-                    '${money.format(teacherDetailNum(row['amount']))} ₽',
+                    '${money.format(_number(row['amount']))} ₽',
                   ),
                   subtitle: Text(
-                    '${teacherDetailShortDate(row['paidAt']?.toString() ?? '')}'
+                    '${_shortDate(row['paidAt']?.toString() ?? '')}'
                     '${row['comment'] == null ? '' : ' · ${row['comment']}'}'
                     '${row['authorName'] == null ? '' : ' · ${row['authorName']}'}',
                   ),
@@ -185,4 +184,27 @@ class _HistoryMenu extends StatelessWidget {
       ],
     );
   }
+}
+
+num _number(dynamic value) {
+  if (value is num) return value;
+  return num.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+List<Map<String, dynamic>> _mapList(dynamic value) {
+  if (value is! List) return const [];
+  return value
+      .whereType<Map>()
+      .map((row) => Map<String, dynamic>.from(row))
+      .toList();
+}
+
+String _shortDate(String value) {
+  final parsed = DateTime.tryParse(value)?.toLocal();
+  return parsed == null ? value : DateFormat('dd.MM.yyyy HH:mm').format(parsed);
+}
+
+String _shortDay(String value) {
+  final parsed = DateTime.tryParse(value)?.toLocal();
+  return parsed == null ? value : DateFormat('dd.MM.yyyy').format(parsed);
 }

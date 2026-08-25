@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_model.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_payroll_controller.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_payroll_dialogs.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_payroll_entry_dialogs.dart';
@@ -193,9 +192,9 @@ class _TeacherPayrollSectionState extends State<TeacherPayrollSection> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Начислено ${_money.format(teacherDetailNum(payroll['accruedTotal']))} ₽ '
-          '(${teacherDetailNum(payroll['hoursTotal'])} астр.ч.) · '
-          'выплачено ${_money.format(teacherDetailNum(payroll['paidTotal']))} ₽',
+          'Начислено ${_money.format(_number(payroll['accruedTotal']))} ₽ '
+          '(${_number(payroll['hoursTotal'])} астр.ч.) · '
+          'выплачено ${_money.format(_number(payroll['paidTotal']))} ₽',
           style: TextStyle(
             color: Theme.of(context).colorScheme.onSurfaceVariant,
             fontSize: 12.5,
@@ -203,10 +202,10 @@ class _TeacherPayrollSectionState extends State<TeacherPayrollSection> {
         ),
         const SizedBox(height: 3),
         Text(
-          'Завершено ${teacherDetailInt(payroll['completedLessons'])} · '
-          'оплачиваемых ${teacherDetailInt(payroll['payableLessons'])} · '
+          'Завершено ${_integer(payroll['completedLessons'])} · '
+          'оплачиваемых ${_integer(payroll['payableLessons'])} · '
           'без поурочного начисления '
-          '${teacherDetailInt(payroll['noAccrualLessons'])}',
+          '${_integer(payroll['noAccrualLessons'])}',
           style: TextStyle(
             color: Theme.of(context).colorScheme.onSurfaceVariant,
             fontSize: 12.5,
@@ -240,3 +239,10 @@ class _TeacherPayrollSectionState extends State<TeacherPayrollSection> {
     );
   }
 }
+
+num _number(dynamic value) {
+  if (value is num) return value;
+  return num.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+int _integer(dynamic value) => _number(value).toInt();

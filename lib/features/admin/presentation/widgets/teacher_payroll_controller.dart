@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_model.dart';
 
 class TeacherPayrollController extends ChangeNotifier {
   TeacherPayrollController({
@@ -22,9 +21,9 @@ class TeacherPayrollController extends ChangeNotifier {
   Object? get mutationError => _mutationError;
   bool get mutating => _mutating;
   bool get loading => _payroll == null && _error == null;
-  num get debt => teacherDetailNum(_payroll?['debt']);
+  num get debt => _number(_payroll?['debt']);
   int? get expectedVersion =>
-      _payroll == null ? null : teacherDetailNum(_payroll!['version']).toInt();
+      _payroll == null ? null : _number(_payroll!['version']).toInt();
 
   Future<void> load() async {
     _error = null;
@@ -160,6 +159,11 @@ class TeacherPayrollController extends ChangeNotifier {
 
   void _notify() {
     if (!_disposed) notifyListeners();
+  }
+
+  static num _number(dynamic value) {
+    if (value is num) return value;
+    return num.tryParse(value?.toString() ?? '') ?? 0;
   }
 
   @override
