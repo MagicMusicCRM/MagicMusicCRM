@@ -36,34 +36,19 @@ import {
   prepareLessonSettlementPlan,
   replaceLessonSettlementPlan,
 } from "./lesson-settlement-plan.persistence";
-
-interface SettlementSourceRow {
-  lesson_id: string;
-  lifecycle_state: string;
-  branch_id: string;
-  teacher_id: string | null;
-  group_id: string | null;
-  client_type: "lead" | "student" | null;
-  client_id: string | null;
-  client_charge_type: ClientChargeFactType | null;
-  client_charge_value: string | null;
-  teacher_compensation_type: "fixed" | "hourly" | "none" | null;
-  teacher_compensation_value: string | null;
-  subscription_id: string | null;
-  reservation_subscription_id: string | null;
-  reservation_state: string | null;
-  duration_minutes: number | null;
-  validation_state: string | null;
-  participant_count: number | string;
-}
-
-interface ChargeSourceRow {
-  client_type: "lead" | "student";
-  client_id: string;
-  charge_type: ClientChargeFactType;
-  charge_value: string;
-  subscription_id: string | null;
-}
+import {
+  insertConfiguredLessonClientFacts,
+  insertConfiguredLessonTeacherFact,
+  insertLegacyLessonSettlementFacts,
+  loadExcludedLessonParticipantIds,
+  loadLessonSettlementCharges,
+  loadLessonSettlementFacts,
+  loadLessonSettlementSource,
+  loadSupersededLessonFacts,
+  type CalculatedLessonClientFact,
+  type LessonSettlementChargeSource,
+  type LessonSettlementSource,
+} from "./lesson-settlement-facts.persistence";
 
 @Injectable()
 export class LessonSettlementRepository {
@@ -167,59 +152,18 @@ export class LessonSettlementRepository {
       [`commerce:lesson-settlement:${lessonId}`],
     );
 
-    const existing = await this.loadFacts(client, lessonId);
+    const existing = await loadLessonSettlementFacts(client, lessonId);
     if (existing && !input?.correction) {
       if (input) await this.assertExistingDecision(client, existing, input);
       return existing;
     }
 
-    const sourceResult = await client.query<SettlementSourceRow>(
-      `
-        select
-          lesson.id as lesson_id,
-          lesson.lifecycle_state,
-          lesson.branch_id,
-          lesson.teacher_id,
-          snapshot.group_id,
-          snapshot.client_type,
-          snapshot.client_id,
-          snapshot.client_charge_type,
-          snapshot.client_charge_value,
-          snapshot.teacher_compensation_type,
-          snapshot.teacher_compensation_value,
-          snapshot.subscription_id,
-          reservation.subscription_id as reservation_subscription_id,
-          reservation.state as reservation_state,
-          snapshot.duration_minutes,
-          snapshot.validation_state
-          ,(
-            select count(*)
-            from app.lesson_snapshot_participants participant
-            where participant.lesson_id = lesson.id
-          ) as participant_count
-        from app.lessons lesson
-        left join app.lesson_snapshots snapshot
-          on snapshot.lesson_id = lesson.id
-        left join lateral (
-          select subscription_id, state
-          from app.lesson_reservations
-          where lesson_id = lesson.id
-          order by created_at desc, id desc
-          limit 1
-        ) reservation on true
-        where lesson.id = $1
-          and lesson.deleted_at is null
-        for update of lesson
-      `,
-      [lessonId],
-    );
-    const source = sourceResult.rows[0];
-    if (!source) throw new NotFoundException("Урок не найден.");
+    const source = await loadLessonSettlementSource(client, lessonId);
     this.assertSettleable(source, input?.context);
 
     if (input) {
       await this.insertConfiguredFacts(client, source, input);
-      const settled = await this.loadFacts(client, lessonId);
+      const settled = await loadLessonSettlementFacts(client, lessonId);
       if (!settled) {
         throw new ConflictException({
           code: "LESSON_SETTLEMENT_INCOMPLETE",
@@ -229,131 +173,9 @@ export class LessonSettlementRepository {
       return settled;
     }
 
-    await client.query(
-      `
-        with charges as (
-          select
-            snapshot.client_type,
-            snapshot.client_id,
-            snapshot.client_charge_type as charge_type,
-            snapshot.client_charge_value as charge_value,
-            snapshot.subscription_id
-          from app.lesson_snapshots snapshot
-          where snapshot.lesson_id = $1 and snapshot.group_id is null
-          union all
-          select
-            'student'::text,
-            participant.student_id,
-            participant.charge_type,
-            participant.charge_value,
-            participant.subscription_id
-          from app.lesson_snapshot_participants participant
-          where participant.lesson_id = $1
-            and not exists (
-              select 1 from app.lesson_participant_exclusions exclusion
-              where exclusion.lesson_id = participant.lesson_id
-                and exclusion.student_id = participant.student_id
-            )
-        ), effective as (
-          select charges.*,
-            case
-              when charges.charge_type = 'subscription'
-                and coverage.subscription_id is null then 'none'
-              else charges.charge_type
-            end as effective_charge_type,
-            coverage.subscription_id as effective_subscription_id
-          from charges
-          left join lateral (
-            select reservation.subscription_id
-            from app.lesson_reservations reservation
-            join app.subscriptions subscription
-              on subscription.id = reservation.subscription_id
-            where reservation.lesson_id = $1
-              and reservation.state = 'reserved'
-              and (
-                reservation.subscription_id = charges.subscription_id
-                or (
-                  charges.client_type = 'student'
-                  and subscription.student_id = charges.client_id
-                )
-              )
-            order by
-              (reservation.subscription_id = charges.subscription_id) desc,
-              reservation.created_at,
-              reservation.id
-            limit 1
-          ) coverage on charges.charge_type = 'subscription'
-        )
-        insert into app.lesson_client_charge_facts (
-          lesson_id,
-          client_type,
-          client_id,
-          charge_type,
-          snapshot_value,
-          subscription_id,
-          amount_minor,
-          units
-        )
-        select
-          $1, client_type, client_id, effective_charge_type,
-          case when effective_charge_type = 'none' then 0 else charge_value end,
-          case when effective_charge_type = 'subscription'
-            then effective_subscription_id else null end,
-          case
-            when effective_charge_type = 'personal_account'
-              then round(charge_value * 100)::bigint
-            else 0
-          end,
-          case
-            when effective_charge_type = 'subscription' then charge_value
-            else 0
-          end
-        from effective
-        order by client_type, client_id
-      `,
-      [lessonId],
-    );
+    await insertLegacyLessonSettlementFacts(client, source);
 
-    await client.query(
-      `
-        insert into app.lesson_teacher_compensation_facts (
-          lesson_id,
-          teacher_id,
-          compensation_type,
-          snapshot_rate,
-          rate_minor,
-          duration_minutes,
-          amount_minor
-        )
-        values (
-          $1, $2, $3,
-          case when $3 = 'none' then 0 else $4::text::numeric end,
-          case
-            when $3 = 'none' then 0
-            else round($4::text::numeric * 100)::bigint
-          end,
-          $5::integer,
-          case
-            when $3 = 'fixed'
-              then round($4::text::numeric * 100)::bigint
-            when $3 = 'hourly'
-              then round(
-                $4::text::numeric * 100 * $5::integer / 60
-              )::bigint
-            else 0
-          end
-        )
-      `,
-      [
-        lessonId,
-        source.teacher_id,
-        source.teacher_compensation_type,
-        source.teacher_compensation_value,
-        source.duration_minutes,
-      ],
-    );
-
-    const settled = await this.loadFacts(client, lessonId);
+    const settled = await loadLessonSettlementFacts(client, lessonId);
     if (!settled) {
       throw new ConflictException({
         code: "LESSON_SETTLEMENT_INCOMPLETE",
@@ -492,7 +314,7 @@ export class LessonSettlementRepository {
 
   private async insertConfiguredFacts(
     client: PoolClient,
-    source: SettlementSourceRow,
+    source: LessonSettlementSource,
     input: LessonSettlementInput,
   ): Promise<void> {
     if (input.reasonText && input.reasonText.trim().length > 500) {
@@ -524,31 +346,9 @@ export class LessonSettlementRepository {
       clientDecisions.set(decision.clientId, decision);
     }
 
-    const chargesResult = await client.query<ChargeSourceRow>(
-      `
-        select snapshot.client_type, snapshot.client_id,
-          snapshot.client_charge_type as charge_type,
-          snapshot.client_charge_value as charge_value,
-          snapshot.subscription_id
-        from app.lesson_snapshots snapshot
-        where snapshot.lesson_id = $1 and snapshot.group_id is null
-        union all
-        select 'student'::text, participant.student_id,
-          participant.charge_type, participant.charge_value,
-          participant.subscription_id
-        from app.lesson_snapshot_participants participant
-        where participant.lesson_id = $1
-          and not exists (
-            select 1 from app.lesson_participant_exclusions exclusion
-            where exclusion.lesson_id = participant.lesson_id
-              and exclusion.student_id = participant.student_id
-          )
-        order by client_type, client_id
-      `,
-      [source.lesson_id],
-    );
-    const knownClients = new Set(chargesResult.rows.map((row) => row.client_id));
-    const excludedClients = await this.loadExcludedParticipantIds(
+    const charges = await loadLessonSettlementCharges(client, source.lesson_id);
+    const knownClients = new Set(charges.map((row) => row.client_id));
+    const excludedClients = await loadExcludedLessonParticipantIds(
       client,
       source.lesson_id,
     );
@@ -560,7 +360,7 @@ export class LessonSettlementRepository {
       );
     }
 
-    const facts = chargesResult.rows.map((charge) => {
+    const facts: CalculatedLessonClientFact[] = charges.map((charge) => {
       const decision = clientDecisions.get(charge.client_id);
       const settlementKey = decision?.settlementTypeKey ??
         input.decision.settlementTypeKey;
@@ -598,21 +398,11 @@ export class LessonSettlementRepository {
       };
     });
 
-    const supersededClients = input.correction
-      ? new Map((await client.query<{ id: string; client_id: string }>(
-          `select id, client_id
-           from app.lesson_client_charge_facts_effective
-           where lesson_id = $1`,
-          [source.lesson_id],
-        )).rows.map((row) => [row.client_id, row.id]))
-      : new Map<string, string>();
-    const supersededTeacher = input.correction
-      ? (await client.query<{ id: string }>(
-          `select id from app.lesson_teacher_compensation_facts_effective
-           where lesson_id = $1`,
-          [source.lesson_id],
-        )).rows[0]?.id ?? null
-      : null;
+    const superseded = await loadSupersededLessonFacts(
+      client,
+      source.lesson_id,
+      Boolean(input.correction),
+    );
     if (input.correction) {
       await this.lockCorrectionSubscriptionCapacity(
         client,
@@ -622,44 +412,13 @@ export class LessonSettlementRepository {
     } else {
       await this.lockAndReserveSubscriptions(client, source.lesson_id, facts);
     }
-    for (const fact of facts) {
-      await client.query(
-        `
-          insert into app.lesson_client_charge_facts (
-            lesson_id, client_type, client_id, charge_type, snapshot_value,
-            subscription_id, amount_minor, units, settlement_type_key,
-            settlement_label, settlement_color_token,
-            hour_share_basis_points, fixed_penalty_minor,
-            configuration_revision_id, correction_id, supersedes_fact_id
-          ) values (
-            $1, $2, $3, $4, $5::numeric, $6, $7::bigint, $8::numeric,
-            $9, $10, $11, $12, $13::bigint, $14, $15, $16
-          )
-        `,
-        [
-          source.lesson_id,
-          fact.charge.client_type,
-          fact.charge.client_id,
-          fact.chargeType,
-          fact.chargeType === "subscription"
-            ? fact.calculation.units
-            : fact.chargeType === "personal_account"
-              ? fact.charge.charge_value
-              : "0",
-          fact.subscriptionId,
-          fact.calculation.amountMinor,
-          fact.calculation.units,
-          fact.settlement.stableKey,
-          fact.settlement.label,
-          fact.settlement.colorToken,
-          fact.settlement.hourShareBasisPoints,
-          fact.settlement.fixedPenaltyMinor ?? "0",
-          catalog.settlement_revision_id,
-          input.correction?.id ?? null,
-          supersededClients.get(fact.charge.client_id) ?? null,
-        ],
-      );
-    }
+    await insertConfiguredLessonClientFacts(client, {
+      lessonId: source.lesson_id,
+      facts,
+      configurationRevisionId: catalog.settlement_revision_id,
+      correctionId: input.correction?.id ?? null,
+      supersededFactIds: superseded.clientFactIds,
+    });
 
     const rule = compensationRules.get(
       input.decision.teacherCompensationRuleKey,
@@ -684,45 +443,20 @@ export class LessonSettlementRepository {
     } catch (error) {
       rethrowLessonSettlementCalculation(error);
     }
-    await client.query(
-      `
-        insert into app.lesson_teacher_compensation_facts (
-          lesson_id, teacher_id, compensation_type, snapshot_rate,
-          rate_minor, duration_minutes, amount_minor,
-          compensation_rule_key, compensation_rule_label, compensation_mode,
-          compensation_default_value, compensation_actual_value,
-          compensation_override_reason, configuration_revision_id,
-          correction_id, supersedes_fact_id
-        ) values (
-          $1, $2, $3, $4::numeric, $5::bigint, $6, $7::bigint,
-          $8, $9, $3, $10::bigint, $11::bigint, $12, $13, $14, $15
-        )
-      `,
-      [
-        source.lesson_id,
-        source.teacher_id,
-        rule.mode,
-        teacher!.snapshotRate,
-        teacher!.rateMinor,
-        source.duration_minutes,
-        teacher!.amountMinor,
-        rule.stableKey,
-        rule.label,
-        teacher!.defaultValue,
-        teacher!.actualValue,
-        teacher!.overrideReason,
-        catalog.compensation_revision_id,
-        input.correction?.id ?? null,
-        supersededTeacher,
-      ],
-    );
+    await insertConfiguredLessonTeacherFact(client, {
+      source,
+      fact: { rule, calculation: teacher! },
+      configurationRevisionId: catalog.compensation_revision_id,
+      correctionId: input.correction?.id ?? null,
+      supersededFactId: superseded.teacherFactId,
+    });
   }
 
   private async lockAndReserveSubscriptions(
     client: PoolClient,
     lessonId: string,
     facts: Array<{
-      charge: ChargeSourceRow;
+      charge: LessonSettlementChargeSource;
       subscriptionId: string | null;
       calculation: { units: string; amountMinor: string };
     }>,
@@ -824,7 +558,7 @@ export class LessonSettlementRepository {
     client: PoolClient,
     lessonId: string,
     facts: Array<{
-      charge: ChargeSourceRow;
+      charge: LessonSettlementChargeSource;
       subscriptionId: string | null;
       calculation: { units: string; amountMinor: string };
     }>,
@@ -894,7 +628,7 @@ export class LessonSettlementRepository {
     existing: LessonSettlementResult,
     input: LessonSettlementInput,
   ): Promise<void> {
-    const excludedClients = await this.loadExcludedParticipantIds(
+    const excludedClients = await loadExcludedLessonParticipantIds(
       client,
       existing.lessonId,
     );
@@ -940,7 +674,7 @@ export class LessonSettlementRepository {
   }
 
   private assertSettleable(
-    source: SettlementSourceRow,
+    source: LessonSettlementSource,
     context?: LessonSettlementInput["context"],
   ) {
     const expectedState = context === "reschedule"
