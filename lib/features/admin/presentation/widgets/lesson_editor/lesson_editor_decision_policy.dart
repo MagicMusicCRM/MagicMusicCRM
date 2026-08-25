@@ -107,6 +107,7 @@ class LessonEditorDecisionPolicy {
   }
 
   Map<String, dynamic> createPayload({
+    required LessonEditorSession session,
     required LessonEditorDraft draft,
     required LessonEditorReferenceState references,
   }) {
@@ -140,8 +141,7 @@ class LessonEditorDecisionPolicy {
       if (compensationNeedsReason(draft: draft, rule: rule))
         'plannedSettlementReason': draft.plannedSettlementReason.trim(),
       if (requiresSubscription(draft)) 'subscriptionId': draft.subscriptionId,
-      if (client?.type == 'lead' && client!.label.trim().isNotEmpty)
-        'notes': 'Занятие по лиду: ${client.label.trim()}',
+      'notes': ?_leadNote(session: session, client: client),
     };
   }
 
@@ -340,6 +340,16 @@ class LessonEditorDecisionPolicy {
     final rate = teacher?.raw['current_rate'];
     return rate is num && rate > 0 ? ('hourly', rate) : ('none', 0);
   }
+}
+
+String? _leadNote({
+  required LessonEditorSession session,
+  required LessonClientRef? client,
+}) {
+  if (client?.type != 'lead') return null;
+  final source = session.leadNoteSource?.trim();
+  if (source == null || source.isEmpty) return null;
+  return 'Занятие по лиду: $source';
 }
 
 LessonDecisionCatalogItem? _catalogItemByKey(

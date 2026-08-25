@@ -166,11 +166,13 @@ class LessonEditorSession {
     required this.draft,
     required this.snapshot,
     required this.seededClient,
+    this.leadNoteSource,
   });
 
   final LessonEditorDraft draft;
   final LessonEditorSnapshot? snapshot;
   final LessonClientRef? seededClient;
+  final String? leadNoteSource;
 
   bool get isEdit => snapshot != null;
   bool get isGroupEdit => isEdit && draft.client?.type == 'group';

@@ -209,6 +209,7 @@ void main() {
           plannedSettlementReason: '  Индивидуальная договорённость  ',
         );
         final payload = policy.createPayload(
+          session: _createSession(draft),
           draft: draft,
           references: _references(
             teachers: [_teacher('teacher-a', currentRate: 1800)],
@@ -250,18 +251,42 @@ void main() {
     test(
       'keeps optional financial value, reason, subscription, and lead note sparse',
       () {
+        final standardDraft = _draft();
+        final fallbackLeadDrafts = ['Лид без имени', 'Клиент без имени']
+            .map(
+              (label) => _draft(
+                client: LessonClientRef(
+                  type: 'lead',
+                  id: 'lead-a',
+                  label: label,
+                ),
+              ),
+            )
+            .toList();
+        final namedLeadDraft = _draft(
+          client: const LessonClientRef(
+            type: 'lead',
+            id: 'lead-a',
+            label: 'Мария',
+          ),
+        );
         final standardPayload = policy.createPayload(
-          draft: _draft(),
+          session: _createSession(standardDraft),
+          draft: standardDraft,
           references: _references(),
         );
-        final leadPayload = policy.createPayload(
-          draft: _draft(
-            client: const LessonClientRef(
-              type: 'lead',
-              id: 'lead-a',
-              label: '  Мария  ',
-            ),
-          ),
+        final fallbackLeadPayloads = fallbackLeadDrafts
+            .map(
+              (draft) => policy.createPayload(
+                session: _createSession(draft),
+                draft: draft,
+                references: _references(),
+              ),
+            )
+            .toList();
+        final namedLeadPayload = policy.createPayload(
+          session: _createSession(namedLeadDraft, leadNoteSource: '  Мария  '),
+          draft: namedLeadDraft,
           references: _references(),
         );
 
@@ -272,7 +297,10 @@ void main() {
         expect(standardPayload, isNot(contains('plannedSettlementReason')));
         expect(standardPayload, isNot(contains('subscriptionId')));
         expect(standardPayload, isNot(contains('notes')));
-        expect(leadPayload['notes'], 'Занятие по лиду: Мария');
+        for (final payload in fallbackLeadPayloads) {
+          expect(payload, isNot(contains('notes')));
+        }
+        expect(namedLeadPayload['notes'], 'Занятие по лиду: Мария');
       },
     );
   });
@@ -353,6 +381,28 @@ void main() {
       expect(plannedRequest.initialSettlementTypeKey, 'standard');
       expect(plannedRequest.initialCompensationRuleKey, 'teacher-fixed');
       expect(plannedRequest.initialCompensationValueMinor, '250000');
+    });
+
+    test('maps lifecycle aliases to the financial edit operation', () {
+      final draft = _draft(
+        compensationRuleKey: 'teacher-fixed',
+        compensationValueMinor: '250000',
+      );
+      const cases = {
+        'successfully_completed': LessonDecisionOperation.correction,
+        'completed': LessonDecisionOperation.correction,
+        'done': LessonDecisionOperation.correction,
+        'planned': LessonDecisionOperation.plannedSettlement,
+      };
+
+      for (final entry in cases.entries) {
+        final request = policy.editRequest(
+          session: _editSession(_draft(), lifecycleState: entry.key),
+          draft: draft,
+        );
+
+        expect(request.operation, entry.value, reason: entry.key);
+      }
     });
   });
 
@@ -455,12 +505,15 @@ LessonEditorDraft _draft({
   plannedSettlementReason: plannedSettlementReason,
 );
 
-LessonEditorSession _createSession(LessonEditorDraft draft) =>
-    LessonEditorSession(
-      draft: draft,
-      snapshot: null,
-      seededClient: draft.client,
-    );
+LessonEditorSession _createSession(
+  LessonEditorDraft draft, {
+  String? leadNoteSource,
+}) => LessonEditorSession(
+  draft: draft,
+  snapshot: null,
+  seededClient: draft.client,
+  leadNoteSource: leadNoteSource,
+);
 
 LessonEditorSession _editSession(
   LessonEditorDraft draft, {

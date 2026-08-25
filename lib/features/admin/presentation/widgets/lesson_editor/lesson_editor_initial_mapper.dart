@@ -64,6 +64,7 @@ class LessonEditorInitialMapper {
       draft: draft,
       snapshot: snapshot,
       seededClient: client,
+      leadNoteSource: _nonEmpty(input.leadName),
     );
   }
 

@@ -70,11 +70,46 @@ void main() {
 
     expect(session.draft.client?.type, 'lead');
     expect(session.draft.client?.id, 'lead-a');
+    expect(session.leadNoteSource, 'Анна');
     expect(session.draft.isTrial, isTrue);
     expect(session.draft.clientChargeType, 'none');
     expect(session.draft.durationMinutes, 45);
     expect(session.snapshot, isNull);
   });
+
+  test(
+    'keeps fallback lead display separate from the nullable note source',
+    () {
+      const cases = {
+        'Лид без имени': LessonEditorInitialInput(
+          initialDate: null,
+          initialDurationMinutes: null,
+          initialRoomId: null,
+          initialBranchId: null,
+          initialIsTrial: false,
+          lesson: null,
+          leadId: 'lead-a',
+        ),
+        'Клиент без имени': LessonEditorInitialInput(
+          initialDate: null,
+          initialDurationMinutes: null,
+          initialRoomId: null,
+          initialBranchId: null,
+          initialIsTrial: false,
+          lesson: null,
+          clientType: 'lead',
+          clientId: 'lead-b',
+        ),
+      };
+
+      for (final entry in cases.entries) {
+        final session = mapper.map(entry.value);
+
+        expect(session.draft.client?.label, entry.key);
+        expect(session.leadNoteSource, isNull, reason: entry.key);
+      }
+    },
+  );
 
   test('prefers an explicit client seed over a lead seed', () {
     final session = mapper.map(
