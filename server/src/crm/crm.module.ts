@@ -39,6 +39,7 @@ import { ScheduleConflictService } from "./schedule/schedule-conflict.service";
 import { ScheduleSeriesMaterializerService } from "./schedule/schedule-series-materializer.service";
 import { ScheduleSeriesService } from "./schedule/schedule-series.service";
 import { LessonScheduleMutationService } from "./schedule/lesson-schedule-mutation.service";
+import { LessonTeacherRateService } from "./schedule/lesson-teacher-rate.service";
 import { SectionViewsService } from "./section-views.service";
 import { TimelineService } from "./timeline.service";
 import { DashboardService } from "./dashboard.service";
@@ -168,6 +169,7 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     ScheduleSeriesMaterializerService,
     ScheduleSeriesService,
     LessonScheduleMutationService,
+    LessonTeacherRateService,
     TimelineService,
     SectionViewsService,
     DashboardService,

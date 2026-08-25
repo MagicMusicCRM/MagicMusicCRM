@@ -10,6 +10,8 @@ describe("CrmScheduleController rollout boundary", () => {
       createLesson: jest.fn().mockResolvedValue({ path: "legacy" }),
       updateLesson: jest.fn().mockResolvedValue({ path: "legacy" }),
       deleteLesson: jest.fn().mockResolvedValue({ success: true }),
+    };
+    const lessonTeacherRates = {
       setLessonsTeacherRate: jest.fn().mockResolvedValue({ updated: 1 }),
     };
     const scheduleRead = {
@@ -58,6 +60,7 @@ describe("CrmScheduleController rollout boundary", () => {
     return {
       controller: new CrmScheduleController(
         lessonMutations as never,
+        lessonTeacherRates as never,
         scheduleRead as never,
         scheduleConflicts as never,
         scheduleSeries as never,
@@ -69,6 +72,7 @@ describe("CrmScheduleController rollout boundary", () => {
         {} as never,
       ),
       lessonMutations,
+      lessonTeacherRates,
       scheduleRead,
       scheduleConflicts,
       scheduleSeries,
@@ -159,7 +163,8 @@ describe("CrmScheduleController rollout boundary", () => {
   });
 
   it("routes legacy-only delete and rate commands through the mutation owner", async () => {
-    const { controller: subject, lessonMutations } = controller("v4");
+    const { controller: subject, lessonMutations, lessonTeacherRates } =
+      controller("v4");
 
     await subject.deleteLesson(actor, "lesson-a");
     await subject.setLessonsTeacherRate(actor, {} as never);
@@ -168,7 +173,7 @@ describe("CrmScheduleController rollout boundary", () => {
       actor,
       "lesson-a",
     );
-    expect(lessonMutations.setLessonsTeacherRate).toHaveBeenCalledWith(
+    expect(lessonTeacherRates.setLessonsTeacherRate).toHaveBeenCalledWith(
       actor,
       {},
     );

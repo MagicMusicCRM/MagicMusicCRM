@@ -19,6 +19,7 @@ import { ScheduleReadService } from "./schedule/schedule-read.service";
 import { ScheduleConflictService } from "./schedule/schedule-conflict.service";
 import { ScheduleSeriesService } from "./schedule/schedule-series.service";
 import { LessonScheduleMutationService } from "./schedule/lesson-schedule-mutation.service";
+import { LessonTeacherRateService } from "./schedule/lesson-teacher-rate.service";
 import { BulkLessonRateDto } from "./dto/bulk-lesson-rate.dto";
 import {
   CreateScheduleSeriesDto,
@@ -73,6 +74,7 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
 export class CrmScheduleController {
   constructor(
     private readonly lessonMutations: LessonScheduleMutationService,
+    private readonly lessonTeacherRates: LessonTeacherRateService,
     private readonly scheduleRead: ScheduleReadService,
     private readonly scheduleConflicts: ScheduleConflictService,
     private readonly scheduleSeries: ScheduleSeriesService,
@@ -281,7 +283,7 @@ export class CrmScheduleController {
     @CurrentActor() actor: ActorContext,
     @Body() dto: BulkLessonRateDto,
   ) {
-    return this.lessonMutations.setLessonsTeacherRate(actor, dto);
+    return this.lessonTeacherRates.setLessonsTeacherRate(actor, dto);
   }
 
   @Post("lessons/:id/planned-settlement/preview")
