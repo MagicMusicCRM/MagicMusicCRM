@@ -5,7 +5,6 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import { isDeepStrictEqual } from "node:util";
 import { PoolClient, QueryResult, QueryResultRow } from "pg";
 import { AuditService } from "../audit/audit.service";
 import { authorizeCurrentCapability } from "../access-control/capability-request-authorizer";
@@ -16,6 +15,12 @@ import {
   buildCrmConfigurationBaseline,
   ClientFieldDefinitionRow,
 } from "./crm-configuration-baseline";
+import {
+  applyCrmConfigurationBranchPatch,
+  createCrmConfigurationBranchPatch,
+  getCrmConfigurationSettingSources,
+  sameCrmConfigurationValue,
+} from "./crm-configuration-branch.policy";
 import type {
   ConfigBranchPatch,
   ConfigField,
@@ -58,13 +63,6 @@ function runQuery<T extends QueryResultRow>(
   )(text, params);
 }
 
-function sameJson(left: unknown, right: unknown): boolean {
-  return isDeepStrictEqual(
-    JSON.parse(JSON.stringify(left)),
-    JSON.parse(JSON.stringify(right)),
-  );
-}
-
 @Injectable()
 export class CrmConfigurationService {
   constructor(
@@ -83,7 +81,7 @@ export class CrmConfigurationService {
       schoolVersion: effective.schoolVersion,
       branchVersion: effective.branchVersion,
       snapshot: effective.snapshot,
-      sources: this.settingSources(
+      sources: getCrmConfigurationSettingSources(
         effective.snapshot,
         effective.schoolSnapshot,
       ),
@@ -247,7 +245,7 @@ export class CrmConfigurationService {
     if (!revision)
       throw new NotFoundException("Версия конфигурации не найдена.");
     const snapshot = dto.branchId
-      ? this.applyBranchPatch(
+      ? applyCrmConfigurationBranchPatch(
           (await this.resolveSchool(this.database)).snapshot,
           revision.patch as ConfigBranchPatch,
         )
@@ -319,7 +317,7 @@ export class CrmConfigurationService {
         : await this.syncClientFields(client, requested);
       const nextVersion = currentVersion + 1;
       const patch = dto.branchId
-        ? this.branchPatch(effective.schoolSnapshot, snapshot)
+        ? createCrmConfigurationBranchPatch(effective.schoolSnapshot, snapshot)
         : snapshot;
       const inserted = await client.query<RevisionRow>(
         `insert into app.crm_configuration_revisions (
@@ -422,7 +420,7 @@ export class CrmConfigurationService {
       branchVersion: latest ? Number(latest.version) : 0,
       schoolSnapshot: school.snapshot,
       snapshot: latest
-        ? this.applyBranchPatch(
+        ? applyCrmConfigurationBranchPatch(
             school.snapshot,
             latest.patch as ConfigBranchPatch,
           )
@@ -471,7 +469,7 @@ export class CrmConfigurationService {
     const blockingIssues: ImpactReport["blockingIssues"] = [];
     if (school) {
       for (const key of ["categories", "fields", "optionSets"] as const) {
-        if (!sameJson(next[key], school[key])) {
+        if (!sameCrmConfigurationValue(next[key], school[key])) {
           blockingIssues.push({
             field: key,
             code: "BRANCH_SCHEMA_OVERRIDE_FORBIDDEN",
@@ -571,7 +569,8 @@ export class CrmConfigurationService {
         previous.map((item) => [item.stableKey, item]),
       );
       return following.filter(
-        (item) => !sameJson(item, previousByKey.get(item.stableKey)),
+        (item) =>
+          !sameCrmConfigurationValue(item, previousByKey.get(item.stableKey)),
       ).length;
     };
     const settlementTypesChanged = changedCatalogItems(
@@ -696,74 +695,6 @@ export class CrmConfigurationService {
     return snapshot;
   }
 
-  private branchPatch(school: ConfigSnapshot, desired: ConfigSnapshot) {
-    const defaults = new Map(
-      school.businessSettings.map((setting) => [setting.key, setting]),
-    );
-    return {
-      businessSettings: desired.businessSettings.filter(
-        (setting) => setting.value !== defaults.get(setting.key)?.value,
-      ),
-      ...(!sameJson(desired.lessonSettlementTypes, school.lessonSettlementTypes)
-        ? { lessonSettlementTypes: desired.lessonSettlementTypes }
-        : {}),
-      ...(!sameJson(
-        desired.teacherCompensationRules,
-        school.teacherCompensationRules,
-      )
-        ? { teacherCompensationRules: desired.teacherCompensationRules }
-        : {}),
-    };
-  }
-
-  private applyBranchPatch(
-    school: ConfigSnapshot,
-    patch: ConfigBranchPatch,
-  ): ConfigSnapshot {
-    const overrides = new Map(
-      (patch.businessSettings ?? []).map((setting) => [setting.key, setting]),
-    );
-    return {
-      ...school,
-      businessSettings: school.businessSettings.map(
-        (setting) => overrides.get(setting.key) ?? setting,
-      ),
-      lessonSettlementTypes:
-        patch.lessonSettlementTypes ?? school.lessonSettlementTypes,
-      teacherCompensationRules:
-        patch.teacherCompensationRules ?? school.teacherCompensationRules,
-    };
-  }
-
-  private settingSources(snapshot: ConfigSnapshot, school: ConfigSnapshot) {
-    const defaults = new Map(
-      school.businessSettings.map((setting) => [setting.key, setting.value]),
-    );
-    return Object.fromEntries([
-      ...snapshot.businessSettings.map((setting) => [
-        setting.key,
-        setting.value === defaults.get(setting.key)
-          ? "school"
-          : "branch_override",
-      ]),
-      [
-        "lessonSettlementTypes",
-        sameJson(snapshot.lessonSettlementTypes, school.lessonSettlementTypes)
-          ? "school"
-          : "branch_override",
-      ],
-      [
-        "teacherCompensationRules",
-        sameJson(
-          snapshot.teacherCompensationRules,
-          school.teacherCompensationRules,
-        )
-          ? "school"
-          : "branch_override",
-      ],
-    ]);
-  }
-
   private async assertCommerceCatalogAccess(
     queryable: Queryable,
     actor: ActorContext,
@@ -772,8 +703,14 @@ export class CrmConfigurationService {
     lockForCommit = false,
   ): Promise<void> {
     if (
-      sameJson(next.lessonSettlementTypes, current.lessonSettlementTypes) &&
-      sameJson(next.teacherCompensationRules, current.teacherCompensationRules)
+      sameCrmConfigurationValue(
+        next.lessonSettlementTypes,
+        current.lessonSettlementTypes,
+      ) &&
+      sameCrmConfigurationValue(
+        next.teacherCompensationRules,
+        current.teacherCompensationRules,
+      )
     ) {
       return;
     }
