@@ -6,7 +6,6 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import type { PoolClient } from "pg";
 import { AuditEventInput, AuditService } from "../audit/audit.service";
 import {
   ActorContext,
@@ -25,32 +24,12 @@ import { BulkLessonRateDto } from "./dto/bulk-lesson-rate.dto";
 import { UpsertLessonDto } from "./dto/upsert-lesson.dto";
 import { LessonRow, formatLessonTimeMoscow, toLessonDto } from "./crm-mappers";
 import { assertLessonPatchUsesTransition } from "./schedule/lesson-protected-patch.guard";
-import { SubscriptionReservationService } from "./commerce/subscription-reservation.service";
-import { ScheduleConstraintEngine } from "./schedule/constraint-engine.service";
 import { ScheduleConflictService } from "./schedule/schedule-conflict.service";
+import { ScheduleSeriesMaterializerService } from "./schedule/schedule-series-materializer.service";
 import {
-  acquireScheduleLockKeys,
   acquireScheduleSeriesLock,
-  lockSchedulePlanSeries as acquireSchedulePlanSeriesLocks,
   ScheduleQueryExecutor,
 } from "./schedule/schedule-locks";
-
-interface SeriesConstraintClientRef {
-  type: "lead" | "student";
-  id: string;
-}
-
-interface SeriesConstraintCandidate {
-  series_date: string;
-  plan_id: string | null;
-  group_id: string | null;
-  teacher_id: string | null;
-  branch_id: string | null;
-  room_id: string | null;
-  starts_at: Date | string;
-  ends_at: Date | string;
-  client_refs: SeriesConstraintClientRef[] | null;
-}
 
 // Pre-update snapshot used by updateLesson to detect a genuine reschedule
 // (time / room / teacher delta) and resolve the assigned teacher (KVA-158).
@@ -111,17 +90,9 @@ export class ScheduleService {
     private readonly policy: CrmPolicy,
     private readonly notifications: NotificationsService,
     private readonly realtime: RealtimeBus,
-    private readonly constraints: ScheduleConstraintEngine,
     private readonly conflicts: ScheduleConflictService,
-    private readonly reservations?: SubscriptionReservationService,
+    private readonly materializer: ScheduleSeriesMaterializerService,
   ) {}
-
-  lockSchedulePlanSeries(
-    client: PoolClient,
-    seriesIds: string[],
-  ): Promise<void> {
-    return acquireSchedulePlanSeriesLocks(client, seriesIds);
-  }
 
   private async notifyTrialBooked(
     lesson: LessonRow,
@@ -314,619 +285,6 @@ export class ScheduleService {
     return toLessonDto(lesson);
   }
 
-  // ── KVA-236: постоянное расписание (серии) ────────────────────────────────
-
-  /** Горизонт материализации занятий серии, дней вперёд. */
-  private static readonly MAX_BOOKING_AHEAD_DAYS = 365;
-  private static readonly INDIVIDUAL_SERIES_HORIZON_DAYS = 60;
-  private static readonly GROUP_SERIES_HORIZON_DAYS = 400;
-
-  /**
-   * Догенерировать занятия серии до горизонта. Идемпотентно: дата серии,
-   * уже закрытая строкой lessons.series_date (включая перенесённые и
-   * отменённые), повторно не создаётся.
-   */
-  private async seriesConstraintCandidates(
-    seriesId: string,
-    executor: ScheduleQueryExecutor = this.database,
-  ): Promise<SeriesConstraintCandidate[]> {
-    const result = await executor.query<SeriesConstraintCandidate>(
-      `
-        with target as (
-          select s.*,
-            coalesce(s.timezone_name, branch.timezone_name, 'Europe/Moscow')
-              as effective_timezone,
-            timezone(
-              coalesce(s.timezone_name, branch.timezone_name, 'Europe/Moscow'),
-              now()
-            )::date as local_today
-          from app.schedule_series s
-          left join app.branches branch
-            on branch.id = s.branch_id and branch.deleted_at is null
-          where s.id = $1 and s.deleted_at is null
-        ), candidates as (
-          select s.id as series_id, s.plan_id, s.client_type, s.client_id,
-            s.student_id, s.group_id, s.teacher_id, s.branch_id, s.room_id,
-            d::date as series_date,
-            (d::date + s.begin_time) at time zone s.effective_timezone
-              as starts_at,
-            (d::date + s.begin_time) at time zone s.effective_timezone
-              + s.duration_minutes * interval '1 minute' as ends_at
-          from target s
-          cross join lateral generate_series(
-            greatest(s.valid_from, s.local_today)::timestamp,
-            least(
-              coalesce(s.valid_until, s.local_today
-                + case when s.plan_id is not null or s.group_id is null
-                    then $2::int else $3::int end),
-              s.local_today
-                + case when s.plan_id is not null or s.group_id is null
-                    then $2::int else $3::int end
-            )::timestamp,
-            interval '1 day'
-          ) as d
-          where extract(isodow from d) = s.weekday
-            and not exists (
-              select 1 from app.lessons lesson
-              where lesson.series_id = s.id and lesson.series_date = d::date
-            )
-        )
-        select candidate.series_date::text, candidate.plan_id,
-          candidate.group_id, candidate.teacher_id, candidate.branch_id,
-          candidate.room_id, candidate.starts_at, candidate.ends_at,
-          case
-            when candidate.client_type is not null
-              and candidate.client_id is not null
-              then jsonb_build_array(jsonb_build_object(
-                'type', candidate.client_type,
-                'id', candidate.client_id
-              ))
-            when candidate.student_id is not null
-              then jsonb_build_array(jsonb_build_object(
-                'type', 'student',
-                'id', candidate.student_id
-              ))
-            when candidate.plan_id is not null then coalesce((
-              select jsonb_agg(
-                jsonb_build_object('type', 'student', 'id', participant.student_id)
-                order by participant.student_id
-              )
-              from app.schedule_plan_participants participant
-              where participant.plan_id = candidate.plan_id
-                and participant.effective_from <= candidate.series_date
-                and (participant.effective_until is null
-                  or participant.effective_until >= candidate.series_date)
-            ), '[]'::jsonb)
-            when candidate.group_id is not null then coalesce((
-              select jsonb_agg(
-                jsonb_build_object('type', 'student', 'id', membership.student_id)
-                order by membership.student_id
-              )
-              from app.group_students membership
-              join app.students student
-                on student.id = membership.student_id and student.deleted_at is null
-              where membership.group_id = candidate.group_id
-                and membership.left_at is null
-            ), '[]'::jsonb)
-            else '[]'::jsonb
-          end as client_refs
-        from candidates candidate
-        order by candidate.series_date
-      `,
-      [
-        seriesId,
-        ScheduleService.INDIVIDUAL_SERIES_HORIZON_DAYS,
-        ScheduleService.GROUP_SERIES_HORIZON_DAYS,
-      ],
-    );
-    return result.rows;
-  }
-
-  private seriesConstraintLockKeys(candidates: SeriesConstraintCandidate[]) {
-    return candidates.flatMap((candidate) => [
-      candidate.plan_id ? `plan:${candidate.plan_id}` : null,
-      candidate.branch_id ? `branch:${candidate.branch_id}` : null,
-      candidate.room_id ? `room:${candidate.room_id}` : null,
-      candidate.teacher_id ? `teacher:${candidate.teacher_id}` : null,
-      ...(candidate.client_refs ?? []).map(
-        (clientRef) => `client:${clientRef.type}:${clientRef.id}`,
-      ),
-    ]);
-  }
-
-  private async assertNoScheduleSeriesConflicts(
-    seriesId: string,
-    executor: ScheduleQueryExecutor = this.database,
-  ): Promise<void> {
-    const beforeLock = await this.seriesConstraintCandidates(
-      seriesId,
-      executor,
-    );
-    const lockedKeys = this.seriesConstraintLockKeys(beforeLock);
-    await acquireScheduleLockKeys(executor, lockedKeys);
-    await acquireScheduleSeriesLock(executor, seriesId);
-
-    // A Plan edit can finish while the worker waits for its locks. Re-read after
-    // locking and fail closed if the series moved to resources we did not lock.
-    const candidates = await this.seriesConstraintCandidates(
-      seriesId,
-      executor,
-    );
-    const normalizedLockedKeys = new Set(
-      lockedKeys
-        .filter((key): key is string => typeof key === "string")
-        .map((key) => key.toLowerCase()),
-    );
-    if (
-      this.seriesConstraintLockKeys(candidates).some(
-        (key) => key != null && !normalizedLockedKeys.has(key.toLowerCase()),
-      )
-    ) {
-      throw new ConflictException({
-        code: "SCHEDULE_SERIES_RESOURCES_CHANGED",
-        message: "Schedule series resources changed during materialization.",
-      });
-    }
-
-    for (const candidate of candidates) {
-      if (!candidate.teacher_id || !candidate.branch_id || !candidate.room_id) {
-        throw new UnprocessableEntityException({
-          code: "LESSON_SERIES_REQUIRED_RESOURCES_MISSING",
-          message: "Lesson series requires teacher, branch and room.",
-          occurrence: { localDate: candidate.series_date },
-        });
-      }
-      const clientRefs = candidate.client_refs?.length
-        ? candidate.client_refs
-        : [
-            {
-              type: "student" as const,
-              id: candidate.group_id ?? seriesId,
-            },
-          ];
-      for (const clientRef of clientRefs) {
-        const result = await this.constraints.validate(
-          {
-            clientRef,
-            teacherId: candidate.teacher_id,
-            branchId: candidate.branch_id,
-            roomId: candidate.room_id,
-            startAt: candidate.starts_at,
-            endAt: candidate.ends_at,
-            excludeScheduleSeriesIds: [seriesId],
-          },
-          executor as unknown as PoolClient,
-        );
-        if (!result.valid) {
-          throw new UnprocessableEntityException({
-            code: "LESSON_SERIES_CONSTRAINT_VIOLATIONS",
-            message: "Lesson series occurrence violates schedule constraints.",
-            occurrence: {
-              localDate: candidate.series_date,
-              startAt: new Date(candidate.starts_at).toISOString(),
-              endAt: new Date(candidate.ends_at).toISOString(),
-            },
-            clientRef,
-            violations: result.violations,
-          });
-        }
-      }
-    }
-  }
-
-  private async materializeSeries(
-    seriesId: string,
-    executor: ScheduleQueryExecutor = this.database,
-  ): Promise<number> {
-    // The worker, edit and stop flows all serialize on the same key. Without
-    // this lock a worker can commit old future lessons after an edit deleted
-    // them, or two edits can create competing continuations.
-    await this.assertNoScheduleSeriesConflicts(seriesId, executor);
-    const result = await executor.query<{ id: string }>(
-      `
-        insert into app.lessons (
-          student_id, group_id, teacher_id, branch_id, room_id,
-          scheduled_at, duration_minutes, status, is_trial,
-          series_id, series_date, created_by
-        )
-        select s.student_id, s.group_id, s.teacher_id, s.branch_id, s.room_id,
-          (d::date + s.begin_time) at time zone
-            coalesce(s.timezone_name, branch.timezone_name, 'Europe/Moscow'),
-          s.duration_minutes, 'scheduled', false,
-          s.id, d::date, s.created_by
-        from app.schedule_series s
-        left join app.branches branch
-          on branch.id = s.branch_id and branch.deleted_at is null
-        cross join lateral generate_series(
-          greatest(
-            s.valid_from,
-            timezone(
-              coalesce(s.timezone_name, branch.timezone_name, 'Europe/Moscow'),
-              now()
-            )::date
-          )::timestamp,
-          least(
-              coalesce(s.valid_until, timezone(
-                coalesce(s.timezone_name, branch.timezone_name, 'Europe/Moscow'),
-                now()
-              )::date
-                + case when s.plan_id is not null or s.group_id is null
-                    then $2::int else $3::int end),
-              timezone(
-                coalesce(s.timezone_name, branch.timezone_name, 'Europe/Moscow'),
-                now()
-              )::date
-                + case when s.plan_id is not null or s.group_id is null
-                    then $2::int else $3::int end
-          )::timestamp,
-          interval '1 day'
-        ) as d
-        where s.id = $1 and s.deleted_at is null
-          and extract(isodow from d) = s.weekday
-          and not exists (
-            select 1 from app.lessons l
-            where l.series_id = s.id and l.series_date = d::date
-          )
-        on conflict (series_id, series_date) where deleted_at is null
-        do nothing
-        returning id
-      `,
-      [
-        seriesId,
-        ScheduleService.INDIVIDUAL_SERIES_HORIZON_DAYS,
-        ScheduleService.GROUP_SERIES_HORIZON_DAYS,
-      ],
-    );
-    const lessonIds = result.rows.map((row) => row.id);
-    if (lessonIds.length === 0) return 0;
-    await executor.query(
-      `
-        with candidate as (
-          select lesson.id, lesson.scheduled_at, lesson.duration_minutes,
-                 series.client_type, series.client_id, series.completion_type,
-                 series.client_charge_type, series.client_charge_value,
-                 series.teacher_compensation_type,
-                 series.teacher_compensation_value, series.subscription_id,
-                 series.trial,
-                 case
-                   when student.custom_data->>'individualPrice' ~ '^[0-9]+(\\.[0-9]+)?$'
-                     then (student.custom_data->>'individualPrice')::numeric
-                   when student.custom_data->>'individual_price' ~ '^[0-9]+(\\.[0-9]+)?$'
-                     then (student.custom_data->>'individual_price')::numeric
-                   else null
-                 end as personal_price,
-                 row_number() over (order by lesson.scheduled_at, lesson.id) as position
-            from app.lessons lesson
-            join app.schedule_series series on series.id = lesson.series_id
-            left join app.students student
-              on series.client_type = 'student' and student.id = series.client_id
-           where lesson.id = any($1::uuid[]) and series.client_type is not null
-        ), capacity as (
-          select subscription.id,
-                 greatest(0,
-                   subscription.lessons_total - subscription.lessons_used
-                   - coalesce((select sum(reservation.units)
-                       from app.lesson_reservations reservation
-                       where reservation.subscription_id = subscription.id
-                         and reservation.state = 'reserved'), 0)
-                   - coalesce((select sum(fact.units)
-                       from app.lesson_client_charge_facts_effective fact
-                       where fact.subscription_id = subscription.id
-                         and fact.charge_type = 'subscription'), 0)
-                 ) as available
-            from app.subscriptions subscription
-           where subscription.id = (
-             select subscription_id from candidate limit 1
-           )
-             and subscription.status = 'active'
-             and subscription.commercial_snapshot is not null
-        ), resolved as (
-          select candidate.*,
-                 case
-                   when candidate.client_charge_type = 'subscription'
-                     and exists (
-                       select 1 from capacity
-                       where capacity.available >= candidate.position
-                         * candidate.client_charge_value
-                     )
-                     and exists (
-                       select 1 from app.subscriptions subscription
-                       where subscription.id = candidate.subscription_id
-                         and (subscription.starts_at is null
-                           or subscription.starts_at <= candidate.scheduled_at::date)
-                         and (subscription.expires_at is null
-                           or subscription.expires_at >= candidate.scheduled_at::date)
-                     ) then 'subscription'
-                   when candidate.client_charge_type = 'subscription'
-                     then 'personal_account'
-                   else candidate.client_charge_type
-                 end as resolved_charge_type
-            from candidate
-        )
-        insert into app.lesson_snapshots (
-          lesson_id, client_type, client_id, completion_type,
-          client_charge_type, client_charge_value,
-          teacher_compensation_type, teacher_compensation_value,
-          subscription_id, trial, duration_minutes
-        )
-        select id, client_type, client_id, completion_type,
-               resolved_charge_type,
-               case when resolved_charge_type = 'personal_account'
-                      and client_charge_type = 'subscription'
-                    then personal_price
-                    else client_charge_value end,
-               teacher_compensation_type, teacher_compensation_value,
-               case when resolved_charge_type = 'subscription'
-                    then subscription_id else null end,
-               trial, duration_minutes
-          from resolved
-        on conflict (lesson_id) do nothing
-      `,
-      [lessonIds],
-    );
-    await executor.query(
-      `
-        insert into app.lesson_snapshots (
-          lesson_id, client_type, client_id, completion_type,
-          client_charge_type, client_charge_value,
-          teacher_compensation_type, teacher_compensation_value,
-          subscription_id, trial, duration_minutes
-        )
-        select lesson.id, 'student', plan.student_id, 'scheduled',
-          'subscription',
-          round(
-            lesson.duration_minutes::numeric
-              * (settlement.item->>'hourShareBasisPoints')::numeric / 6000
-          ) / 100,
-          case when rate.value > 0 then 'fixed' else 'none' end,
-          rate.value, plan.subscription_id, false, lesson.duration_minutes
-        from app.lessons lesson
-        join app.schedule_series series on series.id = lesson.series_id
-        join app.schedule_plans plan on plan.id = series.plan_id
-        join app.crm_configuration_revisions revision
-          on revision.id = series.settlement_revision_id
-        cross join lateral (
-          select item
-          from jsonb_array_elements(
-            revision.effective_snapshot->'lessonSettlementTypes'
-          ) item
-          where item->>'stableKey' =
-            series.planned_financial_decision->>'settlementTypeKey'
-          limit 1
-        ) settlement
-        cross join lateral (
-          select coalesce((
-            select teacher_rate.rate
-            from app.teacher_rates teacher_rate
-            where teacher_rate.teacher_id = series.teacher_id
-              and teacher_rate.deleted_at is null
-              and teacher_rate.effective_from <= lesson.scheduled_at::date
-            order by teacher_rate.effective_from desc, teacher_rate.created_at desc
-            limit 1
-          ), 0)::numeric as value
-        ) rate
-        where lesson.id = any($1::uuid[]) and plan.kind = 'individual'
-        on conflict (lesson_id) do nothing
-      `,
-      [lessonIds],
-    );
-    await executor.query(
-      `
-        insert into app.lesson_snapshots (
-          lesson_id, group_id, completion_type,
-          client_charge_type, client_charge_value,
-          teacher_compensation_type, teacher_compensation_value,
-          trial, duration_minutes
-        )
-        select lesson.id, plan.group_id, 'scheduled', 'none', 0,
-          case when rate.value > 0 then 'fixed' else 'none' end,
-          rate.value, false, lesson.duration_minutes
-        from app.lessons lesson
-        join app.schedule_series series on series.id = lesson.series_id
-        join app.schedule_plans plan on plan.id = series.plan_id
-        join app.groups lesson_group on lesson_group.id = plan.group_id
-        cross join lateral (
-          select coalesce(lesson_group.teacher_rate, (
-            select teacher_rate.rate
-            from app.teacher_rates teacher_rate
-            where teacher_rate.teacher_id = series.teacher_id
-              and teacher_rate.deleted_at is null
-              and teacher_rate.effective_from <= lesson.scheduled_at::date
-            order by teacher_rate.effective_from desc, teacher_rate.created_at desc
-            limit 1
-          ), 0)::numeric as value
-        ) rate
-        where lesson.id = any($1::uuid[]) and plan.kind = 'group'
-        on conflict (lesson_id) do nothing
-      `,
-      [lessonIds],
-    );
-    await executor.query(
-      `
-        insert into app.lesson_snapshot_participants (
-          lesson_id, student_id, charge_type, charge_value, subscription_id
-        )
-        select lesson.id, participant.student_id, 'subscription',
-          round(
-            lesson.duration_minutes::numeric
-              * (settlement.item->>'hourShareBasisPoints')::numeric / 6000
-          ) / 100,
-          participant.subscription_id
-        from app.lessons lesson
-        join app.schedule_series series on series.id = lesson.series_id
-        join app.crm_configuration_revisions revision
-          on revision.id = series.settlement_revision_id
-        cross join lateral (
-          select item
-          from jsonb_array_elements(
-            revision.effective_snapshot->'lessonSettlementTypes'
-          ) item
-          where item->>'stableKey' =
-            series.planned_financial_decision->>'settlementTypeKey'
-          limit 1
-        ) settlement
-        join app.schedule_plan_participants participant
-          on participant.plan_id = series.plan_id
-         and participant.effective_from <= lesson.series_date
-         and (participant.effective_until is null
-           or participant.effective_until >= lesson.series_date)
-        where lesson.id = any($1::uuid[])
-        on conflict (lesson_id, student_id) do nothing
-      `,
-      [lessonIds],
-    );
-    await executor.query(
-      `
-        insert into app.lesson_settlement_plans (
-          lesson_id, decision, settlement_revision_id,
-          compensation_revision_id, selected_by
-        )
-        select lesson.id, series.planned_financial_decision,
-          series.settlement_revision_id, series.compensation_revision_id,
-          series.created_by
-        from app.lessons lesson
-        join app.schedule_series series on series.id = lesson.series_id
-        where lesson.id = any($1::uuid[])
-          and series.planned_financial_decision is not null
-        on conflict (lesson_id) do nothing
-      `,
-      [lessonIds],
-    );
-    await executor.query(
-      `
-        insert into app.lesson_settlement_plan_revisions (
-          lesson_id, version, decision, settlement_revision_id,
-          compensation_revision_id, actor_user_id
-        )
-        select lesson.id, 1, series.planned_financial_decision,
-          series.settlement_revision_id, series.compensation_revision_id,
-          series.created_by
-        from app.lessons lesson
-        join app.schedule_series series on series.id = lesson.series_id
-        join app.lesson_settlement_plans plan on plan.lesson_id = lesson.id
-        where lesson.id = any($1::uuid[])
-          and series.planned_financial_decision is not null
-        on conflict (lesson_id, version) do nothing
-      `,
-      [lessonIds],
-    );
-    await executor.query(
-      `
-        insert into app.lesson_reservations (lesson_id, subscription_id, units)
-        select snapshot.lesson_id, snapshot.subscription_id,
-               snapshot.client_charge_value
-          from app.lesson_snapshots snapshot
-          join app.lessons lesson on lesson.id = snapshot.lesson_id
-          join app.schedule_series series on series.id = lesson.series_id
-         where snapshot.lesson_id = any($1::uuid[])
-           and snapshot.client_charge_type = 'subscription'
-           and series.plan_id is null
-        on conflict (lesson_id, subscription_id) do nothing
-      `,
-      [lessonIds],
-    );
-    const planCharges = await executor.query<{
-      lesson_id: string;
-      student_id: string;
-      subscription_id: string;
-      units: string;
-    }>(
-      `
-        select snapshot.lesson_id, snapshot.client_id as student_id,
-          snapshot.subscription_id, snapshot.client_charge_value::text as units
-        from app.lesson_snapshots snapshot
-        join app.lessons lesson on lesson.id = snapshot.lesson_id
-        join app.schedule_series series on series.id = lesson.series_id
-        where snapshot.lesson_id = any($1::uuid[])
-          and series.plan_id is not null
-          and snapshot.client_charge_type = 'subscription'
-          and snapshot.client_charge_value > 0
-        union all
-        select participant.lesson_id, participant.student_id,
-          participant.subscription_id, participant.charge_value::text
-        from app.lesson_snapshot_participants participant
-        join app.lessons lesson on lesson.id = participant.lesson_id
-        join app.schedule_series series on series.id = lesson.series_id
-        where participant.lesson_id = any($1::uuid[])
-          and series.plan_id is not null
-          and participant.charge_type = 'subscription'
-          and participant.charge_value > 0
-        order by subscription_id, lesson_id
-      `,
-      [lessonIds],
-    );
-    if (planCharges.rows.length && !this.reservations) {
-      throw new Error(
-        "SubscriptionReservationService is required for plan generation.",
-      );
-    }
-    for (const charge of planCharges.rows) {
-      await this.reservations!.allocate(executor as PoolClient, {
-        lessonId: charge.lesson_id,
-        clientType: "student",
-        clientId: charge.student_id,
-        chargeType: "subscription",
-        subscriptionId: charge.subscription_id,
-        units: Number(charge.units),
-      });
-    }
-    await executor.query(
-      `update app.schedule_series
-       set occurrence_count = coalesce(occurrence_count, 0) + $2,
-           updated_at = now()
-       where id = $1 and client_type is not null`,
-      [seriesId, lessonIds.length],
-    );
-    return lessonIds.length;
-  }
-
-  materializePlanSeries(client: PoolClient, seriesId: string): Promise<number> {
-    return this.materializeSeries(seriesId, client);
-  }
-
-  /** Продлить все живые серии (вкл. «до бесконечности») — вызывается воркером. */
-  async extendAllSeriesHorizon(): Promise<{
-    series: number;
-    created: number;
-    failed: number;
-  }> {
-    const rows = await this.database.query<{ id: string }>(
-      `
-        select s.id
-        from app.schedule_series s
-        join app.branches branch on branch.id = s.branch_id
-        where s.deleted_at is null
-          and (
-            s.valid_until is null
-            or s.valid_until >= timezone(
-              coalesce(s.timezone_name, branch.timezone_name, 'Europe/Moscow'),
-              now()
-            )::date
-          )
-      `,
-    );
-    let created = 0;
-    let failed = 0;
-    for (const row of rows.rows) {
-      // Per-series isolation: one poison series must not starve every series
-      // after it in the batch until the next worker tick.
-      try {
-        created += await this.database.transaction((client) =>
-          this.materializeSeries(
-            row.id,
-            client as unknown as ScheduleQueryExecutor,
-          ),
-        );
-      } catch (error) {
-        failed += 1;
-        this.logger.error(
-          `Failed to materialize schedule series ${row.id}: ${String(error)}`,
-        );
-      }
-    }
-    return { series: rows.rows.length, created, failed };
-  }
-
   async listScheduleSeries(
     actor: ActorContext,
     query: {
@@ -1034,7 +392,7 @@ export class ScheduleService {
           ],
         );
         const seriesId = result.rows[0].id;
-        const created = await this.materializeSeries(
+        const created = await this.materializer.materializeSeries(
           seriesId,
           client as unknown as ScheduleQueryExecutor,
         );
@@ -1202,7 +560,7 @@ export class ScheduleService {
          where id = $1 and superseded_by is null`,
           [seriesId, newSeriesId],
         );
-        const created = await this.materializeSeries(
+        const created = await this.materializer.materializeSeries(
           newSeriesId,
           client as unknown as ScheduleQueryExecutor,
         );
@@ -1723,10 +1081,12 @@ export class ScheduleService {
   private assertSeriesDateWithinBookingWindow(value: string): void {
     if (
       value.slice(0, 10) >
-      this.moscowDate(ScheduleService.MAX_BOOKING_AHEAD_DAYS)
+      this.moscowDate(
+        ScheduleSeriesMaterializerService.MAX_BOOKING_AHEAD_DAYS,
+      )
     ) {
       throw new BadRequestException(
-        `Schedule date cannot be more than ${ScheduleService.MAX_BOOKING_AHEAD_DAYS} days ahead.`,
+        `Schedule date cannot be more than ${ScheduleSeriesMaterializerService.MAX_BOOKING_AHEAD_DAYS} days ahead.`,
       );
     }
   }
@@ -1743,13 +1103,17 @@ export class ScheduleService {
     const scheduledAt = new Date(value);
     const upperBound =
       Date.now() +
-      (ScheduleService.MAX_BOOKING_AHEAD_DAYS + 1) * 24 * 60 * 60 * 1000;
+      (ScheduleSeriesMaterializerService.MAX_BOOKING_AHEAD_DAYS + 1) *
+        24 *
+        60 *
+        60 *
+        1000;
     if (
       !Number.isFinite(scheduledAt.getTime()) ||
       scheduledAt.getTime() > upperBound
     ) {
       throw new BadRequestException(
-        `Lesson cannot be scheduled more than ${ScheduleService.MAX_BOOKING_AHEAD_DAYS} days ahead.`,
+        `Lesson cannot be scheduled more than ${ScheduleSeriesMaterializerService.MAX_BOOKING_AHEAD_DAYS} days ahead.`,
       );
     }
   }

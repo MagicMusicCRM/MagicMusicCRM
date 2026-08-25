@@ -7,6 +7,7 @@ import { AuthModule } from "./auth/auth.module";
 import { CrmModule } from "./crm/crm.module";
 import { ScheduleConflictService } from "./crm/schedule/schedule-conflict.service";
 import { ScheduleReadService } from "./crm/schedule/schedule-read.service";
+import { ScheduleSeriesMaterializerService } from "./crm/schedule/schedule-series-materializer.service";
 import { DatabaseService } from "./db/database.service";
 import { NotificationDeliveryModule } from "./notifications/notification-delivery.module";
 import { NotificationWorker } from "./notifications/notification-worker.service";
@@ -140,6 +141,12 @@ describe("AppModule", () => {
   it("resolves the dedicated schedule conflict service", () => {
     expect(
       moduleRef.get(ScheduleConflictService, { strict: false }),
+    ).toBeDefined();
+  });
+
+  it("resolves the dedicated schedule series materializer", () => {
+    expect(
+      moduleRef.get(ScheduleSeriesMaterializerService, { strict: false }),
     ).toBeDefined();
   });
 

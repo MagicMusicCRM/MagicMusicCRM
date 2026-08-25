@@ -11,6 +11,7 @@ import { CrmPolicy } from "./crm.policy";
 import { ScheduleService } from "./schedule.service";
 import { ScheduleConstraintEngine } from "./schedule/constraint-engine.service";
 import { ScheduleConflictService } from "./schedule/schedule-conflict.service";
+import { ScheduleSeriesMaterializerService } from "./schedule/schedule-series-materializer.service";
 
 describe("ScheduleService", () => {
   const actor = { userId: "manager-a", role: "manager" as const };
@@ -43,24 +44,26 @@ describe("ScheduleService", () => {
 
   const construct = (query: jest.Mock, deps: ReturnType<typeof buildDeps>) => {
     const database = {
-        query,
-        // Transactional writes share the same query mock so call indices in
-        // the assertions below stay stable.
-        transaction: (
-          work: (client: { query: jest.Mock }) => Promise<unknown>,
-        ) => work({ query }),
-      } as unknown as DatabaseService;
+      query,
+      // Transactional writes share the same query mock so call indices in
+      // the assertions below stay stable.
+      transaction: (
+        work: (client: { query: jest.Mock }) => Promise<unknown>,
+      ) => work({ query }),
+    } as unknown as DatabaseService;
+    const constraints =
+      deps.constraints as unknown as ScheduleConstraintEngine;
     return new ScheduleService(
       database,
       deps.audit as unknown as AuditService,
       deps.policy as unknown as CrmPolicy,
       deps.notifications as unknown as NotificationsService,
       { emitCrmChanged: () => undefined } as unknown as RealtimeBus,
-      deps.constraints as unknown as ScheduleConstraintEngine,
       new ScheduleConflictService(
         database,
         deps.policy as unknown as CrmPolicy,
       ),
+      new ScheduleSeriesMaterializerService(database, constraints),
     );
   };
 
@@ -123,25 +126,6 @@ describe("ScheduleService", () => {
     } finally {
       jest.useRealTimers();
     }
-  });
-
-  it("selects live series using each branch timezone", async () => {
-    const { service, query } = createService([]);
-
-    await expect(service.extendAllSeriesHorizon()).resolves.toEqual({
-      series: 0,
-      created: 0,
-      failed: 0,
-    });
-
-    const sql = String(query.mock.calls[0]?.[0]);
-    expect(sql).toContain(
-      "join app.branches branch on branch.id = s.branch_id",
-    );
-    expect(sql).toContain(
-      "coalesce(s.timezone_name, branch.timezone_name, 'Europe/Moscow')",
-    );
-    expect(sql).not.toContain("now() at time zone 'Europe/Moscow'");
   });
 
   it("creates a schedule series and materializes lessons up to the horizon (KVA-236)", async () => {

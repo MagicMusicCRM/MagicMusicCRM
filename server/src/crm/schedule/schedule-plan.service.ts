@@ -24,11 +24,12 @@ import {
   SchedulePlanTrayQuery,
   UpdateSchedulePlanDto,
 } from "../dto/schedule-plan.dto";
-import { ScheduleService } from "../schedule.service";
 import type { LessonCommandMetadata } from "./lesson-command.service";
 import { LessonSeriesCommandService } from "./lesson-series-command.service";
 import { groupScheduleConflicts } from "./schedule-analyzer";
 import { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
+import { lockSchedulePlanSeries } from "./schedule-locks";
+import { ScheduleSeriesMaterializerService } from "./schedule-series-materializer.service";
 import {
   LockedSchedulePlan,
   SchedulePlanEndImpact,
@@ -43,7 +44,7 @@ export class SchedulePlanService {
     private readonly policy: CrmPolicy,
     private readonly repository: SchedulePlanRepository,
     private readonly series: LessonSeriesCommandService,
-    private readonly schedule: ScheduleService,
+    private readonly materializer: ScheduleSeriesMaterializerService,
     private readonly database: DatabaseService,
     private readonly previewTokens: SubscriptionPreviewTokenService,
     private readonly lifecycle: LessonLifecycleRepository,
@@ -268,7 +269,7 @@ export class SchedulePlanService {
           client,
           planId,
         );
-        await this.schedule.lockSchedulePlanSeries(
+        await lockSchedulePlanSeries(
           client,
           currentSeries.rows.map((series) => series.id),
         );
@@ -505,7 +506,7 @@ export class SchedulePlanService {
             version,
             settlementPlan,
           });
-          await this.schedule.materializePlanSeries(client, seriesId);
+          await this.materializer.materializePlanSeries(client, seriesId);
           seriesIds.push(seriesId);
           lessonIds.push(...(await this.lessonIds(client, seriesId)));
         }
@@ -561,7 +562,7 @@ export class SchedulePlanService {
           effectiveFrom,
         } = await this.prepareUpdate(client, planId, dto);
 
-        await this.schedule.lockSchedulePlanSeries(
+        await lockSchedulePlanSeries(
           client,
           activeSeries.map((series) => series.id),
         );
@@ -625,7 +626,7 @@ export class SchedulePlanService {
             studentIds,
           );
           const seriesId = seriesIds[index]!;
-          await this.schedule.materializePlanSeries(client, seriesId);
+          await this.materializer.materializePlanSeries(client, seriesId);
           lessonIds.push(...(await this.lessonIds(client, seriesId)));
         }
         return { planId, seriesIds, lessonIds };

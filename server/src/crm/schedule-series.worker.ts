@@ -4,7 +4,7 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from "@nestjs/common";
-import { ScheduleService } from "./schedule.service";
+import { ScheduleSeriesMaterializerService } from "./schedule/schedule-series-materializer.service";
 
 /**
  * KVA-236: продлевает материализацию занятий живых серий (включая
@@ -16,7 +16,9 @@ export class ScheduleSeriesWorker implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ScheduleSeriesWorker.name);
   private timer: ReturnType<typeof setInterval> | undefined;
 
-  constructor(private readonly schedule: ScheduleService) {}
+  constructor(
+    private readonly materializer: ScheduleSeriesMaterializerService,
+  ) {}
 
   onModuleInit(): void {
     if (process.env.SCHEDULE_SERIES_AUTOEXTEND === "false") {
@@ -24,7 +26,7 @@ export class ScheduleSeriesWorker implements OnModuleInit, OnModuleDestroy {
       return;
     }
     const tick = () => {
-      void this.schedule
+      void this.materializer
         .extendAllSeriesHorizon()
         .then(({ series, created }) => {
           if (created > 0) {

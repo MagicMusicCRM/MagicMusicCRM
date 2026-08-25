@@ -12,11 +12,10 @@ import { SubscriptionPreviewTokenService } from "../commerce/subscription-previe
 import { LessonSettlementRepository } from "../commerce/lesson-settlement.repository";
 import { LessonSettlementService } from "../commerce/lesson-settlement.service";
 import { CrmPolicy } from "../crm.policy";
-import { ScheduleService } from "../schedule.service";
 import { AvailabilityRepository } from "./availability.repository";
 import { ConstraintEngineRepository } from "./constraint-engine.repository";
 import { ScheduleConstraintEngine } from "./constraint-engine.service";
-import { ScheduleConflictService } from "./schedule-conflict.service";
+import { ScheduleSeriesMaterializerService } from "./schedule-series-materializer.service";
 import { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
 import { LessonRequiredFieldValidator } from "./lesson-required-field.validator";
 import { LessonSeriesCommandService } from "./lesson-series-command.service";
@@ -40,7 +39,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
   let pool: Pool;
   let database: DatabaseService;
   let plans: SchedulePlanService;
-  let schedule: ScheduleService;
+  let materializer: ScheduleSeriesMaterializerService;
   let constraints: ScheduleConstraintEngine;
   let reservations: SubscriptionReservationService;
   let lifecycle: LessonLifecycleRepository;
@@ -64,14 +63,9 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         new AvailabilityRepository(database),
       ),
     );
-    schedule = new ScheduleService(
+    materializer = new ScheduleSeriesMaterializerService(
       database,
-      {} as never,
-      policy,
-      {} as never,
-      realtime,
       constraints,
-      new ScheduleConflictService(database, policy),
       reservations,
     );
     const availability = new AvailabilityRepository(database);
@@ -89,7 +83,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       policy,
       new SchedulePlanRepository(database),
       series,
-      schedule,
+      materializer,
       database,
       new SubscriptionPreviewTokenService({
         get: (key: string, fallback: string) =>
@@ -214,7 +208,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       const regenerated = await database.transaction(async (client) => {
         let count = 0;
         for (const seriesId of created.seriesIds) {
-          count += await schedule.materializePlanSeries(client, seriesId);
+          count += await materializer.materializePlanSeries(client, seriesId);
         }
         return count;
       });
@@ -617,7 +611,6 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
   it("ends a plan mid-week, preserves history and terminal lessons, and replays once", async () => {
     const fixture = await createFixture(pool);
     const actor = { userId: fixture.managerId, role: "manager" as const };
-    let lockSpy: jest.SpyInstance | undefined;
     try {
       const created = await plans.create(
         actor,
@@ -684,7 +677,6 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         previewToken: preview.previewToken,
         confirm: true as const,
       };
-      lockSpy = jest.spyOn(schedule, "lockSchedulePlanSeries");
       const key = `plan-end-${randomUUID()}`;
       const ended = await plans.end(actor, created.id, command, {
         idempotencyKey: key,
@@ -701,10 +693,6 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         preservedTerminalLessons: 1,
       });
       expect(replay).toEqual({ ...ended, replayed: true });
-      expect(lockSpy).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.arrayContaining(created.seriesIds),
-      );
 
       const persisted = await pool.query<{
         status: string;
@@ -817,7 +805,6 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         ),
       ).rejects.toMatchObject({ response: { code: "SCHEDULE_PLAN_ENDED" } });
     } finally {
-      lockSpy?.mockRestore();
       await cleanup(pool, fixture);
     }
   });
@@ -1218,7 +1205,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       const seriesId = series.rows[0]!.id;
 
       await expect(
-        schedule.materializePlanSeries(client, seriesId),
+        materializer.materializePlanSeries(client, seriesId),
       ).rejects.toMatchObject({
         response: expect.objectContaining({
           code: "LESSON_SERIES_CONSTRAINT_VIOLATIONS",
@@ -1242,7 +1229,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         [fixture.branchId, slot.local_date],
       );
       await expect(
-        schedule.materializePlanSeries(client, seriesId),
+        materializer.materializePlanSeries(client, seriesId),
       ).rejects.toMatchObject({
         response: expect.objectContaining({
           code: "LESSON_SERIES_CONSTRAINT_VIOLATIONS",
@@ -1258,7 +1245,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
         [fixture.branchId, slot.local_date],
       );
       await expect(
-        schedule.materializePlanSeries(client, seriesId),
+        materializer.materializePlanSeries(client, seriesId),
       ).resolves.toBe(1);
       const materialized = await client.query<{ scheduled_at: Date }>(
         "select scheduled_at from app.lessons where series_id = $1",
