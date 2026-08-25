@@ -195,14 +195,19 @@ class LessonEditorReferenceItem {
 }
 
 class LessonEditorReferenceState {
-  const LessonEditorReferenceState({
-    required this.teachers,
-    required this.clients,
-    required this.branches,
-    required this.rooms,
-    required this.subscriptions,
-    required this.catalog,
-  });
+  LessonEditorReferenceState({
+    required List<LessonEditorReferenceItem> teachers,
+    required List<LessonEditorReferenceItem> clients,
+    required List<LessonEditorReferenceItem> branches,
+    required List<LessonEditorReferenceItem> rooms,
+    required List<LessonEditorReferenceItem> subscriptions,
+    required LessonDecisionCatalog? catalog,
+  }) : teachers = _frozenReferenceItems(teachers),
+       clients = _frozenReferenceItems(clients),
+       branches = _frozenReferenceItems(branches),
+       rooms = _frozenReferenceItems(rooms),
+       subscriptions = _frozenReferenceItems(subscriptions),
+       catalog = _frozenCatalog(catalog);
 
   const LessonEditorReferenceState.empty()
     : teachers = const [],
@@ -218,4 +223,64 @@ class LessonEditorReferenceState {
   final List<LessonEditorReferenceItem> rooms;
   final List<LessonEditorReferenceItem> subscriptions;
   final LessonDecisionCatalog? catalog;
+}
+
+List<LessonEditorReferenceItem> _frozenReferenceItems(
+  Iterable<LessonEditorReferenceItem> items,
+) => List.unmodifiable([
+  for (final item in items)
+    LessonEditorReferenceItem(
+      id: item.id,
+      label: item.label,
+      raw: _frozenRaw(item.raw),
+      branchId: item.branchId,
+      status: item.status,
+      assignedBranchIds: Set.unmodifiable(item.assignedBranchIds),
+    ),
+]);
+
+LessonDecisionCatalog? _frozenCatalog(LessonDecisionCatalog? catalog) =>
+    catalog == null
+    ? null
+    : LessonDecisionCatalog(
+        settlementTypes: List.unmodifiable([
+          for (final item in catalog.settlementTypes) _frozenCatalogItem(item),
+        ]),
+        compensationRules: List.unmodifiable([
+          for (final item in catalog.compensationRules)
+            _frozenCatalogItem(item),
+        ]),
+      );
+
+LessonDecisionCatalogItem _frozenCatalogItem(LessonDecisionCatalogItem item) =>
+    LessonDecisionCatalogItem(
+      key: item.key,
+      label: item.label,
+      order: item.order,
+      colorToken: item.colorToken,
+      allowedContexts: List.unmodifiable(item.allowedContexts),
+      mode: item.mode,
+      value: item.value,
+      hourShareBasisPoints: item.hourShareBasisPoints,
+      fixedPenaltyMinor: item.fixedPenaltyMinor,
+    );
+
+Map<String, dynamic> _frozenRaw(Map<String, dynamic> row) => Map.unmodifiable({
+  for (final entry in row.entries) entry.key: _frozenRawValue(entry.value),
+});
+
+Object? _frozenRawValue(Object? value) {
+  if (value is Map) {
+    return Map.unmodifiable({
+      for (final entry in value.entries)
+        entry.key: _frozenRawValue(entry.value),
+    });
+  }
+  if (value is List) {
+    return List.unmodifiable([for (final item in value) _frozenRawValue(item)]);
+  }
+  if (value is Set) {
+    return Set.unmodifiable({for (final item in value) _frozenRawValue(item)});
+  }
+  return value;
 }

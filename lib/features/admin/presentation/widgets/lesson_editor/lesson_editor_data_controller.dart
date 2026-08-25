@@ -106,9 +106,9 @@ class LessonEditorDataController implements LessonEditorDataLoader {
   ) async {
     final clientRevision = _clientRevision;
     final resolved = await _resolveInitialClient(session);
+    if (clientRevision != _clientRevision) return null;
     final selectedClient = resolved.client;
     _activeClientKey = selectedClient?.key;
-    if (clientRevision != _clientRevision) return null;
 
     final results = await Future.wait<List<Map<String, dynamic>>>([
       _listTeachers(),
@@ -583,7 +583,25 @@ String _subscriptionLabel(Map<String, dynamic> subscription) {
 }
 
 Map<String, dynamic> _immutableRow(Map<String, dynamic> row) =>
-    Map.unmodifiable(Map<String, dynamic>.from(row));
+    Map.unmodifiable({
+      for (final entry in row.entries) entry.key: _immutableValue(entry.value),
+    });
+
+Object? _immutableValue(Object? value) {
+  if (value is Map) {
+    return Map.unmodifiable({
+      for (final entry in value.entries)
+        entry.key: _immutableValue(entry.value),
+    });
+  }
+  if (value is List) {
+    return List.unmodifiable([for (final item in value) _immutableValue(item)]);
+  }
+  if (value is Set) {
+    return Set.unmodifiable({for (final item in value) _immutableValue(item)});
+  }
+  return value;
+}
 
 String? _text(Object? value) {
   final text = value?.toString().trim();

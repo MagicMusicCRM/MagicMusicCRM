@@ -100,6 +100,45 @@ void main() {
     });
 
     test(
+      'stale initial resolver cannot steal ownership from a newer selection',
+      () async {
+        final resolvedInitial = Completer<Map<String, dynamic>?>();
+        final selectedSubscriptions = Completer<List<Map<String, dynamic>>>();
+        final controller = LessonEditorDataController.forTesting(
+          listRooms: (_) async => const [],
+          loadCatalog: (_) async => emptyCatalog,
+          listSubscriptions: (_) => selectedSubscriptions.future,
+          resolveClient: ({required type, required id}) =>
+              resolvedInitial.future,
+        );
+
+        final staleInitial = controller.loadInitial(
+          _session(
+            client: const LessonClientRef(
+              type: 'student',
+              id: 'student-a',
+              label: 'A',
+            ),
+          ),
+        );
+        final newerSelection = controller.selectClient(
+          const LessonClientRef(type: 'student', id: 'student-b', label: 'B'),
+          draft: _draft(),
+          references: _references(),
+        );
+
+        resolvedInitial.complete({
+          'ref': {'type': 'student', 'id': 'student-a'},
+          'label': 'Resolved A',
+        });
+        expect(await staleInitial, isNull);
+
+        selectedSubscriptions.complete(const []);
+        expect((await newerSelection)?.draft?.client?.id, 'student-b');
+      },
+    );
+
+    test(
       'discards a client cascade invalidated while its branch loads',
       () async {
         final rooms = Completer<List<Map<String, dynamic>>>();
@@ -339,11 +378,18 @@ void main() {
     });
 
     test('client branch change resets scoped and catalog selections', () async {
-      const newCatalog = LessonDecisionCatalog(
-        settlementTypes: [
-          LessonDecisionCatalogItem(key: 'settlement-b', label: 'B', order: 1),
-        ],
-        compensationRules: [],
+      final sourceAllowedContexts = <String>['settle'];
+      final sourceSettlementTypes = <LessonDecisionCatalogItem>[
+        LessonDecisionCatalogItem(
+          key: 'settlement-b',
+          label: 'B',
+          order: 1,
+          allowedContexts: sourceAllowedContexts,
+        ),
+      ];
+      final newCatalog = LessonDecisionCatalog(
+        settlementTypes: sourceSettlementTypes,
+        compensationRules: const [],
       );
       final controller = LessonEditorDataController.forTesting(
         listRooms: (_) async => const [
@@ -401,7 +447,37 @@ void main() {
       expect(patch?.draft?.settlementTypeKey, isNull);
       expect(patch?.draft?.compensationRuleKey, isNull);
       expect(patch?.draft?.subscriptionId, isNull);
-      expect(patch?.references.catalog, same(newCatalog));
+      sourceAllowedContexts.add('cancel');
+      sourceSettlementTypes.add(
+        const LessonDecisionCatalogItem(
+          key: 'settlement-mutated',
+          label: 'Mutated',
+          order: 2,
+        ),
+      );
+      expect(
+        patch?.references.catalog?.settlementTypes.map((item) => item.key),
+        ['settlement-b'],
+      );
+      expect(
+        patch?.references.catalog?.settlementTypes.single.allowedContexts,
+        ['settle'],
+      );
+      expect(
+        () => patch?.references.catalog?.settlementTypes.add(
+          const LessonDecisionCatalogItem(
+            key: 'forbidden',
+            label: 'Forbidden',
+            order: 3,
+          ),
+        ),
+        throwsUnsupportedError,
+      );
+      expect(
+        () => patch?.references.catalog?.settlementTypes.single.allowedContexts
+            .add('forbidden'),
+        throwsUnsupportedError,
+      );
       expect(patch?.references.subscriptions.map((item) => item.id), [
         'subscription-b',
       ]);
@@ -463,9 +539,207 @@ void main() {
         expect(patch?.draft?.settlementTypeKey, 'settlement-a');
         expect(patch?.draft?.compensationRuleKey, 'rule-a');
         expect(patch?.references.rooms.single.id, 'room-a');
-        expect(patch?.references.catalog, same(emptyCatalog));
+        expect(patch?.references.catalog?.settlementTypes, isEmpty);
+        expect(patch?.references.catalog?.compensationRules, isEmpty);
       },
     );
+  });
+
+  group('immutable patches', () {
+    test('reference state snapshots and freezes constructor lists', () {
+      final sourceTags = <String>['seed'];
+      final sourceAssignments = <String>{'branch-a'};
+      final sourceRooms = <LessonEditorReferenceItem>[
+        LessonEditorReferenceItem(
+          id: 'room-a',
+          label: 'A',
+          raw: {
+            'id': 'room-a',
+            'metadata': <String, dynamic>{'tags': sourceTags},
+          },
+          assignedBranchIds: sourceAssignments,
+        ),
+      ];
+      final sourceContexts = <String>['settle'];
+      final sourceCatalogItems = <LessonDecisionCatalogItem>[
+        LessonDecisionCatalogItem(
+          key: 'settlement-a',
+          label: 'A',
+          order: 1,
+          allowedContexts: sourceContexts,
+        ),
+      ];
+
+      final references = _references(
+        rooms: sourceRooms,
+        catalog: LessonDecisionCatalog(
+          settlementTypes: sourceCatalogItems,
+          compensationRules: const [],
+        ),
+      );
+      sourceRooms.clear();
+      sourceTags.add('mutated');
+      sourceAssignments.add('branch-b');
+      sourceContexts.add('cancel');
+      sourceCatalogItems.clear();
+
+      expect(references.rooms.map((item) => item.id), ['room-a']);
+      expect(references.rooms.single.raw['metadata'], {
+        'tags': ['seed'],
+      });
+      expect(references.rooms.single.assignedBranchIds, {'branch-a'});
+      expect(references.catalog?.settlementTypes.map((item) => item.key), [
+        'settlement-a',
+      ]);
+      expect(references.catalog?.settlementTypes.single.allowedContexts, [
+        'settle',
+      ]);
+      expect(references.rooms.clear, throwsUnsupportedError);
+      expect(
+        () => (references.rooms.single.raw['metadata']['tags'] as List).add(
+          'forbidden',
+        ),
+        throwsUnsupportedError,
+      );
+      expect(
+        () => references.rooms.single.assignedBranchIds.add('forbidden'),
+        throwsUnsupportedError,
+      );
+    });
+
+    test('returned patch detaches and freezes nested reference data', () async {
+      final sourceTags = <String>['seed'];
+      final sourceRaw = <String, dynamic>{
+        'id': 'teacher-a',
+        'metadata': <String, dynamic>{'tags': sourceTags},
+      };
+      final sourceAssignments = <String>{'branch-a'};
+      final sourceTeachers = <LessonEditorReferenceItem>[
+        LessonEditorReferenceItem(
+          id: 'teacher-a',
+          label: 'Teacher A',
+          raw: sourceRaw,
+          assignedBranchIds: sourceAssignments,
+        ),
+      ];
+      final sourceClients = <LessonEditorReferenceItem>[
+        const LessonEditorReferenceItem(
+          id: 'student:student-a',
+          label: 'Student A',
+          raw: {'id': 'student-a'},
+        ),
+      ];
+      final sourceBranches = <LessonEditorReferenceItem>[
+        const LessonEditorReferenceItem(
+          id: 'branch-a',
+          label: 'Branch A',
+          raw: {'id': 'branch-a'},
+        ),
+      ];
+      final sourceRooms = <LessonEditorReferenceItem>[
+        const LessonEditorReferenceItem(
+          id: 'room-a',
+          label: 'Room A',
+          raw: {'id': 'room-a'},
+        ),
+      ];
+      final sourceCatalogContexts = <String>['settle'];
+      final sourceCatalogItems = <LessonDecisionCatalogItem>[
+        LessonDecisionCatalogItem(
+          key: 'settlement-a',
+          label: 'Settlement A',
+          order: 1,
+          allowedContexts: sourceCatalogContexts,
+        ),
+      ];
+      final sourceSubscriptionTags = <String>['active'];
+      final sourceSubscriptionRows = <Map<String, dynamic>>[
+        {
+          'id': 'subscription-a',
+          'status': 'active',
+          'metadata': <String, dynamic>{'tags': sourceSubscriptionTags},
+        },
+      ];
+      final references = _references(
+        teachers: sourceTeachers,
+        clients: sourceClients,
+        branches: sourceBranches,
+        rooms: sourceRooms,
+        catalog: LessonDecisionCatalog(
+          settlementTypes: sourceCatalogItems,
+          compensationRules: const [],
+        ),
+      );
+      final controller = LessonEditorDataController.forTesting(
+        listRooms: (_) async => const [],
+        loadCatalog: (_) async => emptyCatalog,
+        listSubscriptions: (_) async => sourceSubscriptionRows,
+      );
+
+      final patch = await controller.loadSubscriptions(
+        const LessonClientRef(
+          type: 'student',
+          id: 'student-a',
+          label: 'Student A',
+        ),
+        references: references,
+      );
+      final returned = patch!.references;
+
+      sourceTeachers.clear();
+      sourceClients.clear();
+      sourceBranches.clear();
+      sourceRooms.clear();
+      sourceTags.add('mutated');
+      (sourceRaw['metadata'] as Map<String, dynamic>)['extra'] = true;
+      sourceAssignments.add('branch-b');
+      sourceCatalogContexts.add('cancel');
+      sourceCatalogItems.clear();
+      sourceSubscriptionTags.add('mutated');
+      sourceSubscriptionRows.clear();
+
+      expect(returned.teachers.map((item) => item.id), ['teacher-a']);
+      expect(returned.clients.map((item) => item.id), ['student:student-a']);
+      expect(returned.branches.map((item) => item.id), ['branch-a']);
+      expect(returned.rooms.map((item) => item.id), ['room-a']);
+      expect(returned.subscriptions.map((item) => item.id), ['subscription-a']);
+      expect(returned.teachers, isNot(same(references.teachers)));
+      expect(returned.teachers.single.assignedBranchIds, {'branch-a'});
+      expect(returned.teachers.single.raw['metadata'], {
+        'tags': ['seed'],
+      });
+      expect(returned.subscriptions.single.raw['metadata'], {
+        'tags': ['active'],
+      });
+      expect(returned.catalog?.settlementTypes.single.allowedContexts, [
+        'settle',
+      ]);
+
+      for (final collection in [
+        returned.teachers,
+        returned.clients,
+        returned.branches,
+        returned.rooms,
+        returned.subscriptions,
+      ]) {
+        expect(collection.clear, throwsUnsupportedError);
+      }
+      expect(
+        () =>
+            (returned.teachers.single.raw['metadata'] as Map)['extra'] = false,
+        throwsUnsupportedError,
+      );
+      expect(
+        () => (returned.teachers.single.raw['metadata']['tags'] as List).add(
+          'forbidden',
+        ),
+        throwsUnsupportedError,
+      );
+      expect(
+        () => returned.teachers.single.assignedBranchIds.add('forbidden'),
+        throwsUnsupportedError,
+      );
+    });
   });
 
   group('subscriptions', () {
