@@ -13,7 +13,6 @@ import { SharedTaskService } from "./tasks/shared-task.service";
 import { CrmPolicy } from "./crm.policy";
 import { ChatWorkTimelineService } from "../messenger/chat-work-timeline.service";
 import { ScheduleReadService } from "./schedule/schedule-read.service";
-import { ScheduleService } from "./schedule.service";
 import { TimelineService } from "./timeline.service";
 import { CrmService } from "./crm.service";
 import {
@@ -55,10 +54,8 @@ describe("CrmService", () => {
     const tasks = {
       list: jest.fn().mockResolvedValue({ items: [], counters: {} }),
     };
-    const schedule = {
-      listUpcomingLessonsForStudents: jest.fn().mockResolvedValue([]),
-    };
     const scheduleRead = {
+      listUpcomingLessonsForStudents: jest.fn().mockResolvedValue([]),
       listLessons: jest.fn().mockResolvedValue({ items: [] }),
     };
     const timeline = {
@@ -72,7 +69,6 @@ describe("CrmService", () => {
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
       tasks as unknown as SharedTaskService,
-      schedule as unknown as ScheduleService,
       scheduleRead as unknown as ScheduleReadService,
       timeline as unknown as TimelineService,
       notifications as unknown as NotificationsService,
@@ -134,10 +130,8 @@ describe("CrmService", () => {
     const tasks = {
       list: jest.fn().mockResolvedValue({ items: [], counters: {} }),
     };
-    const schedule = {
-      listUpcomingLessonsForStudents: jest.fn().mockResolvedValue([]),
-    };
     const scheduleRead = {
+      listUpcomingLessonsForStudents: jest.fn().mockResolvedValue([]),
       listLessons: jest.fn().mockResolvedValue({ items: [] }),
     };
     const timeline = {
@@ -151,7 +145,6 @@ describe("CrmService", () => {
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
       tasks as unknown as SharedTaskService,
-      schedule as unknown as ScheduleService,
       scheduleRead as unknown as ScheduleReadService,
       timeline as unknown as TimelineService,
       notifications as unknown as NotificationsService,

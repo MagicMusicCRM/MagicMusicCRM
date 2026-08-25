@@ -15,10 +15,10 @@ import {
 import { ActorContext } from "../common/security/actor-context";
 import { CurrentActor } from "../common/security/current-actor.decorator";
 import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
-import { ScheduleService } from "./schedule.service";
 import { ScheduleReadService } from "./schedule/schedule-read.service";
 import { ScheduleConflictService } from "./schedule/schedule-conflict.service";
 import { ScheduleSeriesService } from "./schedule/schedule-series.service";
+import { LessonScheduleMutationService } from "./schedule/lesson-schedule-mutation.service";
 import { BulkLessonRateDto } from "./dto/bulk-lesson-rate.dto";
 import {
   CreateScheduleSeriesDto,
@@ -72,7 +72,7 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
 @Controller("crm")
 export class CrmScheduleController {
   constructor(
-    private readonly schedule: ScheduleService,
+    private readonly lessonMutations: LessonScheduleMutationService,
     private readonly scheduleRead: ScheduleReadService,
     private readonly scheduleConflicts: ScheduleConflictService,
     private readonly scheduleSeries: ScheduleSeriesService,
@@ -263,7 +263,7 @@ export class CrmScheduleController {
     };
     return this.v4DomainFlags.get("schedule").effectivePath === "v4"
       ? this.lessonCommands.create(actor, dto, metadata)
-      : this.schedule.createLesson(actor, dto);
+      : this.lessonMutations.createLesson(actor, dto);
   }
 
   @Post("lessons/constraints/preview")
@@ -281,7 +281,7 @@ export class CrmScheduleController {
     @CurrentActor() actor: ActorContext,
     @Body() dto: BulkLessonRateDto,
   ) {
-    return this.schedule.setLessonsTeacherRate(actor, dto);
+    return this.lessonMutations.setLessonsTeacherRate(actor, dto);
   }
 
   @Post("lessons/:id/planned-settlement/preview")
@@ -357,7 +357,7 @@ export class CrmScheduleController {
     };
     return this.v4DomainFlags.get("schedule").effectivePath === "v4"
       ? this.lessonCommands.update(actor, id, dto, metadata)
-      : this.schedule.updateLesson(actor, id, dto);
+      : this.lessonMutations.updateLesson(actor, id, dto);
   }
 
   @Post("lessons/transitions/bulk/preview")
@@ -463,6 +463,6 @@ export class CrmScheduleController {
     @CurrentActor() actor: ActorContext,
     @Param("id", ParseUUIDPipe) id: string,
   ) {
-    return this.schedule.deleteLesson(actor, id);
+    return this.lessonMutations.deleteLesson(actor, id);
   }
 }

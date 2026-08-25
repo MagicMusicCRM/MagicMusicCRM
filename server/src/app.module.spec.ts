@@ -6,6 +6,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { AuthModule } from "./auth/auth.module";
 import { CrmModule } from "./crm/crm.module";
 import { ScheduleConflictService } from "./crm/schedule/schedule-conflict.service";
+import { LessonScheduleMutationService } from "./crm/schedule/lesson-schedule-mutation.service";
 import { ScheduleReadService } from "./crm/schedule/schedule-read.service";
 import { ScheduleSeriesMaterializerService } from "./crm/schedule/schedule-series-materializer.service";
 import { ScheduleSeriesService } from "./crm/schedule/schedule-series.service";
@@ -153,6 +154,12 @@ describe("AppModule", () => {
 
   it("resolves the dedicated schedule series command owner", () => {
     expect(moduleRef.get(ScheduleSeriesService, { strict: false })).toBeDefined();
+  });
+
+  it("resolves the dedicated lesson schedule mutation owner", () => {
+    expect(
+      moduleRef.get(LessonScheduleMutationService, { strict: false }),
+    ).toBeDefined();
   });
 
   it("mounts the notification API shell directly", () => {

@@ -73,7 +73,6 @@ import { StudentSearchQuery } from "./dto/student-search.query";
 import { UpdateStudentDto } from "./dto/update-student.dto";
 import { CrmPolicy } from "./crm.policy";
 import { SharedTaskService } from "./tasks/shared-task.service";
-import { ScheduleService } from "./schedule.service";
 import { ScheduleReadService } from "./schedule/schedule-read.service";
 import { TimelineService } from "./timeline.service";
 import { StudentFunnelService } from "./student-funnel.service";
@@ -118,7 +117,6 @@ export class CrmService {
     private readonly audit: AuditService,
     private readonly policy: CrmPolicy,
     private readonly tasks: SharedTaskService,
-    private readonly schedule: ScheduleService,
     private readonly scheduleRead: ScheduleReadService,
     private readonly timeline: TimelineService,
     private readonly notifications: NotificationsService,
@@ -151,7 +149,7 @@ export class CrmService {
     let openTasks: unknown[] = [];
     if (studentIds.length) {
       [upcomingLessons, openTasks] = await Promise.all([
-        this.schedule
+        this.scheduleRead
           .listUpcomingLessonsForStudents(studentIds)
           .catch(() => []),
         Promise.all(
@@ -1160,7 +1158,7 @@ export class CrmService {
     return rows.map((row) => toTimelineDto(row));
   }
 
-  // The self-view lesson/task reads live in ScheduleService / SharedTaskService.
+  // The self-view lesson/task reads live in ScheduleReadService / SharedTaskService.
   // Commerce is intentionally served through its separate projection boundary.
 
   private async listClientStudents(userId: string): Promise<StudentRow[]> {

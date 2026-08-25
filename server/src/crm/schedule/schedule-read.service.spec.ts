@@ -538,6 +538,28 @@ describe("schedule read contract", () => {
     expect(sql).toContain("left join app.leads ld on ld.id = l.lead_id");
   });
 
+  it("owns the upcoming self-view projection for direct and group students", async () => {
+    const { service, query } = createService([]);
+
+    await expect(
+      service.listUpcomingLessonsForStudents(["student-a", "student-b"]),
+    ).resolves.toEqual([]);
+
+    const sql = String(query.mock.calls[0][0]);
+    expect(sql).toContain("l.student_id = any($1::uuid[])");
+    expect(sql).toContain("from app.group_students gs");
+    expect(query.mock.calls[0][1]).toEqual([["student-a", "student-b"]]);
+  });
+
+  it("does not query upcoming lessons for an empty student set", async () => {
+    const { service, query } = createService([]);
+
+    await expect(service.listUpcomingLessonsForStudents([])).resolves.toEqual(
+      [],
+    );
+    expect(query).not.toHaveBeenCalled();
+  });
+
   it("orders the client history desc when asked (recent lessons first)", async () => {
     const { service, query } = createService([]);
 

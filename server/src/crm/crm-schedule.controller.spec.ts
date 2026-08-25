@@ -6,10 +6,11 @@ describe("CrmScheduleController rollout boundary", () => {
   const actor = { userId: "user-a", role: "manager" } as const;
 
   function controller(effectivePath: "legacy" | "v4") {
-    const schedule = {
+    const lessonMutations = {
       createLesson: jest.fn().mockResolvedValue({ path: "legacy" }),
       updateLesson: jest.fn().mockResolvedValue({ path: "legacy" }),
-      createScheduleSeries: jest.fn().mockResolvedValue({ path: "legacy" }),
+      deleteLesson: jest.fn().mockResolvedValue({ success: true }),
+      setLessonsTeacherRate: jest.fn().mockResolvedValue({ updated: 1 }),
     };
     const scheduleRead = {
       listLessons: jest.fn().mockResolvedValue({ items: [] }),
@@ -56,7 +57,7 @@ describe("CrmScheduleController rollout boundary", () => {
     } as unknown as V4DomainFlagsService;
     return {
       controller: new CrmScheduleController(
-        schedule as never,
+        lessonMutations as never,
         scheduleRead as never,
         scheduleConflicts as never,
         scheduleSeries as never,
@@ -67,7 +68,7 @@ describe("CrmScheduleController rollout boundary", () => {
         schedulePlans as never,
         {} as never,
       ),
-      schedule,
+      lessonMutations,
       scheduleRead,
       scheduleConflicts,
       scheduleSeries,
@@ -79,19 +80,20 @@ describe("CrmScheduleController rollout boundary", () => {
   it("keeps lesson writes on the legacy service in shadow/legacy mode", async () => {
     const {
       controller: subject,
-      schedule,
+      lessonMutations,
       lessonCommands,
     } = controller("legacy");
 
     await expect(
       subject.createLesson(actor, "key", "request", {} as never),
     ).resolves.toEqual({ path: "legacy" });
-    expect(schedule.createLesson).toHaveBeenCalled();
+    expect(lessonMutations.createLesson).toHaveBeenCalled();
     expect(lessonCommands.create).not.toHaveBeenCalled();
   });
 
   it("routes lesson writes to the v4 command only after enable", async () => {
-    const { controller: subject, schedule, lessonCommands } = controller("v4");
+    const { controller: subject, lessonMutations, lessonCommands } =
+      controller("v4");
 
     await expect(
       subject.createLesson(actor, "key", "request", {} as never),
@@ -104,7 +106,7 @@ describe("CrmScheduleController rollout boundary", () => {
         requestId: "request",
       },
     );
-    expect(schedule.createLesson).not.toHaveBeenCalled();
+    expect(lessonMutations.createLesson).not.toHaveBeenCalled();
   });
 
   it("blocks v4-only transitions while the legacy path is effective", () => {
@@ -154,6 +156,22 @@ describe("CrmScheduleController rollout boundary", () => {
       groupBy: "room",
     });
     expect(scheduleRead.getScheduleMonthSummary).toHaveBeenCalledWith(actor, {});
+  });
+
+  it("routes legacy-only delete and rate commands through the mutation owner", async () => {
+    const { controller: subject, lessonMutations } = controller("v4");
+
+    await subject.deleteLesson(actor, "lesson-a");
+    await subject.setLessonsTeacherRate(actor, {} as never);
+
+    expect(lessonMutations.deleteLesson).toHaveBeenCalledWith(
+      actor,
+      "lesson-a",
+    );
+    expect(lessonMutations.setLessonsTeacherRate).toHaveBeenCalledWith(
+      actor,
+      {},
+    );
   });
 
   it("routes recurring-series reads and mutations through their owner", async () => {

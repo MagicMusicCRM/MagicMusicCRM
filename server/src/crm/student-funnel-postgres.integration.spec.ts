@@ -12,7 +12,6 @@ import { RealtimeBus } from "../realtime/realtime-bus";
 import { CrmPolicy } from "./crm.policy";
 import { CrmService } from "./crm.service";
 import { ScheduleReadService } from "./schedule/schedule-read.service";
-import { ScheduleService } from "./schedule.service";
 import { StudentFunnelStageDto } from "./dto/student-funnel.dto";
 import { StudentFunnelService } from "./student-funnel.service";
 
@@ -100,10 +99,8 @@ describe("Student funnel effective configuration (PostgreSQL)", () => {
       emitCrmChanged: jest.fn(),
     } as unknown as RealtimeBus;
     const policy = new CrmPolicy();
-    const schedule = {
-      listUpcomingLessonsForStudents: jest.fn().mockResolvedValue([]),
-    } as unknown as ScheduleService;
     const scheduleRead = {
+      listUpcomingLessonsForStudents: jest.fn().mockResolvedValue([]),
       listLessons: jest.fn().mockResolvedValue({ items: [] }),
     } as unknown as ScheduleReadService;
     service = new StudentFunnelService(database, audit, policy, realtime);
@@ -112,7 +109,6 @@ describe("Student funnel effective configuration (PostgreSQL)", () => {
       audit,
       policy,
       {} as never,
-      schedule,
       scheduleRead,
       {} as never,
       {} as never,

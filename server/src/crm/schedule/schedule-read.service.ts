@@ -512,10 +512,50 @@ export class ScheduleReadService {
     return { items: result.rows.map((row) => toLessonDto(row)) };
   }
 
-  /**
-   * Contract 7: map the pinned clientRef {type, id} onto the legacy
-   * studentId/leadId fields. An explicit clientRef wins over both.
-   */
+  /** Upcoming lessons for the already actor-scoped student set. */
+  async listUpcomingLessonsForStudents(studentIds: string[]) {
+    if (!studentIds.length) return [];
+    const result = await this.database.query<LessonRow>(
+      `
+        select l.id, l.student_id, l.group_id, l.lead_id, l.teacher_id, l.branch_id, l.room_id, l.scheduled_at,
+          l.duration_minutes, l.status, l.is_trial, l.notes, l.teacher_rate,
+          sp.user_id as student_user_id, tp.user_id as teacher_user_id,
+          trim(coalesce(sp.first_name, '') || ' ' || coalesce(sp.last_name, '')) as student_name,
+          trim(coalesce(ld.first_name, '') || ' ' || coalesce(ld.last_name, '')) as lead_name,
+          trim(coalesce(tp.first_name, '') || ' ' || coalesce(tp.last_name, '')) as teacher_name,
+          b.name as branch_name,
+          r.name as room_name,
+          g.name as group_name,
+          g.price_per_lesson as group_price_per_lesson
+        from app.lessons l
+        left join app.students s on s.id = l.student_id and s.deleted_at is null
+        left join app.profiles sp on sp.id = s.profile_id and sp.deleted_at is null
+        left join app.leads ld on ld.id = l.lead_id and ld.deleted_at is null
+        left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
+        left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
+        left join app.branches b on b.id = l.branch_id and b.deleted_at is null
+        left join app.rooms r on r.id = l.room_id and r.deleted_at is null
+        left join app.groups g on g.id = l.group_id and g.deleted_at is null
+        where l.deleted_at is null
+          and l.scheduled_at >= now()
+          and (
+            l.student_id = any($1::uuid[])
+            or exists (
+              select 1
+              from app.group_students gs
+              where gs.group_id = l.group_id
+                and gs.student_id = any($1::uuid[])
+                and gs.left_at is null
+            )
+          )
+        order by l.scheduled_at asc, l.id asc
+        limit 20
+      `,
+      [studentIds],
+    );
+    return (result?.rows ?? []).map((row) => toLessonDto(row));
+  }
+
   private clientLessonAccessSql(userIdExpression: string): string {
     return `(
       sp.user_id = ${userIdExpression}

@@ -34,11 +34,11 @@ import { StaffService } from "./staff.service";
 import { TeachersService } from "./teachers.service";
 import { PersonAccountService } from "./person-account.service";
 import { PersonLifecycleService } from "./person-lifecycle.service";
-import { ScheduleService } from "./schedule.service";
 import { ScheduleReadService } from "./schedule/schedule-read.service";
 import { ScheduleConflictService } from "./schedule/schedule-conflict.service";
 import { ScheduleSeriesMaterializerService } from "./schedule/schedule-series-materializer.service";
 import { ScheduleSeriesService } from "./schedule/schedule-series.service";
+import { LessonScheduleMutationService } from "./schedule/lesson-schedule-mutation.service";
 import { SectionViewsService } from "./section-views.service";
 import { TimelineService } from "./timeline.service";
 import { DashboardService } from "./dashboard.service";
@@ -167,7 +167,7 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     ScheduleConflictService,
     ScheduleSeriesMaterializerService,
     ScheduleSeriesService,
-    ScheduleService,
+    LessonScheduleMutationService,
     TimelineService,
     SectionViewsService,
     DashboardService,

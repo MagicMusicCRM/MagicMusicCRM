@@ -3,15 +3,15 @@ import {
   ConflictException,
   ForbiddenException,
 } from "@nestjs/common";
-import { AuditService } from "../audit/audit.service";
-import { DatabaseService } from "../db/database.service";
-import { NotificationsService } from "../notifications/notifications.service";
-import { RealtimeBus } from "../realtime/realtime-bus";
-import { CrmPolicy } from "./crm.policy";
-import { ScheduleService } from "./schedule.service";
-import { ScheduleConflictService } from "./schedule/schedule-conflict.service";
+import { AuditService } from "../../audit/audit.service";
+import { DatabaseService } from "../../db/database.service";
+import { NotificationsService } from "../../notifications/notifications.service";
+import { RealtimeBus } from "../../realtime/realtime-bus";
+import { CrmPolicy } from "../crm.policy";
+import { ScheduleConflictService } from "./schedule-conflict.service";
+import { LessonScheduleMutationService } from "./lesson-schedule-mutation.service";
 
-describe("ScheduleService", () => {
+describe("LessonScheduleMutationService", () => {
   const actor = { userId: "manager-a", role: "manager" as const };
 
   afterEach(() => jest.useRealTimers());
@@ -46,7 +46,7 @@ describe("ScheduleService", () => {
         work: (client: { query: jest.Mock }) => Promise<unknown>,
       ) => work({ query }),
     } as unknown as DatabaseService;
-    return new ScheduleService(
+    return new LessonScheduleMutationService(
       database,
       deps.audit as unknown as AuditService,
       deps.policy as unknown as CrmPolicy,

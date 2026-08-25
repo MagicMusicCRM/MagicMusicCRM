@@ -5,23 +5,23 @@ import {
   Logger,
   NotFoundException,
 } from "@nestjs/common";
-import { AuditEventInput, AuditService } from "../audit/audit.service";
+import { AuditEventInput, AuditService } from "../../audit/audit.service";
 import {
   ActorContext,
   isManagerOrAdminRole,
-} from "../common/security/actor-context";
-import { DatabaseService } from "../db/database.service";
-import { NotificationsService } from "../notifications/notifications.service";
-import { RealtimeBus } from "../realtime/realtime-bus";
-import { audienceForLesson } from "./audience";
-import { CrmPolicy } from "./crm.policy";
-import { BulkLessonRateDto } from "./dto/bulk-lesson-rate.dto";
-import { UpsertLessonDto } from "./dto/upsert-lesson.dto";
-import { LessonRow, formatLessonTimeMoscow, toLessonDto } from "./crm-mappers";
-import { assertLessonPatchUsesTransition } from "./schedule/lesson-protected-patch.guard";
-import { ScheduleConflictService } from "./schedule/schedule-conflict.service";
-import { ScheduleSeriesMaterializerService } from "./schedule/schedule-series-materializer.service";
-import { ScheduleQueryExecutor } from "./schedule/schedule-locks";
+} from "../../common/security/actor-context";
+import { DatabaseService } from "../../db/database.service";
+import { NotificationsService } from "../../notifications/notifications.service";
+import { RealtimeBus } from "../../realtime/realtime-bus";
+import { audienceForLesson } from "../audience";
+import { CrmPolicy } from "../crm.policy";
+import { BulkLessonRateDto } from "../dto/bulk-lesson-rate.dto";
+import { UpsertLessonDto } from "../dto/upsert-lesson.dto";
+import { LessonRow, formatLessonTimeMoscow, toLessonDto } from "../crm-mappers";
+import { assertLessonPatchUsesTransition } from "./lesson-protected-patch.guard";
+import { ScheduleConflictService } from "./schedule-conflict.service";
+import { ScheduleSeriesMaterializerService } from "./schedule-series-materializer.service";
+import { ScheduleQueryExecutor } from "./schedule-locks";
 
 // Pre-update snapshot used by updateLesson to detect a genuine reschedule
 // (time / room / teacher delta) and resolve the assigned teacher (KVA-158).
@@ -38,8 +38,8 @@ interface RescheduleSnapshotRow {
 }
 
 @Injectable()
-export class ScheduleService {
-  private readonly logger = new Logger(ScheduleService.name);
+export class LessonScheduleMutationService {
+  private readonly logger = new Logger(LessonScheduleMutationService.name);
 
   constructor(
     private readonly database: DatabaseService,
@@ -325,49 +325,6 @@ export class ScheduleService {
    * CrmPolicy — ownership is established upstream. Owns the lesson SQL that
    * previously lived inline in CrmService.
    */
-  async listUpcomingLessonsForStudents(studentIds: string[]) {
-    if (!studentIds.length) return [];
-    const result = await this.database.query<LessonRow>(
-      `
-        select l.id, l.student_id, l.group_id, l.lead_id, l.teacher_id, l.branch_id, l.room_id, l.scheduled_at,
-          l.duration_minutes, l.status, l.is_trial, l.notes, l.teacher_rate,
-          sp.user_id as student_user_id, tp.user_id as teacher_user_id,
-          trim(coalesce(sp.first_name, '') || ' ' || coalesce(sp.last_name, '')) as student_name,
-          trim(coalesce(ld.first_name, '') || ' ' || coalesce(ld.last_name, '')) as lead_name,
-          trim(coalesce(tp.first_name, '') || ' ' || coalesce(tp.last_name, '')) as teacher_name,
-          b.name as branch_name,
-          r.name as room_name,
-          g.name as group_name,
-          g.price_per_lesson as group_price_per_lesson
-        from app.lessons l
-        left join app.students s on s.id = l.student_id and s.deleted_at is null
-        left join app.profiles sp on sp.id = s.profile_id and sp.deleted_at is null
-        left join app.leads ld on ld.id = l.lead_id and ld.deleted_at is null
-        left join app.teachers t on t.id = l.teacher_id and t.deleted_at is null
-        left join app.profiles tp on tp.id = t.profile_id and tp.deleted_at is null
-        left join app.branches b on b.id = l.branch_id and b.deleted_at is null
-        left join app.rooms r on r.id = l.room_id and r.deleted_at is null
-        left join app.groups g on g.id = l.group_id and g.deleted_at is null
-        where l.deleted_at is null
-          and l.scheduled_at >= now()
-          and (
-            l.student_id = any($1::uuid[])
-            or exists (
-              select 1
-              from app.group_students gs
-              where gs.group_id = l.group_id
-                and gs.student_id = any($1::uuid[])
-                and gs.left_at is null
-            )
-          )
-        order by l.scheduled_at asc, l.id asc
-        limit 20
-      `,
-      [studentIds],
-    );
-    return (result?.rows ?? []).map((row) => toLessonDto(row));
-  }
-
   async deleteLesson(actor: ActorContext, lessonId: string) {
     // Only managers/admins may delete a lesson outright; teachers can update
     // status/notes via updateLesson but not remove a lesson from the schedule.
@@ -636,3 +593,4 @@ export class ScheduleService {
     }
   }
 }
+

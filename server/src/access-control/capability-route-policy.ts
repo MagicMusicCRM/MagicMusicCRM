@@ -421,7 +421,7 @@ export function resolveCapabilityRoutePolicy(
       read ? "schedule.lesson.read.assigned" : "schedule.lesson.write",
       "self_or_assigned",
       read ? allRoles : staffRoles,
-      "ScheduleService/CRM repository actor scope",
+      "Schedule owners/CRM repository actor scope",
     );
   }
 

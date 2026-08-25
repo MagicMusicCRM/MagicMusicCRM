@@ -3,7 +3,7 @@
  *
  * Before this module the same `LessonRow`/`toLessonDto`, `TimelineRow`/`toTimelineDto`
  * and `PaymentRow`/`toPaymentDto` lived byte-for-byte
- * in 2–3 services each (CrmService, LeadsService, ScheduleService,
+ * in 2–3 services each (CrmService, LeadsService, schedule services,
  * TimelineService, FinanceService), so a change to a DTO shape meant editing every
  * copy. They are pure functions (no `this`), so the extraction is behaviour-preserving:
  * every service now imports the single definition here.
