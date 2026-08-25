@@ -49,6 +49,10 @@ import {
   type LessonSettlementChargeSource,
   type LessonSettlementSource,
 } from "./lesson-settlement-facts.persistence";
+import {
+  assertCorrectionSubscriptionCapacity,
+  reserveLessonSettlementSubscriptions,
+} from "./lesson-settlement-subscription-capacity";
 
 @Injectable()
 export class LessonSettlementRepository {
@@ -404,13 +408,17 @@ export class LessonSettlementRepository {
       Boolean(input.correction),
     );
     if (input.correction) {
-      await this.lockCorrectionSubscriptionCapacity(
+      await assertCorrectionSubscriptionCapacity(
         client,
         source.lesson_id,
         facts,
       );
     } else {
-      await this.lockAndReserveSubscriptions(client, source.lesson_id, facts);
+      await reserveLessonSettlementSubscriptions(
+        client,
+        source.lesson_id,
+        facts,
+      );
     }
     await insertConfiguredLessonClientFacts(client, {
       lessonId: source.lesson_id,

@@ -1,0 +1,236 @@
+import {
+  ConflictException,
+  UnprocessableEntityException,
+} from "@nestjs/common";
+import type { PoolClient } from "pg";
+import { invalidLessonSettlementDecision } from "./lesson-settlement-catalog";
+import type { CalculatedLessonClientFact } from "./lesson-settlement-facts.persistence";
+
+export async function reserveLessonSettlementSubscriptions(
+  client: PoolClient,
+  lessonId: string,
+  facts: CalculatedLessonClientFact[],
+): Promise<void> {
+  const factsBySubscription = uniqueFactsBySubscription(
+    facts.filter((fact) => fact.subscriptionId),
+  );
+  for (const subscriptionId of [...factsBySubscription.keys()].sort()) {
+    const fact = factsBySubscription.get(subscriptionId)!;
+    await reserveLessonSubscription(client, lessonId, subscriptionId, fact);
+  }
+}
+
+function uniqueFactsBySubscription(
+  facts: CalculatedLessonClientFact[],
+): Map<string, CalculatedLessonClientFact> {
+  const mapped = new Map(
+    facts.map((fact) => [fact.subscriptionId!, fact]),
+  );
+  if (mapped.size !== facts.length) {
+    invalidLessonSettlementDecision(
+      "DUPLICATE_SUBSCRIPTION_SELECTION",
+      "clientDecisions",
+    );
+  }
+  return mapped;
+}
+
+async function reserveLessonSubscription(
+  client: PoolClient,
+  lessonId: string,
+  subscriptionId: string,
+  fact: CalculatedLessonClientFact,
+): Promise<void> {
+  const locked = await client.query<{
+    student_id: string;
+    is_usable: boolean;
+    has_capacity: boolean;
+    available_units: string;
+  }>(
+    `
+      select subscription.student_id,
+        (
+          subscription.status = 'active'
+          and (
+            subscription.expires_at is null
+            or subscription.expires_at >= current_date
+          )
+        ) as is_usable,
+        capacity.available_units::text,
+        capacity.available_units >= $3::numeric as has_capacity
+      from app.subscriptions subscription
+      cross join lateral (
+        select (
+          subscription.lessons_total - subscription.lessons_used
+          - coalesce((
+            select sum(charge.units)
+            from app.lesson_client_charge_facts_effective charge
+            where charge.subscription_id = subscription.id
+              and charge.charge_type = 'subscription'
+          ), 0)
+          - coalesce((
+            select sum(reservation.units)
+            from app.lesson_reservations reservation
+            where reservation.subscription_id = subscription.id
+              and reservation.state = 'reserved'
+              and reservation.lesson_id <> $2
+          ), 0)
+        ) as available_units
+      ) capacity
+      where subscription.id = $1
+      for update
+    `,
+    [subscriptionId, lessonId, fact.calculation.units],
+  );
+  const subscription = locked.rows[0];
+  const consumesUnits = fact.calculation.units !== "0.00";
+  assertSubscriptionCanCover(
+    subscription,
+    subscriptionId,
+    fact,
+    consumesUnits,
+  );
+  if (!consumesUnits) return;
+  const reservation = await client.query(
+    `
+      insert into app.lesson_reservations (lesson_id, subscription_id, units)
+      values ($1, $2, $3::numeric)
+      on conflict (lesson_id, subscription_id) do update
+        set units = excluded.units
+        where app.lesson_reservations.state = 'reserved'
+      returning id
+    `,
+    [lessonId, subscriptionId, fact.calculation.units],
+  );
+  if (!reservation.rows[0]) {
+    throw new ConflictException({
+      code: "SUBSCRIPTION_RESERVATION_TERMINAL",
+      lessonId,
+      subscriptionId,
+    });
+  }
+}
+
+function assertSubscriptionCanCover(
+  subscription: {
+    student_id: string;
+    is_usable: boolean;
+    has_capacity: boolean;
+    available_units: string;
+  } | undefined,
+  subscriptionId: string,
+  fact: CalculatedLessonClientFact,
+  consumesUnits: boolean,
+): void {
+  const matchesStudent =
+    fact.charge.client_type === "student" &&
+    subscription?.student_id === fact.charge.client_id;
+  const hasCapacity =
+    !consumesUnits ||
+    (subscription?.is_usable === true && subscription.has_capacity === true);
+  if (subscription && matchesStudent && hasCapacity) return;
+  throw new UnprocessableEntityException({
+    code: "SUBSCRIPTION_CAPACITY",
+    subscriptionId,
+    clientId: fact.charge.client_id,
+    requestedUnits: fact.calculation.units,
+    availableUnits: subscription?.available_units ?? "0",
+  });
+}
+
+export async function assertCorrectionSubscriptionCapacity(
+  client: PoolClient,
+  lessonId: string,
+  facts: CalculatedLessonClientFact[],
+): Promise<void> {
+  const selected = facts.filter(
+    (fact) => fact.subscriptionId && Number(fact.calculation.units) > 0,
+  );
+  const factsBySubscription = uniqueFactsBySubscription(selected);
+  for (const subscriptionId of [...factsBySubscription.keys()].sort()) {
+    await assertCorrectionSubscription(
+      client,
+      lessonId,
+      subscriptionId,
+      factsBySubscription.get(subscriptionId)!,
+    );
+  }
+}
+
+async function assertCorrectionSubscription(
+  client: PoolClient,
+  lessonId: string,
+  subscriptionId: string,
+  fact: CalculatedLessonClientFact,
+): Promise<void> {
+  const locked = await client.query<{
+    student_id: string;
+    status: string;
+    is_usable: boolean;
+    lessons_total: string;
+    lessons_used: string;
+  }>(
+    `select student_id, status,
+       (starts_at is null or starts_at <= current_date)
+         and (expires_at is null or expires_at >= current_date)
+         as is_usable,
+       lessons_total::text, lessons_used::text
+     from app.subscriptions where id = $1 for update`,
+    [subscriptionId],
+  );
+  const subscription = locked.rows[0];
+  const used = await client.query<{ settled: string; reserved: string }>(
+    `select
+       coalesce((select sum(units)
+         from app.lesson_client_charge_facts_effective
+         where subscription_id = $1 and charge_type = 'subscription'
+           and lesson_id <> $2), 0)::text as settled,
+       coalesce((select sum(units) from app.lesson_reservations
+         where subscription_id = $1 and state = 'reserved'
+           and lesson_id <> $2), 0)::text as reserved`,
+    [subscriptionId, lessonId],
+  );
+  const available = availableCorrectionUnits(subscription, used.rows[0]);
+  assertCorrectionCanCover(subscription, subscriptionId, fact, available);
+}
+
+function availableCorrectionUnits(
+  subscription:
+    | { lessons_total: string; lessons_used: string }
+    | undefined,
+  used: { settled: string; reserved: string } | undefined,
+): number {
+  if (!subscription) return 0;
+  return (
+    Number(subscription.lessons_total) -
+    Number(subscription.lessons_used) -
+    Number(used?.settled ?? 0) -
+    Number(used?.reserved ?? 0)
+  );
+}
+
+function assertCorrectionCanCover(
+  subscription: {
+    student_id: string;
+    status: string;
+    is_usable: boolean;
+  } | undefined,
+  subscriptionId: string,
+  fact: CalculatedLessonClientFact,
+  available: number,
+): void {
+  const valid =
+    subscription?.student_id === fact.charge.client_id &&
+    fact.charge.client_type === "student" &&
+    subscription.status === "active" &&
+    subscription.is_usable &&
+    available + Number.EPSILON >= Number(fact.calculation.units);
+  if (valid) return;
+  throw new UnprocessableEntityException({
+    code: "SUBSCRIPTION_CAPACITY",
+    subscriptionId,
+    clientId: fact.charge.client_id,
+    requestedUnits: fact.calculation.units,
+    availableUnits: Math.max(0, available).toFixed(2),
+  });
+}
