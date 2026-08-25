@@ -17,6 +17,10 @@ import {
   ClientFieldDefinitionRow,
 } from "./crm-configuration-baseline";
 import type {
+  ConfigBranchPatch,
+  ConfigField,
+  ConfigSnapshot,
+  ImpactReport,
   LessonSettlementTypeConfig,
   TeacherCompensationRuleConfig,
 } from "./crm-configuration.contracts";
@@ -26,11 +30,6 @@ import {
   RollbackCrmConfigurationDto,
   SaveCrmConfigurationDraftDto,
 } from "./dto/crm-configuration.dto";
-
-export type {
-  LessonSettlementTypeConfig,
-  TeacherCompensationRuleConfig,
-} from "./crm-configuration.contracts";
 
 const valueTypes = new Set([
   "text",
@@ -65,71 +64,6 @@ const compensationModes = new Set([
   "hourly",
 ]);
 
-export interface ConfigCategory {
-  key: string;
-  label: string;
-  order: number;
-  active: boolean;
-}
-
-export interface ConfigField {
-  id?: string;
-  key: string;
-  label: string;
-  valueType: string;
-  required: boolean;
-  active: boolean;
-  system: boolean;
-  categoryKey: string;
-  order: number;
-  width: string;
-  placements: string[];
-  options: string[];
-  optionSetKey?: string;
-  visibility: {
-    lead: boolean;
-    student: boolean;
-  };
-}
-
-export interface ConfigOptionSet {
-  key: string;
-  label: string;
-  multiple: boolean;
-  options: Array<{
-    key: string;
-    label: string;
-    order: number;
-    active: boolean;
-  }>;
-}
-
-export interface ConfigSetting {
-  key: keyof typeof settingDefinitions;
-  label: string;
-  valueType: "integer";
-  unit: string;
-  min: number;
-  max: number;
-  value: number;
-  branchOverridable: boolean;
-}
-
-export interface ConfigSnapshot {
-  categories: ConfigCategory[];
-  fields: ConfigField[];
-  optionSets: ConfigOptionSet[];
-  businessSettings: ConfigSetting[];
-  lessonSettlementTypes: LessonSettlementTypeConfig[];
-  teacherCompensationRules: TeacherCompensationRuleConfig[];
-}
-
-export interface ConfigBranchPatch {
-  businessSettings: ConfigSetting[];
-  lessonSettlementTypes?: LessonSettlementTypeConfig[];
-  teacherCompensationRules?: TeacherCompensationRuleConfig[];
-}
-
 interface RevisionRow {
   id: string;
   branch_id: string | null;
@@ -141,21 +75,6 @@ interface RevisionRow {
   rollback_from_version: number | string | null;
   created_by: string | null;
   created_at: Date | string;
-}
-
-export interface ImpactReport {
-  valid: boolean;
-  blockingIssues: Array<{ field: string; code: string; message: string }>;
-  warnings: string[];
-  changes: {
-    fieldsCreated: number;
-    fieldsUpdated: number;
-    fieldsArchived: number;
-    settingsChanged: number;
-    settlementTypesChanged: number;
-    compensationRulesChanged: number;
-  };
-  affectedScreens: string[];
 }
 
 type Queryable = Pick<PoolClient, "query"> | DatabaseService;

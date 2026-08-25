@@ -12,10 +12,8 @@ import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 import { MigrationRunner } from "../db/migration-runner";
 import { RealtimeBus } from "../realtime/realtime-bus";
-import {
-  ConfigSnapshot,
-  CrmConfigurationService,
-} from "./crm-configuration.service";
+import type { ConfigSnapshot } from "./crm-configuration.contracts";
+import { CrmConfigurationService } from "./crm-configuration.service";
 import { CrmPolicy } from "./crm.policy";
 
 const databaseUrl =

@@ -1,4 +1,4 @@
-import type { ConfigSnapshot } from "./crm-configuration.service";
+import type { ConfigSnapshot } from "./crm-configuration.contracts";
 
 export interface ClientFieldDefinitionRow {
   id: string;

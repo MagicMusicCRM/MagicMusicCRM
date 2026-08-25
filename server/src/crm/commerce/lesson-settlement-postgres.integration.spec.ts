@@ -5,7 +5,7 @@ import { Pool } from "pg";
 import { DatabaseService } from "../../db/database.service";
 import { MigrationRunner } from "../../db/migration-runner";
 import { RealtimeBus } from "../../realtime/realtime-bus";
-import { ConfigSnapshot } from "../crm-configuration.service";
+import type { ConfigSnapshot } from "../crm-configuration.contracts";
 import { LessonLifecycleRepository } from "../schedule/lesson-lifecycle.repository";
 import { LessonSettlementRepository } from "./lesson-settlement.repository";
 import { LessonSettlementService } from "./lesson-settlement.service";

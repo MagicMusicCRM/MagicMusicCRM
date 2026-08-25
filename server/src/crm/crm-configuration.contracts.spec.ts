@@ -1,7 +1,28 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { ConfigSnapshot } from "./crm-configuration.contracts";
+
+const contractSnapshot: ConfigSnapshot = {
+  categories: [],
+  fields: [],
+  optionSets: [],
+  businessSettings: [],
+  lessonSettlementTypes: [],
+  teacherCompensationRules: [],
+};
 
 describe("CRM configuration contract boundary", () => {
+  it("owns the complete configuration snapshot contract", () => {
+    expect(Object.keys(contractSnapshot).sort()).toEqual([
+      "businessSettings",
+      "categories",
+      "fields",
+      "lessonSettlementTypes",
+      "optionSets",
+      "teacherCompensationRules",
+    ]);
+  });
+
   it("keeps settlement catalog types outside the configuration service", () => {
     const crmRoot = join(process.cwd(), "src", "crm");
     const contractPath = join(crmRoot, "crm-configuration.contracts.ts");
