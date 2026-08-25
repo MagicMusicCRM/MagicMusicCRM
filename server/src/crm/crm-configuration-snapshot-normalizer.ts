@@ -88,133 +88,206 @@ function normalizeFields(
   raw: unknown,
   categoryKeys: Set<string>,
 ): ConfigField[] {
-  const parsedFields = readArray(raw, "fields").map((item, index) => {
-    const row = readObject(item, `fields.${index}`);
-    const legacyEntityType = row.entityType;
-    const visibilityRow =
-      row.visibility === undefined
-        ? null
-        : readObject(row.visibility, `fields.${index}.visibility`);
-    const visibility = visibilityRow
+  const parsedFields = readArray(raw, "fields").map((item, index) =>
+    normalizeField(item, index, categoryKeys),
+  );
+  return mergeLegacyFields(parsedFields);
+}
+
+function normalizeField(
+  item: unknown,
+  index: number,
+  categoryKeys: Set<string>,
+): ConfigField {
+  const row = readObject(item, `fields.${index}`);
+  const visibility = normalizeFieldVisibility(row, index);
+  const valueType = normalizeFieldValueType(row, index);
+  const categoryKey = normalizeFieldCategoryKey(row, index, categoryKeys);
+  const width = normalizeFieldWidth(row, index);
+  const placements = normalizeFieldPlacements(row, index);
+  const options = normalizeFieldOptions(row, index);
+  const system = readBoolean(row.system, `fields.${index}.system`);
+  const active = readBoolean(row.active, `fields.${index}.active`);
+  assertActiveFieldVisibility(active, visibility, index);
+  assertSelectableFieldOptions(row, index, system, valueType, options);
+  return {
+    ...(typeof row.id === "string" ? { id: row.id } : {}),
+    key: readKey(row.key, `fields.${index}.key`),
+    label: readText(row.label, `fields.${index}.label`, 120),
+    valueType,
+    required: readBoolean(row.required, `fields.${index}.required`),
+    active,
+    system,
+    categoryKey,
+    order: readInteger(row.order, `fields.${index}.order`, 0, 10000),
+    width,
+    placements,
+    options,
+    visibility,
+    ...(typeof row.optionSetKey === "string" && row.optionSetKey.trim()
       ? {
-          lead: readBoolean(
-            visibilityRow.lead,
-            `fields.${index}.visibility.lead`,
-          ),
-          student: readBoolean(
-            visibilityRow.student,
-            `fields.${index}.visibility.student`,
+          optionSetKey: readKey(
+            row.optionSetKey,
+            `fields.${index}.optionSetKey`,
           ),
         }
-      : legacyEntityType === "lead" || legacyEntityType === "student"
-        ? {
-            lead: legacyEntityType === "lead",
-            student: legacyEntityType === "student",
-          }
-        : { lead: true, student: true };
-    const valueType = readText(
-      row.valueType,
-      `fields.${index}.valueType`,
-      32,
+      : {}),
+  };
+}
+
+function normalizeFieldVisibility(
+  row: Record<string, unknown>,
+  index: number,
+): ConfigField["visibility"] {
+  if (row.visibility !== undefined) {
+    const visibility = readObject(
+      row.visibility,
+      `fields.${index}.visibility`,
     );
-    if (!valueTypes.has(valueType)) {
-      invalid(
-        `fields.${index}.valueType`,
-        "INVALID_TYPE",
-        "Тип поля не поддерживается.",
-      );
-    }
-    const categoryKey = readKey(
-      row.categoryKey,
-      `fields.${index}.categoryKey`,
-    );
-    if (!categoryKeys.has(categoryKey)) {
-      invalid(
-        `fields.${index}.categoryKey`,
-        "UNKNOWN_CATEGORY",
-        "Категория не найдена.",
-      );
-    }
-    const width = readText(row.width, `fields.${index}.width`, 16);
-    if (!widthTypes.has(width)) {
-      invalid(
-        `fields.${index}.width`,
-        "INVALID_WIDTH",
-        "Ширина поля не поддерживается.",
-      );
-    }
-    const placements = readArray(
-      row.placements,
-      `fields.${index}.placements`,
-    ).map((placement, placementIndex) => {
-      const value = readText(
-        placement,
-        `fields.${index}.placements.${placementIndex}`,
-        16,
-      );
-      if (!placementTypes.has(value)) {
-        invalid(
-          `fields.${index}.placements.${placementIndex}`,
-          "INVALID_PLACEMENT",
-          "Размещение поля не поддерживается.",
-        );
-      }
-      return value;
-    });
-    const options = readArray(
-      row.options ?? [],
-      `fields.${index}.options`,
-    ).map((option, optionIndex) =>
-      readText(option, `fields.${index}.options.${optionIndex}`, 160),
-    );
-    const system = readBoolean(row.system, `fields.${index}.system`);
-    const active = readBoolean(row.active, `fields.${index}.active`);
-    if (active && !visibility.lead && !visibility.student) {
-      invalid(
-        `fields.${index}.visibility`,
-        "FIELD_VISIBILITY_REQUIRED",
-        "Активное поле должно быть видно хотя бы в одной карточке.",
-      );
-    }
-    if (
-      !system &&
-      ["select", "radio", "multi_select", "checkbox_group"].includes(
-        valueType,
-      ) &&
-      options.length === 0 &&
-      typeof row.optionSetKey !== "string"
-    ) {
-      invalid(
-        `fields.${index}.options`,
-        "OPTIONS_REQUIRED",
-        "Добавьте хотя бы один вариант.",
-      );
-    }
     return {
-      ...(typeof row.id === "string" ? { id: row.id } : {}),
-      key: readKey(row.key, `fields.${index}.key`),
-      label: readText(row.label, `fields.${index}.label`, 120),
-      valueType,
-      required: readBoolean(row.required, `fields.${index}.required`),
-      active,
-      system,
-      categoryKey,
-      order: readInteger(row.order, `fields.${index}.order`, 0, 10000),
-      width,
-      placements: [...new Set(placements)],
-      options: [...new Set(options)],
-      visibility,
-      ...(typeof row.optionSetKey === "string" && row.optionSetKey.trim()
-        ? {
-            optionSetKey: readKey(
-              row.optionSetKey,
-              `fields.${index}.optionSetKey`,
-            ),
-          }
-        : {}),
-    } as ConfigField;
+      lead: readBoolean(visibility.lead, `fields.${index}.visibility.lead`),
+      student: readBoolean(
+        visibility.student,
+        `fields.${index}.visibility.student`,
+      ),
+    };
+  }
+  if (row.entityType === "lead") {
+    return { lead: true, student: false };
+  }
+  if (row.entityType === "student") {
+    return { lead: false, student: true };
+  }
+  return { lead: true, student: true };
+}
+
+function normalizeFieldValueType(
+  row: Record<string, unknown>,
+  index: number,
+): string {
+  const valueType = readText(
+    row.valueType,
+    `fields.${index}.valueType`,
+    32,
+  );
+  if (!valueTypes.has(valueType)) {
+    invalid(
+      `fields.${index}.valueType`,
+      "INVALID_TYPE",
+      "Тип поля не поддерживается.",
+    );
+  }
+  return valueType;
+}
+
+function normalizeFieldCategoryKey(
+  row: Record<string, unknown>,
+  index: number,
+  categoryKeys: Set<string>,
+): string {
+  const categoryKey = readKey(
+    row.categoryKey,
+    `fields.${index}.categoryKey`,
+  );
+  if (!categoryKeys.has(categoryKey)) {
+    invalid(
+      `fields.${index}.categoryKey`,
+      "UNKNOWN_CATEGORY",
+      "Категория не найдена.",
+    );
+  }
+  return categoryKey;
+}
+
+function normalizeFieldWidth(
+  row: Record<string, unknown>,
+  index: number,
+): string {
+  const width = readText(row.width, `fields.${index}.width`, 16);
+  if (!widthTypes.has(width)) {
+    invalid(
+      `fields.${index}.width`,
+      "INVALID_WIDTH",
+      "Ширина поля не поддерживается.",
+    );
+  }
+  return width;
+}
+
+function normalizeFieldPlacements(
+  row: Record<string, unknown>,
+  index: number,
+): string[] {
+  const placements = readArray(
+    row.placements,
+    `fields.${index}.placements`,
+  ).map((placement, placementIndex) => {
+    const value = readText(
+      placement,
+      `fields.${index}.placements.${placementIndex}`,
+      16,
+    );
+    if (!placementTypes.has(value)) {
+      invalid(
+        `fields.${index}.placements.${placementIndex}`,
+        "INVALID_PLACEMENT",
+        "Размещение поля не поддерживается.",
+      );
+    }
+    return value;
   });
-  return mergeLegacyFields(parsedFields);
+  return [...new Set(placements)];
+}
+
+function normalizeFieldOptions(
+  row: Record<string, unknown>,
+  index: number,
+): string[] {
+  const options = readArray(
+    row.options ?? [],
+    `fields.${index}.options`,
+  ).map((option, optionIndex) =>
+    readText(option, `fields.${index}.options.${optionIndex}`, 160),
+  );
+  return [...new Set(options)];
+}
+
+function assertActiveFieldVisibility(
+  active: boolean,
+  visibility: ConfigField["visibility"],
+  index: number,
+): void {
+  if (!active) return;
+  if (visibility.lead || visibility.student) return;
+  invalid(
+    `fields.${index}.visibility`,
+    "FIELD_VISIBILITY_REQUIRED",
+    "Активное поле должно быть видно хотя бы в одной карточке.",
+  );
+}
+
+function assertSelectableFieldOptions(
+  row: Record<string, unknown>,
+  index: number,
+  system: boolean,
+  valueType: string,
+  options: string[],
+): void {
+  if (system) return;
+  if (
+    !new Set(["select", "radio", "multi_select", "checkbox_group"]).has(
+      valueType,
+    )
+  ) {
+    return;
+  }
+  if (options.length > 0) return;
+  if (typeof row.optionSetKey === "string") return;
+  invalid(
+    `fields.${index}.options`,
+    "OPTIONS_REQUIRED",
+    "Добавьте хотя бы один вариант.",
+  );
 }
 
 function mergeLegacyFields(parsedFields: ConfigField[]): ConfigField[] {
@@ -469,60 +542,7 @@ function normalizeCompensationRules(
   raw: unknown,
 ): TeacherCompensationRuleConfig[] {
   const compensationRules = readArray(raw, "teacherCompensationRules")
-    .map((item, index) => {
-      const row = readObject(item, `teacherCompensationRules.${index}`);
-      const mode = readText(
-        row.mode,
-        `teacherCompensationRules.${index}.mode`,
-        16,
-      ) as TeacherCompensationRuleConfig["mode"];
-      if (!compensationModes.has(mode)) {
-        invalid(
-          `teacherCompensationRules.${index}.mode`,
-          "INVALID_COMPENSATION_MODE",
-          "Режим оплаты преподавателю не поддерживается.",
-        );
-      }
-      const value = readMinor(
-        row.value,
-        `teacherCompensationRules.${index}.value`,
-      );
-      if (
-        ((mode === "none" || mode === "standard") && value !== "0") ||
-        (mode === "percent" && BigInt(value) > 20000n)
-      ) {
-        invalid(
-          `teacherCompensationRules.${index}.value`,
-          "INVALID_COMPENSATION_VALUE",
-          mode === "percent"
-            ? "Процент задаётся в basis points от 0 до 20000."
-            : "Для none/standard значение должно быть равно нулю.",
-        );
-      }
-      return {
-        stableKey: readKey(
-          row.stableKey,
-          `teacherCompensationRules.${index}.stableKey`,
-        ),
-        label: readText(
-          row.label,
-          `teacherCompensationRules.${index}.label`,
-          120,
-        ),
-        mode,
-        value,
-        active: readBoolean(
-          row.active,
-          `teacherCompensationRules.${index}.active`,
-        ),
-        order: readInteger(
-          row.order,
-          `teacherCompensationRules.${index}.order`,
-          0,
-          1000,
-        ),
-      };
-    })
+    .map(normalizeCompensationRule)
     .sort(
       (left, right) =>
         left.order - right.order ||
@@ -541,6 +561,75 @@ function normalizeCompensationRules(
     );
   }
   return compensationRules;
+}
+
+function normalizeCompensationRule(
+  item: unknown,
+  index: number,
+): TeacherCompensationRuleConfig {
+  const row = readObject(item, `teacherCompensationRules.${index}`);
+  const mode = readText(
+    row.mode,
+    `teacherCompensationRules.${index}.mode`,
+    16,
+  ) as TeacherCompensationRuleConfig["mode"];
+  if (!compensationModes.has(mode)) {
+    invalid(
+      `teacherCompensationRules.${index}.mode`,
+      "INVALID_COMPENSATION_MODE",
+      "Режим оплаты преподавателю не поддерживается.",
+    );
+  }
+  const value = readMinor(
+    row.value,
+    `teacherCompensationRules.${index}.value`,
+  );
+  assertCompensationValue(mode, value, index);
+  return {
+    stableKey: readKey(
+      row.stableKey,
+      `teacherCompensationRules.${index}.stableKey`,
+    ),
+    label: readText(
+      row.label,
+      `teacherCompensationRules.${index}.label`,
+      120,
+    ),
+    mode,
+    value,
+    active: readBoolean(
+      row.active,
+      `teacherCompensationRules.${index}.active`,
+    ),
+    order: readInteger(
+      row.order,
+      `teacherCompensationRules.${index}.order`,
+      0,
+      1000,
+    ),
+  };
+}
+
+function assertCompensationValue(
+  mode: TeacherCompensationRuleConfig["mode"],
+  value: string,
+  index: number,
+): void {
+  if (mode === "percent") {
+    if (BigInt(value) <= 20000n) return;
+    invalid(
+      `teacherCompensationRules.${index}.value`,
+      "INVALID_COMPENSATION_VALUE",
+      "Процент задаётся в basis points от 0 до 20000.",
+    );
+  }
+  if (mode !== "none" && mode !== "standard") return;
+  if (value === "0") return;
+  invalid(
+    `teacherCompensationRules.${index}.value`,
+    "INVALID_COMPENSATION_VALUE",
+    "Для none/standard значение должно быть равно нулю.",
+  );
 }
 
 function readArray(value: unknown, field: string): unknown[] {
