@@ -71,6 +71,41 @@ void main() {
     );
   });
 
+  test('invalid authoritative 422 details remain failures', () async {
+    const cases = <({String label, Object? details})>[
+      (label: 'null details', details: null),
+      (label: 'empty violations', details: {'violations': <Object>[]}),
+      (
+        label: 'non-map violation',
+        details: {
+          'violations': ['not-a-map'],
+        },
+      ),
+    ];
+
+    for (final (:label, :details) in cases) {
+      var createCalls = 0;
+      final error = MagicApiException(
+        statusCode: 422,
+        message: 'invalid constraint details',
+        details: details,
+      );
+      final flow = LessonEditorSaveFlow.forTesting(
+        preview: (_) async => _validAnalysis,
+        create: (_) async {
+          createCalls++;
+          throw error;
+        },
+      );
+
+      final result = await flow.save(_createCommand());
+
+      expect(result, isA<LessonSaveFailure>(), reason: label);
+      expect((result as LessonSaveFailure).error, same(error), reason: label);
+      expect(createCalls, 1, reason: label);
+    }
+  });
+
   test('non-constraint create failures return a typed failure', () async {
     final error = MagicApiException(
       statusCode: 500,
