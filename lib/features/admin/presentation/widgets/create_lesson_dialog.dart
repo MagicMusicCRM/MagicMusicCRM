@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
-import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/models/lesson_schedule_analysis.dart';
 import 'package:magic_music_crm/core/navigation/app_back_policy.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_text.dart';
@@ -757,7 +756,7 @@ class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
         : _financialEditOperation;
     final changed = await showLessonDecisionFlow(
       context,
-      api: ref.read(magicApiClientProvider),
+      crm: _crm,
       operation: operation,
       lesson: widget.lesson!,
       successor: scheduleChanged ? payload : null,

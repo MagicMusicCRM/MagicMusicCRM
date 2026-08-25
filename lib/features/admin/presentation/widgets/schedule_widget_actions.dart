@@ -98,10 +98,8 @@ extension _ScheduleActions on _ScheduleWidgetState {
     if (widget.canWrite && lessonId?.isNotEmpty == true) {
       try {
         final response = await ref
-            .read(magicApiClientProvider)
-            .get<Map<String, dynamic>>(
-              '/crm/lessons/$lessonId/settlement-history',
-            );
+            .read(magicCrmServiceProvider)
+            .getLessonSettlementHistory(lessonId!);
         settlementHistory = [
           for (final item in response['items'] as List? ?? const [])
             if (item is Map) Map<String, dynamic>.from(item),
@@ -327,7 +325,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
     if (!widget.canWrite) return;
     final changed = await showLessonDecisionFlow(
       context,
-      api: ref.read(magicApiClientProvider),
+      crm: ref.read(magicCrmServiceProvider),
       operation: LessonDecisionOperation.cancel,
       lesson: lesson,
     );
@@ -346,7 +344,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
     if (!widget.canWrite) return;
     final changed = await showLessonDecisionFlow(
       context,
-      api: ref.read(magicApiClientProvider),
+      crm: ref.read(magicCrmServiceProvider),
       operation: LessonDecisionOperation.settle,
       lesson: lesson,
     );
@@ -368,7 +366,7 @@ extension _ScheduleActions on _ScheduleWidgetState {
     if (!widget.canWrite) return;
     final changed = await showLessonDecisionFlow(
       context,
-      api: ref.read(magicApiClientProvider),
+      crm: ref.read(magicCrmServiceProvider),
       operation: operation,
       lesson: lesson,
     );

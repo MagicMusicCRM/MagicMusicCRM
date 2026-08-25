@@ -9,6 +9,11 @@ extension MagicCrmSchedule on MagicCrmService {
         queryParameters: {'branchId': branchId},
       );
 
+  Future<Map<String, dynamic>> getLessonSettlementHistory(String lessonId) =>
+      _api.get<Map<String, dynamic>>(
+        '/crm/lessons/$lessonId/settlement-history',
+      );
+
   Future<LessonScheduleAnalysis> analyzeLessonSchedule({
     required String clientType,
     required String clientId,

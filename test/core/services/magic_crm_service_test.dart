@@ -3294,6 +3294,32 @@ void main() {
         expect(adapter.requests[3].body, isNot(contains('subscriptionId')));
       },
     );
+    test('owns the lesson settlement history route', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/crm/lessons/lesson-a/settlement-history',
+          statusCode: 200,
+          body: {
+            'items': [
+              {'transitionId': 'transition-a'},
+            ],
+          },
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      final response = await service.getLessonSettlementHistory('lesson-a');
+
+      expect(response['items'], [
+        {'transitionId': 'transition-a'},
+      ]);
+      expect(adapter.requests.single.method, 'GET');
+      expect(
+        adapter.requests.single.path,
+        '/crm/lessons/lesson-a/settlement-history',
+      );
+    });
+
     test('owns lesson analysis, catalog, preview and create routes', () async {
       final adapter = _FakeAdapter([
         _FakeResponse(

@@ -1,210 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
-import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
+import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/theme/lesson_state_palette.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_controller.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_models.dart';
 
+export 'lesson_decision/lesson_decision_controller.dart';
 export 'lesson_decision/lesson_decision_models.dart';
-
-class LessonDecisionController {
-  LessonDecisionController({
-    required MagicApiClient api,
-    required this.operation,
-    required this.lesson,
-    this.successor,
-    this.initialSettlementTypeKey,
-    this.initialCompensationRuleKey,
-    this.initialCompensationValueMinor,
-  }) : _api = api,
-       _expectedVersion = (lesson['version'] as num?)?.toInt();
-
-  final MagicApiClient _api;
-  final LessonDecisionOperation operation;
-  final Map<String, dynamic> lesson;
-  final Map<String, dynamic>? successor;
-  final String? initialSettlementTypeKey;
-  final String? initialCompensationRuleKey;
-  final String? initialCompensationValueMinor;
-
-  bool get isGroupLesson {
-    final groupId = lesson['group_id'] ?? lesson['groupId'];
-    return groupId?.toString().isNotEmpty == true;
-  }
-
-  List<LessonDecisionParticipant> get groupParticipants {
-    final raw = lesson['group_participants'] ?? lesson['groupParticipants'];
-    final result = <LessonDecisionParticipant>[];
-    final seen = <String>{};
-    for (final item in raw as List? ?? const []) {
-      if (item is! Map) continue;
-      final participant = Map<String, dynamic>.from(item);
-      final id =
-          (participant['clientId'] ??
-                  participant['client_id'] ??
-                  participant['studentId'] ??
-                  participant['student_id'])
-              ?.toString();
-      if (id == null || id.isEmpty || !seen.add(id)) continue;
-      final name =
-          (participant['clientName'] ??
-                  participant['client_name'] ??
-                  participant['studentName'] ??
-                  participant['student_name'])
-              ?.toString()
-              .trim();
-      result.add(
-        LessonDecisionParticipant(
-          id: id,
-          name: name?.isNotEmpty == true
-              ? name!
-              : 'Ученик ${result.length + 1}',
-        ),
-      );
-    }
-    return result;
-  }
-
-  Map<String, String> get participantNames => {
-    for (final participant in groupParticipants)
-      participant.id: participant.name,
-  };
-
-  bool get isCompletedReschedule {
-    if (operation != LessonDecisionOperation.reschedule) return false;
-    final state =
-        (lesson['lifecycle_state'] ??
-                lesson['lifecycleState'] ??
-                lesson['status'])
-            ?.toString()
-            .toLowerCase();
-    return state == 'successfully_completed' ||
-        state == 'completed' ||
-        state == 'done';
-  }
-
-  Map<String, dynamic>? _previewPayload;
-  MagicMutationIdentity? _commitIdentity;
-  int? _expectedVersion;
-
-  MagicApiException? recoverStaleCommit(Object error) {
-    if (error is! MagicApiException || error.details is! Map) return null;
-    final details = Map<String, dynamic>.from(error.details! as Map);
-    final code = details['code']?.toString();
-    if (code != 'STALE_LESSON_VERSION' &&
-        code != 'LESSON_TRANSITION_PREVIEW_STALE') {
-      return null;
-    }
-    if (code == 'STALE_LESSON_VERSION') {
-      final rawVersion = details['currentVersion'];
-      final currentVersion = rawVersion is num
-          ? rawVersion.toInt()
-          : int.tryParse(rawVersion?.toString() ?? '');
-      if (currentVersion != null && currentVersion > 0) {
-        _expectedVersion = currentVersion;
-      }
-    }
-    _previewPayload = null;
-    _commitIdentity = null;
-    return MagicApiException(
-      statusCode: error.statusCode,
-      details: details,
-      message: code == 'STALE_LESSON_VERSION'
-          ? 'Версия обновлена другим сотрудником. Проверьте параметры и '
-                'нажмите «Рассчитать» ещё раз.'
-          : 'Условия расчёта изменились после предварительного просмотра. '
-                'Проверьте параметры и нажмите «Рассчитать» ещё раз.',
-    );
-  }
-
-  Future<LessonDecisionCatalog> loadCatalog() async {
-    final effectiveBranchId =
-        successor?['branchId'] ??
-        successor?['branch_id'] ??
-        lesson['branch_id'] ??
-        lesson['branchId'];
-    final response = await _api.get<Map<String, dynamic>>(
-      '/crm/configuration/lesson-decisions',
-      queryParameters: {'branchId': effectiveBranchId?.toString()},
-    );
-    return LessonDecisionCatalog.fromJson(response, operation);
-  }
-
-  Future<LessonDecisionPreview> preview({
-    required String reason,
-    required String settlementTypeKey,
-    required String compensationRuleKey,
-    String? compensationValueMinor,
-    List<Map<String, dynamic>> clientDecisions = const [],
-  }) async {
-    final expectedVersion = _expectedVersion;
-    if (expectedVersion == null || expectedVersion < 1) {
-      throw StateError('Обновите расписание: версия занятия не получена.');
-    }
-    final payload = <String, dynamic>{
-      'expectedVersion': expectedVersion,
-      if (operation != LessonDecisionOperation.plannedSettlement &&
-          operation != LessonDecisionOperation.correction)
-        'reasonCode': 'manual',
-      'reasonText': reason.trim(),
-      'financialDecision': {
-        'settlementTypeKey': settlementTypeKey,
-        if (clientDecisions.isNotEmpty)
-          'clientDecisions': [
-            for (final decision in clientDecisions)
-              Map<String, dynamic>.from(decision),
-          ],
-        'teacherCompensationRuleKey': compensationRuleKey,
-        'teacherCompensationValueMinor': ?compensationValueMinor,
-      },
-      if (operation == LessonDecisionOperation.reschedule)
-        'successor': successor ?? const <String, dynamic>{},
-    };
-    final response = await _api.post<Map<String, dynamic>>(
-      '/crm/lessons/${lesson['id']}/${operation.apiKey}/preview',
-      data: payload,
-    );
-    _previewPayload = payload;
-    _commitIdentity = MagicMutationIdentity.create(
-      'lesson-${operation.apiKey}-${lesson['id']}',
-    );
-    return LessonDecisionPreview(response);
-  }
-
-  Future<Map<String, dynamic>> commit(LessonDecisionPreview preview) {
-    final payload = _previewPayload;
-    final identity = _commitIdentity;
-    final token = preview.token;
-    if (payload == null ||
-        identity == null ||
-        token == null ||
-        !preview.canConfirm) {
-      throw StateError('Сначала получите актуальный расчёт.');
-    }
-    final data = {...payload, 'previewToken': token, 'confirm': true};
-    if (operation == LessonDecisionOperation.plannedSettlement) {
-      return _api.request<Map<String, dynamic>>(
-        'PUT',
-        '/crm/lessons/${lesson['id']}/${operation.apiKey}',
-        data: data,
-        mutationIdentity: identity,
-      );
-    }
-    return _api.postIdempotent<Map<String, dynamic>>(
-      '/crm/lessons/${lesson['id']}/${operation.apiKey}',
-      identity: identity,
-      data: data,
-    );
-  }
-}
 
 Future<bool?> showLessonDecisionFlow(
   BuildContext context, {
-  required MagicApiClient api,
+  required MagicCrmService crm,
   required LessonDecisionOperation operation,
   required Map<String, dynamic> lesson,
   Map<String, dynamic>? successor,
@@ -213,7 +24,7 @@ Future<bool?> showLessonDecisionFlow(
   String? initialCompensationValueMinor,
 }) {
   final controller = LessonDecisionController(
-    api: api,
+    crm: crm,
     operation: operation,
     lesson: lesson,
     successor: successor,

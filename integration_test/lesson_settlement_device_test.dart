@@ -7,6 +7,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
+import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/create_lesson_dialog.dart';
@@ -632,7 +633,7 @@ void main() {
               builder: (context) => FilledButton(
                 onPressed: () => showLessonDecisionFlow(
                   context,
-                  api: api,
+                  crm: MagicCrmService(api),
                   operation: operation,
                   lesson: const {
                     'id': 'lesson-1',
@@ -713,7 +714,7 @@ void main() {
                 child: FilledButton(
                   onPressed: () => showLessonDecisionFlow(
                     context,
-                    api: api,
+                    crm: MagicCrmService(api),
                     operation: LessonDecisionOperation.plannedSettlement,
                     lesson: const {
                       'id': 'lesson-five-pay-rules',
@@ -811,7 +812,7 @@ void main() {
                   child: FilledButton(
                     onPressed: () => showLessonDecisionFlow(
                       context,
-                      api: api,
+                      crm: MagicCrmService(api),
                       operation: LessonDecisionOperation.plannedSettlement,
                       lesson: const {
                         'id': 'lesson-group-decision',

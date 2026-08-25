@@ -4,6 +4,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
+import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision_flow.dart';
 
 const _lessonId = '10000000-0000-4000-8000-000000000001';
@@ -341,7 +342,7 @@ Widget _host(
       builder: (context) => FilledButton(
         onPressed: () => showLessonDecisionFlow(
           context,
-          api: api,
+          crm: MagicCrmService(api),
           operation: operation,
           lesson: lesson,
           successor: successor,
@@ -393,6 +394,57 @@ Future<void> _openAndFill(
 
 void main() {
   setUpAll(() => initializeDateFormatting('ru'));
+
+  test('keeps one mutation identity between preview and commit', () async {
+    final api = _LessonDecisionApi();
+    final controller = LessonDecisionController(
+      crm: MagicCrmService(api),
+      operation: LessonDecisionOperation.reschedule,
+      lesson: _lesson,
+      successor: _successor,
+    );
+
+    final preview = await controller.preview(
+      reason: 'Перенос',
+      settlementTypeKey: 'standard',
+      compensationRuleKey: 'standard',
+    );
+    await controller.commit(preview);
+
+    expect(api.identities, hasLength(1));
+    expect(api.commits.single['previewToken'], 'signed-preview');
+  });
+
+  test(
+    'clears preview identity and adopts current version after stale commit',
+    () {
+      final controller = LessonDecisionController(
+        crm: MagicCrmService(_LessonDecisionApi()),
+        operation: LessonDecisionOperation.reschedule,
+        lesson: _lesson,
+        successor: _successor,
+      );
+
+      final recovered = controller.recoverStaleCommit(
+        const MagicApiException(
+          statusCode: 409,
+          message: 'stale',
+          details: {'code': 'STALE_LESSON_VERSION', 'currentVersion': 7},
+        ),
+      );
+
+      expect(recovered?.message, contains('Версия обновлена'));
+      expect(
+        () => controller.commit(
+          const LessonDecisionPreview({
+            'canConfirm': true,
+            'previewToken': 'old',
+          }),
+        ),
+        throwsStateError,
+      );
+    },
+  );
 
   testWidgets('preview precedes commit and retry keeps input and identity', (
     tester,
@@ -674,7 +726,7 @@ void main() {
               builder: (context) => FilledButton(
                 onPressed: () => showLessonDecisionFlow(
                   context,
-                  api: api,
+                  crm: MagicCrmService(api),
                   operation: LessonDecisionOperation.plannedSettlement,
                   lesson: const {
                     'id': _groupLessonId,

@@ -7,6 +7,7 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
+import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
@@ -774,7 +775,7 @@ class _ModalDeviceHomeState extends State<_ModalDeviceHome> {
             onPressed: () async {
               final result = await showLessonDecisionFlow(
                 context,
-                api: _decisionApi,
+                crm: MagicCrmService(_decisionApi),
                 operation: LessonDecisionOperation.reschedule,
                 lesson: const {
                   'id': '10000000-0000-4000-8000-000000000001',
@@ -798,7 +799,7 @@ class _ModalDeviceHomeState extends State<_ModalDeviceHome> {
             onPressed: () async {
               final result = await showLessonDecisionFlow(
                 context,
-                api: _completedDecisionApi,
+                crm: MagicCrmService(_completedDecisionApi),
                 operation: LessonDecisionOperation.reschedule,
                 lesson: const {
                   'id': '10000000-0000-4000-8000-000000000002',
@@ -826,7 +827,7 @@ class _ModalDeviceHomeState extends State<_ModalDeviceHome> {
             onPressed: () async {
               final result = await showLessonDecisionFlow(
                 context,
-                api: _cancelDecisionApi,
+                crm: MagicCrmService(_cancelDecisionApi),
                 operation: LessonDecisionOperation.cancel,
                 lesson: _cancelLesson,
               );

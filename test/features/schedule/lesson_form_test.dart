@@ -9,6 +9,7 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
+import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/create_lesson_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision_flow.dart';
@@ -529,7 +530,7 @@ Widget _decisionHost(_FakeApiClient client, LessonDecisionOperation operation) {
         builder: (context) => FilledButton(
           onPressed: () => showLessonDecisionFlow(
             context,
-            api: client,
+            crm: MagicCrmService(client),
             operation: operation,
             lesson: const {
               'id': '66666666-6666-6666-6666-666666666666',
