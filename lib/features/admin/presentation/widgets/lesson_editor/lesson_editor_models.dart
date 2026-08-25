@@ -1,0 +1,221 @@
+import '../lesson_decision/lesson_decision_models.dart';
+
+const _lessonEditorAbsent = Object();
+
+class LessonClientRef {
+  const LessonClientRef({
+    required this.type,
+    required this.id,
+    required this.label,
+    this.branchId,
+  });
+
+  final String type;
+  final String id;
+  final String label;
+  final String? branchId;
+
+  String get key => '$type:$id';
+
+  @override
+  bool operator ==(Object other) =>
+      other is LessonClientRef &&
+      other.type == type &&
+      other.id == id &&
+      other.label == label &&
+      other.branchId == branchId;
+
+  @override
+  int get hashCode => Object.hash(type, id, label, branchId);
+}
+
+class LessonEditorDraft {
+  const LessonEditorDraft({
+    required this.localStart,
+    required this.durationMinutes,
+    required this.isTrial,
+    required this.completionType,
+    required this.clientChargeType,
+    this.client,
+    this.teacherId,
+    this.branchId,
+    this.roomId,
+    this.subscriptionId,
+    this.settlementTypeKey,
+    this.compensationRuleKey,
+    this.compensationValueMinor,
+    this.plannedSettlementReason = '',
+  });
+
+  final DateTime localStart;
+  final int durationMinutes;
+  final bool isTrial;
+  final String completionType;
+  final String clientChargeType;
+  final LessonClientRef? client;
+  final String? teacherId;
+  final String? branchId;
+  final String? roomId;
+  final String? subscriptionId;
+  final String? settlementTypeKey;
+  final String? compensationRuleKey;
+  final String? compensationValueMinor;
+  final String plannedSettlementReason;
+
+  LessonEditorDraft copyWith({
+    DateTime? localStart,
+    int? durationMinutes,
+    bool? isTrial,
+    String? completionType,
+    String? clientChargeType,
+    Object? client = _lessonEditorAbsent,
+    Object? teacherId = _lessonEditorAbsent,
+    Object? branchId = _lessonEditorAbsent,
+    Object? roomId = _lessonEditorAbsent,
+    Object? subscriptionId = _lessonEditorAbsent,
+    Object? settlementTypeKey = _lessonEditorAbsent,
+    Object? compensationRuleKey = _lessonEditorAbsent,
+    Object? compensationValueMinor = _lessonEditorAbsent,
+    String? plannedSettlementReason,
+  }) => LessonEditorDraft(
+    localStart: localStart ?? this.localStart,
+    durationMinutes: durationMinutes ?? this.durationMinutes,
+    isTrial: isTrial ?? this.isTrial,
+    completionType: completionType ?? this.completionType,
+    clientChargeType: clientChargeType ?? this.clientChargeType,
+    client: identical(client, _lessonEditorAbsent)
+        ? this.client
+        : client as LessonClientRef?,
+    teacherId: identical(teacherId, _lessonEditorAbsent)
+        ? this.teacherId
+        : teacherId as String?,
+    branchId: identical(branchId, _lessonEditorAbsent)
+        ? this.branchId
+        : branchId as String?,
+    roomId: identical(roomId, _lessonEditorAbsent)
+        ? this.roomId
+        : roomId as String?,
+    subscriptionId: identical(subscriptionId, _lessonEditorAbsent)
+        ? this.subscriptionId
+        : subscriptionId as String?,
+    settlementTypeKey: identical(settlementTypeKey, _lessonEditorAbsent)
+        ? this.settlementTypeKey
+        : settlementTypeKey as String?,
+    compensationRuleKey: identical(compensationRuleKey, _lessonEditorAbsent)
+        ? this.compensationRuleKey
+        : compensationRuleKey as String?,
+    compensationValueMinor:
+        identical(compensationValueMinor, _lessonEditorAbsent)
+        ? this.compensationValueMinor
+        : compensationValueMinor as String?,
+    plannedSettlementReason:
+        plannedSettlementReason ?? this.plannedSettlementReason,
+  );
+}
+
+class LessonEditorSnapshot {
+  const LessonEditorSnapshot({
+    required this.lessonId,
+    required this.expectedVersion,
+    required this.rawLesson,
+    required this.clientLocked,
+    required this.initialSchedulePayload,
+    required this.initialCompensationRuleKey,
+    required this.initialCompensationValueMinor,
+  });
+
+  final String lessonId;
+  final int? expectedVersion;
+  final Map<String, dynamic> rawLesson;
+  final bool clientLocked;
+  final Map<String, dynamic> initialSchedulePayload;
+  final String? initialCompensationRuleKey;
+  final String? initialCompensationValueMinor;
+}
+
+class LessonEditorInitialInput {
+  const LessonEditorInitialInput({
+    required this.initialDate,
+    required this.initialRoomId,
+    required this.initialBranchId,
+    required this.initialDurationMinutes,
+    required this.lesson,
+    required this.initialIsTrial,
+    this.leadId,
+    this.leadName,
+    this.clientType,
+    this.clientId,
+    this.clientName,
+  });
+
+  final DateTime? initialDate;
+  final String? initialRoomId;
+  final String? initialBranchId;
+  final int? initialDurationMinutes;
+  final Map<String, dynamic>? lesson;
+  final bool initialIsTrial;
+  final String? leadId;
+  final String? leadName;
+  final String? clientType;
+  final String? clientId;
+  final String? clientName;
+}
+
+class LessonEditorSession {
+  const LessonEditorSession({
+    required this.draft,
+    required this.snapshot,
+    required this.seededClient,
+  });
+
+  final LessonEditorDraft draft;
+  final LessonEditorSnapshot? snapshot;
+  final LessonClientRef? seededClient;
+
+  bool get isEdit => snapshot != null;
+  bool get isGroupEdit => isEdit && draft.client?.type == 'group';
+}
+
+class LessonEditorReferenceItem {
+  const LessonEditorReferenceItem({
+    required this.id,
+    required this.label,
+    required this.raw,
+    this.branchId,
+    this.status,
+    this.assignedBranchIds = const {},
+  });
+
+  final String id;
+  final String label;
+  final Map<String, dynamic> raw;
+  final String? branchId;
+  final String? status;
+  final Set<String> assignedBranchIds;
+}
+
+class LessonEditorReferenceState {
+  const LessonEditorReferenceState({
+    required this.teachers,
+    required this.clients,
+    required this.branches,
+    required this.rooms,
+    required this.subscriptions,
+    required this.catalog,
+  });
+
+  const LessonEditorReferenceState.empty()
+    : teachers = const [],
+      clients = const [],
+      branches = const [],
+      rooms = const [],
+      subscriptions = const [],
+      catalog = null;
+
+  final List<LessonEditorReferenceItem> teachers;
+  final List<LessonEditorReferenceItem> clients;
+  final List<LessonEditorReferenceItem> branches;
+  final List<LessonEditorReferenceItem> rooms;
+  final List<LessonEditorReferenceItem> subscriptions;
+  final LessonDecisionCatalog? catalog;
+}
