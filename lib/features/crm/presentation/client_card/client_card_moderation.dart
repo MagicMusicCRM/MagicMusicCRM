@@ -43,51 +43,66 @@ extension _ClientCardModeration on _ClientCardState {
 
     _emitState(() => _blacklistBusy = true);
     try {
-      // Банится та половина карточки, которая есть: аккаунт клиента цепляется
-      // к любой из них, и бан только на ученике оставил бы лиду открытый чат.
-      final service = ref.read(magicCrmServiceProvider);
-      if (_mode.hasStudentHalf && _studentId.isNotEmpty) {
-        await service.setClientBlacklist(
-          entity: 'students',
-          id: _studentId,
-          blacklisted: value,
-          reason: reason,
-        );
-      }
-      if (_mode.hasLeadHalf && _leadId.isNotEmpty) {
-        await service.setClientBlacklist(
-          entity: 'leads',
-          id: _leadId,
-          blacklisted: value,
-          reason: reason,
-        );
-      }
-      // Перечитываем ту половину, которая открыта: флаг едет в её DTO.
-      if (_mode.hasStudentHalf && _studentId.isNotEmpty) {
-        await _fetchStudentData();
-      } else {
-        await _fetchCard();
-      }
+      await _setBlacklistOnPresentClientHalves(value, reason);
+      await _reloadBlacklistedClient();
       unawaited(_reloadOperationalHistory());
-      if (mounted) {
-        MagicToast.show(
-          context,
-          value ? 'Клиент в чёрном списке' : 'Клиент убран из чёрного списка',
-          type: value ? MagicToastType.danger : MagicToastType.success,
-        );
-      }
+      _showBlacklistResult(value);
     } catch (e) {
-      if (mounted) {
-        MagicToast.show(
-          context,
-          'Не удалось изменить чёрный список',
-          detail: userErrorMessage(e),
-          type: MagicToastType.danger,
-        );
-      }
+      _showBlacklistFailure(e);
     } finally {
       if (mounted) _emitState(() => _blacklistBusy = false);
     }
+  }
+
+  Future<void> _setBlacklistOnPresentClientHalves(
+    bool value,
+    String? reason,
+  ) async {
+    // Банится каждая существующая половина: аккаунт клиента может быть
+    // привязан к любой из них, поэтому частичный бан оставляет обход.
+    final service = ref.read(magicCrmServiceProvider);
+    for (final target in _presentBlacklistTargets()) {
+      await service.setClientBlacklist(
+        entity: target.$1,
+        id: target.$2,
+        blacklisted: value,
+        reason: reason,
+      );
+    }
+  }
+
+  List<(String, String)> _presentBlacklistTargets() {
+    return [
+      if (_mode.hasStudentHalf && _studentId.isNotEmpty)
+        ('students', _studentId),
+      if (_mode.hasLeadHalf && _leadId.isNotEmpty) ('leads', _leadId),
+    ];
+  }
+
+  Future<void> _reloadBlacklistedClient() {
+    // Перечитываем открытую половину: актуальный флаг приходит в её DTO.
+    return _mode.hasStudentHalf && _studentId.isNotEmpty
+        ? _fetchStudentData()
+        : _fetchCard();
+  }
+
+  void _showBlacklistResult(bool value) {
+    if (!mounted) return;
+    MagicToast.show(
+      context,
+      value ? 'Клиент в чёрном списке' : 'Клиент убран из чёрного списка',
+      type: value ? MagicToastType.danger : MagicToastType.success,
+    );
+  }
+
+  void _showBlacklistFailure(Object error) {
+    if (!mounted) return;
+    MagicToast.show(
+      context,
+      'Не удалось изменить чёрный список',
+      detail: userErrorMessage(error),
+      type: MagicToastType.danger,
+    );
   }
 
   Future<String?> _askBlacklistReason() async {

@@ -143,6 +143,7 @@ class FakeCardApiClient extends MagicApiClient {
   final List<String> getRequests = [];
   final List<CardGetCall> getCalls = [];
   final List<CardPostCall> postRequests = [];
+  final List<CardPostCall> patchRequests = [];
   final List<IdempotentCardCall> idempotentRequests = [];
   final Map<String, String> _schedulePlanCreateIds = {};
   int studentCardLoadCount = 0;
@@ -567,6 +568,10 @@ class FakeCardApiClient extends MagicApiClient {
     Map<String, dynamic>? queryParameters,
     bool authenticated = true,
   }) async {
+    patchRequests.add((
+      path: path,
+      data: data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{},
+    ));
     if (lead != null && path == '/crm/leads/${lead!['id']}') {
       requests.add('PATCH $path');
       updateLeadBody = Map<String, dynamic>.from(data as Map);

@@ -54,6 +54,47 @@ void main() {
     }
   });
 
+  testWidgets('blacklist captures a reason and mutates the open lead', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 900);
+    addTearDown(tester.view.reset);
+
+    final api = FakeCardApiClient(
+      lead: const {
+        'id': 'lead-1',
+        'firstName': 'Иван',
+        'lastName': 'Петров',
+        'phone': '+79990000000',
+        'blacklisted': false,
+      },
+    );
+    await pumpClientCard(tester, api: api, seed: const {'id': 'lead-1'});
+
+    final toggle = find.widgetWithText(SwitchListTile, 'Чёрный список');
+    await tester.ensureVisible(toggle);
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'оскорбления в чате');
+    await tester.tap(find.widgetWithText(FilledButton, 'В чёрный список'));
+    await tester.pumpAndSettle();
+
+    expect(
+      api.patchRequests,
+      contains(
+        predicate<CardPostCall>(
+          (request) =>
+              request.path == '/crm/leads/lead-1/blacklist' &&
+              request.data['blacklisted'] == true &&
+              request.data['reason'] == 'оскорбления в чате',
+        ),
+      ),
+    );
+    expect(find.text('Клиент в чёрном списке'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 4));
+  });
+
   const uuid = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
   const statuses = <StatusRecord>[
     (uuid, 'Новый', Colors.amber),
