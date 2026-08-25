@@ -340,3 +340,31 @@ Under the approved production-first ranking, package 7 targets
 line coverage, and ten dependents. `create_lesson_dialog.dart`,
 `crm.service.ts`, `client_card_student.dart`, and `lesson_decision_flow.dart`
 remain in the mandatory god-file cleanup queue.
+
+## Package 7 verified outcome
+
+The Teacher Detail dialog ownership split is implemented and verified at
+`ab0f054baf67`.
+
+- The former `1,158`-NLOC cyclic god owner is replaced by an import-only public
+  shell of `234` NLOC and ten narrow semantic collaborators. Max CCN is `10`,
+  and the shell itself is max CCN `5`.
+- New-owner health ranges from `7.85` to `10.00`. Combined weighted deficit is
+  `800` versus `8,106`, a `90.1%` reduction; no god/brain finding or dependency
+  cycle remains. The shell's `4.73` headline is now historical co-change and
+  prior-fix risk, not current structural complexity.
+- Full Flutter verification passed `1,016/1,016`; analyzer and diff checks are
+  clean. Direct tests own every live split boundary, including payroll version,
+  access, RBAC, history, dialog-controller lifetime, and audit-reason behavior.
+- Sentrux improved from the package baseline `5745` to `5748`, with acyclicity
+  `10000`/raw `0`, depth `13`, equality `6262`, modularity `5381`, redundancy
+  `4889`, and both rules passing.
+
+Repository code-only health is now `6.30`, up from `6.26`; the global `7.5`
+contract and the all-god-files program remain open. Under the production-first
+policy, package 8 targets
+`lib/features/admin/presentation/widgets/create_lesson_dialog.dart`; the literal
+dashboard directive remains the subscription integration suite whose leading
+signal is historical co-change scatter. `server/src/crm/crm.service.ts`,
+`client_card_student.dart`, and `lesson_decision_flow.dart` remain mandatory
+follow-up packages.

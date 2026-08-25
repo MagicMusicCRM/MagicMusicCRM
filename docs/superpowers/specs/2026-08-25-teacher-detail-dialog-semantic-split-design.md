@@ -25,17 +25,24 @@ Split the dialog into independent Dart libraries with these responsibilities:
   the immutable initial editor model.
 - `teacher_payroll_controller.dart` owns local payroll loading, version state,
   and versioned mutations through the existing `MagicCrmService` port.
-- `teacher_payroll_dialogs.dart` owns typed confirmation/edit results and the
-  payroll reason, payout, rate, deletion, and bonus/deduction dialogs.
+- `teacher_detail_save_command.dart` owns normalized update payloads and the
+  salary/rate version-and-reason preparation policy.
+- `teacher_detail_access_flow.dart` owns credential loading and provision
+  orchestration through an injected dialog callback.
+- `teacher_payroll_dialogs.dart` and `teacher_payroll_entry_dialogs.dart` own
+  typed confirmation/edit results and the payroll reason, payout, rate,
+  deletion, and bonus/deduction dialogs. Route-owned text controllers are
+  disposed by `teacher_payroll_dialog_controller_owner.dart` only after the
+  animated dialog route unmounts.
 - `teacher_payroll_history.dart` owns rate and payout history presentation and
   delegates permitted actions through explicit callbacks.
 - `teacher_payroll_section.dart` owns payroll presentation orchestration and
   binds dialogs to the local controller.
 - `teacher_detail_content.dart` owns the summary, credential affordances,
   identity fields, access-role row, and employment form composition.
-- `teacher_detail_dialog.dart` remains the public shell and owns only teacher
-  editor lifetime, save coordination, access/lifecycle flows, and dialog
-  result semantics.
+- `teacher_detail_dialog.dart` remains the public shell and owns only editor
+  lifetime, bounded command coordination, UI adapters, and dialog result
+  semantics.
 
 All files use normal imports. The legacy `teacher_detail_widgets.dart` part is
 deleted, removing the cycle instead of renaming it.
@@ -77,6 +84,28 @@ deleted, removing the cycle instead of renaming it.
 - Sentrux is rescanned after each structural step; acyclicity remains `10000`,
   depth remains at most `13`, both architecture rules pass, and overall quality
   does not regress without an explained root-cause dimension.
+
+## Verified outcome
+
+The semantic split is implemented and verified at `ab0f054baf67`.
+
+- The cyclic `1,158`-NLOC part-based owner is deleted. The public shell is `234`
+  NLOC with max CCN `5`; every replacement is below `500` NLOC, max CCN is
+  `10`, and new-owner health ranges from `7.85` to `10.00`.
+- Combined replacement weighted deficit is `800` versus `8,106`, a `90.1%`
+  reduction. The shell headline remains `4.73` only because RepoWise retains
+  historical scatter (`29` co-change files), four prior fixes, and no ingested
+  line-coverage map; no god/brain or complex-method finding remains.
+- Every live semantic owner has a direct contract test. Full Flutter verification
+  passed `1,016/1,016`; focused RBAC, access, save, payroll version/reload,
+  dialog lifecycle, and presentation tests pass, and `flutter analyze` reports
+  no issues.
+- RepoWise is exact at the verified commit and reports no dependency cycle,
+  conformance violation, breaking change, or cross-repository break. Its sole
+  `missing_tests` row is the deleted `teacher_detail_widgets.dart` diff entry,
+  not a reachable production owner.
+- Sentrux closed at quality `5748`, acyclicity `10000` with raw `0`, depth `13`,
+  equality `6262`, modularity `5381`, redundancy `4889`, and both rules passing.
 
 ## Rollback
 
