@@ -16,30 +16,31 @@ void main() {
     'password_configured': true,
   };
 
-  testWidgets('credential metric is visible only to privileged actors', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      _host(
-        const TeacherDetailSummary(
-          teacher: teacher,
-          canManageCredentials: false,
+  testWidgets(
+    'content credential metric is visible only to privileged actors',
+    (tester) async {
+      await tester.pumpWidget(
+        _host(
+          const TeacherDetailSummary(
+            teacher: teacher,
+            canManageCredentials: false,
+          ),
         ),
-      ),
-    );
-    expect(find.text('Пароль'), findsNothing);
+      );
+      expect(find.text('Пароль'), findsNothing);
 
-    await tester.pumpWidget(
-      _host(
-        const TeacherDetailSummary(
-          teacher: teacher,
-          canManageCredentials: true,
+      await tester.pumpWidget(
+        _host(
+          const TeacherDetailSummary(
+            teacher: teacher,
+            canManageCredentials: true,
+          ),
         ),
-      ),
-    );
-    expect(find.text('Пароль'), findsOneWidget);
-    expect(find.text('Настроен'), findsOneWidget);
-  });
+      );
+      expect(find.text('Пароль'), findsOneWidget);
+      expect(find.text('Настроен'), findsOneWidget);
+    },
+  );
 
   testWidgets('history mutation menus are absent without management role', (
     tester,
