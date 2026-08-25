@@ -78,7 +78,7 @@ class _TrialControl extends StatelessWidget {
             ? 'Маркер зафиксирован при создании'
             : 'Не зависит от типа клиента и способа списания',
       ),
-      onChanged: locked || model.isSaving ? null : actions.selectTrial,
+      onChanged: locked ? null : actions.selectTrial,
     );
   }
 }
@@ -130,10 +130,8 @@ class _CompletionControl extends StatelessWidget {
                 child: Text('Успешно завершить'),
               ),
             ],
-            onChanged: model.isSaving
-                ? null
-                : (value) =>
-                      actions.selectCompletion(value ?? 'standard.success'),
+            onChanged: (value) =>
+                actions.selectCompletion(value ?? 'standard.success'),
           ),
       ],
     );
@@ -163,9 +161,7 @@ class _DecisionFields extends StatelessWidget {
           for (final item in catalog?.settlementTypes ?? const [])
             DropdownMenuItem(value: item.key, child: Text(item.label)),
         ],
-        onChanged: model.session.isEdit || model.isSaving
-            ? null
-            : actions.selectSettlement,
+        onChanged: model.session.isEdit ? null : actions.selectSettlement,
       ),
       second: DropdownButtonFormField<String>(
         menuMaxHeight: 256,
@@ -203,36 +199,46 @@ class _CompensationOverride extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SizedBox(height: 16),
-        TextFormField(
-          key: const ValueKey('lesson-compensation-value-field'),
-          initialValue: formatCompensationMinorInput(
-            draft.compensationValueMinor ?? selectedRule?.value,
+        KeyedSubtree(
+          key: ValueKey(
+            'lesson-compensation-value-rule-${draft.compensationRuleKey}',
           ),
-          enabled: !model.isSaving,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          inputFormatters: [
-            FilteringTextInputFormatter.allow(RegExp(r'[0-9,. ]')),
-          ],
-          decoration: InputDecoration(
-            labelText: _compensationInputLabel(selectedRule?.mode),
-            helperText: 'Действует только для этого занятия',
+          child: TextFormField(
+            key: const ValueKey('lesson-compensation-value-field'),
+            initialValue: formatCompensationMinorInput(
+              draft.compensationValueMinor ?? selectedRule?.value,
+            ),
+            enabled: !model.isSaving,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[0-9,. ]')),
+            ],
+            decoration: InputDecoration(
+              labelText: _compensationInputLabel(selectedRule?.mode),
+              helperText: 'Действует только для этого занятия',
+            ),
+            onChanged: actions.changeCompensationValue,
           ),
-          onChanged: actions.changeCompensationValue,
         ),
         if (!model.session.isEdit && model.compensationNeedsReason) ...[
           const SizedBox(height: 16),
-          TextFormField(
-            key: const ValueKey('lesson-compensation-override-reason-field'),
-            initialValue: draft.plannedSettlementReason,
-            enabled: !model.isSaving,
-            minLines: 2,
-            maxLines: 4,
-            maxLength: 500,
-            decoration: const InputDecoration(
-              labelText: 'Причина индивидуального значения *',
-              helperText: 'Причина сохранится в истории расчёта',
+          KeyedSubtree(
+            key: ValueKey(
+              'lesson-compensation-reason-rule-${draft.compensationRuleKey}',
             ),
-            onChanged: actions.changePlannedSettlementReason,
+            child: TextFormField(
+              key: const ValueKey('lesson-compensation-override-reason-field'),
+              initialValue: draft.plannedSettlementReason,
+              enabled: !model.isSaving,
+              minLines: 2,
+              maxLines: 4,
+              maxLength: 500,
+              decoration: const InputDecoration(
+                labelText: 'Причина индивидуального значения *',
+                helperText: 'Причина сохранится в истории расчёта',
+              ),
+              onChanged: actions.changePlannedSettlementReason,
+            ),
           ),
         ],
       ],
@@ -275,7 +281,7 @@ class _FundingField extends StatelessWidget {
             (locked && draft.clientChargeType == 'none'))
           const DropdownMenuItem(value: 'none', child: Text('Без списания')),
       ],
-      onChanged: locked || model.isSaving
+      onChanged: locked
           ? null
           : (value) => actions.selectFunding(value ?? 'none'),
     );
@@ -301,10 +307,7 @@ class _SubscriptionField extends StatelessWidget {
         placeholder: subscriptions.isEmpty
             ? 'Нет активных абонементов'
             : 'Выберите абонемент',
-        enabled:
-            !model.session.isEdit &&
-            !model.isSaving &&
-            subscriptions.isNotEmpty,
+        enabled: !model.session.isEdit && subscriptions.isNotEmpty,
         selectedId: model.draft.subscriptionId,
         items: [
           for (final subscription in subscriptions)

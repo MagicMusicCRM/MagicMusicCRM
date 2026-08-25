@@ -9,13 +9,11 @@ class LessonParticipantSectionModel {
     required this.session,
     required this.draft,
     required this.references,
-    required this.isDisabled,
   });
 
   final LessonEditorSession session;
   final LessonEditorDraft draft;
   final LessonEditorReferenceState references;
-  final bool isDisabled;
 
   bool get isGroupEdit => session.isGroupEdit;
 
@@ -37,6 +35,7 @@ class LessonParticipantSectionModel {
 class LessonParticipantSection extends StatelessWidget {
   const LessonParticipantSection({
     required this.model,
+    required this.onSearchClients,
     required this.onClientChanged,
     required this.onBranchChanged,
     required this.onRoomChanged,
@@ -45,6 +44,7 @@ class LessonParticipantSection extends StatelessWidget {
   });
 
   final LessonParticipantSectionModel model;
+  final Future<List<LessonClientRef>> Function(String query) onSearchClients;
   final ValueChanged<LessonClientRef?> onClientChanged;
   final ValueChanged<String?> onBranchChanged;
   final ValueChanged<String?> onRoomChanged;
@@ -55,7 +55,11 @@ class LessonParticipantSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _ClientField(model: model, onChanged: onClientChanged),
+        _ClientField(
+          model: model,
+          onSearch: onSearchClients,
+          onChanged: onClientChanged,
+        ),
         const SizedBox(height: 16),
         _BranchRoomFields(
           model: model,
@@ -70,9 +74,14 @@ class LessonParticipantSection extends StatelessWidget {
 }
 
 class _ClientField extends StatelessWidget {
-  const _ClientField({required this.model, required this.onChanged});
+  const _ClientField({
+    required this.model,
+    required this.onSearch,
+    required this.onChanged,
+  });
 
   final LessonParticipantSectionModel model;
+  final Future<List<LessonClientRef>> Function(String query) onSearch;
   final ValueChanged<LessonClientRef?> onChanged;
 
   @override
@@ -107,8 +116,20 @@ class _ClientField extends StatelessWidget {
             data: item.raw,
           ),
       ],
+      onSearch: (query) async => [
+        for (final client in await onSearch(query))
+          SearchableSelectItem(
+            id: client.key,
+            label: client.label,
+            subtitle: client.type == 'lead' ? 'Lead' : 'Student',
+            data: {
+              'ref': {'type': client.type, 'id': client.id},
+              if (client.branchId != null) 'branchId': client.branchId,
+            },
+          ),
+      ],
       isNullable: false,
-      enabled: !model.isDisabled && !model.isClientLocked,
+      enabled: !model.isClientLocked,
       onSelected: (item) => onChanged(
         item == null ? null : _clientReference(item, model.references.clients),
       ),
@@ -142,7 +163,7 @@ class _BranchRoomFields extends StatelessWidget {
           for (final branch in model.references.branches)
             DropdownMenuItem(value: branch.id, child: Text(branch.label)),
         ],
-        onChanged: model.isDisabled ? null : onBranchChanged,
+        onChanged: onBranchChanged,
       ),
       second: SearchablePickerField(
         key: const ValueKey('lesson-room-field'),
@@ -150,7 +171,7 @@ class _BranchRoomFields extends StatelessWidget {
         placeholder: rooms.isEmpty
             ? 'Нет аудиторий в филиале'
             : 'Выберите аудиторию',
-        enabled: !model.isDisabled && rooms.isNotEmpty,
+        enabled: rooms.isNotEmpty,
         selectedId: draft.roomId,
         items: [
           for (final room in rooms)
@@ -185,7 +206,7 @@ class _TeacherFields extends StatelessWidget {
           placeholder: 'Выберите преподавателя',
           hintText: 'Введите имя или ФИО преподавателя',
           selectedId: draft.teacherId,
-          selectedLabel: _labelById(teachers, draft.teacherId),
+          selectedLabel: _labelById(model.references.teachers, draft.teacherId),
           items: [
             for (final teacher in teachers)
               SearchableSelectItem(
@@ -195,7 +216,7 @@ class _TeacherFields extends StatelessWidget {
               ),
           ],
           isNullable: false,
-          enabled: !model.isDisabled && teachers.isNotEmpty,
+          enabled: teachers.isNotEmpty,
           onSelected: (item) => onChanged(item?.id),
         ),
         if (draft.branchId != null && teachers.isEmpty)
@@ -260,6 +281,7 @@ LessonClientRef _clientReference(
       id: selected.id,
       label: selected.label,
       raw: selected.data ?? const {},
+      branchId: selected.data?['branchId']?.toString(),
     ),
   );
   final ref = reference.raw['ref'];

@@ -108,17 +108,13 @@ class LessonScheduleSection extends StatelessWidget {
               for (final minutes in durationOptions)
                 DropdownMenuItem(value: minutes, child: Text('$minutes мин')),
             ],
-            onChanged: model.isSaving
-                ? null
-                : (value) => onDurationChanged(value ?? 60),
+            onChanged: (value) => onDurationChanged(value ?? 60),
           ),
         ),
         const SizedBox(height: AppSpace.sm),
         OutlinedButton.icon(
           key: const ValueKey('lesson-run-schedule-analyzer'),
-          onPressed: model.isAnalyzing || model.isSaving
-              ? null
-              : () => onAnalyze(),
+          onPressed: model.isAnalyzing ? null : () => onAnalyze(),
           icon: model.isAnalyzing
               ? const SizedBox.square(
                   dimension: 16,
@@ -151,19 +147,17 @@ class LessonScheduleSection extends StatelessWidget {
     final selectedDate = DateTime(selected.year, selected.month, selected.day);
     return OutlinedButton.icon(
       key: const ValueKey('lesson-date-field'),
-      onPressed: model.isSaving
-          ? null
-          : () async {
-              final date = await showDatePicker(
-                context: context,
-                initialDate: selectedDate.isBefore(model.minimumDate)
-                    ? model.minimumDate
-                    : selectedDate,
-                firstDate: model.minimumDate,
-                lastDate: model.maximumDate,
-              );
-              if (date != null) onDateChanged(date);
-            },
+      onPressed: () async {
+        final date = await showDatePicker(
+          context: context,
+          initialDate: selectedDate.isBefore(model.minimumDate)
+              ? model.minimumDate
+              : selectedDate,
+          firstDate: model.minimumDate,
+          lastDate: model.maximumDate,
+        );
+        if (date != null) onDateChanged(date);
+      },
       icon: const Icon(Icons.calendar_today_rounded, size: 18),
       label: Text(_dateLabel(selectedDate)),
     );
@@ -173,21 +167,17 @@ class LessonScheduleSection extends StatelessWidget {
     final selected = TimeOfDay.fromDateTime(model.draft.localStart);
     return OutlinedButton.icon(
       key: const ValueKey('lesson-time-field'),
-      onPressed: model.isSaving
-          ? null
-          : () async {
-              final time = await showTimePicker(
-                context: context,
-                initialTime: selected,
-                builder: (context, child) => MediaQuery(
-                  data: MediaQuery.of(
-                    context,
-                  ).copyWith(alwaysUse24HourFormat: true),
-                  child: child!,
-                ),
-              );
-              if (time != null) onTimeChanged(time);
-            },
+      onPressed: () async {
+        final time = await showTimePicker(
+          context: context,
+          initialTime: selected,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+            child: child!,
+          ),
+        );
+        if (time != null) onTimeChanged(time);
+      },
       icon: const Icon(Icons.access_time_rounded, size: 18),
       label: Text(selected.format(context)),
     );

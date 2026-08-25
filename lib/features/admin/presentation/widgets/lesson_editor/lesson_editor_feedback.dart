@@ -5,6 +5,8 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'lesson_editor_models.dart';
 
 abstract interface class LessonEditorActions {
+  Future<List<LessonClientRef>> searchClients(String query);
+
   void selectClient(LessonClientRef? value);
 
   void selectBranch(String? value);

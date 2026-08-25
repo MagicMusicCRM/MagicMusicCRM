@@ -58,7 +58,6 @@ class LessonEditorView extends StatelessWidget {
   String get _title {
     if (title != null) return title!;
     if (model.session.isEdit) return 'Перенести или изменить занятие';
-    if (model.session.leadNoteSource != null) return 'Пробное занятие';
     return 'Новое занятие';
   }
 
@@ -111,8 +110,8 @@ class LessonEditorView extends StatelessWidget {
                   session: model.session,
                   draft: model.draft,
                   references: model.references,
-                  isDisabled: model.isSaving,
                 ),
+                onSearchClients: actions.searchClients,
                 onClientChanged: actions.selectClient,
                 onBranchChanged: actions.selectBranch,
                 onRoomChanged: actions.selectRoom,
