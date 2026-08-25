@@ -12,7 +12,6 @@ import {
 import { LessonCompletionService } from "./lesson-completion.service";
 import { LessonCompletionWorker } from "./lesson-completion.worker";
 import { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
-import { LessonSettlementRepository } from "../commerce/lesson-settlement.repository";
 import { LessonSettlementService } from "../commerce/lesson-settlement.service";
 import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
 import { RealtimeBus } from "../../realtime/realtime-bus";
@@ -58,10 +57,7 @@ describe("Durable Lesson completion worker (PostgreSQL)", () => {
       getOrThrow: () => databaseUrl,
     } as unknown as ConfigService);
     repository = new LessonCompletionWorkerRepository(database);
-    settlement = new LessonSettlementService(
-      database,
-      new LessonSettlementRepository(),
-    );
+    settlement = new LessonSettlementService(database);
     const reservations = new SubscriptionReservationService(database, {
       emitCrmChanged: jest.fn(),
       emitFinanceChanged: jest.fn(),

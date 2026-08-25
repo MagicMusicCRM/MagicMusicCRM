@@ -9,7 +9,6 @@ import { RealtimeBus } from "../../realtime/realtime-bus";
 import { ClientReferenceService } from "../clients/client-reference.service";
 import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
 import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
-import { LessonSettlementRepository } from "../commerce/lesson-settlement.repository";
 import { LessonSettlementService } from "../commerce/lesson-settlement.service";
 import { CrmPolicy } from "../crm.policy";
 import { AvailabilityRepository } from "./availability.repository";
@@ -93,7 +92,7 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       } as unknown as ConfigService),
       lifecycle,
       reservations,
-      new LessonSettlementService(database, new LessonSettlementRepository()),
+      new LessonSettlementService(database),
     );
   });
 

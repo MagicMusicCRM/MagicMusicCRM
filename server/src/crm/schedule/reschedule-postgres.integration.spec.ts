@@ -12,7 +12,6 @@ import { PlatformIntegrityRepository } from "../../platform/platform-integrity.r
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
 import { RealtimeBus } from "../../realtime/realtime-bus";
 import { LessonSettlementPort } from "../commerce/lesson-settlement.port";
-import { LessonSettlementRepository } from "../commerce/lesson-settlement.repository";
 import { LessonSettlementService } from "../commerce/lesson-settlement.service";
 import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
 import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
@@ -77,10 +76,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       constraints,
       lifecycle,
     ] as const;
-    settlement = new LessonSettlementService(
-      database,
-      new LessonSettlementRepository(),
-    );
+    settlement = new LessonSettlementService(database);
     service = new LessonTransitionService(
       ...base,
       settlement,

@@ -82,7 +82,6 @@ import { LessonCommandService } from "./schedule/lesson-command.service";
 import { LessonSeriesCommandService } from "./schedule/lesson-series-command.service";
 import { LessonTransitionService } from "./schedule/lesson-transition.service";
 import { LESSON_SETTLEMENT_PORT } from "./commerce/lesson-settlement.port";
-import { LessonSettlementRepository } from "./commerce/lesson-settlement.repository";
 import { LessonSettlementService } from "./commerce/lesson-settlement.service";
 import { LessonCompletionWorkerRepository } from "./schedule/completion-worker.repository";
 import { LessonCompletionService } from "./schedule/lesson-completion.service";
@@ -211,7 +210,6 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     SchedulePlanRepository,
     SchedulePlanService,
     LessonTransitionService,
-    LessonSettlementRepository,
     LessonSettlementService,
     LessonCompletionWorkerRepository,
     LessonCompletionService,

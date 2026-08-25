@@ -35,8 +35,8 @@ describe("CRM configuration contract boundary", () => {
       join(crmRoot, "crm-configuration.service.ts"),
       "utf8",
     );
-    const settlementRepository = readFileSync(
-      join(crmRoot, "commerce", "lesson-settlement.repository.ts"),
+    const settlementCatalog = readFileSync(
+      join(crmRoot, "commerce", "lesson-settlement-catalog.ts"),
       "utf8",
     );
 
@@ -47,10 +47,10 @@ describe("CRM configuration contract boundary", () => {
     expect(service).toMatch(
       /from ["']\.\/crm-configuration\.contracts["'];/,
     );
-    expect(settlementRepository).toMatch(
+    expect(settlementCatalog).toMatch(
       /import type \{[\s\S]*LessonSettlementTypeConfig[\s\S]*TeacherCompensationRuleConfig[\s\S]*\} from ["']\.\.\/crm-configuration\.contracts["'];/,
     );
-    expect(settlementRepository).not.toMatch(
+    expect(settlementCatalog).not.toMatch(
       /from ["']\.\.\/crm-configuration\.service["'];/,
     );
   });

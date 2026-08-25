@@ -5,7 +5,6 @@ import { DatabaseService } from "../../db/database.service";
 import { MigrationRunner } from "../../db/migration-runner";
 import { RealtimeBus } from "../../realtime/realtime-bus";
 import { LessonLifecycleRepository } from "../schedule/lesson-lifecycle.repository";
-import { LessonSettlementRepository } from "./lesson-settlement.repository";
 import { LessonSettlementService } from "./lesson-settlement.service";
 import { SubscriptionLifecycleRepository } from "./subscription-lifecycle.repository";
 import { SubscriptionReservationService } from "./subscription-reservation.service";
@@ -48,10 +47,7 @@ describe("Subscription reservations and Lesson settlement races", () => {
       database,
       realtime as unknown as RealtimeBus,
     );
-    settlement = new LessonSettlementService(
-      database,
-      new LessonSettlementRepository(),
-    );
+    settlement = new LessonSettlementService(database);
     lifecycle = new SubscriptionLifecycleRepository(database);
   });
 

@@ -15,7 +15,6 @@ import { LessonCommandService } from "./lesson-command.service";
 import { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
 import { LessonRequiredFieldValidator } from "./lesson-required-field.validator";
 import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
-import { LessonSettlementRepository } from "../commerce/lesson-settlement.repository";
 import { LessonSettlementService } from "../commerce/lesson-settlement.service";
 import { RealtimeBus } from "../../realtime/realtime-bus";
 import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
@@ -61,10 +60,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
         emitCrmChanged: jest.fn(),
         emitFinanceChanged: jest.fn(),
       } as unknown as RealtimeBus),
-      new LessonSettlementService(
-        database,
-        new LessonSettlementRepository(),
-      ),
+      new LessonSettlementService(database),
       new SubscriptionPreviewTokenService({
         get: (key: string) => key === "COMMERCE_PREVIEW_SECRET"
           ? "lesson-write-parity-preview-secret-32-bytes"

@@ -8,21 +8,27 @@ import {
   LessonSettlementResult,
   PreparedLessonSettlementPlan,
 } from "./lesson-settlement.port";
-import { LessonSettlementRepository } from "./lesson-settlement.repository";
+import { settleLesson } from "./lesson-settlement-execution";
+import {
+  assignLessonSettlementPlan,
+  cloneLessonSettlementPlan,
+  loadLessonSettlementPlan,
+  markLessonSettlementPlanState,
+  plannedLessonSubscriptionAllocations,
+  prepareLessonSettlementPlan,
+  replaceLessonSettlementPlan,
+} from "./lesson-settlement-plan.persistence";
 
 @Injectable()
 export class LessonSettlementService implements LessonSettlementPort {
-  constructor(
-    private readonly database: DatabaseService,
-    private readonly repository: LessonSettlementRepository,
-  ) {}
+  constructor(private readonly database: DatabaseService) {}
 
   settle(
     client: PoolClient,
     lessonId: string,
     input?: LessonSettlementInput,
   ): Promise<LessonSettlementResult> {
-    return this.repository.settle(client, lessonId, input);
+    return settleLesson(client, lessonId, input);
   }
 
   settleStandalone(
@@ -38,7 +44,7 @@ export class LessonSettlementService implements LessonSettlementPort {
     branchId: string,
     decision: LessonFinancialDecision,
   ): Promise<PreparedLessonSettlementPlan> {
-    return this.repository.preparePlan(client, branchId, decision);
+    return prepareLessonSettlementPlan(client, branchId, decision);
   }
 
   assignPlan(
@@ -51,7 +57,7 @@ export class LessonSettlementService implements LessonSettlementPort {
       reasonText?: string;
     },
   ) {
-    return this.repository.assignPlan(client, input);
+    return assignLessonSettlementPlan(client, input);
   }
 
   clonePlan(
@@ -67,11 +73,11 @@ export class LessonSettlementService implements LessonSettlementPort {
       };
     },
   ) {
-    return this.repository.clonePlan(client, input);
+    return cloneLessonSettlementPlan(client, input);
   }
 
   loadPlan(client: PoolClient, lessonId: string, lock = false) {
-    return this.repository.loadPlan(client, lessonId, lock);
+    return loadLessonSettlementPlan(client, lessonId, lock);
   }
 
   markPlanState(
@@ -80,7 +86,7 @@ export class LessonSettlementService implements LessonSettlementPort {
     state: "settled" | "review_required" | "cancelled",
     failureCode?: string,
   ) {
-    return this.repository.markPlanState(
+    return markLessonSettlementPlanState(
       client,
       lessonId,
       state,
@@ -93,7 +99,7 @@ export class LessonSettlementService implements LessonSettlementPort {
     lessonId: string,
     plan: PreparedLessonSettlementPlan,
   ) {
-    return this.repository.plannedSubscriptionAllocations(
+    return plannedLessonSubscriptionAllocations(
       client,
       lessonId,
       plan,
@@ -109,6 +115,6 @@ export class LessonSettlementService implements LessonSettlementPort {
       reasonText: string;
     },
   ) {
-    return this.repository.replacePlan(client, input);
+    return replaceLessonSettlementPlan(client, input);
   }
 }

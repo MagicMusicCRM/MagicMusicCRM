@@ -7,7 +7,6 @@ import { MigrationRunner } from "../../db/migration-runner";
 import { RealtimeBus } from "../../realtime/realtime-bus";
 import type { ConfigSnapshot } from "../crm-configuration.contracts";
 import { LessonLifecycleRepository } from "../schedule/lesson-lifecycle.repository";
-import { LessonSettlementRepository } from "./lesson-settlement.repository";
 import { LessonSettlementService } from "./lesson-settlement.service";
 import { SubscriptionReservationService } from "./subscription-reservation.service";
 
@@ -36,10 +35,7 @@ describe("Idempotent Lesson settlement (PostgreSQL)", () => {
     database = new DatabaseService({
       getOrThrow: () => databaseUrl,
     } as unknown as ConfigService);
-    service = new LessonSettlementService(
-      database,
-      new LessonSettlementRepository(),
-    );
+    service = new LessonSettlementService(database);
     reservations = new SubscriptionReservationService(
       database,
       {} as RealtimeBus,
