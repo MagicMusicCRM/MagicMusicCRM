@@ -38,6 +38,7 @@ import { ScheduleService } from "./schedule.service";
 import { ScheduleReadService } from "./schedule/schedule-read.service";
 import { ScheduleConflictService } from "./schedule/schedule-conflict.service";
 import { ScheduleSeriesMaterializerService } from "./schedule/schedule-series-materializer.service";
+import { ScheduleSeriesService } from "./schedule/schedule-series.service";
 import { SectionViewsService } from "./section-views.service";
 import { TimelineService } from "./timeline.service";
 import { DashboardService } from "./dashboard.service";
@@ -165,6 +166,7 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     ScheduleReadService,
     ScheduleConflictService,
     ScheduleSeriesMaterializerService,
+    ScheduleSeriesService,
     ScheduleService,
     TimelineService,
     SectionViewsService,

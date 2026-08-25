@@ -23,6 +23,12 @@ describe("CrmScheduleController rollout boundary", () => {
         conflicts: [],
       }),
     };
+    const scheduleSeries = {
+      listScheduleSeries: jest.fn().mockResolvedValue([]),
+      createScheduleSeries: jest.fn().mockResolvedValue({ path: "legacy" }),
+      updateScheduleSeries: jest.fn().mockResolvedValue({ id: "series-a" }),
+      deleteScheduleSeries: jest.fn().mockResolvedValue({ success: true }),
+    };
     const lessonCommands = {
       create: jest.fn().mockResolvedValue({ path: "v4" }),
       update: jest.fn().mockResolvedValue({ path: "v4" }),
@@ -53,6 +59,7 @@ describe("CrmScheduleController rollout boundary", () => {
         schedule as never,
         scheduleRead as never,
         scheduleConflicts as never,
+        scheduleSeries as never,
         lessonCommands as never,
         lessonSeriesCommands as never,
         lessonTransitions as never,
@@ -63,6 +70,7 @@ describe("CrmScheduleController rollout boundary", () => {
       schedule,
       scheduleRead,
       scheduleConflicts,
+      scheduleSeries,
       lessonCommands,
       schedulePlans,
     };
@@ -146,6 +154,22 @@ describe("CrmScheduleController rollout boundary", () => {
       groupBy: "room",
     });
     expect(scheduleRead.getScheduleMonthSummary).toHaveBeenCalledWith(actor, {});
+  });
+
+  it("routes recurring-series reads and mutations through their owner", async () => {
+    const { controller: subject, scheduleSeries } = controller("legacy");
+
+    await subject.listScheduleSeries(actor, {} as never);
+    await subject.createScheduleSeries(actor, "", "", {
+      notes: "Проверка маршрутизации",
+    } as never);
+    await subject.updateScheduleSeries(actor, "series-a", {} as never);
+    await subject.deleteScheduleSeries(actor, "series-a", {} as never);
+
+    expect(scheduleSeries.listScheduleSeries).toHaveBeenCalled();
+    expect(scheduleSeries.createScheduleSeries).toHaveBeenCalled();
+    expect(scheduleSeries.updateScheduleSeries).toHaveBeenCalled();
+    expect(scheduleSeries.deleteScheduleSeries).toHaveBeenCalled();
   });
 
   it("routes conflict preflight through the dedicated conflict service", async () => {

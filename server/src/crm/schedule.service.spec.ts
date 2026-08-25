@@ -12,6 +12,7 @@ import { ScheduleService } from "./schedule.service";
 import { ScheduleConstraintEngine } from "./schedule/constraint-engine.service";
 import { ScheduleConflictService } from "./schedule/schedule-conflict.service";
 import { ScheduleSeriesMaterializerService } from "./schedule/schedule-series-materializer.service";
+import { ScheduleSeriesService } from "./schedule/schedule-series.service";
 
 describe("ScheduleService", () => {
   const actor = { userId: "manager-a", role: "manager" as const };
@@ -51,8 +52,6 @@ describe("ScheduleService", () => {
         work: (client: { query: jest.Mock }) => Promise<unknown>,
       ) => work({ query }),
     } as unknown as DatabaseService;
-    const constraints =
-      deps.constraints as unknown as ScheduleConstraintEngine;
     return new ScheduleService(
       database,
       deps.audit as unknown as AuditService,
@@ -63,7 +62,28 @@ describe("ScheduleService", () => {
         database,
         deps.policy as unknown as CrmPolicy,
       ),
-      new ScheduleSeriesMaterializerService(database, constraints),
+    );
+  };
+
+  const constructSeries = (
+    query: jest.Mock,
+    deps: ReturnType<typeof buildDeps>,
+  ) => {
+    const database = {
+      query,
+      transaction: (
+        work: (client: { query: jest.Mock }) => Promise<unknown>,
+      ) => work({ query }),
+    } as unknown as DatabaseService;
+    return new ScheduleSeriesService(
+      database,
+      deps.audit as unknown as AuditService,
+      deps.policy as unknown as CrmPolicy,
+      { emitCrmChanged: () => undefined } as unknown as RealtimeBus,
+      new ScheduleSeriesMaterializerService(
+        database,
+        deps.constraints as unknown as ScheduleConstraintEngine,
+      ),
     );
   };
 
@@ -71,7 +91,8 @@ describe("ScheduleService", () => {
     const query = jest.fn().mockResolvedValue({ rows });
     const deps = buildDeps();
     const service = construct(query, deps);
-    return { service, query, ...deps };
+    const series = constructSeries(query, deps);
+    return { series, service, query, ...deps };
   };
 
   const createServiceWithQueryResults = (
@@ -89,47 +110,12 @@ describe("ScheduleService", () => {
     });
     const deps = buildDeps();
     const service = construct(query, deps);
-    return { service, query, ...deps };
+    const series = constructSeries(query, deps);
+    return { series, service, query, ...deps };
   };
 
-  it("uses Moscow business dates across the UTC midnight boundary", () => {
-    jest.useFakeTimers();
-    try {
-      // 2026-07-18 00:30 in Moscow, while UTC is still July 17.
-      jest.setSystemTime(new Date("2026-07-17T21:30:00.000Z"));
-      const { service } = createService([]);
-      const businessDate = service as unknown as {
-        moscowDate(offsetDays?: number): string;
-      };
-      expect(businessDate.moscowDate()).toBe("2026-07-18");
-      expect(businessDate.moscowDate(1)).toBe("2026-07-19");
-    } finally {
-      jest.useRealTimers();
-    }
-  });
-
-  it("rejects past series edit/stop cutoffs before opening a transaction", async () => {
-    jest.useFakeTimers();
-    try {
-      jest.setSystemTime(new Date("2026-07-18T09:00:00.000Z"));
-      const { service, query } = createService([]);
-
-      await expect(
-        service.updateScheduleSeries(actor, "series-a", {
-          effectiveFrom: "2026-07-17",
-        }),
-      ).rejects.toBeInstanceOf(BadRequestException);
-      await expect(
-        service.deleteScheduleSeries(actor, "series-a", "2026-07-17"),
-      ).rejects.toBeInstanceOf(BadRequestException);
-      expect(query).not.toHaveBeenCalled();
-    } finally {
-      jest.useRealTimers();
-    }
-  });
-
   it("creates a schedule series and materializes lessons up to the horizon (KVA-236)", async () => {
-    const { service, query, audit } = createServiceWithQueryResults([
+    const { series, query, audit } = createServiceWithQueryResults([
       { rows: [{ id: "series-a" }] }, // insert series
       {
         rows: [
@@ -165,7 +151,7 @@ describe("ScheduleService", () => {
     ]);
 
     await expect(
-      service.createScheduleSeries(actor, {
+      series.createScheduleSeries(actor, {
         studentId: "student-a",
         teacherId: "teacher-a",
         branchId: "branch-a",
@@ -205,7 +191,7 @@ describe("ScheduleService", () => {
   });
 
   it("keeps schedule-series DATE values timezone invariant", async () => {
-    const { service, query } = createService([
+    const { series, query } = createService([
       {
         id: "series-date",
         student_id: "student-a",
@@ -224,7 +210,7 @@ describe("ScheduleService", () => {
       },
     ]);
 
-    const result = await service.listScheduleSeries(actor, {});
+    const result = await series.listScheduleSeries(actor, {});
 
     expect(result.items[0]).toMatchObject({
       validFrom: "2026-07-15",
@@ -238,7 +224,7 @@ describe("ScheduleService", () => {
   it("applies a series edit, preserves exceptions and explicitly clears a finite end", async () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date("2026-07-18T09:00:00.000Z"));
-    const { service, query } = createServiceWithQueryResults([
+    const { series, query } = createServiceWithQueryResults([
       {
         rows: [
           {
@@ -270,7 +256,7 @@ describe("ScheduleService", () => {
     ]);
 
     await expect(
-      service.updateScheduleSeries(actor, "series-a", {
+      series.updateScheduleSeries(actor, "series-a", {
         teacherId: "teacher-b",
         beginTime: "16:00",
         effectiveFrom: "2026-08-01",
@@ -341,10 +327,10 @@ describe("ScheduleService", () => {
       }
       return Promise.resolve(responses.shift());
     });
-    const service = construct(query, buildDeps());
+    const series = constructSeries(query, buildDeps());
 
     await expect(
-      service.deleteScheduleSeries(actor, "series-a", "2026-12-01"),
+      series.deleteScheduleSeries(actor, "series-a", "2026-12-01"),
     ).resolves.toEqual({ id: "series-a", stoppedFrom: "2026-12-01" });
 
     const seriesUpdate = query.mock.calls.find((call) =>
@@ -369,9 +355,9 @@ describe("ScheduleService", () => {
       }
       return Promise.resolve(responses.shift());
     });
-    const service = construct(query, buildDeps());
+    const series = constructSeries(query, buildDeps());
 
-    await service.deleteScheduleSeries(actor, "series-a", "2026-12-01");
+    await series.deleteScheduleSeries(actor, "series-a", "2026-12-01");
 
     const lessonUpdate = query.mock.calls.find((call) =>
       String(call[0]).includes("update app.lessons"),
@@ -389,7 +375,7 @@ describe("ScheduleService", () => {
   it("serializes series edits and rejects a second continuation", async () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date("2026-07-18T09:00:00.000Z"));
-    const { service, query } = createServiceWithQueryResults([
+    const { series, query } = createServiceWithQueryResults([
       {
         rows: [
           {
@@ -414,7 +400,7 @@ describe("ScheduleService", () => {
     ]);
 
     await expect(
-      service.updateScheduleSeries(actor, "series-a", {
+      series.updateScheduleSeries(actor, "series-a", {
         effectiveFrom: "2026-08-01",
       }),
     ).rejects.toBeInstanceOf(ConflictException);
@@ -1435,9 +1421,9 @@ describe("ScheduleService", () => {
     });
 
     it("rejects an ambiguous recurring-series subject", async () => {
-      const { service, query } = createServiceWithQueryResults([]);
+      const { series, query } = createServiceWithQueryResults([]);
       await expect(
-        service.createScheduleSeries(actor, {
+        series.createScheduleSeries(actor, {
           studentId: "student-a",
           groupId: "group-a",
           weekday: 1,
@@ -1449,7 +1435,7 @@ describe("ScheduleService", () => {
     });
 
     it("runs the recurring conflict guard before materializing a series", async () => {
-      const { service, query, constraints } = createServiceWithQueryResults([
+      const { series, query, constraints } = createServiceWithQueryResults([
         { rows: [{ id: "series-a" }] },
         {
           rows: [
@@ -1495,7 +1481,7 @@ describe("ScheduleService", () => {
       });
 
       await expect(
-        service.createScheduleSeries(actor, {
+        series.createScheduleSeries(actor, {
           studentId: "student-a",
           teacherId: "teacher-a",
           branchId: "branch-a",

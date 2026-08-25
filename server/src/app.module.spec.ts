@@ -8,6 +8,7 @@ import { CrmModule } from "./crm/crm.module";
 import { ScheduleConflictService } from "./crm/schedule/schedule-conflict.service";
 import { ScheduleReadService } from "./crm/schedule/schedule-read.service";
 import { ScheduleSeriesMaterializerService } from "./crm/schedule/schedule-series-materializer.service";
+import { ScheduleSeriesService } from "./crm/schedule/schedule-series.service";
 import { DatabaseService } from "./db/database.service";
 import { NotificationDeliveryModule } from "./notifications/notification-delivery.module";
 import { NotificationWorker } from "./notifications/notification-worker.service";
@@ -148,6 +149,10 @@ describe("AppModule", () => {
     expect(
       moduleRef.get(ScheduleSeriesMaterializerService, { strict: false }),
     ).toBeDefined();
+  });
+
+  it("resolves the dedicated schedule series command owner", () => {
+    expect(moduleRef.get(ScheduleSeriesService, { strict: false })).toBeDefined();
   });
 
   it("mounts the notification API shell directly", () => {

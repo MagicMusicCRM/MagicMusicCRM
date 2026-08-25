@@ -18,6 +18,7 @@ import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
 import { ScheduleService } from "./schedule.service";
 import { ScheduleReadService } from "./schedule/schedule-read.service";
 import { ScheduleConflictService } from "./schedule/schedule-conflict.service";
+import { ScheduleSeriesService } from "./schedule/schedule-series.service";
 import { BulkLessonRateDto } from "./dto/bulk-lesson-rate.dto";
 import {
   CreateScheduleSeriesDto,
@@ -74,6 +75,7 @@ export class CrmScheduleController {
     private readonly schedule: ScheduleService,
     private readonly scheduleRead: ScheduleReadService,
     private readonly scheduleConflicts: ScheduleConflictService,
+    private readonly scheduleSeries: ScheduleSeriesService,
     private readonly lessonCommands: LessonCommandService,
     private readonly lessonSeriesCommands: LessonSeriesCommandService,
     private readonly lessonTransitions: LessonTransitionService,
@@ -171,7 +173,7 @@ export class CrmScheduleController {
     @CurrentActor() actor: ActorContext,
     @Query() query: ScheduleSeriesQuery,
   ) {
-    return this.schedule.listScheduleSeries(actor, {
+    return this.scheduleSeries.listScheduleSeries(actor, {
       clientType: query.clientType,
       clientId: query.clientId,
       studentId: query.studentId,
@@ -194,7 +196,7 @@ export class CrmScheduleController {
     };
     return this.v4DomainFlags.get("schedule").effectivePath === "v4"
       ? this.lessonSeriesCommands.create(actor, dto, metadata)
-      : this.schedule.createScheduleSeries(actor, dto);
+      : this.scheduleSeries.createScheduleSeries(actor, dto);
   }
 
   @Patch("schedule-series/:id")
@@ -203,7 +205,7 @@ export class CrmScheduleController {
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateScheduleSeriesDto,
   ) {
-    return this.schedule.updateScheduleSeries(actor, id, dto);
+    return this.scheduleSeries.updateScheduleSeries(actor, id, dto);
   }
 
   @Delete("schedule-series/:id")
@@ -212,7 +214,7 @@ export class CrmScheduleController {
     @Param("id", ParseUUIDPipe) id: string,
     @Query() query: ScheduleSeriesDeleteQuery,
   ) {
-    return this.schedule.deleteScheduleSeries(actor, id, query.from);
+    return this.scheduleSeries.deleteScheduleSeries(actor, id, query.from);
   }
 
   @Get("lessons")
