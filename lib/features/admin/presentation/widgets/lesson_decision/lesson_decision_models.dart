@@ -152,6 +152,33 @@ class LessonDecisionRequest {
   final String? initialCompensationValueMinor;
 }
 
+abstract interface class LessonDecisionFormLifecycle {
+  LessonDecisionOperation get operation;
+  Map<String, dynamic> get lesson;
+  Map<String, dynamic>? get successor;
+  String? get initialSettlementTypeKey;
+  String? get initialCompensationRuleKey;
+  String? get initialCompensationValueMinor;
+  bool get isGroupLesson;
+  List<LessonDecisionParticipant> get groupParticipants;
+  Map<String, String> get participantNames;
+  bool get isCompletedReschedule;
+
+  Future<LessonDecisionCatalog> loadCatalog();
+
+  Future<LessonDecisionPreview> preview({
+    required String reason,
+    required String settlementTypeKey,
+    required String compensationRuleKey,
+    String? compensationValueMinor,
+    List<Map<String, dynamic>> clientDecisions = const [],
+  });
+
+  Future<Map<String, dynamic>> commit(LessonDecisionPreview preview);
+
+  Object? recoverStaleCommit(Object error);
+}
+
 Map<String, dynamic> _map(Object? value) {
   if (value is Map) return Map<String, dynamic>.from(value);
   return <String, dynamic>{};

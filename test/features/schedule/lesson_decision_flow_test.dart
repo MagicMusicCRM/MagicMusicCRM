@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -5,6 +7,7 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_sections.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision_flow.dart';
 
 const _lessonId = '10000000-0000-4000-8000-000000000001';
@@ -394,6 +397,46 @@ Future<void> _openAndFill(
 
 void main() {
   setUpAll(() => initializeDateFormatting('ru'));
+
+  testWidgets('completed reschedule section explains forced reversal', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Material(
+          child: LessonDecisionCompletedNotice(
+            sourceScheduledAt: DateTime(2026, 8, 25, 13),
+            successorScheduledAt: DateTime(2026, 8, 26, 13),
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      find.byKey(const Key('lesson-decision-completed-notice')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('бесплатное'), findsOneWidget);
+  });
+
+  test('flow entry contains no form state or section implementation', () {
+    final source = File(
+      'lib/features/admin/presentation/widgets/lesson_decision_flow.dart',
+    ).readAsStringSync();
+    final formSource = File(
+      'lib/features/admin/presentation/widgets/lesson_decision/'
+      'lesson_decision_form.dart',
+    ).readAsStringSync();
+
+    expect(source, isNot(contains('class _LessonDecisionFormState')));
+    expect(source, isNot(contains('class _LessonDecisionPreviewCard')));
+    expect(source, isNot(contains('class _PreviewCard')));
+    expect(source.split('\n').length, lessThan(120));
+    expect(
+      formSource,
+      isNot(contains("import 'lesson_decision_controller.dart';")),
+    );
+  });
 
   test('keeps one mutation identity between preview and commit', () async {
     final api = _LessonDecisionApi();

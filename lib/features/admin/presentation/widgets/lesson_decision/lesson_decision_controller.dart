@@ -4,7 +4,7 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 
 import 'lesson_decision_models.dart';
 
-class LessonDecisionController {
+class LessonDecisionController implements LessonDecisionFormLifecycle {
   LessonDecisionController({
     required MagicCrmService crm,
     required this.operation,
@@ -17,18 +17,26 @@ class LessonDecisionController {
        _expectedVersion = (lesson['version'] as num?)?.toInt();
 
   final MagicCrmService _crm;
+  @override
   final LessonDecisionOperation operation;
+  @override
   final Map<String, dynamic> lesson;
+  @override
   final Map<String, dynamic>? successor;
+  @override
   final String? initialSettlementTypeKey;
+  @override
   final String? initialCompensationRuleKey;
+  @override
   final String? initialCompensationValueMinor;
 
+  @override
   bool get isGroupLesson {
     final groupId = lesson['group_id'] ?? lesson['groupId'];
     return groupId?.toString().isNotEmpty == true;
   }
 
+  @override
   List<LessonDecisionParticipant> get groupParticipants {
     final raw = lesson['group_participants'] ?? lesson['groupParticipants'];
     final result = <LessonDecisionParticipant>[];
@@ -62,11 +70,13 @@ class LessonDecisionController {
     return result;
   }
 
+  @override
   Map<String, String> get participantNames => {
     for (final participant in groupParticipants)
       participant.id: participant.name,
   };
 
+  @override
   bool get isCompletedReschedule {
     if (operation != LessonDecisionOperation.reschedule) return false;
     final state =
@@ -84,6 +94,7 @@ class LessonDecisionController {
   MagicMutationIdentity? _commitIdentity;
   int? _expectedVersion;
 
+  @override
   MagicApiException? recoverStaleCommit(Object error) {
     if (error is! MagicApiException || error.details is! Map) return null;
     final details = Map<String, dynamic>.from(error.details! as Map);
@@ -114,6 +125,7 @@ class LessonDecisionController {
     );
   }
 
+  @override
   Future<LessonDecisionCatalog> loadCatalog() async {
     final effectiveBranchId =
         successor?['branchId'] ??
@@ -126,6 +138,7 @@ class LessonDecisionController {
     return LessonDecisionCatalog.fromJson(response, operation);
   }
 
+  @override
   Future<LessonDecisionPreview> preview({
     required String reason,
     required String settlementTypeKey,
@@ -168,6 +181,7 @@ class LessonDecisionController {
     return LessonDecisionPreview(response);
   }
 
+  @override
   Future<Map<String, dynamic>> commit(LessonDecisionPreview preview) {
     final payload = _previewPayload;
     final identity = _commitIdentity;

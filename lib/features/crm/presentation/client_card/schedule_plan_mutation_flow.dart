@@ -4,7 +4,7 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/models/schedule_plan.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision_flow.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_models.dart';
 
 import 'group_schedule_participants_editor.dart';
 import 'preferred_schedule_editor.dart';
