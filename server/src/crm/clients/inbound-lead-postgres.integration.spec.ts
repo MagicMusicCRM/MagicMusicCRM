@@ -13,6 +13,11 @@ import { NotificationsPolicy } from "../../notifications/notifications.policy";
 import { NotificationsService } from "../../notifications/notifications.service";
 import { CrmPolicy } from "../crm.policy";
 import { LeadsService } from "../leads.service";
+import { LeadBoardService } from "../lead-board.service";
+import { LeadCardService } from "../lead-card.service";
+import { LeadCommandService } from "../lead-command.service";
+import { LeadDirectoryService } from "../lead-directory.service";
+import { LeadWriteRepository } from "../lead-write.repository";
 import { TimelineService } from "../timeline.service";
 import { StudentFunnelService } from "../student-funnel.service";
 import { ClientConfigRepository } from "./client-config.repository";
@@ -83,19 +88,39 @@ describe("manual and inbound Lead commands (PostgreSQL)", () => {
     );
     userIds.push(user.rows[0]!.id);
     actor = { userId: user.rows[0]!.id, role: "manager" };
+    const policy = new CrmPolicy();
+    const pipeline = {
+      getEffective: jest.fn().mockResolvedValue({ stages: [] }),
+      assertLeadTransition: jest.fn().mockResolvedValue(undefined),
+    } as unknown as StudentFunnelService;
+    const audit = {
+      record: jest.fn().mockResolvedValue(undefined),
+    } as unknown as AuditService;
+    const realtime = {
+      emitCrmChanged: jest.fn(),
+    } as unknown as RealtimeBus;
     manual = new LeadsService(
-      database,
-      { record: jest.fn().mockResolvedValue(undefined) } as unknown as AuditService,
-      new CrmPolicy(),
-      { listForEntity: jest.fn().mockResolvedValue([]) } as unknown as ChatWorkTimelineService,
-      { emitCrmChanged: jest.fn() } as unknown as RealtimeBus,
-      { listFieldAudit: jest.fn().mockResolvedValue({ items: [] }) } as unknown as TimelineService,
-      {
-        assertLeadTransition: jest.fn().mockResolvedValue(undefined),
-      } as unknown as StudentFunnelService,
-      {
-        list: jest.fn().mockResolvedValue({ items: [], counters: {} }),
-      } as never,
+      new LeadBoardService(database, policy, pipeline),
+      new LeadCardService(
+        database,
+        policy,
+        {
+          listForEntity: jest.fn().mockResolvedValue([]),
+        } as unknown as ChatWorkTimelineService,
+        {
+          listFieldAudit: jest.fn().mockResolvedValue({ items: [] }),
+        } as unknown as TimelineService,
+        pipeline,
+        { list: jest.fn().mockResolvedValue({ items: [], counters: {} }) } as never,
+      ),
+      new LeadDirectoryService(database, policy),
+      new LeadCommandService(
+        database,
+        audit,
+        policy,
+        realtime,
+        new LeadWriteRepository(database, pipeline),
+      ),
     );
 
     const source = await database.query<{ id: string }>(

@@ -49,6 +49,11 @@ import { DuplicatesService } from "./duplicates.service";
 import { MergeService } from "./merge.service";
 import { PhoneReviewService } from "./phone-review.service";
 import { LeadsService } from "./leads.service";
+import { LeadBoardService } from "./lead-board.service";
+import { LeadCardService } from "./lead-card.service";
+import { LeadCommandService } from "./lead-command.service";
+import { LeadDirectoryService } from "./lead-directory.service";
+import { LeadWriteRepository } from "./lead-write.repository";
 import { LeadIntakeService } from "./lead-intake.service";
 import { RoomsService } from "./rooms.service";
 import { RoomLifecycleService } from "./room-lifecycle.service";
@@ -178,6 +183,11 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     MergeService,
     PhoneReviewService,
     LeadsService,
+    LeadBoardService,
+    LeadCardService,
+    LeadCommandService,
+    LeadDirectoryService,
+    LeadWriteRepository,
     LeadIntakeService,
     RoomsService,
     RoomLifecycleService,

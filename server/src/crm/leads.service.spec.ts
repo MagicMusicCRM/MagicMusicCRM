@@ -4,6 +4,11 @@ import { DatabaseService } from "../db/database.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { CrmPolicy } from "./crm.policy";
 import { LeadsService } from "./leads.service";
+import { LeadBoardService } from "./lead-board.service";
+import { LeadCardService } from "./lead-card.service";
+import { LeadCommandService } from "./lead-command.service";
+import { LeadDirectoryService } from "./lead-directory.service";
+import { LeadWriteRepository } from "./lead-write.repository";
 import { ChatWorkTimelineService } from "../messenger/chat-work-timeline.service";
 import { TimelineService } from "./timeline.service";
 import { StudentFunnelService } from "./student-funnel.service";
@@ -27,31 +32,44 @@ describe("LeadsService", () => {
     const timeline = {
       listFieldAudit: jest.fn().mockResolvedValue({ items: [] }),
     };
+    const database = db as unknown as DatabaseService;
+    const crmPolicy = policy as unknown as CrmPolicy;
+    const funnel = {
+      getEffective: jest.fn().mockResolvedValue({ stages: [] }),
+      assertLeadTransition: jest.fn().mockResolvedValue(undefined),
+    } as unknown as StudentFunnelService;
+    const sharedTasks = {
+      list: jest.fn().mockResolvedValue({
+        items: [
+          {
+            id: "task-a",
+            title: "Перезвонить",
+            body: null,
+            state: "open",
+            createdAt: "2026-06-12T09:00:00.000Z",
+          },
+        ],
+        counters: {},
+      }),
+    } as unknown as SharedTaskService;
     const service = new LeadsService(
-      db as unknown as DatabaseService,
-      audit as unknown as AuditService,
-      policy as unknown as CrmPolicy,
-      chatWork as unknown as ChatWorkTimelineService,
-      realtime as unknown as RealtimeBus,
-      timeline as unknown as TimelineService,
-      {
-        getEffective: jest.fn().mockResolvedValue({ stages: [] }),
-        assertLeadTransition: jest.fn().mockResolvedValue(undefined),
-      } as unknown as StudentFunnelService,
-      {
-        list: jest.fn().mockResolvedValue({
-          items: [
-            {
-              id: "task-a",
-              title: "Перезвонить",
-              body: null,
-              state: "open",
-              createdAt: "2026-06-12T09:00:00.000Z",
-            },
-          ],
-          counters: {},
-        }),
-      } as unknown as SharedTaskService,
+      new LeadBoardService(database, crmPolicy, funnel),
+      new LeadCardService(
+        database,
+        crmPolicy,
+        chatWork as unknown as ChatWorkTimelineService,
+        timeline as unknown as TimelineService,
+        funnel,
+        sharedTasks,
+      ),
+      new LeadDirectoryService(database, crmPolicy),
+      new LeadCommandService(
+        database,
+        audit as unknown as AuditService,
+        crmPolicy,
+        realtime as unknown as RealtimeBus,
+        new LeadWriteRepository(database, funnel),
+      ),
     );
     return { service, audit, policy, timeline };
   };
