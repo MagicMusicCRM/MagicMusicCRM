@@ -104,13 +104,25 @@ It depends on the database, audit, policy, realtime bus, and materializer.
 Owns legacy-path lesson mutation behavior:
 
 - create, update, and delete lesson;
-- bulk teacher-rate update;
 - lesson subject/client resolution and write authorization;
 - booking-window guard, audit metadata, notifications, and realtime fanout.
 
 It calls `ScheduleConflictService` for conflict enforcement. The controller
 continues choosing between this service and the existing V4 command services
 using `V4DomainFlagsService`; the branch conditions do not change.
+
+### `LessonTeacherRateService`
+
+Owns the financially sensitive bulk teacher-rate correction command:
+
+- bounded lesson selection and teacher-rate authorization;
+- direct updates for unsettled lessons;
+- director/system-admin corrections for settled lessons;
+- append-only superseding payroll facts;
+- audit and realtime fanout after the transaction commits.
+
+The separate owner keeps payroll correction rules out of ordinary lesson CRUD
+and preserves the original transaction, actor checks, and historical facts.
 
 ### Existing `ScheduleReadService`
 
@@ -121,7 +133,7 @@ uses the read owner directly.
 ## Direct caller migration
 
 - `CrmScheduleController` injects the read, conflict, series, lesson-mutation,
-  V4 command, transition, plan, and analyzer owners directly.
+  teacher-rate, V4 command, transition, plan, and analyzer owners directly.
 - `SchedulePlanService` imports the pure plan lock helper and injects
   `ScheduleSeriesMaterializerService` for in-transaction materialization.
 - `ScheduleSeriesWorker` injects `ScheduleSeriesMaterializerService`.

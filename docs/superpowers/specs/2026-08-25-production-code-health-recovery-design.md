@@ -196,3 +196,34 @@ The global success contract remains open: `lib 4.70 < 7.0`,
 `server 6.64 < 7.0`, and code-only `5.99 < 7.5`. Fresh RepoWise re-ranking
 selects `server/src/crm/schedule.service.ts` as package 2: its god-class cut is
 the current directive and represents `11,346` recoverable weighted points.
+
+## Package 2 verified outcome
+
+The full scheduling-backend ownership split is implemented and verified at
+`2f6627a9`. It landed as independent rollback points for conflict ownership,
+series materialization, series commands, test ownership, deletion of the old
+god class, lesson-write simplification, creation persistence, and teacher-rate
+corrections.
+
+- RepoWise is exact at `2f6627a9b0fc` with `index_behind=false`. The original
+  `schedule.service.ts` improved by deletion from health `1.90`, 1,860 NLOC,
+  max CCN `16`, and weighted deficit `11,346`; no compatibility facade remains.
+- Direct replacement owners score: mutation `8.55`, teacher rate `8.15`,
+  conflict `9.50`, locks `9.85`, series commands `7.80`, series read `7.80`,
+  and materialization `7.45`. The mutation and rate owners have zero weighted
+  deficit, and none of the seven owners has the former god-class finding.
+- Full backend verification passed: 199 suites, 1,493 tests, typecheck, Nest
+  build, and a clean diff. Transaction-owned executors, deterministic locks,
+  expected versions, append-only payroll facts, audit, realtime, and legacy/V4
+  routing remain covered by the redistributed characterization suites.
+- The backend module health moved from `6.64` to `6.74`. Sentrux closed at
+  quality `4974`, acyclicity `1`, depth `13`, equality `6186`, modularity
+  `5353`, redundancy `4827`, and both architecture rules passing. Modularity
+  fell by 9 raw points as direct owners replaced one facade, while the combined
+  quality floor and graph invariants remained accepted.
+
+The global success contract remains open: backend `6.74 < 7.0`, Flutter
+`4.70 < 7.0`, and repository code-only health has not yet reached `7.5`.
+Fresh RepoWise re-ranking selects
+`server/src/crm/crm-configuration.service.ts` as the next directive: an
+untested five-dependent hotspot with `10,021` recoverable weighted points.

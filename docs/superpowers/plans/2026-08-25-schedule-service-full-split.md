@@ -102,6 +102,8 @@
 
 - Create `server/src/crm/schedule/lesson-schedule-mutation.service.ts`
 - Create `server/src/crm/schedule/lesson-schedule-mutation.service.spec.ts`
+- Create `server/src/crm/schedule/lesson-teacher-rate.service.ts`
+- Create `server/src/crm/schedule/lesson-teacher-rate.service.spec.ts`
 - Modify `server/src/crm/schedule/schedule-read.service.ts`
 - Modify `server/src/crm/schedule/schedule-read.service.spec.ts`
 - Modify `server/src/crm/schedule.service.ts`
@@ -116,10 +118,11 @@
   ownership; keep the V4 branch assertions unchanged.
 - [ ] Move `listUpcomingLessonsForStudents` to `ScheduleReadService` with its
   policy assertion, SQL, ordering, and row mapping unchanged.
-- [ ] Move create/update/delete/rate plus lesson authorization, subject/client,
+- [ ] Move create/update/delete plus lesson authorization, subject/client,
   audit, notification, and realtime helpers into
   `LessonScheduleMutationService`; inject `ScheduleConflictService` for atomic
-  checks.
+  checks. Move the settled/unsettled bulk teacher-rate correction transaction
+  and append-only payroll facts into `LessonTeacherRateService`.
 - [ ] Route controller legacy branches and `CrmService` directly to the new
   owners; remove all remaining methods from the old service.
 - [ ] Run lesson command/parity/protected-patch, read, CRM, controller, and
@@ -161,3 +164,19 @@
 - [ ] Re-rank all remaining production files by recoverable weighted deficit;
   put the highest-impact god file into the next active package instead of
   ending the global program.
+
+## Verified implementation outcome
+
+Completed at `2f6627a9`. The original `ScheduleService` source and spec are
+gone, and live server source contains no reference to the deleted owner.
+
+- `LessonScheduleMutationService`: health `8.55`, 441 NLOC, max CCN `8`,
+  weighted deficit `0`.
+- `LessonTeacherRateService`: health `8.15`, 154 NLOC, max CCN `9`, weighted
+  deficit `0`.
+- The other extracted owners range from health `7.45` to `9.85`; none carries
+  the original god-class finding.
+- Full backend verification passed: 199 suites and 1,493 tests, typecheck,
+  Nest build, and `git diff --check`.
+- Sentrux closed the package at quality `4974`, acyclicity `1`, depth `13`,
+  and both architecture rules passing.
