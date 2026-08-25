@@ -208,3 +208,35 @@ Land catalog policy, plan ownership, facts/capacity ownership, execution/service
 wiring, and old-file deletion as independent commits. Revert in reverse order.
 No migration, API, environment, production-state, or data-repair rollback is
 required.
+
+## Verified outcome
+
+The split is implemented and verified at `dd71952a0f9f`. It landed as five
+independent implementation commits: catalog policy `f19a4ef1`, plan persistence
+`bc29834f`, fact persistence `8833e37e`, capacity locks `59520bae`, and final
+execution/service wiring with old-repository deletion `dd71952a`.
+
+- The old `lesson-settlement.repository.ts` owner and its provider registration
+  are deleted; live source contains no compatibility facade or stale reference.
+  `LessonSettlementService` remains the sole `LessonSettlementPort`
+  implementation and the only package owner that starts a transaction.
+- RepoWise is exact at implementation HEAD with `index_behind=false`. Replacement
+  health is service `7.25`, facts `8.80`, execution `8.85`, catalog `9.15`,
+  capacity `9.47`, and plan persistence `9.85`; max CCN is `10`, max NLOC is
+  `555`, and no replacement has a god-class or brain-method finding.
+- Combined replacement weighted deficit is `82`, down `99.1%` from the `8,848`
+  baseline and below the `1,769` acceptance ceiling.
+- Verification passed: `209/209` backend suites, `1,531/1,531` tests,
+  TypeScript typecheck, Nest build, and `git diff --check`. Paired focused tests
+  cover every extracted owner, while the PostgreSQL suites retain the financial,
+  locking, correction, and rollback gates.
+- Sentrux reports quality `5732`, acyclicity score `10000` with raw `0`, depth
+  `13`, equality `6223`, modularity `5360`, redundancy `4870`, and both
+  architecture rules passing.
+
+RepoWise classifies the full package range as `Elevated` at percentile `100`
+because it contains 22 files and 4,145 changed lines. It reports no cycle,
+breaking consumer, missing test, cross-repository change, or conformance
+violation. Historical graph output still names the deleted repository, but the
+exact index, clean build, full test suite, and live-source search jointly close
+that warning.

@@ -255,3 +255,31 @@ ranking instead selects
 `1,264` NLOC, max CCN `21`, weighted deficit `8,848`, nine dependents, and an
 untested financial hotspot. It is package 4; characterization must precede any
 structural change.
+
+## Package 4 verified outcome
+
+The lesson-settlement ownership split is implemented and verified at
+`dd71952a0f9f`.
+
+- The `1,264`-NLOC repository with health `1.00`, max CCN `21`, and weighted
+  deficit `8,848` is deleted without a compatibility facade. Six narrow
+  production owners now separate catalog policy, plan persistence, effective
+  facts, capacity locks, execution, and the application port.
+- Every replacement meets the `7.0` health floor, max CCN is `10`, max NLOC is
+  `555`, and the combined weighted deficit is `82`, a `99.1%` reduction.
+- Full backend verification passed with `209` suites and `1,531` tests, plus
+  typecheck, Nest build, and clean diff checks. RepoWise is exact with no live
+  broken consumer, new cycle, missing-test warning, or conformance violation.
+- Sentrux closed at quality `5732`, acyclicity `10000` with raw `0`, depth `13`,
+  equality `6223`, modularity `5360`, redundancy `4870`, and both rules passing.
+
+Repository code-only health is now `6.15`, so the global contract remains open.
+The literal dashboard directive remains the 2,329-NLOC subscription integration
+test (`9,549` weighted points) whose primary signal is historical co-change
+scatter. Under the approved production-first policy, package 5 instead targets
+`lib/features/crm/presentation/client_card/client_card_editors.dart`: health
+`1.41`, `1,376` NLOC, max CCN `24`, weighted deficit `9,068`, 46.93% line
+coverage, and co-change with 30 files. The next god-class owners remain
+`server/src/crm/leads.service.ts` (`8,394`) and
+`server/src/crm/crm.service.ts` (`7,381`); both stay in the mandatory cleanup
+queue rather than being displaced by the package-5 choice.
