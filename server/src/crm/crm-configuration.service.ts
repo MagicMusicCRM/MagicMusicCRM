@@ -23,10 +23,9 @@ import {
 } from "./crm-configuration-branch.policy";
 import type {
   ConfigBranchPatch,
-  ConfigField,
   ConfigSnapshot,
-  ImpactReport,
 } from "./crm-configuration.contracts";
+import { buildCrmConfigurationImpact } from "./crm-configuration-impact.policy";
 import { normalizeCrmConfigurationSnapshot } from "./crm-configuration-snapshot-normalizer";
 import { CrmPolicy } from "./crm.policy";
 import {
@@ -61,6 +60,18 @@ function runQuery<T extends QueryResultRow>(
       values?: unknown[],
     ) => Promise<QueryResult<T>>
   )(text, params);
+}
+
+async function hasStoredClientFieldValues(
+  queryable: Queryable,
+  definitionId: string,
+): Promise<boolean> {
+  const result = await runQuery<{ count: number | string }>(
+    queryable,
+    "select count(*) as count from app.client_custom_field_values where definition_id = $1",
+    [definitionId],
+  );
+  return Number(result.rows[0]?.count ?? 0) > 0;
 }
 
 @Injectable()
@@ -205,12 +216,13 @@ export class CrmConfigurationService {
       snapshot,
       effective.snapshot,
     );
-    return this.buildImpact(
-      this.database,
-      snapshot,
-      effective.snapshot,
-      dto.branchId ? effective.schoolSnapshot : undefined,
-    );
+    return buildCrmConfigurationImpact({
+      next: snapshot,
+      current: effective.snapshot,
+      school: dto.branchId ? effective.schoolSnapshot : undefined,
+      hasStoredClientFieldValues: (definitionId) =>
+        hasStoredClientFieldValues(this.database, definitionId),
+    });
   }
 
   async publish(actor: ActorContext, dto: PublishCrmConfigurationDto) {
@@ -299,12 +311,13 @@ export class CrmConfigurationService {
         effective.snapshot,
         true,
       );
-      const impact = await this.buildImpact(
-        client,
-        requested,
-        effective.snapshot,
-        dto.branchId ? effective.schoolSnapshot : undefined,
-      );
+      const impact = await buildCrmConfigurationImpact({
+        next: requested,
+        current: effective.snapshot,
+        school: dto.branchId ? effective.schoolSnapshot : undefined,
+        hasStoredClientFieldValues: (definitionId) =>
+          hasStoredClientFieldValues(client, definitionId),
+      });
       if (!impact.valid) {
         throw new UnprocessableEntityException({
           code: "CONFIGURATION_INVALID",
@@ -457,173 +470,6 @@ export class CrmConfigurationService {
       snapshot: normalizeCrmConfigurationSnapshot(
         row.effective_snapshot as unknown as Record<string, unknown>,
       ),
-    };
-  }
-
-  private async buildImpact(
-    queryable: Queryable,
-    next: ConfigSnapshot,
-    current: ConfigSnapshot,
-    school?: ConfigSnapshot,
-  ): Promise<ImpactReport> {
-    const blockingIssues: ImpactReport["blockingIssues"] = [];
-    if (school) {
-      for (const key of ["categories", "fields", "optionSets"] as const) {
-        if (!sameCrmConfigurationValue(next[key], school[key])) {
-          blockingIssues.push({
-            field: key,
-            code: "BRANCH_SCHEMA_OVERRIDE_FORBIDDEN",
-            message: "Филиал может переопределять только бизнес-параметры.",
-          });
-        }
-      }
-      const schoolSettings = new Map(
-        school.businessSettings.map((setting) => [setting.key, setting]),
-      );
-      for (const setting of next.businessSettings) {
-        if (
-          setting.value !== schoolSettings.get(setting.key)?.value &&
-          !schoolSettings.get(setting.key)?.branchOverridable
-        ) {
-          blockingIssues.push({
-            field: `businessSettings.${setting.key}`,
-            code: "BRANCH_OVERRIDE_FORBIDDEN",
-            message: "Параметр не допускает филиальное переопределение.",
-          });
-        }
-      }
-    }
-    const currentFields = new Map(
-      current.fields.map((field) => [field.key, field]),
-    );
-    for (const [field, previous, following] of [
-      [
-        "lessonSettlementTypes",
-        current.lessonSettlementTypes,
-        next.lessonSettlementTypes,
-      ],
-      [
-        "teacherCompensationRules",
-        current.teacherCompensationRules,
-        next.teacherCompensationRules,
-      ],
-    ] as const) {
-      const nextKeys = new Set(following.map((item) => item.stableKey));
-      for (const item of previous) {
-        if (!nextKeys.has(item.stableKey)) {
-          blockingIssues.push({
-            field: `${field}.${item.stableKey}`,
-            code: "CATALOG_KEY_REMOVAL_FORBIDDEN",
-            message:
-              "Стабильный ключ нельзя удалить или переименовать; архивируйте тип.",
-          });
-        }
-      }
-    }
-    const nextFields = new Map(
-      next.fields.map((field) => [field.key, field]),
-    );
-    for (const [key, field] of nextFields) {
-      const before = currentFields.get(key);
-      if (!before) continue;
-      if (
-        before.system &&
-        (field.valueType !== before.valueType || !field.active)
-      ) {
-        blockingIssues.push({
-          field: `fields.${field.key}`,
-          code: "SYSTEM_FIELD_LOCKED",
-          message: "Тип и активность системного поля защищены.",
-        });
-      }
-      if (before.valueType !== field.valueType && before.id) {
-        const count = await runQuery<{ count: number | string }>(
-          queryable,
-          "select count(*) as count from app.client_custom_field_values where definition_id = $1",
-          [before.id],
-        );
-        if (Number(count.rows[0]?.count ?? 0) > 0) {
-          blockingIssues.push({
-            field: `fields.${field.key}.valueType`,
-            code: "FIELD_TYPE_MIGRATION_REQUIRED",
-            message:
-              "Поле с сохранёнными значениями нельзя перевести в другой тип.",
-          });
-        }
-      }
-    }
-    const changed = (field: ConfigField) =>
-      JSON.stringify(field) !==
-      JSON.stringify(currentFields.get(field.key));
-    const settings = new Map(
-      current.businessSettings.map((setting) => [setting.key, setting.value]),
-    );
-    const settingsChanged = next.businessSettings.filter(
-      (setting) => settings.get(setting.key) !== setting.value,
-    ).length;
-    const changedCatalogItems = <T extends { stableKey: string }>(
-      following: T[],
-      previous: T[],
-    ) => {
-      const previousByKey = new Map(
-        previous.map((item) => [item.stableKey, item]),
-      );
-      return following.filter(
-        (item) =>
-          !sameCrmConfigurationValue(item, previousByKey.get(item.stableKey)),
-      ).length;
-    };
-    const settlementTypesChanged = changedCatalogItems(
-      next.lessonSettlementTypes,
-      current.lessonSettlementTypes,
-    );
-    const compensationRulesChanged = changedCatalogItems(
-      next.teacherCompensationRules,
-      current.teacherCompensationRules,
-    );
-    const fieldChange =
-      next.fields.some(changed) ||
-      current.fields.some(
-        (field) => !nextFields.has(field.key),
-      );
-    return {
-      valid: blockingIssues.length === 0,
-      blockingIssues,
-      warnings: [
-        ...(settingsChanged > 0
-          ? ["Новые значения применятся только к будущим бизнес-снимкам."]
-          : []),
-        ...(settlementTypesChanged > 0 || compensationRulesChanged > 0
-          ? [
-              "Новые правила применятся только к будущим решениям; история сохранит прежние снимки.",
-            ]
-          : []),
-      ],
-      changes: {
-        fieldsCreated: next.fields.filter(
-          (field) => !currentFields.has(field.key),
-        ).length,
-        fieldsUpdated: next.fields.filter(
-          (field) =>
-            currentFields.has(field.key) && changed(field),
-        ).length,
-        fieldsArchived: current.fields.filter(
-          (field) => !nextFields.has(field.key),
-        ).length,
-        settingsChanged,
-        settlementTypesChanged,
-        compensationRulesChanged,
-      },
-      affectedScreens: [
-        ...(fieldChange
-          ? ["lead.create", "student.create", "client.card.custom_fields"]
-          : []),
-        ...(settingsChanged
-          ? ["schedule.lesson.create", "client.payments"]
-          : []),
-        ...(settlementTypesChanged > 0 ? ["schedule.lesson.decision"] : []),
-        ...(compensationRulesChanged > 0 ? ["teacher.compensation"] : []),
-      ],
     };
   }
 
