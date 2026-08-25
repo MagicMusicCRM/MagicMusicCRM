@@ -43,7 +43,9 @@ export class LeadCommandService {
   ) {
     this.policy.assertCanWriteCrm(actor);
     const { lead, branchId } = await this.writes.create(actor, dto, validated);
-    await this.claimIfUnassigned(actor, dto, lead.id);
+    if (!dto.clearAssignedTo && !dto.assignedTo) {
+      await ensureResponsibleSafe(this.database, actor, "lead", lead.id);
+    }
     await this.audit.record({
       actor,
       action: "crm.lead_created",
@@ -76,7 +78,9 @@ export class LeadCommandService {
       customFields,
     );
     if (!lead) throw new NotFoundException("Лид не найден.");
-    await this.claimIfUnassigned(actor, dto, lead.id);
+    if (!dto.clearAssignedTo && !dto.assignedTo) {
+      await ensureResponsibleSafe(this.database, actor, "lead", lead.id);
+    }
     await this.audit.record({
       actor,
       action: "crm.lead_updated",
@@ -140,15 +144,6 @@ export class LeadCommandService {
     throw new ConflictException(
       "Прямое удаление лида отключено. Используйте управляемое архивирование с предварительной проверкой связанных данных.",
     );
-  }
-
-  private async claimIfUnassigned(
-    actor: ActorContext,
-    dto: UpsertLeadDto,
-    leadId: string,
-  ) {
-    if (dto.clearAssignedTo || dto.assignedTo) return;
-    await ensureResponsibleSafe(this.database, actor, "lead", leadId);
   }
 
   private async assertEntityExists(
