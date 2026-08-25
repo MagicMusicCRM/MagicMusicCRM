@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/person_access_role_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/person_lifecycle_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/provision_access_dialog.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_access_flow.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_content.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_model.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_save_command.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_employment_fields.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_payroll_controller.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_payroll_dialogs.dart';
@@ -98,26 +99,14 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
     }
     setState(() => _saving = true);
     try {
-      final names = _nameController.text.trim().split(RegExp(r'\s+'));
-      await ref
-          .read(magicCrmServiceProvider)
-          .updateTeacher(
-            _teacherId,
-            firstName: names.first,
-            lastName: names.length > 1 ? names.sublist(1).join(' ') : '',
-            phone: _canonicalPhone,
-            customDataPatch: employment.customDataPatch,
-            salary: employment.salaryChanged ? employment.salary : null,
-            disciplineIds: employment.disciplineIds,
-            branchIds: employment.branchIds,
-            rate: employment.rateChanged ? employment.rate : null,
-            rateEffectiveFrom:
-                employment.rateChanged && employment.rateEffectiveFrom != null
-                ? DateFormat('yyyy-MM-dd').format(employment.rateEffectiveFrom!)
-                : null,
-            payrollExpectedVersion: payrollExpectedVersion,
-            payrollReasonText: payrollReasonText,
-          );
+      final command = TeacherDetailSaveCommand.fromEditor(
+        name: _nameController.text,
+        phone: _canonicalPhone,
+        employment: employment,
+        payrollExpectedVersion: payrollExpectedVersion,
+        payrollReasonText: payrollReasonText,
+      );
+      await command.execute(ref.read(magicCrmServiceProvider), _teacherId);
       if (!mounted) return;
       Navigator.pop(context, true);
       _showMessage('Данные сохранены');
@@ -137,46 +126,36 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
 
   Future<void> _provisionAccess() async {
     final accessExists = _teacher['is_app_account'] == true;
-    Map<String, dynamic>? credentials;
-    if (accessExists) {
-      try {
-        credentials = await ref
-            .read(magicCrmServiceProvider)
-            .getTeacherAccess(_teacherId);
-      } catch (error) {
-        if (mounted) {
-          _showMessage(
-            userErrorMessage(
-              error,
-              fallback: 'Не удалось получить данные для входа.',
-            ),
-          );
-        }
-        return;
-      }
-    }
-    if (!mounted) return;
-    Map<String, dynamic>? updated;
-    final saved = await showProvisionAccessDialog(
-      context,
-      personLabel: _nameController.text.trim(),
-      initialEmail: credentials?['email']?.toString() ?? _emailController.text,
-      currentPassword: credentials?['password']?.toString(),
+    final updated = await TeacherDetailAccessFlow.run(
+      service: ref.read(magicCrmServiceProvider),
+      teacherId: _teacherId,
+      currentEmail: _emailController.text,
       accessExists: accessExists,
-      onSubmit: (email, password) async {
-        updated = await ref
-            .read(magicCrmServiceProvider)
-            .provisionTeacherAccess(
-              teacherId: _teacherId,
-              email: email,
-              password: password,
-            );
+      onLoadError: (error) {
+        if (!mounted) return;
+        _showMessage(
+          userErrorMessage(
+            error,
+            fallback: 'Не удалось получить данные для входа.',
+          ),
+        );
       },
+      showDialog:
+          ({required initialEmail, currentPassword, required onSubmit}) {
+            return showProvisionAccessDialog(
+              context,
+              personLabel: _nameController.text.trim(),
+              initialEmail: initialEmail,
+              currentPassword: currentPassword,
+              accessExists: accessExists,
+              onSubmit: onSubmit,
+            );
+          },
     );
-    if (saved == true && mounted && updated != null) {
+    if (mounted && updated != null) {
       setState(() {
-        _teacher = updated!;
-        _emailController.text = updated!['email']?.toString() ?? '';
+        _teacher = updated;
+        _emailController.text = updated['email']?.toString() ?? '';
       });
       _showMessage('Доступ преподавателя создан');
     }
