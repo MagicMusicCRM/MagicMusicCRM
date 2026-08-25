@@ -36,6 +36,23 @@ void main() {
     }
   });
 
+  test('client card editor responsibilities have semantic parts', () {
+    final owner = File(
+      'lib/features/crm/presentation/client_card/client_card.dart',
+    ).readAsStringSync();
+    expect(owner, isNot(contains("part 'client_card_editors.dart';")));
+    for (final part in const [
+      'client_card_custom_fields.dart',
+      'client_card_moderation.dart',
+      'client_card_contact_editors.dart',
+      'client_card_assignment_editors.dart',
+      'client_card_comment_editor.dart',
+      'client_card_family_access.dart',
+    ]) {
+      expect(owner, contains("part '$part';"));
+    }
+  });
+
   const uuid = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
   const statuses = <StatusRecord>[
     (uuid, 'Новый', Colors.amber),

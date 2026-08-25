@@ -75,7 +75,12 @@ part 'client_card_tasks_tab.dart';
 part 'client_card_collaboration_tabs.dart';
 part 'client_card_presentation.dart';
 part 'client_card_student.dart';
-part 'client_card_editors.dart';
+part 'client_card_custom_fields.dart';
+part 'client_card_moderation.dart';
+part 'client_card_contact_editors.dart';
+part 'client_card_assignment_editors.dart';
+part 'client_card_comment_editor.dart';
+part 'client_card_family_access.dart';
 part 'client_card_workspace_sections.dart';
 
 /// Unified «Карточка клиента». Phase 1 hosts the full lead experience (5 tabs:
