@@ -100,63 +100,66 @@ extension _ClientCardCommentEditor on _ClientCardState {
   Future<void> _addComment() async {
     final text = _commentCtrl.text.trim();
     if (text.isEmpty) return;
-
-    // New comments target the card's primary half: the student side for a
-    // converted client (where most activity lives), otherwise the open entity.
-    final targetType = _isConverted ? 'student' : widget.entityType;
-    final targetId = _isConverted ? _studentId : _entityId;
-    if (targetId.isEmpty) return;
-    // kind существует только у entity_comments (ученик): staff выбирает поток,
-    // педагог всегда пишет teacher_note (admin_comment ему запрещён RBAC'ом).
-    final role = ref.read(releaseGateStatusProvider).asData?.value.role;
-    final kind = targetType != 'student'
-        ? null
-        : _canPickCommentKind
-        ? _commentKind
-        : role == 'teacher'
-        ? 'teacher_note'
-        : null;
+    final target = _commentTarget();
+    if (target == null) return;
+    final kind = _commentKindFor(target.$1);
     try {
       await ref
           .read(magicCrmServiceProvider)
           .createComment(
-            entityType: targetType,
-            entityId: targetId,
+            entityType: target.$1,
+            entityId: target.$2,
             body: text,
             kind: kind,
           );
       _commentCtrl.clear();
-      if (mounted) {
-        // #11: видимая обратная связь — что комментарий создан и в какой
-        // поток он ушёл; выбор потока возвращается к безопасному дефолту.
-        MagicToast.show(
-          context,
-          kind == 'teacher_note'
-              ? 'Комментарий добавлен (для педагога)'
-              : 'Комментарий добавлен',
-          type: MagicToastType.success,
-        );
-        _emitState(() {
-          _commentsRefreshKey++;
-          _commentKind = 'admin_comment';
-        });
-        if (_mode.hasStudentHalf) {
-          _fetchStudentData();
-        }
-        if (_mode.hasLeadHalf) {
-          _fetchCard();
-        }
-      }
+      _onCommentCreated(kind);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              userErrorMessage(e, fallback: 'Не удалось сохранить изменение.'),
-            ),
-          ),
-        );
-      }
+      _showCommentFailure(e);
     }
+  }
+
+  (String, String)? _commentTarget() {
+    // Converted clients write to the student half where primary activity lives.
+    final type = _isConverted ? 'student' : widget.entityType;
+    final id = _isConverted ? _studentId : _entityId;
+    return id.isEmpty ? null : (type, id);
+  }
+
+  String? _commentKindFor(String targetType) {
+    // kind exists only for student comments. Teachers are forced into the
+    // teacher stream by RBAC; staff may choose explicitly.
+    if (targetType != 'student') return null;
+    if (_canPickCommentKind) return _commentKind;
+    final role = ref.read(releaseGateStatusProvider).asData?.value.role;
+    return role == 'teacher' ? 'teacher_note' : null;
+  }
+
+  void _onCommentCreated(String? kind) {
+    if (!mounted) return;
+    MagicToast.show(
+      context,
+      kind == 'teacher_note'
+          ? 'Комментарий добавлен (для педагога)'
+          : 'Комментарий добавлен',
+      type: MagicToastType.success,
+    );
+    _emitState(() {
+      _commentsRefreshKey++;
+      _commentKind = 'admin_comment';
+    });
+    if (_mode.hasStudentHalf) _fetchStudentData();
+    if (_mode.hasLeadHalf) _fetchCard();
+  }
+
+  void _showCommentFailure(Object error) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          userErrorMessage(error, fallback: 'Не удалось сохранить изменение.'),
+        ),
+      ),
+    );
   }
 }

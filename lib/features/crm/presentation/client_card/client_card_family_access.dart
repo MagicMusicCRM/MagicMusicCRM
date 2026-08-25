@@ -26,62 +26,62 @@ extension _ClientCardFamilyAccess on _ClientCardState {
       defaultEntityLabel: _clientPresentationLabel,
     );
     if (input == null) return;
-    final role = input.role;
-    final entityType = input.entityType;
-    final entityId = input.entityId;
-    final isPrimaryContact = input.isPrimaryContact;
-    if (entityId.isEmpty) {
-      if (mounted) {
-        MagicToast.show(
-          context,
-          'Выберите запись',
-          type: MagicToastType.danger,
-        );
-      }
+    if (input.entityId.isEmpty) {
+      _showFamilyError('Выберите запись');
       return;
     }
 
     _emitState(() => _familyBusy = true);
     try {
-      final crm = ref.read(magicCrmServiceProvider);
-      var familyId = _familyIdFrom(_family?['family'] as Map<String, dynamic>?);
-      if (familyId == null) {
-        final branchId = _leadData['branch_id']?.toString();
-        final created = await crm.createFamily({
-          if (branchId != null && branchId.isNotEmpty) 'branchId': branchId,
-        });
-        familyId = _familyIdFrom(created);
-        if (familyId == null) {
-          throw StateError('Не удалось получить идентификатор семьи');
-        }
-      }
-      await crm.addFamilyMember(
-        familyId,
-        entityType: entityType,
-        entityId: entityId,
-        role: role,
-        isPrimaryContact: isPrimaryContact ? true : null,
-      );
-      await _fetchFamily();
-      if (mounted) {
-        MagicToast.show(
-          context,
-          'Участник добавлен',
-          type: MagicToastType.success,
-        );
-      }
+      await _addFamilyMember(input);
+      _showFamilySuccess('Участник добавлен');
     } catch (e) {
-      if (mounted) {
-        MagicToast.show(
-          context,
-          'Ошибка добавления',
-          detail: userErrorMessage(e),
-          type: MagicToastType.danger,
-        );
-      }
+      _showFamilyError('Ошибка добавления', error: e);
     } finally {
       if (mounted) _emitState(() => _familyBusy = false);
     }
+  }
+
+  Future<void> _addFamilyMember(FamilyMemberInput input) async {
+    final crm = ref.read(magicCrmServiceProvider);
+    final familyId = await _ensureFamilyId(crm);
+    await crm.addFamilyMember(
+      familyId,
+      entityType: input.entityType,
+      entityId: input.entityId,
+      role: input.role,
+      isPrimaryContact: input.isPrimaryContact ? true : null,
+    );
+    await _fetchFamily();
+  }
+
+  Future<String> _ensureFamilyId(MagicCrmService crm) async {
+    final existing = _familyIdFrom(_family?['family'] as Map<String, dynamic>?);
+    if (existing != null) return existing;
+    final branchId = _leadData['branch_id']?.toString();
+    final created = await crm.createFamily({
+      if (branchId != null && branchId.isNotEmpty) 'branchId': branchId,
+    });
+    final createdId = _familyIdFrom(created);
+    if (createdId == null) {
+      throw StateError('Не удалось получить идентификатор семьи');
+    }
+    return createdId;
+  }
+
+  void _showFamilySuccess(String message) {
+    if (!mounted) return;
+    MagicToast.show(context, message, type: MagicToastType.success);
+  }
+
+  void _showFamilyError(String message, {Object? error}) {
+    if (!mounted) return;
+    MagicToast.show(
+      context,
+      message,
+      detail: error == null ? null : userErrorMessage(error),
+      type: MagicToastType.danger,
+    );
   }
 
   Future<void> _removeFamilyMember(FamilyMember member) async {
