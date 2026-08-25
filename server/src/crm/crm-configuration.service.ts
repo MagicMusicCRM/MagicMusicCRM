@@ -5,16 +5,11 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import { PoolClient, QueryResult, QueryResultRow } from "pg";
 import { AuditService } from "../audit/audit.service";
 import { authorizeCurrentCapability } from "../access-control/capability-request-authorizer";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
-import {
-  buildCrmConfigurationBaseline,
-  ClientFieldDefinitionRow,
-} from "./crm-configuration-baseline";
 import {
   applyCrmConfigurationBranchPatch,
   createCrmConfigurationBranchPatch,
@@ -26,6 +21,16 @@ import type {
   ConfigSnapshot,
 } from "./crm-configuration.contracts";
 import { buildCrmConfigurationImpact } from "./crm-configuration-impact.policy";
+import {
+  assertCrmConfigurationBranch,
+  crmConfigurationRevisionDto,
+  type CrmConfigurationQueryable,
+  type CrmConfigurationRevisionRow,
+  hasStoredCrmClientFieldValues,
+  resolveEffectiveCrmConfiguration,
+  resolveSchoolCrmConfiguration,
+  syncCrmClientFields,
+} from "./crm-configuration-persistence";
 import { normalizeCrmConfigurationSnapshot } from "./crm-configuration-snapshot-normalizer";
 import { CrmPolicy } from "./crm.policy";
 import {
@@ -33,46 +38,6 @@ import {
   RollbackCrmConfigurationDto,
   SaveCrmConfigurationDraftDto,
 } from "./dto/crm-configuration.dto";
-
-interface RevisionRow {
-  id: string;
-  branch_id: string | null;
-  version: number | string;
-  patch: ConfigSnapshot | ConfigBranchPatch;
-  effective_snapshot: ConfigSnapshot;
-  impact: Record<string, unknown>;
-  reason: string;
-  rollback_from_version: number | string | null;
-  created_by: string | null;
-  created_at: Date | string;
-}
-
-type Queryable = Pick<PoolClient, "query"> | DatabaseService;
-
-function runQuery<T extends QueryResultRow>(
-  queryable: Queryable,
-  text: string,
-  params: unknown[] = [],
-): Promise<QueryResult<T>> {
-  return (
-    queryable.query as (
-      query: string,
-      values?: unknown[],
-    ) => Promise<QueryResult<T>>
-  )(text, params);
-}
-
-async function hasStoredClientFieldValues(
-  queryable: Queryable,
-  definitionId: string,
-): Promise<boolean> {
-  const result = await runQuery<{ count: number | string }>(
-    queryable,
-    "select count(*) as count from app.client_custom_field_values where definition_id = $1",
-    [definitionId],
-  );
-  return Number(result.rows[0]?.count ?? 0) > 0;
-}
 
 @Injectable()
 export class CrmConfigurationService {
@@ -85,7 +50,10 @@ export class CrmConfigurationService {
 
   async getEffective(actor: ActorContext, branchId?: string) {
     await this.assertScope(actor, branchId);
-    const effective = await this.resolveEffective(this.database, branchId);
+    const effective = await resolveEffectiveCrmConfiguration(
+      this.database,
+      branchId,
+    );
     return {
       branchId: branchId ?? null,
       source: effective.branchVersion > 0 ? "branch_override" : "school",
@@ -104,9 +72,12 @@ export class CrmConfigurationService {
     if (actor.role === "manager") {
       await this.assertScope(actor, branchId);
     } else if (branchId) {
-      await this.assertBranch(this.database, branchId);
+      await assertCrmConfigurationBranch(this.database, branchId);
     }
-    const effective = await this.resolveEffective(this.database, branchId);
+    const effective = await resolveEffectiveCrmConfiguration(
+      this.database,
+      branchId,
+    );
     const defaultLessonDurationMinutes =
       effective.snapshot.businessSettings.find(
         (setting) => setting.key === "default_lesson_duration_minutes",
@@ -149,7 +120,10 @@ export class CrmConfigurationService {
         updatedAt: existing.updated_at,
       };
     }
-    const effective = await this.resolveEffective(this.database, branchId);
+    const effective = await resolveEffectiveCrmConfiguration(
+      this.database,
+      branchId,
+    );
     return {
       branchId: branchId ?? null,
       baseVersion: branchId ? effective.branchVersion : effective.schoolVersion,
@@ -162,7 +136,10 @@ export class CrmConfigurationService {
   async saveDraft(actor: ActorContext, dto: SaveCrmConfigurationDraftDto) {
     await this.assertScope(actor, dto.branchId);
     const snapshot = normalizeCrmConfigurationSnapshot(dto.snapshot);
-    const current = await this.resolveEffective(this.database, dto.branchId);
+    const current = await resolveEffectiveCrmConfiguration(
+      this.database,
+      dto.branchId,
+    );
     const currentVersion = dto.branchId
       ? current.branchVersion
       : current.schoolVersion;
@@ -209,7 +186,10 @@ export class CrmConfigurationService {
   async preview(actor: ActorContext, dto: SaveCrmConfigurationDraftDto) {
     await this.assertScope(actor, dto.branchId);
     const snapshot = normalizeCrmConfigurationSnapshot(dto.snapshot);
-    const effective = await this.resolveEffective(this.database, dto.branchId);
+    const effective = await resolveEffectiveCrmConfiguration(
+      this.database,
+      dto.branchId,
+    );
     await this.assertCommerceCatalogAccess(
       this.database,
       actor,
@@ -221,7 +201,7 @@ export class CrmConfigurationService {
       current: effective.snapshot,
       school: dto.branchId ? effective.schoolSnapshot : undefined,
       hasStoredClientFieldValues: (definitionId) =>
-        hasStoredClientFieldValues(this.database, definitionId),
+        hasStoredCrmClientFieldValues(this.database, definitionId),
     });
   }
 
@@ -232,7 +212,7 @@ export class CrmConfigurationService {
 
   async listRevisions(actor: ActorContext, branchId?: string) {
     await this.assertScope(actor, branchId);
-    const result = await this.database.query<RevisionRow>(
+    const result = await this.database.query<CrmConfigurationRevisionRow>(
       `select id, branch_id, version, patch, effective_snapshot, impact,
          reason, rollback_from_version, created_by, created_at
        from app.crm_configuration_revisions
@@ -240,12 +220,12 @@ export class CrmConfigurationService {
        order by version desc limit 50`,
       [branchId ?? null],
     );
-    return { items: result.rows.map((row) => this.revisionDto(row)) };
+    return { items: result.rows.map(crmConfigurationRevisionDto) };
   }
 
   async rollback(actor: ActorContext, dto: RollbackCrmConfigurationDto) {
     await this.assertScope(actor, dto.branchId);
-    const target = await this.database.query<RevisionRow>(
+    const target = await this.database.query<CrmConfigurationRevisionRow>(
       `select id, branch_id, version, patch, effective_snapshot, impact,
          reason, rollback_from_version, created_by, created_at
        from app.crm_configuration_revisions
@@ -258,7 +238,7 @@ export class CrmConfigurationService {
       throw new NotFoundException("Версия конфигурации не найдена.");
     const snapshot = dto.branchId
       ? applyCrmConfigurationBranchPatch(
-          (await this.resolveSchool(this.database)).snapshot,
+          (await resolveSchoolCrmConfiguration(this.database)).snapshot,
           revision.patch as ConfigBranchPatch,
         )
       : revision.effective_snapshot;
@@ -292,8 +272,13 @@ export class CrmConfigurationService {
       await client.query("select pg_advisory_xact_lock(hashtext($1))", [
         `crm-configuration:${dto.branchId ?? "school"}`,
       ]);
-      if (dto.branchId) await this.assertBranch(client, dto.branchId);
-      const effective = await this.resolveEffective(client, dto.branchId);
+       if (dto.branchId) {
+         await assertCrmConfigurationBranch(client, dto.branchId);
+       }
+       const effective = await resolveEffectiveCrmConfiguration(
+         client,
+         dto.branchId,
+       );
       const currentVersion = dto.branchId
         ? effective.branchVersion
         : effective.schoolVersion;
@@ -316,7 +301,7 @@ export class CrmConfigurationService {
         current: effective.snapshot,
         school: dto.branchId ? effective.schoolSnapshot : undefined,
         hasStoredClientFieldValues: (definitionId) =>
-          hasStoredClientFieldValues(client, definitionId),
+           hasStoredCrmClientFieldValues(client, definitionId),
       });
       if (!impact.valid) {
         throw new UnprocessableEntityException({
@@ -327,12 +312,12 @@ export class CrmConfigurationService {
       }
       const snapshot = dto.branchId
         ? requested
-        : await this.syncClientFields(client, requested);
+         : await syncCrmClientFields(client, requested);
       const nextVersion = currentVersion + 1;
       const patch = dto.branchId
         ? createCrmConfigurationBranchPatch(effective.schoolSnapshot, snapshot)
         : snapshot;
-      const inserted = await client.query<RevisionRow>(
+       const inserted = await client.query<CrmConfigurationRevisionRow>(
         `insert into app.crm_configuration_revisions (
            branch_id, version, patch, effective_snapshot, impact, reason,
            rollback_from_version, created_by
@@ -360,7 +345,7 @@ export class CrmConfigurationService {
         previousVersion: currentVersion,
       };
     });
-    const revision = this.revisionDto(result.row);
+    const revision = crmConfigurationRevisionDto(result.row);
     await this.audit.record({
       actor,
       action: "crm.configuration_published",
@@ -382,7 +367,9 @@ export class CrmConfigurationService {
   private async assertScope(actor: ActorContext, branchId?: string) {
     this.policy.assertCanManageSystemSettings(actor);
     if (actor.role !== "manager") {
-      if (branchId) await this.assertBranch(this.database, branchId);
+      if (branchId) {
+        await assertCrmConfigurationBranch(this.database, branchId);
+      }
       return;
     }
     if (!branchId) {
@@ -408,141 +395,8 @@ export class CrmConfigurationService {
     }
   }
 
-  private async resolveEffective(queryable: Queryable, branchId?: string) {
-    const school = await this.resolveSchool(queryable);
-    if (!branchId) {
-      return {
-        schoolVersion: school.version,
-        branchVersion: 0,
-        schoolSnapshot: school.snapshot,
-        snapshot: school.snapshot,
-      };
-    }
-    await this.assertBranch(queryable, branchId);
-    const branch = await runQuery<RevisionRow>(
-      queryable,
-      `select id, branch_id, version, patch, effective_snapshot, impact,
-         reason, rollback_from_version, created_by, created_at
-       from app.crm_configuration_revisions
-       where branch_id = $1 order by version desc limit 1`,
-      [branchId],
-    );
-    const latest = branch.rows[0];
-    return {
-      schoolVersion: school.version,
-      branchVersion: latest ? Number(latest.version) : 0,
-      schoolSnapshot: school.snapshot,
-      snapshot: latest
-        ? applyCrmConfigurationBranchPatch(
-            school.snapshot,
-            latest.patch as ConfigBranchPatch,
-          )
-        : school.snapshot,
-    };
-  }
-
-  private async resolveSchool(queryable: Queryable) {
-    const result = await runQuery<RevisionRow>(
-      queryable,
-      `select id, branch_id, version, patch, effective_snapshot, impact,
-         reason, rollback_from_version, created_by, created_at
-       from app.crm_configuration_revisions
-       where branch_id is null order by version desc limit 1`,
-    );
-    const row = result.rows[0];
-    if (!row) {
-      const definitions = await runQuery<ClientFieldDefinitionRow>(
-        queryable,
-        `select id, field_key, label, value_type, is_required,
-           is_active, is_system, category_key, category_label, sort_order, width,
-           placements, options, visible_on_lead, visible_on_student
-         from app.client_custom_field_definitions
-         where is_active = true and deleted_at is null
-         order by sort_order, label`,
-      );
-      return {
-        version: 0,
-        snapshot: buildCrmConfigurationBaseline(definitions.rows),
-      };
-    }
-    return {
-      version: Number(row.version),
-      snapshot: normalizeCrmConfigurationSnapshot(
-        row.effective_snapshot as unknown as Record<string, unknown>,
-      ),
-    };
-  }
-
-  private async syncClientFields(client: PoolClient, snapshot: ConfigSnapshot) {
-    const keys = snapshot.fields.map((field) => field.key);
-    const categoryLabels = new Map(
-      snapshot.categories.map((category) => [category.key, category.label]),
-    );
-    for (const field of snapshot.fields) {
-      const result = await client.query<{ id: string }>(
-        `insert into app.client_custom_field_definitions (
-           field_key, label, value_type, is_required, is_active,
-           is_system, options, category_key, category_label, sort_order, width,
-           placements, visible_on_lead, visible_on_student
-         ) values ($1, $2, $3, $4, $5, false, $6::jsonb, $7, $8, $9, $10,
-           $11::jsonb, $12, $13)
-         on conflict (field_key) do update set
-           label = excluded.label,
-           value_type = case when app.client_custom_field_definitions.is_system
-             then app.client_custom_field_definitions.value_type else excluded.value_type end,
-           is_required = excluded.is_required,
-           is_active = case when app.client_custom_field_definitions.is_system
-             then true else excluded.is_active end,
-           deleted_at = case when excluded.is_active then null else coalesce(app.client_custom_field_definitions.deleted_at, now()) end,
-           options = excluded.options,
-           category_key = excluded.category_key,
-           category_label = excluded.category_label,
-           sort_order = excluded.sort_order,
-           width = excluded.width,
-           placements = excluded.placements,
-           visible_on_lead = case
-             when app.client_custom_field_definitions.is_system
-               then app.client_custom_field_definitions.visible_on_lead
-             else excluded.visible_on_lead end,
-           visible_on_student = case
-             when app.client_custom_field_definitions.is_system
-               then app.client_custom_field_definitions.visible_on_student
-             else excluded.visible_on_student end,
-           version = app.client_custom_field_definitions.version + 1,
-           updated_at = now()
-         returning id`,
-        [
-          field.key,
-          field.label,
-          field.valueType,
-          field.required,
-          field.active,
-          JSON.stringify(field.options),
-          field.categoryKey,
-          categoryLabels.get(field.categoryKey) ?? field.categoryKey,
-          field.order,
-          field.width,
-          JSON.stringify(field.placements),
-          field.visibility.lead,
-          field.visibility.student,
-        ],
-      );
-      field.id = result.rows[0]!.id;
-    }
-    await client.query(
-      `update app.client_custom_field_definitions definition
-       set is_active = false, deleted_at = coalesce(deleted_at, now()),
-         version = version + 1, updated_at = now()
-       where not definition.is_system
-         and not (definition.field_key = any($1::text[]))
-         and definition.is_active`,
-      [keys],
-    );
-    return snapshot;
-  }
-
   private async assertCommerceCatalogAccess(
-    queryable: Queryable,
+    queryable: CrmConfigurationQueryable,
     actor: ActorContext,
     next: ConfigSnapshot,
     current: ConfigSnapshot,
@@ -566,34 +420,6 @@ export class CrmConfigurationService {
       "config.commerce.manage",
       lockForCommit,
     );
-  }
-
-  private async assertBranch(queryable: Queryable, branchId: string) {
-    const result = await runQuery<{ present: boolean }>(
-      queryable,
-      "select exists (select 1 from app.branches where id = $1 and deleted_at is null) as present",
-      [branchId],
-    );
-    if (!result.rows[0]?.present)
-      throw new NotFoundException("Филиал не найден.");
-  }
-
-  private revisionDto(row: RevisionRow) {
-    return {
-      id: row.id,
-      branchId: row.branch_id,
-      version: Number(row.version),
-      reason: row.reason,
-      rollbackFromVersion:
-        row.rollback_from_version === null
-          ? null
-          : Number(row.rollback_from_version),
-      createdBy: row.created_by,
-      createdAt: row.created_at,
-      snapshot: row.effective_snapshot,
-      patch: row.patch,
-      impact: row.impact,
-    };
   }
 
 }
