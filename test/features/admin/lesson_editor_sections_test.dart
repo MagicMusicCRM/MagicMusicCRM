@@ -257,7 +257,8 @@ final _forbiddenPresentationUses = <String, RegExp>{
     r'\b(?:ChangeNotifier|ValueNotifier|StateNotifier|AsyncNotifier|Notifier)\b',
   ),
   'controller or notifier construction': RegExp(
-    r'\b[A-Z]\w*(?:Controller|Notifier)\s*(?:<[^;(){}]+>\s*)?\(',
+    r'\b_*[A-Z]\w*(?:Controller|Notifier)\s*'
+    r'(?:<[^;(){}]+>\s*)?(?:\.[A-Za-z_]\w*)?\s*\(',
   ),
   'focus ownership construction': RegExp(
     r'\b(?:FocusNode|FocusScopeNode)\s*\(',
@@ -1482,6 +1483,14 @@ void main() {
       'final owner = StreamController<int>();':
           'controller or notifier construction',
       'final owner = ValueNotifier<int>(0);':
+          'controller or notifier construction',
+      'final owner = _LessonController();':
+          'controller or notifier construction',
+      'final owner = _DraftNotifier<int>();':
+          'controller or notifier construction',
+      'final owner = AnimationController.unbounded(vsync: this);':
+          'controller or notifier construction',
+      'final owner = StreamController<int>.broadcast();':
           'controller or notifier construction',
     };
     for (final fixture in forbiddenFixtures.entries) {
