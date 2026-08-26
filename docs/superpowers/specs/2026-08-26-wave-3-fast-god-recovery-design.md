@@ -2,7 +2,12 @@
 
 **Date:** 2026-08-26
 
-**Status:** Awaiting owner review
+**Status:** Superseded by the owner-approved Campaign-12 design on 2026-08-26
+
+This three-owner proposal is retained as decision history. It is replaced by
+`2026-08-26-campaign-12-god-recovery-design.md`, which keeps the same isolation
+model but expands execution to four dependency-ordered tiers and one global
+acceptance gate.
 
 ## Goal
 
