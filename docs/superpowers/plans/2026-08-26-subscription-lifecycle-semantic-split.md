@@ -1056,9 +1056,16 @@ Package 9 is complete only after every task-specific review is clean, the final 
 
 ## Results
 
-**Status:** accepted at code HEAD `8ebbf32e03a4`, range
-`8a38a57b..8ebbf32e`. Package commits: `ffd1fdb9`, `aa27e4ef`, `9dec8c6d`,
-`34763488`, `829069d9`, `b5cdaa56`, `8ebbf32e`.
+**Status:** accepted at code HEAD
+`8ebbf32e03a42eec6621270c9304964abeedd3a8`, range
+`8a38a57bcc82b724a25ef0c20a4e421b290800bc..8ebbf32e03a42eec6621270c9304964abeedd3a8`.
+Package commits: `ffd1fdb99aed37b00e4719f92b48dd2dfaf4434b`,
+`aa27e4ef97ee1f196942858cd004f61bdf434edc`,
+`9dec8c6dbba87f51cbf5f4cce06c062c76f5acf6`,
+`347634884f063ea4f8f118bd1349de2272dca73a`,
+`829069d9344c6ca19b6bde1e0746e8cfe875d0ff`,
+`b5cdaa5639942485f490da55ae471836501233ce`, and
+`8ebbf32e03a42eec6621270c9304964abeedd3a8`.
 
 ### Verification and coverage
 
@@ -1071,8 +1078,9 @@ Package 9 is complete only after every task-specific review is clean, the final 
 
 `server/coverage/lcov.info` is 766,302 bytes with SHA-256
 `ea00521cffe08f4d4091d895af899e1d742bd9a4b9a72762a666f96faf75123e` and 428
-LCOV file records. RepoWise resolved 407 files at exact commit `8ebbf32e` and
-reports 17,187/20,348 mapped lines (`84.47%`) and `61.83%` mapped branches.
+LCOV file records. RepoWise resolved 407 files at exact commit
+`8ebbf32e03a42eec6621270c9304964abeedd3a8` and reports 17,187/20,348 mapped
+lines (`84.47%`) and `61.83%` mapped branches.
 Raw report totals, including the 21 unmapped report paths, are 18,252/22,679
 lines (`80.48%`) and 13,379/22,250 branches (`60.13%`).
 
@@ -1111,19 +1119,21 @@ same live production filter moves `25 -> 24` `god_class` findings. The facade
 has 72 physical non-comment lines, zero transaction/repository references, and
 no `god_class`/`brain_method`. Every structural owner has CCN `<=8`.
 
-Indexed scope at `8ebbf32e`: 1,609 files, average health `6.74`,
-`server=7.07`, `lib=5.06`; status reports hotspot health `5.90`. Separate live
-CLI scope: 1,708 files, average `7.02`, hotspot `4.99`; the production filter
-contains 773 files, 243 below health `7.0`, and 24 god classes. These scopes
-are not conflated.
+Indexed scope at `8ebbf32e03a42eec6621270c9304964abeedd3a8`: 1,609 files,
+average health `6.74`, `server=7.07`, `lib=5.06`; status reports hotspot health
+`5.90`. Separate live CLI repository scope: 1,708 files, average `7.02`, hotspot
+`4.99`; the production filter contains 773 files, 243 below health `7.0`, and
+24 god classes. These scopes are not conflated.
 
 Changed-file PR risk is `1.31`; predicted review surface is five downstream
 files, two downstream tests, and three missing historical co-changers. Actual
 verification passed the full suite. RepoWise reports empty `breaking_changes`,
 `will_break_consumers`, `dependency_cycles`, and `conformance_violations`.
-Full-range risk for `8a38a57b..8ebbf32e` is score `9.8`, probability `0.9813`,
-percentile `98.0`, priority `high`, classification `Elevated`, reflecting 2,643
-insertions, 1,359 deletions, and 16 changed files.
+Full-range risk for
+`8a38a57bcc82b724a25ef0c20a4e421b290800bc..8ebbf32e03a42eec6621270c9304964abeedd3a8`
+is score `9.8`, probability `0.9813`, percentile `98.0`, priority `high`,
+classification `Elevated`, reflecting 2,643 insertions, 1,359 deletions, and
+16 changed files.
 
 Accepted exceptions are explicit. The replacement and cancellation executor
 `execute` methods remain indivisible atomic I/O owners at 196/195 lines, health

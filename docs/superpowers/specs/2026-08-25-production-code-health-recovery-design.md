@@ -341,7 +341,8 @@ The Leads application ownership split is implemented and verified at
 - Sentrux improved `5730 → 5745`, with acyclicity `10000`/raw `0`, depth `13`,
   equality `6249`, modularity `5369`, redundancy `4896`, and both rules passing.
 
-Backend module health is `7.02`, so the server-side program gate is achieved.
+At that Package 6 snapshot, backend module health was `7.02`, so the
+server-side program gate was achieved.
 Repository code-only health is `6.26`; Flutter `4.82` and the overall `7.5`
 contract remain open. The literal dashboard directive is still the large
 subscription integration suite whose primary signal is historical co-change.
@@ -654,10 +655,18 @@ is never manually rewritten to repair a refactor.
 
 ## Package 9 verified outcome — subscription lifecycle
 
-Package 9 is accepted at code commit `8ebbf32e03a4` over execution range
-`8a38a57b..8ebbf32e`. Its reversible code commits are `ffd1fdb9`, `aa27e4ef`,
-`9dec8c6d`, `34763488`, `829069d9`, `b5cdaa56`, and `8ebbf32e`. The production
-recount moves `25 -> 24` `god_class` owners. The former
+Package 9 is accepted at code commit
+`8ebbf32e03a42eec6621270c9304964abeedd3a8` over execution range
+`8a38a57bcc82b724a25ef0c20a4e421b290800bc..8ebbf32e03a42eec6621270c9304964abeedd3a8`.
+Its reversible code commits are
+`ffd1fdb99aed37b00e4719f92b48dd2dfaf4434b`,
+`aa27e4ef97ee1f196942858cd004f61bdf434edc`,
+`9dec8c6dbba87f51cbf5f4cce06c062c76f5acf6`,
+`347634884f063ea4f8f118bd1349de2272dca73a`,
+`829069d9344c6ca19b6bde1e0746e8cfe875d0ff`,
+`b5cdaa5639942485f490da55ae471836501233ce`, and
+`8ebbf32e03a42eec6621270c9304964abeedd3a8`. The production recount moves
+`25 -> 24` `god_class` owners. The former
 `SubscriptionLifecycleService` moves from health `3.44`, `1,350` NLOC, max CCN
 `14`, and weighted deficit `6,156` to a transaction-free 72-NLOC facade at
 health `7.39`, max CCN `1`, and deficit `44`, with no `god_class` or
@@ -682,7 +691,8 @@ about `164.5 s`; the unchanged command passed with
 `ea00521cffe08f4d4091d895af899e1d742bd9a4b9a72762a666f96faf75123e`,
 `766,302` bytes and 428 report records. RepoWise resolved 407 files and reports
 `84.47%` mapped lines / `61.83%` mapped branches at exact coverage commit
-`8ebbf32e`; the seven Package 9 owner/type files aggregate to `363/390`
+`8ebbf32e03a42eec6621270c9304964abeedd3a8`; the seven Package 9 owner/type
+files aggregate to `363/390`
 coverable lines (`93.08%`) and `190/304` branches (`62.50%`). File-level LCOV
 attributes every changed owner; 26 changed coverable lines remain uncovered,
 while the facade's 10 changed coverable lines are all covered. The per-test
@@ -690,9 +700,10 @@ change map separately attributes three guarding integration/module tests and
 does not infer per-test attribution for newly added source files; that narrower
 map is not substituted for the file-level LCOV evidence.
 
-RepoWise's exact indexed dashboard at `8ebbf32e` has 1,609 files, average
-health `6.74`, with module scores `server=7.07` and `lib=5.06`. The distinct
-live CLI scan has 1,708 files, average health `7.02`, hotspot health `4.99`,
+RepoWise's exact indexed dashboard at
+`8ebbf32e03a42eec6621270c9304964abeedd3a8` has 1,609 files, average health
+`6.74`, with module scores `server=7.07` and `lib=5.06`. The distinct live CLI
+repository scan has 1,708 files, average health `7.02`, hotspot health `4.99`,
 773 production-filter files, 243 below `7.0`, and exactly 24 production
 `god_class` findings; these scopes are deliberately not combined. Package PR
 risk is `1.31`, with no breaking change, consumer break, dependency cycle, or
@@ -717,7 +728,7 @@ The fresh Package 10 owner is `server/src/crm/crm.service.ts`: health `1.90`,
 1,210 NLOC, max CCN `21`, and weighted deficit `7,381`. It is now dependency-
 ready after the lifecycle foundation, has a paired test and no test-gap or
 security signal, and ranks above messenger (`6,529`) and the remaining ready
-backend/Flutter owners. Its 100% hotspot, six dependents, and 27 fixes in six
+backend/Flutter owners. Its `99.93%` hotspot, six dependents, and 27 fixes in six
 months raise the required characterization depth but do not veto readiness.
 
 ### Phase B: health completion after `god_class = 0`
@@ -726,7 +737,7 @@ Eliminating all 25 owners cannot by itself satisfy the approved health
 contract. Their entire current deficit is about `0.37` points over the indexed
 repository denominator, so the realistic indexed result is approximately
 `6.90-7.03`, not `7.5`. Flutter starts at `5.06`; backend already meets its
-module gate at `7.02`.
+current indexed module gate at `7.07`.
 
 After the absolute `god_class = 0` gate, the same package process continues
 over non-god production hotspots ranked by recoverable deficit. The current
