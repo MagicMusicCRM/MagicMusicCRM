@@ -231,9 +231,10 @@ describe("PayrollService semantic boundary", () => {
       // integrity.executeVersionedMutation({});
       integrity.executeVersionedMutation({});
       integrity.executeVersionedMutation<Result>({});
+      integrity?.executeVersionedMutation?.({});
     `;
 
-    expect(versionedMutationCount(source)).toBe(2);
+    expect(versionedMutationCount(source)).toBe(3);
   });
 
   it("keeps every integrity mutation in the command owner", () => {
