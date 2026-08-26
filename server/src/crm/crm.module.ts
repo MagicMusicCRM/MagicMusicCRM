@@ -61,6 +61,12 @@ import { BranchesService } from "./branches.service";
 import { BranchLifecycleService } from "./branch-lifecycle.service";
 import { GroupsService } from "./groups.service";
 import { GroupLifecycleService } from "./group-lifecycle.service";
+import { PayrollAccrualCalculator } from "./payroll/payroll-accrual-calculator";
+import { PayrollReadRepository } from "./payroll/payroll-read.repository";
+import { TeacherPayrollQueryService } from "./payroll/teacher-payroll-query.service";
+import { TeacherPayrollCommandService } from "./payroll/teacher-payroll-command.service";
+import { TeacherStatsReportService } from "./payroll/teacher-stats-report.service";
+import { TeacherStatsCsvService } from "./payroll/teacher-stats-csv.service";
 import { PayrollService } from "./payroll.service";
 import { LeadWebhookController } from "./lead-webhook.controller";
 import { ScheduleSeriesWorker } from "./schedule-series.worker";
@@ -94,6 +100,11 @@ import { LessonCompletionWorker } from "./schedule/lesson-completion.worker";
 import { PackageCatalogRepository } from "./commerce/package-catalog.repository";
 import { PackageCatalogService } from "./commerce/package-catalog.service";
 import { SubscriptionCommerceController } from "./subscription-commerce.controller";
+import { SubscriptionCommercialTermsService } from "./commerce/subscription-commercial-terms.service";
+import { SubscriptionPurchasePreviewService } from "./commerce/subscription-purchase-preview.service";
+import { SubscriptionPurchaseCommandService } from "./commerce/subscription-purchase-command.service";
+import { SubscriptionGrantCommandService } from "./commerce/subscription-grant-command.service";
+import { SubscriptionIssueResultService } from "./commerce/subscription-issue-result.service";
 import { SubscriptionIssueRepository } from "./commerce/subscription-issue.repository";
 import { SubscriptionIssueService } from "./commerce/subscription-issue.service";
 import { ActualPaymentService } from "./commerce/actual-payment.service";
@@ -210,6 +221,12 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     BranchLifecycleService,
     GroupsService,
     GroupLifecycleService,
+    PayrollAccrualCalculator,
+    PayrollReadRepository,
+    TeacherPayrollQueryService,
+    TeacherPayrollCommandService,
+    TeacherStatsReportService,
+    TeacherStatsCsvService,
     PayrollService,
     CrmPolicy,
     HolliHopMetadataService,
@@ -242,6 +259,11 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     LessonSettlementCorrectionService,
     PackageCatalogRepository,
     PackageCatalogService,
+    SubscriptionCommercialTermsService,
+    SubscriptionPurchasePreviewService,
+    SubscriptionPurchaseCommandService,
+    SubscriptionGrantCommandService,
+    SubscriptionIssueResultService,
     SubscriptionIssueRepository,
     SubscriptionIssueService,
     ActualPaymentService,

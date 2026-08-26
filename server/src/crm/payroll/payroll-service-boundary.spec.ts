@@ -22,6 +22,7 @@ const sources = Object.fromEntries(
 ) as Record<keyof typeof paths, string>;
 const facade = sources.facade;
 const commandSource = sources.command;
+const moduleSource = readSource(resolve(crmDirectory, "crm.module.ts"));
 const productionPayrollSource = Object.values(sources).join("\n");
 const otherProductionSources = Object.entries(sources)
   .filter(([name]) => name !== "command")
@@ -43,6 +44,40 @@ const versionedMutationCount = (source: string) =>
 
 const identifierName = (node: ts.Node | undefined) =>
   node && ts.isIdentifier(node) ? node.text : null;
+
+const moduleMetadataIdentifiers = (propertyName: "providers" | "exports") => {
+  const sourceFile = ts.createSourceFile(
+    "crm.module.ts",
+    moduleSource,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const moduleClass = sourceFile.statements.find(
+    (statement): statement is ts.ClassDeclaration =>
+      ts.isClassDeclaration(statement) && statement.name?.text === "CrmModule",
+  );
+  const decorator = moduleClass && ts.getDecorators(moduleClass)?.find((item) => {
+    const expression = item.expression;
+    return (
+      ts.isCallExpression(expression) &&
+      ts.isIdentifier(expression.expression) &&
+      expression.expression.text === "Module"
+    );
+  });
+  expect(decorator).toBeDefined();
+  const call = decorator!.expression as ts.CallExpression;
+  const metadata = call.arguments[0];
+  expect(metadata && ts.isObjectLiteralExpression(metadata)).toBe(true);
+  const property = (metadata as ts.ObjectLiteralExpression).properties.find(
+    (item): item is ts.PropertyAssignment =>
+      ts.isPropertyAssignment(item) && identifierName(item.name) === propertyName,
+  );
+  expect(property && ts.isArrayLiteralExpression(property.initializer)).toBe(true);
+  return (property!.initializer as ts.ArrayLiteralExpression).elements.map(
+    (element) => identifierName(element),
+  );
+};
 
 const facadeContracts = [
   ["getTeacherPayroll", "query", ["actor", "teacherId"]],
@@ -117,6 +152,29 @@ const assertFacadeAst = () => {
 };
 
 describe("PayrollService semantic boundary", () => {
+  it("wires every payroll owner privately and retains the facade", () => {
+    const owners = [
+      "PayrollAccrualCalculator",
+      "PayrollReadRepository",
+      "TeacherPayrollQueryService",
+      "TeacherPayrollCommandService",
+      "TeacherStatsReportService",
+      "TeacherStatsCsvService",
+    ];
+    const providers = moduleMetadataIdentifiers("providers");
+    const exports = moduleMetadataIdentifiers("exports");
+    const facadeIndex = providers.indexOf("PayrollService");
+
+    expect(providers.slice(facadeIndex - owners.length, facadeIndex)).toEqual(owners);
+    expect(facadeIndex).toBeGreaterThanOrEqual(owners.length);
+    for (const owner of owners) {
+      expect(providers.filter((provider) => provider === owner)).toHaveLength(1);
+      expect(exports).not.toContain(owner);
+    }
+    expect(providers.filter((provider) => provider === "PayrollService")).toHaveLength(1);
+    expect(exports).not.toContain("PayrollService");
+  });
+
   it("keeps the exact four-owner, nine-delegation public facade", () => {
     expect(sourceNloc(facade)).toBeLessThanOrEqual(120);
     assertFacadeAst();

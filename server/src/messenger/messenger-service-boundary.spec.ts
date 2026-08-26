@@ -11,6 +11,41 @@ const access = readSource("messenger-chat-access.service.ts");
 const queries = readSource("messenger-chat-query.service.ts");
 const commands = readSource("messenger-chat-command.service.ts");
 const delivery = readSource("messenger-message-delivery.service.ts");
+const moduleSource = readSource("messenger.module.ts");
+
+const moduleMetadataIdentifiers = (propertyName: "providers" | "exports") => {
+  const sourceFile = ts.createSourceFile(
+    "messenger.module.ts",
+    moduleSource,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const moduleClass = sourceFile.statements.find(
+    (statement): statement is ts.ClassDeclaration =>
+      ts.isClassDeclaration(statement) && statement.name?.text === "MessengerModule",
+  );
+  const decorator = moduleClass && ts.getDecorators(moduleClass)?.find((item) => {
+    const expression = item.expression;
+    return (
+      ts.isCallExpression(expression) &&
+      ts.isIdentifier(expression.expression) &&
+      expression.expression.text === "Module"
+    );
+  });
+  expect(decorator).toBeDefined();
+  const call = decorator!.expression as ts.CallExpression;
+  const metadata = call.arguments[0];
+  expect(metadata && ts.isObjectLiteralExpression(metadata)).toBe(true);
+  const property = (metadata as ts.ObjectLiteralExpression).properties.find(
+    (item): item is ts.PropertyAssignment =>
+      ts.isPropertyAssignment(item) && identifierName(item.name) === propertyName,
+  );
+  expect(property && ts.isArrayLiteralExpression(property.initializer)).toBe(true);
+  return (property!.initializer as ts.ArrayLiteralExpression).elements.map(
+    (element) => identifierName(element),
+  );
+};
 
 const sourceNloc = (source: string) => {
   const withoutBlockComments = source.replace(/\/\*[\s\S]*?\*\//g, "");
@@ -126,6 +161,32 @@ const expectSourceOrder = (source: string, markers: readonly string[]) => {
 };
 
 describe("Messenger service boundaries", () => {
+  it("wires every semantic owner privately before the compatibility facade", () => {
+    const owners = [
+      "MessengerChatAccessService",
+      "MessengerSystemChatService",
+      "MessengerChatQueryService",
+      "MessengerChatCommandService",
+      "MessengerMessageDeliveryService",
+    ];
+    const providers = moduleMetadataIdentifiers("providers");
+    const exports = moduleMetadataIdentifiers("exports");
+
+    expect(providers.slice(0, owners.length + 1)).toEqual([
+      ...owners,
+      "MessengerService",
+    ]);
+    for (const owner of owners) {
+      expect(providers.filter((provider) => provider === owner)).toHaveLength(1);
+      expect(exports).not.toContain(owner);
+    }
+    expect(exports).toEqual([
+      "MessengerService",
+      "MessengerPolicyModule",
+      "RealtimeGateway",
+    ]);
+  });
+
   it("keeps the compatibility facade small and persistence-free", () => {
     expect(sourceNloc(facade)).toBeLessThanOrEqual(100);
     expect(facade).not.toMatch(

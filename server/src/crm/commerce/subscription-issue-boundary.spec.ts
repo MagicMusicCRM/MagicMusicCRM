@@ -12,6 +12,7 @@ const purchaseSource = readSource("subscription-purchase-command.service.ts");
 const grantSource = readSource("subscription-grant-command.service.ts");
 const resultSource = readSource("subscription-issue-result.service.ts");
 const contractsSource = readSource("subscription-issue.contracts.ts");
+const moduleSource = readFileSync(resolve(__dirname, "..", "crm.module.ts"), "utf8");
 
 const sourceNloc = (source: string) => {
   const withoutBlockComments = source.replace(/\/\*[\s\S]*?\*\//g, "");
@@ -29,6 +30,40 @@ const versionedMutationCount = (source: string) =>
 const identifierName = (node: ts.Node | undefined) =>
   node && ts.isIdentifier(node) ? node.text : null;
 
+const moduleMetadataIdentifiers = (propertyName: "providers" | "exports") => {
+  const sourceFile = ts.createSourceFile(
+    "crm.module.ts",
+    moduleSource,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const moduleClass = sourceFile.statements.find(
+    (statement): statement is ts.ClassDeclaration =>
+      ts.isClassDeclaration(statement) && statement.name?.text === "CrmModule",
+  );
+  const decorator = moduleClass && ts.getDecorators(moduleClass)?.find((item) => {
+    const expression = item.expression;
+    return (
+      ts.isCallExpression(expression) &&
+      ts.isIdentifier(expression.expression) &&
+      expression.expression.text === "Module"
+    );
+  });
+  expect(decorator).toBeDefined();
+  const call = decorator!.expression as ts.CallExpression;
+  const metadata = call.arguments[0];
+  expect(metadata && ts.isObjectLiteralExpression(metadata)).toBe(true);
+  const property = (metadata as ts.ObjectLiteralExpression).properties.find(
+    (item): item is ts.PropertyAssignment =>
+      ts.isPropertyAssignment(item) && identifierName(item.name) === propertyName,
+  );
+  expect(property && ts.isArrayLiteralExpression(property.initializer)).toBe(true);
+  return (property!.initializer as ts.ArrayLiteralExpression).elements.map(
+    (element) => identifierName(element),
+  );
+};
+
 const assertInOrder = (source: string, markers: readonly string[]) => {
   let previous = -1;
   for (const marker of markers) {
@@ -45,6 +80,30 @@ const facadeContracts = [
 ] as const;
 
 describe("subscription issue owner boundaries", () => {
+  it("wires every subscription issue owner privately and retains the facade pair", () => {
+    const owners = [
+      "SubscriptionCommercialTermsService",
+      "SubscriptionPurchasePreviewService",
+      "SubscriptionPurchaseCommandService",
+      "SubscriptionGrantCommandService",
+      "SubscriptionIssueResultService",
+    ];
+    const providers = moduleMetadataIdentifiers("providers");
+    const exports = moduleMetadataIdentifiers("exports");
+    const repositoryIndex = providers.indexOf("SubscriptionIssueRepository");
+
+    expect(providers.slice(repositoryIndex - owners.length, repositoryIndex)).toEqual(owners);
+    expect(repositoryIndex).toBeGreaterThanOrEqual(owners.length);
+    for (const owner of owners) {
+      expect(providers.filter((provider) => provider === owner)).toHaveLength(1);
+      expect(exports).not.toContain(owner);
+    }
+    expect(providers.filter((provider) => provider === "SubscriptionIssueRepository")).toHaveLength(1);
+    expect(providers.filter((provider) => provider === "SubscriptionIssueService")).toHaveLength(1);
+    expect(exports).not.toContain("SubscriptionIssueRepository");
+    expect(exports).not.toContain("SubscriptionIssueService");
+  });
+
   it("keeps exact direct facade delegations", () => {
     const sourceFile = ts.createSourceFile(
       "subscription-issue.service.ts",

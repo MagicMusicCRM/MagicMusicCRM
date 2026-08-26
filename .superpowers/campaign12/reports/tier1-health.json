@@ -1,0 +1,80 @@
+{
+  "campaign_baseline": "9cb1f506a5c5418650926fe53b81fe2667ba9bd7",
+  "integrated_lane_head": "43fc7c7072b400105f1372b3793a14571d104c74",
+  "command": "repowise health --format json",
+  "exit": 0,
+  "duration_ms": 119359,
+  "exact_target_count": 19,
+  "score_semantics": "raw integrated health before stale-coverage adjustment",
+  "acceptance": "PASS — COVERAGE DEFERRED",
+  "coverage_provenance": {
+    "command": "repowise coverage status --format json",
+    "indexed": true,
+    "source_format": "lcov",
+    "ingested_at": "2026-08-26 16:40:34.175987",
+    "ingested_commit_sha": "e86b1f555da5892d66e9d850f1bccb203af57949",
+    "campaign_baseline_sha": "9cb1f506a5c5418650926fe53b81fe2667ba9bd7",
+    "contains_campaign12_owner_paths": false,
+    "test_map_ingested_commit_sha": "dca72f598cc2c80af03152366cec37d05a3e5472"
+  },
+  "coverage_adjustment": {
+    "provisional": true,
+    "stale_only_biomarker": "untested_hotspot",
+    "impact_added_back": 1.56,
+    "repository_coverage_deferred_until": "single final global gate",
+    "final_gate_requirement": "Ingest fresh LCOV containing every new owner; stale penalty must disappear through real coverage evidence and every new owner raw score must be >= 7.0."
+  },
+  "metrics": [
+    { "file_path": "server/src/messenger/messenger.service.ts", "score": 6.39, "nloc": 63, "max_ccn": 1, "weighted_deficit": 101, "god_or_brain": [] },
+    { "file_path": "server/src/messenger/messenger-chat-access.service.ts", "score": 10.0, "nloc": 15, "max_ccn": 2, "weighted_deficit": 0, "god_or_brain": [] },
+    { "file_path": "server/src/messenger/messenger-system-chat.service.ts", "score": 9.85, "nloc": 46, "max_ccn": 2, "weighted_deficit": 0, "god_or_brain": [] },
+    { "file_path": "server/src/messenger/messenger-chat-query.service.ts", "score": 5.51, "coverage_adjusted_score": 7.07, "nloc": 425, "max_ccn": 10, "weighted_deficit": 1058, "god_or_brain": [] },
+    { "file_path": "server/src/messenger/messenger-chat-command.service.ts", "score": 7.79, "nloc": 365, "max_ccn": 8, "weighted_deficit": 77, "god_or_brain": [] },
+    { "file_path": "server/src/messenger/messenger-message-delivery.service.ts", "score": 7.54, "nloc": 300, "max_ccn": 8, "weighted_deficit": 138, "god_or_brain": [] },
+    { "file_path": "server/src/crm/payroll.service.ts", "score": 6.07, "nloc": 115, "max_ccn": 1, "weighted_deficit": 222, "god_or_brain": [] },
+    { "file_path": "server/src/crm/payroll/payroll-accrual-calculator.ts", "score": 7.84, "nloc": 113, "max_ccn": 6, "weighted_deficit": 18, "god_or_brain": [] },
+    { "file_path": "server/src/crm/payroll/payroll-read.repository.ts", "score": 7.74, "nloc": 243, "max_ccn": 3, "weighted_deficit": 63, "god_or_brain": [] },
+    { "file_path": "server/src/crm/payroll/teacher-payroll-query.service.ts", "score": 7.74, "nloc": 87, "max_ccn": 4, "weighted_deficit": 23, "god_or_brain": [] },
+    { "file_path": "server/src/crm/payroll/teacher-payroll-command.service.ts", "score": 6.24, "coverage_adjusted_score": 7.80, "nloc": 449, "max_ccn": 6, "weighted_deficit": 790, "god_or_brain": [] },
+    { "file_path": "server/src/crm/payroll/teacher-stats-report.service.ts", "score": 7.54, "nloc": 364, "max_ccn": 4, "weighted_deficit": 167, "god_or_brain": [] },
+    { "file_path": "server/src/crm/payroll/teacher-stats-csv.service.ts", "score": 7.94, "nloc": 112, "max_ccn": 3, "weighted_deficit": 7, "god_or_brain": [] },
+    { "file_path": "server/src/crm/commerce/subscription-issue.service.ts", "score": 5.72, "nloc": 43, "max_ccn": 1, "weighted_deficit": 98, "god_or_brain": [] },
+    { "file_path": "server/src/crm/commerce/subscription-commercial-terms.service.ts", "score": 7.14, "nloc": 357, "max_ccn": 7, "weighted_deficit": 307, "god_or_brain": [] },
+    { "file_path": "server/src/crm/commerce/subscription-purchase-preview.service.ts", "score": 6.41, "coverage_adjusted_score": 7.97, "nloc": 196, "max_ccn": 6, "weighted_deficit": 312, "god_or_brain": [] },
+    { "file_path": "server/src/crm/commerce/subscription-purchase-command.service.ts", "score": 6.24, "coverage_adjusted_score": 7.80, "nloc": 250, "max_ccn": 5, "weighted_deficit": 440, "god_or_brain": [] },
+    { "file_path": "server/src/crm/commerce/subscription-grant-command.service.ts", "score": 7.21, "nloc": 182, "max_ccn": 5, "weighted_deficit": 144, "god_or_brain": [] },
+    { "file_path": "server/src/crm/commerce/subscription-issue-result.service.ts", "score": 9.47, "nloc": 66, "max_ccn": 3, "weighted_deficit": 0, "god_or_brain": [] }
+  ],
+  "raw_below_threshold_owner_findings": {
+    "server/src/messenger/messenger-chat-query.service.ts": [
+      { "biomarker": "untested_hotspot", "impact": 1.56 },
+      { "biomarker": "large_method", "impact": 1.008, "symbol": "listChats" },
+      { "biomarker": "complex_conditional", "impact": 0.931 },
+      { "biomarker": "low_cohesion", "impact": 0.35 },
+      { "biomarker": "complex_method", "impact": 0.341, "symbol": "decodeChatCursor" },
+      { "biomarker": "large_method", "impact": 0.151, "symbol": "getMessages" },
+      { "biomarker": "dry_violation", "impact": 0.15 }
+    ],
+    "server/src/crm/payroll/teacher-payroll-command.service.ts": [
+      { "biomarker": "untested_hotspot", "impact": 1.56 },
+      { "biomarker": "dry_violation", "impact": 0.35 },
+      { "biomarker": "low_cohesion", "impact": 0.35 },
+      { "biomarker": "large_method", "impact": 1.07, "note": "five methods at 0.214 each" },
+      { "biomarker": "primitive_obsession", "impact": 0.43, "note": "five methods at 0.086 each" }
+    ],
+    "server/src/crm/commerce/subscription-purchase-preview.service.ts": [
+      { "biomarker": "untested_hotspot", "impact": 1.56 },
+      { "biomarker": "complex_conditional", "impact": 0.931, "symbol": "decodeBoundToken" },
+      { "biomarker": "low_cohesion", "impact": 0.6 },
+      { "biomarker": "dry_violation", "impact": 0.35 },
+      { "biomarker": "primitive_obsession", "impact": 0.15, "symbol": "createTokenPayload" }
+    ],
+    "server/src/crm/commerce/subscription-purchase-command.service.ts": [
+      { "biomarker": "untested_hotspot", "impact": 1.56 },
+      { "biomarker": "large_method", "impact": 1.364, "symbol": "purchase" },
+      { "biomarker": "dry_violation", "impact": 0.35 },
+      { "biomarker": "low_cohesion", "impact": 0.35 },
+      { "biomarker": "primitive_obsession", "impact": 0.136, "symbol": "constructor" }
+    ]
+  }
+}
