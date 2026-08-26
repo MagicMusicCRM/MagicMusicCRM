@@ -65,10 +65,11 @@ class LessonEditorDecisionPolicy {
       next = applyFundingDefault(draft: next, references: references);
     }
     return (
-      session: _normalizeLegacyCompensationBaseline(
+      session: _normalizeCompensationBaseline(
         session: session,
         draft: next,
         rule: rule,
+        requiresValue: requiresCompensationValue(rule),
       ),
       draft: next,
     );
@@ -565,25 +566,17 @@ class LessonEditorDecisionPolicy {
   }
 }
 
-LessonEditorSession _normalizeLegacyCompensationBaseline({
+LessonEditorSession _normalizeCompensationBaseline({
   required LessonEditorSession session,
   required LessonEditorDraft draft,
   required LessonDecisionCatalogItem? rule,
+  required bool requiresValue,
 }) {
   final snapshot = session.snapshot;
-  final legacyMode = snapshot?.rawLesson['teacher_compensation_type']
-      ?.toString();
   final baselineIsComplete =
       snapshot?.initialCompensationRuleKey != null &&
-      snapshot?.initialCompensationValueMinor != null;
-  final usesCatalogCompensation = switch (legacyMode) {
-    'percent' || 'fixed' || 'hourly' => true,
-    _ => false,
-  };
-  if (snapshot == null ||
-      baselineIsComplete ||
-      !usesCatalogCompensation ||
-      rule?.mode != legacyMode) {
+      (!requiresValue || snapshot?.initialCompensationValueMinor != null);
+  if (snapshot == null || rule == null || baselineIsComplete) {
     return session;
   }
   return LessonEditorSession(

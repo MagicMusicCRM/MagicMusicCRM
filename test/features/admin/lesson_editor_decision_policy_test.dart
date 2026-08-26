@@ -391,6 +391,78 @@ void main() {
   });
 
   group('edit decisions', () {
+    test('legacy value-free rules become the immutable no-op baseline', () {
+      const mapper = LessonEditorInitialMapper();
+      for (final mode in const ['none', 'standard']) {
+        final mapped = mapper.map(
+          LessonEditorInitialInput(
+            initialDate: null,
+            initialRoomId: null,
+            initialBranchId: null,
+            initialDurationMinutes: null,
+            initialIsTrial: false,
+            lesson: {
+              'id': 'lesson-$mode',
+              'version': 4,
+              'student_id': 'student-a',
+              'teacher_id': 'teacher-a',
+              'branch_id': 'branch-a',
+              'room_id': 'room-a',
+              'scheduled_at': '2026-08-26T10:00:00.000Z',
+              'duration_minutes': 60,
+              'teacher_compensation_type': mode,
+            },
+          ),
+        );
+        final references = _references(
+          compensationRules: [_catalogItem(key: 'teacher-$mode', mode: mode)],
+        );
+
+        final defaults = policy.applyReferenceDefaults(
+          mapped,
+          mapped.draft,
+          references,
+          false,
+        );
+
+        expect(
+          defaults.draft.compensationRuleKey,
+          'teacher-$mode',
+          reason: mode,
+        );
+        expect(defaults.draft.compensationValueMinor, isNull, reason: mode);
+        expect(
+          defaults.session.snapshot?.initialCompensationRuleKey,
+          'teacher-$mode',
+          reason: mode,
+        );
+        expect(
+          defaults.session.snapshot?.initialCompensationValueMinor,
+          isNull,
+          reason: mode,
+        );
+        expect(
+          policy.hasFinancialChanges(
+            session: defaults.session,
+            draft: defaults.draft,
+          ),
+          isFalse,
+          reason: mode,
+        );
+        expect(
+          policy
+              .validate(
+                session: defaults.session,
+                draft: defaults.draft,
+                references: references,
+              )
+              .message,
+          'Измените параметры расписания или оплату преподавателю',
+          reason: mode,
+        );
+      }
+    });
+
     test(
       'legacy percent catalog default becomes the immutable no-op baseline',
       () {
