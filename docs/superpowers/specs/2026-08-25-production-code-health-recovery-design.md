@@ -733,9 +733,10 @@ months raise the required characterization depth but do not veto readiness.
 
 ## Package 10 verified outcome — CRM students
 
-Package 10 is verified at code, coverage, indexed, and evidence-source commit
-`e86b1f555da5892d66e9d850f1bccb203af57949` over execution range
-`c224ce8bd849dadba3b5bd1c27974e6e0d984482..e86b1f555da5892d66e9d850f1bccb203af57949`.
+Package 10 production code, coverage, recount, and initial evidence are verified
+at `e86b1f555da5892d66e9d850f1bccb203af57949`. The final-review test-only fixes
+extend the test-inclusive execution range to
+`c224ce8bd849dadba3b5bd1c27974e6e0d984482..91fbcdc23461d216870ab6f7196c399a4da6c5a7`.
 The reversible task commits are
 `48109e4a1ab6b5a098d7cc048baf0cea2b1251dc`,
 `1bad5239e64715bb3a914583021d000d1423a016`,
@@ -743,8 +744,10 @@ The reversible task commits are
 `6bd90f569009076a6f0067f13c317e08993fca2d`,
 `47e3cbed04adee62d0f8024ff5ebfbf35b574618`,
 `e1a227ae31b66b8bc988d8f16ddbd8bff05d785f`,
-`48edbabbe78a5299816c537e891ae7034a01743f`, and
-`e86b1f555da5892d66e9d850f1bccb203af57949`.
+`48edbabbe78a5299816c537e891ae7034a01743f`,
+`e86b1f555da5892d66e9d850f1bccb203af57949`,
+`1d41426620238b8226b84d9f558c2d3d2456a770`, and
+`91fbcdc23461d216870ab6f7196c399a4da6c5a7`.
 
 The original `CrmService` moves from health `1.90`, 1,210 NLOC, max CCN
 `21`, weighted deficit `7,381`, and a `god_class`/brain `updateStudent` to a
@@ -802,9 +805,11 @@ Changed-file PR blast score is `2.74`. The hard arrays
 predicted five downstream files and two downstream tests are closed by the full
 suite. The only directive-level missing test is the type-only mutation contract;
 fresh file-level LCOV covers every executable owner, while the older per-test
-map cannot attribute newly created files. Full-range change risk is score `9.9`,
-probability `0.9862`, percentile `100`, priority `high`, classification
-`Elevated`, driven by 3,675 additions and 1,319 deletions across 22 files.
+map cannot attribute newly created files. Final TypeScript-range change risk is
+score `9.9`, probability `0.9868`, percentile `100`, priority `high`,
+classification `Elevated`, driven by 3,884 additions and 1,319 deletions across
+22 TypeScript files. The full Git range including the two evidence documents is
+24 files, 4,056 additions, and 1,319 deletions.
 
 Sentrux scans 2,451 files, 4,829 import edges, and 510,859 lines. Quality moves
 `5744 -> 5757`; depth remains raw `13` / score `3810`; acyclicity remains raw
@@ -821,6 +826,36 @@ metadata and lesson-transition prerequisites. The high Flutter owners remain
 in the later dependency wave; the subscription issue sheet waits for its
 backend service and teacher statistics waits for payroll. Messenger is therefore
 the highest-deficit dependency-ready owner rather than a name-based default.
+
+### Final-review fix evidence refresh
+
+The reviewer-fix commits
+`1d41426620238b8226b84d9f558c2d3d2456a770` and
+`91fbcdc23461d216870ab6f7196c399a4da6c5a7` change only
+`server/src/crm/students/student-service-boundary.spec.ts`; their combined diff
+against evidence commit `74562d9afb63c68a58b080515bb2adf533ac0390` is one
+test file, 228 additions, and 19 deletions. Both endpoints contain the same 795
+production blobs, with identical production-manifest SHA-256
+`0e2be6b5e70742bcf418ecb78e77670d9a277bb1c20daff44f88beda3676247f`.
+No production source or production import edge changed.
+
+At fixed test HEAD `91fbcdc23461d216870ab6f7196c399a4da6c5a7`, a fresh
+full backend run passes `234/234` suites and `1,638/1,638` tests in `117.871 s`;
+typecheck passes in `3.139 s`, build in `6.526 s`, and both worktree and range
+diff checks are clean. RepoWise is exact at that SHA with
+`index_behind=false`, 1,627 indexed files, average health `6.78`, and hotspot
+health `5.99`.
+
+The retained LCOV remains byte-identical at 772,314 bytes and SHA-256
+`baeffbc2538897e8cb39a3950c1c586c108cb207b46323b22a0e1b978017b511`.
+Because all production blobs and the production graph are unchanged, the exact
+file-level coverage, owner health, and `24 -> 23` production recount from
+`e86b1f555da5892d66e9d850f1bccb203af57949` remain valid; regenerating them
+would measure the same production bytes. Fresh Sentrux confirms the unchanged
+4,829-edge graph: quality `5757`, depth `13/3810`, acyclicity `0/10000`,
+equality `6342`, modularity `5412`, redundancy `4836`, and rules `2/2` over
+2,451 files and 511,240 lines. Package 10 remains pending the final reviewer
+verdict and is not declared closed by this evidence refresh.
 
 ### Phase B: health completion after `god_class = 0`
 

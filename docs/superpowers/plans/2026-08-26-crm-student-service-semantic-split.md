@@ -677,9 +677,10 @@ Package 10 is complete only after every task review and the final whole-package 
 
 ## Results
 
-**Status:** all Task 8 evidence gates pass at code, coverage, indexed, and
-evidence-source commit `e86b1f555da5892d66e9d850f1bccb203af57949` over range
-`c224ce8bd849dadba3b5bd1c27974e6e0d984482..e86b1f555da5892d66e9d850f1bccb203af57949`.
+**Status:** all Task 8 production evidence gates pass at code/coverage/recount
+commit `e86b1f555da5892d66e9d850f1bccb203af57949`. Final-review test fixes extend
+the test-inclusive range to
+`c224ce8bd849dadba3b5bd1c27974e6e0d984482..91fbcdc23461d216870ab6f7196c399a4da6c5a7`.
 The documentation commit is the commit containing this section; it is not
 self-referenced because a Git commit cannot contain its own content-derived
 SHA. Final Package 10 closure still requires the plan-mandated clean whole-
@@ -737,9 +738,11 @@ PR blast score is `2.74`. `breaking_changes`, `will_break_consumers`,
 `dependency_cycles`, and `conformance_violations` are empty; security signals
 are empty. Full tests close the predicted five downstream files and two tests.
 The type-only mutation contract is the only directive `missing_tests` label;
-the file-level LCOV above covers every executable owner. Full-range change risk
-is `9.9`, probability `0.9862`, percentile `100`, priority `high`, classification
-`Elevated`, with 3,675 additions, 1,319 deletions, and 22 files.
+the file-level LCOV above covers every executable owner. Final TypeScript-range
+change risk is `9.9`, probability `0.9868`, percentile `100`, priority `high`,
+classification `Elevated`, with 3,884 additions, 1,319 deletions, and 22
+TypeScript files. The full Git range including evidence docs is 24 files,
+4,056 additions, and 1,319 deletions.
 
 ### Sentrux and Package 11
 
@@ -755,3 +758,30 @@ Package 11 reranks to `server/src/messenger/messenger.service.ts`: health
 the approved neutral command metadata and lesson-transition prerequisites land;
 the leading Flutter candidates are also in later dependency waves. Messenger
 is the highest-deficit ready owner.
+
+### Final-review fix evidence refresh
+
+Fix commits `1d41426620238b8226b84d9f558c2d3d2456a770` and
+`91fbcdc23461d216870ab6f7196c399a4da6c5a7` change only
+`server/src/crm/students/student-service-boundary.spec.ts`: one test file,
+228 additions, and 19 deletions since evidence commit
+`74562d9afb63c68a58b080515bb2adf533ac0390`. The 795 production blobs are
+identical at both endpoints; both production manifests hash to
+`0e2be6b5e70742bcf418ecb78e77670d9a277bb1c20daff44f88beda3676247f`.
+Production source and its graph therefore did not change.
+
+Fresh fixed-HEAD gates pass: backend `234/234` suites and `1,638/1,638` tests
+in `117.871 s`, typecheck in `3.139 s`, build in `6.526 s`, and clean diff
+checks. RepoWise is exact at `91fbcdc23461d216870ab6f7196c399a4da6c5a7`
+with `index_behind=false`, 1,627 files, average health `6.78`, and hotspot
+`5.99`.
+
+The retained LCOV is still exactly 772,314 bytes with SHA-256
+`baeffbc2538897e8cb39a3950c1c586c108cb207b46323b22a0e1b978017b511`.
+Since production bytes and import edges are identical, the file-level coverage,
+owner metrics, and `24 -> 23` recount at
+`e86b1f555da5892d66e9d850f1bccb203af57949` remain valid without a redundant
+production rescan. Fresh Sentrux closes at 2,451 files / 4,829 edges / 511,240
+lines, quality `5757`, depth `13/3810`, acyclicity `0/10000`, equality `6342`,
+modularity `5412`, redundancy `4836`, and rules `2/2`. Final reviewer re-review
+remains pending; this refresh does not declare Package 10 closed.
