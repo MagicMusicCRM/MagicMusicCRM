@@ -38,8 +38,13 @@ Integrated lane range: `9cb1f506a5c5418650926fe53b81fe2667ba9bd7..43fc7c7072b400
 
 - One `repowise update --index-only` processed `14665146..43fc7c70`, 25 changed files (7 modified, 18 added). Follow-up `repowise status` resolved last sync exactly to `43fc7c7072b400105f1372b3793a14571d104c74`. Observed command duration was approximately 162 seconds; the detached tool stream did not retain its millisecond footer.
 - One already-started `repowise health --module server/src/messenger --format json` completed before the efficiency ruling.
-- Authoritative integrated query: `repowise health --format json`; exit 0; 119.359 seconds; exactly 19 requested target rows, with duplicate/missing rows rejected.
-- Full exact-target JSON: `.superpowers/campaign12/reports/tier1-health.json`.
+- Raw integrated command: `repowise health --format json > .superpowers/campaign12/reports/tier1-health-raw.json`; exit 0; 134.437 seconds. The preserved stdout artifact is 2,824,420 bytes with SHA256 `2bcc58b1d9e88e9f1e2324d3dd231abbacb45d4fb691c8a0789a27e16638463a`.
+- Coverage provenance command: `repowise coverage status --format json > .superpowers/campaign12/reports/tier1-coverage-status.json`; exit 0. The preserved JSON is 673 bytes with SHA256 `08340a87ed13c89767ecda7e31e7340a0f36d28c055642c5d05c379ef3c47cf1`.
+- Deterministic extraction command: `pwsh -NoProfile -File .superpowers/campaign12/reports/validate-tier1-health.ps1 -Mode Write`; result: `PASS wrote 19 exact target rows; adjusted 4; raw sha256=2bcc58b1d9e88e9f1e2324d3dd231abbacb45d4fb691c8a0789a27e16638463a`.
+- Deterministic verification command: `pwsh -NoProfile -File .superpowers/campaign12/reports/validate-tier1-health.ps1 -Mode Verify`; result: `PASS verified 19 exact target rows; adjusted 4; raw sha256=2bcc58b1d9e88e9f1e2324d3dd231abbacb45d4fb691c8a0789a27e16638463a`.
+- Validator guard command: `pwsh -NoProfile -File .superpowers/campaign12/reports/validate-tier1-health.tests.ps1`; PASS for missing target, duplicate target, wrong impact, wrong coverage SHA, valid write, and byte-equivalent verify.
+- The validator contains all 19 literal paths, rejects any missing/duplicate metric row, preserves each raw score and raw finding, and permits adjustment only for the four named owners when the same row has exactly one `untested_hotspot` impact `1.56` and coverage SHA equals `e86b1f555da5892d66e9d850f1bccb203af57949`.
+- Compact exact-target JSON: `.superpowers/campaign12/reports/tier1-health.json` (29,508 bytes at validation; SHA256 `820af82b9bad573cf5f8c89237d0a530ca91a4fee0e5b845da63ec75739b0e71`).
 - All 19 rows have max CCN `<= 10`; none has `god_class` or `brain_method`.
 - `repowise coverage status --format json` confirms the active LCOV was ingested from `e86b1f555da5892d66e9d850f1bccb203af57949`, older than Campaign baseline `9cb1f506a5c5418650926fe53b81fe2667ba9bd7`; it cannot contain any Campaign-12 owner path. The test map is older again at `dca72f598cc2c80af03152366cec37d05a3e5472`.
 - Repository coverage is deferred because the approved Campaign-12 process permits it only at the single final global gate.
@@ -52,3 +57,15 @@ Integrated lane range: `9cb1f506a5c5418650926fe53b81fe2667ba9bd7..43fc7c7072b400
 | `subscription-purchase-command.service.ts` | 6.24 | 1.56 | 7.80 | 250 | 5 | untested 1.56; purchase large 1.364; DRY 0.35; cohesion 0.35; constructor parameters 0.136 |
 
 Provisional Tier 1 acceptance is `PASS — COVERAGE DEFERRED`. The final global gate must ingest fresh LCOV that includes every new owner, remove the stale `untested_hotspot` penalty through real coverage evidence, and produce raw health `>= 7.0` for every new owner; adjusted scores are not acceptable at that gate. Tier review has not yet been performed and `.superpowers/campaign12/reports/tier1-review.md` was not created.
+
+## Controller review checks
+
+Each command `git diff --quiet 9cb1f506a5c5418650926fe53b81fe2667ba9bd7..HEAD -- <path>` exited 0. Baseline and HEAD blob hashes are identical:
+
+| Verify-only controller | Baseline = HEAD blob | Forwarding / metadata / header contract |
+|---|---|---|
+| `server/src/messenger/messenger.controller.ts` | `0118a931d970760f8a51314f4b0f9d37e4a6917e` | `@UseGuards(JwtAuthGuard)` and `@Controller("messenger")` remain. Ten facade-facing routes forward `actor` first, then unchanged UUID-piped IDs, query, and DTO in the original order to `listChats`, `getChat`, `getMessages`, `listChatMembers`, `sendMessage`, `createDirectChat`, `createGroup`, `updateGroupMembers`, `leaveGroup`, and `setChatMute`; this surface has no command-metadata headers. |
+| `server/src/crm/crm-people.controller.ts` | `baa548ec7f9c1b97c168a0dd80b195eaac43ec24` | `@UseGuards(JwtAuthGuard)` and `@Controller("crm")` remain. Payroll reads/reports forward `actor` plus ID/query unchanged. Six payout/rate mutations forward `actor, id, [entryId], dto, metadata`; metadata preserves `idempotency-key` and `x-request-id` with `?? ""`. CSV export still awaits `exportTeacherStatsReport(actor, query)` and sets `Content-Type: text/csv; charset=utf-8` plus `Content-Disposition: attachment; filename="teacher-stats.csv"`. |
+| `server/src/crm/subscription-commerce.controller.ts` | `384daf6567342fcbe9e4c12bee589e62bfb5612b` | `@UseGuards(JwtAuthGuard)` and `@Controller("crm/students")` remain. Preview forwards `actor, studentId, dto`; issue and purchase forward `actor, studentId, dto, metadata`. Metadata preserves `idempotency-key` and `x-request-id` with `?? ""`, and every `studentId` remains `ParseUUIDPipe`. |
+
+No forwarding, metadata, header, route, DTO, guard, or controller mismatch was found. Controllers remain verify-only; no controller test or source edit was added.

@@ -1,80 +1,791 @@
 {
-  "campaign_baseline": "9cb1f506a5c5418650926fe53b81fe2667ba9bd7",
-  "integrated_lane_head": "43fc7c7072b400105f1372b3793a14571d104c74",
-  "command": "repowise health --format json",
-  "exit": 0,
-  "duration_ms": 119359,
-  "exact_target_count": 19,
-  "score_semantics": "raw integrated health before stale-coverage adjustment",
+  "schema_version": 1,
   "acceptance": "PASS — COVERAGE DEFERRED",
+  "campaign_baseline": "9cb1f506a5c5418650926fe53b81fe2667ba9bd7",
+  "raw_artifact": {
+    "command": "repowise health --format json > .superpowers/campaign12/reports/tier1-health-raw.json",
+    "path": ".superpowers/campaign12/reports/tier1-health-raw.json",
+    "size_bytes": 2824420,
+    "sha256": "2bcc58b1d9e88e9f1e2324d3dd231abbacb45d4fb691c8a0789a27e16638463a"
+  },
   "coverage_provenance": {
-    "command": "repowise coverage status --format json",
-    "indexed": true,
+    "command": "repowise coverage status --format json > .superpowers/campaign12/reports/tier1-coverage-status.json",
+    "path": ".superpowers/campaign12/reports/tier1-coverage-status.json",
+    "size_bytes": 673,
+    "sha256": "08340a87ed13c89767ecda7e31e7340a0f36d28c055642c5d05c379ef3c47cf1",
     "source_format": "lcov",
     "ingested_at": "2026-08-26 16:40:34.175987",
     "ingested_commit_sha": "e86b1f555da5892d66e9d850f1bccb203af57949",
-    "campaign_baseline_sha": "9cb1f506a5c5418650926fe53b81fe2667ba9bd7",
-    "contains_campaign12_owner_paths": false,
     "test_map_ingested_commit_sha": "dca72f598cc2c80af03152366cec37d05a3e5472"
   },
-  "coverage_adjustment": {
-    "provisional": true,
-    "stale_only_biomarker": "untested_hotspot",
-    "impact_added_back": 1.56,
-    "repository_coverage_deferred_until": "single final global gate",
-    "final_gate_requirement": "Ingest fresh LCOV containing every new owner; stale penalty must disappear through real coverage evidence and every new owner raw score must be >= 7.0."
+  "extraction": {
+    "write_command": "pwsh -NoProfile -File .superpowers/campaign12/reports/validate-tier1-health.ps1 -Mode Write",
+    "verify_command": "pwsh -NoProfile -File .superpowers/campaign12/reports/validate-tier1-health.ps1 -Mode Verify",
+    "exact_target_count": 19,
+    "stale_coverage_biomarker": "untested_hotspot",
+    "stale_coverage_impact": 1.56,
+    "adjusted_target_count": 4
   },
+  "final_gate_blocker": "Ingest fresh LCOV containing every new owner; the stale penalty must disappear through real coverage evidence and every new owner raw score must be >= 7.0.",
   "metrics": [
-    { "file_path": "server/src/messenger/messenger.service.ts", "score": 6.39, "nloc": 63, "max_ccn": 1, "weighted_deficit": 101, "god_or_brain": [] },
-    { "file_path": "server/src/messenger/messenger-chat-access.service.ts", "score": 10.0, "nloc": 15, "max_ccn": 2, "weighted_deficit": 0, "god_or_brain": [] },
-    { "file_path": "server/src/messenger/messenger-system-chat.service.ts", "score": 9.85, "nloc": 46, "max_ccn": 2, "weighted_deficit": 0, "god_or_brain": [] },
-    { "file_path": "server/src/messenger/messenger-chat-query.service.ts", "score": 5.51, "coverage_adjusted_score": 7.07, "nloc": 425, "max_ccn": 10, "weighted_deficit": 1058, "god_or_brain": [] },
-    { "file_path": "server/src/messenger/messenger-chat-command.service.ts", "score": 7.79, "nloc": 365, "max_ccn": 8, "weighted_deficit": 77, "god_or_brain": [] },
-    { "file_path": "server/src/messenger/messenger-message-delivery.service.ts", "score": 7.54, "nloc": 300, "max_ccn": 8, "weighted_deficit": 138, "god_or_brain": [] },
-    { "file_path": "server/src/crm/payroll.service.ts", "score": 6.07, "nloc": 115, "max_ccn": 1, "weighted_deficit": 222, "god_or_brain": [] },
-    { "file_path": "server/src/crm/payroll/payroll-accrual-calculator.ts", "score": 7.84, "nloc": 113, "max_ccn": 6, "weighted_deficit": 18, "god_or_brain": [] },
-    { "file_path": "server/src/crm/payroll/payroll-read.repository.ts", "score": 7.74, "nloc": 243, "max_ccn": 3, "weighted_deficit": 63, "god_or_brain": [] },
-    { "file_path": "server/src/crm/payroll/teacher-payroll-query.service.ts", "score": 7.74, "nloc": 87, "max_ccn": 4, "weighted_deficit": 23, "god_or_brain": [] },
-    { "file_path": "server/src/crm/payroll/teacher-payroll-command.service.ts", "score": 6.24, "coverage_adjusted_score": 7.80, "nloc": 449, "max_ccn": 6, "weighted_deficit": 790, "god_or_brain": [] },
-    { "file_path": "server/src/crm/payroll/teacher-stats-report.service.ts", "score": 7.54, "nloc": 364, "max_ccn": 4, "weighted_deficit": 167, "god_or_brain": [] },
-    { "file_path": "server/src/crm/payroll/teacher-stats-csv.service.ts", "score": 7.94, "nloc": 112, "max_ccn": 3, "weighted_deficit": 7, "god_or_brain": [] },
-    { "file_path": "server/src/crm/commerce/subscription-issue.service.ts", "score": 5.72, "nloc": 43, "max_ccn": 1, "weighted_deficit": 98, "god_or_brain": [] },
-    { "file_path": "server/src/crm/commerce/subscription-commercial-terms.service.ts", "score": 7.14, "nloc": 357, "max_ccn": 7, "weighted_deficit": 307, "god_or_brain": [] },
-    { "file_path": "server/src/crm/commerce/subscription-purchase-preview.service.ts", "score": 6.41, "coverage_adjusted_score": 7.97, "nloc": 196, "max_ccn": 6, "weighted_deficit": 312, "god_or_brain": [] },
-    { "file_path": "server/src/crm/commerce/subscription-purchase-command.service.ts", "score": 6.24, "coverage_adjusted_score": 7.80, "nloc": 250, "max_ccn": 5, "weighted_deficit": 440, "god_or_brain": [] },
-    { "file_path": "server/src/crm/commerce/subscription-grant-command.service.ts", "score": 7.21, "nloc": 182, "max_ccn": 5, "weighted_deficit": 144, "god_or_brain": [] },
-    { "file_path": "server/src/crm/commerce/subscription-issue-result.service.ts", "score": 9.47, "nloc": 66, "max_ccn": 3, "weighted_deficit": 0, "god_or_brain": [] }
-  ],
-  "raw_below_threshold_owner_findings": {
-    "server/src/messenger/messenger-chat-query.service.ts": [
-      { "biomarker": "untested_hotspot", "impact": 1.56 },
-      { "biomarker": "large_method", "impact": 1.008, "symbol": "listChats" },
-      { "biomarker": "complex_conditional", "impact": 0.931 },
-      { "biomarker": "low_cohesion", "impact": 0.35 },
-      { "biomarker": "complex_method", "impact": 0.341, "symbol": "decodeChatCursor" },
-      { "biomarker": "large_method", "impact": 0.151, "symbol": "getMessages" },
-      { "biomarker": "dry_violation", "impact": 0.15 }
-    ],
-    "server/src/crm/payroll/teacher-payroll-command.service.ts": [
-      { "biomarker": "untested_hotspot", "impact": 1.56 },
-      { "biomarker": "dry_violation", "impact": 0.35 },
-      { "biomarker": "low_cohesion", "impact": 0.35 },
-      { "biomarker": "large_method", "impact": 1.07, "note": "five methods at 0.214 each" },
-      { "biomarker": "primitive_obsession", "impact": 0.43, "note": "five methods at 0.086 each" }
-    ],
-    "server/src/crm/commerce/subscription-purchase-preview.service.ts": [
-      { "biomarker": "untested_hotspot", "impact": 1.56 },
-      { "biomarker": "complex_conditional", "impact": 0.931, "symbol": "decodeBoundToken" },
-      { "biomarker": "low_cohesion", "impact": 0.6 },
-      { "biomarker": "dry_violation", "impact": 0.35 },
-      { "biomarker": "primitive_obsession", "impact": 0.15, "symbol": "createTokenPayload" }
-    ],
-    "server/src/crm/commerce/subscription-purchase-command.service.ts": [
-      { "biomarker": "untested_hotspot", "impact": 1.56 },
-      { "biomarker": "large_method", "impact": 1.364, "symbol": "purchase" },
-      { "biomarker": "dry_violation", "impact": 0.35 },
-      { "biomarker": "low_cohesion", "impact": 0.35 },
-      { "biomarker": "primitive_obsession", "impact": 0.136, "symbol": "constructor" }
-    ]
-  }
+    {
+      "file_path": "server/src/messenger/messenger.service.ts",
+      "raw_score": 6.39,
+      "nloc": 63,
+      "max_ccn": 1,
+      "weighted_deficit": 101.0,
+      "findings": [
+        {
+          "biomarker_type": "low_cohesion",
+          "severity": "high",
+          "health_impact": 0.6,
+          "function_name": "MessengerService",
+          "reason": "MessengerService has low cohesion (LCOM4=5): its 13 methods split into 5 groups that share no fields or calls"
+        },
+        {
+          "biomarker_type": "dry_violation",
+          "severity": "high",
+          "health_impact": 0.6,
+          "function_name": null,
+          "reason": "92% of file duplicated; worst clone shares 38 lines with server/src/crm/crm.service.ts (co-changed 6x)"
+        },
+        {
+          "biomarker_type": "coverage_gradient",
+          "severity": "low",
+          "health_impact": 0.412,
+          "function_name": null,
+          "reason": "10% of lines uncovered (90% line coverage) - uncovered code carries proportionally more defect risk"
+        },
+        {
+          "biomarker_type": "prior_defect",
+          "severity": "critical",
+          "health_impact": 2.0,
+          "function_name": null,
+          "reason": "10 bug-fixes touched this file in the last ~6 months; recent defect history is the strongest cost-effective predictor of further defects"
+        }
+      ]
+    },
+    {
+      "file_path": "server/src/messenger/messenger-chat-access.service.ts",
+      "raw_score": 10.0,
+      "nloc": 15,
+      "max_ccn": 2,
+      "weighted_deficit": 0.0,
+      "findings": []
+    },
+    {
+      "file_path": "server/src/messenger/messenger-system-chat.service.ts",
+      "raw_score": 9.85,
+      "nloc": 46,
+      "max_ccn": 2,
+      "weighted_deficit": 0.0,
+      "findings": [
+        {
+          "biomarker_type": "dry_violation",
+          "severity": "low",
+          "health_impact": 0.15,
+          "function_name": null,
+          "reason": "16% of file duplicated; worst clone shares 16 lines with server/src/messenger/messenger-fanout.service.ts"
+        }
+      ]
+    },
+    {
+      "file_path": "server/src/messenger/messenger-chat-query.service.ts",
+      "raw_score": 5.51,
+      "nloc": 425,
+      "max_ccn": 10,
+      "weighted_deficit": 1058.0,
+      "findings": [
+        {
+          "biomarker_type": "low_cohesion",
+          "severity": "medium",
+          "health_impact": 0.35,
+          "function_name": "MessengerChatQueryService",
+          "reason": "MessengerChatQueryService has low cohesion (LCOM4=2): its 9 methods split into 2 groups that share no fields or calls"
+        },
+        {
+          "biomarker_type": "complex_method",
+          "severity": "medium",
+          "health_impact": 0.341,
+          "function_name": "decodeChatCursor",
+          "reason": "decodeChatCursor has cyclomatic complexity 10"
+        },
+        {
+          "biomarker_type": "large_method",
+          "severity": "low",
+          "health_impact": 0.151,
+          "function_name": "getMessages",
+          "reason": "getMessages is 71 lines long"
+        },
+        {
+          "biomarker_type": "large_method",
+          "severity": "critical",
+          "health_impact": 1.008,
+          "function_name": "listChats",
+          "reason": "listChats is 202 lines long"
+        },
+        {
+          "biomarker_type": "dry_violation",
+          "severity": "low",
+          "health_impact": 0.15,
+          "function_name": null,
+          "reason": "21% of file duplicated; worst clone shares 38 lines with server/src/messenger/messenger-chat-query.service.ts"
+        },
+        {
+          "biomarker_type": "untested_hotspot",
+          "severity": "high",
+          "health_impact": 1.56,
+          "function_name": null,
+          "reason": "Hotspot with no paired test file and no coverage data — 6 dependents"
+        },
+        {
+          "biomarker_type": "complex_conditional",
+          "severity": "medium",
+          "health_impact": 0.931,
+          "function_name": "decodeChatCursor",
+          "reason": "if condition combines 4 boolean operators"
+        }
+      ],
+      "coverage_adjustment": 1.56,
+      "coverage_adjusted_score": 7.07
+    },
+    {
+      "file_path": "server/src/messenger/messenger-chat-command.service.ts",
+      "raw_score": 7.79,
+      "nloc": 365,
+      "max_ccn": 8,
+      "weighted_deficit": 77.0,
+      "findings": [
+        {
+          "biomarker_type": "low_cohesion",
+          "severity": "medium",
+          "health_impact": 0.35,
+          "function_name": "MessengerChatCommandService",
+          "reason": "MessengerChatCommandService has low cohesion (LCOM4=2): its 11 methods split into 2 groups that share no fields or calls"
+        },
+        {
+          "biomarker_type": "primitive_obsession",
+          "severity": "low",
+          "health_impact": 0.15,
+          "function_name": "persistGroupMemberChanges",
+          "reason": "persistGroupMemberChanges takes 5 parameters"
+        },
+        {
+          "biomarker_type": "dry_violation",
+          "severity": "low",
+          "health_impact": 0.15,
+          "function_name": null,
+          "reason": "18% of file duplicated; worst clone shares 28 lines with server/src/crm/commerce/subscription-grant-command.service.ts"
+        },
+        {
+          "biomarker_type": "untested_hotspot",
+          "severity": "high",
+          "health_impact": 1.56,
+          "function_name": null,
+          "reason": "Hotspot with no paired test file and no coverage data — 5 dependents"
+        }
+      ]
+    },
+    {
+      "file_path": "server/src/messenger/messenger-message-delivery.service.ts",
+      "raw_score": 7.54,
+      "nloc": 300,
+      "max_ccn": 8,
+      "weighted_deficit": 138.0,
+      "findings": [
+        {
+          "biomarker_type": "low_cohesion",
+          "severity": "medium",
+          "health_impact": 0.35,
+          "function_name": "MessengerMessageDeliveryService",
+          "reason": "MessengerMessageDeliveryService has low cohesion (LCOM4=2): its 10 methods split into 2 groups that share no fields or calls"
+        },
+        {
+          "biomarker_type": "dry_violation",
+          "severity": "low",
+          "health_impact": 0.15,
+          "function_name": null,
+          "reason": "10% of file duplicated; worst clone shares 15 lines with server/src/messenger/read-receipt.service.ts"
+        },
+        {
+          "biomarker_type": "untested_hotspot",
+          "severity": "high",
+          "health_impact": 1.56,
+          "function_name": null,
+          "reason": "Hotspot with no paired test file and no coverage data — 5 dependents"
+        },
+        {
+          "biomarker_type": "complex_conditional",
+          "severity": "low",
+          "health_impact": 0.399,
+          "function_name": "assertVoiceMessagePayload",
+          "reason": "if condition combines 3 boolean operators"
+        }
+      ]
+    },
+    {
+      "file_path": "server/src/crm/payroll.service.ts",
+      "raw_score": 6.07,
+      "nloc": 115,
+      "max_ccn": 1,
+      "weighted_deficit": 222.0,
+      "findings": [
+        {
+          "biomarker_type": "low_cohesion",
+          "severity": "high",
+          "health_impact": 0.6,
+          "function_name": "PayrollService",
+          "reason": "PayrollService has low cohesion (LCOM4=5): its 10 methods split into 5 groups that share no fields or calls"
+        },
+        {
+          "biomarker_type": "primitive_obsession",
+          "severity": "low",
+          "health_impact": 0.15,
+          "function_name": "deleteTeacherPayout",
+          "reason": "deleteTeacherPayout takes 5 parameters"
+        },
+        {
+          "biomarker_type": "primitive_obsession",
+          "severity": "low",
+          "health_impact": 0.15,
+          "function_name": "updateTeacherPayout",
+          "reason": "updateTeacherPayout takes 5 parameters"
+        },
+        {
+          "biomarker_type": "primitive_obsession",
+          "severity": "low",
+          "health_impact": 0.15,
+          "function_name": "deleteTeacherRate",
+          "reason": "deleteTeacherRate takes 5 parameters"
+        },
+        {
+          "biomarker_type": "primitive_obsession",
+          "severity": "low",
+          "health_impact": 0.15,
+          "function_name": "updateTeacherRate",
+          "reason": "updateTeacherRate takes 5 parameters"
+        },
+        {
+          "biomarker_type": "dry_violation",
+          "severity": "medium",
+          "health_impact": 0.35,
+          "function_name": null,
+          "reason": "100% of file duplicated; worst clone shares 8 lines with server/src/crm/crm.service.ts (co-changed 2x)"
+        },
+        {
+          "biomarker_type": "coverage_gradient",
+          "severity": "low",
+          "health_impact": 0.267,
+          "function_name": null,
+          "reason": "7% of lines uncovered (93% line coverage) - uncovered code carries proportionally more defect risk"
+        },
+        {
+          "biomarker_type": "change_entropy",
+          "severity": "high",
+          "health_impact": 1.812,
+          "function_name": null,
+          "reason": "changes are scattered across noisy commits (top 8% change entropy); a strong history-based fault predictor"
+        },
+        {
+          "biomarker_type": "prior_defect",
+          "severity": "low",
+          "health_impact": 0.3,
+          "function_name": null,
+          "reason": "1 bug-fix touched this file in the last ~6 months; recent defect history is the strongest cost-effective predictor of further defects"
+        }
+      ]
+    },
+    {
+      "file_path": "server/src/crm/payroll/payroll-accrual-calculator.ts",
+      "raw_score": 7.84,
+      "nloc": 113,
+      "max_ccn": 6,
+      "weighted_deficit": 18.0,
+      "findings": [
+        {
+          "biomarker_type": "low_cohesion",
+          "severity": "high",
+          "health_impact": 0.6,
+          "function_name": "PayrollAccrualCalculator",
+          "reason": "PayrollAccrualCalculator has low cohesion (LCOM4=4): its 11 methods split into 4 groups that share no fields or calls"
+        },
+        {
+          "biomarker_type": "untested_hotspot",
+          "severity": "high",
+          "health_impact": 1.56,
+          "function_name": null,
+          "reason": "Hotspot with no paired test file and no coverage data — 7 dependents"
+        }
+      ]
+    },
+    {
+      "file_path": "server/src/crm/payroll/payroll-read.repository.ts",
+      "raw_score": 7.74,
+      "nloc": 243,
+      "max_ccn": 3,
+      "weighted_deficit": 63.0,
+      "findings": [
+        {
+          "biomarker_type": "low_cohesion",
+          "severity": "medium",
+          "health_impact": 0.35,
+          "function_name": "PayrollReadRepository",
+          "reason": "PayrollReadRepository has low cohesion (LCOM4=2): its 10 methods split into 2 groups that share no fields or calls"
+        },
+        {
+          "biomarker_type": "dry_violation",
+          "severity": "medium",
+          "health_impact": 0.35,
+          "function_name": null,
+          "reason": "33% of file duplicated; worst clone shares 46 lines with server/src/crm/commerce/payment-reversal.repository.ts"
+        },
+        {
+          "biomarker_type": "untested_hotspot",
+          "severity": "high",
+          "health_impact": 1.56,
+          "function_name": null,
+          "reason": "Hotspot with no paired test file and no coverage data — 6 dependents"
+        }
+      ]
+    },
+    {
+      "file_path": "server/src/crm/payroll/teacher-payroll-query.service.ts",
+      "raw_score": 7.74,
+      "nloc": 87,
+      "max_ccn": 4,
+      "weighted_deficit": 23.0,
+      "findings": [
+        {
+          "biomarker_type": "low_cohesion",
+          "severity": "medium",
+          "health_impact": 0.35,
+          "function_name": "TeacherPayrollQueryService",
+          "reason": "TeacherPayrollQueryService has low cohesion (LCOM4=2): its 5 methods split into 2 groups that share no fields or calls"
+        },
+        {
+          "biomarker_type": "dry_violation",
+          "severity": "medium",
+          "health_impact": 0.35,
+          "function_name": null,
+          "reason": "32% of file duplicated; worst clone shares 19 lines with server/src/crm/client-linking.service.ts"
+        },
+        {
+          "biomarker_type": "untested_hotspot",
+          "severity": "high",
+          "health_impact": 1.56,
+          "function_name": null,
+          "reason": "Hotspot with no paired test file and no coverage data — 4 dependents"
+        }
+      ]
+    },
+    {
+      "file_path": "server/src/crm/payroll/teacher-payroll-command.service.ts",
+      "raw_score": 6.24,
+      "nloc": 449,
+      "max_ccn": 6,
+      "weighted_deficit": 790.0,
+      "findings": [
+        {
+          "biomarker_type": "low_cohesion",
+          "severity": "medium",
+          "health_impact": 0.35,
+          "function_name": "TeacherPayrollCommandService",
+          "reason": "TeacherPayrollCommandService has low cohesion (LCOM4=2): its 8 methods split into 2 groups that share no fields or calls"
+        },
+        {
+          "biomarker_type": "large_method",
+          "severity": "low",
+          "health_impact": 0.214,
+          "function_name": "voidPayrollEntry",
+          "reason": "voidPayrollEntry is 61 lines long"
+        },
+        {
+          "biomarker_type": "large_method",
+          "severity": "low",
+          "health_impact": 0.214,
+          "function_name": "updateTeacherPayout",
+          "reason": "updateTeacherPayout is 76 lines long"
+        },
+        {
+          "biomarker_type": "large_method",
+          "severity": "low",
+          "health_impact": 0.214,
+          "function_name": "updateTeacherRate",
+          "reason": "updateTeacherRate is 63 lines long"
+        },
+        {
+          "biomarker_type": "large_method",
+          "severity": "low",
+          "health_impact": 0.214,
+          "function_name": "setTeacherRate",
+          "reason": "setTeacherRate is 73 lines long"
+        },
+        {
+          "biomarker_type": "large_method",
+          "severity": "low",
+          "health_impact": 0.214,
+          "function_name": "createTeacherPayout",
+          "reason": "createTeacherPayout is 84 lines long"
+        },
+        {
+          "biomarker_type": "primitive_obsession",
+          "severity": "low",
+          "health_impact": 0.086,
+          "function_name": "voidPayrollEntry",
+          "reason": "voidPayrollEntry takes 6 parameters"
+        },
+        {
+          "biomarker_type": "primitive_obsession",
+          "severity": "low",
+          "health_impact": 0.086,
+          "function_name": "deleteTeacherPayout",
+          "reason": "deleteTeacherPayout takes 5 parameters"
+        },
+        {
+          "biomarker_type": "primitive_obsession",
+          "severity": "low",
+          "health_impact": 0.086,
+          "function_name": "updateTeacherPayout",
+          "reason": "updateTeacherPayout takes 5 parameters"
+        },
+        {
+          "biomarker_type": "primitive_obsession",
+          "severity": "low",
+          "health_impact": 0.086,
+          "function_name": "deleteTeacherRate",
+          "reason": "deleteTeacherRate takes 5 parameters"
+        },
+        {
+          "biomarker_type": "primitive_obsession",
+          "severity": "low",
+          "health_impact": 0.086,
+          "function_name": "updateTeacherRate",
+          "reason": "updateTeacherRate takes 5 parameters"
+        },
+        {
+          "biomarker_type": "dry_violation",
+          "severity": "medium",
+          "health_impact": 0.35,
+          "function_name": null,
+          "reason": "70% of file duplicated; worst clone shares 93 lines with server/src/crm/payroll/teacher-payroll-command.service.ts"
+        },
+        {
+          "biomarker_type": "untested_hotspot",
+          "severity": "high",
+          "health_impact": 1.56,
+          "function_name": null,
+          "reason": "Hotspot with no paired test file and no coverage data — 4 dependents"
+        }
+      ],
+      "coverage_adjustment": 1.56,
+      "coverage_adjusted_score": 7.8
+    },
+    {
+      "file_path": "server/src/crm/payroll/teacher-stats-report.service.ts",
+      "raw_score": 7.54,
+      "nloc": 364,
+      "max_ccn": 4,
+      "weighted_deficit": 167.0,
+      "findings": [
+        {
+          "biomarker_type": "low_cohesion",
+          "severity": "high",
+          "health_impact": 0.6,
+          "function_name": "TeacherStatsReportService",
+          "reason": "TeacherStatsReportService has low cohesion (LCOM4=2): its 20 methods split into 2 groups that share no fields or calls"
+        },
+        {
+          "biomarker_type": "primitive_obsession",
+          "severity": "low",
+          "health_impact": 0.15,
+          "function_name": "projectTeachers",
+          "reason": "projectTeachers takes 6 parameters"
+        },
+        {
+          "biomarker_type": "dry_violation",
+          "severity": "low",
+          "health_impact": 0.15,
+          "function_name": null,
+          "reason": "16% of file duplicated; worst clone shares 17 lines with server/src/crm/clients/comment-sharing.service.ts"
+        },
+        {
+          "biomarker_type": "untested_hotspot",
+          "severity": "high",
+          "health_impact": 1.56,
+          "function_name": null,
+          "reason": "Hotspot with no paired test file and no coverage data — 5 dependents"
+        }
+      ]
+    },
+    {
+      "file_path": "server/src/crm/payroll/teacher-stats-csv.service.ts",
+      "raw_score": 7.94,
+      "nloc": 112,
+      "max_ccn": 3,
+      "weighted_deficit": 7.0,
+      "findings": [
+        {
+          "biomarker_type": "low_cohesion",
+          "severity": "medium",
+          "health_impact": 0.35,
+          "function_name": "TeacherStatsCsvService",
+          "reason": "TeacherStatsCsvService has low cohesion (LCOM4=2): its 6 methods split into 2 groups that share no fields or calls"
+        },
+        {
+          "biomarker_type": "dry_violation",
+          "severity": "low",
+          "health_impact": 0.15,
+          "function_name": null,
+          "reason": "21% of file duplicated; worst clone shares 31 lines with server/src/settings/settings.service.ts"
+        },
+        {
+          "biomarker_type": "untested_hotspot",
+          "severity": "high",
+          "health_impact": 1.56,
+          "function_name": null,
+          "reason": "Hotspot with no paired test file and no coverage data — 4 dependents"
+        }
+      ]
+    },
+    {
+      "file_path": "server/src/crm/commerce/subscription-issue.service.ts",
+      "raw_score": 5.72,
+      "nloc": 43,
+      "max_ccn": 1,
+      "weighted_deficit": 98.0,
+      "findings": [
+        {
+          "biomarker_type": "dry_violation",
+          "severity": "medium",
+          "health_impact": 0.35,
+          "function_name": null,
+          "reason": "47% of file duplicated; worst clone shares 15 lines with server/src/crm/leads.service.ts"
+        },
+        {
+          "biomarker_type": "coverage_gradient",
+          "severity": "low",
+          "health_impact": 0.431,
+          "function_name": null,
+          "reason": "11% of lines uncovered (89% line coverage) - uncovered code carries proportionally more defect risk"
+        },
+        {
+          "biomarker_type": "hidden_coupling",
+          "severity": "medium",
+          "health_impact": 0.452,
+          "function_name": null,
+          "reason": "server/src/crm/commerce/subscription-issue.repository.ts co-changes with this file 3 times (60% of shared commits) but no static dependency exists"
+        },
+        {
+          "biomarker_type": "churn_risk",
+          "severity": "critical",
+          "health_impact": 1.551,
+          "function_name": null,
+          "reason": "90-day churn rewrote 36.8x the file's size (1584 lines over 43 NLOC, top 3% of repo churn)"
+        },
+        {
+          "biomarker_type": "change_entropy",
+          "severity": "medium",
+          "health_impact": 0.683,
+          "function_name": null,
+          "reason": "changes are scattered across noisy commits (top 17% change entropy); a strong history-based fault predictor"
+        },
+        {
+          "biomarker_type": "co_change_scatter",
+          "severity": "medium",
+          "health_impact": 0.814,
+          "function_name": null,
+          "reason": "co-changes with 12 distinct files — editing this file tends to ripple across the codebase (shotgun surgery)"
+        }
+      ]
+    },
+    {
+      "file_path": "server/src/crm/commerce/subscription-commercial-terms.service.ts",
+      "raw_score": 7.14,
+      "nloc": 357,
+      "max_ccn": 7,
+      "weighted_deficit": 307.0,
+      "findings": [
+        {
+          "biomarker_type": "low_cohesion",
+          "severity": "high",
+          "health_impact": 0.6,
+          "function_name": "SubscriptionCommercialTermsService",
+          "reason": "SubscriptionCommercialTermsService has low cohesion (LCOM4=3): its 18 methods split into 3 groups that share no fields or calls"
+        },
+        {
+          "biomarker_type": "primitive_obsession",
+          "severity": "low",
+          "health_impact": 0.15,
+          "function_name": "createSnapshot",
+          "reason": "createSnapshot takes 6 parameters"
+        },
+        {
+          "biomarker_type": "dry_violation",
+          "severity": "low",
+          "health_impact": 0.15,
+          "function_name": null,
+          "reason": "16% of file duplicated; worst clone shares 20 lines with server/src/crm/schedule/availability.service.ts"
+        },
+        {
+          "biomarker_type": "untested_hotspot",
+          "severity": "high",
+          "health_impact": 1.56,
+          "function_name": null,
+          "reason": "Hotspot with no paired test file and no coverage data — 8 dependents"
+        },
+        {
+          "biomarker_type": "complex_conditional",
+          "severity": "low",
+          "health_impact": 0.399,
+          "function_name": "normalizeFixedDiscount",
+          "reason": "if condition combines 3 boolean operators"
+        }
+      ]
+    },
+    {
+      "file_path": "server/src/crm/commerce/subscription-purchase-preview.service.ts",
+      "raw_score": 6.41,
+      "nloc": 196,
+      "max_ccn": 6,
+      "weighted_deficit": 312.0,
+      "findings": [
+        {
+          "biomarker_type": "low_cohesion",
+          "severity": "high",
+          "health_impact": 0.6,
+          "function_name": "SubscriptionPurchasePreviewService",
+          "reason": "SubscriptionPurchasePreviewService has low cohesion (LCOM4=3): its 8 methods split into 3 groups that share no fields or calls"
+        },
+        {
+          "biomarker_type": "primitive_obsession",
+          "severity": "low",
+          "health_impact": 0.15,
+          "function_name": "createTokenPayload",
+          "reason": "createTokenPayload takes 5 parameters"
+        },
+        {
+          "biomarker_type": "dry_violation",
+          "severity": "medium",
+          "health_impact": 0.35,
+          "function_name": null,
+          "reason": "34% of file duplicated; worst clone shares 23 lines with server/src/crm/timeline.service.ts"
+        },
+        {
+          "biomarker_type": "untested_hotspot",
+          "severity": "high",
+          "health_impact": 1.56,
+          "function_name": null,
+          "reason": "Hotspot with no paired test file and no coverage data — 7 dependents"
+        },
+        {
+          "biomarker_type": "complex_conditional",
+          "severity": "medium",
+          "health_impact": 0.931,
+          "function_name": "decodeBoundToken",
+          "reason": "if condition combines 4 boolean operators"
+        }
+      ],
+      "coverage_adjustment": 1.56,
+      "coverage_adjusted_score": 7.97
+    },
+    {
+      "file_path": "server/src/crm/commerce/subscription-purchase-command.service.ts",
+      "raw_score": 6.24,
+      "nloc": 250,
+      "max_ccn": 5,
+      "weighted_deficit": 440.0,
+      "findings": [
+        {
+          "biomarker_type": "low_cohesion",
+          "severity": "medium",
+          "health_impact": 0.35,
+          "function_name": "SubscriptionPurchaseCommandService",
+          "reason": "SubscriptionPurchaseCommandService has low cohesion (LCOM4=2): its 5 methods split into 2 groups that share no fields or calls"
+        },
+        {
+          "biomarker_type": "large_method",
+          "severity": "high",
+          "health_impact": 1.364,
+          "function_name": "purchase",
+          "reason": "purchase is 159 lines long"
+        },
+        {
+          "biomarker_type": "primitive_obsession",
+          "severity": "low",
+          "health_impact": 0.136,
+          "function_name": "constructor",
+          "reason": "constructor takes 7 parameters"
+        },
+        {
+          "biomarker_type": "dry_violation",
+          "severity": "medium",
+          "health_impact": 0.35,
+          "function_name": null,
+          "reason": "60% of file duplicated; worst clone shares 39 lines with server/src/crm/commerce/subscription-grant-command.service.ts"
+        },
+        {
+          "biomarker_type": "untested_hotspot",
+          "severity": "high",
+          "health_impact": 1.56,
+          "function_name": null,
+          "reason": "Hotspot with no paired test file and no coverage data — 6 dependents"
+        }
+      ],
+      "coverage_adjustment": 1.56,
+      "coverage_adjusted_score": 7.8
+    },
+    {
+      "file_path": "server/src/crm/commerce/subscription-grant-command.service.ts",
+      "raw_score": 7.21,
+      "nloc": 182,
+      "max_ccn": 5,
+      "weighted_deficit": 144.0,
+      "findings": [
+        {
+          "biomarker_type": "large_method",
+          "severity": "medium",
+          "health_impact": 0.875,
+          "function_name": "issue",
+          "reason": "issue is 116 lines long"
+        },
+        {
+          "biomarker_type": "dry_violation",
+          "severity": "medium",
+          "health_impact": 0.35,
+          "function_name": null,
+          "reason": "73% of file duplicated; worst clone shares 39 lines with server/src/crm/commerce/subscription-purchase-command.service.ts"
+        },
+        {
+          "biomarker_type": "untested_hotspot",
+          "severity": "high",
+          "health_impact": 1.56,
+          "function_name": null,
+          "reason": "Hotspot with no paired test file and no coverage data — 6 dependents"
+        }
+      ]
+    },
+    {
+      "file_path": "server/src/crm/commerce/subscription-issue-result.service.ts",
+      "raw_score": 9.47,
+      "nloc": 66,
+      "max_ccn": 3,
+      "weighted_deficit": 0.0,
+      "findings": [
+        {
+          "biomarker_type": "large_method",
+          "severity": "low",
+          "health_impact": 0.375,
+          "function_name": "load",
+          "reason": "load is 60 lines long"
+        },
+        {
+          "biomarker_type": "dry_violation",
+          "severity": "low",
+          "health_impact": 0.15,
+          "function_name": null,
+          "reason": "20% of file duplicated; worst clone shares 22 lines with server/src/crm/commerce/commerce-projection.factory.ts"
+        }
+      ]
+    }
+  ]
 }

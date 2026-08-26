@@ -1,0 +1,22 @@
+{
+  "repo": "C:\\Users\\Alinka\\Documents\\Codex Import\\MagicMusicCRM",
+  "indexed": true,
+  "coverage": {
+    "file_count": 415,
+    "covered_lines": 17388,
+    "total_lines": 20507,
+    "line_coverage_pct": 84.79,
+    "branch_coverage_pct": 61.96,
+    "source_format": "lcov",
+    "ingested_at": "2026-08-26 16:40:34.175987",
+    "ingested_commit_sha": "e86b1f555da5892d66e9d850f1bccb203af57949"
+  },
+  "test_map": {
+    "pair_count": 6586,
+    "test_count": 290,
+    "source_file_count": 618,
+    "source_format": "lcov",
+    "ingested_at": "2026-08-13 18:18:24.280942",
+    "ingested_commit_sha": "dca72f598cc2c80af03152366cec37d05a3e5472"
+  }
+}
