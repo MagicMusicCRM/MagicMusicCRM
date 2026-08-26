@@ -8,6 +8,12 @@ import { PlatformIntegrityRepository } from "../platform/platform-integrity.repo
 import { PlatformIntegrityService } from "../platform/platform-integrity.service";
 import { CrmPolicy } from "./crm.policy";
 import { PayrollService } from "./payroll.service";
+import { PayrollAccrualCalculator } from "./payroll/payroll-accrual-calculator";
+import { PayrollReadRepository } from "./payroll/payroll-read.repository";
+import { TeacherPayrollCommandService } from "./payroll/teacher-payroll-command.service";
+import { TeacherPayrollQueryService } from "./payroll/teacher-payroll-query.service";
+import { TeacherStatsCsvService } from "./payroll/teacher-stats-csv.service";
+import { TeacherStatsReportService } from "./payroll/teacher-stats-report.service";
 
 const databaseUrl =
   process.env.V4_PLATFORM_TEST_DATABASE_URL ??
@@ -86,7 +92,25 @@ describe("Teacher payroll integrity (PostgreSQL)", () => {
       database,
       new PlatformIntegrityRepository(),
     );
-    payroll = new PayrollService(database, new CrmPolicy(), integrity);
+    const repository = new PayrollReadRepository(database);
+    const policy = new CrmPolicy();
+    const calculator = new PayrollAccrualCalculator();
+    const report = new TeacherStatsReportService(
+      repository,
+      policy,
+      calculator,
+    );
+    payroll = new PayrollService(
+      new TeacherPayrollQueryService(repository, policy, calculator),
+      new TeacherPayrollCommandService(
+        repository,
+        policy,
+        integrity,
+        calculator,
+      ),
+      report,
+      new TeacherStatsCsvService(report),
+    );
   });
 
   afterAll(async () => {

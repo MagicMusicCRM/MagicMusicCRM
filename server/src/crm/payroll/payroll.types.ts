@@ -1,0 +1,101 @@
+export type TeacherStatsUnitType =
+  | "group"
+  | "individual"
+  | "group_trial"
+  | "individual_trial";
+
+export interface PayrollMutationMetadata {
+  idempotencyKey: string;
+  requestId: string;
+}
+
+export interface PayrollLessonFilters {
+  teacherId?: string | null;
+  branchId?: string | null;
+  from?: string | null;
+  to?: string | null;
+}
+
+export interface PayrollLessonRow {
+  id: string;
+  teacher_id: string;
+  student_id: string | null;
+  lead_id: string | null;
+  group_id: string | null;
+  group_name: string | null;
+  student_name: string | null;
+  lead_name: string | null;
+  scheduled_at: Date | string;
+  duration_minutes: number | string;
+  is_trial: boolean;
+  group_rate: string | number | null;
+  teacher_rate: string | number | null;
+  attendance_kind: string | null;
+  charge_share: string | number | null;
+  settlement_fact_id: string | null;
+  settled_amount_minor: string | number | null;
+}
+
+export interface PayrollLessonAccrual {
+  hours: number;
+  rate: number;
+  coefficient: number;
+  amount: number;
+}
+
+export interface TeacherRateRow {
+  id?: string;
+  teacher_id: string;
+  rate: string | number;
+  effective_from: Date | string;
+  created_at?: Date | string;
+  author_first_name?: string | null;
+  author_last_name?: string | null;
+}
+
+export interface TeacherRateEntry {
+  id: string | null;
+  rate: number;
+  effectiveFrom: string;
+  createdAt: Date | string | null;
+  authorName: string | null;
+}
+
+export interface TeacherPayoutRow {
+  id: string;
+  teacher_id: string;
+  amount: string | number;
+  kind: string;
+  comment: string | null;
+  paid_at: Date | string;
+  author_first_name?: string | null;
+  author_last_name?: string | null;
+}
+
+export interface TeacherPayrollHeader {
+  id: string;
+  version: string | number;
+}
+
+export interface TeacherMovementTotals {
+  paid: number;
+  bonus: number;
+  deduction: number;
+}
+
+export interface TeacherReportReadInput {
+  teacherId: string | null;
+  lessonTeacherIds: string[];
+  includeMovementOnly: boolean;
+  from: string;
+  to: string;
+  status: string | null;
+  discipline: string | null;
+  category: string | null;
+}
+
+export interface TeacherReportRow {
+  id: string;
+  name: string;
+  salary: string | number | null;
+}

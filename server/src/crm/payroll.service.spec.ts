@@ -3,12 +3,19 @@ import { DatabaseService } from "../db/database.service";
 import { PlatformIntegrityService } from "../platform/platform-integrity.service";
 import { CrmPolicy } from "./crm.policy";
 import { PayrollService } from "./payroll.service";
+import { PayrollAccrualCalculator } from "./payroll/payroll-accrual-calculator";
+import { PayrollReadRepository } from "./payroll/payroll-read.repository";
+import { TeacherPayrollCommandService } from "./payroll/teacher-payroll-command.service";
+import { TeacherPayrollQueryService } from "./payroll/teacher-payroll-query.service";
+import { TeacherStatsCsvService } from "./payroll/teacher-stats-csv.service";
+import { TeacherStatsReportService } from "./payroll/teacher-stats-report.service";
 
 describe("PayrollService (KVA-238 teacher payroll)", () => {
   const actor = { userId: "manager-a", role: "manager" as const };
 
   const createServiceWithQueryResults = (
     results: { rows: Record<string, unknown>[] }[],
+    suppliedIntegrity?: PlatformIntegrityService,
   ) => {
     const queued = [...results];
     const query = jest.fn().mockImplementation((sql: unknown) => {
@@ -20,8 +27,11 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
       return Promise.resolve(queued.shift());
     });
     const database = { query };
-    const policy = { assertCanReadPayroll: jest.fn() };
-    const integrity = {
+    const policy = {
+      assertCanReadPayroll: jest.fn(),
+      assertCanManagePayrollHistory: jest.fn(),
+    };
+    const integrity = suppliedIntegrity ?? ({
       executeVersionedMutation: jest.fn(async (command: any) => ({
         resultRef: await command.mutate({ query }, command.expectedVersion + 1),
         version: command.expectedVersion + 1,
@@ -29,13 +39,71 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
         auditId: "audit-1",
         eventId: "event-1",
       })),
-    };
-    const service = new PayrollService(
+    } as unknown as PlatformIntegrityService);
+    const repository = new PayrollReadRepository(
       database as unknown as DatabaseService,
-      policy as unknown as CrmPolicy,
-      integrity as unknown as PlatformIntegrityService,
     );
-    return { service, query, integrity, policy };
+    const calculator = new PayrollAccrualCalculator();
+    const queryService = new TeacherPayrollQueryService(
+      repository,
+      policy as unknown as CrmPolicy,
+      calculator,
+    );
+    const commandService = new TeacherPayrollCommandService(
+      repository,
+      policy as unknown as CrmPolicy,
+      integrity,
+      calculator,
+    );
+    const reportService = new TeacherStatsReportService(
+      repository,
+      policy as unknown as CrmPolicy,
+      calculator,
+    );
+    const csvService = new TeacherStatsCsvService(reportService);
+    const service = new PayrollService(
+      queryService,
+      commandService,
+      reportService,
+      csvService,
+    );
+    return { service, query, integrity, policy, commandService };
+  };
+
+  const teacherId = "11111111-1111-4111-8111-111111111111";
+  const entryId = "22222222-2222-4222-8222-222222222222";
+  const directorActor = { userId: "manager-a", role: "director" as const };
+  const metadata = {
+    idempotencyKey: "payroll-key-001",
+    requestId: "request-001",
+  };
+
+  const createMutationService = (integrityResult: {
+    resultRef: { entryId: string };
+    version: number;
+    replayed: boolean;
+  }) => {
+    const repository = {} as PayrollReadRepository;
+    const policy = {
+      assertCanReadPayroll: jest.fn(),
+      assertCanManagePayrollHistory: jest.fn(),
+    } as unknown as CrmPolicy;
+    const integrity = {
+      executeVersionedMutation: jest.fn().mockResolvedValue(integrityResult),
+    } as unknown as PlatformIntegrityService;
+    const commands = new TeacherPayrollCommandService(
+      repository,
+      policy,
+      integrity,
+      new PayrollAccrualCalculator(),
+    );
+    const service = new PayrollService(
+      {} as TeacherPayrollQueryService,
+      commands,
+      {} as TeacherStatsReportService,
+      {} as TeacherStatsCsvService,
+    );
+    return { service, integrity, policy };
   };
 
   const lessonRow = (over: Record<string, unknown> = {}) => ({
@@ -707,5 +775,133 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
       ),
     ).rejects.toThrow("Передайте корректный Idempotency-Key");
     expect(integrity.executeVersionedMutation).not.toHaveBeenCalled();
+  });
+
+  it("updateTeacherRate preserves expected-version, correction audit and outbox metadata", async () => {
+    const dto = {
+      expectedVersion: 7,
+      reasonText: "Исправление ставки",
+      rate: 1250,
+      effectiveFrom: "2026-08-01",
+    };
+    const { service, integrity, policy } = createMutationService({
+      resultRef: { entryId },
+      version: 8,
+      replayed: false,
+    });
+
+    await expect(
+      service.updateTeacherRate(
+        directorActor,
+        teacherId,
+        entryId,
+        dto,
+        metadata,
+      ),
+    ).resolves.toEqual({
+      id: entryId,
+      teacherId,
+      rate: 1250,
+      effectiveFrom: "2026-08-01",
+      version: 8,
+      replayed: false,
+    });
+    expect(policy.assertCanManagePayrollHistory).toHaveBeenCalledWith(
+      directorActor,
+    );
+    expect(integrity.executeVersionedMutation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: "crm.teacher-rate.update",
+        aggregateType: "teacher:payroll",
+        aggregateId: teacherId,
+        expectedVersion: 7,
+        idempotencyKey: "payroll-key-001",
+        requestId: "request-001",
+        authorization: {
+          actor: directorActor,
+          capabilityKey: "commerce.teacher_payroll.write",
+        },
+        audit: expect.objectContaining({
+          action: "crm.teacher_rate_updated",
+          reason: "TEACHER_RATE_CORRECTION",
+          reasonText: "Исправление ставки",
+          beforeRef: { entryId },
+        }),
+        outbox: {
+          type: "crm.teacher_payroll.changed",
+          payload: {
+            action: "rate_updated",
+            entityId: teacherId,
+            entryId,
+          },
+        },
+      }),
+    );
+  });
+
+  it("updateTeacherPayout preserves expected-version, correction audit and outbox metadata", async () => {
+    const dto = {
+      expectedVersion: 7,
+      reasonText: "Исправление выплаты",
+      kind: "bonus" as const,
+      amount: 2500,
+      comment: "Премия",
+      paidAt: "2026-08-20T12:00:00.000Z",
+    };
+    const { service, integrity, policy } = createMutationService({
+      resultRef: { entryId },
+      version: 8,
+      replayed: false,
+    });
+
+    await expect(
+      service.updateTeacherPayout(
+        directorActor,
+        teacherId,
+        entryId,
+        dto,
+        metadata,
+      ),
+    ).resolves.toEqual({
+      id: entryId,
+      teacherId,
+      kind: "bonus",
+      amount: 2500,
+      comment: "Премия",
+      paidAt: "2026-08-20T12:00:00.000Z",
+      version: 8,
+      replayed: false,
+    });
+    expect(policy.assertCanManagePayrollHistory).toHaveBeenCalledWith(
+      directorActor,
+    );
+    expect(integrity.executeVersionedMutation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: "crm.teacher-payout.update",
+        aggregateType: "teacher:payroll",
+        aggregateId: teacherId,
+        expectedVersion: 7,
+        idempotencyKey: "payroll-key-001",
+        requestId: "request-001",
+        authorization: {
+          actor: directorActor,
+          capabilityKey: "commerce.teacher_payroll.write",
+        },
+        audit: expect.objectContaining({
+          action: "crm.teacher_payout_updated",
+          reason: "TEACHER_PAYOUT_CORRECTION",
+          reasonText: "Исправление выплаты",
+          beforeRef: { entryId },
+        }),
+        outbox: {
+          type: "crm.teacher_payroll.changed",
+          payload: {
+            action: "payout_updated",
+            entityId: teacherId,
+            entryId,
+          },
+        },
+      }),
+    );
   });
 });
