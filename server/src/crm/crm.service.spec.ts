@@ -445,12 +445,6 @@ describe("CrmService", () => {
 
   const stubCardSections = (service: CrmService) => {
     jest
-      .spyOn(
-        service as unknown as { toStudentDto: () => unknown },
-        "toStudentDto",
-      )
-      .mockReturnValue({ id: "student-a" });
-    jest
       .spyOn(service, "listStudentGroups")
       .mockResolvedValue({ items: [] } as never);
     jest

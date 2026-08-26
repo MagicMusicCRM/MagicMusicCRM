@@ -19,9 +19,7 @@ import {
   sanitizeJsonObject,
   trimOptional,
 } from "./crm-util";
-import { buildTextSearch } from "./search-text";
 import { audienceForStudent } from "./audience";
-import { resolveAge } from "./age";
 import { APPEAL_KEY, resolveAppealDate } from "./appeal-date";
 import { ensureResponsibleSafe } from "./responsible";
 import {
@@ -32,7 +30,6 @@ import {
 import {
   diffEntityFields,
   isDeliverableEmail,
-  presentableEmail,
   toTimelineDto,
 } from "./crm-mappers";
 import {
@@ -77,36 +74,14 @@ import { ScheduleReadService } from "./schedule/schedule-read.service";
 import { TimelineService } from "./timeline.service";
 import { StudentFunnelService } from "./student-funnel.service";
 import { assertGroupBranchScope } from "./group-branch-scope";
-
-interface StudentSearchRow extends StudentRow {
-  total_count: string | number;
-  branch_id: string | null;
-  branch_name: string | null;
-  groups_count: string | number;
-  open_tasks_count: string | number;
-  lessons_count: string | number;
-  payments_total: string | number | null;
-  linked_user_id: string | null;
-  linked_user_email: string | null;
-  is_app_account: boolean | null;
-  disciplines: { id: string; name: string }[] | null;
-  table_custom_fields: Record<string, unknown>[] | null;
-}
-
-interface GroupRow {
-  id: string;
-  teacher_id: string | null;
-  branch_id: string | null;
-  room_id: string | null;
-  name: string;
-  price_per_lesson: string | null;
-  // KVA-238: переопределение ставки педагога (null = брать ставку педагога).
-  teacher_rate?: string | number | null;
-  teacher_name: string | null;
-  branch_name: string | null;
-  room_name: string | null;
-  created_at: Date | string;
-}
+import {
+  StudentGroupRow,
+  StudentSearchRow,
+  toStudentDto,
+  toStudentGroupDto,
+  toStudentSearchDto,
+} from "./students/student-presenter";
+import { buildStudentSearchFilter } from "./students/student-search-filter";
 
 @Injectable()
 export class CrmService {
@@ -168,7 +143,7 @@ export class CrmService {
     }
 
     return {
-      students: students.map((row) => this.toStudentDto(row)),
+      students: students.map((row) => toStudentDto(row)),
       upcomingLessons,
       tasks: openTasks,
     };
@@ -210,13 +185,13 @@ export class CrmService {
       [actor.role, actor.userId, q || null, limit],
     );
 
-    return { items: result.rows.map((row) => this.toStudentDto(row)) };
+    return { items: result.rows.map((row) => toStudentDto(row)) };
   }
 
   async searchStudents(actor: ActorContext, query: StudentSearchQuery) {
     this.policy.assertCanListStudents(actor);
     const limit = Math.min(query.limit ?? 50, 500);
-    const filter = this.buildStudentSearchFilter(actor, query);
+    const filter = buildStudentSearchFilter(actor, query);
     const result = await this.database.query<StudentSearchRow>(
       `
         select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
@@ -299,7 +274,7 @@ export class CrmService {
     const hasMore = result.rows.length > limit;
     const boundary = page.at(-1);
     return {
-      items: page.map((row) => this.toStudentSearchDto(row)),
+      items: page.map((row) => toStudentSearchDto(row)),
       totalCount: Number(result.rows[0]?.total_count ?? page.length),
       nextCursor:
         hasMore && boundary
@@ -496,7 +471,7 @@ export class CrmService {
         branchId: branchId ?? null,
       });
       return {
-        ...this.toStudentDto(student),
+        ...toStudentDto(student),
         ...(validated ? { warnings: validated.warnings } : {}),
       };
     } catch (error) {
@@ -512,7 +487,7 @@ export class CrmService {
       profileUserId: student.profile_user_id,
       teacherUserIds: student.teacher_user_ids ?? [],
     });
-    return this.toStudentDto(student);
+    return toStudentDto(student);
   }
 
   async getStudentCard(actor: ActorContext, studentId: string) {
@@ -596,7 +571,7 @@ export class CrmService {
     );
 
     return {
-      student: this.toStudentDto(student),
+      student: toStudentDto(student),
       groups: groups.items,
       lessons: lessons.items,
       tasks: tasks.items,
@@ -619,7 +594,7 @@ export class CrmService {
     });
 
     const limit = Math.min(query.limit ?? 50, 100);
-    const result = await this.database.query<GroupRow>(
+    const result = await this.database.query<StudentGroupRow>(
       `
         select g.id, g.teacher_id, g.branch_id, g.room_id, g.name,
           g.price_per_lesson,
@@ -641,7 +616,7 @@ export class CrmService {
       [studentId, limit],
     );
 
-    return { items: result.rows.map((row) => this.toGroupDto(row)) };
+    return { items: result.rows.map((row) => toStudentGroupDto(row)) };
   }
 
   async updateStudent(
@@ -864,7 +839,7 @@ export class CrmService {
       branchId: branchId ?? beforeStudent?.branch_id ?? null,
     });
     return {
-      ...this.toStudentDto(student),
+      ...toStudentDto(student),
       ...(customFields ? { warnings: customFields.warnings } : {}),
     };
   }
@@ -945,7 +920,7 @@ export class CrmService {
       `,
       [groupId, actor.role, actor.userId, limit],
     );
-    return { items: result.rows.map((row) => this.toStudentDto(row)) };
+    return { items: result.rows.map((row) => toStudentDto(row)) };
   }
 
   // Kept temporarily for compatibility with already released clients. Direct
@@ -967,150 +942,6 @@ export class CrmService {
     void studentId;
     throw new ConflictException(
       "Возврат ученика в лиды отключён. Сначала нужен управляемый сценарий с предварительной проверкой занятий, абонементов и финансовых операций.",
-    );
-  }
-
-  private buildStudentSearchFilter(
-    actor: ActorContext,
-    query: StudentSearchQuery,
-  ) {
-    const params: unknown[] = [];
-    const filters = ["s.deleted_at is null"];
-    const add = (value: unknown) => {
-      params.push(value);
-      return `$${params.length}`;
-    };
-    const role = add(actor.role);
-    const userId = add(actor.userId);
-    filters.push(`
-      (
-        ${managerAdminRolesSql(role)}
-        or (${role}::text = 'teacher' and tp.user_id = ${userId})
-      )
-    `);
-    filters.push(
-      managerBranchScopeSql({
-        roleExpression: role,
-        userIdExpression: userId,
-        branchExpression: branchIdExpr("s"),
-      }),
-    );
-
-    const q = query.q?.trim();
-    let searchRank: string | null = null;
-    if (q) {
-      const search = buildTextSearch({
-        q,
-        columns: ["p.first_name", "p.last_name", "u.email", "p.phone"],
-        phoneColumn: "p.phone",
-        customDataColumn: "s.custom_data",
-        exactColumn: "concat_ws(' ', p.first_name, p.last_name)",
-        add,
-      });
-      filters.push(search.where);
-      searchRank = search.rank;
-    }
-    if (query.status?.trim()) {
-      filters.push(`s.status = ${add(query.status.trim())}::text`);
-    }
-    if (query.branchId) {
-      const p = add(query.branchId);
-      filters.push(`${branchIdExpr("s")} = ${p}::text`);
-    }
-    // «Без филиала» board: students with no branch on the FK column nor any
-    // legacy custom_data branch key. Mutually exclusive with branchId in practice.
-    if (query.noBranch) {
-      filters.push(`${branchIdExpr("s")} is null`);
-    }
-    if (query.groupId) {
-      filters.push(`
-        exists (
-          select 1
-          from app.group_students group_filter
-          where group_filter.student_id = s.id
-            and group_filter.group_id = ${add(query.groupId)}::uuid
-            and group_filter.left_at is null
-        )
-      `);
-    }
-    this.addLeadTextFilter(
-      filters,
-      add,
-      "coalesce(s.custom_data->>'discipline', s.custom_data->>'disciplineName', s.custom_data->>'discipline_name')",
-      query.discipline,
-    );
-    this.addLeadTextFilter(
-      filters,
-      add,
-      "coalesce(s.custom_data->>'level', s.custom_data->>'levelName', s.custom_data->>'level_name')",
-      query.level,
-    );
-    this.addLeadTextFilter(
-      filters,
-      add,
-      "coalesce(s.custom_data->>'category', s.custom_data->>'categoryName', s.custom_data->>'category_name', s.custom_data->>'maturity')",
-      query.category,
-    );
-    if (query.from) {
-      filters.push(`s.created_at >= ${add(query.from)}::timestamptz`);
-    }
-    if (query.to) {
-      filters.push(`s.created_at < ${add(query.to)}::timestamptz`);
-    }
-    if (query.linkedUser !== undefined) {
-      const condition =
-        "(exists (select 1 from app.user_crm_links link_filter where link_filter.entity_type = 'student' and link_filter.entity_id = s.id and link_filter.deleted_at is null) or u.is_app_account = true)";
-      filters.push(query.linkedUser ? condition : `not ${condition}`);
-    }
-    if (query.noEmail === true) {
-      filters.push(`coalesce(nullif(btrim(u.email), ''), '') = ''`);
-    }
-    if (query.noOpenTasks === true) {
-      filters.push(`
-        not exists (
-          select 1
-          from app.canonical_tasks task_filter
-          where task_filter.entity_type = 'student'
-            and task_filter.entity_id = s.id
-            and task_filter.deleted_at is null
-            and task_filter.status in ('open', 'in_progress')
-            and exists (
-              select 1 from app.shared_task_visibility visibility
-              where visibility.task_id = task_filter.id
-                and visibility.user_id = ${userId}::uuid
-            )
-        )
-      `);
-    }
-    if (query.cursor) {
-      const [createdAt, id] = query.cursor.split("|");
-      if (createdAt && id) {
-        const created = add(createdAt);
-        const studentId = add(id);
-        filters.push(
-          `(s.created_at, s.id) < (${created}::timestamptz, ${studentId}::uuid)`,
-        );
-      }
-    }
-    return { where: filters.join("\n          and "), params, searchRank };
-  }
-
-  // ponytail: generic case-insensitive text-filter helper (misnamed "Lead" for
-  // history). Copied for buildStudentSearchFilter; LeadsService keeps its own.
-  private addLeadTextFilter(
-    filters: string[],
-    add: (value: unknown) => string,
-    expression: string,
-    value: string | undefined,
-    fuzzy = false,
-  ) {
-    const trimmed = value?.trim();
-    if (!trimmed) return;
-    const p = add(trimmed);
-    filters.push(
-      fuzzy
-        ? `lower(${expression}) like lower('%' || ${p}::text || '%')`
-        : `lower(${expression}) = lower(${p}::text)`,
     );
   }
 
@@ -1246,81 +1077,4 @@ export class CrmService {
     return createHash("sha256").update(value.toLowerCase()).digest("hex");
   }
 
-  private toStudentDto(row: StudentRow) {
-    // «Дата обращения»: явное значение → исходная дата HolliHop → момент
-    // появления записи здесь. Резолвится на чтении, а не хранится, потому что
-    // 3105 импортированных учеников уже несут её как custom_data.addressDate.
-    const appeal = resolveAppealDate(row.custom_data, row.created_at);
-    // Возраст: дата рождения (считается и не устаревает) → вписанный руками.
-    // См. age.ts — там же объяснено, почему приоритет обратный appeal-date.
-    const age = resolveAge(row.custom_data);
-    return {
-      id: row.id,
-      leadId: row.lead_id,
-      sourceId: row.source_id ?? null,
-      sourceName: row.source_name ?? null,
-      status: row.status,
-      customData: row.custom_data ?? {},
-      profileId: row.profile_id,
-      profileUserId: row.profile_user_id,
-      firstName: row.first_name,
-      lastName: row.last_name,
-      email: presentableEmail(row.email),
-      phone: row.phone,
-      teacherUserIds: row.teacher_user_ids ?? [],
-      createdAt: row.created_at,
-      appealAt: appeal.value,
-      appealAtSource: appeal.source,
-      age: age.years,
-      ageMonths: age.months,
-      ageSource: age.source,
-      // Чёрный список = бан (✔ владелец 17.07). См. blacklist.ts.
-      blacklisted: row.blacklisted === true,
-      blacklistReason: row.blacklist_reason ?? null,
-    };
-  }
-
-  private toStudentSearchDto(row: StudentSearchRow) {
-    return {
-      ...this.toStudentDto(row),
-      branchId: row.branch_id,
-      branchName: row.branch_name,
-      groupsCount: this.toNumericStat(row.groups_count),
-      openTasksCount: this.toNumericStat(row.open_tasks_count),
-      lessonsCount: this.toNumericStat(row.lessons_count),
-      paymentsTotal: this.toNumericStat(row.payments_total),
-      linkedUserId: row.linked_user_id,
-      linkedUserEmail: row.linked_user_email,
-      isAppAccount: row.is_app_account ?? false,
-      disciplines: row.disciplines ?? [],
-      tableFields: row.table_custom_fields ?? [],
-    };
-  }
-
-  private toGroupDto(row: GroupRow) {
-    return {
-      id: row.id,
-      teacherId: row.teacher_id,
-      branchId: row.branch_id,
-      roomId: row.room_id,
-      name: row.name,
-      pricePerLesson:
-        row.price_per_lesson === null ? null : Number(row.price_per_lesson),
-      // KVA-238: null = брать ставку педагога, 0 = «входит в оклад».
-      teacherRate:
-        row.teacher_rate === null || row.teacher_rate === undefined
-          ? null
-          : Number(row.teacher_rate),
-      teacherName: row.teacher_name || null,
-      branchName: row.branch_name,
-      roomName: row.room_name,
-      createdAt: row.created_at,
-    };
-  }
-
-  private toNumericStat(value: string | number | null | undefined): number {
-    if (value === null || value === undefined) return 0;
-    const numeric = Number(value);
-    return Number.isFinite(numeric) ? numeric : 0;
-  }
 }
