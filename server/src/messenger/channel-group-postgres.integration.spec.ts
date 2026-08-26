@@ -10,9 +10,14 @@ import { MigrationRunner } from "../db/migration-runner";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { ChannelsService } from "./channels.service";
 import { ChatInboxService } from "./chat-inbox.service";
+import { MessengerChatAccessService } from "./messenger-chat-access.service";
+import { MessengerChatCommandService } from "./messenger-chat-command.service";
+import { MessengerChatQueryService } from "./messenger-chat-query.service";
 import { MessengerFanoutService } from "./messenger-fanout.service";
+import { MessengerMessageDeliveryService } from "./messenger-message-delivery.service";
 import { MessengerPolicy } from "./messenger.policy";
 import { MessengerService } from "./messenger.service";
+import { MessengerSystemChatService } from "./messenger-system-chat.service";
 import { RealtimeGateway } from "./realtime.gateway";
 
 const defaultTestDatabaseUrl =
@@ -88,14 +93,27 @@ describe("channel and group lifecycle (PostgreSQL)", () => {
     inbox = new ChatInboxService(database, audit, policy, realtime, {
       emitCrmChanged: jest.fn(),
     } as unknown as RealtimeBus);
+    const access = new MessengerChatAccessService(policy);
+    const queries = new MessengerChatQueryService(database, policy, access);
     messenger = new MessengerService(
-      database,
-      audit,
-      policy,
-      realtime,
-      { autoCreateLeadFromChat: jest.fn() } as unknown as LeadIntakePort,
-      { emitCrmChanged: jest.fn() } as unknown as RealtimeBus,
-      fanout,
+      new MessengerSystemChatService(database),
+      queries,
+      new MessengerMessageDeliveryService(
+        database,
+        policy,
+        access,
+        { autoCreateLeadFromChat: jest.fn() } as unknown as LeadIntakePort,
+        realtime,
+        fanout,
+      ),
+      new MessengerChatCommandService(
+        database,
+        audit,
+        policy,
+        access,
+        realtime,
+        queries,
+      ),
     );
     manager = await createUser("manager", "Управляющий");
     teacher = await createUser("teacher", "Преподаватель");

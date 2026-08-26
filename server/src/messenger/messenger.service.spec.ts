@@ -1,27 +1,48 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
 import { LeadIntakePort } from "../common/lead-intake.port";
+import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
-import { RealtimeBus } from "../realtime/realtime-bus";
+import { MessengerChatAccessService } from "./messenger-chat-access.service";
+import { MessengerChatCommandService } from "./messenger-chat-command.service";
+import { MessengerChatQueryService } from "./messenger-chat-query.service";
 import { MessengerPolicy } from "./messenger.policy";
 import { MessengerFanoutService } from "./messenger-fanout.service";
+import { MessengerMessageDeliveryService } from "./messenger-message-delivery.service";
 import { MessengerService } from "./messenger.service";
+import { MessengerSystemChatService } from "./messenger-system-chat.service";
 import { RealtimeGateway } from "./realtime.gateway";
 
 describe("MessengerService", () => {
   const actor = { userId: "user-a", role: "client" as const };
+  const clientActor = { userId: "user-a", role: "client" as const };
+  const managerActor = { userId: "manager-a", role: "manager" as const };
+  const administrationChatId = "11111111-1111-4111-8111-111111111111";
+  const groupChatId = "22222222-2222-4222-8222-222222222222";
+  const addedUserId = "33333333-3333-4333-8333-333333333333";
+  const removedUserId = "44444444-4444-4444-8444-444444444444";
+  const textMessageDto = { content: "Сообщение" };
+
+  const deferred = <T>() => {
+    let resolve!: (value: T | PromiseLike<T>) => void;
+    const promise = new Promise<T>((complete) => {
+      resolve = complete;
+    });
+    return { promise, resolve };
+  };
 
   function createService(overrides?: {
     database?: Partial<DatabaseService>;
     audit?: Partial<AuditService>;
     policy?: Partial<MessengerPolicy>;
     realtime?: Partial<RealtimeGateway>;
-    realtimeBus?: Partial<RealtimeBus>;
     crm?: Partial<LeadIntakePort>;
+    transactionCommit?: Promise<void>;
   }) {
     const database = {
       query: jest.fn(),
@@ -30,7 +51,11 @@ describe("MessengerService", () => {
     } as unknown as DatabaseService;
     if (!overrides?.database?.transaction) {
       (database.transaction as jest.Mock).mockImplementation(
-        async (fn: (client: DatabaseService) => unknown) => fn(database),
+        async (fn: (client: DatabaseService) => unknown) => {
+          const result = await fn(database);
+          await overrides?.transactionCommit;
+          return result;
+        },
       );
     }
     const audit = {
@@ -38,12 +63,22 @@ describe("MessengerService", () => {
       ...overrides?.audit,
     } as unknown as AuditService;
     const policy = {
-      getChatAccess: jest.fn().mockResolvedValue({
-        id: "chat-a",
-        type: "direct",
-        memberUserId: "user-a",
-        memberRole: "member",
-      }),
+      getChatAccess: jest.fn().mockImplementation(
+        async (_actor: ActorContext, chatId: string) =>
+          chatId === groupChatId
+            ? {
+                id: groupChatId,
+                type: "group",
+                memberUserId: managerActor.userId,
+                memberRole: "admin",
+              }
+            : {
+                id: "chat-a",
+                type: "direct",
+                memberUserId: "user-a",
+                memberRole: "member",
+              },
+      ),
       assertCanReadChat: jest.fn(),
       assertCanWriteChat: jest.fn(),
       assertNotBlacklisted: jest.fn().mockResolvedValue(undefined),
@@ -64,31 +99,153 @@ describe("MessengerService", () => {
         .mockResolvedValue({ leadId: "l1", created: true }),
       ...overrides?.crm,
     } as unknown as LeadIntakePort;
-    const realtimeBus = {
-      emitCrmChanged: jest.fn(),
-      ...overrides?.realtimeBus,
-    } as unknown as RealtimeBus;
-
     const fanout = new MessengerFanoutService(database, realtime);
-
-    return {
-      service: new MessengerService(
-        database,
-        audit,
-        policy,
-        realtime,
-        crm,
-        realtimeBus,
-        fanout,
-      ),
+    jest.spyOn(fanout, "publishMessageEventForAudience");
+    jest.spyOn(fanout, "fanoutChatListUpdate");
+    const access = new MessengerChatAccessService(policy);
+    const systemChats = new MessengerSystemChatService(database);
+    const queries = new MessengerChatQueryService(database, policy, access);
+    const realGetChat = queries.getChat.bind(queries);
+    queries.getChat = jest.fn(realGetChat) as typeof queries.getChat;
+    const delivery = new MessengerMessageDeliveryService(
+      database,
+      policy,
+      access,
+      crm,
+      realtime,
+      fanout,
+    );
+    const commands = new MessengerChatCommandService(
       database,
       audit,
       policy,
+      access,
       realtime,
+      queries,
+    );
+
+    return {
+      service: new MessengerService(systemChats, queries, delivery, commands),
+      database,
+      audit: audit as AuditService & { record: jest.Mock },
+      policy,
+      realtime: realtime as RealtimeGateway & {
+        publishChatEvent: jest.Mock;
+        publishChannelEvent: jest.Mock;
+        publishUserEvent: jest.Mock;
+        publishAdminInboxEvent: jest.Mock;
+      },
       crm,
-      realtimeBus,
+      leadIntake: crm,
+      fanout: fanout as MessengerFanoutService & {
+        publishMessageEventForAudience: jest.Mock;
+        fanoutChatListUpdate: jest.Mock;
+      },
+      queries: queries as MessengerChatQueryService & { getChat: jest.Mock },
     };
   }
+
+  it("onModuleInit resolves and logs when announcements provisioning fails", async () => {
+    const warn = jest.spyOn(Logger.prototype, "warn").mockImplementation();
+    const harness = createService({
+      database: {
+        transaction: jest.fn().mockRejectedValue(new Error("bootstrap failed")),
+      },
+    });
+
+    await expect(harness.service.onModuleInit()).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "ensureAnnouncementsChat failed: Error: bootstrap failed",
+      ),
+    );
+  });
+
+  it("sendMessage emits no lead-intake, realtime or fanout event when its transaction rejects", async () => {
+    const harness = createService({
+      database: {
+        transaction: jest.fn().mockRejectedValue(new Error("rollback")),
+      },
+    });
+
+    await expect(
+      harness.service.sendMessage(
+        clientActor,
+        administrationChatId,
+        textMessageDto,
+      ),
+    ).rejects.toThrow("rollback");
+    expect(harness.leadIntake.autoCreateLeadFromChat).not.toHaveBeenCalled();
+    expect(harness.realtime.publishAdminInboxEvent).not.toHaveBeenCalled();
+    expect(harness.fanout.publishMessageEventForAudience).not.toHaveBeenCalled();
+    expect(harness.fanout.fanoutChatListUpdate).not.toHaveBeenCalled();
+  });
+
+  it("updateGroupMembers performs audit and realtime only after its transaction commits", async () => {
+    const commit = deferred<void>();
+    const harness = createService({ transactionCommit: commit.promise });
+    harness.database.query = jest.fn().mockImplementation(async (sql: string) => {
+      if (sql.includes("from app.users")) {
+        return { rows: [{ id: addedUserId }] };
+      }
+      if (sql.includes("returning user_id")) {
+        return { rows: [{ user_id: removedUserId }] };
+      }
+      if (sql.includes("select c.id")) {
+        return {
+          rows: [
+            {
+              id: groupChatId,
+              type: "group",
+              title: "Группа",
+              created_by: managerActor.userId,
+              last_message_id: null,
+              last_message_content: null,
+              last_message_created_at: null,
+              unread_count: "0",
+              is_muted: false,
+              partner_user_id: null,
+              partner_email: null,
+              partner_first_name: null,
+              partner_last_name: null,
+              partner_avatar_file_id: null,
+              created_at: new Date("2026-08-26T00:00:00Z"),
+              updated_at: new Date("2026-08-26T00:00:00Z"),
+            },
+          ],
+        };
+      }
+      return { rows: [] };
+    });
+    const pending = harness.service.updateGroupMembers(
+      managerActor,
+      groupChatId,
+      { addUserIds: [addedUserId], removeUserIds: [removedUserId] },
+    );
+
+    await Promise.resolve();
+    expect(harness.audit.record).not.toHaveBeenCalled();
+    expect(harness.realtime.publishChatEvent).not.toHaveBeenCalled();
+    expect(harness.realtime.publishUserEvent).not.toHaveBeenCalled();
+
+    commit.resolve();
+    await pending;
+    expect(harness.audit.record).toHaveBeenCalledWith({
+      actor: managerActor,
+      action: "messenger.group_members_updated",
+      entityType: "chat",
+      entityId: groupChatId,
+    });
+    expect(harness.audit.record.mock.invocationCallOrder[0]).toBeLessThan(
+      harness.realtime.publishChatEvent.mock.invocationCallOrder[0],
+    );
+    expect(
+      harness.realtime.publishChatEvent.mock.invocationCallOrder[0],
+    ).toBeLessThan(harness.queries.getChat.mock.invocationCallOrder[0]);
+    expect(harness.queries.getChat.mock.invocationCallOrder[0]).toBeLessThan(
+      harness.realtime.publishUserEvent.mock.invocationCallOrder[0],
+    );
+  });
 
   describe("чёрный список = бан на отправку", () => {
     // ✔ Решение владельца 17.07: «этот клиент не может писать далее в чатах
@@ -188,18 +345,34 @@ describe("MessengerService", () => {
       publishAdminInboxEvent: jest.fn(),
     } as unknown as RealtimeGateway;
 
+    const audit = { record: jest.fn() } as unknown as AuditService;
+    const leadIntake = {
+      autoCreateLeadFromChat: jest
+        .fn()
+        .mockResolvedValue({ leadId: "l1", created: true }),
+    } as unknown as LeadIntakePort;
+    const fanout = new MessengerFanoutService(database, realtime);
+    const access = new MessengerChatAccessService(policy);
+    const queries = new MessengerChatQueryService(database, policy, access);
     const service = new MessengerService(
-      database,
-      { record: jest.fn() } as unknown as AuditService,
-      policy,
-      realtime,
-      {
-        autoCreateLeadFromChat: jest
-          .fn()
-          .mockResolvedValue({ leadId: "l1", created: true }),
-      } as unknown as LeadIntakePort,
-      { emitCrmChanged: jest.fn() } as unknown as RealtimeBus,
-      new MessengerFanoutService(database, realtime),
+      new MessengerSystemChatService(database),
+      queries,
+      new MessengerMessageDeliveryService(
+        database,
+        policy,
+        access,
+        leadIntake,
+        realtime,
+        fanout,
+      ),
+      new MessengerChatCommandService(
+        database,
+        audit,
+        policy,
+        access,
+        realtime,
+        queries,
+      ),
     );
 
     const result = await service.sendMessage(

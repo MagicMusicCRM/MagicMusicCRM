@@ -7,11 +7,15 @@ import { ActorContext } from "../common/security/actor-context";
 import { LeadIntakePort } from "../common/lead-intake.port";
 import { DatabaseService } from "../db/database.service";
 import { MigrationRunner } from "../db/migration-runner";
-import { RealtimeBus } from "../realtime/realtime-bus";
 import { MessageService } from "./message.service";
+import { MessengerChatAccessService } from "./messenger-chat-access.service";
+import { MessengerChatCommandService } from "./messenger-chat-command.service";
+import { MessengerChatQueryService } from "./messenger-chat-query.service";
 import { MessengerFanoutService } from "./messenger-fanout.service";
+import { MessengerMessageDeliveryService } from "./messenger-message-delivery.service";
 import { MessengerService } from "./messenger.service";
 import { MessengerPolicy } from "./messenger.policy";
+import { MessengerSystemChatService } from "./messenger-system-chat.service";
 import { ReadReceiptService } from "./read-receipt.service";
 import { RealtimeGateway } from "./realtime.gateway";
 
@@ -134,16 +138,27 @@ describe("direct chat media lifecycle (PostgreSQL)", () => {
     } as unknown as ConfigService);
     const policy = new MessengerPolicy(database);
     const fanout = new MessengerFanoutService(database, realtime);
+    const access = new MessengerChatAccessService(policy);
+    const queries = new MessengerChatQueryService(database, policy, access);
     messenger = new MessengerService(
-      database,
-      audit,
-      policy,
-      realtime,
-      {
-        autoCreateLeadFromChat: jest.fn(),
-      } as unknown as LeadIntakePort,
-      { emitCrmChanged: jest.fn() } as unknown as RealtimeBus,
-      fanout,
+      new MessengerSystemChatService(database),
+      queries,
+      new MessengerMessageDeliveryService(
+        database,
+        policy,
+        access,
+        { autoCreateLeadFromChat: jest.fn() } as unknown as LeadIntakePort,
+        realtime,
+        fanout,
+      ),
+      new MessengerChatCommandService(
+        database,
+        audit,
+        policy,
+        access,
+        realtime,
+        queries,
+      ),
     );
     messages = new MessageService(database, audit, policy, realtime, fanout);
     receipts = new ReadReceiptService(database, policy, realtime, fanout);
