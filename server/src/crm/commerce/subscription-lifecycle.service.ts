@@ -17,20 +17,17 @@ import {
   SubscriptionReplaceCommandDto,
   SubscriptionReplacePreviewDto,
 } from "../dto/subscription-replace.dto";
-import { IssuedCommercialSnapshot } from "./commerce-schema.types";
 import {
   CancellationContext,
-  ReplacementContext,
-  ReplacementPackageRow,
   SubscriptionLifecycleRepository,
 } from "./subscription-lifecycle.repository";
 import {
   SubscriptionCancelPreviewTokenPayload,
-  SubscriptionReplacePreviewTokenPayload,
 } from "./subscription-preview-token";
 import { SubscriptionPreviewTokenService } from "./subscription-preview-token.service";
 import { SubscriptionIssueRepository } from "./subscription-issue.repository";
 import { SubscriptionLifecycleCommandPolicy } from "./subscription-lifecycle-command.policy";
+import { SubscriptionReplacementPolicy } from "./subscription-replacement.policy";
 import {
   CancellationResultRef,
   LifecycleWarning,
@@ -44,19 +41,6 @@ export type {
   ReplacementResultRef,
   SubscriptionLifecycleMutationMetadata,
 } from "./subscription-lifecycle.types";
-
-interface ReplacementCalculation {
-  deltaMinor: bigint;
-  positionMinor: bigint;
-  positionKind: "debt" | "overpayment" | "settled";
-}
-
-interface ReplacementReservationPlan {
-  transferReservationIds: string[];
-  releaseReservationIds: string[];
-  transferredUnits: string;
-  releasedUnits: string;
-}
 
 interface CancellationCalculation {
   confirmedFundedMinor: bigint;
@@ -77,6 +61,7 @@ export class SubscriptionLifecycleService {
     private readonly previewTokens: SubscriptionPreviewTokenService,
     private readonly reservations: SubscriptionReservationService,
     private readonly commands: SubscriptionLifecycleCommandPolicy,
+    private readonly replacements: SubscriptionReplacementPolicy,
   ) {}
 
   async previewReplacement(
@@ -90,16 +75,16 @@ export class SubscriptionLifecycleService {
       issuedSubscriptionId,
       dto.newPackageId,
     );
-    this.assertReplaceableContext(context);
+    this.replacements.assertContext(context);
     this.commands.assertStudentScope(context, studentId);
     await this.issueRepository.assertStudentsInScope(actor, [
       context.studentId,
       context.payerStudentId,
     ]);
-    const tokenPayload = this.createTokenPayload(actor, context);
+    const tokenPayload = this.replacements.createTokenPayload(actor, context);
     const signed = this.previewTokens.issue(tokenPayload);
-    const calculation = this.calculate(context);
-    const reservationPlan = this.planReservations(context);
+    const calculation = this.replacements.calculate(context);
+    const reservationPlan = this.replacements.planReservations(context);
     return {
       issuedSubscriptionId,
       expectedVersion: context.oldVersion,
@@ -134,7 +119,7 @@ export class SubscriptionLifecycleService {
           amountMinor: absolute(calculation.positionMinor).toString(),
         },
       },
-      warnings: this.replacementWarnings(context),
+      warnings: this.replacements.warnings(context),
       previewToken: signed.token,
       expiresAt: signed.expiresAt,
     };
@@ -262,16 +247,16 @@ export class SubscriptionLifecycleService {
               issuedSubscriptionId,
               signedPayload.newPackageId,
             );
-          this.assertReplaceableContext(context);
+          this.replacements.assertContext(context);
           this.commands.assertStudentScope(context, studentId);
-          this.assertPreviewStillCurrent(
+          this.replacements.assertPreviewCurrent(
             signedPayload,
-            this.createTokenPayload(actor, context),
+            this.replacements.createTokenPayload(actor, context),
           );
 
-          const calculation = this.calculate(context);
-          const reservationPlan = this.planReservations(context);
-          const snapshot = this.createReplacementSnapshot(
+          const calculation = this.replacements.calculate(context);
+          const reservationPlan = this.replacements.planReservations(context);
+          const snapshot = this.replacements.createSnapshot(
             issuedSubscriptionId,
             context,
             lockedPackage,
@@ -763,48 +748,6 @@ export class SubscriptionLifecycleService {
     return response;
   }
 
-  private createTokenPayload(
-    actor: ActorContext,
-    context: ReplacementContext,
-  ): Omit<
-    SubscriptionReplacePreviewTokenPayload,
-    "issuedAtSeconds" | "expiresAtSeconds"
-  > {
-    const calculation = this.calculate(context);
-    const reservationPlan = this.planReservations(context);
-    return {
-      kind: "subscription.replace",
-      actorUserId: actor.userId,
-      studentId: context.studentId,
-      payerStudentId: context.payerStudentId,
-      issuedSubscriptionId: context.issuedSubscriptionId,
-      expectedVersion: context.oldVersion,
-      newPackageId: context.newPackage!.id,
-      newPackageVersion: context.newPackage!.version,
-      currencyCode: context.oldCurrencyCode,
-      usedUnits: context.usedUnits,
-      reservedLessonCount: context.reservedLessonCount,
-      reservedUnits: context.reservedUnits,
-      transferableReservationCount:
-        reservationPlan.transferReservationIds.length,
-      transferableReservationUnits: reservationPlan.transferredUnits,
-      releasedReservationCount: reservationPlan.releaseReservationIds.length,
-      releasedReservationUnits: reservationPlan.releasedUnits,
-      reservationPlanFingerprint: fingerprintPayload({
-        transfer: reservationPlan.transferReservationIds,
-        release: reservationPlan.releaseReservationIds,
-      }),
-      futureLessonCount: context.futureLessonCount,
-      futureUnits: context.futureUnits,
-      oldFinalMinor: context.oldFinalPriceMinor,
-      newFinalMinor: context.newPackage!.basePriceMinor,
-      actualPaidMinor: context.actualPaidMinor,
-      deltaMinor: calculation.deltaMinor.toString(),
-      positionKind: calculation.positionKind,
-      positionMinor: absolute(calculation.positionMinor).toString(),
-    };
-  }
-
   private createCancellationTokenPayload(
     actor: ActorContext,
     context: CancellationContext,
@@ -848,52 +791,6 @@ export class SubscriptionLifecycleService {
     };
   }
 
-  private assertReplaceableContext(
-    context: ReplacementContext | null,
-  ): asserts context is ReplacementContext & {
-    newPackage: NonNullable<ReplacementContext["newPackage"]>;
-  } {
-    if (!context) {
-      throw new NotFoundException("Выданный абонемент не найден.");
-    }
-    if (context.oldStatus !== "active") {
-      throw new UnprocessableEntityException({
-        code: "SUBSCRIPTION_NOT_ACTIVE",
-        message: "Заменить можно только активный абонемент.",
-        status: context.oldStatus,
-      });
-    }
-    if (
-      !context.newPackage ||
-      !context.newPackage.active ||
-      context.newPackage.deletedAt !== null
-    ) {
-      throw new NotFoundException(
-        "Новый пакет не найден или находится в архиве.",
-      );
-    }
-    if (context.oldCurrencyCode !== context.newPackage.currencyCode) {
-      throw new UnprocessableEntityException({
-        code: "SUBSCRIPTION_CURRENCY_MISMATCH",
-        message: "Замена между разными валютами не поддерживается.",
-        oldCurrencyCode: context.oldCurrencyCode,
-        newCurrencyCode: context.newPackage.currencyCode,
-      });
-    }
-    if (
-      unitsToHundredths(context.newPackage.unitCount) <
-      unitsToHundredths(context.usedUnits)
-    ) {
-      throw new UnprocessableEntityException({
-        code: "REPLACEMENT_VOLUME_BELOW_USED",
-        message:
-          "Объём нового пакета не может быть меньше уже использованного.",
-        usedUnits: context.usedUnits,
-        newUnitCount: context.newPackage.unitCount,
-      });
-    }
-  }
-
   private assertCancellableContext(
     context: CancellationContext | null,
   ): asserts context is CancellationContext {
@@ -905,101 +802,6 @@ export class SubscriptionLifecycleService {
         code: "SUBSCRIPTION_NOT_ACTIVE",
         message: "Отменить можно только активный абонемент.",
         status: context.status,
-      });
-    }
-  }
-
-  private calculate(context: ReplacementContext): ReplacementCalculation {
-    const oldFinal = BigInt(context.oldFinalPriceMinor);
-    const newFinal = BigInt(context.newPackage!.basePriceMinor);
-    const paid = BigInt(context.actualPaidMinor);
-    const positionMinor = newFinal - paid;
-    return {
-      deltaMinor: newFinal - oldFinal,
-      positionMinor,
-      positionKind:
-        positionMinor > 0n
-          ? "debt"
-          : positionMinor < 0n
-            ? "overpayment"
-            : "settled",
-    };
-  }
-
-  private planReservations(
-    context: ReplacementContext,
-  ): ReplacementReservationPlan {
-    let remaining =
-      unitsToHundredths(context.newPackage!.unitCount) -
-      unitsToHundredths(context.usedUnits);
-    let exhausted = false;
-    let transferred = 0n;
-    let released = 0n;
-    const transferReservationIds: string[] = [];
-    const releaseReservationIds: string[] = [];
-    for (const reservation of context.reservedRows) {
-      const units = unitsToHundredths(reservation.units);
-      if (!exhausted && units <= remaining) {
-        transferReservationIds.push(reservation.reservationId);
-        transferred += units;
-        remaining -= units;
-      } else {
-        exhausted = true;
-        releaseReservationIds.push(reservation.reservationId);
-        released += units;
-      }
-    }
-    return {
-      transferReservationIds,
-      releaseReservationIds,
-      transferredUnits: hundredthsToUnits(transferred),
-      releasedUnits: hundredthsToUnits(released),
-    };
-  }
-
-  private createReplacementSnapshot(
-    oldIssuedSubscriptionId: string,
-    context: ReplacementContext,
-    packageRow: ReplacementPackageRow,
-  ): IssuedCommercialSnapshot {
-    return {
-      snapshotVersion: 1,
-      packageVersion: Number(packageRow.version),
-      displayName: packageRow.name,
-      unitCount: packageRow.lessons_total,
-      validityDays: packageRow.validity_days,
-      basePriceMinor: packageRow.base_price_minor,
-      currencyCode: packageRow.currency_code,
-      discount: { type: "none" },
-      finalPriceMinor: packageRow.base_price_minor,
-      installments: [],
-      paymentMethod: null,
-      commercialRules: {
-        carriedUsedUnits: context.usedUnits,
-        replacedFromSubscriptionId: oldIssuedSubscriptionId,
-      },
-    };
-  }
-
-  private assertPreviewStillCurrent(
-    signed: SubscriptionReplacePreviewTokenPayload,
-    current: Omit<
-      SubscriptionReplacePreviewTokenPayload,
-      "issuedAtSeconds" | "expiresAtSeconds"
-    >,
-  ): void {
-    const {
-      issuedAtSeconds: _issuedAtSeconds,
-      expiresAtSeconds: _expiresAtSeconds,
-      ...signedFacts
-    } = signed;
-    if (
-      fingerprintPayload(signedFacts) !== fingerprintPayload(current)
-    ) {
-      throw new ConflictException({
-        code: "REPLACEMENT_PREVIEW_STALE",
-        message:
-          "После предпросмотра изменились платежи, использование, резервы или пакет.",
       });
     }
   }
@@ -1023,43 +825,6 @@ export class SubscriptionLifecycleService {
           "После предпросмотра изменились платежи, списания, резервы или баланс.",
       });
     }
-  }
-
-  private replacementWarnings(context: ReplacementContext): LifecycleWarning[] {
-    const warnings: LifecycleWarning[] = [];
-    if (unitsToHundredths(context.usedUnits) > 0n) {
-      warnings.push({
-        code: "USED_UNITS_TRANSFERRED",
-        units: context.usedUnits,
-        message: "Использованные единицы будут перенесены в новый абонемент.",
-      });
-    }
-    if (context.futureLessonCount > 0) {
-      warnings.push({
-        code: "FUTURE_LESSONS_PRESERVED",
-        count: context.futureLessonCount,
-        units: context.futureUnits,
-        message:
-          "Будущие занятия сохранятся; существующие резервы будут перенесены.",
-      });
-    }
-    const reservationPlan = this.planReservations(context);
-    if (reservationPlan.releaseReservationIds.length > 0) {
-      warnings.push({
-        code: "RESERVATIONS_RELEASED_FOR_CAPACITY",
-        count: reservationPlan.releaseReservationIds.length,
-        units: reservationPlan.releasedUnits,
-        message:
-          "Не помещающиеся в новый объём резервы будут сняты; занятия сохранятся.",
-      });
-    }
-    if (BigInt(context.actualPaidMinor) > 0n) {
-      warnings.push({
-        code: "ACTUAL_PAYMENTS_PRESERVED",
-        message: "Фактические платежи останутся неизменными.",
-      });
-    }
-    return warnings;
   }
 
   private calculateCancellation(

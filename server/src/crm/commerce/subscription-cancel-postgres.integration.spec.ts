@@ -23,6 +23,7 @@ import { PaymentLifecycleService } from "./payment-lifecycle.service";
 import { SubscriptionIssueRepository } from "./subscription-issue.repository";
 import { SubscriptionIssueService } from "./subscription-issue.service";
 import { SubscriptionLifecycleCommandPolicy } from "./subscription-lifecycle-command.policy";
+import { SubscriptionReplacementPolicy } from "./subscription-replacement.policy";
 import { SubscriptionLifecycleRepository } from "./subscription-lifecycle.repository";
 import { SubscriptionLifecycleService } from "./subscription-lifecycle.service";
 import { SubscriptionPreviewTokenService } from "./subscription-preview-token.service";
@@ -114,6 +115,7 @@ describe("Subscription cancellation preview/confirm", () => {
       } as unknown as ConfigService),
       reservations,
       commands,
+      new SubscriptionReplacementPolicy(),
     );
     fixture = await createFixture(pool);
     actor = fixture.actor;
