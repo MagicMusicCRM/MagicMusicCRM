@@ -2,13 +2,11 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
-  UnprocessableEntityException,
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import { ActorContext } from "../../common/security/actor-context";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
 import { PlatformAuditInput } from "../../platform/platform-integrity.types";
-import { fingerprintPayload } from "../../platform/platform-integrity.util";
 import { CrmPolicy } from "../crm.policy";
 import {
   SubscriptionCancelCommandDto,
@@ -17,20 +15,14 @@ import {
   SubscriptionReplaceCommandDto,
   SubscriptionReplacePreviewDto,
 } from "../dto/subscription-replace.dto";
-import {
-  CancellationContext,
-  SubscriptionLifecycleRepository,
-} from "./subscription-lifecycle.repository";
-import {
-  SubscriptionCancelPreviewTokenPayload,
-} from "./subscription-preview-token";
+import { SubscriptionLifecycleRepository } from "./subscription-lifecycle.repository";
 import { SubscriptionPreviewTokenService } from "./subscription-preview-token.service";
 import { SubscriptionIssueRepository } from "./subscription-issue.repository";
 import { SubscriptionLifecycleCommandPolicy } from "./subscription-lifecycle-command.policy";
+import { SubscriptionCancellationPolicy } from "./subscription-cancellation.policy";
 import { SubscriptionReplacementPolicy } from "./subscription-replacement.policy";
 import {
   CancellationResultRef,
-  LifecycleWarning,
   ReplacementResultRef,
   SubscriptionLifecycleMutationMetadata,
 } from "./subscription-lifecycle.types";
@@ -41,15 +33,6 @@ export type {
   ReplacementResultRef,
   SubscriptionLifecycleMutationMetadata,
 } from "./subscription-lifecycle.types";
-
-interface CancellationCalculation {
-  confirmedFundedMinor: bigint;
-  previousRefundMinor: bigint;
-  unusedUnits: bigint;
-  unusedValueMinor: bigint;
-  unfundedCancellationMinor: bigint;
-  recommendedRefundMinor: bigint;
-}
 
 @Injectable()
 export class SubscriptionLifecycleService {
@@ -62,6 +45,7 @@ export class SubscriptionLifecycleService {
     private readonly reservations: SubscriptionReservationService,
     private readonly commands: SubscriptionLifecycleCommandPolicy,
     private readonly replacements: SubscriptionReplacementPolicy,
+    private readonly cancellations: SubscriptionCancellationPolicy,
   ) {}
 
   async previewReplacement(
@@ -409,15 +393,15 @@ export class SubscriptionLifecycleService {
     const context = await this.repository.readCancellationContext(
       issuedSubscriptionId,
     );
-    this.assertCancellableContext(context);
+    this.cancellations.assertContext(context);
     this.commands.assertStudentScope(context, studentId);
     await this.issueRepository.assertStudentsInScope(actor, [
       context.studentId,
       context.payerStudentId,
     ]);
-    const calculation = this.calculateCancellation(context);
+    const calculation = this.cancellations.calculate(context);
     const signed = this.previewTokens.issueCancellation(
-      this.createCancellationTokenPayload(actor, context),
+      this.cancellations.createTokenPayload(actor, context),
     );
     return {
       issuedSubscriptionId,
@@ -466,7 +450,7 @@ export class SubscriptionLifecycleService {
           reserved: lesson.reserved,
         })),
       },
-      warnings: this.cancellationWarnings(context),
+      warnings: this.cancellations.warnings(context),
       previewToken: signed.token,
       expiresAt: signed.expiresAt,
     };
@@ -593,22 +577,17 @@ export class SubscriptionLifecycleService {
               client,
               issuedSubscriptionId,
             );
-          this.assertCancellableContext(context);
+          this.cancellations.assertContext(context);
           this.commands.assertStudentScope(context, studentId);
-          this.assertCancellationPreviewStillCurrent(
+          this.cancellations.assertPreviewCurrent(
             signedPayload,
-            this.createCancellationTokenPayload(actor, context),
+            this.cancellations.createTokenPayload(actor, context),
           );
-          const calculation = this.calculateCancellation(context);
-          const chosenRefundMinor = BigInt(dto.refundMinor);
-          if (chosenRefundMinor > calculation.recommendedRefundMinor) {
-            throw new UnprocessableEntityException({
-              code: "CANCELLATION_REFUND_EXCEEDS_CAP",
-              message: "Возврат превышает подтверждённый доступный максимум.",
-              maximumRefundMinor:
-                calculation.recommendedRefundMinor.toString(),
-            });
-          }
+          const calculation = this.cancellations.calculate(context);
+          const chosenRefundMinor = this.cancellations.assertRefundWithinCap(
+            dto.refundMinor,
+            calculation.recommendedRefundMinor,
+          );
           const totalCreditMinor =
             calculation.unfundedCancellationMinor + chosenRefundMinor;
 
@@ -748,172 +727,6 @@ export class SubscriptionLifecycleService {
     return response;
   }
 
-  private createCancellationTokenPayload(
-    actor: ActorContext,
-    context: CancellationContext,
-  ): Omit<
-    SubscriptionCancelPreviewTokenPayload,
-    "issuedAtSeconds" | "expiresAtSeconds"
-  > {
-    return {
-      kind: "subscription.cancel",
-      actorUserId: actor.userId,
-      studentId: context.studentId,
-      payerStudentId: context.payerStudentId,
-      issuedSubscriptionId: context.issuedSubscriptionId,
-      expectedVersion: context.version,
-      packageId: context.package.id,
-      packageVersion: context.package.version,
-      unitCount: context.package.unitCount,
-      usedUnits: context.usedUnits,
-      currencyCode: context.currencyCode,
-      finalMinor: context.finalMinor,
-      actualPaidMinor: context.actualPaidMinor,
-      fundingMode: context.fundingMode,
-      previousRefundMinor: context.previousRefundMinor,
-      writeoffMinor: context.writeoffMinor,
-      balanceMinor: context.balanceMinor,
-      openPaymentRecordCount: context.openPaymentRecordRefs.length,
-      openPaymentRecordMinor: sumMinor(
-        context.openPaymentRecordRefs.map((record) => record.amountMinor),
-      ).toString(),
-      futureLessonCount: context.futureLessonCount,
-      reservedLessonCount: context.reservedLessonCount,
-      reservedUnits: context.reservedUnits,
-      impactFingerprint: fingerprintPayload({
-        payments: context.paymentRefs,
-        refunds: context.previousRefundRefs,
-        openPaymentRecords: context.openPaymentRecordRefs,
-        writeoffs: context.writeoffRefs,
-        obligations: context.obligationRefs,
-        future: context.futureLessons,
-      }),
-    };
-  }
-
-  private assertCancellableContext(
-    context: CancellationContext | null,
-  ): asserts context is CancellationContext {
-    if (!context) {
-      throw new NotFoundException("Выданный абонемент не найден.");
-    }
-    if (context.status !== "active") {
-      throw new UnprocessableEntityException({
-        code: "SUBSCRIPTION_NOT_ACTIVE",
-        message: "Отменить можно только активный абонемент.",
-        status: context.status,
-      });
-    }
-  }
-
-  private assertCancellationPreviewStillCurrent(
-    signed: SubscriptionCancelPreviewTokenPayload,
-    current: Omit<
-      SubscriptionCancelPreviewTokenPayload,
-      "issuedAtSeconds" | "expiresAtSeconds"
-    >,
-  ): void {
-    const {
-      issuedAtSeconds: _issuedAtSeconds,
-      expiresAtSeconds: _expiresAtSeconds,
-      ...signedFacts
-    } = signed;
-    if (fingerprintPayload(signedFacts) !== fingerprintPayload(current)) {
-      throw new ConflictException({
-        code: "CANCELLATION_PREVIEW_STALE",
-        message:
-          "После предпросмотра изменились платежи, списания, резервы или баланс.",
-      });
-    }
-  }
-
-  private calculateCancellation(
-    context: CancellationContext,
-  ): CancellationCalculation {
-    const totalUnits = unitsToHundredths(context.package.unitCount);
-    if (totalUnits <= 0n) {
-      throw new UnprocessableEntityException({
-        code: "CANCELLATION_UNITS_INVALID",
-        message: "У абонемента нет корректного объёма для расчёта возврата.",
-      });
-    }
-    const protectedUnits = minBigInt(
-      totalUnits,
-      unitsToHundredths(context.usedUnits) +
-        unitsToHundredths(context.reservedUnits),
-    );
-    const unusedUnits = totalUnits - protectedUnits;
-    const finalMinor = BigInt(context.finalMinor);
-    const actualPaidMinor = BigInt(context.actualPaidMinor);
-    const confirmedFundedMinor =
-      context.fundingMode === "personal_account"
-        ? finalMinor
-        : minBigInt(finalMinor, maxBigInt(0n, actualPaidMinor));
-    const previousRefundMinor = BigInt(context.previousRefundMinor);
-    const unusedValueMinor = (finalMinor * unusedUnits) / totalUnits;
-    const grossRefundMinor =
-      (confirmedFundedMinor * unusedUnits) / totalUnits;
-    const recommendedRefundMinor = minBigInt(
-      unusedValueMinor,
-      maxBigInt(0n, grossRefundMinor - previousRefundMinor),
-    );
-    return {
-      confirmedFundedMinor,
-      previousRefundMinor,
-      unusedUnits,
-      unusedValueMinor,
-      unfundedCancellationMinor:
-        unusedValueMinor - recommendedRefundMinor,
-      recommendedRefundMinor,
-    };
-  }
-
-  private cancellationWarnings(context: CancellationContext): LifecycleWarning[] {
-    const warnings: LifecycleWarning[] = [];
-    if (context.futureLessonCount > 0) {
-      warnings.push({
-        code: "FUTURE_LESSONS_PRESERVED",
-        count: context.futureLessonCount,
-        message:
-          "Будущие занятия сохранятся; активные резервы абонемента будут сняты.",
-      });
-    }
-    if (context.reservedLessonCount > 0) {
-      warnings.push({
-        code: "RESERVATIONS_RELEASED",
-        count: context.reservedLessonCount,
-        units: context.reservedUnits,
-        message:
-          "Резервы будут сняты без удаления или изменения самих занятий.",
-      });
-    }
-    if (BigInt(context.actualPaidMinor) > 0n) {
-      warnings.push({
-        code: "ACTUAL_PAYMENTS_PRESERVED",
-        message: "Фактические платежи и выручка останутся неизменными.",
-      });
-    }
-    if (
-      context.writeoffRefs.length > 0 ||
-      BigInt(context.writeoffMinor) > 0n
-    ) {
-      warnings.push({
-        code: "WRITEOFFS_PRESERVED",
-        count: context.writeoffRefs.length,
-        message: "Исторические списания останутся неизменными.",
-      });
-    }
-    return warnings;
-  }
-
-}
-
-function unitsToHundredths(value: string): bigint {
-  if (!/^(0|[1-9]\d*)(\.\d{1,2})?$/.test(value)) {
-    throw new TypeError(`Invalid unit value: ${value}`);
-  }
-  const [whole, fraction = ""] = value.split(".");
-  return BigInt(whole!) * 100n + BigInt(fraction.padEnd(2, "0"));
 }
 
 function hundredthsToUnits(value: bigint): string {
@@ -930,12 +743,4 @@ function absolute(value: bigint): bigint {
 
 function sumMinor(values: string[]): bigint {
   return values.reduce((sum, value) => sum + BigInt(value), 0n);
-}
-
-function minBigInt(left: bigint, right: bigint): bigint {
-  return left < right ? left : right;
-}
-
-function maxBigInt(left: bigint, right: bigint): bigint {
-  return left > right ? left : right;
 }
