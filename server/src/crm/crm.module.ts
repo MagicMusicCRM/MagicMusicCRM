@@ -99,6 +99,7 @@ import { SubscriptionIssueService } from "./commerce/subscription-issue.service"
 import { ActualPaymentService } from "./commerce/actual-payment.service";
 import { SubscriptionLifecycleRepository } from "./commerce/subscription-lifecycle.repository";
 import { SubscriptionLifecycleCommandPolicy } from "./commerce/subscription-lifecycle-command.policy";
+import { SubscriptionCancellationService } from "./commerce/subscription-cancellation.service";
 import { SubscriptionCancellationPolicy } from "./commerce/subscription-cancellation.policy";
 import { SubscriptionReplacementPolicy } from "./commerce/subscription-replacement.policy";
 import { SubscriptionReplacementService } from "./commerce/subscription-replacement.service";
@@ -239,6 +240,7 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     SubscriptionReplacementPolicy,
     SubscriptionReplacementService,
     SubscriptionCancellationPolicy,
+    SubscriptionCancellationService,
     SubscriptionLifecycleService,
     SubscriptionPreviewTokenService,
     CommerceProjectionFactory,

@@ -20,6 +20,7 @@ import { PaymentLifecycleService } from "./payment-lifecycle.service";
 import { SubscriptionIssueRepository } from "./subscription-issue.repository";
 import { SubscriptionIssueService } from "./subscription-issue.service";
 import { SubscriptionLifecycleCommandPolicy } from "./subscription-lifecycle-command.policy";
+import { SubscriptionCancellationService } from "./subscription-cancellation.service";
 import { SubscriptionCancellationPolicy } from "./subscription-cancellation.policy";
 import { SubscriptionReplacementPolicy } from "./subscription-replacement.policy";
 import { SubscriptionReplacementService } from "./subscription-replacement.service";
@@ -119,7 +120,7 @@ describe("Subscription replacement preview/confirm", () => {
       commands,
       replacementPolicy,
     );
-    lifecycleService = new SubscriptionLifecycleService(
+    const cancellationService = new SubscriptionCancellationService(
       lifecycleRepository,
       issueRepository,
       policy,
@@ -128,7 +129,10 @@ describe("Subscription replacement preview/confirm", () => {
       reservations,
       commands,
       new SubscriptionCancellationPolicy(),
+    );
+    lifecycleService = new SubscriptionLifecycleService(
       replacementService,
+      cancellationService,
     );
     fixture = await createFixture(pool);
     actor = fixture.actor;
