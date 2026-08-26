@@ -88,6 +88,24 @@ describe("MyProfileService", () => {
     expect(repository.findByUserId).toHaveBeenCalledTimes(2);
   });
 
+  it("returns no branches and a null home branch without active assignments", async () => {
+    const { service, database, repository } = createService();
+    repository.findByUserId.mockResolvedValue(profileRow);
+    database.query.mockResolvedValue({ rows: [] });
+
+    await expect(service.getMe(actor)).resolves.toMatchObject({
+      id: "profile-a",
+      branchIds: [],
+      homeBranchId: null,
+    });
+    expect(database.query).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /sba\.deleted_at is null[\s\S]*sm\.deleted_at is null[\s\S]*order by sba\.created_at asc, sba\.branch_id asc/,
+      ),
+      [profileRow.id],
+    );
+  });
+
   it("rejects an avatar outside the actor-owned active avatar boundary", async () => {
     const { service, database, audit, repository } = createService();
     repository.ensure.mockResolvedValue(undefined);

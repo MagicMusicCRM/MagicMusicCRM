@@ -1,5 +1,6 @@
 import { NotFoundException } from "@nestjs/common";
 import { ProfileDirectoryService } from "./profile-directory.service";
+import { ProfileRecordRepository } from "./profile-record.repository";
 
 const actor = { userId: "manager-a", role: "manager" } as const;
 const profileRow = {
@@ -54,6 +55,62 @@ describe("ProfileDirectoryService", () => {
       ),
       [null, "Анна", 100, actor.role],
     );
+  });
+
+  it("keeps linked and candidate counts in one grouped directory projection", async () => {
+    const database = {
+      query: jest.fn().mockResolvedValue({
+        rows: [
+          {
+            ...profileRow,
+            is_app_account: true,
+            phone_verified_at: null,
+            linked_students_count: "2",
+            linked_leads_count: "1",
+            linked_teachers_count: "3",
+            linked_staff_count: "4",
+            candidate_students_count: "5",
+            candidate_leads_count: "6",
+            candidate_teachers_count: "7",
+            candidate_staff_count: "8",
+            total: "1",
+          },
+        ],
+      }),
+    };
+    const policy = {
+      assertCanListProfiles: jest.fn(),
+      assertCanReadProfile: jest.fn(),
+    };
+    const repository = new ProfileRecordRepository(database as any);
+    const service = new ProfileDirectoryService(
+      database as any,
+      policy as any,
+      repository,
+    );
+
+    await expect(service.listProfiles(actor, {})).resolves.toEqual({
+      items: [
+        expect.objectContaining({
+          linkedStudents: 2,
+          linkedLeads: 1,
+          linkedTeachers: 3,
+          linkedStaff: 4,
+          candidateStudents: 5,
+          candidateLeads: 6,
+          candidateTeachers: 7,
+          candidateStaff: 8,
+        }),
+      ],
+      total: 1,
+    });
+    expect(database.query).toHaveBeenCalledTimes(1);
+    const [sql, parameters] = database.query.mock.calls[0];
+    expect(String(sql)).toMatch(
+      /count\(\*\) over\(\) as total[\s\S]*group by vp\.user_id[\s\S]*linked_students_count[\s\S]*candidate_staff_count/,
+    );
+    expect(String(sql)).toContain("occupied.user_id <> vp.user_id");
+    expect(parameters).toEqual([null, null, 50, actor.role]);
   });
 
   it("authorizes getProfile against the profile user id", async () => {
