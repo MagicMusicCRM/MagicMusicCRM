@@ -1911,6 +1911,7 @@ git rev-parse HEAD
 - Modify: `server/src/crm/schedule/reschedule-postgres.integration.spec.ts`
 - Create: `server/src/crm/schedule/lesson-command-metadata.spec.ts`
 - Create: `server/src/crm/schedule/lesson-transition-boundaries.spec.ts`
+- Create: `server/src/crm/schedule/lesson-transition-order.spec.ts`
 - Report: `.superpowers/campaign12/lane-f-lesson-transition-report.md`
 
 **Verify-only:** `server/src/crm/crm-schedule.controller.ts`, all transition DTOs, platform integrity, lifecycle, reservation, settlement, preview-token, and constraint-engine implementations.
@@ -1940,7 +1941,7 @@ expect(lessonCommandSource).toMatch(/export type { LessonCommandMetadata } from 
 expect(schedulePlanSource).not.toMatch(/LessonCommandMetadata.*lesson-command\.service/);
 ```
 
-In `lesson-transition-boundaries.spec.ts`, add mock-order tests that assert:
+In `lesson-transition-order.spec.ts`, add runtime mock-order tests that assert:
 
 ```ts
 expect(advisoryKeys).toEqual([...new Set(advisoryKeys)].sort());
@@ -1963,7 +1964,7 @@ Add bulk assertions for deterministic lesson-ID sorting, duplicate rejection, ma
 
 ```powershell
 Set-Location server
-npm test -- --runTestsByPath src/crm/schedule/lesson-command-metadata.spec.ts src/crm/schedule/lesson-transition-boundaries.spec.ts
+npm test -- --runTestsByPath src/crm/schedule/lesson-command-metadata.spec.ts src/crm/schedule/lesson-transition-boundaries.spec.ts src/crm/schedule/lesson-transition-order.spec.ts
 ```
 
 Expected: FAIL because the neutral contract and extracted owner files do not exist.
@@ -2149,7 +2150,7 @@ Also assert each new production file `<=500` NLOC, max CCN from RepoWise `<=10`,
 
 ```powershell
 Set-Location server
-npm test -- --runTestsByPath src/crm/schedule/lesson-command-metadata.spec.ts src/crm/schedule/lesson-transition-boundaries.spec.ts
+npm test -- --runTestsByPath src/crm/schedule/lesson-command-metadata.spec.ts src/crm/schedule/lesson-transition-boundaries.spec.ts src/crm/schedule/lesson-transition-order.spec.ts
 npm test -- --runTestsByPath src/crm/schedule/reschedule-postgres.integration.spec.ts --testNamePattern="dry-runs the exact facts|rejects stale/tampered previews|commits a signed bulk transition"
 npm run typecheck -- --pretty false
 Set-Location ..
@@ -2216,7 +2217,7 @@ Expected: D owns only profile-module wiring, E only auth-module wiring, F only C
 Set-Location server
 npm test -- --runTestsByPath src/profile/profile.service.spec.ts src/profile/my-profile.service.spec.ts src/profile/profile-directory.service.spec.ts src/profile/profile-notes.service.spec.ts src/profile/profile.policy.spec.ts src/profile/profile-boundaries.spec.ts
 npm test -- --runTestsByPath src/auth/auth.service.spec.ts src/auth/auth-boundaries.spec.ts src/auth/password-policy.spec.ts src/auth/password.service.spec.ts src/auth/session.service.spec.ts src/auth/auth.controller.spec.ts
-npm test -- --runTestsByPath src/crm/schedule/lesson-command-metadata.spec.ts src/crm/schedule/lesson-transition-boundaries.spec.ts
+npm test -- --runTestsByPath src/crm/schedule/lesson-command-metadata.spec.ts src/crm/schedule/lesson-transition-boundaries.spec.ts src/crm/schedule/lesson-transition-order.spec.ts
 npm test -- --runTestsByPath src/crm/schedule/reschedule-postgres.integration.spec.ts --testNamePattern="dry-runs the exact facts|rejects stale/tampered previews|commits a signed bulk transition"
 npm run typecheck -- --pretty false
 Set-Location ..
