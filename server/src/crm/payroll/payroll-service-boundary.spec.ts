@@ -39,8 +39,43 @@ const sourceNloc = (source: string) => {
     }).length;
 };
 
-const versionedMutationCount = (source: string) =>
-  source.match(/executeVersionedMutation\s*\(/g)?.length ?? 0;
+const callCalleeIdentity = (expression: ts.Expression): string | null => {
+  if (ts.isIdentifier(expression)) return expression.text;
+  if (ts.isPropertyAccessExpression(expression)) return expression.name.text;
+  if (
+    ts.isElementAccessExpression(expression) &&
+    expression.argumentExpression &&
+    ts.isStringLiteralLike(expression.argumentExpression)
+  ) {
+    return expression.argumentExpression.text;
+  }
+  if (ts.isParenthesizedExpression(expression)) {
+    return callCalleeIdentity(expression.expression);
+  }
+  return null;
+};
+
+const versionedMutationCount = (source: string) => {
+  const sourceFile = ts.createSourceFile(
+    "payroll-mutation-boundary.ts",
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  let count = 0;
+  const visit = (node: ts.Node) => {
+    if (
+      ts.isCallExpression(node) &&
+      callCalleeIdentity(node.expression) === "executeVersionedMutation"
+    ) {
+      count += 1;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return count;
+};
 
 const identifierName = (node: ts.Node | undefined) =>
   node && ts.isIdentifier(node) ? node.text : null;
@@ -188,6 +223,17 @@ describe("PayrollService semantic boundary", () => {
     expect(sourceNloc(sources.command)).toBeLessThanOrEqual(520);
     expect(sourceNloc(sources.report)).toBeLessThanOrEqual(420);
     expect(sourceNloc(sources.csv)).toBeLessThanOrEqual(170);
+  });
+
+  it("counts typed and untyped mutation calls but ignores text decoys", () => {
+    const source = `
+      const decoy = "integrity.executeVersionedMutation({})";
+      // integrity.executeVersionedMutation({});
+      integrity.executeVersionedMutation({});
+      integrity.executeVersionedMutation<Result>({});
+    `;
+
+    expect(versionedMutationCount(source)).toBe(2);
   });
 
   it("keeps every integrity mutation in the command owner", () => {
