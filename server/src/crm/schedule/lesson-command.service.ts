@@ -31,11 +31,8 @@ import { LessonSettlementService } from "../commerce/lesson-settlement.service";
 import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
 import { LessonSettlementResult } from "../commerce/lesson-settlement.port";
 import { assertLessonPatchUsesTransition } from "./lesson-protected-patch.guard";
-
-export interface LessonCommandMetadata {
-  idempotencyKey: string;
-  requestId: string;
-}
+import type { LessonCommandMetadata } from "./lesson-command-metadata";
+export type { LessonCommandMetadata } from "./lesson-command-metadata";
 
 interface CurrentLessonRow {
   id: string;

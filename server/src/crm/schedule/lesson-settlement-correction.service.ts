@@ -19,7 +19,7 @@ import {
   LessonSettlementCorrectionCommandDto,
   LessonSettlementCorrectionPreviewDto,
 } from "../dto/lesson-settlement-correction.dto";
-import { LessonCommandMetadata } from "./lesson-command.service";
+import type { LessonCommandMetadata } from "./lesson-command-metadata";
 
 @Injectable()
 export class LessonSettlementCorrectionService {

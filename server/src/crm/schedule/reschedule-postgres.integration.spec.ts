@@ -24,6 +24,12 @@ import { LessonCompletionService } from "./lesson-completion.service";
 import { LessonCompletionWorker } from "./lesson-completion.worker";
 import { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
 import { LessonRequiredFieldValidator } from "./lesson-required-field.validator";
+import { LessonBulkTransitionService } from "./lesson-bulk-transition.service";
+import { LessonTransitionCommandService } from "./lesson-transition-command.service";
+import { LessonTransitionCommitService } from "./lesson-transition-commit.service";
+import { LessonTransitionFinancialService } from "./lesson-transition-financial.service";
+import { LessonTransitionPreparationService } from "./lesson-transition-preparation.service";
+import { LessonTransitionPreviewService } from "./lesson-transition-preview.service";
 import { LessonTransitionService } from "./lesson-transition.service";
 
 const url =
@@ -68,24 +74,55 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
       database,
       new PlatformIntegrityRepository(),
     );
-    const base = [
-      database,
-      platform,
-      new CrmPolicy(),
-      new LessonRequiredFieldValidator(),
-      constraints,
-      lifecycle,
-    ] as const;
+    const policy = new CrmPolicy();
+    const validator = new LessonRequiredFieldValidator();
     settlement = new LessonSettlementService(database);
-    service = new LessonTransitionService(
-      ...base,
-      settlement,
-      reservations,
-      tokens,
-    );
-    failingService = new LessonTransitionService(
-      ...base,
-      {
+    const buildTransitionGraph = (settlementPort: LessonSettlementPort) => {
+      const financial = new LessonTransitionFinancialService(
+        settlementPort,
+        reservations,
+      );
+      const preparation = new LessonTransitionPreparationService(
+        database,
+        validator,
+        constraints,
+        settlementPort,
+        reservations,
+        financial,
+      );
+      const commits = new LessonTransitionCommitService(
+        preparation,
+        financial,
+        settlementPort,
+        reservations,
+        lifecycle,
+      );
+      const previews = new LessonTransitionPreviewService(
+        database,
+        policy,
+        preparation,
+        tokens,
+      );
+      const commands = new LessonTransitionCommandService(
+        platform,
+        policy,
+        tokens,
+        commits,
+        reservations,
+      );
+      const bulkTransitions = new LessonBulkTransitionService(
+        database,
+        platform,
+        policy,
+        tokens,
+        preparation,
+        commits,
+        reservations,
+      );
+      return new LessonTransitionService(previews, commands, bulkTransitions);
+    };
+    service = buildTransitionGraph(settlement);
+    failingService = buildTransitionGraph({
         settle: async (
           ...args: Parameters<LessonSettlementService["settle"]>
         ) => {
@@ -99,10 +136,7 @@ describe("Atomic lesson reschedule/cancel/settle (PostgreSQL)", () => {
         markPlanState: settlement.markPlanState.bind(settlement),
         plannedSubscriptionAllocations:
           settlement.plannedSubscriptionAllocations.bind(settlement),
-      } satisfies LessonSettlementPort,
-      reservations,
-      tokens,
-    );
+      } satisfies LessonSettlementPort);
     const completionRepository = new LessonCompletionWorkerRepository(database);
     completionWorker = new LessonCompletionWorker(
       completionRepository,
