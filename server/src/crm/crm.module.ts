@@ -92,6 +92,12 @@ import { LessonRequiredFieldValidator } from "./schedule/lesson-required-field.v
 import { LessonCommandService } from "./schedule/lesson-command.service";
 import { LessonSeriesCommandService } from "./schedule/lesson-series-command.service";
 import { LessonTransitionService } from "./schedule/lesson-transition.service";
+import { LessonTransitionPreparationService } from "./schedule/lesson-transition-preparation.service";
+import { LessonTransitionFinancialService } from "./schedule/lesson-transition-financial.service";
+import { LessonTransitionCommitService } from "./schedule/lesson-transition-commit.service";
+import { LessonTransitionPreviewService } from "./schedule/lesson-transition-preview.service";
+import { LessonTransitionCommandService } from "./schedule/lesson-transition-command.service";
+import { LessonBulkTransitionService } from "./schedule/lesson-bulk-transition.service";
 import { LESSON_SETTLEMENT_PORT } from "./commerce/lesson-settlement.port";
 import { LessonSettlementService } from "./commerce/lesson-settlement.service";
 import { LessonCompletionWorkerRepository } from "./schedule/completion-worker.repository";
@@ -251,6 +257,12 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     LessonSeriesCommandService,
     SchedulePlanRepository,
     SchedulePlanService,
+    LessonTransitionPreparationService,
+    LessonTransitionFinancialService,
+    LessonTransitionCommitService,
+    LessonTransitionPreviewService,
+    LessonTransitionCommandService,
+    LessonBulkTransitionService,
     LessonTransitionService,
     LessonSettlementService,
     LessonCompletionWorkerRepository,

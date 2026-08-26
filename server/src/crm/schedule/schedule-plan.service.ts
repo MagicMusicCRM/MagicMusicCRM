@@ -24,7 +24,7 @@ import {
   SchedulePlanTrayQuery,
   UpdateSchedulePlanDto,
 } from "../dto/schedule-plan.dto";
-import type { LessonCommandMetadata } from "./lesson-command.service";
+import type { LessonCommandMetadata } from "./lesson-command-metadata";
 import { LessonSeriesCommandService } from "./lesson-series-command.service";
 import { groupScheduleConflicts } from "./schedule-analyzer";
 import { LessonLifecycleRepository } from "./lesson-lifecycle.repository";

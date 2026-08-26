@@ -14,7 +14,7 @@ import { SchedulePlanRowDto } from "../dto/schedule-plan.dto";
 import { UpsertLessonDto } from "../dto/upsert-lesson.dto";
 import { ScheduleConstraintEngine } from "./constraint-engine.service";
 import { ConstraintViolation } from "./constraint-engine.types";
-import type { LessonCommandMetadata } from "./lesson-command.service";
+import type { LessonCommandMetadata } from "./lesson-command-metadata";
 import type { ScheduleSuggestion } from "./schedule-analyzer";
 import { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
 import {
