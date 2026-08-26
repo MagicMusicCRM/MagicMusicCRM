@@ -18,6 +18,7 @@ import { CrmService } from "./crm.service";
 import { StudentDirectoryService } from "./students/student-directory.service";
 import { StudentSelfSummaryService } from "./students/student-self-summary.service";
 import { StudentCardTimelineService } from "./students/student-card-timeline.service";
+import { StudentMutationExecutor } from "./students/student-mutation.executor";
 import {
   ACTIVE_RESPONSIBLE_STAFF_STATUSES,
   RESPONSIBLE_AUTH_ROLES,
@@ -87,6 +88,14 @@ describe("CrmService", () => {
       timeline as unknown as TimelineService,
       chatWork,
     );
+    const studentFunnel = {
+      assertCreateStatus: jest.fn(),
+      assertTransition: jest.fn(),
+    } as unknown as StudentFunnelService;
+    const studentMutations = new StudentMutationExecutor(
+      database as unknown as DatabaseService,
+      studentFunnel,
+    );
     const service = new CrmService(
       database as unknown as DatabaseService,
       audit as unknown as AuditService,
@@ -96,10 +105,7 @@ describe("CrmService", () => {
       cardTimeline,
       notifications as unknown as NotificationsService,
       { emitCrmChanged: () => undefined } as unknown as RealtimeBus,
-      {
-        assertCreateStatus: jest.fn(),
-        assertTransition: jest.fn(),
-      } as unknown as StudentFunnelService,
+      studentMutations,
     );
 
     return {
@@ -180,6 +186,14 @@ describe("CrmService", () => {
       timeline as unknown as TimelineService,
       chatWork,
     );
+    const studentFunnel = {
+      assertCreateStatus: jest.fn(),
+      assertTransition: jest.fn(),
+    } as unknown as StudentFunnelService;
+    const studentMutations = new StudentMutationExecutor(
+      database as unknown as DatabaseService,
+      studentFunnel,
+    );
     const service = new CrmService(
       database as unknown as DatabaseService,
       audit as unknown as AuditService,
@@ -189,10 +203,7 @@ describe("CrmService", () => {
       cardTimeline,
       notifications as unknown as NotificationsService,
       { emitCrmChanged: () => undefined } as unknown as RealtimeBus,
-      {
-        assertCreateStatus: jest.fn(),
-        assertTransition: jest.fn(),
-      } as unknown as StudentFunnelService,
+      studentMutations,
     );
 
     return { service, query, audit, policy, tasks, notifications, database };
@@ -1351,6 +1362,14 @@ describe("CrmService", () => {
       const chatWork = {
         listForEntity: jest.fn().mockResolvedValue([]),
       } as unknown as ChatWorkTimelineService;
+      const studentFunnel = {
+        assertCreateStatus: jest.fn(),
+        assertTransition: jest.fn(),
+      } as unknown as StudentFunnelService;
+      const studentMutations = new StudentMutationExecutor(
+        database as unknown as DatabaseService,
+        studentFunnel,
+      );
       const service = new CrmService(
         database as unknown as DatabaseService,
         audit as unknown as AuditService,
@@ -1375,10 +1394,7 @@ describe("CrmService", () => {
           notifyNewLead: jest.fn(),
         } as unknown as NotificationsService,
         realtime as unknown as RealtimeBus,
-        {
-          assertCreateStatus: jest.fn(),
-          assertTransition: jest.fn(),
-        } as unknown as StudentFunnelService,
+        studentMutations,
       );
       return { events, service, realtime };
     };

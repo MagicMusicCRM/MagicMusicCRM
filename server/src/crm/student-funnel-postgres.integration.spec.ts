@@ -14,6 +14,7 @@ import { CrmService } from "./crm.service";
 import { StudentDirectoryService } from "./students/student-directory.service";
 import { StudentSelfSummaryService } from "./students/student-self-summary.service";
 import { StudentCardTimelineService } from "./students/student-card-timeline.service";
+import { StudentMutationExecutor } from "./students/student-mutation.executor";
 import { ScheduleReadService } from "./schedule/schedule-read.service";
 import { StudentFunnelStageDto } from "./dto/student-funnel.dto";
 import { StudentFunnelService } from "./student-funnel.service";
@@ -124,7 +125,7 @@ describe("Student funnel effective configuration (PostgreSQL)", () => {
       ),
       {} as never,
       realtime,
-      service,
+      new StudentMutationExecutor(database, service),
     );
     director = { userId: directorId, role: "director" };
   });

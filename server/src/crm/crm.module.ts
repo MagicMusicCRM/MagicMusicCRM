@@ -119,6 +119,7 @@ import { StudentFunnelService } from "./student-funnel.service";
 import { StudentDirectoryService } from "./students/student-directory.service";
 import { StudentSelfSummaryService } from "./students/student-self-summary.service";
 import { StudentCardTimelineService } from "./students/student-card-timeline.service";
+import { StudentMutationExecutor } from "./students/student-mutation.executor";
 import { CrmConfigurationController } from "./crm-configuration.controller";
 import { CrmConfigurationService } from "./crm-configuration.service";
 import { InstallmentDueWorker } from "./commerce/installment-due.worker";
@@ -169,6 +170,7 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     StudentDirectoryService,
     StudentSelfSummaryService,
     StudentCardTimelineService,
+    StudentMutationExecutor,
     BlacklistService,
     HomeworkService,
     ReferenceDataService,
