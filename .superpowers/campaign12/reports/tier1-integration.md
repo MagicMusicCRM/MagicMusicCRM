@@ -89,3 +89,11 @@ The Subscription cherry-pick had one same-file content conflict because the inte
 - Subscription controller resolution: baseline..HEAD diff exit 0 and blob remains `384daf6567342fcbe9e4c12bee589e62bfb5612b`; preview forwarding, issue/purchase metadata, header normalization, UUID pipe, routes, and DTO order are unchanged.
 
 No controller mismatch was found. `.superpowers/campaign12/reports/tier1-review.md` remains intentionally absent pending the controller-dispatched fresh review.
+
+## Review fix round 2 — Payroll optional-chain guard
+
+- Source commit `0505493a8691c510eee9a982943175e914a6d48c` applied as `f24e34ae09840f89424879765d0008287a922ea5` (`test(crm): cover optional mutation syntax`). The commit changes only `server/src/crm/payroll/payroll-service-boundary.spec.ts`; its post-pick diff-check exited 0.
+- Exact smoke: `npm --prefix server test -- --runTestsByPath src/crm/payroll.service.spec.ts src/crm/payroll/payroll-service-boundary.spec.ts --runInBand` — exit 0, 2/2 suites, 26/26 tests, 0 snapshots, Jest 13.772 seconds, wall 16.070 seconds.
+- Typecheck: `npm --prefix server run typecheck` — exit 0, `tsc --noEmit`, wall 8.266 seconds.
+- Range check: `git diff --check 6fb9ad0f556737cd1cd5ae674c70df13e95a251c..HEAD` — exit 0.
+- `.superpowers/campaign12/reports/tier1-review.md` remains intentionally absent pending fresh controller-dispatched review.
