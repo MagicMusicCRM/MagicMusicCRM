@@ -269,6 +269,7 @@ const assertExactFacadeBoundary = (source: string) => {
       return;
     }
 
+    expect(call.questionDotToken).toBeUndefined();
     expect(call.typeArguments).toBeUndefined();
     expect(call.arguments.map((argument) => identifierName(argument))).toEqual(
       expected.parameters.map((parameter) => parameter.name),
@@ -278,6 +279,7 @@ const assertExactFacadeBoundary = (source: string) => {
       return;
     }
 
+    expect(call.expression.questionDotToken).toBeUndefined();
     expect(call.expression.name.text).toBe(expected.name);
     const ownerAccess = call.expression.expression;
     expect(ts.isPropertyAccessExpression(ownerAccess)).toBe(true);
@@ -285,6 +287,7 @@ const assertExactFacadeBoundary = (source: string) => {
       return;
     }
 
+    expect(ownerAccess.questionDotToken).toBeUndefined();
     expect(ownerAccess.name.text).toBe(expected.owner);
     expect(ownerAccess.expression.kind).toBe(ts.SyntaxKind.ThisKeyword);
   });
