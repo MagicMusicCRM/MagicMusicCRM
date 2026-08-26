@@ -652,6 +652,74 @@ reverted in reverse commit order. No schema/data mutation belongs to this
 program, and financial, lesson, payroll, reservation, audit, or outbox history
 is never manually rewritten to repair a refactor.
 
+## Package 9 verified outcome — subscription lifecycle
+
+Package 9 is accepted at code commit `8ebbf32e03a4` over execution range
+`8a38a57b..8ebbf32e`. Its reversible code commits are `ffd1fdb9`, `aa27e4ef`,
+`9dec8c6d`, `34763488`, `829069d9`, `b5cdaa56`, and `8ebbf32e`. The production
+recount moves `25 -> 24` `god_class` owners. The former
+`SubscriptionLifecycleService` moves from health `3.44`, `1,350` NLOC, max CCN
+`14`, and weighted deficit `6,156` to a transaction-free 72-NLOC facade at
+health `7.39`, max CCN `1`, and deficit `44`, with no `god_class` or
+`brain_method` finding.
+
+The five semantic owners close as follows: command policy `7.95` / 187 NLOC /
+CCN `5` / deficit `9`; replacement policy `9.05` / 258 / `8` / `0`;
+cancellation policy `9.65` / 203 / `6` / `0`; replacement executor `8.15` /
+475 / `8` / `0`; cancellation executor `8.15` / 484 / `8` / `0`. Shared
+lifecycle types score `9.65` at 46 NLOC and CCN `1`. The split-owner deficit is
+therefore `6,156 -> 53`, recovering `6,103` points; the mandatory god-owner
+portfolio moves `114,548 -> 108,392` because the removed owner carried all
+`6,156` god-owner points. No replacement owner is below `7.0`, and every owner
+is at or below CCN `10`.
+
+Backend verification passed twice: `225/225` suites and `1,567/1,567` tests in
+`117.051 s`, then the same counts with coverage in `122.258 s`; typecheck
+passed in `3.06 s`, and build passed in `6.50 s`. The first coverage attempt at
+Node's default approximately 2-GB heap ended in an out-of-memory failure after
+about `164.5 s`; the unchanged command passed with
+`NODE_OPTIONS=--max-old-space-size=8192`. The generated LCOV SHA-256 is
+`ea00521cffe08f4d4091d895af899e1d742bd9a4b9a72762a666f96faf75123e`,
+`766,302` bytes and 428 report records. RepoWise resolved 407 files and reports
+`84.47%` mapped lines / `61.83%` mapped branches at exact coverage commit
+`8ebbf32e`; the seven Package 9 owner/type files aggregate to `363/390`
+coverable lines (`93.08%`) and `190/304` branches (`62.50%`). File-level LCOV
+attributes every changed owner; 26 changed coverable lines remain uncovered,
+while the facade's 10 changed coverable lines are all covered. The per-test
+change map separately attributes three guarding integration/module tests and
+does not infer per-test attribution for newly added source files; that narrower
+map is not substituted for the file-level LCOV evidence.
+
+RepoWise's exact indexed dashboard at `8ebbf32e` has 1,609 files, average
+health `6.74`, with module scores `server=7.07` and `lib=5.06`. The distinct
+live CLI scan has 1,708 files, average health `7.02`, hotspot health `4.99`,
+773 production-filter files, 243 below `7.0`, and exactly 24 production
+`god_class` findings; these scopes are deliberately not combined. Package PR
+risk is `1.31`, with no breaking change, consumer break, dependency cycle, or
+conformance violation. Full-range change risk is `9.8`, probability `0.9813`,
+percentile `98.0`, review priority `high`, classification `Elevated`, driven by
+the intentionally broad 16-file semantic split; full tests close the predicted
+downstream review surface.
+
+The accepted executor exception is explicit: replacement and cancellation
+`execute` remain complete atomic I/O owners at 196 and 195 lines respectively,
+both health `8.15` and CCN `8`. Splitting either callback would weaken the
+transaction/integrity boundary. Policy low-cohesion/DRY findings and facade
+history/test-pair heuristics are accepted only because their exact health is
+`>=7`, no live structural gate fails, and file-level coverage is present.
+
+Sentrux rescans 2,433 files and closes at quality `5744`, depth `13` / score
+`3810`, acyclicity raw `0` / score `10000`, equality `6331`, modularity `5411`,
+redundancy `4792`, and rules `2/2`. Every root cause is at or above the Package
+9 baseline (`5736`, `13/3810`, `10000`, `6310`, `5406`, `4777`).
+
+The fresh Package 10 owner is `server/src/crm/crm.service.ts`: health `1.90`,
+1,210 NLOC, max CCN `21`, and weighted deficit `7,381`. It is now dependency-
+ready after the lifecycle foundation, has a paired test and no test-gap or
+security signal, and ranks above messenger (`6,529`) and the remaining ready
+backend/Flutter owners. Its 100% hotspot, six dependents, and 27 fixes in six
+months raise the required characterization depth but do not veto readiness.
+
 ### Phase B: health completion after `god_class = 0`
 
 Eliminating all 25 owners cannot by itself satisfy the approved health

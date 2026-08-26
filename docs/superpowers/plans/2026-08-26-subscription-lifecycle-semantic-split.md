@@ -982,7 +982,7 @@ Between the RepoWise update and commit, query targeted health/risk and run Sentr
 - Consumes: final Package 9 commit range, server coverage/lcov.info, RepoWise/Sentrux output.
 - Produces: exact Package 9 acceptance record and Package 10 reranking.
 
-- [ ] **Step 1: Run the full backend verification**
+- [x] **Step 1: Run the full backend verification**
 
 From server:
 
@@ -995,7 +995,7 @@ npm test -- --coverage --coverageReporters=lcov
 
 Expected: all backend tests pass twice, typecheck/build exit zero, and server/coverage/lcov.info is generated.
 
-- [ ] **Step 2: Ingest truthful coverage and refresh RepoWise**
+- [x] **Step 2: Ingest truthful coverage and refresh RepoWise**
 
 From repository root:
 
@@ -1006,7 +1006,7 @@ repowise update --index-only
 
 Record exact coverage SHA, file count, target line/branch coverage, and any uncovered changed lines. Do not rename tests or source files for pairing.
 
-- [ ] **Step 3: Run RepoWise package gates**
+- [x] **Step 3: Run RepoWise package gates**
 
 Query target health for the old facade and all five replacement owners, repository dashboard/module scores, changed-file risk, full-range change risk, consumers/cycles/conformance, and production god count.
 
@@ -1022,7 +1022,7 @@ RepoWise consumers/cycles/conformance: no new violation
 
 If a new owner has health below 7.0, document every deduction and rework any current structural defect before accepting history/co-change-only residue.
 
-- [ ] **Step 4: Run Sentrux package gates**
+- [x] **Step 4: Run Sentrux package gates**
 
 ~~~text
 rescan current repository
@@ -1034,11 +1034,11 @@ rules 2/2
 
 Any root-cause regression blocks acceptance even if aggregate quality rises.
 
-- [ ] **Step 5: Update exact evidence**
+- [x] **Step 5: Update exact evidence**
 
 Append a Package 9 verified outcome to the master spec and a Results section to this plan. Include commits, commands, pass counts/durations, coverage SHA, old/new health/NLOC/CCN/deficit, portfolio delta, production god count, Sentrux root causes, RepoWise risk, accepted exceptions, and the freshly reranked Package 10 owner.
 
-- [ ] **Step 6: Verify docs and commit**
+- [x] **Step 6: Verify docs and commit**
 
 ~~~bash
 git diff --check
@@ -1053,3 +1053,96 @@ Expected: worktree clean, RepoWise exact at final HEAD, and no production/test f
 ## Execution Handoff
 
 Package 9 is complete only after every task-specific review is clean, the final whole-package review is clean, and Task 7 records exact evidence. Continuous execution then reranks and starts Package 10 under the approved 25 -> 0 master program.
+
+## Results
+
+**Status:** accepted at code HEAD `8ebbf32e03a4`, range
+`8a38a57b..8ebbf32e`. Package commits: `ffd1fdb9`, `aa27e4ef`, `9dec8c6d`,
+`34763488`, `829069d9`, `b5cdaa56`, `8ebbf32e`.
+
+### Verification and coverage
+
+| Command | Result |
+|---|---|
+| `npm test` | 225/225 suites, 1,567/1,567 tests, `117.051 s` |
+| `npm run typecheck` | exit 0, `3.06 s` wall time |
+| `npm run build` | exit 0, `6.50 s` wall time |
+| `npm test -- --coverage --coverageReporters=lcov` | first attempt OOM at the default approximately 2-GB Node heap after about `164.5 s`; unchanged command with `NODE_OPTIONS=--max-old-space-size=8192` passed 225/225 suites and 1,567/1,567 tests in `122.258 s` |
+
+`server/coverage/lcov.info` is 766,302 bytes with SHA-256
+`ea00521cffe08f4d4091d895af899e1d742bd9a4b9a72762a666f96faf75123e` and 428
+LCOV file records. RepoWise resolved 407 files at exact commit `8ebbf32e` and
+reports 17,187/20,348 mapped lines (`84.47%`) and `61.83%` mapped branches.
+Raw report totals, including the 21 unmapped report paths, are 18,252/22,679
+lines (`80.48%`) and 13,379/22,250 branches (`60.13%`).
+
+| Target | Lines | Branches | Uncovered changed coverable lines |
+|---|---:|---:|---|
+| lifecycle facade | 20/21 (`95.24%`) | 14/29 (`48.28%`) | none; all 10 changed coverable lines are covered |
+| command policy | 41/47 (`87.23%`) | 41/60 (`68.33%`) | 5, 25, 40, 48, 55, 71 |
+| replacement policy | 65/69 (`94.20%`) | 41/60 (`68.33%`) | 5, 15, 18, 193 |
+| cancellation policy | 54/55 (`98.18%`) | 35/51 (`68.63%`) | 5 |
+| replacement executor | 90/97 (`92.78%`) | 30/52 (`57.69%`) | 5, 128, 132, 135, 145, 172, 184 |
+| cancellation executor | 93/100 (`93.00%`) | 29/52 (`55.77%`) | 5, 138, 142, 145, 169, 176, 188 |
+| shared types | 0/1 (`0%`) | 0/0 | 2 |
+| **Package 9 aggregate** | **363/390 (`93.08%`)** | **190/304 (`62.50%`)** | **26** |
+
+The file-level LCOV/RepoWise health coverage block attributes all seven changed
+owner/type files. The narrower per-test change map proves three guarding tests
+for changed lines (`app.module.spec.ts` and the cancel/replace PostgreSQL
+integration specs); it lists new source files as lacking per-test attribution,
+which is recorded as a map limitation rather than overwritten by inference.
+
+### RepoWise acceptance
+
+| Owner | Before health/NLOC/CCN/deficit | After health/NLOC/CCN/deficit |
+|---|---|---|
+| lifecycle facade | `3.44 / 1,350 / 14 / 6,156` | `7.39 / 72 / 1 / 44` |
+| command policy | n/a | `7.95 / 187 / 5 / 9` |
+| replacement policy | n/a | `9.05 / 258 / 8 / 0` |
+| cancellation policy | n/a | `9.65 / 203 / 6 / 0` |
+| replacement executor | n/a | `8.15 / 475 / 8 / 0` |
+| cancellation executor | n/a | `8.15 / 484 / 8 / 0` |
+| shared types | n/a | `9.65 / 46 / 1 / 0` |
+
+The split-owner portfolio moves `6,156 -> 53`, a `-6,103` weighted-deficit
+delta. The production god-owner portfolio moves `114,548 -> 108,392`, and the
+same live production filter moves `25 -> 24` `god_class` findings. The facade
+has 72 physical non-comment lines, zero transaction/repository references, and
+no `god_class`/`brain_method`. Every structural owner has CCN `<=8`.
+
+Indexed scope at `8ebbf32e`: 1,609 files, average health `6.74`,
+`server=7.07`, `lib=5.06`; status reports hotspot health `5.90`. Separate live
+CLI scope: 1,708 files, average `7.02`, hotspot `4.99`; the production filter
+contains 773 files, 243 below health `7.0`, and 24 god classes. These scopes
+are not conflated.
+
+Changed-file PR risk is `1.31`; predicted review surface is five downstream
+files, two downstream tests, and three missing historical co-changers. Actual
+verification passed the full suite. RepoWise reports empty `breaking_changes`,
+`will_break_consumers`, `dependency_cycles`, and `conformance_violations`.
+Full-range risk for `8a38a57b..8ebbf32e` is score `9.8`, probability `0.9813`,
+percentile `98.0`, priority `high`, classification `Elevated`, reflecting 2,643
+insertions, 1,359 deletions, and 16 changed files.
+
+Accepted exceptions are explicit. The replacement and cancellation executor
+`execute` methods remain indivisible atomic I/O owners at 196/195 lines, health
+`8.15`, CCN `8`. The command/replacement policy low-cohesion and DRY findings,
+cancellation-policy DRY finding, and facade history/test-pair heuristics are
+accepted because every headline is `>=7`, file-level coverage is truthful, and
+there is no live god/brain/CCN failure.
+
+### Sentrux and next package
+
+Sentrux scan/rescan covers 2,433 files, 4,730 import edges, and 507,648 lines.
+Quality is `5744` versus baseline `5736`; depth is unchanged at raw `13` / score
+`3810`; acyclicity is raw `0` / score `10000`; equality `6310 -> 6331`,
+modularity `5406 -> 5411`, redundancy `4777 -> 4792`; rules pass `2/2` with
+zero violations. No root cause regressed.
+
+Package 10 reranks to `server/src/crm/crm.service.ts`: health `1.90`, 1,210
+NLOC, max CCN `21`, weighted deficit `7,381`. It is ready now that lifecycle is
+closed, has a paired test, six dependents, and no test-gap/security signal. Its
+hotspot is `99.93%` with 27 fixes in six months, so characterization and staged
+semantic extraction are mandatory. Messenger remains next by deficit at
+`6,529` but is not selected ahead of the now-ready CRM owner.
