@@ -29,6 +29,10 @@ describe("CrmFacilitiesController", () => {
     await expect(
       controller.listGroupStudents(actor, groupId, query),
     ).resolves.toBe(response);
-    expect(crm.listGroupStudents).toHaveBeenCalledWith(actor, groupId, query);
+    const received = crm.listGroupStudents.mock.calls[0];
+    expect(received).toHaveLength(3);
+    expect(received?.[0]).toBe(actor);
+    expect(received?.[1]).toBe(groupId);
+    expect(received?.[2]).toBe(query);
   });
 });

@@ -1136,6 +1136,17 @@ describe("CrmService", () => {
       blacklisted: true,
       blacklistReason: "Нарушение правил",
     };
+    const expectedListStudentDto = {
+      ...expectedStudentDto,
+      // listStudents deliberately does not join lead_sources.
+      sourceId: null,
+      sourceName: null,
+    };
+    const {
+      source_id: _listSourceId,
+      source_name: _listSourceName,
+      ...listStudentRow
+    } = studentRow;
     const teacherActor = {
       userId: "teacher-boundary-a",
       role: "teacher" as const,
@@ -1143,13 +1154,20 @@ describe("CrmService", () => {
 
     it("lists students through list policy, bounded query, and canonical DTO", async () => {
       const { service, database, policy } = createService();
-      database.query.mockResolvedValueOnce({ rows: [studentRow] });
+      const events: string[] = [];
+      policy.assertCanListStudents.mockImplementation(() => events.push("policy"));
+      database.query.mockImplementation(async () => {
+        events.push("query");
+        return { rows: [listStudentRow] };
+      });
 
       await expect(
         service.listStudents(actor, { q: "  Алина  ", limit: 999 }),
-      ).resolves.toEqual({ items: [expectedStudentDto] });
+      ).resolves.toEqual({ items: [expectedListStudentDto] });
 
       expect(policy.assertCanListStudents).toHaveBeenCalledWith(actor);
+      expect(database.query).toHaveBeenCalledTimes(1);
+      expect(events).toEqual(["policy", "query"]);
       expect(database.query.mock.calls[0]![1]).toEqual([
         actor.role,
         actor.userId,
@@ -1160,7 +1178,14 @@ describe("CrmService", () => {
 
     it("reads one student only after row-level authorization", async () => {
       const { service, database, policy } = createService();
-      database.query.mockResolvedValueOnce({ rows: [studentRow] });
+      const events: string[] = [];
+      database.query.mockImplementation(async () => {
+        events.push("authorization lookup");
+        return { rows: [studentRow] };
+      });
+      policy.assertCanReadStudent.mockImplementation(() =>
+        events.push("authorization"),
+      );
 
       await expect(
         service.getStudent(teacherActor, studentRow.id),
@@ -1170,6 +1195,8 @@ describe("CrmService", () => {
         profileUserId: studentRow.profile_user_id,
         teacherUserIds: studentRow.teacher_user_ids,
       });
+      expect(database.query).toHaveBeenCalledTimes(1);
+      expect(events).toEqual(["authorization lookup", "authorization"]);
     });
 
     it("reports the exact not-found message for a missing student", async () => {
@@ -1191,7 +1218,13 @@ describe("CrmService", () => {
         ...studentRow,
         total_count: "2",
       };
-      const { service } = createService([newestStudent, olderStudent]);
+      const { service, database, policy } = createService();
+      const events: string[] = [];
+      policy.assertCanListStudents.mockImplementation(() => events.push("policy"));
+      database.query.mockImplementation(async () => {
+        events.push("query");
+        return { rows: [newestStudent, olderStudent] };
+      });
 
       const result = await service.searchStudents(actor, { limit: 1 });
 
@@ -1201,6 +1234,35 @@ describe("CrmService", () => {
       expect(result.nextCursor).toBe(
         "2026-08-01T10:00:00.000Z|student-boundary-a",
       );
+      expect(database.query).toHaveBeenCalledTimes(1);
+      expect(events).toEqual(["policy", "query"]);
+    });
+
+    it("checks group scope before querying the student roster", async () => {
+      const { service, database, policy } = createService();
+      const events: string[] = [];
+      policy.assertCanReadOperationalData.mockImplementation(() =>
+        events.push("policy"),
+      );
+      database.query.mockImplementation(async (sql: string) => {
+        if (sql.includes("from app.groups")) {
+          events.push("group scope");
+          return { rows: [{ branch_id: "branch-boundary-a" }] };
+        }
+        if (sql.includes("app.staff_branch_assignments")) {
+          events.push("branch scope");
+          return { rows: [{ branch_id: "branch-boundary-a" }] };
+        }
+        events.push("roster");
+        return { rows: [studentRow] };
+      });
+
+      await expect(
+        service.listGroupStudents(actor, "group-boundary-a", { limit: 10 }),
+      ).resolves.toEqual({ items: [expectedStudentDto] });
+
+      expect(database.query).toHaveBeenCalledTimes(3);
+      expect(events).toEqual(["policy", "group scope", "branch scope", "roster"]);
     });
 
     const createPublicationHarness = () => {

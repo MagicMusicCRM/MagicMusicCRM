@@ -79,7 +79,11 @@ describe("CrmStudentsController", () => {
 
     for (const testCase of cases) {
       await expect(testCase.invoke()).resolves.toBe(response);
-      expect(testCase.method).toHaveBeenCalledWith(...testCase.expected);
+      const received = testCase.method.mock.calls[0];
+      expect(received).toHaveLength(testCase.expected.length);
+      testCase.expected.forEach((argument, index) => {
+        expect(received?.[index]).toBe(argument);
+      });
     }
   });
 
