@@ -69,3 +69,23 @@ Each command `git diff --quiet 9cb1f506a5c5418650926fe53b81fe2667ba9bd7..HEAD --
 | `server/src/crm/subscription-commerce.controller.ts` | `384daf6567342fcbe9e4c12bee589e62bfb5612b` | `@UseGuards(JwtAuthGuard)` and `@Controller("crm/students")` remain. Preview forwards `actor, studentId, dto`; issue and purchase forward `actor, studentId, dto, metadata`. Metadata preserves `idempotency-key` and `x-request-id` with `?? ""`, and every `studentId` remains `ParseUUIDPipe`. |
 
 No forwarding, metadata, header, route, DTO, guard, or controller mismatch was found. Controllers remain verify-only; no controller test or source edit was added.
+
+## Review fix round 1 — guard integration
+
+Evidence/provenance fix commit: `838d85e0018dfe1da2e2e099dbf83babaab2558e` (`docs(health): make Tier 1 evidence reproducible`). Its preserved raw artifact remains SHA256 `2bcc58b1d9e88e9f1e2324d3dd231abbacb45d4fb691c8a0789a27e16638463a`.
+
+| Owner guard | Source commit | Applied commit | Scope | Post-pick diff check |
+|---|---|---|---|---:|
+| Payroll mutation AST guard | `a7ec45b891f3d7f7729aa842538faf3ea0c458df` | `82738c2fbbb732c56d7e237096a369ebf69e9fa8` | only `server/src/crm/payroll/payroll-service-boundary.spec.ts` | 0 |
+| Subscription mutation AST guard | `61e0654def4f92d5eef9d54809df1bc66517ade5` | `245a1c92c744f20069ca51d7760ce963a9dd3151` | only `server/src/crm/commerce/subscription-issue-boundary.spec.ts` | 0 |
+
+The Subscription cherry-pick had one same-file content conflict because the integration checkpoint had already inserted the private-wiring assertion at the start of the same `describe`. Resolution preserved that assertion and added the owner guard's AST mutation-counter assertion unchanged; no production or controller file was involved.
+
+- Combined smoke: `npm --prefix server test -- --runTestsByPath src/crm/payroll.service.spec.ts src/crm/payroll/payroll-service-boundary.spec.ts src/crm/commerce/subscription-issue.service.spec.ts src/crm/commerce/subscription-issue-boundary.spec.ts --runInBand` — exit 0, 4/4 suites, 37/37 tests, 0 snapshots, Jest 19.995 seconds, wall 22.616 seconds.
+- Typecheck: `npm --prefix server run typecheck` — exit 0, `tsc --noEmit`, wall 9.453 seconds.
+- Range check: `git diff --check 3fda5c105bb0dde51dac1168ec0e6150b6273200..HEAD` — exit 0.
+- Messenger controller resolution: baseline..HEAD diff exit 0 and blob remains `0118a931d970760f8a51314f4b0f9d37e4a6917e`; actor-first facade forwarding, UUID pipes, guard, routes, query/DTO order, and no command-metadata headers are unchanged.
+- Payroll controller resolution: baseline..HEAD diff exit 0 and blob remains `baa548ec7f9c1b97c168a0dd80b195eaac43ec24`; actor/ID/entry/DTO order, `idempotency-key`, `x-request-id`, empty-string normalization, and CSV content headers are unchanged.
+- Subscription controller resolution: baseline..HEAD diff exit 0 and blob remains `384daf6567342fcbe9e4c12bee589e62bfb5612b`; preview forwarding, issue/purchase metadata, header normalization, UUID pipe, routes, and DTO order are unchanged.
+
+No controller mismatch was found. `.superpowers/campaign12/reports/tier1-review.md` remains intentionally absent pending the controller-dispatched fresh review.
