@@ -21,6 +21,9 @@ import { CommerceProjectionRepository } from "./commerce-projection.repository";
 import { PaymentLifecycleRepository } from "./payment-lifecycle.repository";
 import { PaymentLifecycleService } from "./payment-lifecycle.service";
 import { SubscriptionIssueRepository } from "./subscription-issue.repository";
+import { SubscriptionCommercialTermsService } from "./subscription-commercial-terms.service";
+import { SubscriptionGrantCommandService } from "./subscription-grant-command.service";
+import { SubscriptionIssueResultService } from "./subscription-issue-result.service";
 import { SubscriptionIssueService } from "./subscription-issue.service";
 import { SubscriptionLifecycleCommandPolicy } from "./subscription-lifecycle-command.policy";
 import { SubscriptionCancellationService } from "./subscription-cancellation.service";
@@ -30,6 +33,8 @@ import { SubscriptionReplacementService } from "./subscription-replacement.servi
 import { SubscriptionLifecycleRepository } from "./subscription-lifecycle.repository";
 import { SubscriptionLifecycleService } from "./subscription-lifecycle.service";
 import { SubscriptionPreviewTokenService } from "./subscription-preview-token.service";
+import { SubscriptionPurchaseCommandService } from "./subscription-purchase-command.service";
+import { SubscriptionPurchasePreviewService } from "./subscription-purchase-preview.service";
 import { SubscriptionReservationService } from "./subscription-reservation.service";
 
 const databaseUrl =
@@ -78,15 +83,37 @@ describe("Subscription cancellation preview/confirm", () => {
         emitFinanceChanged: jest.fn(),
       } as unknown as RealtimeBus,
     );
-    issueService = new SubscriptionIssueService(
+    const issuePreviewTokens = new SubscriptionPreviewTokenService({
+      get: (key: string, fallback?: string) =>
+        key === "COMMERCE_PREVIEW_SECRET" ? previewSecret : fallback,
+    } as unknown as ConfigService);
+    const terms = new SubscriptionCommercialTermsService();
+    const issueResults = new SubscriptionIssueResultService(issueRepository);
+    const purchasePreview = new SubscriptionPurchasePreviewService(
       issueRepository,
       policy,
-      integrity,
-      reservations,
-      new SubscriptionPreviewTokenService({
-        get: (key: string, fallback?: string) =>
-          key === "COMMERCE_PREVIEW_SECRET" ? previewSecret : fallback,
-      } as unknown as ConfigService),
+      terms,
+      issuePreviewTokens,
+    );
+    issueService = new SubscriptionIssueService(
+      purchasePreview,
+      new SubscriptionPurchaseCommandService(
+        issueRepository,
+        policy,
+        integrity,
+        reservations,
+        purchasePreview,
+        terms,
+        issueResults,
+      ),
+      new SubscriptionGrantCommandService(
+        issueRepository,
+        policy,
+        integrity,
+        reservations,
+        terms,
+        issueResults,
+      ),
     );
     const commerceRepository = new CommerceProjectionRepository(database);
     paymentLifecycle = new PaymentLifecycleService(

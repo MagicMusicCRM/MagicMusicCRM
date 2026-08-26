@@ -24,8 +24,13 @@ import { PaymentCorrectionService } from "./payment-correction.service";
 import { PaymentReversalRepository } from "./payment-reversal.repository";
 import { PaymentReversalService } from "./payment-reversal.service";
 import { SubscriptionIssueRepository } from "./subscription-issue.repository";
+import { SubscriptionCommercialTermsService } from "./subscription-commercial-terms.service";
+import { SubscriptionGrantCommandService } from "./subscription-grant-command.service";
+import { SubscriptionIssueResultService } from "./subscription-issue-result.service";
 import { SubscriptionIssueService } from "./subscription-issue.service";
 import { SubscriptionPreviewTokenService } from "./subscription-preview-token.service";
+import { SubscriptionPurchaseCommandService } from "./subscription-purchase-command.service";
+import { SubscriptionPurchasePreviewService } from "./subscription-purchase-preview.service";
 import { SubscriptionReservationService } from "./subscription-reservation.service";
 
 const databaseUrl =
@@ -100,12 +105,33 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       get: (key: string, fallback?: string) =>
         key === "COMMERCE_PREVIEW_SECRET" ? previewSecret : fallback,
     } as unknown as ConfigService);
-    issueService = new SubscriptionIssueService(
+    const terms = new SubscriptionCommercialTermsService();
+    const issueResults = new SubscriptionIssueResultService(issueRepository);
+    const purchasePreview = new SubscriptionPurchasePreviewService(
       issueRepository,
       policy,
-      integrity,
-      reservations,
+      terms,
       previewTokens,
+    );
+    issueService = new SubscriptionIssueService(
+      purchasePreview,
+      new SubscriptionPurchaseCommandService(
+        issueRepository,
+        policy,
+        integrity,
+        reservations,
+        purchasePreview,
+        terms,
+        issueResults,
+      ),
+      new SubscriptionGrantCommandService(
+        issueRepository,
+        policy,
+        integrity,
+        reservations,
+        terms,
+        issueResults,
+      ),
     );
     commerceRepository = new CommerceProjectionRepository(database);
     const paymentRepository = new PaymentLifecycleRepository(
