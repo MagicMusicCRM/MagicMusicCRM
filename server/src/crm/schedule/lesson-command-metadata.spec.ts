@@ -16,15 +16,12 @@ const parse = (source: string) => ts.createSourceFile(
 const identifierName = (node: ts.Node | undefined) =>
   node && ts.isIdentifier(node) ? node.text : null;
 
-const metadataContract = (source: string) => {
-  const declarations = parse(source).statements.filter(
+const metadataInterfaces = (source: string) =>
+  parse(source).statements.filter(
     (statement): statement is ts.InterfaceDeclaration =>
       ts.isInterfaceDeclaration(statement) &&
       statement.name.text === "LessonCommandMetadata",
-  );
-  if (declarations.length !== 1) return null;
-  const declaration = declarations[0]!;
-  return {
+  ).map((declaration) => ({
     exported: declaration.modifiers?.some(
       (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword,
     ) === true,
@@ -37,53 +34,104 @@ const metadataContract = (source: string) => {
         type: property ? member.type?.getText() : undefined,
       };
     }),
-  };
+  }));
+
+const importDeclarationsFrom = (source: string, moduleName: string) =>
+  parse(source).statements.filter(
+    (statement): statement is ts.ImportDeclaration =>
+      ts.isImportDeclaration(statement) &&
+      ts.isStringLiteral(statement.moduleSpecifier) &&
+      statement.moduleSpecifier.text === moduleName,
+  ).map((declaration) => {
+    const clause = declaration.importClause;
+    const elements = clause?.namedBindings && ts.isNamedImports(clause.namedBindings)
+      ? clause.namedBindings.elements.map((element) => ({
+          imported: element.propertyName?.text ?? element.name.text,
+          local: element.name.text,
+          elementTypeOnly: element.isTypeOnly,
+        }))
+      : null;
+    return { declarationTypeOnly: clause?.isTypeOnly === true, elements };
+  });
+
+const exportDeclarationsFrom = (source: string, moduleName: string) =>
+  parse(source).statements.filter(
+    (statement): statement is ts.ExportDeclaration =>
+      ts.isExportDeclaration(statement) &&
+      Boolean(statement.moduleSpecifier) &&
+      ts.isStringLiteral(statement.moduleSpecifier!) &&
+      statement.moduleSpecifier.text === moduleName,
+  ).map((declaration) => ({
+    declarationTypeOnly: declaration.isTypeOnly,
+    elements: declaration.exportClause && ts.isNamedExports(declaration.exportClause)
+      ? declaration.exportClause.elements.map((element) => ({
+          imported: element.propertyName?.text ?? element.name.text,
+          exported: element.name.text,
+          elementTypeOnly: element.isTypeOnly,
+        }))
+      : null,
+  }));
+
+const importsMetadataFrom = (source: string, moduleName: string) =>
+  importDeclarationsFrom(source, moduleName).some((declaration) =>
+    declaration.elements?.some(
+      (element) => element.imported === "LessonCommandMetadata",
+    ) === true
+  );
+
+const consumerMetadataErrors = (source: string): string[] => {
+  const errors: string[] = [];
+  const neutralImports = importDeclarationsFrom(
+    source,
+    "./lesson-command-metadata",
+  );
+  if (neutralImports.length !== 1) errors.push("neutral-import-count");
+  if (JSON.stringify(neutralImports[0]) !== JSON.stringify({
+    declarationTypeOnly: true,
+    elements: [{
+      imported: "LessonCommandMetadata",
+      local: "LessonCommandMetadata",
+      elementTypeOnly: false,
+    }],
+  })) errors.push("neutral-import-contract");
+  if (importsMetadataFrom(source, "./lesson-command.service")) {
+    errors.push("legacy-import");
+  }
+  return errors;
 };
 
-const hasDirectTypeImport = (
-  source: string,
-  importedName: string,
-  moduleName: string,
-) => parse(source).statements.some((statement) => {
-  if (!ts.isImportDeclaration(statement)) return false;
-  if (!ts.isStringLiteral(statement.moduleSpecifier)) return false;
-  if (statement.moduleSpecifier.text !== moduleName) return false;
-  const clause = statement.importClause;
-  if (!clause?.isTypeOnly || !clause.namedBindings) return false;
-  if (!ts.isNamedImports(clause.namedBindings)) return false;
-  return clause.namedBindings.elements.some(
-    (element) => element.name.text === importedName && !element.propertyName,
-  );
-});
+const historicalOwnershipErrors = (source: string): string[] => {
+  const errors = consumerMetadataErrors(source);
+  if (metadataInterfaces(source).length !== 0) errors.push("local-interface");
+  const exports = exportDeclarationsFrom(source, "./lesson-command-metadata");
+  if (exports.length !== 1) errors.push("neutral-export-count");
+  if (JSON.stringify(exports[0]) !== JSON.stringify({
+    declarationTypeOnly: true,
+    elements: [{
+      imported: "LessonCommandMetadata",
+      exported: "LessonCommandMetadata",
+      elementTypeOnly: false,
+    }],
+  })) errors.push("neutral-export-contract");
+  return errors;
+};
 
-const hasHistoricalTypeExport = (source: string) =>
-  parse(source).statements.some((statement) => {
-    if (!ts.isExportDeclaration(statement) || !statement.isTypeOnly) return false;
-    if (!statement.moduleSpecifier || !ts.isStringLiteral(statement.moduleSpecifier)) {
-      return false;
-    }
-    if (statement.moduleSpecifier.text !== "./lesson-command-metadata") return false;
-    if (!statement.exportClause || !ts.isNamedExports(statement.exportClause)) {
-      return false;
-    }
-    return statement.exportClause.elements.some(
-      (element) => element.name.text === "LessonCommandMetadata" &&
-        !element.propertyName,
-    );
-  });
+const expectedInterface = {
+  exported: true,
+  members: [
+    { property: true, name: "idempotencyKey", optional: false, type: "string" },
+    { property: true, name: "requestId", optional: false, type: "string" },
+  ],
+};
 
 describe("LessonCommandMetadata ownership", () => {
-  it("keeps the neutral interface exported with exactly two required strings", () => {
-    expect(metadataContract(readSource("lesson-command-metadata.ts"))).toEqual({
-      exported: true,
-      members: [
-        { property: true, name: "idempotencyKey", optional: false, type: "string" },
-        { property: true, name: "requestId", optional: false, type: "string" },
-      ],
-    });
+  it("keeps one exact neutral interface", () => {
+    expect(metadataInterfaces(readSource("lesson-command-metadata.ts"))).toEqual([
+      expectedInterface,
+    ]);
   });
 
-  it("keeps all five consumers on direct neutral type imports", () => {
+  it("keeps exactly one exclusive direct import in all five consumers", () => {
     const consumers = [
       "lesson-command.service.ts",
       "lesson-series-command.service.ts",
@@ -92,23 +140,17 @@ describe("LessonCommandMetadata ownership", () => {
       "schedule-plan.service.ts",
     ];
     for (const name of consumers) {
-      expect(hasDirectTypeImport(
-        readSource(name),
-        "LessonCommandMetadata",
-        "./lesson-command-metadata",
-      )).toBe(true);
+      expect({ name, errors: consumerMetadataErrors(readSource(name)) }).toEqual({
+        name,
+        errors: [],
+      });
     }
   });
 
-  it("retains only the historical type re-export from lesson command", () => {
-    const lessonCommand = readSource("lesson-command.service.ts");
-    const schedulePlan = readSource("schedule-plan.service.ts");
-    expect(hasHistoricalTypeExport(lessonCommand)).toBe(true);
-    expect(hasDirectTypeImport(
-      schedulePlan,
-      "LessonCommandMetadata",
-      "./lesson-command.service",
-    )).toBe(false);
+  it("keeps exactly one historical type re-export and no local interface", () => {
+    expect(historicalOwnershipErrors(
+      readSource("lesson-command.service.ts"),
+    )).toEqual([]);
   });
 
   it("ignores interface, import, and export decoys in comments and strings", () => {
@@ -117,27 +159,35 @@ describe("LessonCommandMetadata ownership", () => {
       const importText = 'import type { LessonCommandMetadata } from "./lesson-command-metadata"';
       const exportText = 'export type { LessonCommandMetadata } from "./lesson-command-metadata"';
     `;
-    expect(metadataContract(decoys)).toBeNull();
-    expect(hasDirectTypeImport(
-      decoys,
-      "LessonCommandMetadata",
-      "./lesson-command-metadata",
-    )).toBe(false);
-    expect(hasHistoricalTypeExport(decoys)).toBe(false);
+    expect(metadataInterfaces(decoys)).toEqual([]);
+    expect(importDeclarationsFrom(decoys, "./lesson-command-metadata")).toEqual([]);
+    expect(exportDeclarationsFrom(decoys, "./lesson-command-metadata")).toEqual([]);
   });
 
-  it("rejects optional or non-string metadata fields", () => {
-    expect(metadataContract(`
-      export interface LessonCommandMetadata {
-        idempotencyKey?: string;
-        requestId: number;
-      }
-    `)).not.toEqual({
-      exported: true,
-      members: [
-        { property: true, name: "idempotencyKey", optional: false, type: "string" },
-        { property: true, name: "requestId", optional: false, type: "string" },
-      ],
-    });
+  it("rejects legacy imports, aliases, and duplicate ownership", () => {
+    const validImport = `
+      import type { LessonCommandMetadata } from "./lesson-command-metadata";
+    `;
+    expect(consumerMetadataErrors(`${validImport}
+      import type { LessonCommandMetadata } from "./lesson-command.service";
+    `)).toContain("legacy-import");
+    expect(consumerMetadataErrors(`
+      import type { LessonCommandMetadata as Metadata } from "./lesson-command-metadata";
+    `)).toContain("neutral-import-contract");
+    expect(consumerMetadataErrors(`${validImport}${validImport}`)).toContain(
+      "neutral-import-count",
+    );
+    expect(metadataInterfaces(`
+      export interface LessonCommandMetadata { idempotencyKey: string; requestId: string; }
+      export interface LessonCommandMetadata { idempotencyKey: string; requestId: string; }
+    `)).not.toEqual([expectedInterface]);
+    expect(historicalOwnershipErrors(`${validImport}
+      export type { LessonCommandMetadata } from "./lesson-command-metadata";
+      export type { LessonCommandMetadata } from "./lesson-command-metadata";
+      interface LessonCommandMetadata { idempotencyKey: string; requestId: string; }
+    `)).toEqual(expect.arrayContaining([
+      "local-interface",
+      "neutral-export-count",
+    ]));
   });
 });
