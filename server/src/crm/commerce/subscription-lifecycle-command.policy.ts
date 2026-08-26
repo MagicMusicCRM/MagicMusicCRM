@@ -20,90 +20,93 @@ export class SubscriptionLifecycleCommandPolicy {
     dto: SubscriptionReplaceCommandDto,
     metadata: SubscriptionLifecycleMutationMetadata,
   ): void {
-    if (dto.confirm !== true) {
-      throw new UnprocessableEntityException({
-        code: "REPLACEMENT_CONFIRMATION_REQUIRED",
-        message: "Подтвердите замену после просмотра расчёта.",
-      });
-    }
-    if (!Number.isSafeInteger(dto.expectedVersion) || dto.expectedVersion < 1) {
-      throw new UnprocessableEntityException({
-        code: "SUBSCRIPTION_VERSION_REQUIRED",
-        message: "Передайте актуальную версию абонемента.",
-      });
-    }
-    if (!dto.reason?.trim() || dto.reason.trim().length > 500) {
-      throw new UnprocessableEntityException({
-        code: "REPLACEMENT_REASON_REQUIRED",
-        message: "Укажите причину замены абонемента.",
-      });
-    }
-    if (
-      typeof dto.previewToken !== "string" ||
-      dto.previewToken.length === 0 ||
-      dto.previewToken.length > 16_384
-    ) {
-      throw new UnprocessableEntityException({
-        code: "PREVIEW_TOKEN_INVALID",
-        message: "Передайте подписанный предпросмотр замены.",
-      });
-    }
-    if (!/^[A-Za-z0-9._:-]{8,160}$/.test(metadata.idempotencyKey)) {
-      throw new BadRequestException({
-        code: "INVALID_IDEMPOTENCY_KEY",
-        message: "Idempotency-Key должен содержать 8–160 безопасных символов.",
-      });
-    }
-    if (
-      !metadata.requestId ||
-      metadata.requestId.length > 128 ||
-      /[\r\n]/.test(metadata.requestId)
-    ) {
-      throw new BadRequestException({
-        code: "INVALID_REQUEST_ID",
-        message: "X-Request-Id обязателен и не должен превышать 128 символов.",
-      });
-    }
+    this.assertConfirmation(
+      dto.confirm,
+      "REPLACEMENT_CONFIRMATION_REQUIRED",
+      "Подтвердите замену после просмотра расчёта.",
+    );
+    this.assertExpectedVersion(dto.expectedVersion);
+    this.assertReason(
+      dto.reason,
+      "REPLACEMENT_REASON_REQUIRED",
+      "Укажите причину замены абонемента.",
+    );
+    this.assertPreviewToken(
+      dto.previewToken,
+      "Передайте подписанный предпросмотр замены.",
+    );
+    this.assertMetadata(metadata);
   }
 
   assertCancellationCommand(
     dto: SubscriptionCancelCommandDto,
     metadata: SubscriptionLifecycleMutationMetadata,
   ): void {
-    if (dto.confirm !== true) {
-      throw new UnprocessableEntityException({
-        code: "CANCELLATION_CONFIRMATION_REQUIRED",
-        message: "Подтвердите отмену после просмотра последствий.",
-      });
-    }
-    if (!Number.isSafeInteger(dto.expectedVersion) || dto.expectedVersion < 1) {
-      throw new UnprocessableEntityException({
-        code: "SUBSCRIPTION_VERSION_REQUIRED",
-        message: "Передайте актуальную версию абонемента.",
-      });
-    }
-    if (!dto.reason?.trim() || dto.reason.trim().length > 500) {
-      throw new UnprocessableEntityException({
-        code: "CANCELLATION_REASON_REQUIRED",
-        message: "Укажите причину отмены абонемента.",
-      });
-    }
+    this.assertConfirmation(
+      dto.confirm,
+      "CANCELLATION_CONFIRMATION_REQUIRED",
+      "Подтвердите отмену после просмотра последствий.",
+    );
+    this.assertExpectedVersion(dto.expectedVersion);
+    this.assertReason(
+      dto.reason,
+      "CANCELLATION_REASON_REQUIRED",
+      "Укажите причину отмены абонемента.",
+    );
     if (!/^(0|[1-9]\d*)$/.test(dto.refundMinor)) {
       throw new UnprocessableEntityException({
         code: "CANCELLATION_REFUND_INVALID",
         message: "Укажите сумму возврата в минимальных денежных единицах.",
       });
     }
+    this.assertPreviewToken(
+      dto.previewToken,
+      "Передайте подписанный предпросмотр отмены.",
+    );
+    this.assertMetadata(metadata);
+  }
+
+  private assertConfirmation(
+    confirm: boolean,
+    code: string,
+    message: string,
+  ): void {
+    if (confirm !== true) {
+      throw new UnprocessableEntityException({ code, message });
+    }
+  }
+
+  private assertExpectedVersion(expectedVersion: number): void {
+    if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
+      throw new UnprocessableEntityException({
+        code: "SUBSCRIPTION_VERSION_REQUIRED",
+        message: "Передайте актуальную версию абонемента.",
+      });
+    }
+  }
+
+  private assertReason(reason: string, code: string, message: string): void {
+    if (!reason?.trim() || reason.trim().length > 500) {
+      throw new UnprocessableEntityException({ code, message });
+    }
+  }
+
+  private assertPreviewToken(previewToken: string, message: string): void {
     if (
-      typeof dto.previewToken !== "string" ||
-      dto.previewToken.length === 0 ||
-      dto.previewToken.length > 16_384
+      typeof previewToken !== "string" ||
+      previewToken.length === 0 ||
+      previewToken.length > 16_384
     ) {
       throw new UnprocessableEntityException({
         code: "PREVIEW_TOKEN_INVALID",
-        message: "Передайте подписанный предпросмотр отмены.",
+        message,
       });
     }
+  }
+
+  private assertMetadata(
+    metadata: SubscriptionLifecycleMutationMetadata,
+  ): void {
     if (!/^[A-Za-z0-9._:-]{8,160}$/.test(metadata.idempotencyKey)) {
       throw new BadRequestException({
         code: "INVALID_IDEMPOTENCY_KEY",
