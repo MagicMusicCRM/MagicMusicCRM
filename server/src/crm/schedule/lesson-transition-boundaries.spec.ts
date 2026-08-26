@@ -1,16 +1,28 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import * as ts from "typescript";
+import * as transitionRules from "./lesson-transition.rules";
 import {
   bulkTransitionFingerprint,
   normalizeBulkTransitionItems,
   transitionAdvisoryKeys,
 } from "./lesson-transition.rules";
 import { LessonTransitionFinancialService } from "./lesson-transition-financial.service";
+import { LessonTransitionCommitService } from "./lesson-transition-commit.service";
+import { LessonTransitionCommandService } from "./lesson-transition-command.service";
 import type { LessonSettlementPort, LessonSettlementResult } from "../commerce/lesson-settlement.port";
 import type { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
 import type { PoolClient } from "pg";
-import type { TransitionSource, TransitionSuccessor } from "./lesson-transition.types";
+import type {
+  CommittedTransition,
+  TransitionSource,
+  TransitionSuccessor,
+} from "./lesson-transition.types";
+import type { LessonTransitionPreparationService } from "./lesson-transition-preparation.service";
+import type { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
+import type { PlatformIntegrityService } from "../../platform/platform-integrity.service";
+import type { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
+import type { CrmPolicy } from "../crm.policy";
 
 const readSource = (name: string) =>
   readFileSync(resolve(__dirname, name), "utf8");
@@ -126,12 +138,6 @@ const classDeclaration = (source: string, name: string) => {
   return declaration;
 };
 
-const constructorTypes = (declaration: ts.ClassDeclaration) => {
-  const constructor = declaration.members.find(ts.isConstructorDeclaration);
-  if (!constructor) return [];
-  return constructor.parameters.map((parameter) => parameter.type?.getText());
-};
-
 const moduleMetadataIdentifiers = (propertyName: "providers" | "exports") => {
   const sourceFile = ts.createSourceFile(
     "crm.module.ts",
@@ -161,34 +167,94 @@ const moduleMetadataIdentifiers = (propertyName: "providers" | "exports") => {
   );
 };
 
-const expectSourceOrder = (source: string, markers: readonly string[]) => {
-  let previous = -1;
-  for (const marker of markers) {
-    const current = source.indexOf(marker, previous + 1);
-    expect(current).toBeGreaterThan(previous);
-    previous = current;
+const facadeContracts = [
+  { name: "previewReschedule", owner: "previews", target: "previewReschedule", args: ["actor", "lessonId", "dto"] },
+  { name: "previewCancel", owner: "previews", target: "previewCancel", args: ["actor", "lessonId", "dto"] },
+  { name: "previewSettle", owner: "previews", target: "previewSettle", args: ["actor", "lessonId", "dto"] },
+  { name: "reschedule", owner: "commands", target: "reschedule", args: ["actor", "lessonId", "dto", "metadata"] },
+  { name: "cancel", owner: "commands", target: "cancel", args: ["actor", "lessonId", "dto", "metadata"] },
+  { name: "settle", owner: "commands", target: "settle", args: ["actor", "lessonId", "dto", "metadata"] },
+  { name: "previewBulk", owner: "bulkTransitions", target: "previewBulk", args: ["actor", "dto"] },
+  { name: "bulk", owner: "bulkTransitions", target: "bulk", args: ["actor", "dto", "metadata"] },
+] as const;
+
+const facadeContractErrors = (source: string): string[] => {
+  const errors: string[] = [];
+  const facade = classDeclaration(source, "LessonTransitionService");
+  const constructors = facade.members.filter(ts.isConstructorDeclaration);
+  if (constructors.length !== 1) return ["constructor-count"];
+  const constructor = constructors[0]!;
+  const expectedParameters = [
+    ["previews", "LessonTransitionPreviewService"],
+    ["commands", "LessonTransitionCommandService"],
+    ["bulkTransitions", "LessonBulkTransitionService"],
+  ] as const;
+  if (constructor.parameters.length !== expectedParameters.length) {
+    errors.push("constructor-parameter-count");
   }
+  constructor.parameters.forEach((parameter, index) => {
+    const expected = expectedParameters[index];
+    if (!expected) return;
+    if (identifierName(parameter.name) !== expected[0]) {
+      errors.push(`constructor-name-${index}`);
+    }
+    if (parameter.type?.getText() !== expected[1]) {
+      errors.push(`constructor-type-${index}`);
+    }
+    const modifiers = parameter.modifiers?.map((modifier) => modifier.kind) ?? [];
+    if (
+      modifiers.length !== 2 ||
+      !modifiers.includes(ts.SyntaxKind.PrivateKeyword) ||
+      !modifiers.includes(ts.SyntaxKind.ReadonlyKeyword)
+    ) errors.push(`constructor-modifiers-${index}`);
+  });
+
+  const methods = facade.members.filter(ts.isMethodDeclaration);
+  const methodNames = methods.map((method) => identifierName(method.name));
+  if (JSON.stringify(methodNames) !== JSON.stringify(
+    facadeContracts.map(({ name }) => name),
+  )) errors.push("method-names");
+  facadeContracts.forEach((contract, index) => {
+    const method = methods[index];
+    if (!method || identifierName(method.name) !== contract.name) return;
+    const parameterNames = method.parameters.map((parameter) =>
+      identifierName(parameter.name)
+    );
+    if (JSON.stringify(parameterNames) !== JSON.stringify(contract.args)) {
+      errors.push(`parameters-${contract.name}`);
+    }
+    if (method.body?.statements.length !== 1) {
+      errors.push(`statement-count-${contract.name}`);
+      return;
+    }
+    const statement = method.body.statements[0];
+    if (!statement || !ts.isReturnStatement(statement)) {
+      errors.push(`return-${contract.name}`);
+      return;
+    }
+    const call = statement.expression;
+    if (!call || !ts.isCallExpression(call)) {
+      errors.push(`call-${contract.name}`);
+      return;
+    }
+    const target = call.expression;
+    if (!ts.isPropertyAccessExpression(target) || target.name.text !== contract.target) {
+      errors.push(`target-method-${contract.name}`);
+      return;
+    }
+    const owner = target.expression;
+    if (
+      !ts.isPropertyAccessExpression(owner) ||
+      owner.expression.kind !== ts.SyntaxKind.ThisKeyword ||
+      owner.name.text !== contract.owner
+    ) errors.push(`target-owner-${contract.name}`);
+    const argumentNames = call.arguments.map((argument) => identifierName(argument));
+    if (JSON.stringify(argumentNames) !== JSON.stringify(contract.args)) {
+      errors.push(`arguments-${contract.name}`);
+    }
+  });
+  return errors;
 };
-
-const observedEvents = (
-  source: string,
-  markers: ReadonlyArray<readonly [string, string]>,
-) => markers.map(([event, marker]) => ({
-  event,
-  position: source.indexOf(marker),
-})).sort((left, right) => left.position - right.position)
-  .map(({ event }) => event);
-
-const facadeMethods = [
-  "previewReschedule",
-  "previewCancel",
-  "previewSettle",
-  "reschedule",
-  "cancel",
-  "settle",
-  "previewBulk",
-  "bulk",
-];
 
 const source: TransitionSource = {
   id: "00000000-0000-4000-8000-000000000001",
@@ -281,21 +347,36 @@ settlementResult.clientFact = settlementResult.clientFacts[0]!;
 
 describe("Lesson transition owner boundaries", () => {
   it("keeps the compatibility facade as eight direct delegations", () => {
-    const facade = classDeclaration(sources.facade, "LessonTransitionService");
     expect(sourceNloc(sources.facade)).toBeLessThanOrEqual(130);
-    expect(constructorTypes(facade)).toEqual([
-      "LessonTransitionPreviewService",
-      "LessonTransitionCommandService",
-      "LessonBulkTransitionService",
-    ]);
-    expect(
-      facade.members.filter(ts.isMethodDeclaration).map((method) =>
-        identifierName(method.name)
-      ),
-    ).toEqual(facadeMethods);
+    expect(facadeContractErrors(sources.facade)).toEqual([]);
     expect(sources.facade).not.toMatch(
       /DatabaseService|PlatformIntegrityService|\.transaction\s*\(|executeVersionedMutation|select\s|insert\s|update\s/iu,
     );
+  });
+
+  it("rejects wrong facade modifiers, target, method, and argument order", () => {
+    const mutations = [
+      sources.facade.replace(
+        "private readonly previews: LessonTransitionPreviewService",
+        "public readonly previews: LessonTransitionPreviewService",
+      ),
+      sources.facade.replace(
+        "this.previews.previewCancel(actor, lessonId, dto)",
+        "this.commands.previewCancel(actor, lessonId, dto)",
+      ),
+      sources.facade.replace(
+        "this.previews.previewSettle(actor, lessonId, dto)",
+        "this.previews.previewCancel(actor, lessonId, dto)",
+      ),
+      sources.facade.replace(
+        "this.commands.reschedule(actor, lessonId, dto, metadata)",
+        "this.commands.reschedule(lessonId, actor, dto, metadata)",
+      ),
+    ];
+    for (const mutation of mutations) {
+      expect(mutation).not.toBe(sources.facade);
+      expect(facadeContractErrors(mutation)).not.toEqual([]);
+    }
   });
 
   it("keeps persistence and mutation ownership singular", () => {
@@ -340,44 +421,136 @@ describe("Lesson transition owner boundaries", () => {
     }
   });
 
-  it("preserves commit and post-commit publication order", () => {
-    expectSourceOrder(sources.commit, [
-      ".loadSource(",
-      ".assertSettlementReviewPlan(",
-      ".acquireLocks(",
-      ".assertValidSuccessor(",
-      ".lockSettlementCoverage(",
-      ".insertSuccessor(",
-      ".settleSource(",
-      "transitionFingerprint(",
-      ".cloneAndAllocateSuccessor(",
-      ".updateCompletedSource(",
-      ".appendTransition(",
-    ]);
-    expectSourceOrder(sources.command, [
-      "executeVersionedMutation",
-      "await this.reservations.publishLessonSettlementPostCommit(lessonId)",
-      "await this.reservations.publishLessonSettlementPostCommit(successorId)",
-    ]);
-    const events = [
-      ...observedEvents(sources.commit, [
-        ["source-for-update", ".loadSource("],
-        ["settlement-review", ".assertSettlementReviewPlan("],
-        ["advisory-locks", ".acquireLocks("],
-        ["constraint-validation", ".assertValidSuccessor("],
-        ["coverage-lock", ".lockSettlementCoverage("],
-        ["successor-insert", ".insertSuccessor("],
-        ["source-settlement", ".settleSource("],
-        ["fingerprint-check", ".assertExpectedFingerprint("],
-        ["successor-allocation", ".cloneAndAllocateSuccessor("],
-        ["transition-append", ".appendTransition("],
-      ]),
-      ...observedEvents(sources.command, [
-        ["mutation-resolved", "const mutation = await this.platform.executeVersionedMutation"],
-        ["publish-source", "publishLessonSettlementPostCommit(lessonId)"],
-        ["publish-successor", "publishLessonSettlementPostCommit(successorId)"],
-      ]),
-    ];
+  it("preserves runtime commit and post-commit publication order", async () => {
+    const events: string[] = [];
+    let advisoryRecorded = false;
+    const client = {
+      query: jest.fn(async (query: string) => {
+        const normalized = query.trim().replace(/\s+/g, " ").toLowerCase();
+        if (normalized.includes("pg_advisory_xact_lock") && !advisoryRecorded) {
+          advisoryRecorded = true;
+          events.push("advisory-locks");
+        }
+        if (normalized.startsWith("insert into app.lessons")) {
+          events.push("successor-insert");
+        }
+        if (
+          normalized.startsWith("update app.lessons") &&
+          normalized.includes("returning version")
+        ) return { rows: [{ version: 2 }] };
+        return { rows: [] };
+      }),
+    } as unknown as PoolClient;
+    const preparation = {
+      loadSource: jest.fn(async () => {
+        events.push("source-for-update");
+        return source;
+      }),
+      assertSource: jest.fn(),
+      assertSettlementReviewPlan: jest.fn(async () => {
+        events.push("settlement-review");
+      }),
+      successorDraft: jest.fn(() => successor),
+      validateSuccessor: jest.fn(async () => {
+        events.push("constraint-validation");
+        return { valid: true, violations: [] };
+      }),
+    } as unknown as LessonTransitionPreparationService;
+    const financial = {
+      cloneAndAllocateSuccessor: jest.fn(async () => {
+        events.push("successor-allocation");
+      }),
+    } as unknown as LessonTransitionFinancialService;
+    const settlement = {
+      settle: jest.fn(async () => {
+        events.push("source-settlement");
+        return settlementResult;
+      }),
+    } as unknown as LessonSettlementPort;
+    const reservations = {
+      lockSettlementCoverage: jest.fn(async () => {
+        events.push("coverage-lock");
+        return {};
+      }),
+      terminalize: jest.fn(async () => undefined),
+      publishLessonSettlementPostCommit: jest.fn(async (lessonId: string) => {
+        events.push(lessonId === source.id ? "publish-source" : "publish-successor");
+      }),
+    } as unknown as SubscriptionReservationService;
+    const lifecycle = {
+      createSnapshot: jest.fn(async () => undefined),
+      appendTransition: jest.fn(async () => {
+        events.push("transition-append");
+        return { rows: [{ id: "transition-id" }] };
+      }),
+    } as unknown as LessonLifecycleRepository;
+    const fingerprint = jest.spyOn(transitionRules, "transitionFingerprint")
+      .mockImplementation(() => {
+        events.push("fingerprint-check");
+        return "fingerprint";
+      });
+    try {
+      const commits = new LessonTransitionCommitService(
+        preparation,
+        financial,
+        settlement,
+        reservations,
+        lifecycle,
+      );
+      type MutationInput = {
+        mutate: (
+          transactionClient: PoolClient,
+          nextVersion: number,
+        ) => Promise<CommittedTransition>;
+      };
+      const platform = {
+        executeVersionedMutation: jest.fn(async (input: MutationInput) => {
+          const resultRef = await input.mutate(client, 2);
+          events.push("mutation-resolved");
+          return { version: 2, resultRef, replayed: false };
+        }),
+      } as unknown as PlatformIntegrityService;
+      const policy = {
+        assertCanWriteCrm: jest.fn(),
+      } as unknown as CrmPolicy;
+      const tokens = {
+        verifyLessonTransition: jest.fn(() => ({
+          kind: "lesson.transition",
+          actorUserId: "actor",
+          operation: "reschedule",
+          lessonId: source.id,
+          expectedVersion: 1,
+          transitionFingerprint: "fingerprint",
+        })),
+      } as unknown as SubscriptionPreviewTokenService;
+      const commands = new LessonTransitionCommandService(
+        platform,
+        policy,
+        tokens,
+        commits,
+        reservations,
+      );
+      const result = await commands.reschedule(
+        { userId: "actor", role: "manager" },
+        source.id,
+        {
+          expectedVersion: 1,
+          reasonText: "reason",
+          financialDecision: {
+            settlementTypeKey: "free_lesson",
+            teacherCompensationRuleKey: "none",
+          },
+          successor: {} as never,
+          previewToken: "signed-preview",
+          confirm: true,
+        },
+        { idempotencyKey: "runtime-order-key", requestId: "request-id" },
+      );
+      expect(result.replayed).toBe(false);
+      expect(result.successor?.state).toBe("scheduled");
+    } finally {
+      fingerprint.mockRestore();
+    }
     expect(events).toEqual([
       "source-for-update", "settlement-review", "advisory-locks",
       "constraint-validation", "coverage-lock", "successor-insert",
