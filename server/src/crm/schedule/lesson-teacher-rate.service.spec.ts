@@ -179,4 +179,3 @@ describe("bulk teacher rate", () => {
     });
   });
 });
-
