@@ -378,6 +378,106 @@ signal is historical co-change scatter. `server/src/crm/crm.service.ts`,
 `client_card_student.dart`, and `lesson_decision_flow.dart` remain mandatory
 follow-up packages.
 
+## Package 8 verified outcome
+
+The lesson-creation ownership split is implemented and verified on the exact
+production commit `861d89d77b0f25d3224e8a4d6f8770ae99aa1191`. The later
+evidence-only commit does not change production code.
+
+- The two original structural owners were
+  `create_lesson_dialog.dart` at health `1.00`, `1,099` NLOC, max CCN `35`,
+  and weighted deficit `7,693`, and `lesson_decision_flow.dart` at health
+  `1.00`, `1,025` NLOC, max CCN `28`, and deficit `7,175`. Their total
+  baseline deficit was `14,868`.
+- The stable public boundaries are now a `298`-NLOC dialog composition shell
+  at health `3.99`, max CCN `12`, `90.73%` line coverage, and deficit `1,195`,
+  plus a `37`-NLOC decision entry at health `6.50`, max CCN `1`, `100%`
+  coverage, and deficit `56`. The old god state, part cycle, and CCN-28 brain
+  are gone. The shells alone carry `1,251` deficit points, a `91.6%`
+  reduction from the two original files.
+- The dialog shell's `save` remains the explicit Task 10 composition exception:
+  CCN `12` in a `47`-NLOC UI-lifecycle method. The extracted semantic-owner
+  ceiling remains max CCN `10`; no semantic owner or public shell has a
+  `god_class` or `brain_method` finding.
+
+Fresh full coverage at the same production SHA ingested `336` exact files and
+`30,666/42,849` lines (`71.57%`). RepoWise measured the new semantic owners as
+follows; weighted deficit is floored at zero per file against the `8.0` target.
+
+| New semantic owner | Health | NLOC | Max CCN | Lines | Deficit |
+|---|---:|---:|---:|---:|---:|
+| `lesson_schedule_analysis.dart` | 9.65 | 139 | 5 | unmapped | 0 |
+| `lesson_decision_controller.dart` | 8.37 | 192 | 10 | 90.48% | 0 |
+| `lesson_decision_form.dart` | 7.97 | 296 | 10 | 90.50% | 9 |
+| `lesson_decision_models.dart` | 9.73 | 169 | 3 | 97.10% | 0 |
+| `lesson_decision_sections.dart` | 9.53 | 696 | 10 | 96.96% | 0 |
+| `lesson_editor_data_controller.dart` | 6.89 | 606 | 9 | 96.68% | 673 |
+| `lesson_editor_decision_policy.dart` | 5.57 | 610 | 9 | 97.81% | 1,482 |
+| `lesson_editor_feedback.dart` | 5.90 | 268 | 4 | 93.75% | 563 |
+| `lesson_editor_initial_mapper.dart` | 7.82 | 157 | 5 | 98.77% | 28 |
+| `lesson_editor_models.dart` | 5.05 | 367 | 9 | 100% | 1,083 |
+| `lesson_editor_save_flow.dart` | 9.63 | 163 | 4 | 98.21% | 0 |
+| `lesson_editor_schedule_controller.dart` | 9.45 | 88 | 5 | 100% | 0 |
+| `lesson_editor_view.dart` | 4.52 | 302 | 9 | 96.67% | 1,051 |
+| `lesson_financial_section.dart` | 5.90 | 360 | 8 | 100% | 756 |
+| `lesson_participant_section.dart` | 5.77 | 318 | 10 | 85.53% | 709 |
+| `lesson_schedule_section.dart` | 7.18 | 328 | 10 | 97.86% | 269 |
+
+The new semantic owners total `6,623` deficit points. Including the two stable
+public shells, the replacement portfolio totals `7,874`, so the original
+numeric `<= 2,230` portfolio gate is not met. The owner accepts this exact
+history/co-change exception: five fixes now attach to models and policy, three
+to feedback/view/financial/participant, and the same files co-change with
+`9-12` peers even though current coverage is `85.53-100%`, max CCN is `10`,
+and no god/brain remains. The cost is an honest `47.0%` measured portfolio
+reduction instead of the original `85%`; history was not rewritten, files were
+not moved for score, and functions were not reshaped to game denominators.
+
+Three pre-existing touched boundaries remain outside the new-owner portfolio:
+`magic_crm_service_schedule.dart` is `3.54/21/78.57%` with `3,809` deficit
+points from unrelated service methods, while `searchable_picker_field.dart`
+is `6.33/12/95.28%` with `387` and `searchable_select.dart` is
+`3.89/17/90.91%` with `1,377`. The picker/select brain findings and structure
+are their pre-package shared-widget baseline; Package 8 only relocated the
+dependency-free item model and preserved the old import by re-export.
+
+Verification is exact and fresh:
+
+- the expanded owner-focused suite passed `205/205` in `39.108s`;
+- the full Flutter suite passed `1,105/1,105` in `159.389s`, and the separate
+  full coverage run passed `1,105/1,105` in `221.442s`;
+- `flutter analyze` reported zero issues in `11.710s`; `git diff --check`
+  exited zero in `0.026s`;
+- RepoWise coverage and index both name the exact production SHA above. The
+  CLI dashboard analyzed `1,695` files at average health `6.92` and hotspot
+  health `4.76`.
+
+The exact 34-file `lib` change set gives RepoWise PR blast score `6.27`.
+`breaking_changes`, `conformance_violations`, `dependency_cycles`, and
+`will_break_consumers` are empty. The three `missing_tests` labels are not
+truthful owner gaps: one is the deleted legacy view and the feedback/schedule
+section are directly exercised by `lesson_editor_sections_test.dart`; the full
+suite passes. The MCP-only `lesson_schedule_analysis.dart: not_indexed` result
+is likewise resolved by live CLI health (`9.65/5`, 139 NLOC) and source. The
+whole-package `get_change_risk` is Elevated/high at percentile `100`, score
+`9.9`, probability `99.1%`, driven by `10,699` additions and `2,943` deletions
+across `50` files; this is review priority, not a broken-consumer finding.
+
+Sentrux closes on the accepted `5736` exception: genuine Task 10 fixes improved
+`5723 -> 5736`, while the remaining 12 global points require unrelated cleanup.
+Fresh raw evidence is depth `13`/score `3810`, acyclicity raw `0`/score
+`10000`, equality raw `0.3690247236570714`/score `6310`, modularity raw
+`0.31095361747322303`/score `5406`, redundancy raw
+`0.5222544113774032`/score `4777`, `4,655` import edges, `2,727` cross-module
+edges, and rules `2/2`; a same-tree session end is stable at `5736 -> 5736`.
+
+The production god-owner recount moves `26 -> 25`; Package 8 removes the old
+`_CreateLessonDialogState` finding. The next package is
+`server/src/crm/commerce/subscription-lifecycle.service.ts`: health `1.04`,
+`1,350` NLOC, max CCN `14`, and recoverable weighted deficit `9,396`. It ranks
+ahead of `crm.service.ts` (`7,381`) and `lesson-transition.service.ts`
+(`7,076`). Repository completion remains open.
+
 ## Live global god-owner audit after Package 7
 
 A full in-process `repowise health --format json` run at `d1ce1b443b8d`

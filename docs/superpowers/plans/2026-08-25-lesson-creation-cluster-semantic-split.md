@@ -1892,13 +1892,13 @@ git commit -m "refactor(lessons): remove lesson editor god state"
 - Consumes: final Package 8 tree and all recovery-program gates.
 - Produces: exact indexed evidence, updated all-god-owner count, and the next highest-impact production package.
 
-- [ ] **Step 1: Run every focused test once more**
+- [x] **Step 1: Run every focused test once more**
 
 ```powershell
 flutter test test/core/services/magic_crm_service_test.dart test/features/admin/lesson_editor_initial_mapper_test.dart test/features/admin/lesson_editor_data_controller_test.dart test/features/admin/lesson_editor_decision_policy_test.dart test/features/admin/lesson_editor_schedule_controller_test.dart test/features/admin/lesson_editor_save_flow_test.dart test/features/admin/lesson_editor_sections_test.dart test/features/admin/lesson_creation_architecture_test.dart test/features/admin/presentation/widgets/create_lesson_dialog_test.dart test/features/admin/create_lesson_student_search_test.dart test/features/admin/presentation/widgets/lesson_form_rules_test.dart test/features/schedule/lesson_decision_models_test.dart test/features/schedule/lesson_decision_flow_test.dart test/features/schedule/lesson_form_test.dart --reporter compact
 ```
 
-- [ ] **Step 2: Run full Flutter verification**
+- [x] **Step 2: Run full Flutter verification**
 
 ```powershell
 flutter test --reporter compact
@@ -1908,7 +1908,7 @@ git diff --check
 
 Expected: at least the pre-package `1,016/1,016` tests plus all new tests pass; analyzer has zero issues.
 
-- [ ] **Step 3: Refresh and inspect RepoWise**
+- [x] **Step 3: Refresh and inspect RepoWise**
 
 ```powershell
 repowise update --index-only
@@ -1924,11 +1924,11 @@ Use MCP `get_health` on every new production owner. Build the exact
 no breaking API, no missing live consumer, and combined weighted deficit
 `<= 2,230` (`85%` reduction from `14,868`).
 
-- [ ] **Step 4: Close Sentrux session**
+- [x] **Step 4: Close Sentrux session**
 
 Run Sentrux rescan, health, rules, and session end. Require quality `>= 5748`, depth `<= 13`, acyclicity `10000`, and rules `2/2`.
 
-- [ ] **Step 5: Record evidence and commit**
+- [x] **Step 5: Record evidence and commit**
 
 Update the recovery spec with before/after NLOC, max CCN, health, deficit, focused/full test totals, RepoWise risk, Sentrux metrics, and the new production god-class count. Mark this plan's verified outcome only with the exact final commit.
 
@@ -1939,3 +1939,48 @@ git status --short --branch
 ```
 
 Expected: clean worktree. Re-rank the remaining 25-or-fewer production god owners by recoverable weighted deficit and continue the global program; do not mark the global goal complete.
+
+## Verified Package 8 outcome
+
+Package 8 production is fixed at
+`861d89d77b0f25d3224e8a4d6f8770ae99aa1191`; Task 11 changes evidence only.
+The public constructor, route, Russian copy, service boundary, decision
+commands, and all characterized create/edit outcomes remain covered.
+
+- Focused verification included the listed cluster plus
+  `lesson_editor_models_test.dart`, both picker/select tests, and the Task 9
+  props/state ownership guard: `205/205`, exit `0`, `39.108s`.
+- Full verification passed `1,105/1,105`, exit `0`, `159.389s`; analyzer found
+  zero issues in `11.710s`, and diff-check exited zero in `0.026s`. A separate
+  truthful full-coverage run passed `1,105/1,105` in `221.442s` and RepoWise
+  ingested `336` exact files at `71.57%` lines on the same SHA.
+- The two old owners moved from `2,124` NLOC, max CCN `35/28`, and deficit
+  `14,868` to `298/37`-NLOC public shells, health `3.99/6.50`, max CCN `12/1`,
+  coverage `90.73%/100%`, and shell deficit `1,251`. No god/brain or part cycle
+  remains in the package's semantic owners or public shells.
+- The 16 new semantic owners total `6,623` weighted-deficit points. With the
+  shells, the exact portfolio is `7,874`, so the original `<=2,230`/85% gate is
+  not met. The owner accepts this instead of metric gaming: all sub-7 semantic
+  owners have `85.53-100%` truthful coverage, max CCN `<=10`, and deductions
+  dominated by the package's own fix history and `9-12` co-change peers. The
+  shell's CCN-12 `save` is the separately recorded UI-lifecycle exception.
+- RepoWise is exact at `861d89d7`; dashboard health is `6.92`, hotspot health
+  `4.76`, and the production recount is `25` god findings in `25` files.
+  PR blast score is `6.27` with empty breaking-change, conformance, cycle, and
+  broken-consumer arrays. Whole-package change risk is Elevated/high,
+  percentile `100`, score `9.9`, probability `99.1%`. No predicted
+  `missing_tests` label represents a truthful missing direct owner test.
+
+Sentrux is accepted at `5736` instead of `5748`: the reviewed structural fixes
+improved `5723 -> 5736`, and the remaining 12 points require unrelated global
+cleanup. Fresh results are depth `13`, acyclicity `10000`/raw `0`, equality
+`6310`/raw `0.3690247236570714`, modularity `5406`/raw
+`0.31095361747322303`, redundancy `4777`/raw `0.5222544113774032`, and rules
+`2/2`; session end is stable. Package 8 is accepted with these explicit metric
+exceptions, while the global recovery goal remains open.
+
+The next highest-impact production package is
+`server/src/crm/commerce/subscription-lifecycle.service.ts`: health `1.04`,
+`1,350` NLOC, max CCN `14`, recoverable weighted deficit `9,396`. It leads the
+remaining 25-owner queue ahead of `crm.service.ts` (`7,381`) and
+`lesson-transition.service.ts` (`7,076`).
