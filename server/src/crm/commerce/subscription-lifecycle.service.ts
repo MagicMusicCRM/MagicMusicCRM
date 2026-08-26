@@ -1,11 +1,10 @@
 import {
-  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { ActorContext } from "../../common/security/actor-context";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
 import { PlatformAuditInput } from "../../platform/platform-integrity.types";
@@ -31,50 +30,20 @@ import {
 } from "./subscription-preview-token";
 import { SubscriptionPreviewTokenService } from "./subscription-preview-token.service";
 import { SubscriptionIssueRepository } from "./subscription-issue.repository";
+import { SubscriptionLifecycleCommandPolicy } from "./subscription-lifecycle-command.policy";
+import {
+  CancellationResultRef,
+  LifecycleWarning,
+  ReplacementResultRef,
+  SubscriptionLifecycleMutationMetadata,
+} from "./subscription-lifecycle.types";
 import { SubscriptionReservationService } from "./subscription-reservation.service";
 
-export interface SubscriptionLifecycleMutationMetadata {
-  idempotencyKey: string;
-  requestId: string;
-}
-
-export interface ReplacementResultRef extends Record<string, unknown> {
-  sourceId: string;
-  sourceVersion: number;
-  resultId: string;
-  resultVersion: number;
-  payerStudentId: string;
-  newPackageId: string;
-  newPackageVersion: number;
-  usedUnits: string;
-  transferredReservationCount: number;
-  transferredReservationUnits: string;
-  releasedReservationCount: number;
-  releasedReservationUnits: string;
-  deltaMinor: string;
-  positionKind: "debt" | "overpayment" | "settled";
-  positionMinor: string;
-  ccy: string;
-  obligationFactId: string | null;
-}
-
-export interface CancellationResultRef extends Record<string, unknown> {
-  sourceId: string;
-  resultVersion: number;
-  state: "cancelled";
-  payerStudentId: string;
-  releasedCount: number;
-  releasedUnits: string;
-  futureCount: number;
-  closedRecordCount: number;
-  confirmedFundedMinor: string;
-  previousRefundMinor: string;
-  unusedUnits: string;
-  unfundedCancellationMinor: string;
-  chosenRefundMinor: string;
-  totalCreditMinor: string;
-  creditFactId: string | null;
-}
+export type {
+  CancellationResultRef,
+  ReplacementResultRef,
+  SubscriptionLifecycleMutationMetadata,
+} from "./subscription-lifecycle.types";
 
 interface ReplacementCalculation {
   deltaMinor: bigint;
@@ -107,6 +76,7 @@ export class SubscriptionLifecycleService {
     private readonly integrity: PlatformIntegrityService,
     private readonly previewTokens: SubscriptionPreviewTokenService,
     private readonly reservations: SubscriptionReservationService,
+    private readonly commands: SubscriptionLifecycleCommandPolicy,
   ) {}
 
   async previewReplacement(
@@ -121,7 +91,7 @@ export class SubscriptionLifecycleService {
       dto.newPackageId,
     );
     this.assertReplaceableContext(context);
-    this.assertStudentScope(context, studentId);
+    this.commands.assertStudentScope(context, studentId);
     await this.issueRepository.assertStudentsInScope(actor, [
       context.studentId,
       context.payerStudentId,
@@ -178,9 +148,9 @@ export class SubscriptionLifecycleService {
     metadata: SubscriptionLifecycleMutationMetadata,
   ) {
     this.policy.assertCanWriteCrm(actor);
-    this.assertCommand(dto, metadata);
+    this.commands.assertReplacementCommand(dto, metadata);
     const reason = dto.reason.trim();
-    const newSubscriptionId = this.deterministicId(
+    const newSubscriptionId = this.commands.deterministicId(
       actor.userId,
       "crm.subscription.replace",
       metadata.idempotencyKey,
@@ -235,7 +205,7 @@ export class SubscriptionLifecycleService {
           // Verify before taking domain locks so recipient and payer are always
           // locked in the same UUID order as every other commerce command.
           const signedPayload = this.previewTokens.verify(dto.previewToken);
-          this.assertTokenBinding(
+          this.commands.assertReplacementTokenBinding(
             signedPayload,
             actor,
             studentId,
@@ -293,7 +263,7 @@ export class SubscriptionLifecycleService {
               signedPayload.newPackageId,
             );
           this.assertReplaceableContext(context);
-          this.assertStudentScope(context, studentId);
+          this.commands.assertStudentScope(context, studentId);
           this.assertPreviewStillCurrent(
             signedPayload,
             this.createTokenPayload(actor, context),
@@ -455,7 +425,7 @@ export class SubscriptionLifecycleService {
       issuedSubscriptionId,
     );
     this.assertCancellableContext(context);
-    this.assertStudentScope(context, studentId);
+    this.commands.assertStudentScope(context, studentId);
     await this.issueRepository.assertStudentsInScope(actor, [
       context.studentId,
       context.payerStudentId,
@@ -525,7 +495,7 @@ export class SubscriptionLifecycleService {
     metadata: SubscriptionLifecycleMutationMetadata,
   ) {
     this.policy.assertCanWriteCrm(actor);
-    this.assertCancelCommand(dto, metadata);
+    this.commands.assertCancellationCommand(dto, metadata);
     const reason = dto.reason.trim();
     const auditId = randomUUID();
     const audit: PlatformAuditInput = {
@@ -582,7 +552,7 @@ export class SubscriptionLifecycleService {
           const signedPayload = this.previewTokens.verifyCancellation(
             dto.previewToken,
           );
-          this.assertCancellationTokenBinding(
+          this.commands.assertCancellationTokenBinding(
             signedPayload,
             actor,
             studentId,
@@ -639,7 +609,7 @@ export class SubscriptionLifecycleService {
               issuedSubscriptionId,
             );
           this.assertCancellableContext(context);
-          this.assertStudentScope(context, studentId);
+          this.commands.assertStudentScope(context, studentId);
           this.assertCancellationPreviewStillCurrent(
             signedPayload,
             this.createCancellationTokenPayload(actor, context),
@@ -1011,55 +981,6 @@ export class SubscriptionLifecycleService {
     };
   }
 
-  private assertTokenBinding(
-    payload: SubscriptionReplacePreviewTokenPayload,
-    actor: ActorContext,
-    studentId: string,
-    issuedSubscriptionId: string,
-    expectedVersion: number,
-  ): void {
-    if (
-      payload.actorUserId !== actor.userId ||
-      payload.studentId !== studentId ||
-      payload.issuedSubscriptionId !== issuedSubscriptionId ||
-      payload.expectedVersion !== expectedVersion
-    ) {
-      throw new UnprocessableEntityException({
-        code: "PREVIEW_TOKEN_SCOPE_MISMATCH",
-        message: "Предпросмотр создан для другой операции или пользователя.",
-      });
-    }
-  }
-
-  private assertStudentScope(
-    context: { studentId: string },
-    studentId: string,
-  ): void {
-    if (context.studentId !== studentId) {
-      throw new NotFoundException("Выданный абонемент не найден.");
-    }
-  }
-
-  private assertCancellationTokenBinding(
-    payload: SubscriptionCancelPreviewTokenPayload,
-    actor: ActorContext,
-    studentId: string,
-    issuedSubscriptionId: string,
-    expectedVersion: number,
-  ): void {
-    if (
-      payload.actorUserId !== actor.userId ||
-      payload.studentId !== studentId ||
-      payload.issuedSubscriptionId !== issuedSubscriptionId ||
-      payload.expectedVersion !== expectedVersion
-    ) {
-      throw new UnprocessableEntityException({
-        code: "PREVIEW_TOKEN_SCOPE_MISMATCH",
-        message: "Предпросмотр создан для другой операции или пользователя.",
-      });
-    }
-  }
-
   private assertPreviewStillCurrent(
     signed: SubscriptionReplacePreviewTokenPayload,
     current: Omit<
@@ -1104,13 +1025,8 @@ export class SubscriptionLifecycleService {
     }
   }
 
-  private replacementWarnings(context: ReplacementContext) {
-    const warnings: {
-      code: string;
-      count?: number;
-      units?: string;
-      message: string;
-    }[] = [];
+  private replacementWarnings(context: ReplacementContext): LifecycleWarning[] {
+    const warnings: LifecycleWarning[] = [];
     if (unitsToHundredths(context.usedUnits) > 0n) {
       warnings.push({
         code: "USED_UNITS_TRANSFERRED",
@@ -1187,13 +1103,8 @@ export class SubscriptionLifecycleService {
     };
   }
 
-  private cancellationWarnings(context: CancellationContext) {
-    const warnings: {
-      code: string;
-      count?: number;
-      units?: string;
-      message: string;
-    }[] = [];
+  private cancellationWarnings(context: CancellationContext): LifecycleWarning[] {
+    const warnings: LifecycleWarning[] = [];
     if (context.futureLessonCount > 0) {
       warnings.push({
         code: "FUTURE_LESSONS_PRESERVED",
@@ -1230,133 +1141,6 @@ export class SubscriptionLifecycleService {
     return warnings;
   }
 
-  private assertCommand(
-    dto: SubscriptionReplaceCommandDto,
-    metadata: SubscriptionLifecycleMutationMetadata,
-  ): void {
-    if (dto.confirm !== true) {
-      throw new UnprocessableEntityException({
-        code: "REPLACEMENT_CONFIRMATION_REQUIRED",
-        message: "Подтвердите замену после просмотра расчёта.",
-      });
-    }
-    if (!Number.isSafeInteger(dto.expectedVersion) || dto.expectedVersion < 1) {
-      throw new UnprocessableEntityException({
-        code: "SUBSCRIPTION_VERSION_REQUIRED",
-        message: "Передайте актуальную версию абонемента.",
-      });
-    }
-    if (!dto.reason?.trim() || dto.reason.trim().length > 500) {
-      throw new UnprocessableEntityException({
-        code: "REPLACEMENT_REASON_REQUIRED",
-        message: "Укажите причину замены абонемента.",
-      });
-    }
-    if (
-      typeof dto.previewToken !== "string" ||
-      dto.previewToken.length === 0 ||
-      dto.previewToken.length > 16_384
-    ) {
-      throw new UnprocessableEntityException({
-        code: "PREVIEW_TOKEN_INVALID",
-        message: "Передайте подписанный предпросмотр замены.",
-      });
-    }
-    if (!/^[A-Za-z0-9._:-]{8,160}$/.test(metadata.idempotencyKey)) {
-      throw new BadRequestException({
-        code: "INVALID_IDEMPOTENCY_KEY",
-        message: "Idempotency-Key должен содержать 8–160 безопасных символов.",
-      });
-    }
-    if (
-      !metadata.requestId ||
-      metadata.requestId.length > 128 ||
-      /[\r\n]/.test(metadata.requestId)
-    ) {
-      throw new BadRequestException({
-        code: "INVALID_REQUEST_ID",
-        message: "X-Request-Id обязателен и не должен превышать 128 символов.",
-      });
-    }
-  }
-
-  private assertCancelCommand(
-    dto: SubscriptionCancelCommandDto,
-    metadata: SubscriptionLifecycleMutationMetadata,
-  ): void {
-    if (dto.confirm !== true) {
-      throw new UnprocessableEntityException({
-        code: "CANCELLATION_CONFIRMATION_REQUIRED",
-        message: "Подтвердите отмену после просмотра последствий.",
-      });
-    }
-    if (!Number.isSafeInteger(dto.expectedVersion) || dto.expectedVersion < 1) {
-      throw new UnprocessableEntityException({
-        code: "SUBSCRIPTION_VERSION_REQUIRED",
-        message: "Передайте актуальную версию абонемента.",
-      });
-    }
-    if (!dto.reason?.trim() || dto.reason.trim().length > 500) {
-      throw new UnprocessableEntityException({
-        code: "CANCELLATION_REASON_REQUIRED",
-        message: "Укажите причину отмены абонемента.",
-      });
-    }
-    if (!/^(0|[1-9]\d*)$/.test(dto.refundMinor)) {
-      throw new UnprocessableEntityException({
-        code: "CANCELLATION_REFUND_INVALID",
-        message: "Укажите сумму возврата в минимальных денежных единицах.",
-      });
-    }
-    if (
-      typeof dto.previewToken !== "string" ||
-      dto.previewToken.length === 0 ||
-      dto.previewToken.length > 16_384
-    ) {
-      throw new UnprocessableEntityException({
-        code: "PREVIEW_TOKEN_INVALID",
-        message: "Передайте подписанный предпросмотр отмены.",
-      });
-    }
-    if (!/^[A-Za-z0-9._:-]{8,160}$/.test(metadata.idempotencyKey)) {
-      throw new BadRequestException({
-        code: "INVALID_IDEMPOTENCY_KEY",
-        message: "Idempotency-Key должен содержать 8–160 безопасных символов.",
-      });
-    }
-    if (
-      !metadata.requestId ||
-      metadata.requestId.length > 128 ||
-      /[\r\n]/.test(metadata.requestId)
-    ) {
-      throw new BadRequestException({
-        code: "INVALID_REQUEST_ID",
-        message: "X-Request-Id обязателен и не должен превышать 128 символов.",
-      });
-    }
-  }
-
-  private deterministicId(
-    actorUserId: string,
-    operation: string,
-    idempotencyKey: string,
-  ): string {
-    const hex = createHash("sha256")
-      .update(`${actorUserId}\0${operation}\0${idempotencyKey}`)
-      .digest("hex")
-      .slice(0, 32)
-      .split("");
-    hex[12] = "4";
-    hex[16] = ["8", "9", "a", "b"][parseInt(hex[16]!, 16) % 4]!;
-    const value = hex.join("");
-    return [
-      value.slice(0, 8),
-      value.slice(8, 12),
-      value.slice(12, 16),
-      value.slice(16, 20),
-      value.slice(20),
-    ].join("-");
-  }
 }
 
 function unitsToHundredths(value: string): bigint {

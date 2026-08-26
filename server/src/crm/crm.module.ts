@@ -98,6 +98,7 @@ import { SubscriptionIssueRepository } from "./commerce/subscription-issue.repos
 import { SubscriptionIssueService } from "./commerce/subscription-issue.service";
 import { ActualPaymentService } from "./commerce/actual-payment.service";
 import { SubscriptionLifecycleRepository } from "./commerce/subscription-lifecycle.repository";
+import { SubscriptionLifecycleCommandPolicy } from "./commerce/subscription-lifecycle-command.policy";
 import { SubscriptionLifecycleService } from "./commerce/subscription-lifecycle.service";
 import { SubscriptionPreviewTokenService } from "./commerce/subscription-preview-token.service";
 import { CommerceProjectionController } from "./commerce/commerce-projection.controller";
@@ -231,6 +232,7 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     SubscriptionIssueService,
     ActualPaymentService,
     SubscriptionLifecycleRepository,
+    SubscriptionLifecycleCommandPolicy,
     SubscriptionLifecycleService,
     SubscriptionPreviewTokenService,
     CommerceProjectionFactory,

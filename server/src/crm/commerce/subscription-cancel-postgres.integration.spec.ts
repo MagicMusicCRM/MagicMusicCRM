@@ -22,6 +22,7 @@ import { PaymentLifecycleRepository } from "./payment-lifecycle.repository";
 import { PaymentLifecycleService } from "./payment-lifecycle.service";
 import { SubscriptionIssueRepository } from "./subscription-issue.repository";
 import { SubscriptionIssueService } from "./subscription-issue.service";
+import { SubscriptionLifecycleCommandPolicy } from "./subscription-lifecycle-command.policy";
 import { SubscriptionLifecycleRepository } from "./subscription-lifecycle.repository";
 import { SubscriptionLifecycleService } from "./subscription-lifecycle.service";
 import { SubscriptionPreviewTokenService } from "./subscription-preview-token.service";
@@ -61,6 +62,7 @@ describe("Subscription cancellation preview/confirm", () => {
     } as unknown as ConfigService);
     const issueRepository = new SubscriptionIssueRepository(database);
     const policy = new CrmPolicy();
+    const commands = new SubscriptionLifecycleCommandPolicy();
     const integrity = new PlatformIntegrityService(
       database,
       new PlatformIntegrityRepository(),
@@ -111,6 +113,7 @@ describe("Subscription cancellation preview/confirm", () => {
           key === "COMMERCE_PREVIEW_SECRET" ? previewSecret : fallback,
       } as unknown as ConfigService),
       reservations,
+      commands,
     );
     fixture = await createFixture(pool);
     actor = fixture.actor;
