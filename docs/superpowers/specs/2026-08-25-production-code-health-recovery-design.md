@@ -731,6 +731,97 @@ security signal, and ranks above messenger (`6,529`) and the remaining ready
 backend/Flutter owners. Its `99.93%` hotspot, six dependents, and 27 fixes in six
 months raise the required characterization depth but do not veto readiness.
 
+## Package 10 verified outcome — CRM students
+
+Package 10 is verified at code, coverage, indexed, and evidence-source commit
+`e86b1f555da5892d66e9d850f1bccb203af57949` over execution range
+`c224ce8bd849dadba3b5bd1c27974e6e0d984482..e86b1f555da5892d66e9d850f1bccb203af57949`.
+The reversible task commits are
+`48109e4a1ab6b5a098d7cc048baf0cea2b1251dc`,
+`1bad5239e64715bb3a914583021d000d1423a016`,
+`22a9fd4a5ad5a28012871ad8056cc94e60502a3d`,
+`6bd90f569009076a6f0067f13c317e08993fca2d`,
+`47e3cbed04adee62d0f8024ff5ebfbf35b574618`,
+`e1a227ae31b66b8bc988d8f16ddbd8bff05d785f`,
+`48edbabbe78a5299816c537e891ae7034a01743f`, and
+`e86b1f555da5892d66e9d850f1bccb203af57949`.
+
+The original `CrmService` moves from health `1.90`, 1,210 NLOC, max CCN
+`21`, weighted deficit `7,381`, and a `god_class`/brain `updateStudent` to a
+76-NLOC, CCN-1 compatibility facade at health `5.30`, deficit `205`, with no
+`god_class` or `brain_method`. The lower headline is an accepted history-only
+exception: 27 prior fixes, historical co-change scatter, and delegation LCOM
+remain, while the permanent source guard enforces the 120-NLOC ceiling, twelve
+direct delegations, no SQL/persistence/policy/transaction logic, exactly two
+executor transactions, and five private providers.
+
+| Package 10 production owner | Health | NLOC | Max CCN | Deficit |
+|---|---:|---:|---:|---:|
+| `CrmService` facade | 5.30 | 76 | 1 | 205 |
+| student presenter | 9.65 | 98 | 5 | 0 |
+| student search filter | 10.00 | 162 | 8 | 0 |
+| student directory | 8.43 | 246 | 4 | 0 |
+| student self-summary | 9.30 | 125 | 7 | 0 |
+| student card timeline | 9.28 | 133 | 6 | 0 |
+| student mutation types | 10.00 | 38 | 1 | 0 |
+| student mutation executor | 9.50 | 373 | 5 | 0 |
+| student command service | 9.15 | 307 | 6 | 0 |
+
+All eight new owners are above `7.0`, have max CCN at most `8`, and have no
+god/brain finding. The split portfolio moves `7,381 -> 205`, recovering `7,176`
+weighted-deficit points (`97.2%`). Fixed-baseline god-owner accounting moves
+`108,392 -> 101,011`; the separately recalibrated fresh live scan sums the 23
+remaining god-owner deficits to `91,422`, so coverage-driven rescoring is not
+mixed into the fixed-baseline subtraction.
+
+Fresh backend verification passed `234/234` suites and `1,638/1,638` tests in
+`121.743 s`; the independent coverage run passed the same counts in `150.433 s`
+with `NODE_OPTIONS=--max-old-space-size=8192`. Typecheck passed in `3.073 s`,
+build in `6.465 s`, and no Node heap exception occurred. The exact LCOV is
+`772,314` bytes, 436 records, SHA-256
+`baeffbc2538897e8cb39a3950c1c586c108cb207b46323b22a0e1b978017b511`.
+RepoWise resolved 415 files and reports `17,388/20,507` mapped lines (`84.79%`)
+and `61.96%` mapped branches. The nine facade/owner/type files aggregate to
+`425/440` lines (`96.59%`) and `264/375` branches (`70.40%`). The type-only
+mutation contract is the sole `0/1` instrumented line; every executable owner
+has `92.86-100%` line coverage.
+
+RepoWise is exact at `e86b1f555da5892d66e9d850f1bccb203af57949`
+with `index_behind=false`. The indexed dashboard moves from 1,609 files and
+average health `6.74` to 1,627 files and `6.78`; hotspot health is `5.99`.
+Module scores move `server 7.07 -> 7.13` and `lib 5.06 -> 5.06`; their current
+NLOC-weighted combined score is `6.34` versus approximately `6.30` on the
+Package 9 module baseline. The distinct live CLI scan covers 1,726 files at
+average `7.10` and hotspot `4.85`; its production-only filter covers 781 files
+and proves the absolute `god_class` gate `24 -> 23`. No Package 10 file has a
+new brain finding.
+
+Changed-file PR blast score is `2.74`. The hard arrays
+`breaking_changes`, `will_break_consumers`, `dependency_cycles`, and
+`conformance_violations` are empty; target security signals are empty. The
+predicted five downstream files and two downstream tests are closed by the full
+suite. The only directive-level missing test is the type-only mutation contract;
+fresh file-level LCOV covers every executable owner, while the older per-test
+map cannot attribute newly created files. Full-range change risk is score `9.9`,
+probability `0.9862`, percentile `100`, priority `high`, classification
+`Elevated`, driven by 3,675 additions and 1,319 deletions across 22 files.
+
+Sentrux scans 2,451 files, 4,829 import edges, and 510,859 lines. Quality moves
+`5744 -> 5757`; depth remains raw `13` / score `3810`; acyclicity remains raw
+`0` / score `10000`; equality moves `6331 -> 6345`, modularity `5411 -> 5412`,
+and redundancy `4792 -> 4833`. Both architectural rules pass with zero
+violations.
+
+Fresh ranking selects `server/src/messenger/messenger.service.ts` for Package
+11: indexed health `1.74`, 1,043 NLOC, max CCN `16`, weighted deficit `6,529`,
+89.69% line coverage, 10 fixes in six months, five dependents, a paired test,
+and no security/test-gap signal. `schedule-plan.service.ts` has the highest
+fresh live god deficit (`5,924`) but remains behind its approved neutral-command
+metadata and lesson-transition prerequisites. The high Flutter owners remain
+in the later dependency wave; the subscription issue sheet waits for its
+backend service and teacher statistics waits for payroll. Messenger is therefore
+the highest-deficit dependency-ready owner rather than a name-based default.
+
 ### Phase B: health completion after `god_class = 0`
 
 Eliminating all 25 owners cannot by itself satisfy the approved health

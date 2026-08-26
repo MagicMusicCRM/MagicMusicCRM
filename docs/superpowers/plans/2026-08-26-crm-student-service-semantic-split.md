@@ -674,3 +674,84 @@ git commit -m "docs(health): record CRM student split evidence"
 ```
 
 Package 10 is complete only after every task review and the final whole-package review are clean. Continuous execution then starts the freshly ranked Package 11 under the same approved `25 -> 0` program.
+
+## Results
+
+**Status:** all Task 8 evidence gates pass at code, coverage, indexed, and
+evidence-source commit `e86b1f555da5892d66e9d850f1bccb203af57949` over range
+`c224ce8bd849dadba3b5bd1c27974e6e0d984482..e86b1f555da5892d66e9d850f1bccb203af57949`.
+The documentation commit is the commit containing this section; it is not
+self-referenced because a Git commit cannot contain its own content-derived
+SHA. Final Package 10 closure still requires the plan-mandated clean whole-
+package review.
+
+### Verification and coverage
+
+| Gate | Exact result |
+|---|---|
+| Full backend Jest | `234/234` suites, `1,638/1,638` tests, `121.743 s`, zero failures |
+| Typecheck | exit 0, `3.073 s` |
+| Nest build | exit 0, `6.465 s` |
+| Fresh coverage Jest | `234/234` suites, `1,638/1,638` tests, `150.433 s`, heap `8192 MB`, no heap exception |
+
+`server/coverage/lcov.info` is `772,314` bytes, has 436 records, and SHA-256
+`baeffbc2538897e8cb39a3950c1c586c108cb207b46323b22a0e1b978017b511`.
+RepoWise imported it at coverage commit
+`e86b1f555da5892d66e9d850f1bccb203af57949`: 415 mapped files,
+`17,388/20,507` lines (`84.79%`), and `61.96%` branches.
+
+| Target | Lines | Branches |
+|---|---:|---:|
+| `crm.service.ts` | 32/33 (`96.97%`) | 14/29 (`48.28%`) |
+| student presenter | 17/17 (`100%`) | 29/30 (`96.67%`) |
+| student search filter | 60/60 (`100%`) | 30/30 (`100%`) |
+| student directory | 53/55 (`96.36%`) | 33/55 (`60.00%`) |
+| student self-summary | 49/50 (`98.00%`) | 20/35 (`57.14%`) |
+| student card timeline | 39/42 (`92.86%`) | 18/38 (`47.37%`) |
+| student mutation types | 0/1 (`0%`, type-only) | 0/0 |
+| student mutation executor | 70/73 (`95.89%`) | 50/70 (`71.43%`) |
+| student command service | 105/109 (`96.33%`) | 70/88 (`79.55%`) |
+| **Package 10 aggregate** | **425/440 (`96.59%`)** | **264/375 (`70.40%`)** |
+
+### RepoWise acceptance
+
+The facade moves `1.90 / 1,210 NLOC / CCN 21 / deficit 7,381` to
+`5.30 / 76 / CCN 1 / deficit 205`; the god class and brain method are gone.
+Its sub-7 headline is historical/delegation-only and protected by the permanent
+source guard. New-owner results are presenter `9.65/98/5`, search filter
+`10.00/162/8`, directory `8.43/246/4`, self-summary `9.30/125/7`, card timeline
+`9.28/133/6`, mutation types `10.00/38/1`, mutation executor `9.50/373/5`, and
+command service `9.15/307/6`; every new owner has deficit zero and no god/brain.
+The Package 10 portfolio moves `7,381 -> 205` (`-7,176`, `97.2%`).
+
+The index is exact at indexed commit
+`e86b1f555da5892d66e9d850f1bccb203af57949`, `index_behind=false`.
+Indexed scope is 1,627 files, average health `6.78`, hotspot `5.99`, with
+`server=7.13` and `lib=5.06`; current module-weighted combined health is `6.34`.
+The separate live scan is 1,726 files, average `7.10`, hotspot `4.85`. Its
+production filter is 781 files and proves exactly `24 -> 23` god owners; the 23
+remaining live god deficits sum to `91,422`, and no changed owner has a new
+brain finding.
+
+PR blast score is `2.74`. `breaking_changes`, `will_break_consumers`,
+`dependency_cycles`, and `conformance_violations` are empty; security signals
+are empty. Full tests close the predicted five downstream files and two tests.
+The type-only mutation contract is the only directive `missing_tests` label;
+the file-level LCOV above covers every executable owner. Full-range change risk
+is `9.9`, probability `0.9862`, percentile `100`, priority `high`, classification
+`Elevated`, with 3,675 additions, 1,319 deletions, and 22 files.
+
+### Sentrux and Package 11
+
+Fresh Sentrux is 2,451 files / 4,829 imports / 510,859 lines, quality `5757`,
+depth `13/3810`, acyclicity `0/10000`, equality `6345`, modularity `5412`,
+redundancy `4833`, and rules `2/2`; every Package 10 baseline root cause holds or
+improves.
+
+Package 11 reranks to `server/src/messenger/messenger.service.ts`: health
+`1.74`, 1,043 NLOC, CCN `16`, deficit `6,529`, five dependents, paired test,
+89.69% line coverage, and no test-gap/security signal. The higher fresh live
+`schedule-plan.service.ts` god deficit (`5,924`) is not dependency-ready until
+the approved neutral command metadata and lesson-transition prerequisites land;
+the leading Flutter candidates are also in later dependency waves. Messenger
+is the highest-deficit ready owner.
