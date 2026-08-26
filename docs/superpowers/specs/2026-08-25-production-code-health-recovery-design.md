@@ -2,7 +2,8 @@
 
 **Date:** 2026-08-25
 
-**Status:** Approved by the owner on 2026-08-25
+**Status:** Approved by the owner on 2026-08-25; the complete `25 -> 0`
+continuation was approved on 2026-08-26
 
 ## Context
 
@@ -40,8 +41,9 @@ commit:
 - every replacement owner created by the program scores at least `7.0`, has no
   god/brain owner finding, and keeps max CCN at or below `10` unless an explicit
   transaction-preservation exception is recorded with focused coverage;
-- Sentrux acyclicity remains raw `1`, architectural rules pass, and quality
-  does not regress from the baseline;
+- Sentrux acyclicity remains perfect under the active metric semantics
+  (currently raw `0`, score `10000`), architectural rules pass, and quality
+  does not regress from the active package baseline;
 - Flutter and backend full verification gates pass.
 
 The module scores are weighted gates, while zero production god classes is an
@@ -534,3 +536,140 @@ After every structural package the full production filter is rerun. Completion
 requires the god-class count to reach zero, all replacement owners to satisfy
 the per-owner floor, all remaining sub-7 files to be classified and remediated,
 and the existing RepoWise/Sentrux/test gates to pass on the same indexed commit.
+
+## Approved `25 -> 0` continuation baseline
+
+The owner approved continuous execution of the complete remaining program on
+2026-08-26. The exact indexed commit is `9963adb839ad`; the worktree is clean.
+RepoWise's indexed dashboard reports 1,596 files, average health `6.70`, and
+hotspot health `5.90`. A distinct live CLI scan reports 1,695 files, average
+health `6.82`, and hotspot health `4.69`. These scopes remain separate in every
+evidence manifest. Sentrux reports quality `5736`, depth `13`, acyclicity raw
+`0`/score `10000`, and rules `2/2`.
+
+The 25 production god owners carry `114,548` weighted-deficit points:
+`54,801` in Flutter and `59,747` in the backend. Coverage is currently pinned
+to production SHA `861d89d7`; backend source is byte-identical to that SHA, but
+every package must generate or ingest fresh coverage before acceptance.
+
+| Rank | Production owner | Health | NLOC | Max CCN | Deficit |
+|---:|---|---:|---:|---:|---:|
+| 1 | `server/src/crm/crm.service.ts` | 1.90 | 1,210 | 21 | 7,381 |
+| 2 | `server/src/messenger/messenger.service.ts` | 1.74 | 1,043 | 16 | 6,529 |
+| 3 | `server/src/crm/commerce/subscription-lifecycle.service.ts` | 3.44 | 1,350 | 14 | 6,156 |
+| 4 | `lib/core/widgets/telegram/chat_info_dialog.dart` | 1.00 | 807 | 45 | 5,649 |
+| 5 | `lib/features/crm/presentation/client_card/subscription_issue_sheet.dart` | 3.04 | 1,114 | 19 | 5,525 |
+| 6 | `server/src/auth/auth.service.ts` | 1.68 | 865 | 11 | 5,467 |
+| 7 | `server/src/crm/payroll.service.ts` | 3.42 | 1,178 | 23 | 5,395 |
+| 8 | `lib/features/manager/presentation/widgets/teacher_stats_widget.dart` | 3.04 | 1,074 | 22 | 5,327 |
+| 9 | `server/src/crm/schedule/lesson-transition.service.ts` | 4.58 | 1,535 | 36 | 5,250 |
+| 10 | `server/src/crm/schedule/schedule-plan.service.ts` | 3.58 | 1,148 | 19 | 5,074 |
+| 11 | `server/src/crm/finance.service.ts` | 2.09 | 815 | 9 | 4,817 |
+| 12 | `lib/features/manager/presentation/widgets/finance_widget.dart` | 1.00 | 668 | 35 | 4,676 |
+| 13 | `lib/features/crm/presentation/client_card/preferred_schedule_editor.dart` | 1.00 | 667 | 39 | 4,669 |
+| 14 | `lib/features/manager/presentation/widgets/student_funnel_editor.dart` | 1.00 | 665 | 16 | 4,655 |
+| 15 | `lib/features/admin/presentation/widgets/staff_detail_dialog.dart` | 1.04 | 662 | 30 | 4,608 |
+| 16 | `lib/features/admin/presentation/widgets/schedule_reference_settings.dart` | 2.14 | 763 | 11 | 4,471 |
+| 17 | `server/src/crm/commerce/subscription-issue.service.ts` | 3.60 | 1,008 | 18 | 4,435 |
+| 18 | `lib/features/crm/presentation/client_card/client_card.dart` | 1.00 | 620 | 18 | 4,340 |
+| 19 | `lib/features/manager/presentation/widgets/students_board_widget.dart` | 1.48 | 662 | 19 | 4,316 |
+| 20 | `lib/features/manager/presentation/tasks/shared_task_editor.dart` | 3.24 | 790 | 22 | 3,760 |
+| 21 | `server/src/crm/schedule/lesson-command.service.ts` | 2.93 | 741 | 13 | 3,757 |
+| 22 | `server/src/profile/profile.service.ts` | 2.78 | 656 | 10 | 3,424 |
+| 23 | `server/src/crm/student-funnel.service.ts` | 5.34 | 775 | 13 | 2,062 |
+| 24 | `lib/core/workspace/production_workspace_host.dart` | 3.49 | 425 | 14 | 1,917 |
+| 25 | `lib/features/admin/presentation/widgets/reference_catalog_lifecycle_dialog.dart` | 5.65 | 378 | 25 | 888 |
+
+### Selection method and package topology
+
+Packages are ranked by `weighted_deficit * structural_fraction`, where the
+structural fraction excludes history-only and coverage-attribution deductions.
+Dependency readiness is a veto, not a discount: a high-risk owner may wait for
+a prerequisite, but it remains in the mandatory queue. The queue is re-ranked
+after every accepted package against one exact indexed commit.
+
+The default is one source god owner per package, producing 25 packages. Only
+owners that share an indivisible characterization suite may be combined, so
+the safe lower bound is 23 packages. Package 9 remains the previously approved
+`subscription-lifecycle.service.ts` cut: despite `crm.service.ts` having the
+larger raw deficit, lifecycle is the highest ready boundary with strong
+transactional coverage and only four dependents.
+
+Execution proceeds in these dependency waves:
+
+1. Backend foundations: subscription lifecycle, CRM students, messenger,
+   auth, payroll, scheduling, finance, subscription issue, profile, and funnel.
+2. Scheduling moves shared command metadata to a neutral contract before the
+   god owners land separately in transition, plan, then command order.
+3. Flutter leaves: subscription issue, chat, teacher statistics, preferred
+   schedule, finance, funnel editor, board, lifecycle, staff, references, and
+   shared tasks.
+4. Flutter hubs: `client_card.dart` only after its leaf editors; the production
+   workspace host is last after all feature packages.
+
+Backend prerequisites land before their presentation consumers:
+messenger/profile before chat; payroll before teacher statistics; finance
+before finance UI; funnel service before funnel editor/board; subscription
+issue service before issue sheet, and issue sheet before Client Card.
+
+### Per-package semantic contract
+
+Every package extracts named domain or presentation owners with immutable
+inputs and explicit callback/service interfaces. Original public files may
+remain as compatibility facades only when they contain composition or
+controller-facing delegation; they may not retain policy, persistence,
+transaction callbacks, mutable god state, or copied decision logic. Existing
+`part` families are converted to imported semantic collaborators when they
+share private state; adding more part files is not an accepted split.
+
+Backend transaction executors keep each complete transaction callback intact.
+Expected versions, mutation identities, idempotency locks, preview-token
+binding/currentness, deterministic lock order, audit/outbox writes, append-only
+facts, RBAC, and resource scope remain in the same atomic boundary. Flutter
+widgets continue through canonical services/providers and do not access the
+database or Supabase directly.
+
+### Per-package acceptance gate
+
+A package is accepted only when all of the following hold on its final commit:
+
+- the production god count decreases and no new production `god_class` or
+  `brain_method` appears;
+- every new semantic owner has max CCN `<=10` and targets health `>=7.0`;
+  a lower headline is allowed only for evidenced history/co-change deductions
+  with no live structural defect and truthful coverage;
+- characterization and focused tests pass after every boundary, followed by
+  the relevant full Flutter/backend suite, analyzer/build, and diff checks;
+- RepoWise reports no new consumer break, cycle, or conformance violation and
+  publishes exact SHA, file/NLOC denominator, coverage SHA, target metrics,
+  portfolio delta, and change risk;
+- Sentrux stays at quality `>=5736`, depth `<=13`, perfect acyclicity, and
+  rules `2/2`; any root-cause regression blocks acceptance even when the
+  aggregate score rises.
+
+Each semantic boundary is a reversible commit. A failed package is reworked or
+reverted in reverse commit order. No schema/data mutation belongs to this
+program, and financial, lesson, payroll, reservation, audit, or outbox history
+is never manually rewritten to repair a refactor.
+
+### Phase B: health completion after `god_class = 0`
+
+Eliminating all 25 owners cannot by itself satisfy the approved health
+contract. Their entire current deficit is about `0.37` points over the indexed
+repository denominator, so the realistic indexed result is approximately
+`6.90-7.03`, not `7.5`. Flutter starts at `5.06`; backend already meets its
+module gate at `7.02`.
+
+After the absolute `god_class = 0` gate, the same package process continues
+over non-god production hotspots ranked by recoverable deficit. The current
+front includes `client_card_student.dart`, `client_create_dialogs.dart`,
+`client_payment_form.dart`, `schedule_widget_actions.dart`, and
+`subscription-preview-token.ts`. Phase B ends only when Flutter is `>=7.0`,
+backend remains `>=7.0`, combined production health is `>=7.5`, all remaining
+sub-7 production files are classified, and the RepoWise/Sentrux/test gates pass
+on one exact indexed commit.
+
+The owner's full-program approval authorizes continuous task execution without
+check-ins between packages. Work stops only for an irreversible/destructive
+operation, a security-sensitive decision, an external side effect such as
+merge/push/deploy, or a plan defect that leaves every path forward speculative.
