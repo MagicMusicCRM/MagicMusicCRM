@@ -683,8 +683,9 @@ the test-inclusive range to
 `c224ce8bd849dadba3b5bd1c27974e6e0d984482..91fbcdc23461d216870ab6f7196c399a4da6c5a7`.
 The documentation commit is the commit containing this section; it is not
 self-referenced because a Git commit cannot contain its own content-derived
-SHA. Final Package 10 closure still requires the plan-mandated clean whole-
-package review.
+SHA. The plan-mandated final whole-package re-review passed over
+`c224ce8bd849dadba3b5bd1c27974e6e0d984482..01b0c55069eb49997c571f3e2a86e20370ba5303`
+with Critical/Important/Minor `0/0/0`. Package 10 is closed.
 
 ### Verification and coverage
 
@@ -783,5 +784,7 @@ owner metrics, and `24 -> 23` recount at
 `e86b1f555da5892d66e9d850f1bccb203af57949` remain valid without a redundant
 production rescan. Fresh Sentrux closes at 2,451 files / 4,829 edges / 511,240
 lines, quality `5757`, depth `13/3810`, acyclicity `0/10000`, equality `6342`,
-modularity `5412`, redundancy `4836`, and rules `2/2`. Final reviewer re-review
-remains pending; this refresh does not declare Package 10 closed.
+modularity `5412`, redundancy `4836`, and rules `2/2`. The final whole-package
+re-review independently accepted the AST guard, production provenance,
+retained coverage/recount, runtime graph, and evidence arithmetic with no
+findings. Package 10 is closed and the owner-approved Wave-3 may start.

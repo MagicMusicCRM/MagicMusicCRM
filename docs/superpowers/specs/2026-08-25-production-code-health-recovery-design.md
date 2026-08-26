@@ -854,8 +854,10 @@ file-level coverage, owner health, and `24 -> 23` production recount from
 would measure the same production bytes. Fresh Sentrux confirms the unchanged
 4,829-edge graph: quality `5757`, depth `13/3810`, acyclicity `0/10000`,
 equality `6342`, modularity `5412`, redundancy `4836`, and rules `2/2` over
-2,451 files and 511,240 lines. Package 10 remains pending the final reviewer
-verdict and is not declared closed by this evidence refresh.
+2,451 files and 511,240 lines. The final whole-package re-review passed over
+`c224ce8bd849dadba3b5bd1c27974e6e0d984482..01b0c55069eb49997c571f3e2a86e20370ba5303`
+with Critical/Important/Minor `0/0/0`. Both prior guard findings are addressed,
+Package 10 is closed, and the owner-approved Wave-3 may start.
 
 ### Phase B: health completion after `god_class = 0`
 
