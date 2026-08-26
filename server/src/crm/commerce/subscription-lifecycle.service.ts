@@ -20,10 +20,9 @@ import { SubscriptionPreviewTokenService } from "./subscription-preview-token.se
 import { SubscriptionIssueRepository } from "./subscription-issue.repository";
 import { SubscriptionLifecycleCommandPolicy } from "./subscription-lifecycle-command.policy";
 import { SubscriptionCancellationPolicy } from "./subscription-cancellation.policy";
-import { SubscriptionReplacementPolicy } from "./subscription-replacement.policy";
+import { SubscriptionReplacementService } from "./subscription-replacement.service";
 import {
   CancellationResultRef,
-  ReplacementResultRef,
   SubscriptionLifecycleMutationMetadata,
 } from "./subscription-lifecycle.types";
 import { SubscriptionReservationService } from "./subscription-reservation.service";
@@ -44,8 +43,8 @@ export class SubscriptionLifecycleService {
     private readonly previewTokens: SubscriptionPreviewTokenService,
     private readonly reservations: SubscriptionReservationService,
     private readonly commands: SubscriptionLifecycleCommandPolicy,
-    private readonly replacements: SubscriptionReplacementPolicy,
-    private readonly cancellations: SubscriptionCancellationPolicy,
+    private readonly cancellationPolicy: SubscriptionCancellationPolicy,
+    private readonly replacement: SubscriptionReplacementService,
   ) {}
 
   async previewReplacement(
@@ -54,59 +53,7 @@ export class SubscriptionLifecycleService {
     issuedSubscriptionId: string,
     dto: SubscriptionReplacePreviewDto,
   ) {
-    this.policy.assertCanWriteCrm(actor);
-    const context = await this.repository.readReplacementContext(
-      issuedSubscriptionId,
-      dto.newPackageId,
-    );
-    this.replacements.assertContext(context);
-    this.commands.assertStudentScope(context, studentId);
-    await this.issueRepository.assertStudentsInScope(actor, [
-      context.studentId,
-      context.payerStudentId,
-    ]);
-    const tokenPayload = this.replacements.createTokenPayload(actor, context);
-    const signed = this.previewTokens.issue(tokenPayload);
-    const calculation = this.replacements.calculate(context);
-    const reservationPlan = this.replacements.planReservations(context);
-    return {
-      issuedSubscriptionId,
-      expectedVersion: context.oldVersion,
-      oldPackageId: context.oldPackageId,
-      newPackage: {
-        id: context.newPackage.id,
-        version: context.newPackage.version,
-        name: context.newPackage.name,
-        unitCount: context.newPackage.unitCount,
-      },
-      usage: {
-        usedUnits: context.usedUnits,
-        reservedLessonCount: context.reservedLessonCount,
-        reservedUnits: context.reservedUnits,
-        transferableReservationCount:
-          reservationPlan.transferReservationIds.length,
-        transferableReservationUnits: reservationPlan.transferredUnits,
-        releasedReservationCount:
-          reservationPlan.releaseReservationIds.length,
-        releasedReservationUnits: reservationPlan.releasedUnits,
-        futureLessonCount: context.futureLessonCount,
-        futureUnits: context.futureUnits,
-      },
-      financial: {
-        currencyCode: context.oldCurrencyCode,
-        oldFinalMinor: context.oldFinalPriceMinor,
-        newFinalMinor: context.newPackage.basePriceMinor,
-        actualPaidMinor: context.actualPaidMinor,
-        obligationDeltaMinor: calculation.deltaMinor.toString(),
-        resultingPosition: {
-          kind: calculation.positionKind,
-          amountMinor: absolute(calculation.positionMinor).toString(),
-        },
-      },
-      warnings: this.replacements.warnings(context),
-      previewToken: signed.token,
-      expiresAt: signed.expiresAt,
-    };
+    return this.replacement.preview(actor, studentId, issuedSubscriptionId, dto);
   }
 
   async replace(
@@ -116,272 +63,13 @@ export class SubscriptionLifecycleService {
     dto: SubscriptionReplaceCommandDto,
     metadata: SubscriptionLifecycleMutationMetadata,
   ) {
-    this.policy.assertCanWriteCrm(actor);
-    this.commands.assertReplacementCommand(dto, metadata);
-    const reason = dto.reason.trim();
-    const newSubscriptionId = this.commands.deterministicId(
-      actor.userId,
-      "crm.subscription.replace",
-      metadata.idempotencyKey,
+    return this.replacement.execute(
+      actor,
+      studentId,
+      issuedSubscriptionId,
+      dto,
+      metadata,
     );
-    const audit: PlatformAuditInput = {
-      action: "crm.subscription_replaced",
-      entityType: "subscription",
-      entityId: issuedSubscriptionId,
-      reason: "subscription_replace",
-      reasonText: reason,
-      beforeRef: {
-        subscriptionId: issuedSubscriptionId,
-        version: dto.expectedVersion,
-        lifecycle: "active",
-      },
-      metadata: {
-        lifecycle: "replaced",
-      },
-    };
-    const result =
-      await this.integrity.executeVersionedMutation<ReplacementResultRef>({
-        actorKey: actor.userId,
-        actorUserId: actor.userId,
-        authorization: {
-          actor,
-          capabilityKey: "commerce.client_finance.write",
-        },
-        operation: "crm.subscription.replace",
-        idempotencyKey: metadata.idempotencyKey,
-        requestId: metadata.requestId,
-        aggregateType: "commerce:issued-subscription",
-        aggregateId: issuedSubscriptionId,
-        expectedVersion: dto.expectedVersion,
-        payload: {
-          issuedSubscriptionId,
-          studentId,
-          expectedVersion: dto.expectedVersion,
-          previewToken: dto.previewToken,
-          confirm: dto.confirm,
-          reason,
-        },
-        audit,
-        outbox: {
-          type: "commerce.subscription.changed",
-          payload: {
-            entityId: issuedSubscriptionId,
-            state: "replaced",
-            invalidates: ["student-finance", "subscription", "schedule"],
-          },
-        },
-        mutate: async (client, nextVersion) => {
-          // Verify before taking domain locks so recipient and payer are always
-          // locked in the same UUID order as every other commerce command.
-          const signedPayload = this.previewTokens.verify(dto.previewToken);
-          this.commands.assertReplacementTokenBinding(
-            signedPayload,
-            actor,
-            studentId,
-            issuedSubscriptionId,
-            dto.expectedVersion,
-          );
-          const scopedStudents = new Set([
-            studentId,
-            signedPayload.payerStudentId,
-          ]);
-          if (
-            (await this.issueRepository.lockPurchaseStudents(
-              client,
-              actor,
-              [...scopedStudents],
-            )).length !== scopedStudents.size
-          ) {
-            throw new NotFoundException("Клиент или плательщик не найден.");
-          }
-          const issued = await this.repository.lockIssuedSubscription(
-            client,
-            issuedSubscriptionId,
-          );
-          if (!issued) {
-            throw new NotFoundException("Выданный абонемент не найден.");
-          }
-          if (
-            issued.status !== "active" ||
-            Number(issued.version) !== dto.expectedVersion
-          ) {
-            throw new ConflictException({
-              code: "SUBSCRIPTION_REPLACE_CONFLICT",
-              message: "Абонемент уже изменён или больше не активен.",
-              expectedVersion: dto.expectedVersion,
-              currentVersion: Number(issued.version),
-              currentStatus: issued.status,
-            });
-          }
-
-          const lockedPackage = await this.repository.lockPackage(
-            client,
-            signedPayload.newPackageId,
-          );
-          if (!lockedPackage) {
-            throw new NotFoundException("Новый пакет абонемента не найден.");
-          }
-          await this.repository.lockReservedRows(
-            client,
-            issuedSubscriptionId,
-          );
-          const context =
-            await this.repository.readReplacementContextInTransaction(
-              client,
-              issuedSubscriptionId,
-              signedPayload.newPackageId,
-            );
-          this.replacements.assertContext(context);
-          this.commands.assertStudentScope(context, studentId);
-          this.replacements.assertPreviewCurrent(
-            signedPayload,
-            this.replacements.createTokenPayload(actor, context),
-          );
-
-          const calculation = this.replacements.calculate(context);
-          const reservationPlan = this.replacements.planReservations(context);
-          const snapshot = this.replacements.createSnapshot(
-            issuedSubscriptionId,
-            context,
-            lockedPackage,
-          );
-          const replacement =
-            await this.repository.createReplacementSubscription(client, {
-              id: newSubscriptionId,
-              studentId: context.studentId,
-              package: lockedPackage,
-              usedUnits: context.usedUnits,
-              snapshot,
-              payerStudentId: context.payerStudentId,
-              fundingMode: context.fundingMode,
-              purchaseReason: context.purchaseReason,
-            });
-          await this.repository.initializeIssuedAggregate(
-            client,
-            replacement.id,
-          );
-          const closed = await this.repository.closeReplacedSubscription(
-            client,
-            {
-              issuedSubscriptionId,
-              expectedVersion: dto.expectedVersion,
-              nextVersion,
-            },
-          );
-          if (!closed) {
-            throw new ConflictException({
-              code: "SUBSCRIPTION_REPLACE_CONFLICT",
-              message: "Абонемент изменился во время замены.",
-            });
-          }
-          const reservationResult =
-            await this.repository.applyReservationPlan(client, {
-              oldIssuedSubscriptionId: issuedSubscriptionId,
-              newIssuedSubscriptionId: replacement.id,
-              transferReservationIds:
-                reservationPlan.transferReservationIds,
-              releaseReservationIds:
-                reservationPlan.releaseReservationIds,
-            });
-          if (
-            reservationResult.transferred !==
-              reservationPlan.transferReservationIds.length ||
-            reservationResult.released !==
-              reservationPlan.releaseReservationIds.length ||
-            reservationResult.remaining !== 0
-          ) {
-            throw new ConflictException({
-              code: "SUBSCRIPTION_RESERVATION_CONFLICT",
-              message:
-                "Резервы занятий изменились во время замены абонемента.",
-            });
-          }
-          const obligation =
-            await this.repository.createReplacementObligation(client, {
-              studentId: context.payerStudentId,
-              issuedSubscriptionId: replacement.id,
-              deltaMinor: calculation.deltaMinor,
-              currencyCode: context.oldCurrencyCode,
-            });
-          await this.repository.createReplaceLifecycle(client, {
-            oldIssuedSubscriptionId: issuedSubscriptionId,
-            newIssuedSubscriptionId: replacement.id,
-            actorUserId: actor.userId,
-            reason,
-          });
-          const resultRef: ReplacementResultRef = {
-            sourceId: issuedSubscriptionId,
-            sourceVersion: nextVersion,
-            resultId: replacement.id,
-            resultVersion: 1,
-            payerStudentId: context.payerStudentId,
-            newPackageId: context.newPackage.id,
-            newPackageVersion: context.newPackage.version,
-            usedUnits: context.usedUnits,
-            transferredReservationCount: reservationResult.transferred,
-            transferredReservationUnits: reservationPlan.transferredUnits,
-            releasedReservationCount: reservationResult.released,
-            releasedReservationUnits: reservationPlan.releasedUnits,
-            deltaMinor: calculation.deltaMinor.toString(),
-            positionKind: calculation.positionKind,
-            positionMinor: absolute(calculation.positionMinor).toString(),
-            ccy: context.oldCurrencyCode,
-            obligationFactId: obligation?.id ?? null,
-          };
-          audit.afterRef = {
-            oldSubscriptionId: issuedSubscriptionId,
-            oldSubscriptionVersion: nextVersion,
-            newSubscriptionId: replacement.id,
-            newSubscriptionVersion: 1,
-            lifecycle: "active",
-          };
-          audit.metadata = {
-            lifecycle: "replaced",
-            newPackageId: context.newPackage.id,
-            newPackageVersion: context.newPackage.version,
-            usedUnits: context.usedUnits,
-            transferredReservationCount: reservationResult.transferred,
-            releasedReservationCount: reservationResult.released,
-            positionKind: calculation.positionKind,
-          };
-          return resultRef;
-        },
-      });
-    const response = {
-      replacement: {
-        oldSubscriptionId: result.resultRef.sourceId,
-        oldSubscriptionVersion: result.resultRef.sourceVersion,
-        newSubscriptionId: result.resultRef.resultId,
-        newSubscriptionVersion: result.resultRef.resultVersion,
-        newPackageId: result.resultRef.newPackageId,
-        newPackageVersion: result.resultRef.newPackageVersion,
-        usedUnits: result.resultRef.usedUnits,
-        transferredReservationCount:
-          result.resultRef.transferredReservationCount,
-        transferredReservationUnits:
-          result.resultRef.transferredReservationUnits,
-        releasedReservationCount:
-          result.resultRef.releasedReservationCount,
-        releasedReservationUnits:
-          result.resultRef.releasedReservationUnits,
-        deltaMinor: result.resultRef.deltaMinor,
-        positionKind: result.resultRef.positionKind,
-        positionMinor: result.resultRef.positionMinor,
-        ccy: result.resultRef.ccy,
-        obligationFactId: result.resultRef.obligationFactId,
-      },
-      replayed: result.replayed,
-      auditId: result.auditId,
-      eventId: result.eventId,
-    };
-    if (!result.replayed) {
-      await this.reservations.publishPostCommit({
-        studentId,
-        payerStudentId: result.resultRef.payerStudentId,
-        subscriptionId: result.resultRef.resultId,
-      });
-    }
-    return response;
   }
 
   async previewCancellation(
@@ -393,15 +81,15 @@ export class SubscriptionLifecycleService {
     const context = await this.repository.readCancellationContext(
       issuedSubscriptionId,
     );
-    this.cancellations.assertContext(context);
+    this.cancellationPolicy.assertContext(context);
     this.commands.assertStudentScope(context, studentId);
     await this.issueRepository.assertStudentsInScope(actor, [
       context.studentId,
       context.payerStudentId,
     ]);
-    const calculation = this.cancellations.calculate(context);
+    const calculation = this.cancellationPolicy.calculate(context);
     const signed = this.previewTokens.issueCancellation(
-      this.cancellations.createTokenPayload(actor, context),
+      this.cancellationPolicy.createTokenPayload(actor, context),
     );
     return {
       issuedSubscriptionId,
@@ -450,7 +138,7 @@ export class SubscriptionLifecycleService {
           reserved: lesson.reserved,
         })),
       },
-      warnings: this.cancellations.warnings(context),
+      warnings: this.cancellationPolicy.warnings(context),
       previewToken: signed.token,
       expiresAt: signed.expiresAt,
     };
@@ -577,14 +265,14 @@ export class SubscriptionLifecycleService {
               client,
               issuedSubscriptionId,
             );
-          this.cancellations.assertContext(context);
+          this.cancellationPolicy.assertContext(context);
           this.commands.assertStudentScope(context, studentId);
-          this.cancellations.assertPreviewCurrent(
+          this.cancellationPolicy.assertPreviewCurrent(
             signedPayload,
-            this.cancellations.createTokenPayload(actor, context),
+            this.cancellationPolicy.createTokenPayload(actor, context),
           );
-          const calculation = this.cancellations.calculate(context);
-          const chosenRefundMinor = this.cancellations.assertRefundWithinCap(
+          const calculation = this.cancellationPolicy.calculate(context);
+          const chosenRefundMinor = this.cancellationPolicy.assertRefundWithinCap(
             dto.refundMinor,
             calculation.recommendedRefundMinor,
           );
@@ -737,9 +425,6 @@ function hundredthsToUnits(value: bigint): string {
     : `${whole}.${fraction.replace(/0$/, "")}`;
 }
 
-function absolute(value: bigint): bigint {
-  return value < 0n ? -value : value;
-}
 
 function sumMinor(values: string[]): bigint {
   return values.reduce((sum, value) => sum + BigInt(value), 0n);

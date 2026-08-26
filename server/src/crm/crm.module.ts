@@ -101,6 +101,7 @@ import { SubscriptionLifecycleRepository } from "./commerce/subscription-lifecyc
 import { SubscriptionLifecycleCommandPolicy } from "./commerce/subscription-lifecycle-command.policy";
 import { SubscriptionCancellationPolicy } from "./commerce/subscription-cancellation.policy";
 import { SubscriptionReplacementPolicy } from "./commerce/subscription-replacement.policy";
+import { SubscriptionReplacementService } from "./commerce/subscription-replacement.service";
 import { SubscriptionLifecycleService } from "./commerce/subscription-lifecycle.service";
 import { SubscriptionPreviewTokenService } from "./commerce/subscription-preview-token.service";
 import { CommerceProjectionController } from "./commerce/commerce-projection.controller";
@@ -236,6 +237,7 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     SubscriptionLifecycleRepository,
     SubscriptionLifecycleCommandPolicy,
     SubscriptionReplacementPolicy,
+    SubscriptionReplacementService,
     SubscriptionCancellationPolicy,
     SubscriptionLifecycleService,
     SubscriptionPreviewTokenService,

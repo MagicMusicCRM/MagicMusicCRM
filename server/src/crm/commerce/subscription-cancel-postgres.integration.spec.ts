@@ -25,6 +25,7 @@ import { SubscriptionIssueService } from "./subscription-issue.service";
 import { SubscriptionLifecycleCommandPolicy } from "./subscription-lifecycle-command.policy";
 import { SubscriptionCancellationPolicy } from "./subscription-cancellation.policy";
 import { SubscriptionReplacementPolicy } from "./subscription-replacement.policy";
+import { SubscriptionReplacementService } from "./subscription-replacement.service";
 import { SubscriptionLifecycleRepository } from "./subscription-lifecycle.repository";
 import { SubscriptionLifecycleService } from "./subscription-lifecycle.service";
 import { SubscriptionPreviewTokenService } from "./subscription-preview-token.service";
@@ -105,19 +106,32 @@ describe("Subscription cancellation preview/confirm", () => {
       commerceRepository,
       paymentLifecycle,
     );
-    lifecycleService = new SubscriptionLifecycleService(
-      new SubscriptionLifecycleRepository(database),
+    const lifecycleRepository = new SubscriptionLifecycleRepository(database);
+    const previewTokens = new SubscriptionPreviewTokenService({
+      get: (key: string, fallback?: string) =>
+        key === "COMMERCE_PREVIEW_SECRET" ? previewSecret : fallback,
+    } as unknown as ConfigService);
+    const replacementPolicy = new SubscriptionReplacementPolicy();
+    const replacementService = new SubscriptionReplacementService(
+      lifecycleRepository,
       issueRepository,
       policy,
       integrity,
-      new SubscriptionPreviewTokenService({
-        get: (key: string, fallback?: string) =>
-          key === "COMMERCE_PREVIEW_SECRET" ? previewSecret : fallback,
-      } as unknown as ConfigService),
+      previewTokens,
       reservations,
       commands,
-      new SubscriptionReplacementPolicy(),
+      replacementPolicy,
+    );
+    lifecycleService = new SubscriptionLifecycleService(
+      lifecycleRepository,
+      issueRepository,
+      policy,
+      integrity,
+      previewTokens,
+      reservations,
+      commands,
       new SubscriptionCancellationPolicy(),
+      replacementService,
     );
     fixture = await createFixture(pool);
     actor = fixture.actor;
