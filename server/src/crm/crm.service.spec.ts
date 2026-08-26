@@ -15,6 +15,7 @@ import { ChatWorkTimelineService } from "../messenger/chat-work-timeline.service
 import { ScheduleReadService } from "./schedule/schedule-read.service";
 import { TimelineService } from "./timeline.service";
 import { CrmService } from "./crm.service";
+import { StudentDirectoryService } from "./students/student-directory.service";
 import {
   ACTIVE_RESPONSIBLE_STAFF_STATUSES,
   RESPONSIBLE_AUTH_ROLES,
@@ -68,6 +69,10 @@ describe("CrmService", () => {
       database as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
+      new StudentDirectoryService(
+        database as unknown as DatabaseService,
+        policy as unknown as CrmPolicy,
+      ),
       tasks as unknown as SharedTaskService,
       scheduleRead as unknown as ScheduleReadService,
       timeline as unknown as TimelineService,
@@ -144,6 +149,10 @@ describe("CrmService", () => {
       database as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
+      new StudentDirectoryService(
+        database as unknown as DatabaseService,
+        policy as unknown as CrmPolicy,
+      ),
       tasks as unknown as SharedTaskService,
       scheduleRead as unknown as ScheduleReadService,
       timeline as unknown as TimelineService,
@@ -1314,6 +1323,10 @@ describe("CrmService", () => {
         database as unknown as DatabaseService,
         audit as unknown as AuditService,
         policy as unknown as CrmPolicy,
+        new StudentDirectoryService(
+          database as unknown as DatabaseService,
+          policy as unknown as CrmPolicy,
+        ),
         { list: jest.fn().mockResolvedValue({ items: [], counters: {} }) } as unknown as SharedTaskService,
         {
           listUpcomingLessonsForStudents: jest.fn().mockResolvedValue([]),

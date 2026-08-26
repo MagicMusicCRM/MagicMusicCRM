@@ -11,6 +11,7 @@ import { MigrationRunner } from "../db/migration-runner";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { CrmPolicy } from "./crm.policy";
 import { CrmService } from "./crm.service";
+import { StudentDirectoryService } from "./students/student-directory.service";
 import { ScheduleReadService } from "./schedule/schedule-read.service";
 import { StudentFunnelStageDto } from "./dto/student-funnel.dto";
 import { StudentFunnelService } from "./student-funnel.service";
@@ -108,6 +109,7 @@ describe("Student funnel effective configuration (PostgreSQL)", () => {
       database,
       audit,
       policy,
+      new StudentDirectoryService(database, policy),
       {} as never,
       scheduleRead,
       {} as never,

@@ -116,6 +116,7 @@ import { SharedTaskService } from "./tasks/shared-task.service";
 import { SharedTaskReminderWorker } from "./tasks/shared-task-reminder.worker";
 import { CrmClientPipelineController } from "./crm-student-funnel.controller";
 import { StudentFunnelService } from "./student-funnel.service";
+import { StudentDirectoryService } from "./students/student-directory.service";
 import { CrmConfigurationController } from "./crm-configuration.controller";
 import { CrmConfigurationService } from "./crm-configuration.service";
 import { InstallmentDueWorker } from "./commerce/installment-due.worker";
@@ -163,6 +164,7 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
   ],
   providers: [
     CrmService,
+    StudentDirectoryService,
     BlacklistService,
     HomeworkService,
     ReferenceDataService,
