@@ -185,11 +185,15 @@ class LessonEditorView extends StatelessWidget {
                 ),
                 onSearchClients: actions.searchClients,
                 onClientChanged: actions.selectClient,
-                onBranchChanged: (value) =>
-                    actions.edit(LessonBranchEdit(value)),
-                onRoomChanged: (value) => actions.edit(LessonRoomEdit(value)),
-                onTeacherChanged: (value) =>
-                    actions.edit(LessonTeacherEdit(value)),
+                onBranchChanged: (value) => actions.edit(
+                  LessonReferenceEdit(LessonReferenceTarget.branch, value),
+                ),
+                onRoomChanged: (value) => actions.edit(
+                  LessonReferenceEdit(LessonReferenceTarget.room, value),
+                ),
+                onTeacherChanged: (value) => actions.edit(
+                  LessonReferenceEdit(LessonReferenceTarget.teacher, value),
+                ),
               ),
               const SizedBox(height: 16),
               LessonScheduleSection(

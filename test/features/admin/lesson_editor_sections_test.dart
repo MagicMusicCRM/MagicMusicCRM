@@ -585,9 +585,15 @@ void main() {
             ),
             onSearchClients: actions.searchClients,
             onClientChanged: actions.selectClient,
-            onBranchChanged: (value) => actions.edit(LessonBranchEdit(value)),
-            onRoomChanged: (value) => actions.edit(LessonRoomEdit(value)),
-            onTeacherChanged: (value) => actions.edit(LessonTeacherEdit(value)),
+            onBranchChanged: (value) => actions.edit(
+              LessonReferenceEdit(LessonReferenceTarget.branch, value),
+            ),
+            onRoomChanged: (value) => actions.edit(
+              LessonReferenceEdit(LessonReferenceTarget.room, value),
+            ),
+            onTeacherChanged: (value) => actions.edit(
+              LessonReferenceEdit(LessonReferenceTarget.teacher, value),
+            ),
           ),
         ),
       );
@@ -628,9 +634,15 @@ void main() {
             ),
             onSearchClients: actions.searchClients,
             onClientChanged: actions.selectClient,
-            onBranchChanged: (value) => actions.edit(LessonBranchEdit(value)),
-            onRoomChanged: (value) => actions.edit(LessonRoomEdit(value)),
-            onTeacherChanged: (value) => actions.edit(LessonTeacherEdit(value)),
+            onBranchChanged: (value) => actions.edit(
+              LessonReferenceEdit(LessonReferenceTarget.branch, value),
+            ),
+            onRoomChanged: (value) => actions.edit(
+              LessonReferenceEdit(LessonReferenceTarget.room, value),
+            ),
+            onTeacherChanged: (value) => actions.edit(
+              LessonReferenceEdit(LessonReferenceTarget.teacher, value),
+            ),
           ),
         ),
       );
@@ -691,9 +703,15 @@ void main() {
             ),
             onSearchClients: actions.searchClients,
             onClientChanged: actions.selectClient,
-            onBranchChanged: (value) => actions.edit(LessonBranchEdit(value)),
-            onRoomChanged: (value) => actions.edit(LessonRoomEdit(value)),
-            onTeacherChanged: (value) => actions.edit(LessonTeacherEdit(value)),
+            onBranchChanged: (value) => actions.edit(
+              LessonReferenceEdit(LessonReferenceTarget.branch, value),
+            ),
+            onRoomChanged: (value) => actions.edit(
+              LessonReferenceEdit(LessonReferenceTarget.room, value),
+            ),
+            onTeacherChanged: (value) => actions.edit(
+              LessonReferenceEdit(LessonReferenceTarget.teacher, value),
+            ),
           ),
         ),
       );
@@ -1505,32 +1523,38 @@ class _RecordingActions implements LessonEditorActions {
   void cancel() => cancelCount++;
 
   @override
-  void edit(LessonEditorEdit<Object?> edit) {
+  void edit(LessonEditorEdit edit) {
     switch (edit) {
-      case LessonBranchEdit(:final value):
-        branch = value;
-      case LessonRoomEdit(:final value):
-        room = value;
-      case LessonTeacherEdit(:final value):
-        teacher = value;
+      case LessonReferenceEdit(:final target, :final value):
+        switch (target) {
+          case LessonReferenceTarget.branch:
+            branch = value;
+          case LessonReferenceTarget.room:
+            room = value;
+          case LessonReferenceTarget.teacher:
+            teacher = value;
+          case LessonReferenceTarget.settlement:
+            settlement = value;
+          case LessonReferenceTarget.compensationRule:
+            compensationRule = value;
+          case LessonReferenceTarget.subscription:
+            subscription = value;
+        }
+      case LessonTextEdit(:final target, :final value):
+        switch (target) {
+          case LessonTextTarget.completion:
+            completion = value;
+          case LessonTextTarget.compensationValue:
+            compensationValue = value;
+          case LessonTextTarget.settlementReason:
+            compensationReason = value;
+          case LessonTextTarget.funding:
+            funding = value;
+        }
       case LessonDurationEdit(:final value):
         duration = value;
       case LessonTrialEdit(:final value):
         trial = value;
-      case LessonCompletionEdit(:final value):
-        completion = value;
-      case LessonSettlementEdit(:final value):
-        settlement = value;
-      case LessonCompensationRuleEdit(:final value):
-        compensationRule = value;
-      case LessonCompensationValueEdit(:final value):
-        compensationValue = value;
-      case LessonSettlementReasonEdit(:final value):
-        compensationReason = value;
-      case LessonFundingEdit(:final value):
-        funding = value;
-      case LessonSubscriptionEdit(:final value):
-        subscription = value;
     }
   }
 

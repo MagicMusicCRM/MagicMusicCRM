@@ -129,7 +129,7 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
       _session,
       patch.draft ?? _draft,
       references,
-      patch.appliesCatalogDefaults && widget.initialDurationMinutes == null,
+      patch.appliesCatalogDefaults && (widget.initialDurationMinutes ?? 0) <= 0,
     );
     setState(() {
       _session = defaults.session;
@@ -165,7 +165,7 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
       'Не удалось выбрать клиента.',
     ),
   );
-  void edit(LessonEditorEdit<Object?> edit) {
+  void edit(LessonEditorEdit edit) {
     final change = _policy.applyEdit(_draft, _refs, edit);
     _updateDraft(change.draft, scheduleChanged: change.scheduleChanged);
     if (change.branchToLoad case final branchId?) {

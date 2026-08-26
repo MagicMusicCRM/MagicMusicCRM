@@ -35,7 +35,7 @@ abstract interface class LessonEditorActions {
 
   void selectClient(LessonClientRef? value);
 
-  void edit(LessonEditorEdit<Object?> edit);
+  void edit(LessonEditorEdit edit);
 
   Future<void> selectDate(LessonDatePickerRequest request);
 

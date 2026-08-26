@@ -10,6 +10,14 @@ void main() {
     final removedView = File(
       'lib/features/admin/presentation/widgets/create_lesson_dialog_view.dart',
     );
+    final models = File(
+      'lib/features/admin/presentation/widgets/lesson_editor/'
+      'lesson_editor_models.dart',
+    ).readAsStringSync();
+    final policy = File(
+      'lib/features/admin/presentation/widgets/lesson_editor/'
+      'lesson_editor_decision_policy.dart',
+    ).readAsStringSync();
 
     expect(shell, isNot(contains("part 'create_lesson_dialog_view.dart'")));
     expect(shell, isNot(contains('part of ')));
@@ -40,5 +48,24 @@ void main() {
     expect(shell, contains('LessonEditorSaveFlow'));
     expect(shell.split('\n').length, lessThan(320));
     expect(removedView.existsSync(), isFalse);
+    for (final duplicateWrapper in [
+      'LessonBranchEdit',
+      'LessonRoomEdit',
+      'LessonTeacherEdit',
+      'LessonCompletionEdit',
+      'LessonSettlementEdit',
+      'LessonCompensationRuleEdit',
+      'LessonCompensationValueEdit',
+      'LessonSettlementReasonEdit',
+      'LessonFundingEdit',
+      'LessonSubscriptionEdit',
+    ]) {
+      expect(models, isNot(contains('class $duplicateWrapper')));
+    }
+    final reducer = policy.substring(
+      policy.indexOf('  applyEdit('),
+      policy.indexOf('  LessonEditorDraft branchSelection('),
+    );
+    expect(reducer, isNot(matches(RegExp(r'\b_\s*=>|\bdefault\s*:'))));
   });
 }

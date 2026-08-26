@@ -392,6 +392,76 @@ void main() {
 
   group('edit decisions', () {
     test(
+      'legacy percent catalog default becomes the immutable no-op baseline',
+      () {
+        final mapped = const LessonEditorInitialMapper().map(
+          const LessonEditorInitialInput(
+            initialDate: null,
+            initialRoomId: null,
+            initialBranchId: null,
+            initialDurationMinutes: null,
+            initialIsTrial: false,
+            lesson: {
+              'id': 'lesson-percent',
+              'version': 4,
+              'student_id': 'student-a',
+              'teacher_id': 'teacher-a',
+              'branch_id': 'branch-a',
+              'room_id': 'room-a',
+              'scheduled_at': '2026-08-26T10:00:00.000Z',
+              'duration_minutes': 60,
+              'teacher_compensation_type': 'percent',
+            },
+          ),
+        );
+        final references = _references(
+          compensationRules: [
+            _catalogItem(
+              key: 'teacher-percent',
+              mode: 'percent',
+              value: '12500',
+            ),
+          ],
+        );
+
+        final defaults = policy.applyReferenceDefaults(
+          mapped,
+          mapped.draft,
+          references,
+          false,
+        );
+
+        expect(defaults.draft.compensationRuleKey, 'teacher-percent');
+        expect(defaults.draft.compensationValueMinor, '12500');
+        expect(
+          defaults.session.snapshot?.initialCompensationRuleKey,
+          'teacher-percent',
+        );
+        expect(
+          defaults.session.snapshot?.initialCompensationValueMinor,
+          '12500',
+        );
+        expect(
+          policy.hasFinancialChanges(
+            session: defaults.session,
+            draft: defaults.draft,
+          ),
+          isFalse,
+        );
+        expect(
+          policy
+              .validate(
+                session: defaults.session,
+                draft: defaults.draft,
+                references: references,
+              )
+              .message,
+          'Измените параметры расписания или оплату преподавателю',
+        );
+      },
+    );
+
+    test(
       'legacy fixed and hourly defaults become the immutable no-op baseline',
       () {
         const mapper = LessonEditorInitialMapper();
@@ -558,6 +628,257 @@ void main() {
         );
 
         expect(request.operation, entry.value, reason: entry.key);
+      }
+    });
+
+    test('typed edit reducer covers every action and ownership signal', () {
+      final draft = _draft(
+        subscriptionId: 'subscription-old',
+        compensationRuleKey: 'teacher-fixed',
+        compensationValueMinor: '100000',
+        plannedSettlementReason: 'Старая причина',
+      );
+      final references = _references(
+        subscriptions: [
+          _subscription('subscription-first'),
+          _subscription('subscription-second'),
+        ],
+        settlements: [_catalogItem(key: 'paid')],
+        compensationRules: [
+          _catalogItem(key: 'teacher-fixed', mode: 'fixed', value: '250000'),
+        ],
+      );
+      final cases =
+          <
+            ({
+              String name,
+              LessonEditorEdit edit,
+              Matcher draft,
+              bool scheduleChanged,
+              String? branchToLoad,
+            })
+          >[
+            (
+              name: 'branch',
+              edit: const LessonReferenceEdit(
+                LessonReferenceTarget.branch,
+                'branch-b',
+              ),
+              draft: isA<LessonEditorDraft>()
+                  .having((value) => value.branchId, 'branch', 'branch-b')
+                  .having((value) => value.teacherId, 'teacher', isNull)
+                  .having((value) => value.roomId, 'room', isNull)
+                  .having(
+                    (value) => value.settlementTypeKey,
+                    'settlement',
+                    isNull,
+                  )
+                  .having(
+                    (value) => value.compensationRuleKey,
+                    'compensation rule',
+                    isNull,
+                  )
+                  .having(
+                    (value) => value.compensationValueMinor,
+                    'compensation value',
+                    isNull,
+                  )
+                  .having(
+                    (value) => value.plannedSettlementReason,
+                    'reason',
+                    isEmpty,
+                  ),
+              scheduleChanged: true,
+              branchToLoad: 'branch-b',
+            ),
+            (
+              name: 'room',
+              edit: const LessonReferenceEdit(
+                LessonReferenceTarget.room,
+                'room-b',
+              ),
+              draft: isA<LessonEditorDraft>().having(
+                (value) => value.roomId,
+                'room',
+                'room-b',
+              ),
+              scheduleChanged: true,
+              branchToLoad: null,
+            ),
+            (
+              name: 'teacher',
+              edit: const LessonReferenceEdit(
+                LessonReferenceTarget.teacher,
+                'teacher-b',
+              ),
+              draft: isA<LessonEditorDraft>().having(
+                (value) => value.teacherId,
+                'teacher',
+                'teacher-b',
+              ),
+              scheduleChanged: true,
+              branchToLoad: null,
+            ),
+            (
+              name: 'settlement',
+              edit: const LessonReferenceEdit(
+                LessonReferenceTarget.settlement,
+                'paid',
+              ),
+              draft: isA<LessonEditorDraft>()
+                  .having(
+                    (value) => value.settlementTypeKey,
+                    'settlement',
+                    'paid',
+                  )
+                  .having(
+                    (value) => value.clientChargeType,
+                    'funding',
+                    'subscription',
+                  )
+                  .having(
+                    (value) => value.subscriptionId,
+                    'subscription',
+                    'subscription-first',
+                  ),
+              scheduleChanged: false,
+              branchToLoad: null,
+            ),
+            (
+              name: 'compensation rule',
+              edit: const LessonReferenceEdit(
+                LessonReferenceTarget.compensationRule,
+                'teacher-fixed',
+              ),
+              draft: isA<LessonEditorDraft>()
+                  .having(
+                    (value) => value.compensationRuleKey,
+                    'rule',
+                    'teacher-fixed',
+                  )
+                  .having(
+                    (value) => value.compensationValueMinor,
+                    'value',
+                    '250000',
+                  )
+                  .having(
+                    (value) => value.plannedSettlementReason,
+                    'reason',
+                    isEmpty,
+                  ),
+              scheduleChanged: false,
+              branchToLoad: null,
+            ),
+            (
+              name: 'subscription',
+              edit: const LessonReferenceEdit(
+                LessonReferenceTarget.subscription,
+                'subscription-second',
+              ),
+              draft: isA<LessonEditorDraft>().having(
+                (value) => value.subscriptionId,
+                'subscription',
+                'subscription-second',
+              ),
+              scheduleChanged: false,
+              branchToLoad: null,
+            ),
+            (
+              name: 'completion',
+              edit: const LessonTextEdit(
+                LessonTextTarget.completion,
+                'standard.success',
+              ),
+              draft: isA<LessonEditorDraft>().having(
+                (value) => value.completionType,
+                'completion',
+                'standard.success',
+              ),
+              scheduleChanged: false,
+              branchToLoad: null,
+            ),
+            (
+              name: 'compensation value',
+              edit: const LessonTextEdit(
+                LessonTextTarget.compensationValue,
+                '1250',
+              ),
+              draft: isA<LessonEditorDraft>().having(
+                (value) => value.compensationValueMinor,
+                'compensation value',
+                '125000',
+              ),
+              scheduleChanged: false,
+              branchToLoad: null,
+            ),
+            (
+              name: 'settlement reason',
+              edit: const LessonTextEdit(
+                LessonTextTarget.settlementReason,
+                'Новая причина',
+              ),
+              draft: isA<LessonEditorDraft>().having(
+                (value) => value.plannedSettlementReason,
+                'reason',
+                'Новая причина',
+              ),
+              scheduleChanged: false,
+              branchToLoad: null,
+            ),
+            (
+              name: 'funding',
+              edit: const LessonTextEdit(
+                LessonTextTarget.funding,
+                'subscription',
+              ),
+              draft: isA<LessonEditorDraft>()
+                  .having(
+                    (value) => value.clientChargeType,
+                    'funding',
+                    'subscription',
+                  )
+                  .having(
+                    (value) => value.subscriptionId,
+                    'subscription',
+                    'subscription-first',
+                  ),
+              scheduleChanged: false,
+              branchToLoad: null,
+            ),
+            (
+              name: 'duration',
+              edit: const LessonDurationEdit(75),
+              draft: isA<LessonEditorDraft>().having(
+                (value) => value.durationMinutes,
+                'duration',
+                75,
+              ),
+              scheduleChanged: true,
+              branchToLoad: null,
+            ),
+            (
+              name: 'trial',
+              edit: const LessonTrialEdit(true),
+              draft: isA<LessonEditorDraft>().having(
+                (value) => value.isTrial,
+                'trial',
+                isTrue,
+              ),
+              scheduleChanged: false,
+              branchToLoad: null,
+            ),
+          ];
+
+      for (final entry in cases) {
+        final result = policy.applyEdit(draft, references, entry.edit);
+
+        expect(result.draft, entry.draft, reason: entry.name);
+        expect(
+          result.scheduleChanged,
+          entry.scheduleChanged,
+          reason: entry.name,
+        );
+        expect(result.branchToLoad, entry.branchToLoad, reason: entry.name);
       }
     });
   });

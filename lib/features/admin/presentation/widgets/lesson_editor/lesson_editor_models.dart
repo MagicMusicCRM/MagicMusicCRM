@@ -159,58 +159,50 @@ class LessonTimePickerRequest {
   final int minute;
 }
 
-sealed class LessonEditorEdit<T> {
-  const LessonEditorEdit(this.value);
-
-  final T value;
+enum LessonReferenceTarget {
+  branch,
+  room,
+  teacher,
+  settlement,
+  compensationRule,
+  subscription,
 }
 
-final class LessonBranchEdit extends LessonEditorEdit<String?> {
-  const LessonBranchEdit(super.value);
+enum LessonTextTarget {
+  completion,
+  compensationValue,
+  settlementReason,
+  funding,
 }
 
-final class LessonRoomEdit extends LessonEditorEdit<String?> {
-  const LessonRoomEdit(super.value);
+sealed class LessonEditorEdit {
+  const LessonEditorEdit();
 }
 
-final class LessonTeacherEdit extends LessonEditorEdit<String?> {
-  const LessonTeacherEdit(super.value);
+final class LessonReferenceEdit extends LessonEditorEdit {
+  const LessonReferenceEdit(this.target, this.value);
+
+  final LessonReferenceTarget target;
+  final String? value;
 }
 
-final class LessonDurationEdit extends LessonEditorEdit<int> {
-  const LessonDurationEdit(super.value);
+final class LessonTextEdit extends LessonEditorEdit {
+  const LessonTextEdit(this.target, this.value);
+
+  final LessonTextTarget target;
+  final String value;
 }
 
-final class LessonTrialEdit extends LessonEditorEdit<bool> {
-  const LessonTrialEdit(super.value);
+final class LessonDurationEdit extends LessonEditorEdit {
+  const LessonDurationEdit(this.value);
+
+  final int value;
 }
 
-final class LessonCompletionEdit extends LessonEditorEdit<String> {
-  const LessonCompletionEdit(super.value);
-}
+final class LessonTrialEdit extends LessonEditorEdit {
+  const LessonTrialEdit(this.value);
 
-final class LessonSettlementEdit extends LessonEditorEdit<String?> {
-  const LessonSettlementEdit(super.value);
-}
-
-final class LessonCompensationRuleEdit extends LessonEditorEdit<String?> {
-  const LessonCompensationRuleEdit(super.value);
-}
-
-final class LessonCompensationValueEdit extends LessonEditorEdit<String> {
-  const LessonCompensationValueEdit(super.value);
-}
-
-final class LessonSettlementReasonEdit extends LessonEditorEdit<String> {
-  const LessonSettlementReasonEdit(super.value);
-}
-
-final class LessonFundingEdit extends LessonEditorEdit<String> {
-  const LessonFundingEdit(super.value);
-}
-
-final class LessonSubscriptionEdit extends LessonEditorEdit<String?> {
-  const LessonSubscriptionEdit(super.value);
+  final bool value;
 }
 
 class LessonEditorSnapshot {

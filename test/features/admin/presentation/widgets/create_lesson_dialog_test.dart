@@ -170,7 +170,7 @@ Map<String, dynamic> _roomResponse(String branchId, String suffix) => {
 };
 
 Map<String, dynamic> _catalogResponse(String suffix) => {
-  'defaultLessonDurationMinutes': suffix == 'А' ? 45 : 90,
+  'defaultLessonDurationMinutes': suffix == 'А' ? 75 : 90,
   'settlementTypes': [
     {
       'stableKey': 'settlement_$suffix',
@@ -258,11 +258,20 @@ Widget _host(Map<String, dynamic> lesson) {
   );
 }
 
-Widget _controlledHost(_ControlledApiClient client) {
+Widget _controlledHost(
+  _ControlledApiClient client, {
+  int? initialDurationMinutes,
+}) {
   return ProviderScope(
     overrides: [magicApiClientProvider.overrideWithValue(client)],
-    child: const MaterialApp(
-      home: Scaffold(body: CreateLessonDialog(initialBranchId: _branchAId)),
+    child: MaterialApp(
+      home: Scaffold(
+        body: CreateLessonDialog(
+          key: ValueKey('lesson-$initialDurationMinutes'),
+          initialBranchId: _branchAId,
+          initialDurationMinutes: initialDurationMinutes,
+        ),
+      ),
     ),
   );
 }
@@ -417,6 +426,32 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets(
+    'non-positive constructor durations use catalog default; positive stays explicit',
+    (tester) async {
+      tester.view.physicalSize = const Size(1400, 1800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      for (final entry in const {0: 75, -15: 75, 45: 45}.entries) {
+        await tester.pumpWidget(
+          _controlledHost(
+            _ControlledApiClient(),
+            initialDurationMinutes: entry.key,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(ValueKey('lesson-duration-selection-${entry.value}')),
+          findsOneWidget,
+          reason: 'constructor duration ${entry.key}',
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+      }
+    },
+  );
 
   testWidgets('creating with an old initial date keeps the 30-day boundary', (
     tester,
