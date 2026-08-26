@@ -52,6 +52,7 @@ void main() {
     expect(session.snapshot?.clientLocked, isTrue);
     expect(session.snapshot?.initialCompensationRuleKey, 'teacher-hourly');
     expect(session.snapshot?.initialCompensationValueMinor, '12500');
+    expect(session.snapshot?.compensationBaselineCaptured, isFalse);
   });
 
   test('keeps lead trial creation independent from funding', () {

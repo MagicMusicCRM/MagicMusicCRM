@@ -69,7 +69,6 @@ class LessonEditorDecisionPolicy {
         session: session,
         draft: next,
         rule: rule,
-        requiresValue: requiresCompensationValue(rule),
       ),
       draft: next,
     );
@@ -570,13 +569,11 @@ LessonEditorSession _normalizeCompensationBaseline({
   required LessonEditorSession session,
   required LessonEditorDraft draft,
   required LessonDecisionCatalogItem? rule,
-  required bool requiresValue,
 }) {
   final snapshot = session.snapshot;
-  final baselineIsComplete =
-      snapshot?.initialCompensationRuleKey != null &&
-      (!requiresValue || snapshot?.initialCompensationValueMinor != null);
-  if (snapshot == null || rule == null || baselineIsComplete) {
+  if (snapshot == null ||
+      rule == null ||
+      snapshot.compensationBaselineCaptured) {
     return session;
   }
   return LessonEditorSession(
@@ -589,6 +586,7 @@ LessonEditorSession _normalizeCompensationBaseline({
       initialSchedulePayload: snapshot.initialSchedulePayload,
       initialCompensationRuleKey: draft.compensationRuleKey,
       initialCompensationValueMinor: draft.compensationValueMinor,
+      compensationBaselineCaptured: true,
     ),
     seededClient: session.seededClient,
     leadNoteSource: session.leadNoteSource,

@@ -214,6 +214,7 @@ class LessonEditorSnapshot {
     required this.initialSchedulePayload,
     required this.initialCompensationRuleKey,
     required this.initialCompensationValueMinor,
+    this.compensationBaselineCaptured = true,
   });
 
   final String lessonId;
@@ -223,6 +224,7 @@ class LessonEditorSnapshot {
   final Map<String, dynamic> initialSchedulePayload;
   final String? initialCompensationRuleKey;
   final String? initialCompensationValueMinor;
+  final bool compensationBaselineCaptured;
 }
 
 abstract interface class LessonEditorInitialSource {

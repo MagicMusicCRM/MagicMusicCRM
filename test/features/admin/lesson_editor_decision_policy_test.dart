@@ -391,9 +391,14 @@ void main() {
   });
 
   group('edit decisions', () {
-    test('legacy value-free rules become the immutable no-op baseline', () {
+    test('captured value-free baselines survive later catalog hydration', () {
       const mapper = LessonEditorInitialMapper();
-      for (final mode in const ['none', 'standard']) {
+      const cases = [
+        (initialMode: 'none', laterMode: 'fixed'),
+        (initialMode: 'standard', laterMode: 'hourly'),
+      ];
+      for (final value in cases) {
+        final initialMode = value.initialMode;
         final mapped = mapper.map(
           LessonEditorInitialInput(
             initialDate: null,
@@ -402,7 +407,7 @@ void main() {
             initialDurationMinutes: null,
             initialIsTrial: false,
             lesson: {
-              'id': 'lesson-$mode',
+              'id': 'lesson-$initialMode',
               'version': 4,
               'student_id': 'student-a',
               'teacher_id': 'teacher-a',
@@ -410,55 +415,109 @@ void main() {
               'room_id': 'room-a',
               'scheduled_at': '2026-08-26T10:00:00.000Z',
               'duration_minutes': 60,
-              'teacher_compensation_type': mode,
+              'teacher_compensation_type': initialMode,
             },
           ),
         );
-        final references = _references(
-          compensationRules: [_catalogItem(key: 'teacher-$mode', mode: mode)],
+        final initialReferences = _references(
+          compensationRules: [
+            _catalogItem(key: 'teacher-$initialMode', mode: initialMode),
+          ],
         );
 
-        final defaults = policy.applyReferenceDefaults(
+        expect(mapped.snapshot?.compensationBaselineCaptured, isFalse);
+        final first = policy.applyReferenceDefaults(
           mapped,
           mapped.draft,
-          references,
+          initialReferences,
           false,
         );
 
         expect(
-          defaults.draft.compensationRuleKey,
-          'teacher-$mode',
-          reason: mode,
+          first.draft.compensationRuleKey,
+          'teacher-$initialMode',
+          reason: initialMode,
         );
-        expect(defaults.draft.compensationValueMinor, isNull, reason: mode);
+        expect(first.draft.compensationValueMinor, isNull, reason: initialMode);
         expect(
-          defaults.session.snapshot?.initialCompensationRuleKey,
-          'teacher-$mode',
-          reason: mode,
+          first.session.snapshot?.initialCompensationRuleKey,
+          'teacher-$initialMode',
+          reason: initialMode,
         );
         expect(
-          defaults.session.snapshot?.initialCompensationValueMinor,
+          first.session.snapshot?.initialCompensationValueMinor,
           isNull,
-          reason: mode,
+          reason: initialMode,
         );
+        expect(
+          first.session.snapshot?.compensationBaselineCaptured,
+          isTrue,
+          reason: initialMode,
+        );
+
+        final laterMode = value.laterMode;
+        final laterReferences = _references(
+          compensationRules: [
+            _catalogItem(
+              key: 'teacher-$laterMode',
+              mode: laterMode,
+              value: '250000',
+            ),
+          ],
+        );
+        final second = policy.applyReferenceDefaults(
+          first.session,
+          first.draft.copyWith(branchId: 'branch-b'),
+          laterReferences,
+          false,
+        );
+
+        expect(second.draft.branchId, 'branch-b', reason: initialMode);
+        expect(
+          second.draft.compensationRuleKey,
+          'teacher-$laterMode',
+          reason: initialMode,
+        );
+        expect(
+          second.draft.compensationValueMinor,
+          '250000',
+          reason: initialMode,
+        );
+        expect(
+          second.session.snapshot?.initialCompensationRuleKey,
+          'teacher-$initialMode',
+          reason: initialMode,
+        );
+        expect(
+          second.session.snapshot?.initialCompensationValueMinor,
+          isNull,
+          reason: initialMode,
+        );
+        expect(
+          second.session.snapshot?.compensationBaselineCaptured,
+          isTrue,
+          reason: initialMode,
+        );
+
+        final restoredDraft = first.draft;
         expect(
           policy.hasFinancialChanges(
-            session: defaults.session,
-            draft: defaults.draft,
+            session: second.session,
+            draft: restoredDraft,
           ),
           isFalse,
-          reason: mode,
+          reason: initialMode,
         );
         expect(
           policy
               .validate(
-                session: defaults.session,
-                draft: defaults.draft,
-                references: references,
+                session: second.session,
+                draft: restoredDraft,
+                references: initialReferences,
               )
               .message,
           'Измените параметры расписания или оплату преподавателю',
-          reason: mode,
+          reason: initialMode,
         );
       }
     });

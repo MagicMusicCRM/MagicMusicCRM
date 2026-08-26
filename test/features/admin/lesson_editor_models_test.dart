@@ -3,6 +3,20 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decis
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_editor_models.dart';
 
 void main() {
+  test('manually constructed snapshots default to a captured baseline', () {
+    const snapshot = LessonEditorSnapshot(
+      lessonId: 'lesson-1',
+      expectedVersion: 4,
+      rawLesson: {},
+      clientLocked: true,
+      initialSchedulePayload: {},
+      initialCompensationRuleKey: 'teacher-standard',
+      initialCompensationValueMinor: null,
+    );
+
+    expect(snapshot.compensationBaselineCaptured, isTrue);
+  });
+
   test('draft copyWith distinguishes omitted values from explicit null', () {
     const client = LessonClientRef(type: 'student', id: 's-1', label: 'Анна');
     final draft = LessonEditorDraft(

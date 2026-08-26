@@ -61,6 +61,7 @@ class LessonEditorInitialMapper {
             }),
             initialCompensationRuleKey: compensationRuleKey,
             initialCompensationValueMinor: compensationValueMinor,
+            compensationBaselineCaptured: false,
           );
 
     return LessonEditorSession(
