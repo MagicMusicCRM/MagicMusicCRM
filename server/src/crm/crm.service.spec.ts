@@ -16,6 +16,8 @@ import { ScheduleReadService } from "./schedule/schedule-read.service";
 import { TimelineService } from "./timeline.service";
 import { CrmService } from "./crm.service";
 import { StudentDirectoryService } from "./students/student-directory.service";
+import { StudentSelfSummaryService } from "./students/student-self-summary.service";
+import { StudentCardTimelineService } from "./students/student-card-timeline.service";
 import {
   ACTIVE_RESPONSIBLE_STAFF_STATUSES,
   RESPONSIBLE_AUTH_ROLES,
@@ -65,21 +67,34 @@ describe("CrmService", () => {
       listFieldAudit: jest.fn().mockResolvedValue({ items: [] }),
     };
 
+    const directory = new StudentDirectoryService(
+      database as unknown as DatabaseService,
+      policy as unknown as CrmPolicy,
+    );
+    const chatWork = {
+      listForEntity: jest.fn().mockResolvedValue([]),
+    } as unknown as ChatWorkTimelineService;
+    const selfSummary = new StudentSelfSummaryService(
+      database as unknown as DatabaseService,
+      tasks as unknown as SharedTaskService,
+      scheduleRead as unknown as ScheduleReadService,
+    );
+    const cardTimeline = new StudentCardTimelineService(
+      database as unknown as DatabaseService,
+      directory,
+      scheduleRead as unknown as ScheduleReadService,
+      tasks as unknown as SharedTaskService,
+      timeline as unknown as TimelineService,
+      chatWork,
+    );
     const service = new CrmService(
       database as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
-      new StudentDirectoryService(
-        database as unknown as DatabaseService,
-        policy as unknown as CrmPolicy,
-      ),
-      tasks as unknown as SharedTaskService,
-      scheduleRead as unknown as ScheduleReadService,
-      timeline as unknown as TimelineService,
+      directory,
+      selfSummary,
+      cardTimeline,
       notifications as unknown as NotificationsService,
-      {
-        listForEntity: jest.fn().mockResolvedValue([]),
-      } as unknown as ChatWorkTimelineService,
       { emitCrmChanged: () => undefined } as unknown as RealtimeBus,
       {
         assertCreateStatus: jest.fn(),
@@ -145,21 +160,34 @@ describe("CrmService", () => {
       listFieldAudit: jest.fn().mockResolvedValue({ items: [] }),
     };
 
+    const directory = new StudentDirectoryService(
+      database as unknown as DatabaseService,
+      policy as unknown as CrmPolicy,
+    );
+    const chatWork = {
+      listForEntity: jest.fn().mockResolvedValue([]),
+    } as unknown as ChatWorkTimelineService;
+    const selfSummary = new StudentSelfSummaryService(
+      database as unknown as DatabaseService,
+      tasks as unknown as SharedTaskService,
+      scheduleRead as unknown as ScheduleReadService,
+    );
+    const cardTimeline = new StudentCardTimelineService(
+      database as unknown as DatabaseService,
+      directory,
+      scheduleRead as unknown as ScheduleReadService,
+      tasks as unknown as SharedTaskService,
+      timeline as unknown as TimelineService,
+      chatWork,
+    );
     const service = new CrmService(
       database as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
-      new StudentDirectoryService(
-        database as unknown as DatabaseService,
-        policy as unknown as CrmPolicy,
-      ),
-      tasks as unknown as SharedTaskService,
-      scheduleRead as unknown as ScheduleReadService,
-      timeline as unknown as TimelineService,
+      directory,
+      selfSummary,
+      cardTimeline,
       notifications as unknown as NotificationsService,
-      {
-        listForEntity: jest.fn().mockResolvedValue([]),
-      } as unknown as ChatWorkTimelineService,
       { emitCrmChanged: () => undefined } as unknown as RealtimeBus,
       {
         assertCreateStatus: jest.fn(),
@@ -452,18 +480,6 @@ describe("CrmService", () => {
     );
   });
 
-  const stubCardSections = (service: CrmService) => {
-    jest
-      .spyOn(service, "listStudentGroups")
-      .mockResolvedValue({ items: [] } as never);
-    jest
-      .spyOn(
-        service as unknown as { listUserCrmLinks: () => Promise<unknown> },
-        "listUserCrmLinks",
-      )
-      .mockResolvedValue([]);
-  };
-
   it("keeps the teacher student card free of embedded commerce sections", async () => {
     // findStudent is now a shared db read (student-read.ts) — seed its row via
     // the query mock instead of spying a method.
@@ -474,7 +490,6 @@ describe("CrmService", () => {
         teacher_user_ids: ["teacher-a"],
       },
     ]);
-    stubCardSections(service);
     const lesson = {
       id: "lesson-from-schedule-read",
       version: 4,
@@ -536,7 +551,6 @@ describe("CrmService", () => {
     const { service } = createService([
       { id: "student-a", profile_user_id: "user-a", teacher_user_ids: [] },
     ]);
-    stubCardSections(service);
 
     const card = await service.getStudentCard(
       { userId: "admin-a", role: "admin" },
@@ -1319,29 +1333,47 @@ describe("CrmService", () => {
         assertCanReadPayroll: jest.fn(),
         assertCanReadStudent: jest.fn(),
       };
+      const directory = new StudentDirectoryService(
+        database as unknown as DatabaseService,
+        policy as unknown as CrmPolicy,
+      );
+      const tasks = {
+        list: jest.fn().mockResolvedValue({ items: [], counters: {} }),
+      } as unknown as SharedTaskService;
+      const scheduleRead = {
+        listUpcomingLessonsForStudents: jest.fn().mockResolvedValue([]),
+        listLessons: jest.fn().mockResolvedValue({ items: [] }),
+      } as unknown as ScheduleReadService;
+      const timeline = {
+        listComments: jest.fn().mockResolvedValue({ items: [] }),
+        listFieldAudit: jest.fn().mockResolvedValue({ items: [] }),
+      } as unknown as TimelineService;
+      const chatWork = {
+        listForEntity: jest.fn().mockResolvedValue([]),
+      } as unknown as ChatWorkTimelineService;
       const service = new CrmService(
         database as unknown as DatabaseService,
         audit as unknown as AuditService,
         policy as unknown as CrmPolicy,
-        new StudentDirectoryService(
+        directory,
+        new StudentSelfSummaryService(
           database as unknown as DatabaseService,
-          policy as unknown as CrmPolicy,
+          tasks,
+          scheduleRead,
         ),
-        { list: jest.fn().mockResolvedValue({ items: [], counters: {} }) } as unknown as SharedTaskService,
-        {
-          listUpcomingLessonsForStudents: jest.fn().mockResolvedValue([]),
-          listLessons: jest.fn().mockResolvedValue({ items: [] }),
-        } as unknown as ScheduleReadService,
-        {
-          listComments: jest.fn().mockResolvedValue({ items: [] }),
-          listFieldAudit: jest.fn().mockResolvedValue({ items: [] }),
-        } as unknown as TimelineService,
+        new StudentCardTimelineService(
+          database as unknown as DatabaseService,
+          directory,
+          scheduleRead,
+          tasks,
+          timeline,
+          chatWork,
+        ),
         {
           sendEmail: jest.fn(),
           notifyUser: jest.fn(),
           notifyNewLead: jest.fn(),
         } as unknown as NotificationsService,
-        { listForEntity: jest.fn().mockResolvedValue([]) } as unknown as ChatWorkTimelineService,
         realtime as unknown as RealtimeBus,
         {
           assertCreateStatus: jest.fn(),

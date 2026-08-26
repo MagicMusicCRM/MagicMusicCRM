@@ -12,6 +12,8 @@ import { RealtimeBus } from "../realtime/realtime-bus";
 import { CrmPolicy } from "./crm.policy";
 import { CrmService } from "./crm.service";
 import { StudentDirectoryService } from "./students/student-directory.service";
+import { StudentSelfSummaryService } from "./students/student-self-summary.service";
+import { StudentCardTimelineService } from "./students/student-card-timeline.service";
 import { ScheduleReadService } from "./schedule/schedule-read.service";
 import { StudentFunnelStageDto } from "./dto/student-funnel.dto";
 import { StudentFunnelService } from "./student-funnel.service";
@@ -105,15 +107,21 @@ describe("Student funnel effective configuration (PostgreSQL)", () => {
       listLessons: jest.fn().mockResolvedValue({ items: [] }),
     } as unknown as ScheduleReadService;
     service = new StudentFunnelService(database, audit, policy, realtime);
+    const directory = new StudentDirectoryService(database, policy);
     crm = new CrmService(
       database,
       audit,
       policy,
-      new StudentDirectoryService(database, policy),
-      {} as never,
-      scheduleRead,
-      {} as never,
-      {} as never,
+      directory,
+      new StudentSelfSummaryService(database, {} as never, scheduleRead),
+      new StudentCardTimelineService(
+        database,
+        directory,
+        scheduleRead,
+        {} as never,
+        {} as never,
+        {} as never,
+      ),
       {} as never,
       realtime,
       service,

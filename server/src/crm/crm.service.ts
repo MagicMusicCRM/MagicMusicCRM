@@ -23,11 +23,7 @@ import {
   assertEligibleResponsible,
   responsibleUserIdFromCustomDataPatch,
 } from "./responsible-eligibility";
-import {
-  diffEntityFields,
-  isDeliverableEmail,
-  toTimelineDto,
-} from "./crm-mappers";
+import { diffEntityFields, isDeliverableEmail } from "./crm-mappers";
 import {
   ValidatedCustomFields,
   ValidatedStudentCreate,
@@ -50,27 +46,22 @@ const STUDENT_AUDITED_FIELDS = [
   "email",
 ];
 import { StudentRow, findStudent } from "./student-read";
-import {
-  ActorContext,
-  isManagerOrAdminRole,
-} from "../common/security/actor-context";
+import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 import { NotificationsService } from "../notifications/notifications.service";
-import { ChatWorkTimelineService } from "../messenger/chat-work-timeline.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { CreateStudentDto } from "./dto/create-student.dto";
 import { CrmListQuery } from "./dto/crm-list.query";
 import { StudentSearchQuery } from "./dto/student-search.query";
 import { UpdateStudentDto } from "./dto/update-student.dto";
 import { CrmPolicy } from "./crm.policy";
-import { SharedTaskService } from "./tasks/shared-task.service";
-import { ScheduleReadService } from "./schedule/schedule-read.service";
-import { TimelineService } from "./timeline.service";
 import { StudentFunnelService } from "./student-funnel.service";
 import {
   toStudentDto,
 } from "./students/student-presenter";
 import { StudentDirectoryService } from "./students/student-directory.service";
+import { StudentSelfSummaryService } from "./students/student-self-summary.service";
+import { StudentCardTimelineService } from "./students/student-card-timeline.service";
 
 @Injectable()
 export class CrmService {
@@ -81,62 +72,15 @@ export class CrmService {
     private readonly audit: AuditService,
     private readonly policy: CrmPolicy,
     private readonly directory: StudentDirectoryService,
-    private readonly tasks: SharedTaskService,
-    private readonly scheduleRead: ScheduleReadService,
-    private readonly timeline: TimelineService,
+    private readonly selfSummary: StudentSelfSummaryService,
+    private readonly cardTimeline: StudentCardTimelineService,
     private readonly notifications: NotificationsService,
-    private readonly chatWork: ChatWorkTimelineService,
     private readonly realtime: RealtimeBus,
     private readonly studentFunnel: StudentFunnelService,
   ) {}
 
-  async getMySummary(actor: ActorContext) {
-    const ownStudents = await this.listClientStudents(actor.userId);
-    // KVA-156: a parent/payer account also sees children linked via Families.
-    const familyStudents = await this.listFamilyLinkedStudents(actor.userId);
-    // Manual app-account links are the CRM source of truth for imported/existing
-    // students whose profile owner is not the signed-in app user.
-    const linkedStudents = await this.listManuallyLinkedStudents(actor.userId);
-    // Union own + family/manual-linked students; dedup by student id (own wins).
-    const byId = new Map<string, StudentRow>();
-    for (const row of ownStudents) byId.set(row.id, row);
-    for (const row of familyStudents) {
-      if (!byId.has(row.id)) byId.set(row.id, row);
-    }
-    for (const row of linkedStudents) {
-      if (!byId.has(row.id)) byId.set(row.id, row);
-    }
-    const students = Array.from(byId.values());
-    const studentIds = students.map((student) => student.id);
-    // Commerce has its own actor-scoped projection boundary. The base self
-    // summary only composes the non-financial lesson/task sections.
-    let upcomingLessons: unknown[] = [];
-    let openTasks: unknown[] = [];
-    if (studentIds.length) {
-      [upcomingLessons, openTasks] = await Promise.all([
-        this.scheduleRead
-          .listUpcomingLessonsForStudents(studentIds)
-          .catch(() => []),
-        Promise.all(
-          studentIds.map((studentId) =>
-            this.tasks.list(actor, {
-              state: "open",
-              linkedEntityType: "student",
-              linkedEntityId: studentId,
-              limit: 20,
-            }),
-          ),
-        )
-          .then((results) => results.flatMap((result) => result.items))
-          .catch(() => []),
-      ]);
-    }
-
-    return {
-      students: students.map((row) => toStudentDto(row)),
-      upcomingLessons,
-      tasks: openTasks,
-    };
+  getMySummary(actor: ActorContext) {
+    return this.selfSummary.getMySummary(actor);
   }
 
   listStudents(actor: ActorContext, query: CrmListQuery) {
@@ -351,95 +295,8 @@ export class CrmService {
     return this.directory.getStudent(actor, studentId);
   }
 
-  async getStudentCard(actor: ActorContext, studentId: string) {
-    const student = await findStudent(this.database, studentId);
-    if (!student) throw new NotFoundException("Ученик не найден.");
-    this.policy.assertCanReadStudent(actor, {
-      profileUserId: student.profile_user_id,
-      teacherUserIds: student.teacher_user_ids ?? [],
-    });
-
-    // Commerce is projected separately at /crm/students/:id/commerce. Keeping
-    // the base card finance-free prevents mixed-scope DTOs and cache entries.
-    // ScheduleReadService owns the detailed actor-scoped lesson list; the
-    // legacy schedule dependency remains only for the distinct upcoming query.
-    const emptyList = { items: [] as never[] };
-
-    const [groups, lessons, tasks, comments, links, chatWork, fieldAudit] =
-      await Promise.all([
-        this.listStudentGroups(actor, studentId, { limit: 100 }),
-        this.scheduleRead.listLessons(actor, { studentId, limit: 100 }),
-        this.tasks.list(actor, {
-          linkedEntityType: "student",
-          linkedEntityId: studentId,
-          limit: 100,
-        }),
-        this.timeline
-          .listComments(actor, {
-            entityType: "student",
-            entityId: studentId,
-            limit: 100,
-          })
-          .catch(() => emptyList),
-        this.listUserCrmLinks("student", studentId),
-        this.listChatWorkTimeline("student", studentId),
-        // Field edits («кто поменял телефон»). Returns empty for non-staff, and
-        // is caught like the other optional sections: a missing audit list must
-        // not take the whole card down.
-        this.timeline
-          .listFieldAudit(actor, "student", studentId, 50)
-          .catch(() => emptyList),
-      ]);
-
-    const timeline = [
-      ...comments.items.map((comment) => ({
-        id: comment.id,
-        type: "comment",
-        title: "Комментарий",
-        body: comment.body,
-        status: null,
-        occurredAt: comment.createdAt,
-      })),
-      ...tasks.items.map((task) => ({
-        id: task.id,
-        type: "task",
-        title: task.title,
-        body: task.body,
-        status: task.state,
-        occurredAt: task.createdAt,
-      })),
-      ...lessons.items.map((lesson) => ({
-        id: lesson.id,
-        type: lesson.isTrial ? "trial" : "lesson",
-        title: lesson.isTrial ? "Пробное занятие" : "Занятие",
-        body: lesson.teacherName || lesson.roomName || null,
-        status: lesson.status,
-        occurredAt: lesson.scheduledAt,
-      })),
-      ...chatWork,
-      ...fieldAudit.items.map((entry) => ({
-        id: String(entry.id),
-        type: "audit",
-        title: String(entry.title),
-        body: entry.body === null ? null : String(entry.body),
-        status: null,
-        occurredAt: entry.occurredAt,
-      })),
-    ].sort(
-      (a, b) =>
-        new Date(String(b.occurredAt)).getTime() -
-        new Date(String(a.occurredAt)).getTime(),
-    );
-
-    return {
-      student: toStudentDto(student),
-      groups: groups.items,
-      lessons: lessons.items,
-      tasks: tasks.items,
-      comments: comments.items,
-      links,
-      timeline,
-    };
+  getStudentCard(actor: ActorContext, studentId: string) {
+    return this.cardTimeline.getStudentCard(actor, studentId);
   }
 
   listStudentGroups(
@@ -737,134 +594,6 @@ export class CrmService {
     throw new ConflictException(
       "Возврат ученика в лиды отключён. Сначала нужен управляемый сценарий с предварительной проверкой занятий, абонементов и финансовых операций.",
     );
-  }
-
-  private async listUserCrmLinks(entityType: string, entityId: string) {
-    const result = await this.database.query<{
-      id: string;
-      user_id: string;
-      email: string | null;
-      phone: string | null;
-      link_source: string;
-      confirmed_at: Date | string | null;
-      created_at: Date | string;
-    }>(
-      `
-        select link.id, link.user_id, u.email, u.phone, link.link_source,
-          link.confirmed_at, link.created_at
-        from app.user_crm_links link
-        join app.users u on u.id = link.user_id and u.deleted_at is null
-        where link.deleted_at is null
-          and link.entity_type = $1::app.crm_entity_type
-          and link.entity_id = $2
-        order by link.created_at desc, link.id desc
-      `,
-      [entityType, entityId],
-    );
-    return result.rows.map((row) => ({
-      id: row.id,
-      userId: row.user_id,
-      email: row.email,
-      phone: row.phone,
-      linkSource: row.link_source,
-      confirmedAt: row.confirmed_at,
-      createdAt: row.created_at,
-    }));
-  }
-
-  // Chat "taken into work" events belong to the messenger schema
-  // (app.chats / app.chat_work_events); read them through the messenger-owned
-  // ChatWorkTimelineService instead of inlining that SQL here.
-  private async listChatWorkTimeline(
-    entityType: "student" | "lead",
-    entityId: string,
-  ) {
-    const rows = await this.chatWork.listForEntity(entityType, entityId);
-    return rows.map((row) => toTimelineDto(row));
-  }
-
-  // The self-view lesson/task reads live in ScheduleReadService / SharedTaskService.
-  // Commerce is intentionally served through its separate projection boundary.
-
-  private async listClientStudents(userId: string): Promise<StudentRow[]> {
-    const result = await this.database.query<StudentRow>(
-      `
-        select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
-          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
-          '{}'::uuid[] as teacher_user_ids
-        from app.students s
-        join app.profiles p on p.id = s.profile_id and p.deleted_at is null
-        left join app.users u on u.id = p.user_id and u.deleted_at is null
-        where s.deleted_at is null and p.user_id = $1
-        order by s.created_at desc
-      `,
-      [userId],
-    );
-    return result.rows;
-  }
-
-  /**
-   * KVA-156: students linked to the account-holder via Families.
-   *
-   * The account-holder's user maps to a profile (app.profiles.user_id). We find
-   * the active families where that profile is a parent/payer member, then return
-   * the active STUDENT members of those families. Only active rows are
-   * considered (deleted_at is null on families, family_members and students),
-   * and the result shape mirrors listClientStudents so toStudentDto stays valid.
-   */
-  private async listFamilyLinkedStudents(
-    userId: string,
-  ): Promise<StudentRow[]> {
-    const result = await this.database.query<StudentRow>(
-      `
-        select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
-          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
-          '{}'::uuid[] as teacher_user_ids
-        from app.profiles acct
-        join app.family_members parent_m
-          on parent_m.entity_type = 'profile'
-          and parent_m.entity_id = acct.id
-          and parent_m.role in ('parent', 'payer')
-          and parent_m.deleted_at is null
-        join app.families f
-          on f.id = parent_m.family_id and f.deleted_at is null
-        join app.family_members child_m
-          on child_m.family_id = f.id
-          and child_m.entity_type = 'student'
-          and child_m.deleted_at is null
-        join app.students s
-          on s.id = child_m.entity_id and s.deleted_at is null
-        join app.profiles p on p.id = s.profile_id and p.deleted_at is null
-        left join app.users u on u.id = p.user_id and u.deleted_at is null
-        where acct.user_id = $1 and acct.deleted_at is null
-        order by s.created_at desc
-      `,
-      [userId],
-    );
-    return result.rows;
-  }
-
-  private async listManuallyLinkedStudents(
-    userId: string,
-  ): Promise<StudentRow[]> {
-    const result = await this.database.query<StudentRow>(
-      `
-        select s.id, s.status, s.profile_id, p.user_id as profile_user_id,
-          s.lead_id, s.custom_data, s.blacklisted, s.blacklist_reason, p.first_name, p.last_name, u.email, p.phone, s.created_at,
-          '{}'::uuid[] as teacher_user_ids
-        from app.user_crm_links link
-        join app.students s
-          on s.id = link.entity_id and s.deleted_at is null
-        left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
-        left join app.users u on u.id = p.user_id and u.deleted_at is null
-        where link.user_id = $1
-          and link.entity_type = 'student'
-          and link.deleted_at is null
-        order by s.created_at desc
-      `,
-      [userId],
-    );
-    return result.rows;
   }
 
   private hashEmail(value: string): string {
