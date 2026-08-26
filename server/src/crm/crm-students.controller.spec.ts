@@ -8,6 +8,81 @@ import { ClientWriteValidator } from "./clients/client-write.validator";
 import { ActualPaymentService } from "./commerce/actual-payment.service";
 
 describe("CrmStudentsController", () => {
+  it("delegates student boundary methods without copying request values", async () => {
+    const response = { id: "response-a" };
+    const crm = {
+      getMySummary: jest.fn().mockResolvedValue(response),
+      listStudents: jest.fn().mockResolvedValue(response),
+      searchStudents: jest.fn().mockResolvedValue(response),
+      getStudent: jest.fn().mockResolvedValue(response),
+      listStudentGroups: jest.fn().mockResolvedValue(response),
+      inviteStudent: jest.fn().mockResolvedValue(response),
+      deleteStudent: jest.fn().mockResolvedValue(response),
+      returnStudentToLead: jest.fn().mockResolvedValue(response),
+    };
+    const controller = new CrmStudentsController(
+      crm as unknown as CrmService,
+      {} as FinanceService,
+      {} as SubscriptionsService,
+      {} as BlacklistService,
+      {} as ClientCardReadService,
+      {} as ClientWriteValidator,
+      {} as ActualPaymentService,
+    );
+    const actor = { userId: "admin-a", role: "admin" as const };
+    const id = "student-a";
+    const listQuery = { limit: 10 };
+    const searchQuery = { q: "Алина", limit: 10 };
+
+    const cases = [
+      {
+        invoke: () => controller.getMe(actor),
+        method: crm.getMySummary,
+        expected: [actor],
+      },
+      {
+        invoke: () => controller.listStudents(actor, listQuery),
+        method: crm.listStudents,
+        expected: [actor, listQuery],
+      },
+      {
+        invoke: () => controller.searchStudents(actor, searchQuery),
+        method: crm.searchStudents,
+        expected: [actor, searchQuery],
+      },
+      {
+        invoke: () => controller.getStudent(actor, id),
+        method: crm.getStudent,
+        expected: [actor, id],
+      },
+      {
+        invoke: () => controller.listStudentGroups(actor, id, listQuery),
+        method: crm.listStudentGroups,
+        expected: [actor, id, listQuery],
+      },
+      {
+        invoke: () => controller.inviteStudent(actor, id),
+        method: crm.inviteStudent,
+        expected: [actor, id],
+      },
+      {
+        invoke: () => controller.deleteStudent(actor, id),
+        method: crm.deleteStudent,
+        expected: [actor, id],
+      },
+      {
+        invoke: () => controller.returnStudentToLead(actor, id),
+        method: crm.returnStudentToLead,
+        expected: [actor, id],
+      },
+    ];
+
+    for (const testCase of cases) {
+      await expect(testCase.invoke()).resolves.toBe(response);
+      expect(testCase.method).toHaveBeenCalledWith(...testCase.expected);
+    }
+  });
+
   it("validates ordinary student creation before delegating", async () => {
     const crm = {
       createStudent: jest.fn().mockResolvedValue({ id: "student-a" }),

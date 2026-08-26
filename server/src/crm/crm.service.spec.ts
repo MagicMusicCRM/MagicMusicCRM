@@ -1093,4 +1093,205 @@ describe("CrmService", () => {
     );
     expect(summary).not.toHaveProperty("recentPayments");
   });
+
+  describe("student boundary characterization", () => {
+    const studentRow = {
+      id: "student-boundary-a",
+      lead_id: "lead-boundary-a",
+      source_id: "source-boundary-a",
+      source_name: "Рекомендация",
+      status: "active",
+      custom_data: { age: 12 },
+      profile_id: "profile-boundary-a",
+      profile_user_id: "user-boundary-a",
+      first_name: "Алина",
+      last_name: "Иванова",
+      email: "alina@example.com",
+      phone: "+79990000000",
+      teacher_user_ids: ["teacher-boundary-a"],
+      blacklisted: true,
+      blacklist_reason: "Нарушение правил",
+      created_at: "2026-08-01T10:00:00.000Z",
+    };
+    const expectedStudentDto = {
+      id: "student-boundary-a",
+      leadId: "lead-boundary-a",
+      sourceId: "source-boundary-a",
+      sourceName: "Рекомендация",
+      status: "active",
+      customData: { age: 12 },
+      profileId: "profile-boundary-a",
+      profileUserId: "user-boundary-a",
+      firstName: "Алина",
+      lastName: "Иванова",
+      email: "alina@example.com",
+      phone: "+79990000000",
+      teacherUserIds: ["teacher-boundary-a"],
+      createdAt: "2026-08-01T10:00:00.000Z",
+      appealAt: "2026-08-01T10:00:00.000Z",
+      appealAtSource: "app",
+      age: 12,
+      ageMonths: null,
+      ageSource: "manual",
+      blacklisted: true,
+      blacklistReason: "Нарушение правил",
+    };
+    const teacherActor = {
+      userId: "teacher-boundary-a",
+      role: "teacher" as const,
+    };
+
+    it("lists students through list policy, bounded query, and canonical DTO", async () => {
+      const { service, database, policy } = createService();
+      database.query.mockResolvedValueOnce({ rows: [studentRow] });
+
+      await expect(
+        service.listStudents(actor, { q: "  Алина  ", limit: 999 }),
+      ).resolves.toEqual({ items: [expectedStudentDto] });
+
+      expect(policy.assertCanListStudents).toHaveBeenCalledWith(actor);
+      expect(database.query.mock.calls[0]![1]).toEqual([
+        actor.role,
+        actor.userId,
+        "Алина",
+        100,
+      ]);
+    });
+
+    it("reads one student only after row-level authorization", async () => {
+      const { service, database, policy } = createService();
+      database.query.mockResolvedValueOnce({ rows: [studentRow] });
+
+      await expect(
+        service.getStudent(teacherActor, studentRow.id),
+      ).resolves.toEqual(expectedStudentDto);
+
+      expect(policy.assertCanReadStudent).toHaveBeenCalledWith(teacherActor, {
+        profileUserId: studentRow.profile_user_id,
+        teacherUserIds: studentRow.teacher_user_ids,
+      });
+    });
+
+    it("reports the exact not-found message for a missing student", async () => {
+      const { service } = createService();
+
+      await expect(service.getStudent(actor, "student-missing")).rejects.toThrow(
+        "Ученик не найден.",
+      );
+    });
+
+    it("returns a cursor for the visible first page of a student search", async () => {
+      const olderStudent = {
+        ...studentRow,
+        id: "student-boundary-b",
+        created_at: "2026-07-01T10:00:00.000Z",
+        total_count: "2",
+      };
+      const newestStudent = {
+        ...studentRow,
+        total_count: "2",
+      };
+      const { service } = createService([newestStudent, olderStudent]);
+
+      const result = await service.searchStudents(actor, { limit: 1 });
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]).toMatchObject({ id: newestStudent.id });
+      expect(result.totalCount).toBe(2);
+      expect(result.nextCursor).toBe(
+        "2026-08-01T10:00:00.000Z|student-boundary-a",
+      );
+    });
+
+    const createPublicationHarness = () => {
+      const events: string[] = [];
+      const realtime = { emitCrmChanged: jest.fn(() => events.push("realtime")) };
+      const query = jest.fn(async (sql: string) => {
+        if (
+          sql.includes("with eligible_actor as") &&
+          sql.includes("update app.students")
+        ) {
+          events.push("responsible");
+          return { rows: [] };
+        }
+        if (sql.includes("insert into app.students")) {
+          return { rows: [studentRow] };
+        }
+        if (sql.includes("select status, custom_data, branch_id")) {
+          return {
+            rows: [
+              {
+                status: "active",
+                custom_data: {},
+                branch_id: null,
+              },
+            ],
+          };
+        }
+        if (sql.includes("update app.students s")) {
+          return { rows: [studentRow] };
+        }
+        return { rows: [] };
+      });
+      const database = {
+        query,
+        transaction: jest.fn(async (fn: (client: { query: typeof query }) => unknown) => {
+          const result = await fn({ query });
+          events.push("transaction");
+          return result;
+        }),
+      };
+      const audit = { record: jest.fn(async () => events.push("audit")) };
+      const policy = {
+        assertCanReadOperationalData: jest.fn(),
+        assertCanWriteCrm: jest.fn(),
+        assertManagerOnly: jest.fn(),
+        assertCanReadStudentFinance: jest.fn(),
+        canReadStudentFinance: jest.fn().mockReturnValue(true),
+        assertCanReadSchoolFinance: jest.fn(),
+        canReadSchoolFinance: jest.fn().mockReturnValue(true),
+        assertCanListStudents: jest.fn(),
+        assertCanReadPayroll: jest.fn(),
+        assertCanReadStudent: jest.fn(),
+      };
+      const service = new CrmService(
+        database as unknown as DatabaseService,
+        audit as unknown as AuditService,
+        policy as unknown as CrmPolicy,
+        { list: jest.fn().mockResolvedValue({ items: [], counters: {} }) } as unknown as SharedTaskService,
+        {
+          listUpcomingLessonsForStudents: jest.fn().mockResolvedValue([]),
+          listLessons: jest.fn().mockResolvedValue({ items: [] }),
+        } as unknown as ScheduleReadService,
+        {
+          listComments: jest.fn().mockResolvedValue({ items: [] }),
+          listFieldAudit: jest.fn().mockResolvedValue({ items: [] }),
+        } as unknown as TimelineService,
+        {
+          sendEmail: jest.fn(),
+          notifyUser: jest.fn(),
+          notifyNewLead: jest.fn(),
+        } as unknown as NotificationsService,
+        { listForEntity: jest.fn().mockResolvedValue([]) } as unknown as ChatWorkTimelineService,
+        realtime as unknown as RealtimeBus,
+        {
+          assertCreateStatus: jest.fn(),
+          assertTransition: jest.fn(),
+        } as unknown as StudentFunnelService,
+      );
+      return { events, service, realtime };
+    };
+
+    it.each([
+      ["create", (service: CrmService) => service.createStudent(actor, { firstName: "Алина" })],
+      ["update", (service: CrmService) => service.updateStudent(actor, studentRow.id, { firstName: "Алина" })],
+    ])("publishes %s only after transaction and responsible fallback", async (_, run) => {
+      const { events, realtime, service } = createPublicationHarness();
+
+      await run(service);
+
+      expect(events).toEqual(["transaction", "responsible", "audit", "realtime"]);
+      expect(realtime.emitCrmChanged).toHaveBeenCalledTimes(1);
+    });
+  });
 });
