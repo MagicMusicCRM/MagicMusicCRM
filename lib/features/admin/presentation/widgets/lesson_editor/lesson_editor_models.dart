@@ -1,5 +1,12 @@
 import '../lesson_decision/lesson_decision_models.dart';
 
+export 'package:magic_music_crm/core/models/lesson_schedule_analysis.dart'
+    show
+        LessonConstraintViolation,
+        LessonScheduleAnalysis,
+        ScheduleSuggestion,
+        lessonConstraintViolationsFromDetails;
+
 const _lessonEditorAbsent = Object();
 
 class LessonClientRef {
@@ -111,6 +118,26 @@ class LessonEditorDraft {
     plannedSettlementReason:
         plannedSettlementReason ?? this.plannedSettlementReason,
   );
+
+  LessonEditorDraft withDate(DateTime value) => copyWith(
+    localStart: DateTime(
+      value.year,
+      value.month,
+      value.day,
+      localStart.hour,
+      localStart.minute,
+    ),
+  );
+
+  LessonEditorDraft withTime(int hour, int minute) => copyWith(
+    localStart: DateTime(
+      localStart.year,
+      localStart.month,
+      localStart.day,
+      hour,
+      minute,
+    ),
+  );
 }
 
 class LessonEditorSnapshot {
@@ -133,6 +160,20 @@ class LessonEditorSnapshot {
   final String? initialCompensationValueMinor;
 }
 
+abstract interface class LessonEditorInitialSource {
+  DateTime? get initialDate;
+  String? get initialRoomId;
+  String? get initialBranchId;
+  int? get initialDurationMinutes;
+  Map<String, dynamic>? get lesson;
+  bool get initialIsTrial;
+  String? get leadId;
+  String? get leadName;
+  String? get clientType;
+  String? get clientId;
+  String? get clientName;
+}
+
 class LessonEditorInitialInput {
   const LessonEditorInitialInput({
     required this.initialDate,
@@ -147,6 +188,22 @@ class LessonEditorInitialInput {
     this.clientId,
     this.clientName,
   });
+
+  factory LessonEditorInitialInput.fromSource(
+    LessonEditorInitialSource source,
+  ) => LessonEditorInitialInput(
+    initialDate: source.initialDate,
+    initialRoomId: source.initialRoomId,
+    initialBranchId: source.initialBranchId,
+    initialDurationMinutes: source.initialDurationMinutes,
+    lesson: source.lesson,
+    initialIsTrial: source.initialIsTrial,
+    leadId: source.leadId,
+    leadName: source.leadName,
+    clientType: source.clientType,
+    clientId: source.clientId,
+    clientName: source.clientName,
+  );
 
   final DateTime? initialDate;
   final String? initialRoomId;
@@ -252,6 +309,7 @@ LessonDecisionCatalog? _frozenCatalog(LessonDecisionCatalog? catalog) =>
           for (final item in catalog.compensationRules)
             _frozenCatalogItem(item),
         ]),
+        defaultDurationMinutes: catalog.defaultDurationMinutes,
       );
 
 LessonDecisionCatalogItem _frozenCatalogItem(LessonDecisionCatalogItem item) =>

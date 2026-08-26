@@ -1,8 +1,9 @@
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
-import 'package:magic_music_crm/core/models/lesson_schedule_analysis.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 
 import '../lesson_decision/lesson_decision_models.dart';
+import 'lesson_editor_decision_policy.dart';
+import 'lesson_editor_models.dart';
 
 class LessonEditorScheduleRequest {
   const LessonEditorScheduleRequest({
@@ -64,6 +65,12 @@ final class LessonSaveBusy extends LessonSaveOutcome {
   const LessonSaveBusy();
 }
 
+final class LessonSaveInvalid extends LessonSaveOutcome {
+  const LessonSaveInvalid(this.validation);
+
+  final LessonEditorValidation validation;
+}
+
 final class LessonSaveFailure extends LessonSaveOutcome {
   const LessonSaveFailure(this.error, this.stackTrace);
 
@@ -103,6 +110,36 @@ class LessonEditorSaveFlow {
   final LessonSchedulePreview _preview;
   final LessonCreate _create;
   bool _saving = false;
+
+  Future<LessonSaveOutcome> saveDraft(
+    LessonEditorSession session,
+    LessonEditorDraft draft,
+    LessonEditorReferenceState references,
+    LessonEditorScheduleRequest Function() scheduleRequest, {
+    LessonEditorDecisionPolicy policy = const LessonEditorDecisionPolicy(),
+  }) {
+    final validation = policy.validate(
+      session: session,
+      draft: draft,
+      references: references,
+    );
+    if (!validation.isValid) return Future.value(LessonSaveInvalid(validation));
+    return save(
+      LessonEditorSaveCommand(
+        scheduleRequest: scheduleRequest(),
+        payload: session.isEdit
+            ? policy.schedulePayload(draft)
+            : policy.createPayload(
+                session: session,
+                draft: draft,
+                references: references,
+              ),
+        decisionRequest: session.isEdit
+            ? policy.editRequest(session: session, draft: draft)
+            : null,
+      ),
+    );
+  }
 
   Future<LessonSaveOutcome> save(LessonEditorSaveCommand command) async {
     if (_saving) return const LessonSaveBusy();

@@ -15,6 +15,56 @@ class LessonEditorValidation {
 class LessonEditorDecisionPolicy {
   const LessonEditorDecisionPolicy();
 
+  LessonEditorDraft applyReferenceDefaults(
+    LessonEditorSession session,
+    LessonEditorDraft draft,
+    LessonEditorReferenceState references,
+    bool useConfiguredDuration,
+  ) {
+    final catalog = references.catalog;
+    if (catalog == null) {
+      return session.isEdit
+          ? draft
+          : applyFundingDefault(draft: draft, references: references);
+    }
+    final settlement =
+        _catalogItemByKey(catalog.settlementTypes, draft.settlementTypeKey) ??
+        catalog.settlementTypes.firstOrNull;
+    final legacyMode = session.snapshot?.rawLesson['teacher_compensation_type']
+        ?.toString();
+    final rule =
+        _catalogItemByKey(
+          catalog.compensationRules,
+          draft.compensationRuleKey,
+        ) ??
+        catalog.compensationRules
+            .where((item) => item.mode == legacyMode)
+            .firstOrNull ??
+        catalog.compensationRules.firstOrNull;
+    final configuredDuration = catalog.defaultDurationMinutes;
+    final compensationValue = requiresCompensationValue(rule)
+        ? draft.compensationValueMinor ??
+              _legacyCompensationValue(session, rule) ??
+              rule?.value
+        : null;
+    var next = draft.copyWith(
+      durationMinutes:
+          !session.isEdit &&
+              useConfiguredDuration &&
+              configuredDuration != null &&
+              configuredDuration > 0
+          ? configuredDuration
+          : draft.durationMinutes,
+      settlementTypeKey: settlement?.key,
+      compensationRuleKey: rule?.key,
+      compensationValueMinor: compensationValue,
+    );
+    if (!session.isEdit) {
+      next = applyFundingDefault(draft: next, references: references);
+    }
+    return next;
+  }
+
   bool isNoCharge(LessonDecisionCatalogItem? settlement) =>
       settlement?.hourShareBasisPoints == 0 &&
       settlement?.fixedPenaltyMinor == '0';
@@ -35,6 +85,63 @@ class LessonEditorDecisionPolicy {
         'percent' || 'fixed' || 'hourly' => true,
         _ => false,
       };
+
+  LessonEditorDraft branchSelection(
+    LessonEditorDraft draft,
+    LessonEditorReferenceState references,
+    String branchId,
+  ) {
+    final keepsTeacher = references.teachers.any(
+      (item) =>
+          item.id == draft.teacherId &&
+          item.status == 'active' &&
+          item.assignedBranchIds.contains(branchId),
+    );
+    return draft.copyWith(
+      branchId: branchId,
+      teacherId: keepsTeacher ? draft.teacherId : null,
+      roomId: null,
+      settlementTypeKey: null,
+      compensationRuleKey: null,
+      compensationValueMinor: null,
+      plannedSettlementReason: '',
+    );
+  }
+
+  LessonEditorDraft compensationRuleSelection(
+    LessonEditorDraft draft,
+    LessonEditorReferenceState references,
+    String? ruleKey,
+  ) {
+    final rule = _catalogItemByKey(
+      references.catalog?.compensationRules,
+      ruleKey,
+    );
+    return draft.copyWith(
+      compensationRuleKey: ruleKey,
+      compensationValueMinor: requiresCompensationValue(rule)
+          ? rule?.value
+          : null,
+      plannedSettlementReason: '',
+    );
+  }
+
+  LessonEditorDraft compensationValueChange(
+    LessonEditorDraft draft,
+    LessonEditorReferenceState references,
+    String rawValue,
+  ) {
+    final rule = _catalogItemByKey(
+      references.catalog?.compensationRules,
+      draft.compensationRuleKey,
+    );
+    return draft.copyWith(
+      compensationValueMinor: parseCompensationValueMinor(
+        mode: rule?.mode,
+        rawValue: rawValue,
+      ),
+    );
+  }
 
   LessonEditorValidation validate({
     required LessonEditorSession session,
@@ -340,6 +447,17 @@ class LessonEditorDecisionPolicy {
     final rate = teacher?.raw['current_rate'];
     return rate is num && rate > 0 ? ('hourly', rate) : ('none', 0);
   }
+}
+
+String? _legacyCompensationValue(
+  LessonEditorSession session,
+  LessonDecisionCatalogItem? rule,
+) {
+  if (!session.isEdit || (rule?.mode != 'fixed' && rule?.mode != 'hourly')) {
+    return null;
+  }
+  final value = session.snapshot?.rawLesson['teacher_compensation_value'];
+  return value is num && value >= 0 ? (value * 100).round().toString() : null;
 }
 
 String? _leadNote({

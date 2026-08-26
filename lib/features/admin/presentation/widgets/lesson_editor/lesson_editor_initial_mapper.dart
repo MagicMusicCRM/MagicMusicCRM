@@ -3,6 +3,9 @@ import 'lesson_editor_models.dart';
 class LessonEditorInitialMapper {
   const LessonEditorInitialMapper();
 
+  LessonEditorSession fromSource(LessonEditorInitialSource source) =>
+      map(LessonEditorInitialInput.fromSource(source));
+
   LessonEditorSession map(LessonEditorInitialInput input) {
     final lesson = input.lesson;
     final constructorClient = _constructorClient(input);

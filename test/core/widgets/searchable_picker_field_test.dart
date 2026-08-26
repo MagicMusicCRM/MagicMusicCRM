@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
-import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 
 void main() {
   testWidgets('searchable picker caps its menu at five scrollable rows', (

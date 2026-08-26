@@ -5,6 +5,8 @@ import 'lesson_editor_models.dart';
 typedef LessonEditorRowsById =
     Future<List<Map<String, dynamic>>> Function(String id);
 typedef LessonEditorRows = Future<List<Map<String, dynamic>>> Function();
+typedef LessonEditorClientSearch =
+    Future<List<Map<String, dynamic>>> Function(String query);
 typedef LessonEditorCatalogLoader =
     Future<LessonDecisionCatalog> Function(String branchId);
 typedef LessonEditorClientResolver =
@@ -23,6 +25,13 @@ class LessonEditorLoadPatch {
   final String? branchId;
   final LessonEditorDraft? draft;
   final LessonEditorReferenceState references;
+}
+
+class LessonEditorLoadResult {
+  const LessonEditorLoadResult({this.patch, this.error});
+
+  final LessonEditorLoadPatch? patch;
+  final Object? error;
 }
 
 abstract interface class LessonEditorDataLoader {
@@ -48,6 +57,8 @@ abstract interface class LessonEditorDataLoader {
         const LessonEditorReferenceState.empty(),
   });
 
+  Future<List<LessonClientRef>> searchClients(String query);
+
   void invalidateClientSelection();
 }
 
@@ -58,7 +69,7 @@ class LessonEditorDataController implements LessonEditorDataLoader {
     required LessonEditorRowsById listSubscriptions,
     LessonEditorRows listTeachers = _emptyRows,
     LessonEditorRows listBranches = _emptyRows,
-    LessonEditorRows searchClients = _emptyRows,
+    LessonEditorClientSearch searchClients = _emptyClientSearch,
     LessonEditorClientResolver resolveClient = _emptyResolvedClient,
   }) : _listRooms = listRooms,
        _loadCatalog = loadCatalog,
@@ -79,7 +90,7 @@ class LessonEditorDataController implements LessonEditorDataLoader {
             crm.listSubscriptions(studentId: studentId, limit: 50),
         listTeachers: () => crm.listTeachers(limit: 100),
         listBranches: () => crm.listBranches(limit: 100),
-        searchClients: () => crm.searchClientRefs(limit: 50),
+        searchClients: (query) => crm.searchClientRefs(q: query, limit: 50),
         resolveClient: ({required type, required id}) =>
             crm.resolveClientRef(type: type, id: id),
       );
@@ -89,7 +100,7 @@ class LessonEditorDataController implements LessonEditorDataLoader {
   final LessonEditorRowsById _listSubscriptions;
   final LessonEditorRows _listTeachers;
   final LessonEditorRows _listBranches;
-  final LessonEditorRows _searchClients;
+  final LessonEditorClientSearch _searchClients;
   final LessonEditorClientResolver _resolveClient;
 
   int _branchRevision = 0;
@@ -99,6 +110,16 @@ class LessonEditorDataController implements LessonEditorDataLoader {
   String? _activeBranchId;
   String? _activeStudentId;
   String? _activeClientKey;
+
+  Future<LessonEditorLoadResult> loadInitialSafely(
+    LessonEditorSession session,
+  ) async {
+    try {
+      return LessonEditorLoadResult(patch: await loadInitial(session));
+    } catch (error) {
+      return LessonEditorLoadResult(error: error);
+    }
+  }
 
   @override
   Future<LessonEditorLoadPatch?> loadInitial(
@@ -113,7 +134,7 @@ class LessonEditorDataController implements LessonEditorDataLoader {
     final results = await Future.wait<List<Map<String, dynamic>>>([
       _listTeachers(),
       _listBranches(),
-      _searchClients(),
+      _searchClients(''),
     ]);
     if (clientRevision != _clientRevision) return null;
 
@@ -266,7 +287,20 @@ class LessonEditorDataController implements LessonEditorDataLoader {
       );
     }
 
-    final rows = await _listSubscriptions(studentId);
+    late final List<Map<String, dynamic>> rows;
+    try {
+      rows = await _listSubscriptions(studentId);
+    } catch (_) {
+      if (subscriptionRevision != _subscriptionRevision ||
+          _activeStudentId != studentId) {
+        return null;
+      }
+      return LessonEditorLoadPatch(
+        branchId: draft?.branchId,
+        draft: draft?.copyWith(subscriptionId: null),
+        references: _copyReferences(references, subscriptions: const []),
+      );
+    }
     if (subscriptionRevision != _subscriptionRevision ||
         _activeStudentId != studentId) {
       return null;
@@ -283,6 +317,12 @@ class LessonEditorDataController implements LessonEditorDataLoader {
       references: _copyReferences(references, subscriptions: subscriptions),
     );
   }
+
+  @override
+  Future<List<LessonClientRef>> searchClients(String query) async =>
+      List.unmodifiable([
+        for (final row in await _searchClients(query)) ?_clientFromRow(row),
+      ]);
 
   @override
   void invalidateClientSelection() {
@@ -322,6 +362,9 @@ class LessonEditorDataController implements LessonEditorDataLoader {
 }
 
 Future<List<Map<String, dynamic>>> _emptyRows() async => const [];
+
+Future<List<Map<String, dynamic>>> _emptyClientSearch(String _) async =>
+    const [];
 
 // Kept as the symmetric no-op seam for ID-scoped loaders in this boundary.
 // ignore: unused_element

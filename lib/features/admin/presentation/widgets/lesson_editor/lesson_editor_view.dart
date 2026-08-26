@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:magic_music_crm/core/models/lesson_schedule_analysis.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
@@ -23,6 +22,7 @@ class LessonEditorViewModel {
     required this.isSaving,
     required this.isAnalyzing,
     required this.validationMessage,
+    this.loadErrorMessage,
     this.scheduleAnalysisError,
   });
 
@@ -34,6 +34,7 @@ class LessonEditorViewModel {
   final bool isSaving;
   final bool isAnalyzing;
   final String? validationMessage;
+  final String? loadErrorMessage;
   final String? scheduleAnalysisError;
 }
 
@@ -45,6 +46,7 @@ class LessonEditorView extends StatelessWidget {
     this.title,
     this.scrollController,
     this.now,
+    this.onRetry,
     super.key,
   });
 
@@ -54,6 +56,7 @@ class LessonEditorView extends StatelessWidget {
   final String? title;
   final ScrollController? scrollController;
   final DateTime? now;
+  final VoidCallback? onRetry;
 
   String get _title {
     if (title != null) return title!;
@@ -63,8 +66,17 @@ class LessonEditorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (model.isLoading) return _loadingSurface();
+    final stateSurface = _stateSurface();
+    return stateSurface ?? _loadedSurface(context);
+  }
 
+  Widget? _stateSurface() {
+    if (model.isLoading) return _loadingSurface();
+    if (model.loadErrorMessage != null) return _errorSurface();
+    return null;
+  }
+
+  Widget _loadedSurface(BuildContext context) {
     const policy = LessonEditorDecisionPolicy();
     final selectedSettlement = _catalogItem(
       model.references.catalog?.settlementTypes,
@@ -201,6 +213,30 @@ class LessonEditorView extends StatelessWidget {
             body: const SafeArea(top: false, child: loading),
           )
         : const AlertDialog(content: loading);
+  }
+
+  Widget _errorSurface() {
+    final error = Center(
+      child: Column(
+        key: const ValueKey('lesson-load-error'),
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(model.loadErrorMessage!, textAlign: TextAlign.center),
+          const SizedBox(height: AppSpace.md),
+          FilledButton(
+            key: const ValueKey('lesson-load-retry'),
+            onPressed: onRetry,
+            child: const Text('Повторить'),
+          ),
+        ],
+      ),
+    );
+    return pageMode
+        ? Scaffold(
+            appBar: AppBar(title: Text(_title)),
+            body: SafeArea(top: false, child: error),
+          )
+        : AlertDialog(title: Text(_title), content: error);
   }
 }
 

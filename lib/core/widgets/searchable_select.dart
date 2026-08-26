@@ -4,22 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_surface_kind.dart';
+import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 
-class SearchableSelectItem {
-  final String id;
-  final String label;
-  final String? subtitle;
-  final String? avatarUrl;
-  final Map<String, dynamic>? data;
-
-  SearchableSelectItem({
-    required this.id,
-    required this.label,
-    this.subtitle,
-    this.avatarUrl,
-    this.data,
-  });
-}
+export 'package:magic_music_crm/core/widgets/searchable_picker_field.dart'
+    show SearchableSelectItem;
 
 class SearchableSelect extends StatefulWidget {
   final String title;

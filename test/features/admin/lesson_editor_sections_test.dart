@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:magic_music_crm/core/models/lesson_schedule_analysis.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_models.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_editor_feedback.dart';
@@ -205,6 +204,7 @@ LessonEditorViewModel _viewModel({
   bool isAnalyzing = false,
   LessonEditorReferenceState? references,
   String? leadNoteSource,
+  String? loadErrorMessage,
 }) {
   final value = draft ?? _draft();
   return LessonEditorViewModel(
@@ -220,6 +220,7 @@ LessonEditorViewModel _viewModel({
     isSaving: isSaving,
     isAnalyzing: isAnalyzing,
     validationMessage: null,
+    loadErrorMessage: loadErrorMessage,
   );
 }
 
@@ -1049,6 +1050,21 @@ void main() {
     expect(find.byType(Scaffold), findsOneWidget);
     expect(find.text('Загрузка данных...'), findsOneWidget);
 
+    var retries = 0;
+    await tester.pumpWidget(
+      _host(
+        LessonEditorView(
+          model: _viewModel(loadErrorMessage: 'Ошибка загрузки'),
+          actions: _RecordingActions(),
+          onRetry: () => retries += 1,
+        ),
+      ),
+    );
+    expect(find.byKey(const ValueKey('lesson-load-error')), findsOneWidget);
+    expect(find.text('Ошибка загрузки'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('lesson-load-retry')));
+    expect(retries, 1);
+
     final createActions = _RecordingActions();
     await tester.pumpWidget(
       _host(
@@ -1410,7 +1426,6 @@ void main() {
       'lib/features/admin/presentation/widgets/lesson_editor/lesson_editor_view.dart':
           {
             'package:flutter/material.dart',
-            'package:magic_music_crm/core/models/lesson_schedule_analysis.dart',
             'package:magic_music_crm/core/theme/app_theme.dart',
             'package:magic_music_crm/core/theme/design_tokens.dart',
             '../lesson_decision/lesson_decision_models.dart',
@@ -1425,14 +1440,12 @@ void main() {
           {
             'package:flutter/material.dart',
             'package:magic_music_crm/core/widgets/searchable_picker_field.dart',
-            'package:magic_music_crm/core/widgets/searchable_select.dart',
             'lesson_editor_models.dart',
           },
       'lib/features/admin/presentation/widgets/lesson_editor/lesson_schedule_section.dart':
           {
             'dart:async',
             'package:flutter/material.dart',
-            'package:magic_music_crm/core/models/lesson_schedule_analysis.dart',
             'package:magic_music_crm/core/navigation/entity_link_text.dart',
             'package:magic_music_crm/core/theme/design_tokens.dart',
             'lesson_editor_models.dart',
@@ -1443,7 +1456,6 @@ void main() {
             'package:flutter/services.dart',
             'package:magic_music_crm/core/theme/app_theme.dart',
             'package:magic_music_crm/core/widgets/searchable_picker_field.dart',
-            'package:magic_music_crm/core/widgets/searchable_select.dart',
             '../lesson_decision/lesson_decision_models.dart',
             '../lesson_form_rules.dart',
             'lesson_editor_feedback.dart',
@@ -1452,8 +1464,9 @@ void main() {
       'lib/features/admin/presentation/widgets/lesson_editor/lesson_editor_feedback.dart':
           {
             'package:flutter/material.dart',
-            'package:magic_music_crm/core/models/lesson_schedule_analysis.dart',
+            'package:magic_music_crm/core/api/magic_api_error.dart',
             'package:magic_music_crm/core/theme/design_tokens.dart',
+            'lesson_editor_decision_policy.dart',
             'lesson_editor_models.dart',
           },
     };

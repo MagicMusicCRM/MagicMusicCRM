@@ -7,6 +7,58 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_form_
 void main() {
   const policy = LessonEditorDecisionPolicy();
 
+  test(
+    'reference defaults keep catalog decisions and branch duration typed',
+    () {
+      final draft = _draft(
+        durationMinutes: 60,
+        clientChargeType: 'none',
+        settlementTypeKey: null,
+        compensationRuleKey: null,
+      );
+      final references = LessonEditorReferenceState(
+        teachers: const [],
+        clients: const [],
+        branches: const [],
+        rooms: const [],
+        subscriptions: const [],
+        catalog: LessonDecisionCatalog(
+          defaultDurationMinutes: 75,
+          settlementTypes: [
+            _catalogItem(
+              key: 'free',
+              hourShareBasisPoints: 0,
+              fixedPenaltyMinor: '0',
+            ),
+          ],
+          compensationRules: [
+            _catalogItem(key: 'fixed', mode: 'fixed', value: '125000'),
+          ],
+        ),
+      );
+
+      final configured = policy.applyReferenceDefaults(
+        _createSession(draft),
+        draft,
+        references,
+        true,
+      );
+      final explicit = policy.applyReferenceDefaults(
+        _createSession(draft),
+        draft,
+        references,
+        false,
+      );
+
+      expect(configured.durationMinutes, 75);
+      expect(explicit.durationMinutes, 60);
+      expect(configured.settlementTypeKey, 'free');
+      expect(configured.compensationRuleKey, 'fixed');
+      expect(configured.compensationValueMinor, '125000');
+      expect(configured.clientChargeType, 'none');
+    },
+  );
+
   group('create validation', () {
     test('none funding is legal only for a zero-charge settlement', () {
       final paid = _catalogItem(

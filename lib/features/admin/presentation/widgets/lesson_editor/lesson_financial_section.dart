@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
-import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 
 import '../lesson_decision/lesson_decision_models.dart';
 import '../lesson_form_rules.dart';

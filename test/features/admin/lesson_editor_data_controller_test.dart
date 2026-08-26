@@ -1,6 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:magic_music_crm/core/api/magic_api_client.dart';
+import 'package:magic_music_crm/core/api/magic_token_store.dart';
+import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_models.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_editor_data_controller.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_editor_models.dart';
@@ -9,6 +12,28 @@ void main() {
   const emptyCatalog = LessonDecisionCatalog(
     settlementTypes: [],
     compensationRules: [],
+  );
+
+  test(
+    'remote client search forwards query and returns typed metadata',
+    () async {
+      final api = _ClientSearchApi();
+      final controller = LessonEditorDataController.fromCrm(
+        MagicCrmService(api),
+      );
+
+      final clients = await controller.searchClients('  Зинаида  ');
+
+      expect(api.queryParameters, {'q': 'Зинаида', 'limit': 50});
+      expect(clients, const [
+        LessonClientRef(
+          type: 'student',
+          id: 'student-z',
+          label: 'Зинаида Заречная',
+          branchId: 'branch-z',
+        ),
+      ]);
+    },
   );
 
   group('revision ownership', () {
@@ -89,7 +114,7 @@ void main() {
         listSubscriptions: (_) async => const [],
         listTeachers: () => teachers.future,
         listBranches: () async => const [],
-        searchClients: () async => const [],
+        searchClients: (_) async => const [],
       );
 
       final pending = controller.loadInitial(_session());
@@ -252,7 +277,7 @@ void main() {
             {'id': 'branch-a', 'name': 'A'},
             {'id': 'branch-b', 'name': 'B'},
           ],
-          searchClients: () async => const [
+          searchClients: (_) async => const [
             {
               'ref': {'type': 'lead', 'id': 'lead-a'},
               'label': 'Lead A',
@@ -765,6 +790,40 @@ void main() {
     });
 
     test(
+      'subscription failure clears stale funding without losing selection',
+      () async {
+        final controller = LessonEditorDataController.forTesting(
+          listRooms: (_) async => const [],
+          loadCatalog: (_) async => emptyCatalog,
+          listSubscriptions: (_) async =>
+              throw const FormatException('commerce unavailable'),
+        );
+
+        final patch = await controller.loadSubscriptions(
+          const LessonClientRef(type: 'student', id: 'student-a', label: 'A'),
+          draft: _draft(
+            branchId: 'branch-a',
+            subscriptionId: 'subscription-old',
+          ),
+          references: _references(
+            subscriptions: const [
+              LessonEditorReferenceItem(
+                id: 'subscription-old',
+                label: 'Old',
+                status: 'active',
+                raw: {'id': 'subscription-old'},
+              ),
+            ],
+          ),
+        );
+
+        expect(patch?.branchId, 'branch-a');
+        expect(patch?.references.subscriptions, isEmpty);
+        expect(patch?.draft?.subscriptionId, isNull);
+      },
+    );
+
+    test(
       'non-student selection clears subscriptions without a request',
       () async {
         var requests = 0;
@@ -799,6 +858,35 @@ void main() {
       },
     );
   });
+}
+
+class _ClientSearchApi extends MagicApiClient {
+  _ClientSearchApi()
+    : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
+
+  Map<String, dynamic>? queryParameters;
+
+  @override
+  Future<T> get<T>(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
+  }) async {
+    expect(path, '/crm/clients/search');
+    this.queryParameters = Map<String, dynamic>.from(queryParameters ?? {});
+    return <String, dynamic>{
+          'items': [
+            {
+              'ref': {'type': 'student', 'id': 'student-z'},
+              'label': 'Зинаида Заречная',
+              'branchId': 'branch-z',
+              'lifecycleState': 'active',
+              'tombstone': false,
+            },
+          ],
+        }
+        as T;
+  }
 }
 
 LessonEditorDataController _initialController({

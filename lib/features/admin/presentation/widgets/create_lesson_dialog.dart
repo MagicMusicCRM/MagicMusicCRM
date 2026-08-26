@@ -1,33 +1,24 @@
+import 'dart:async';
+// ignore_for_file: annotate_overrides
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
-import 'package:magic_music_crm/core/api/magic_api_error.dart';
-import 'package:magic_music_crm/core/models/lesson_schedule_analysis.dart';
-import 'package:magic_music_crm/core/navigation/app_back_policy.dart';
-import 'package:magic_music_crm/core/navigation/entity_link_text.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
-import 'package:magic_music_crm/core/theme/app_theme.dart';
-import 'package:magic_music_crm/core/theme/design_tokens.dart';
-import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
-import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
-
 import 'lesson_decision_flow.dart';
-import 'lesson_form_rules.dart';
+import 'lesson_editor/lesson_editor_data_controller.dart';
+import 'lesson_editor/lesson_editor_decision_policy.dart';
+import 'lesson_editor/lesson_editor_feedback.dart';
+import 'lesson_editor/lesson_editor_initial_mapper.dart';
+import 'lesson_editor/lesson_editor_models.dart';
+import 'lesson_editor/lesson_editor_save_flow.dart';
+import 'lesson_editor/lesson_editor_schedule_controller.dart';
+import 'lesson_editor/lesson_editor_view.dart';
 
-part 'create_lesson_dialog_view.dart';
-
-/// Unified v4 create/edit form.
-///
-/// A lesson always points at exactly one typed ClientRef. Trial is an
-/// independent marker, while the completion/financial/compensation snapshot is
-/// chosen explicitly on create and becomes read-only on edit.
-class CreateLessonDialog extends ConsumerStatefulWidget {
+class CreateLessonDialog extends ConsumerStatefulWidget
+    implements LessonEditorInitialSource {
   final DateTime? initialDate;
-  final String? initialRoomId;
-  final String? initialBranchId;
+  final String? initialRoomId, initialBranchId;
   final int? initialDurationMinutes;
   final Map<String, dynamic>? lesson;
   final String? leadId;
@@ -37,7 +28,6 @@ class CreateLessonDialog extends ConsumerStatefulWidget {
   final String? clientName;
   final bool initialIsTrial;
   final bool pageMode;
-
   const CreateLessonDialog({
     super.key,
     this.initialDate,
@@ -53,7 +43,6 @@ class CreateLessonDialog extends ConsumerStatefulWidget {
     this.initialIsTrial = false,
     this.pageMode = false,
   });
-
   static Future<bool?> show(
     BuildContext context, {
     DateTime? initialDate,
@@ -68,1098 +57,261 @@ class CreateLessonDialog extends ConsumerStatefulWidget {
     String? clientName,
     bool initialIsTrial = false,
   }) {
+    CreateLessonDialog editor(bool pageMode) => CreateLessonDialog(
+      initialDate: initialDate,
+      initialRoomId: initialRoomId,
+      initialBranchId: initialBranchId,
+      initialDurationMinutes: initialDurationMinutes,
+      lesson: lesson,
+      leadId: leadId,
+      leadName: leadName,
+      clientType: clientType,
+      clientId: clientId,
+      clientName: clientName,
+      initialIsTrial: initialIsTrial,
+      pageMode: pageMode,
+    );
     if (WorkspaceNavigationScope.maybeOf(context)?.isDesktop == true) {
-      return showDialog<bool>(
-        context: context,
-        builder: (_) => CreateLessonDialog(
-          initialDate: initialDate,
-          initialRoomId: initialRoomId,
-          initialBranchId: initialBranchId,
-          initialDurationMinutes: initialDurationMinutes,
-          lesson: lesson,
-          leadId: leadId,
-          leadName: leadName,
-          clientType: clientType,
-          clientId: clientId,
-          clientName: clientName,
-          initialIsTrial: initialIsTrial,
-        ),
-      );
+      return showDialog<bool>(context: context, builder: (_) => editor(false));
     }
     return Navigator.of(context).push<bool>(
       MaterialPageRoute(
         fullscreenDialog: true,
         settings: const RouteSettings(name: 'lesson-editor'),
-        builder: (ctx) => CreateLessonDialog(
-          initialDate: initialDate,
-          initialRoomId: initialRoomId,
-          initialBranchId: initialBranchId,
-          initialDurationMinutes: initialDurationMinutes,
-          lesson: lesson,
-          leadId: leadId,
-          leadName: leadName,
-          clientType: clientType,
-          clientId: clientId,
-          clientName: clientName,
-          initialIsTrial: initialIsTrial,
-          pageMode: true,
-        ),
+        builder: (_) => editor(true),
       ),
     );
   }
 
-  @override
-  ConsumerState<CreateLessonDialog> createState() => _CreateLessonDialogState();
+  ConsumerState<CreateLessonDialog> createState() => _LessonEditorDialogState();
 }
 
-class _CreateLessonDialogState extends ConsumerState<CreateLessonDialog> {
-  final _scrollController = ScrollController(keepScrollOffset: false);
-  final _compensationValueController = TextEditingController();
-  final _plannedSettlementReasonController = TextEditingController();
-  bool _loading = false;
-  bool _saving = false;
-  bool _analyzingSchedule = false;
-  String? _validationMessage;
-  String? _scheduleAnalysisError;
-  LessonScheduleAnalysis? _scheduleAnalysis;
-
-  List<Map<String, dynamic>> _teachers = [];
-  List<Map<String, dynamic>> _clients = [];
-  List<Map<String, dynamic>> _branches = [];
-  List<Map<String, dynamic>> _rooms = [];
-  List<Map<String, dynamic>> _subscriptions = [];
-  int _roomsRequestRevision = 0;
-  int _decisionCatalogRequestRevision = 0;
-  int _subscriptionsRequestRevision = 0;
-  int _clientSelectionRevision = 0;
-
-  Map<String, dynamic>? _selectedClient;
-  String? _selectedTeacherId;
-  String? _selectedBranchId;
-  String? _selectedRoomId;
-  String? _selectedSubscriptionId;
-
-  DateTime _selectedDate = DateTime.now();
-  TimeOfDay _selectedTime = TimeOfDay.now();
-  int _durationMinutes = 60;
-  bool _isTrial = false;
-
-  String _completionType = 'standard.success';
-  String _clientChargeType = 'none';
-  LessonDecisionCatalog? _decisionCatalog;
-  String? _settlementTypeKey;
-  String? _compensationRuleKey;
-  String? _initialCompensationValueMinor;
-  String? _financialBaselineRuleKey;
-  String? _financialBaselineValueMinor;
-  bool _financialBaselineCaptured = false;
-
-  bool get _isEdit => widget.lesson != null;
-  String? get _groupId {
-    final value = widget.lesson?['group_id'] ?? widget.lesson?['groupId'];
-    final id = value?.toString();
-    return id == null || id.isEmpty ? null : id;
-  }
-
-  bool get _isGroupEdit => _isEdit && _groupId != null;
-  String get _groupName {
-    final value =
-        widget.lesson?['group_name'] ?? widget.lesson?['groupName'] ?? 'Группа';
-    final name = value.toString().trim();
-    return name.isEmpty ? 'Группа' : name;
-  }
-
-  bool get _snapshotLocked => _isEdit;
-  MagicCrmService get _crm => ref.read(magicCrmServiceProvider);
-  List<int> get _durationOptions {
-    final values = <int>{30, 45, 60, 90, 120, _durationMinutes}.toList()
-      ..sort();
-    return values;
-  }
-
-  String? get _clientType {
-    final ref = _selectedClient?['ref'];
-    return ref is Map ? ref['type']?.toString() : null;
-  }
-
-  String? get _clientId {
-    final ref = _selectedClient?['ref'];
-    return ref is Map ? ref['id']?.toString() : null;
-  }
-
-  String get _clientKey {
-    final type = _clientType;
-    final id = _clientId;
-    return type == null || id == null ? '' : '$type:$id';
-  }
-
-  String? _clientBranchId(Map<String, dynamic>? client) {
-    final value = client?['branchId'] ?? client?['branch_id'];
-    final branchId = value?.toString();
-    return branchId == null || branchId.isEmpty ? null : branchId;
-  }
-
-  bool _hasBranch(String? branchId) =>
-      branchId != null &&
-      _branches.any((branch) => branch['id']?.toString() == branchId);
-
-  List<Map<String, dynamic>> get _eligibleTeachers {
-    final branchId = _selectedBranchId;
-    if (branchId == null) return const [];
-    return _teachers
-        .where((teacher) {
-          if (teacher['status']?.toString() != 'active') return false;
-          final assignments = teacher['assigned_branches'];
-          return assignments is List &&
-              assignments.whereType<Map>().any(
-                (branch) => branch['id']?.toString() == branchId,
-              );
-        })
-        .toList(growable: false);
-  }
-
-  List<Map<String, dynamic>> get _eligibleRooms {
-    final branchId = _selectedBranchId;
-    if (branchId == null) return const [];
-    return _rooms
-        .where(
-          (room) =>
-              (room['branch_id'] ?? room['branchId'])?.toString() == branchId &&
-              room['lifecycle_state']?.toString() != 'archived',
-        )
-        .toList(growable: false);
-  }
-
-  @override
+class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
+    with LessonEditorDraftActions
+    implements LessonEditorActions {
+  static const _policy = LessonEditorDecisionPolicy();
+  final _scroll = ScrollController(keepScrollOffset: false);
+  late final LessonEditorSession _session;
+  late LessonEditorDraft _draft;
+  var _refs = const LessonEditorReferenceState.empty();
+  late final LessonEditorDataController _data;
+  late final LessonEditorScheduleController _schedule;
+  late final LessonEditorSaveFlow _flow;
+  bool _loading = true, _saving = false, _analyzing = false;
+  String? _loadError, _scheduleError;
+  LessonEditorValidation _valid = const LessonEditorValidation.valid();
+  LessonScheduleAnalysis? _conflicts;
+  LessonEditorDraft get actionDraft => _draft;
+  LessonEditorReferenceState get actionReferences => _refs;
+  LessonEditorDecisionPolicy get actionPolicy => _policy;
   void initState() {
     super.initState();
-    _isTrial = widget.initialIsTrial;
-    if (widget.initialDate != null) {
-      _selectedDate = widget.initialDate!;
-      _selectedTime = widget.initialIsTrial
-          ? const TimeOfDay(hour: 10, minute: 0)
-          : TimeOfDay.fromDateTime(widget.initialDate!);
-    }
-    _selectedRoomId = widget.initialRoomId;
-    _selectedBranchId = widget.initialBranchId;
-    if (widget.initialDurationMinutes case final minutes? when minutes > 0) {
-      _durationMinutes = minutes;
-    }
-
-    if (widget.clientId != null) {
-      _selectedClient = _clientRow(
-        type: widget.clientType == 'lead' ? 'lead' : 'student',
-        id: widget.clientId!,
-        label: widget.clientName ?? 'Клиент без имени',
-      );
-    } else if (widget.leadId != null) {
-      _selectedClient = _clientRow(
-        type: 'lead',
-        id: widget.leadId!,
-        label: widget.leadName ?? 'Лид без имени',
-      );
-    }
-
-    final lesson = widget.lesson;
-    if (lesson != null) {
-      final leadId = lesson['lead_id']?.toString();
-      final studentId = lesson['student_id']?.toString();
-      if (leadId != null && leadId.isNotEmpty) {
-        _selectedClient = _clientRow(
-          type: 'lead',
-          id: leadId,
-          label: lesson['lead_name']?.toString() ?? 'Лид без имени',
-        );
-      } else if (studentId != null && studentId.isNotEmpty) {
-        _selectedClient = _clientRow(
-          type: 'student',
-          id: studentId,
-          label: lesson['student_name']?.toString() ?? 'Ученик без имени',
-        );
-      }
-      _selectedTeacherId = lesson['teacher_id']?.toString();
-      _selectedBranchId = lesson['branch_id']?.toString() ?? _selectedBranchId;
-      _selectedRoomId = lesson['room_id']?.toString() ?? _selectedRoomId;
-      _durationMinutes =
-          (lesson['duration_minutes'] as num?)?.toInt() ?? _durationMinutes;
-      final raw = lesson['scheduled_at']?.toString();
-      final parsed = raw == null ? null : DateTime.tryParse(raw);
-      if (parsed != null) {
-        final local = parsed.toUtc().add(const Duration(hours: 3));
-        _selectedDate = DateTime(local.year, local.month, local.day);
-        _selectedTime = TimeOfDay(hour: local.hour, minute: local.minute);
-      }
-      _isTrial = lesson['snapshot_trial'] == true || lesson['is_trial'] == true;
-      _completionType =
-          lesson['completion_type']?.toString() ?? _completionType;
-      _clientChargeType =
-          lesson['client_charge_type']?.toString() ?? _clientChargeType;
-      _selectedSubscriptionId = lesson['subscription_id']?.toString();
-      _settlementTypeKey =
-          (lesson['settlement_type_key'] ?? lesson['settlementTypeKey'])
-              ?.toString();
-      _compensationRuleKey =
-          (lesson['teacher_compensation_rule_key'] ??
-                  lesson['teacherCompensationRuleKey'])
-              ?.toString();
-      _initialCompensationValueMinor =
-          (lesson['teacher_compensation_value_minor'] ??
-                  lesson['teacherCompensationValueMinor'])
-              ?.toString();
-    }
-    _loadData();
+    _session = const LessonEditorInitialMapper().fromSource(widget);
+    _draft = _session.draft;
+    final crm = ref.read(magicCrmServiceProvider);
+    _data = LessonEditorDataController.fromCrm(crm);
+    _schedule = LessonEditorScheduleController.fromCrm(crm, policy: _policy);
+    _flow = LessonEditorSaveFlow.fromCrm(crm);
+    unawaited(_refreshReferences());
   }
 
-  @override
   void dispose() {
-    _scrollController.dispose();
-    _compensationValueController.dispose();
-    _plannedSettlementReasonController.dispose();
+    _data.invalidateClientSelection();
+    _scroll.dispose();
     super.dispose();
   }
 
-  String get _dialogTitle => _isEdit
-      ? 'Перенести или изменить занятие'
-      : widget.leadId != null
-      ? 'Пробное занятие'
-      : 'Новое занятие';
-
-  String get _savedMessage =>
-      _isEdit ? 'Изменения занятия применены' : 'Занятие создано';
-
-  Future<void> _loadData() async {
-    final clientSelectionRevision = _clientSelectionRevision;
-    setState(() => _loading = true);
-    try {
-      Map<String, dynamic>? resolvedClient;
-      if (!_isEdit && _selectedClient != null) {
-        try {
-          resolvedClient = await _crm.resolveClientRef(
-            type: _clientType!,
-            id: _clientId!,
-          );
-        } catch (error) {
-          debugPrint('Error resolving selected client: $error');
-        }
-      }
-      final results = await Future.wait([
-        _crm.listTeachers(limit: 100),
-        _crm.listBranches(limit: 100),
-        _crm.searchClientRefs(limit: 50),
-      ]);
-      if (!mounted) return;
-      setState(() {
-        _teachers = results[0];
-        _branches = results[1];
-        _clients = results[2];
-        if (resolvedClient != null) {
-          _selectedClient = resolvedClient;
-        }
-        if (_selectedClient case final selected?
-            when !_clients.any(
-              (row) => _clientKeyFor(row) == _clientKeyFor(selected),
-            )) {
-          _clients = [selected, ..._clients];
-        }
-        _loading = false;
-      });
-      final clientBranchId = _clientBranchId(_selectedClient);
-      final previousBranchId = _selectedBranchId;
-      final branchId = !_isEdit && _hasBranch(clientBranchId)
-          ? clientBranchId
-          : _hasBranch(_selectedBranchId)
-          ? _selectedBranchId
-          : _branches.firstOrNull?['id']?.toString();
-      if (branchId != null) {
-        if (mounted) {
-          setState(() {
-            _selectedBranchId = branchId;
-            if (!_isEdit &&
-                clientBranchId == branchId &&
-                previousBranchId != branchId) {
-              _selectedRoomId = null;
-            }
-            if (!_eligibleTeachers.any(
-              (teacher) => teacher['id']?.toString() == _selectedTeacherId,
-            )) {
-              _selectedTeacherId = null;
-            }
-          });
-        }
-        final selectedClientKey = _clientKey;
-        await Future.wait([
-          _loadRooms(branchId),
-          _loadDecisionCatalog(branchId),
-        ]);
-        if (!mounted ||
-            clientSelectionRevision != _clientSelectionRevision ||
-            _clientKey != selectedClientKey ||
-            _selectedBranchId != branchId) {
-          return;
-        }
-      }
-      await _loadSubscriptions();
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            userErrorMessage(
-              error,
-              fallback: 'Не удалось загрузить данные занятия.',
-            ),
-          ),
-        ),
-      );
-      Navigator.pop(context);
-    }
-  }
-
-  Future<void> _selectClient(Map<String, dynamic> row) async {
-    final revision = ++_clientSelectionRevision;
-    final branchId = _clientBranchId(row);
-    final switchBranch = _hasBranch(branchId) && branchId != _selectedBranchId;
+  Future<void> _refreshReferences() async {
+    _data.invalidateClientSelection();
     setState(() {
-      _selectedClient = row;
-      if (switchBranch) {
-        _selectedBranchId = branchId;
-        _selectedTeacherId = null;
-        _selectedRoomId = null;
-        _rooms = [];
-        _decisionCatalog = null;
-        _settlementTypeKey = null;
-        _compensationRuleKey = null;
-      }
+      _loading = true;
+      _loadError = null;
     });
-    final selectedClientKey = _clientKey;
-    final selectedBranchId = _selectedBranchId;
-    if (switchBranch) {
-      await Future.wait([
-        _loadRooms(branchId!),
-        _loadDecisionCatalog(branchId),
-      ]);
+    final result = await _data.loadInitialSafely(_session);
+    if (!mounted) return;
+    if (result.patch case final patch?) {
+      return _acceptPatch(patch, loaded: true);
     }
-    if (!mounted ||
-        revision != _clientSelectionRevision ||
-        _clientKey != selectedClientKey ||
-        _selectedBranchId != selectedBranchId) {
-      return;
-    }
-    await _loadSubscriptions();
+    setState(() {
+      _loading = false;
+      _loadError = lessonLoadErrorMessage(result.error);
+    });
   }
 
-  Future<void> _loadRooms(String branchId) async {
-    final revision = ++_roomsRequestRevision;
-    try {
-      final rooms = await _crm.listRooms(branchId: branchId, limit: 100);
-      if (!mounted ||
-          revision != _roomsRequestRevision ||
-          _selectedBranchId != branchId) {
-        return;
-      }
-      setState(() {
-        _rooms = rooms;
-        if (_selectedRoomId != null &&
-            !_eligibleRooms.any(
-              (room) => room['id'].toString() == _selectedRoomId,
-            )) {
-          _selectedRoomId = null;
-        }
-      });
-    } catch (error) {
-      if (!mounted ||
-          revision != _roomsRequestRevision ||
-          _selectedBranchId != branchId) {
-        return;
-      }
-      debugPrint('Error loading rooms: $error');
-    }
-  }
-
-  Future<void> _loadDecisionCatalog(String branchId) async {
-    final revision = ++_decisionCatalogRequestRevision;
-    late final Map<String, dynamic> response;
-    try {
-      response = await _crm.getLessonDecisionCatalog(branchId: branchId);
-    } catch (_) {
-      if (!mounted ||
-          revision != _decisionCatalogRequestRevision ||
-          _selectedBranchId != branchId) {
-        return;
-      }
-      rethrow;
-    }
-    if (!mounted ||
-        revision != _decisionCatalogRequestRevision ||
-        _selectedBranchId != branchId) {
-      return;
-    }
-    final catalog = LessonDecisionCatalog.fromJson(
-      response,
-      LessonDecisionOperation.settle,
+  void _acceptPatch(LessonEditorLoadPatch patch, {bool loaded = false}) {
+    final references = patch.references;
+    final draft = _policy.applyReferenceDefaults(
+      _session,
+      patch.draft ?? _draft,
+      references,
+      widget.initialDurationMinutes == null,
     );
-    final configuredDuration =
-        (response['defaultLessonDurationMinutes'] as num?)?.toInt();
-    final hasExplicitDuration =
-        widget.initialDurationMinutes != null &&
-        widget.initialDurationMinutes! > 0;
     setState(() {
-      _decisionCatalog = catalog;
-      if (!_isEdit &&
-          !hasExplicitDuration &&
-          configuredDuration != null &&
-          configuredDuration > 0) {
-        _durationMinutes = configuredDuration;
-      }
-      if (!catalog.settlementTypes.any(
-        (item) => item.key == _settlementTypeKey,
-      )) {
-        _settlementTypeKey = catalog.settlementTypes.firstOrNull?.key;
-      }
-      if (!catalog.compensationRules.any(
-        (item) => item.key == _compensationRuleKey,
-      )) {
-        final legacyMode = widget.lesson?['teacher_compensation_type']
-            ?.toString();
-        _compensationRuleKey = catalog.compensationRules
-            .where((item) => item.mode == legacyMode)
-            .firstOrNull
-            ?.key;
-        _compensationRuleKey ??= catalog.compensationRules.firstOrNull?.key;
-      }
-      final rule = _selectedCompensationRule;
-      if (rule != null) {
-        final initialValue =
-            _initialCompensationValueMinor ??
-            _legacyCompensationValueMinor(rule);
-        _compensationValueController.text = _compensationInput(
-          rule,
-          valueMinor: initialValue,
-        );
-      } else {
-        _compensationValueController.clear();
-      }
-      if (!_financialBaselineCaptured) {
-        _financialBaselineRuleKey = _compensationRuleKey;
-        _financialBaselineValueMinor = _compensationValueMinor();
-        _financialBaselineCaptured = true;
-      }
-      if (!_isEdit) _applyFundingDefault();
+      _draft = draft;
+      _refs = references;
+      if (loaded) _loading = false;
     });
   }
 
-  Future<void> _loadSubscriptions() async {
-    final revision = ++_subscriptionsRequestRevision;
-    final studentId = _clientType == 'student' ? _clientId : null;
-    if (studentId == null) {
-      if (mounted) {
-        setState(() {
-          _subscriptions = [];
-          _selectedSubscriptionId = null;
-          if (!_isEdit) _applyFundingDefault();
-        });
+  void updateActionDraft(
+    LessonEditorDraft value, {
+    bool scheduleChanged = false,
+  }) {
+    setState(() {
+      _draft = value;
+      if (scheduleChanged) {
+        _conflicts = null;
+        _scheduleError = null;
       }
-      return;
-    }
+    });
+  }
+
+  Widget build(BuildContext context) => LessonEditorView(
+    model: LessonEditorViewModel(
+      session: _session,
+      draft: _draft,
+      references: _refs,
+      analysis: _conflicts,
+      isLoading: _loading,
+      isSaving: _saving,
+      isAnalyzing: _analyzing,
+      validationMessage: _valid.message,
+      loadErrorMessage: _loadError,
+      scheduleAnalysisError: _scheduleError,
+    ),
+    actions: this,
+    pageMode: widget.pageMode,
+    title: lessonEditorTitle(_session, widget.leadId != null),
+    scrollController: _scroll,
+    onRetry: _refreshReferences,
+  );
+  Future<List<LessonClientRef>> searchClients(String query) =>
+      _data.searchClients(query);
+  void selectClient(LessonClientRef? value) => unawaited(
+    _requestPatch(
+      _data.selectClient(value, draft: _draft, references: _refs),
+      'Не удалось выбрать клиента.',
+    ),
+  );
+  void loadActionBranch(String value) {
+    unawaited(
+      _requestPatch(
+        _data.loadBranch(value, draft: _draft, references: _refs),
+        'Не удалось загрузить данные филиала.',
+      ),
+    );
+  }
+
+  LessonEditorDraft applyActionSuggestion(ScheduleSuggestion value) =>
+      _schedule.applySuggestion(_draft, value);
+  void focusActionConstraint(String lessonId) => _focusConstraint(lessonId);
+
+  Future<void> _requestPatch(
+    Future<LessonEditorLoadPatch?> request,
+    String fallback,
+  ) async {
     try {
-      final rows = await _crm.listSubscriptions(
-        studentId: studentId,
-        limit: 50,
-      );
-      if (!mounted ||
-          revision != _subscriptionsRequestRevision ||
-          _clientType != 'student' ||
-          _clientId != studentId) {
-        return;
-      }
-      setState(() {
-        _subscriptions = rows
-            .where((row) => row['status']?.toString() == 'active')
-            .toList(growable: false);
-        if (_selectedSubscriptionId != null &&
-            !_subscriptions.any(
-              (row) => row['id']?.toString() == _selectedSubscriptionId,
-            )) {
-          _selectedSubscriptionId = null;
-        }
-        if (!_isEdit) {
-          _applyFundingDefault();
-        }
-      });
+      final patch = await request;
+      if (mounted && patch != null) _acceptPatch(patch);
     } catch (error) {
-      if (!mounted ||
-          revision != _subscriptionsRequestRevision ||
-          _clientType != 'student' ||
-          _clientId != studentId) {
-        return;
-      }
-      debugPrint('Error loading subscriptions: $error');
+      if (mounted) _showError(error, fallback);
     }
   }
 
-  void _applyFundingDefault() {
-    final settlement = _decisionCatalog?.settlementTypes
-        .where((item) => item.key == _settlementTypeKey)
-        .firstOrNull;
-    if (settlement?.hourShareBasisPoints == 0 &&
-        settlement?.fixedPenaltyMinor == '0') {
-      _clientChargeType = 'none';
-      _selectedSubscriptionId = null;
-      return;
-    }
-    if (_clientType == 'student' && _subscriptions.isNotEmpty) {
-      _clientChargeType = 'subscription';
-      _selectedSubscriptionId ??= _subscriptions.first['id']?.toString();
-    } else {
-      _clientChargeType = 'personal_account';
-      _selectedSubscriptionId = null;
-    }
+  Future<void> analyzeSchedule() async {
+    setState(() {
+      _analyzing = true;
+      _scheduleError = null;
+    });
+    final result = await _schedule.inspect(_session, _draft);
+    if (!mounted) return;
+    setState(() {
+      _analyzing = false;
+      _conflicts = result.analysis;
+      _scheduleError = lessonScheduleErrorMessage(result.error);
+    });
   }
 
-  bool get _selectedSettlementIsNoCharge {
-    final settlement = _decisionCatalog?.settlementTypes
-        .where((item) => item.key == _settlementTypeKey)
-        .firstOrNull;
-    return settlement?.hourShareBasisPoints == 0 &&
-        settlement?.fixedPenaltyMinor == '0';
-  }
-
-  Future<void> _save() async {
+  Future<void> save() async {
     if (_saving) return;
-    if (_validationMessage != null) setState(() => _validationMessage = null);
-    final clientId = _clientId;
-    final clientType = _clientType;
-    final version = (widget.lesson?['version'] as num?)?.toInt();
-    final compensationValueMinor = _compensationValueMinor();
-    final startsAt = DateTime.utc(
-      _selectedDate.year,
-      _selectedDate.month,
-      _selectedDate.day,
-      _selectedTime.hour - 3,
-      _selectedTime.minute,
+    setState(() {
+      _saving = true;
+      _valid = const LessonEditorValidation.valid();
+    });
+    final outcome = await _flow.saveDraft(
+      _session,
+      _draft,
+      _refs,
+      () => _schedule.requestFor(session: _session, draft: _draft),
     );
-    final payload = _lessonPayload(scheduledAt: startsAt.toIso8601String());
-    final scheduleChanged = _isEdit && _hasScheduleChanges(payload);
-    final financialChanged = _isEdit && _hasFinancialDecisionChanges;
-    final validationMessage = _saveValidationMessage(
-      version,
-      compensationValueMinor,
-      scheduleChanged,
-      financialChanged,
-    );
-    if (validationMessage != null) {
-      setState(() => _validationMessage = validationMessage);
-      return;
-    }
-    setState(() => _saving = true);
+    if (!mounted) return;
     try {
-      final saved = _isEdit
-          ? await _saveEdit(payload, scheduleChanged, compensationValueMinor)
-          : await _saveCreate(payload, startsAt, clientType!, clientId!);
-      if (!saved || !mounted) return;
-      _showSaveResult();
-    } catch (error) {
-      _showSaveError(error);
+      switch (outcome) {
+        case LessonSaveCreated():
+          _finishSave('Занятие создано');
+        case LessonSaveInvalid(:final validation):
+          setState(() => _valid = validation);
+        case LessonSaveViolations(:final violations):
+          setState(
+            () =>
+                _conflicts = LessonScheduleAnalysis.fromViolations(violations),
+          );
+          await _showViolations(violations);
+        case LessonSaveDecision(:final request):
+          final changed = await showLessonDecisionFlow(
+            context,
+            crm: ref.read(magicCrmServiceProvider),
+            operation: request.operation,
+            lesson: request.lesson,
+            successor: request.successor,
+            initialSettlementTypeKey: request.initialSettlementTypeKey,
+            initialCompensationRuleKey: request.initialCompensationRuleKey,
+            initialCompensationValueMinor:
+                request.initialCompensationValueMinor,
+          );
+          if (changed == true && mounted) {
+            _finishSave('Изменения занятия применены');
+          }
+        case LessonSaveFailure(:final error):
+          _showError(error, 'Не удалось сохранить занятие.');
+        case LessonSaveBusy():
+          break;
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
-  String? _saveValidationMessage(
-    int? version,
-    String? compensationValueMinor,
-    bool scheduleChanged,
-    bool financialChanged,
-  ) {
-    final missingSubscription =
-        !_isEdit &&
-        _clientChargeType == 'subscription' &&
-        _selectedSubscriptionId == null;
-    final invalidNoFunding =
-        !_isEdit &&
-        _clientChargeType == 'none' &&
-        !_selectedSettlementIsNoCharge;
-    final compensationValueRequired = switch (_selectedCompensationRule?.mode) {
-      'percent' || 'fixed' || 'hourly' => true,
-      _ => false,
-    };
-    final missingCompensationValue =
-        compensationValueRequired && compensationValueMinor == null;
-    final missingCompensationReason =
-        !_isEdit &&
-        _compensationNeedsReason &&
-        _plannedSettlementReasonController.text.trim().isEmpty;
-    final missingClient =
-        !_isGroupEdit && (_clientId == null || _clientType == null);
-    if (missingClient ||
-        _selectedTeacherId == null ||
-        _selectedBranchId == null ||
-        _selectedRoomId == null ||
-        missingSubscription ||
-        invalidNoFunding ||
-        (!_isEdit && _settlementTypeKey == null) ||
-        (!_isEdit && _compensationRuleKey == null) ||
-        missingCompensationValue ||
-        missingCompensationReason ||
-        (_isEdit && version == null)) {
-      return _isEdit && version == null
-          ? 'Обновите расписание: версия занятия не получена'
-          : missingCompensationValue
-          ? 'Введите корректный процент или сумму оплаты преподавателю'
-          : missingCompensationReason
-          ? 'Укажите причину индивидуального значения оплаты преподавателю'
-          : invalidNoFunding
-          ? 'Для платного списания выберите абонемент или личный счёт'
-          : 'Заполните обязательные поля корректно';
-    }
-    if (_isEdit && !scheduleChanged && !financialChanged) {
-      return 'Измените параметры расписания или оплату преподавателю';
-    }
-    return null;
+  Future<void> _showViolations(List<LessonConstraintViolation> violations) =>
+      showDialog<void>(
+        context: context,
+        builder: (dialogContext) => LessonConstraintDialog(
+          violations: violations,
+          onOpen: (lessonId) {
+            Navigator.pop(dialogContext);
+            _focusConstraint(lessonId);
+          },
+          onFix: () => Navigator.pop(dialogContext),
+        ),
+      );
+
+  void _focusConstraint(String lessonId) {
+    ref
+        .read(scheduleNavigationProvider.notifier)
+        .focus(_draft.localStart, lessonId);
+    Navigator.pop(context);
   }
 
-  Future<bool> _saveCreate(
-    Map<String, dynamic> payload,
-    DateTime startsAt,
-    String clientType,
-    String clientId,
-  ) async {
-    final canSave = await _previewConstraintsBeforeSave(
-      startsAt,
-      clientType,
-      clientId,
-    );
-    if (!canSave || !mounted) return false;
-    try {
-      await _crm.createLessonRaw(payload);
-    } on MagicApiException catch (error) {
-      final violations = lessonConstraintViolationsFromDetails(error.details);
-      if (violations == null || violations.isEmpty) rethrow;
-      if (mounted) {
-        setState(() {
-          _scheduleAnalysis = LessonScheduleAnalysis.fromViolations(violations);
-        });
-        await _showConstraintViolations(violations);
-      }
-      return false;
-    }
-    return true;
-  }
-
-  Future<bool> _saveEdit(
-    Map<String, dynamic> payload,
-    bool scheduleChanged,
-    String? compensationValueMinor,
-  ) async {
-    final operation = scheduleChanged
-        ? LessonDecisionOperation.reschedule
-        : _financialEditOperation;
-    final changed = await showLessonDecisionFlow(
-      context,
-      crm: _crm,
-      operation: operation,
-      lesson: widget.lesson!,
-      successor: scheduleChanged ? payload : null,
-      initialSettlementTypeKey: _settlementTypeKey,
-      initialCompensationRuleKey: _compensationRuleKey,
-      initialCompensationValueMinor: compensationValueMinor,
-    );
-    return changed == true && mounted;
-  }
-
-  void _showSaveResult() {
+  void cancel() => Navigator.pop(context);
+  void _finishSave(String message) {
+    final messenger = ScaffoldMessenger.of(context);
     Navigator.pop(context, true);
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(_savedMessage)));
+    messenger.showSnackBar(SnackBar(content: Text(message)));
   }
 
-  void _showSaveError(Object error) {
-    if (!mounted) return;
+  void _showError(Object error, String fallback) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          userErrorMessage(error, fallback: 'Не удалось сохранить занятие.'),
-        ),
-      ),
+      SnackBar(content: Text(lessonEditorErrorMessage(error, fallback))),
     );
-  }
-
-  Map<String, dynamic> _lessonPayload({required String scheduledAt}) {
-    final compensationValueMinor = _compensationValueMinor();
-    final mutable = <String, dynamic>{
-      'teacherId': _selectedTeacherId,
-      'branchId': _selectedBranchId,
-      'roomId': _selectedRoomId,
-      'scheduledAt': scheduledAt,
-      'durationMinutes': _durationMinutes,
-    };
-    if (_isEdit) {
-      return mutable;
-    }
-    return {
-      ...mutable,
-      'clientRef': {'type': _clientType, 'id': _clientId},
-      'isTrial': _isTrial,
-      'completionType': _completionType,
-      'clientChargeType': _clientChargeType,
-      'clientChargeValue': _derivedClientChargeValue,
-      'teacherCompensationType': _derivedTeacherRate.$1,
-      'teacherCompensationValue': _derivedTeacherRate.$2,
-      'financialDecision': {
-        'settlementTypeKey': _settlementTypeKey,
-        'teacherCompensationRuleKey': _compensationRuleKey,
-        'teacherCompensationValueMinor': ?compensationValueMinor,
-      },
-      if (_compensationNeedsReason)
-        'plannedSettlementReason': _plannedSettlementReasonController.text
-            .trim(),
-      if (_clientChargeType == 'subscription')
-        'subscriptionId': _selectedSubscriptionId,
-      if (_clientType == 'lead' && widget.leadName?.trim().isNotEmpty == true)
-        'notes': 'Занятие по лиду: ${widget.leadName!.trim()}',
-    };
-  }
-
-  bool _hasScheduleChanges(Map<String, dynamic> successor) {
-    final lesson = widget.lesson;
-    if (lesson == null) return true;
-    return hasLessonScheduleChanges(lesson: lesson, successor: successor);
-  }
-
-  LessonDecisionOperation get _financialEditOperation {
-    final state =
-        (widget.lesson?['lifecycle_state'] ??
-                widget.lesson?['lifecycleState'] ??
-                widget.lesson?['status'])
-            ?.toString()
-            .toLowerCase();
-    return state == 'successfully_completed' ||
-            state == 'completed' ||
-            state == 'done'
-        ? LessonDecisionOperation.correction
-        : LessonDecisionOperation.plannedSettlement;
-  }
-
-  bool get _hasFinancialDecisionChanges =>
-      _compensationRuleKey != _financialBaselineRuleKey ||
-      _compensationValueMinor() != _financialBaselineValueMinor;
-
-  num get _derivedClientChargeValue {
-    if (_clientChargeType == 'subscription') {
-      return _durationMinutes / 60;
-    }
-    if (_clientChargeType != 'personal_account') return 0;
-    final source = _subscriptions.firstWhere(
-      (row) => row['id']?.toString() == _selectedSubscriptionId,
-      orElse: () => _subscriptions.firstOrNull ?? const {},
-    );
-    final price = source['package_price'];
-    final units = source['lessons_total'];
-    if (price is! num || units is! num || units <= 0) return 0;
-    return price / units * (_durationMinutes / 60);
-  }
-
-  (String, num) get _derivedTeacherRate {
-    final teacher = _teachers.firstWhere(
-      (row) => row['id']?.toString() == _selectedTeacherId,
-      orElse: () => const {},
-    );
-    final rate = teacher['current_rate'];
-    return rate is num && rate > 0 ? ('hourly', rate) : ('none', 0);
-  }
-
-  LessonDecisionCatalogItem? get _selectedSettlementType => _decisionCatalog
-      ?.settlementTypes
-      .where((item) => item.key == _settlementTypeKey)
-      .firstOrNull;
-
-  LessonDecisionCatalogItem? get _selectedCompensationRule => _decisionCatalog
-      ?.compensationRules
-      .where((item) => item.key == _compensationRuleKey)
-      .firstOrNull;
-
-  void _selectCompensationRule(String? key) {
-    setState(() {
-      _compensationRuleKey = key;
-      final rule = _selectedCompensationRule;
-      _compensationValueController.text = rule == null
-          ? ''
-          : _compensationInput(rule);
-      _plannedSettlementReasonController.clear();
-    });
-  }
-
-  String? _legacyCompensationValueMinor(LessonDecisionCatalogItem rule) {
-    if (!_isEdit || (rule.mode != 'fixed' && rule.mode != 'hourly')) {
-      return null;
-    }
-    final value = widget.lesson?['teacher_compensation_value'];
-    if (value is! num || value < 0) return null;
-    return (value * 100).round().toString();
-  }
-
-  String _compensationInput(
-    LessonDecisionCatalogItem rule, {
-    String? valueMinor,
-  }) {
-    return formatCompensationMinorInput(valueMinor ?? rule.value);
-  }
-
-  String? _compensationValueMinor() {
-    return parseCompensationValueMinor(
-      mode: _selectedCompensationRule?.mode,
-      rawValue: _compensationValueController.text,
-    );
-  }
-
-  bool get _compensationNeedsReason {
-    final rule = _selectedCompensationRule;
-    final value = _compensationValueMinor();
-    return rule != null && value != null && value != rule.value;
-  }
-
-  String _snapshotNumber(num value) =>
-      NumberFormat('#,##0.##', 'ru').format(value);
-
-  String get _clientSnapshotValue => switch (_clientChargeType) {
-    'subscription' => '${_snapshotNumber(_derivedClientChargeValue)} ч',
-    'personal_account' => '${_snapshotNumber(_derivedClientChargeValue)} ₽',
-    _ => '0 ₽',
-  };
-
-  String get _teacherSnapshotValue {
-    final rule = _selectedCompensationRule;
-    if (rule == null) return 'Не выбрано';
-    if (rule.mode == 'none') return '0 ₽';
-    if (rule.mode == 'standard') {
-      final rate = _derivedTeacherRate;
-      return rate.$1 == 'none'
-          ? 'Стандартная ставка преподавателя · 0 ₽'
-          : 'Стандартная ставка преподавателя · '
-                '${_snapshotNumber(rate.$2)} ₽/ч';
-    }
-    final input = _compensationValueController.text.trim();
-    if (rule.mode == 'percent') return '$input% от стандартной ставки';
-    if (rule.mode == 'hourly') return '$input ₽/ч';
-    return '$input ₽ за занятие';
-  }
-
-  Future<bool> _previewConstraintsBeforeSave(
-    DateTime startsAt,
-    String clientType,
-    String clientId,
-  ) async {
-    try {
-      final analysis = await _crm.analyzeLessonSchedule(
-        clientType: clientType,
-        clientId: clientId,
-        teacherId: _selectedTeacherId!,
-        branchId: _selectedBranchId!,
-        roomId: _selectedRoomId!,
-        scheduledAt: startsAt.toIso8601String(),
-        durationMinutes: _durationMinutes,
-        excludeLessonId: _isEdit ? widget.lesson!['id']?.toString() : null,
-      );
-      if (mounted) {
-        setState(() {
-          _scheduleAnalysis = analysis;
-          _scheduleAnalysisError = null;
-        });
-      }
-      if (analysis.valid) return true;
-      if (!mounted) return false;
-      await _showConstraintViolations(analysis.violations);
-      return false;
-    } catch (error) {
-      // The write repeats the same engine inside its transaction and still
-      // fails closed if this read-only preview is temporarily unavailable.
-      debugPrint('Schedule constraints preview failed: $error');
-      return true;
-    }
-  }
-
-  Future<void> _analyzeCurrentSchedule() async {
-    final clientType = _clientType;
-    final clientId = _clientId;
-    if (clientType == null ||
-        clientId == null ||
-        _selectedTeacherId == null ||
-        _selectedBranchId == null ||
-        _selectedRoomId == null) {
-      setState(() {
-        _scheduleAnalysisError =
-            'Выберите клиента, филиал, преподавателя и аудиторию.';
-      });
-      return;
-    }
-    final startsAt = DateTime.utc(
-      _selectedDate.year,
-      _selectedDate.month,
-      _selectedDate.day,
-      _selectedTime.hour - 3,
-      _selectedTime.minute,
-    );
-    setState(() {
-      _analyzingSchedule = true;
-      _scheduleAnalysisError = null;
-    });
-    try {
-      final analysis = await _crm.analyzeLessonSchedule(
-        clientType: clientType,
-        clientId: clientId,
-        teacherId: _selectedTeacherId!,
-        branchId: _selectedBranchId!,
-        roomId: _selectedRoomId!,
-        scheduledAt: startsAt.toIso8601String(),
-        durationMinutes: _durationMinutes,
-        excludeLessonId: _isEdit ? widget.lesson!['id']?.toString() : null,
-      );
-      if (mounted) setState(() => _scheduleAnalysis = analysis);
-    } catch (error) {
-      if (mounted) {
-        setState(
-          () => _scheduleAnalysisError = userErrorMessage(
-            error,
-            fallback: 'Не удалось проверить расписание.',
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _analyzingSchedule = false);
-    }
-  }
-
-  Future<void> _applyScheduleSuggestion(ScheduleSuggestion suggestion) async {
-    setState(() {
-      if (suggestion.roomId != null) _selectedRoomId = suggestion.roomId;
-      if (suggestion.teacherId != null) {
-        _selectedTeacherId = suggestion.teacherId;
-      }
-      if (suggestion.startAt != null) {
-        final start = suggestion.startAt!;
-        _selectedDate = DateTime(start.year, start.month, start.day);
-        _selectedTime = TimeOfDay(hour: start.hour, minute: start.minute);
-      }
-      _scheduleAnalysis = null;
-      _scheduleAnalysisError = null;
-    });
-    await _analyzeCurrentSchedule();
-  }
-
-  String _scheduleSuggestionLabel(ScheduleSuggestion suggestion) {
-    final details = <String>[
-      if (suggestion.roomName != null) suggestion.roomName!,
-      if (suggestion.teacherName != null) suggestion.teacherName!,
-      if (suggestion.startAt != null)
-        DateFormat('dd.MM · HH:mm', 'ru').format(suggestion.startAt!),
-    ];
-    return '№${suggestion.rank} · ${suggestion.title}'
-        '${details.isEmpty ? '' : ' · ${details.join(' · ')}'}';
-  }
-
-  Future<void> _showConstraintViolations(
-    List<LessonConstraintViolation> violations,
-  ) {
-    return showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        icon: const Icon(Icons.rule_rounded, color: AppColor.danger),
-        title: const Text('Занятие не сохранено'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Исправьте все ограничения расписания перед сохранением:',
-              ),
-              const SizedBox(height: 12),
-              for (final violation in violations)
-                _violationCard(
-                  title: violation.title,
-                  resource: violation.resourceLabel,
-                  lessonIds: violation.conflictingLessonIds,
-                  dialogContext: ctx,
-                ),
-            ],
-          ),
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Исправить'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _updateFormState(VoidCallback update) => setState(update);
-
-  @override
-  Widget build(BuildContext context) => _buildLessonDialogView(context);
-
-  SearchableSelectItem _clientItem(Map<String, dynamic> row) {
-    final type = _clientTypeFor(row);
-    return SearchableSelectItem(
-      id: _clientKeyFor(row),
-      label: row['label']?.toString() ?? 'Клиент без имени',
-      subtitle: type == 'lead' ? 'Lead' : 'Student',
-      data: row,
-    );
-  }
-
-  Map<String, dynamic> _clientRow({
-    required String type,
-    required String id,
-    required String label,
-  }) => {
-    'ref': {'type': type, 'id': id},
-    'label': label,
-    'lifecycleState': 'active',
-    'tombstone': false,
-  };
-
-  String _clientTypeFor(Map<String, dynamic> row) {
-    final ref = row['ref'];
-    return ref is Map ? ref['type']?.toString() ?? '' : '';
-  }
-
-  String _clientKeyFor(Map<String, dynamic> row) {
-    final ref = row['ref'];
-    if (ref is! Map) return '';
-    return '${ref['type']}:${ref['id']}';
-  }
-
-  String _getTeacherName(String? id) {
-    if (id == null) return 'Не выбран';
-    final teacher = _teachers.firstWhere(
-      (row) => row['id'].toString() == id,
-      orElse: () => const {},
-    );
-    return teacher.isEmpty ? 'Не выбран' : _getTeacherNameFromData(teacher);
-  }
-
-  String _getTeacherNameFromData(Map<String, dynamic> teacher) {
-    final profile = teacher['profiles'];
-    var name = '${teacher['first_name'] ?? ''} ${teacher['last_name'] ?? ''}'
-        .trim();
-    if (name.isEmpty && profile is Map) {
-      name = '${profile['first_name'] ?? ''} ${profile['last_name'] ?? ''}'
-          .trim();
-    }
-    return name.isEmpty ? 'Без имени' : name;
-  }
-
-  String _subscriptionLabel(Map<String, dynamic> subscription) {
-    final name = subscription['package_name']?.toString().trim();
-    final total = subscription['lessons_total'];
-    final used = subscription['lessons_used'];
-    final balance = total is num && used is num ? total - used : null;
-    return [
-      if (name != null && name.isNotEmpty) name else 'Абонемент',
-      if (balance != null) 'остаток $balance',
-    ].join(' · ');
   }
 }

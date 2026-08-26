@@ -161,7 +161,7 @@ void main() {
           )
           .controller!
           .text,
-      'Зинаида Заречная',
+      'Зинаида Заречная · Student',
       reason: 'the selected typed client must retain the server label',
     );
     expect(

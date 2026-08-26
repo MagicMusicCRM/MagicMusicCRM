@@ -2,7 +2,22 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:magic_music_crm/core/widgets/searchable_select.dart';
+
+class SearchableSelectItem {
+  final String id;
+  final String label;
+  final String? subtitle;
+  final String? avatarUrl;
+  final Map<String, dynamic>? data;
+
+  SearchableSelectItem({
+    required this.id,
+    required this.label,
+    this.subtitle,
+    this.avatarUrl,
+    this.data,
+  });
+}
 
 /// Compact searchable field for data-driven lists such as people and rooms.
 ///

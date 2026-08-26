@@ -84,10 +84,12 @@ class LessonDecisionCatalog {
   const LessonDecisionCatalog({
     required this.settlementTypes,
     required this.compensationRules,
+    this.defaultDurationMinutes,
   });
 
   final List<LessonDecisionCatalogItem> settlementTypes;
   final List<LessonDecisionCatalogItem> compensationRules;
+  final int? defaultDurationMinutes;
 
   factory LessonDecisionCatalog.fromJson(
     Map<String, dynamic> json,
@@ -106,6 +108,8 @@ class LessonDecisionCatalog {
           )
           .toList(),
       compensationRules: parse('teacherCompensationRules'),
+      defaultDurationMinutes: (json['defaultLessonDurationMinutes'] as num?)
+          ?.toInt(),
     );
   }
 }

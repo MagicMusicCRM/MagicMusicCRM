@@ -655,7 +655,7 @@ void main() {
     },
   );
 
-  testWidgets('stale startup load cannot supersede selected subscriptions', (
+  testWidgets('startup waits for its owned references before interaction', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1400, 2200);
@@ -667,14 +667,15 @@ void main() {
     );
 
     await tester.pumpWidget(_controlledHost(client));
+    await tester.pump();
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    client.initialRoomResponse.complete(_roomResponse(_branchAId, 'А'));
     await tester.pumpAndSettle();
     await _selectPickerOption(
       tester,
       const ValueKey('lesson-client-field'),
       'Ученик А',
     );
-    client.initialRoomResponse.complete(_roomResponse(_branchAId, 'А'));
-    await tester.pumpAndSettle();
     client.commerceResponses[_studentAId]!.first.complete(
       _commerceResponse(_studentAId, 'Абонемент А'),
     );

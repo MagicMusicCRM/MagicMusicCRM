@@ -1,8 +1,29 @@
 import 'package:flutter/material.dart';
-import 'package:magic_music_crm/core/models/lesson_schedule_analysis.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
+import 'lesson_editor_decision_policy.dart';
 import 'lesson_editor_models.dart';
+
+String lessonEditorTitle(LessonEditorSession session, bool hasLeadPreset) =>
+    session.isEdit
+    ? 'Перенести или изменить занятие'
+    : hasLeadPreset
+    ? 'Пробное занятие'
+    : 'Новое занятие';
+
+String? lessonLoadErrorMessage(Object? error) => error == null
+    ? null
+    : userErrorMessage(error, fallback: 'Не удалось загрузить данные занятия.');
+
+String? lessonScheduleErrorMessage(Object? error) => error == null
+    ? null
+    : error is StateError
+    ? 'Выберите клиента, филиал, преподавателя и аудиторию.'
+    : userErrorMessage(error, fallback: 'Не удалось проверить расписание.');
+
+String lessonEditorErrorMessage(Object error, String fallback) =>
+    userErrorMessage(error, fallback: fallback);
 
 abstract interface class LessonEditorActions {
   Future<List<LessonClientRef>> searchClients(String query);
@@ -46,6 +67,168 @@ abstract interface class LessonEditorActions {
   void cancel();
 
   void openConstraint(LessonConstraintViolation value);
+}
+
+mixin LessonEditorDraftActions implements LessonEditorActions {
+  LessonEditorDraft get actionDraft;
+  LessonEditorReferenceState get actionReferences;
+  LessonEditorDecisionPolicy get actionPolicy;
+
+  void updateActionDraft(
+    LessonEditorDraft value, {
+    bool scheduleChanged = false,
+  });
+
+  void loadActionBranch(String branchId);
+  LessonEditorDraft applyActionSuggestion(ScheduleSuggestion value);
+  void focusActionConstraint(String lessonId);
+
+  @override
+  void selectBranch(String? value) {
+    if (value == null) return;
+    updateActionDraft(
+      actionPolicy.branchSelection(actionDraft, actionReferences, value),
+      scheduleChanged: true,
+    );
+    loadActionBranch(value);
+  }
+
+  @override
+  void selectRoom(String? value) => updateActionDraft(
+    actionDraft.copyWith(roomId: value),
+    scheduleChanged: true,
+  );
+
+  @override
+  void selectTeacher(String? value) => updateActionDraft(
+    actionDraft.copyWith(teacherId: value),
+    scheduleChanged: true,
+  );
+
+  @override
+  void selectDate(DateTime value) =>
+      updateActionDraft(actionDraft.withDate(value), scheduleChanged: true);
+
+  @override
+  void selectTime(TimeOfDay value) => updateActionDraft(
+    actionDraft.withTime(value.hour, value.minute),
+    scheduleChanged: true,
+  );
+
+  @override
+  void selectDuration(int value) => updateActionDraft(
+    actionDraft.copyWith(durationMinutes: value),
+    scheduleChanged: true,
+  );
+
+  @override
+  void selectTrial(bool value) =>
+      updateActionDraft(actionDraft.copyWith(isTrial: value));
+
+  @override
+  void selectCompletion(String value) =>
+      updateActionDraft(actionDraft.copyWith(completionType: value));
+
+  @override
+  void selectSettlement(String? value) => updateActionDraft(
+    actionPolicy.applyFundingDefault(
+      draft: actionDraft.copyWith(settlementTypeKey: value),
+      references: actionReferences,
+    ),
+  );
+
+  @override
+  void selectCompensationRule(String? value) => updateActionDraft(
+    actionPolicy.compensationRuleSelection(
+      actionDraft,
+      actionReferences,
+      value,
+    ),
+  );
+
+  @override
+  void changeCompensationValue(String value) => updateActionDraft(
+    actionPolicy.compensationValueChange(actionDraft, actionReferences, value),
+  );
+
+  @override
+  void changePlannedSettlementReason(String value) =>
+      updateActionDraft(actionDraft.copyWith(plannedSettlementReason: value));
+
+  @override
+  void selectFunding(String value) => updateActionDraft(
+    actionDraft.copyWith(
+      clientChargeType: value,
+      subscriptionId: value == 'subscription'
+          ? actionDraft.subscriptionId
+          : null,
+    ),
+  );
+
+  @override
+  void selectSubscription(String? value) =>
+      updateActionDraft(actionDraft.copyWith(subscriptionId: value));
+
+  @override
+  Future<void> applySuggestion(ScheduleSuggestion value) async {
+    updateActionDraft(applyActionSuggestion(value), scheduleChanged: true);
+    await analyzeSchedule();
+  }
+
+  @override
+  void openConstraint(LessonConstraintViolation value) {
+    final lessonId = value.conflictingLessonIds.firstOrNull;
+    if (lessonId != null) focusActionConstraint(lessonId);
+  }
+}
+
+class LessonConstraintDialog extends StatelessWidget {
+  const LessonConstraintDialog({
+    required this.violations,
+    required this.onOpen,
+    required this.onFix,
+    super.key,
+  });
+
+  final List<LessonConstraintViolation> violations;
+  final ValueChanged<String> onOpen;
+  final VoidCallback onFix;
+
+  @override
+  Widget build(BuildContext context) {
+    final seenLessonIds = <String>{};
+    return AlertDialog(
+      title: const Text('Занятие не сохранено'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Исправьте все ограничения расписания перед сохранением:',
+            ),
+            for (final (violationIndex, violation) in violations.indexed) ...[
+              const SizedBox(height: 12),
+              Text(violation.title),
+              Text(violation.resourceLabel),
+              for (final (linkIndex, lessonId)
+                  in violation.conflictingLessonIds.indexed)
+                TextButton(
+                  key: ValueKey(
+                    seenLessonIds.add(lessonId)
+                        ? 'conflict-lesson-$lessonId'
+                        : 'conflict-lesson-$lessonId-$violationIndex-$linkIndex',
+                  ),
+                  onPressed: () => onOpen(lessonId),
+                  child: Text('Открыть занятие ${linkIndex + 1}'),
+                ),
+            ],
+          ],
+        ),
+      ),
+      actions: [FilledButton(onPressed: onFix, child: const Text('Исправить'))],
+    );
+  }
 }
 
 class LessonEditorFeedbackModel {
