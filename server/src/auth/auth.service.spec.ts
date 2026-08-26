@@ -5,6 +5,13 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { AuthService } from "./auth.service";
+import { AuthAccountService } from "./auth-account.service";
+import { AuthEmailChallengeService } from "./auth-email-challenge.service";
+import { AuthLoginService } from "./auth-login.service";
+import { AuthPasswordRecoveryService } from "./auth-password-recovery.service";
+import { AuthRateLimitService } from "./auth-rate-limit.service";
+import { AuthRegistrationService } from "./auth-registration.service";
+import { AuthVerificationService } from "./auth-verification.service";
 import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
 import { PasswordService } from "./password.service";
@@ -44,13 +51,64 @@ describe("AuthService", () => {
     notifications = {
       sendEmail: jest.fn().mockResolvedValue({ queued: true, delivered: true }),
     };
-    service = new AuthService(
-      { query } as unknown as DatabaseService,
-      passwordService,
-      sessions as unknown as SessionService,
-      audit as unknown as AuditService,
-      notifications as unknown as NotificationsService,
+    const database = { query } as unknown as DatabaseService;
+    const sessionService = sessions as unknown as SessionService;
+    const auditService = audit as unknown as AuditService;
+    const notificationService =
+      notifications as unknown as NotificationsService;
+    const rateLimits = new AuthRateLimitService(database, auditService);
+    const challenges = new AuthEmailChallengeService(
+      database,
+      notificationService,
+      auditService,
     );
+    const registration = new AuthRegistrationService(
+      database,
+      passwordService,
+      rateLimits,
+      challenges,
+      auditService,
+    );
+    const login = new AuthLoginService(
+      database,
+      passwordService,
+      sessionService,
+      rateLimits,
+      challenges,
+      auditService,
+    );
+    const verification = new AuthVerificationService(
+      database,
+      sessionService,
+      rateLimits,
+      challenges,
+      auditService,
+    );
+    const recovery = new AuthPasswordRecoveryService(
+      database,
+      passwordService,
+      sessionService,
+      rateLimits,
+      challenges,
+      auditService,
+    );
+    const account = new AuthAccountService(
+      database,
+      passwordService,
+      sessionService,
+      auditService,
+    );
+    service = new AuthService(
+      registration,
+      login,
+      verification,
+      recovery,
+      account,
+    );
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it("creates users with client role and normalized email", async () => {
@@ -434,6 +492,16 @@ describe("AuthService", () => {
     );
   });
 
+  it("does not reveal an unknown OTP identity", async () => {
+    query.mockResolvedValueOnce({ rows: [] });
+
+    await expect(service.requestOtp(" missing@example.com ")).resolves.toEqual({
+      accepted: true,
+    });
+    expect(notifications.sendEmail).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
   it("rate limits OTP challenges", async () => {
     query
       .mockResolvedValueOnce({
@@ -665,6 +733,37 @@ describe("AuthService", () => {
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({ action: "auth.password_reset_completed" }),
     );
+    expect(sessions.revokeAll.mock.invocationCallOrder[0]).toBeLessThan(
+      audit.record.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("encrypts the recoverable copy when a managed user resets password", async () => {
+    const encrypt = jest
+      .spyOn(passwordService, "encryptForManagedAccess")
+      .mockReturnValueOnce("v1:encrypted-password");
+    query
+      .mockResolvedValueOnce({ rows: [{ count: "0" }] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "teacher-a",
+            email: "teacher@example.com",
+            password_hash: "new-hash",
+            role: "teacher",
+            email_verified_at: new Date(),
+          },
+        ],
+      });
+
+    await service.resetPassword(
+      "abcdefghijklmnopqrstuvwxyz0123456789",
+      "new-strong-password-123",
+      "1.2.3.4",
+    );
+
+    expect(encrypt).toHaveBeenCalledWith("new-strong-password-123");
+    expect(query.mock.calls[1][1][2]).toBe("v1:encrypted-password");
   });
 
   it("rate limits repeated password reset confirmations by IP", async () => {
@@ -696,6 +795,7 @@ describe("AuthService", () => {
   });
 
   it("sets password for the current authenticated user", async () => {
+    const encrypt = jest.spyOn(passwordService, "encryptForManagedAccess");
     query.mockResolvedValueOnce({
       rows: [
         {
@@ -717,6 +817,8 @@ describe("AuthService", () => {
     expect(query.mock.calls[0][0]).toContain("update app.users");
     expect(query.mock.calls[0][1][0]).toBe("user-a");
     expect(query.mock.calls[0][1][1]).not.toBe("new-strong-password-123");
+    expect(query.mock.calls[0][1][2]).toBeNull();
+    expect(encrypt).not.toHaveBeenCalled();
     // Changing the password must invalidate every existing session (High #2).
     expect(sessions.revokeAll).toHaveBeenCalledWith({
       userId: "user-a",
@@ -727,6 +829,9 @@ describe("AuthService", () => {
         action: "auth.password_changed",
         actor: { userId: "user-a", role: "client" },
       }),
+    );
+    expect(sessions.revokeAll.mock.invocationCallOrder[0]).toBeLessThan(
+      audit.record.mock.invocationCallOrder[0],
     );
   });
 
@@ -823,6 +928,37 @@ describe("AuthService", () => {
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({ action: "auth.email_changed" }),
     );
+    expect(sessions.revokeAll.mock.invocationCallOrder[0]).toBeLessThan(
+      audit.record.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("maps duplicate email and leaves sessions untouched", async () => {
+    const verify = jest
+      .spyOn(passwordService, "verify")
+      .mockResolvedValueOnce(true);
+    const actor = { userId: "user-a", role: "client" as const };
+    query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "user-a",
+            email: "old@example.com",
+            password_hash: "hash",
+            role: "client",
+            email_verified_at: new Date(),
+          },
+        ],
+      })
+      .mockRejectedValueOnce(
+        Object.assign(new Error("duplicate"), { code: "23505" }),
+      );
+
+    await expect(
+      service.changeEmail(actor, "new@example.com", "secret123"),
+    ).rejects.toThrow("Пользователь с такой почтой уже существует.");
+    expect(verify).toHaveBeenCalledWith("secret123", "hash");
+    expect(sessions.revokeAll).not.toHaveBeenCalled();
   });
 
   it("lists email and external identities for current user", async () => {
@@ -863,6 +999,34 @@ describe("AuthService", () => {
     );
 
     expect(result.user.emailVerified).toBe(true);
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "auth.email_verified" }),
+    );
+  });
+
+  it("audits email verification once and rejects token replay", async () => {
+    query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "user-a",
+            email: "user@example.com",
+            password_hash: "hash",
+            role: "client",
+            email_verified_at: new Date(),
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] });
+    const token = "abcdefghijklmnopqrstuvwxyz0123456789";
+
+    await expect(service.verifyEmail(token)).resolves.toMatchObject({
+      user: { id: "user-a", emailVerified: true },
+    });
+    await expect(service.verifyEmail(token)).rejects.toThrow(
+      "Код подтверждения недействителен или истек.",
+    );
+    expect(audit.record).toHaveBeenCalledTimes(1);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({ action: "auth.email_verified" }),
     );
