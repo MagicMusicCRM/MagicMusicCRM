@@ -448,20 +448,26 @@ Verification is exact and fresh:
   full coverage run passed `1,105/1,105` in `221.442s`;
 - `flutter analyze` reported zero issues in `11.710s`; `git diff --check`
   exited zero in `0.026s`;
-- RepoWise coverage and index both name the exact production SHA above. The
-  CLI dashboard analyzed `1,695` files at average health `6.92` and hotspot
-  health `4.76`.
+- RepoWise coverage remains pinned to the exact production SHA `861d89d7`.
+  The final index is exact at the documentation SHA `8ad0594c`; its indexed
+  MCP/status dashboard has `1,596` files, average health `6.70`, and hotspot
+  health `5.90`. Separately, the live CLI health scan sees `1,695` files at
+  average health `6.82` and hotspot health `4.69` while consuming the
+  production-SHA LCOV; these scopes are not interchangeable.
 
 The exact 34-file `lib` change set gives RepoWise PR blast score `6.27`.
 `breaking_changes`, `conformance_violations`, `dependency_cycles`, and
-`will_break_consumers` are empty. The three `missing_tests` labels are not
-truthful owner gaps: one is the deleted legacy view and the feedback/schedule
-section are directly exercised by `lesson_editor_sections_test.dart`; the full
-suite passes. The MCP-only `lesson_schedule_analysis.dart: not_indexed` result
-is likewise resolved by live CLI health (`9.65/5`, 139 NLOC) and source. The
-whole-package `get_change_risk` is Elevated/high at percentile `100`, score
-`9.9`, probability `99.1%`, driven by `10,699` additions and `2,943` deletions
-across `50` files; this is review priority, not a broken-consumer finding.
+`will_break_consumers` are empty. The three `missing_tests` labels are
+`lesson_schedule_section.dart`, `lesson_editor_feedback.dart`, and
+`lesson_decision_form.dart`. The first two are directly exercised by
+`lesson_editor_sections_test.dart`; the form has `90.50%` ingested coverage
+through the flow suite, so none is a truthful owner gap. The full suite passes.
+The MCP-only `lesson_schedule_analysis.dart: not_indexed` result is likewise
+resolved by live CLI health (`9.65/5`, 139 NLOC) and source. Dart-filtered
+`get_change_risk` for `d1d24ea3..861d89d7` is Elevated/high at percentile
+`100`, score `9.9`, probability `99.1%`, driven by `10,699` additions and
+`2,943` deletions across `50` files; this is review priority, not a
+broken-consumer finding.
 
 Sentrux closes on the accepted `5736` exception: genuine Task 10 fixes improved
 `5723 -> 5736`, while the remaining 12 global points require unrelated cleanup.

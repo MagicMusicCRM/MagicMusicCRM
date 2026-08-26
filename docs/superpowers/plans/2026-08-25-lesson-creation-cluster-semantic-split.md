@@ -1964,12 +1964,17 @@ commands, and all characterized create/edit outcomes remain covered.
   owners have `85.53-100%` truthful coverage, max CCN `<=10`, and deductions
   dominated by the package's own fix history and `9-12` co-change peers. The
   shell's CCN-12 `save` is the separately recorded UI-lifecycle exception.
-- RepoWise is exact at `861d89d7`; dashboard health is `6.92`, hotspot health
-  `4.76`, and the production recount is `25` god findings in `25` files.
-  PR blast score is `6.27` with empty breaking-change, conformance, cycle, and
-  broken-consumer arrays. Whole-package change risk is Elevated/high,
-  percentile `100`, score `9.9`, probability `99.1%`. No predicted
-  `missing_tests` label represents a truthful missing direct owner test.
+- RepoWise coverage is exact at production SHA `861d89d7`; the final index is
+  exact at docs SHA `8ad0594c`. Its indexed dashboard is `1,596` files, health
+  `6.70`, and hotspot health `5.90`; the distinct live CLI scan is `1,695`
+  files, health `6.82`, and hotspot health `4.69` while using the
+  production-SHA LCOV. The production recount is `25` god findings in `25`
+  files. PR blast score is `6.27` with empty breaking-change, conformance,
+  cycle, and broken-consumer arrays. Dart-filtered change risk is
+  Elevated/high, percentile `100`, score `9.9`, probability `99.1%`. The three
+  predicted labels name schedule section, feedback, and decision form; the
+  first two have their direct sections test and the form has `90.50%` ingested
+  flow-suite coverage, so none is a truthful missing owner test.
 
 Sentrux is accepted at `5736` instead of `5748`: the reviewed structural fixes
 improved `5723 -> 5736`, and the remaining 12 points require unrelated global
