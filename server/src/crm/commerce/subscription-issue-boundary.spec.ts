@@ -24,8 +24,33 @@ const sourceNloc = (source: string) => {
     }).length;
 };
 
-const versionedMutationCount = (source: string) =>
-  source.match(/executeVersionedMutation\s*</g)?.length ?? 0;
+const versionedMutationCount = (source: string) => {
+  const sourceFile = ts.createSourceFile(
+    "mutation-guard-input.ts",
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  let count = 0;
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      calleeIdentity(node.expression) === "executeVersionedMutation"
+    ) {
+      count += 1;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return count;
+};
+
+const calleeIdentity = (expression: ts.LeftHandSideExpression) => {
+  if (ts.isIdentifier(expression)) return expression.text;
+  if (ts.isPropertyAccessExpression(expression)) return expression.name.text;
+  return null;
+};
 
 const identifierName = (node: ts.Node | undefined) =>
   node && ts.isIdentifier(node) ? node.text : null;
@@ -102,6 +127,26 @@ describe("subscription issue owner boundaries", () => {
     expect(providers.filter((provider) => provider === "SubscriptionIssueService")).toHaveLength(1);
     expect(exports).not.toContain("SubscriptionIssueRepository");
     expect(exports).not.toContain("SubscriptionIssueService");
+  });
+
+  it("counts typed and untyped mutation calls but ignores source text", () => {
+    expect(
+      versionedMutationCount("integrity.executeVersionedMutation({});"),
+    ).toBe(1);
+    expect(
+      versionedMutationCount(
+        "integrity.executeVersionedMutation<Result>({});",
+      ),
+    ).toBe(1);
+    expect(
+      versionedMutationCount("integrity?.executeVersionedMutation?.({});"),
+    ).toBe(1);
+    expect(
+      versionedMutationCount(`
+        // integrity.executeVersionedMutation<Comment>({});
+        const text = "integrity.executeVersionedMutation<String>({});";
+      `),
+    ).toBe(0);
   });
 
   it("keeps exact direct facade delegations", () => {
