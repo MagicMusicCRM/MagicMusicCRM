@@ -219,4 +219,31 @@ describe("StudentCardTimelineService", () => {
       },
     ]);
   });
+
+  it("stops before every downstream card read when student authorization rejects", async () => {
+    const actor: ActorContext = { userId: "teacher-a", role: "teacher" };
+    const authorizationError = new Error("student access denied");
+    const {
+      service,
+      database,
+      directory,
+      scheduleRead,
+      tasks,
+      timeline,
+      chatWork,
+    } = createService();
+    directory.getStudent.mockRejectedValueOnce(authorizationError);
+
+    await expect(service.getStudentCard(actor, "student-a")).rejects.toBe(
+      authorizationError,
+    );
+
+    expect(directory.listStudentGroups).not.toHaveBeenCalled();
+    expect(scheduleRead.listLessons).not.toHaveBeenCalled();
+    expect(tasks.list).not.toHaveBeenCalled();
+    expect(timeline.listComments).not.toHaveBeenCalled();
+    expect(timeline.listFieldAudit).not.toHaveBeenCalled();
+    expect(database.query).not.toHaveBeenCalled();
+    expect(chatWork.listForEntity).not.toHaveBeenCalled();
+  });
 });
