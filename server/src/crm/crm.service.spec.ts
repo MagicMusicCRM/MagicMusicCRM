@@ -19,6 +19,7 @@ import { StudentDirectoryService } from "./students/student-directory.service";
 import { StudentSelfSummaryService } from "./students/student-self-summary.service";
 import { StudentCardTimelineService } from "./students/student-card-timeline.service";
 import { StudentMutationExecutor } from "./students/student-mutation.executor";
+import { StudentCommandService } from "./students/student-command.service";
 import {
   ACTIVE_RESPONSIBLE_STAFF_STATUSES,
   RESPONSIBLE_AUTH_ROLES,
@@ -96,16 +97,22 @@ describe("CrmService", () => {
       database as unknown as DatabaseService,
       studentFunnel,
     );
-    const service = new CrmService(
+    const realtime = {
+      emitCrmChanged: () => undefined,
+    } as unknown as RealtimeBus;
+    const commands = new StudentCommandService(
       database as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
+      notifications as unknown as NotificationsService,
+      realtime,
+      studentMutations,
+    );
+    const service = new CrmService(
       directory,
       selfSummary,
       cardTimeline,
-      notifications as unknown as NotificationsService,
-      { emitCrmChanged: () => undefined } as unknown as RealtimeBus,
-      studentMutations,
+      commands,
     );
 
     return {
@@ -194,16 +201,22 @@ describe("CrmService", () => {
       database as unknown as DatabaseService,
       studentFunnel,
     );
-    const service = new CrmService(
+    const realtime = {
+      emitCrmChanged: () => undefined,
+    } as unknown as RealtimeBus;
+    const commands = new StudentCommandService(
       database as unknown as DatabaseService,
       audit as unknown as AuditService,
       policy as unknown as CrmPolicy,
+      notifications as unknown as NotificationsService,
+      realtime,
+      studentMutations,
+    );
+    const service = new CrmService(
       directory,
       selfSummary,
       cardTimeline,
-      notifications as unknown as NotificationsService,
-      { emitCrmChanged: () => undefined } as unknown as RealtimeBus,
-      studentMutations,
+      commands,
     );
 
     return { service, query, audit, policy, tasks, notifications, database };
@@ -1370,10 +1383,19 @@ describe("CrmService", () => {
         database as unknown as DatabaseService,
         studentFunnel,
       );
-      const service = new CrmService(
+      const commands = new StudentCommandService(
         database as unknown as DatabaseService,
         audit as unknown as AuditService,
         policy as unknown as CrmPolicy,
+        {
+          sendEmail: jest.fn(),
+          notifyUser: jest.fn(),
+          notifyNewLead: jest.fn(),
+        } as unknown as NotificationsService,
+        realtime as unknown as RealtimeBus,
+        studentMutations,
+      );
+      const service = new CrmService(
         directory,
         new StudentSelfSummaryService(
           database as unknown as DatabaseService,
@@ -1388,13 +1410,7 @@ describe("CrmService", () => {
           timeline,
           chatWork,
         ),
-        {
-          sendEmail: jest.fn(),
-          notifyUser: jest.fn(),
-          notifyNewLead: jest.fn(),
-        } as unknown as NotificationsService,
-        realtime as unknown as RealtimeBus,
-        studentMutations,
+        commands,
       );
       return { events, service, realtime };
     };

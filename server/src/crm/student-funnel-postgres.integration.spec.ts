@@ -15,6 +15,7 @@ import { StudentDirectoryService } from "./students/student-directory.service";
 import { StudentSelfSummaryService } from "./students/student-self-summary.service";
 import { StudentCardTimelineService } from "./students/student-card-timeline.service";
 import { StudentMutationExecutor } from "./students/student-mutation.executor";
+import { StudentCommandService } from "./students/student-command.service";
 import { ScheduleReadService } from "./schedule/schedule-read.service";
 import { StudentFunnelStageDto } from "./dto/student-funnel.dto";
 import { StudentFunnelService } from "./student-funnel.service";
@@ -109,10 +110,15 @@ describe("Student funnel effective configuration (PostgreSQL)", () => {
     } as unknown as ScheduleReadService;
     service = new StudentFunnelService(database, audit, policy, realtime);
     const directory = new StudentDirectoryService(database, policy);
-    crm = new CrmService(
+    const commands = new StudentCommandService(
       database,
       audit,
       policy,
+      {} as never,
+      realtime,
+      new StudentMutationExecutor(database, service),
+    );
+    crm = new CrmService(
       directory,
       new StudentSelfSummaryService(database, {} as never, scheduleRead),
       new StudentCardTimelineService(
@@ -123,9 +129,7 @@ describe("Student funnel effective configuration (PostgreSQL)", () => {
         {} as never,
         {} as never,
       ),
-      {} as never,
-      realtime,
-      new StudentMutationExecutor(database, service),
+      commands,
     );
     director = { userId: directorId, role: "director" };
   });
