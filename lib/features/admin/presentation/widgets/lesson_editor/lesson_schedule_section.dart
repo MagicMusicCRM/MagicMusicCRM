@@ -54,6 +54,24 @@ class LessonScheduleSectionModel {
   final DateTime maximumDate;
   final String? errorMessage;
   final bool isSaving;
+
+  LessonDatePickerRequest get datePickerRequest {
+    final selected = DateTime(
+      draft.localStart.year,
+      draft.localStart.month,
+      draft.localStart.day,
+    );
+    return LessonDatePickerRequest(
+      initialDate: selected.isBefore(minimumDate) ? minimumDate : selected,
+      firstDate: minimumDate,
+      lastDate: maximumDate,
+    );
+  }
+
+  LessonTimePickerRequest get timePickerRequest => LessonTimePickerRequest(
+    hour: draft.localStart.hour,
+    minute: draft.localStart.minute,
+  );
 }
 
 class LessonScheduleSection extends StatelessWidget {
@@ -62,8 +80,8 @@ class LessonScheduleSection extends StatelessWidget {
     required this.onAnalyze,
     required this.onApplySuggestion,
     required this.onOpenConstraint,
-    required this.onDateChanged,
-    required this.onTimeChanged,
+    required this.onDateRequested,
+    required this.onTimeRequested,
     required this.onDurationChanged,
     super.key,
   });
@@ -72,8 +90,8 @@ class LessonScheduleSection extends StatelessWidget {
   final FutureOr<void> Function() onAnalyze;
   final FutureOr<void> Function(ScheduleSuggestion value) onApplySuggestion;
   final ValueChanged<LessonConstraintViolation> onOpenConstraint;
-  final ValueChanged<DateTime> onDateChanged;
-  final ValueChanged<TimeOfDay> onTimeChanged;
+  final ValueChanged<LessonDatePickerRequest> onDateRequested;
+  final ValueChanged<LessonTimePickerRequest> onTimeRequested;
   final ValueChanged<int> onDurationChanged;
 
   @override
@@ -89,10 +107,7 @@ class LessonScheduleSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _ResponsivePair(
-          first: _dateButton(context),
-          second: _timeButton(context),
-        ),
+        _ResponsivePair(first: _dateButton(), second: _timeButton(context)),
         const SizedBox(height: 16),
         KeyedSubtree(
           key: ValueKey(
@@ -141,22 +156,12 @@ class LessonScheduleSection extends StatelessWidget {
     );
   }
 
-  Widget _dateButton(BuildContext context) {
+  Widget _dateButton() {
     final selected = model.draft.localStart;
     final selectedDate = DateTime(selected.year, selected.month, selected.day);
     return OutlinedButton.icon(
       key: const ValueKey('lesson-date-field'),
-      onPressed: () async {
-        final date = await showDatePicker(
-          context: context,
-          initialDate: selectedDate.isBefore(model.minimumDate)
-              ? model.minimumDate
-              : selectedDate,
-          firstDate: model.minimumDate,
-          lastDate: model.maximumDate,
-        );
-        if (date != null) onDateChanged(date);
-      },
+      onPressed: () => onDateRequested(model.datePickerRequest),
       icon: const Icon(Icons.calendar_today_rounded, size: 18),
       label: Text(_dateLabel(selectedDate)),
     );
@@ -166,17 +171,7 @@ class LessonScheduleSection extends StatelessWidget {
     final selected = TimeOfDay.fromDateTime(model.draft.localStart);
     return OutlinedButton.icon(
       key: const ValueKey('lesson-time-field'),
-      onPressed: () async {
-        final time = await showTimePicker(
-          context: context,
-          initialTime: selected,
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
-            child: child!,
-          ),
-        );
-        if (time != null) onTimeChanged(time);
-      },
+      onPressed: () => onTimeRequested(model.timePickerRequest),
       icon: const Icon(Icons.access_time_rounded, size: 18),
       label: Text(selected.format(context)),
     );

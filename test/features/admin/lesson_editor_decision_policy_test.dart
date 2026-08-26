@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_models.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_editor_decision_policy.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_editor_initial_mapper.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_editor_models.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_form_rules.dart';
 
@@ -50,12 +51,12 @@ void main() {
         false,
       );
 
-      expect(configured.durationMinutes, 75);
-      expect(explicit.durationMinutes, 60);
-      expect(configured.settlementTypeKey, 'free');
-      expect(configured.compensationRuleKey, 'fixed');
-      expect(configured.compensationValueMinor, '125000');
-      expect(configured.clientChargeType, 'none');
+      expect(configured.draft.durationMinutes, 75);
+      expect(explicit.draft.durationMinutes, 60);
+      expect(configured.draft.settlementTypeKey, 'free');
+      expect(configured.draft.compensationRuleKey, 'fixed');
+      expect(configured.draft.compensationValueMinor, '125000');
+      expect(configured.draft.clientChargeType, 'none');
     },
   );
 
@@ -236,6 +237,38 @@ void main() {
             .having((value) => value.subscriptionId, 'subscription', isNull),
       );
     });
+
+    test(
+      'explicit subscription funding restores the first active subscription',
+      () {
+        final references = _references(
+          subscriptions: [
+            _subscription('subscription-first'),
+            _subscription('subscription-second'),
+          ],
+        );
+        final personalAccount = _draft(
+          clientChargeType: 'personal_account',
+          subscriptionId: null,
+        );
+
+        final subscription = policy.fundingSelection(
+          personalAccount,
+          references,
+          'subscription',
+        );
+        final restoredPersonalAccount = policy.fundingSelection(
+          subscription,
+          references,
+          'personal_account',
+        );
+
+        expect(subscription.clientChargeType, 'subscription');
+        expect(subscription.subscriptionId, 'subscription-first');
+        expect(restoredPersonalAccount.clientChargeType, 'personal_account');
+        expect(restoredPersonalAccount.subscriptionId, isNull);
+      },
+    );
   });
 
   group('payload construction', () {
@@ -358,6 +391,77 @@ void main() {
   });
 
   group('edit decisions', () {
+    test(
+      'legacy fixed and hourly defaults become the immutable no-op baseline',
+      () {
+        const mapper = LessonEditorInitialMapper();
+        for (final mode in const ['fixed', 'hourly']) {
+          final mapped = mapper.map(
+            LessonEditorInitialInput(
+              initialDate: null,
+              initialRoomId: null,
+              initialBranchId: null,
+              initialDurationMinutes: null,
+              initialIsTrial: false,
+              lesson: {
+                'id': 'lesson-$mode',
+                'version': 4,
+                'student_id': 'student-a',
+                'teacher_id': 'teacher-a',
+                'branch_id': 'branch-a',
+                'room_id': 'room-a',
+                'scheduled_at': '2026-08-26T10:00:00.000Z',
+                'duration_minutes': 60,
+                'teacher_compensation_type': mode,
+                'teacher_compensation_value': 1250,
+                if (mode == 'hourly')
+                  'teacher_compensation_rule_key': 'teacher-hourly',
+              },
+            ),
+          );
+          final references = _references(
+            compensationRules: [
+              _catalogItem(key: 'teacher-$mode', mode: mode, value: '99900'),
+            ],
+          );
+          final defaults = policy.applyReferenceDefaults(
+            mapped,
+            mapped.draft,
+            references,
+            false,
+          );
+          final draft = defaults.draft;
+
+          expect(draft.compensationRuleKey, 'teacher-$mode');
+          expect(draft.compensationValueMinor, '125000');
+          expect(
+            defaults.session.snapshot?.initialCompensationRuleKey,
+            'teacher-$mode',
+          );
+          expect(
+            defaults.session.snapshot?.initialCompensationValueMinor,
+            '125000',
+          );
+          expect(
+            policy.hasFinancialChanges(session: defaults.session, draft: draft),
+            isFalse,
+            reason: mode,
+          );
+          expect(
+            policy
+                .validate(
+                  session: defaults.session,
+                  draft: draft,
+                  references: references,
+                )
+                .message,
+            'Измените параметры расписания или оплату преподавателю',
+            reason: mode,
+          );
+        }
+      },
+    );
+
     test('rejects a missing version and a no-op edit', () {
       final draft = _draft();
       final missingVersion = _editSession(draft, expectedVersion: null);

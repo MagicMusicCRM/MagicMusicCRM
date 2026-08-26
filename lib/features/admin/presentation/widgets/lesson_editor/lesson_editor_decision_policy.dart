@@ -15,7 +15,8 @@ class LessonEditorValidation {
 class LessonEditorDecisionPolicy {
   const LessonEditorDecisionPolicy();
 
-  LessonEditorDraft applyReferenceDefaults(
+  ({LessonEditorSession session, LessonEditorDraft draft})
+  applyReferenceDefaults(
     LessonEditorSession session,
     LessonEditorDraft draft,
     LessonEditorReferenceState references,
@@ -23,9 +24,10 @@ class LessonEditorDecisionPolicy {
   ) {
     final catalog = references.catalog;
     if (catalog == null) {
-      return session.isEdit
+      final next = session.isEdit
           ? draft
           : applyFundingDefault(draft: draft, references: references);
+      return (session: session, draft: next);
     }
     final settlement =
         _catalogItemByKey(catalog.settlementTypes, draft.settlementTypeKey) ??
@@ -62,7 +64,14 @@ class LessonEditorDecisionPolicy {
     if (!session.isEdit) {
       next = applyFundingDefault(draft: next, references: references);
     }
-    return next;
+    return (
+      session: _normalizeLegacyCompensationBaseline(
+        session: session,
+        draft: next,
+        rule: rule,
+      ),
+      draft: next,
+    );
   }
 
   bool isNoCharge(LessonDecisionCatalogItem? settlement) =>
@@ -85,6 +94,85 @@ class LessonEditorDecisionPolicy {
         'percent' || 'fixed' || 'hourly' => true,
         _ => false,
       };
+
+  ({LessonEditorDraft draft, bool scheduleChanged, String? branchToLoad})
+  applyEdit(
+    LessonEditorDraft draft,
+    LessonEditorReferenceState references,
+    LessonEditorEdit<Object?> edit,
+  ) {
+    final schedule = _applyScheduleEdit(draft, references, edit);
+    if (schedule != null) return schedule;
+    return (
+      draft: _applyFinancialEdit(draft, references, edit),
+      scheduleChanged: false,
+      branchToLoad: null,
+    );
+  }
+
+  ({LessonEditorDraft draft, bool scheduleChanged, String? branchToLoad})?
+  _applyScheduleEdit(
+    LessonEditorDraft draft,
+    LessonEditorReferenceState references,
+    LessonEditorEdit<Object?> edit,
+  ) => switch (edit) {
+    LessonBranchEdit(:final value) => (
+      draft: value == null ? draft : branchSelection(draft, references, value),
+      scheduleChanged: true,
+      branchToLoad: value,
+    ),
+    LessonRoomEdit(:final value) => (
+      draft: draft.copyWith(roomId: value),
+      scheduleChanged: true,
+      branchToLoad: null,
+    ),
+    LessonTeacherEdit(:final value) => (
+      draft: draft.copyWith(teacherId: value),
+      scheduleChanged: true,
+      branchToLoad: null,
+    ),
+    LessonDurationEdit(:final value) => (
+      draft: draft.copyWith(durationMinutes: value),
+      scheduleChanged: true,
+      branchToLoad: null,
+    ),
+    _ => null,
+  };
+
+  LessonEditorDraft _applyFinancialEdit(
+    LessonEditorDraft draft,
+    LessonEditorReferenceState references,
+    LessonEditorEdit<Object?> edit,
+  ) => switch (edit) {
+    LessonTrialEdit(:final value) => draft.copyWith(isTrial: value),
+    LessonCompletionEdit(:final value) => draft.copyWith(completionType: value),
+    LessonSettlementEdit(:final value) => applyFundingDefault(
+      draft: draft.copyWith(settlementTypeKey: value),
+      references: references,
+    ),
+    LessonCompensationRuleEdit(:final value) => compensationRuleSelection(
+      draft,
+      references,
+      value,
+    ),
+    LessonCompensationValueEdit(:final value) => compensationValueChange(
+      draft,
+      references,
+      value,
+    ),
+    LessonSettlementReasonEdit(:final value) => draft.copyWith(
+      plannedSettlementReason: value,
+    ),
+    LessonFundingEdit(:final value) => fundingSelection(
+      draft,
+      references,
+      value,
+    ),
+    LessonSubscriptionEdit(:final value) => draft.copyWith(
+      subscriptionId: value,
+    ),
+    _ => draft,
+  };
 
   LessonEditorDraft branchSelection(
     LessonEditorDraft draft,
@@ -194,6 +282,18 @@ class LessonEditorDecisionPolicy {
       subscriptionId: null,
     );
   }
+
+  LessonEditorDraft fundingSelection(
+    LessonEditorDraft draft,
+    LessonEditorReferenceState references,
+    String value,
+  ) => draft.copyWith(
+    clientChargeType: value,
+    subscriptionId: value == 'subscription'
+        ? _referenceById(references.subscriptions, draft.subscriptionId)?.id ??
+              references.subscriptions.firstOrNull?.id
+        : null,
+  );
 
   Map<String, dynamic> schedulePayload(LessonEditorDraft draft) {
     final local = draft.localStart;
@@ -447,6 +547,37 @@ class LessonEditorDecisionPolicy {
     final rate = teacher?.raw['current_rate'];
     return rate is num && rate > 0 ? ('hourly', rate) : ('none', 0);
   }
+}
+
+LessonEditorSession _normalizeLegacyCompensationBaseline({
+  required LessonEditorSession session,
+  required LessonEditorDraft draft,
+  required LessonDecisionCatalogItem? rule,
+}) {
+  final snapshot = session.snapshot;
+  final legacyMode = snapshot?.rawLesson['teacher_compensation_type']
+      ?.toString();
+  if (snapshot == null ||
+      (snapshot.initialCompensationRuleKey != null &&
+          snapshot.initialCompensationValueMinor != null) ||
+      (legacyMode != 'fixed' && legacyMode != 'hourly') ||
+      rule?.mode != legacyMode) {
+    return session;
+  }
+  return LessonEditorSession(
+    draft: draft,
+    snapshot: LessonEditorSnapshot(
+      lessonId: snapshot.lessonId,
+      expectedVersion: snapshot.expectedVersion,
+      rawLesson: snapshot.rawLesson,
+      clientLocked: snapshot.clientLocked,
+      initialSchedulePayload: snapshot.initialSchedulePayload,
+      initialCompensationRuleKey: draft.compensationRuleKey,
+      initialCompensationValueMinor: draft.compensationValueMinor,
+    ),
+    seededClient: session.seededClient,
+    leadNoteSource: session.leadNoteSource,
+  );
 }
 
 String? _legacyCompensationValue(

@@ -77,7 +77,9 @@ class _TrialControl extends StatelessWidget {
             ? 'Маркер зафиксирован при создании'
             : 'Не зависит от типа клиента и способа списания',
       ),
-      onChanged: locked ? null : actions.selectTrial,
+      onChanged: locked
+          ? null
+          : (value) => actions.edit(LessonTrialEdit(value)),
     );
   }
 }
@@ -130,7 +132,7 @@ class _CompletionControl extends StatelessWidget {
               ),
             ],
             onChanged: (value) =>
-                actions.selectCompletion(value ?? 'standard.success'),
+                actions.edit(LessonCompletionEdit(value ?? 'standard.success')),
           ),
       ],
     );
@@ -160,7 +162,9 @@ class _DecisionFields extends StatelessWidget {
           for (final item in catalog?.settlementTypes ?? const [])
             DropdownMenuItem(value: item.key, child: Text(item.label)),
         ],
-        onChanged: model.session.isEdit ? null : actions.selectSettlement,
+        onChanged: model.session.isEdit
+            ? null
+            : (value) => actions.edit(LessonSettlementEdit(value)),
       ),
       second: DropdownButtonFormField<String>(
         menuMaxHeight: 256,
@@ -174,7 +178,9 @@ class _DecisionFields extends StatelessWidget {
           for (final item in catalog?.compensationRules ?? const [])
             DropdownMenuItem(value: item.key, child: Text(item.label)),
         ],
-        onChanged: model.isSaving ? null : actions.selectCompensationRule,
+        onChanged: model.isSaving
+            ? null
+            : (value) => actions.edit(LessonCompensationRuleEdit(value)),
       ),
     );
   }
@@ -216,7 +222,8 @@ class _CompensationOverride extends StatelessWidget {
               labelText: _compensationInputLabel(selectedRule?.mode),
               helperText: 'Действует только для этого занятия',
             ),
-            onChanged: actions.changeCompensationValue,
+            onChanged: (value) =>
+                actions.edit(LessonCompensationValueEdit(value)),
           ),
         ),
         if (!model.session.isEdit && model.compensationNeedsReason) ...[
@@ -236,7 +243,8 @@ class _CompensationOverride extends StatelessWidget {
                 labelText: 'Причина индивидуального значения *',
                 helperText: 'Причина сохранится в истории расчёта',
               ),
-              onChanged: actions.changePlannedSettlementReason,
+              onChanged: (value) =>
+                  actions.edit(LessonSettlementReasonEdit(value)),
             ),
           ),
         ],
@@ -282,7 +290,7 @@ class _FundingField extends StatelessWidget {
       ],
       onChanged: locked
           ? null
-          : (value) => actions.selectFunding(value ?? 'none'),
+          : (value) => actions.edit(LessonFundingEdit(value ?? 'none')),
     );
   }
 }
@@ -315,7 +323,7 @@ class _SubscriptionField extends StatelessWidget {
               label: subscription.label,
             ),
         ],
-        onSelected: (item) => actions.selectSubscription(item?.id),
+        onSelected: (item) => actions.edit(LessonSubscriptionEdit(item?.id)),
       ),
     );
   }

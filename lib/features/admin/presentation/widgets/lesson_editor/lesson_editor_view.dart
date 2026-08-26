@@ -10,7 +10,28 @@ import 'lesson_financial_section.dart';
 import 'lesson_participant_section.dart';
 import 'lesson_schedule_section.dart';
 
-export 'lesson_editor_feedback.dart' show LessonEditorActions;
+export 'lesson_editor_feedback.dart'
+    show
+        LessonConstraintDialog,
+        LessonEditorActions,
+        lessonEditorErrorMessage,
+        lessonEditorTitle,
+        lessonLoadErrorMessage,
+        lessonScheduleErrorMessage,
+        lessonTimePicker24HourBuilder;
+
+typedef LessonEditorCoreViewState = (
+  LessonEditorSession,
+  LessonEditorDraft,
+  LessonEditorReferenceState,
+);
+typedef LessonEditorProgressViewState = (
+  LessonScheduleAnalysis?,
+  bool,
+  bool,
+  bool,
+);
+typedef LessonEditorFeedbackViewState = (String?, String?, String?);
 
 class LessonEditorViewModel {
   const LessonEditorViewModel({
@@ -25,6 +46,23 @@ class LessonEditorViewModel {
     this.loadErrorMessage,
     this.scheduleAnalysisError,
   });
+
+  factory LessonEditorViewModel.fromState(
+    LessonEditorCoreViewState editor,
+    LessonEditorProgressViewState progress,
+    LessonEditorFeedbackViewState feedback,
+  ) => LessonEditorViewModel(
+    session: editor.$1,
+    draft: editor.$2,
+    references: editor.$3,
+    analysis: progress.$1,
+    isLoading: progress.$2,
+    isSaving: progress.$3,
+    isAnalyzing: progress.$4,
+    validationMessage: feedback.$1,
+    loadErrorMessage: feedback.$2,
+    scheduleAnalysisError: feedback.$3,
+  );
 
   final LessonEditorSession session;
   final LessonEditorDraft draft;
@@ -49,6 +87,28 @@ class LessonEditorView extends StatelessWidget {
     this.onRetry,
     super.key,
   });
+
+  factory LessonEditorView.fromState(
+    LessonEditorCoreViewState editor,
+    LessonEditorProgressViewState progress,
+    LessonEditorFeedbackViewState feedback, {
+    required LessonEditorActions actions,
+    bool pageMode = false,
+    String? title,
+    ScrollController? scrollController,
+    DateTime? now,
+    VoidCallback? onRetry,
+    Key? key,
+  }) => LessonEditorView(
+    model: LessonEditorViewModel.fromState(editor, progress, feedback),
+    actions: actions,
+    pageMode: pageMode,
+    title: title,
+    scrollController: scrollController,
+    now: now,
+    onRetry: onRetry,
+    key: key,
+  );
 
   final LessonEditorViewModel model;
   final LessonEditorActions actions;
@@ -125,9 +185,11 @@ class LessonEditorView extends StatelessWidget {
                 ),
                 onSearchClients: actions.searchClients,
                 onClientChanged: actions.selectClient,
-                onBranchChanged: actions.selectBranch,
-                onRoomChanged: actions.selectRoom,
-                onTeacherChanged: actions.selectTeacher,
+                onBranchChanged: (value) =>
+                    actions.edit(LessonBranchEdit(value)),
+                onRoomChanged: (value) => actions.edit(LessonRoomEdit(value)),
+                onTeacherChanged: (value) =>
+                    actions.edit(LessonTeacherEdit(value)),
               ),
               const SizedBox(height: 16),
               LessonScheduleSection(
@@ -143,9 +205,10 @@ class LessonEditorView extends StatelessWidget {
                 onAnalyze: actions.analyzeSchedule,
                 onApplySuggestion: actions.applySuggestion,
                 onOpenConstraint: actions.openConstraint,
-                onDateChanged: actions.selectDate,
-                onTimeChanged: actions.selectTime,
-                onDurationChanged: actions.selectDuration,
+                onDateRequested: actions.selectDate,
+                onTimeRequested: actions.selectTime,
+                onDurationChanged: (value) =>
+                    actions.edit(LessonDurationEdit(value)),
               ),
               LessonFinancialSection(
                 model: LessonFinancialSectionModel(

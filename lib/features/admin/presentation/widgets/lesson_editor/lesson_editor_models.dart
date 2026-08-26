@@ -140,6 +140,79 @@ class LessonEditorDraft {
   );
 }
 
+class LessonDatePickerRequest {
+  const LessonDatePickerRequest({
+    required this.initialDate,
+    required this.firstDate,
+    required this.lastDate,
+  });
+
+  final DateTime initialDate;
+  final DateTime firstDate;
+  final DateTime lastDate;
+}
+
+class LessonTimePickerRequest {
+  const LessonTimePickerRequest({required this.hour, required this.minute});
+
+  final int hour;
+  final int minute;
+}
+
+sealed class LessonEditorEdit<T> {
+  const LessonEditorEdit(this.value);
+
+  final T value;
+}
+
+final class LessonBranchEdit extends LessonEditorEdit<String?> {
+  const LessonBranchEdit(super.value);
+}
+
+final class LessonRoomEdit extends LessonEditorEdit<String?> {
+  const LessonRoomEdit(super.value);
+}
+
+final class LessonTeacherEdit extends LessonEditorEdit<String?> {
+  const LessonTeacherEdit(super.value);
+}
+
+final class LessonDurationEdit extends LessonEditorEdit<int> {
+  const LessonDurationEdit(super.value);
+}
+
+final class LessonTrialEdit extends LessonEditorEdit<bool> {
+  const LessonTrialEdit(super.value);
+}
+
+final class LessonCompletionEdit extends LessonEditorEdit<String> {
+  const LessonCompletionEdit(super.value);
+}
+
+final class LessonSettlementEdit extends LessonEditorEdit<String?> {
+  const LessonSettlementEdit(super.value);
+}
+
+final class LessonCompensationRuleEdit extends LessonEditorEdit<String?> {
+  const LessonCompensationRuleEdit(super.value);
+}
+
+final class LessonCompensationValueEdit extends LessonEditorEdit<String> {
+  const LessonCompensationValueEdit(super.value);
+}
+
+final class LessonSettlementReasonEdit extends LessonEditorEdit<String> {
+  const LessonSettlementReasonEdit(super.value);
+}
+
+final class LessonFundingEdit extends LessonEditorEdit<String> {
+  const LessonFundingEdit(super.value);
+}
+
+final class LessonSubscriptionEdit extends LessonEditorEdit<String?> {
+  const LessonSubscriptionEdit(super.value);
+}
+
 class LessonEditorSnapshot {
   const LessonEditorSnapshot({
     required this.lessonId,

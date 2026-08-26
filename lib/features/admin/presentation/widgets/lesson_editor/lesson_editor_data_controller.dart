@@ -20,11 +20,13 @@ class LessonEditorLoadPatch {
     required this.branchId,
     required this.draft,
     required this.references,
+    this.appliesCatalogDefaults = false,
   });
 
   final String? branchId;
   final LessonEditorDraft? draft;
   final LessonEditorReferenceState references;
+  final bool appliesCatalogDefaults;
 }
 
 class LessonEditorLoadResult {
@@ -187,7 +189,12 @@ class LessonEditorDataController implements LessonEditorDataLoader {
         !_ownsClient(clientRevision, selectedClient, branchId)) {
       return null;
     }
-    return subscriptionPatch;
+    return LessonEditorLoadPatch(
+      branchId: subscriptionPatch.branchId,
+      draft: subscriptionPatch.draft,
+      references: subscriptionPatch.references,
+      appliesCatalogDefaults: true,
+    );
   }
 
   @override
@@ -227,7 +234,12 @@ class LessonEditorDataController implements LessonEditorDataLoader {
         !_ownsClient(clientRevision, client, selectedBranchId)) {
       return null;
     }
-    return subscriptionPatch;
+    return LessonEditorLoadPatch(
+      branchId: subscriptionPatch.branchId,
+      draft: subscriptionPatch.draft,
+      references: subscriptionPatch.references,
+      appliesCatalogDefaults: transition.loadsBranch,
+    );
   }
 
   @override
@@ -261,6 +273,7 @@ class LessonEditorDataController implements LessonEditorDataLoader {
     return LessonEditorLoadPatch(
       branchId: branchId,
       draft: nextDraft,
+      appliesCatalogDefaults: true,
       references: _copyReferences(
         references,
         rooms: rooms,
@@ -427,6 +440,8 @@ _clientSelectionTransition(
       roomId: null,
       settlementTypeKey: null,
       compensationRuleKey: null,
+      compensationValueMinor: null,
+      plannedSettlementReason: '',
     ),
     references: _copyReferences(references, rooms: const [], catalog: null),
     branchId: clientBranchId,

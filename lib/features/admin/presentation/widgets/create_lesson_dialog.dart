@@ -8,7 +8,6 @@ import 'package:magic_music_crm/features/admin/presentation/providers/schedule_n
 import 'lesson_decision_flow.dart';
 import 'lesson_editor/lesson_editor_data_controller.dart';
 import 'lesson_editor/lesson_editor_decision_policy.dart';
-import 'lesson_editor/lesson_editor_feedback.dart';
 import 'lesson_editor/lesson_editor_initial_mapper.dart';
 import 'lesson_editor/lesson_editor_models.dart';
 import 'lesson_editor/lesson_editor_save_flow.dart';
@@ -18,16 +17,11 @@ import 'lesson_editor/lesson_editor_view.dart';
 class CreateLessonDialog extends ConsumerStatefulWidget
     implements LessonEditorInitialSource {
   final DateTime? initialDate;
-  final String? initialRoomId, initialBranchId;
+  final String? initialRoomId, initialBranchId, leadId, leadName;
+  final String? clientType, clientId, clientName;
   final int? initialDurationMinutes;
   final Map<String, dynamic>? lesson;
-  final String? leadId;
-  final String? leadName;
-  final String? clientType;
-  final String? clientId;
-  final String? clientName;
-  final bool initialIsTrial;
-  final bool pageMode;
+  final bool initialIsTrial, pageMode;
   const CreateLessonDialog({
     super.key,
     this.initialDate,
@@ -83,27 +77,24 @@ class CreateLessonDialog extends ConsumerStatefulWidget
     );
   }
 
-  ConsumerState<CreateLessonDialog> createState() => _LessonEditorDialogState();
+  createState() => _LessonEditorDialogState();
 }
 
 class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
-    with LessonEditorDraftActions
     implements LessonEditorActions {
   static const _policy = LessonEditorDecisionPolicy();
   final _scroll = ScrollController(keepScrollOffset: false);
-  late final LessonEditorSession _session;
+  late LessonEditorSession _session;
   late LessonEditorDraft _draft;
   var _refs = const LessonEditorReferenceState.empty();
   late final LessonEditorDataController _data;
   late final LessonEditorScheduleController _schedule;
   late final LessonEditorSaveFlow _flow;
-  bool _loading = true, _saving = false, _analyzing = false;
-  String? _loadError, _scheduleError;
+  (bool loading, String? error) _loadState = (true, null);
+  (bool analyzing, String? error) _scheduleState = (false, null);
+  bool _saving = false;
   LessonEditorValidation _valid = const LessonEditorValidation.valid();
   LessonScheduleAnalysis? _conflicts;
-  LessonEditorDraft get actionDraft => _draft;
-  LessonEditorReferenceState get actionReferences => _refs;
-  LessonEditorDecisionPolicy get actionPolicy => _policy;
   void initState() {
     super.initState();
     _session = const LessonEditorInitialMapper().fromSource(widget);
@@ -123,88 +114,105 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
 
   Future<void> _refreshReferences() async {
     _data.invalidateClientSelection();
-    setState(() {
-      _loading = true;
-      _loadError = null;
-    });
+    setState(() => _loadState = (true, null));
     final result = await _data.loadInitialSafely(_session);
     if (!mounted) return;
     if (result.patch case final patch?) {
       return _acceptPatch(patch, loaded: true);
     }
-    setState(() {
-      _loading = false;
-      _loadError = lessonLoadErrorMessage(result.error);
-    });
+    setState(() => _loadState = (false, lessonLoadErrorMessage(result.error)));
   }
 
   void _acceptPatch(LessonEditorLoadPatch patch, {bool loaded = false}) {
     final references = patch.references;
-    final draft = _policy.applyReferenceDefaults(
+    final defaults = _policy.applyReferenceDefaults(
       _session,
       patch.draft ?? _draft,
       references,
-      widget.initialDurationMinutes == null,
+      patch.appliesCatalogDefaults && widget.initialDurationMinutes == null,
     );
     setState(() {
-      _draft = draft;
+      _session = defaults.session;
+      _draft = defaults.draft;
       _refs = references;
-      if (loaded) _loading = false;
+      if (loaded) _loadState = (false, _loadState.$2);
     });
   }
 
-  void updateActionDraft(
-    LessonEditorDraft value, {
-    bool scheduleChanged = false,
-  }) {
+  void _updateDraft(LessonEditorDraft value, {bool scheduleChanged = false}) {
     setState(() {
       _draft = value;
-      if (scheduleChanged) {
-        _conflicts = null;
-        _scheduleError = null;
-      }
+      if (!scheduleChanged) return;
+      _conflicts = null;
+      _scheduleState = (_scheduleState.$1, null);
     });
   }
 
-  Widget build(BuildContext context) => LessonEditorView(
-    model: LessonEditorViewModel(
-      session: _session,
-      draft: _draft,
-      references: _refs,
-      analysis: _conflicts,
-      isLoading: _loading,
-      isSaving: _saving,
-      isAnalyzing: _analyzing,
-      validationMessage: _valid.message,
-      loadErrorMessage: _loadError,
-      scheduleAnalysisError: _scheduleError,
-    ),
+  Widget build(BuildContext context) => LessonEditorView.fromState(
+    (_session, _draft, _refs),
+    (_conflicts, _loadState.$1, _saving, _scheduleState.$1),
+    (_valid.message, _loadState.$2, _scheduleState.$2),
     actions: this,
     pageMode: widget.pageMode,
     title: lessonEditorTitle(_session, widget.leadId != null),
     scrollController: _scroll,
     onRetry: _refreshReferences,
   );
-  Future<List<LessonClientRef>> searchClients(String query) =>
-      _data.searchClients(query);
+  searchClients(String q) => _data.searchClients(q);
   void selectClient(LessonClientRef? value) => unawaited(
     _requestPatch(
       _data.selectClient(value, draft: _draft, references: _refs),
       'Не удалось выбрать клиента.',
     ),
   );
-  void loadActionBranch(String value) {
-    unawaited(
-      _requestPatch(
-        _data.loadBranch(value, draft: _draft, references: _refs),
-        'Не удалось загрузить данные филиала.',
-      ),
+  void edit(LessonEditorEdit<Object?> edit) {
+    final change = _policy.applyEdit(_draft, _refs, edit);
+    _updateDraft(change.draft, scheduleChanged: change.scheduleChanged);
+    if (change.branchToLoad case final branchId?) {
+      unawaited(
+        _requestPatch(
+          _data.loadBranch(branchId, draft: _draft, references: _refs),
+          'Не удалось загрузить данные филиала.',
+        ),
+      );
+    }
+  }
+
+  Future<void> selectDate(LessonDatePickerRequest request) async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: request.initialDate,
+      firstDate: request.firstDate,
+      lastDate: request.lastDate,
+    );
+    if (!mounted || date == null) return;
+    _updateDraft(_draft.withDate(date), scheduleChanged: true);
+  }
+
+  Future<void> selectTime(LessonTimePickerRequest request) async {
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: request.hour, minute: request.minute),
+      builder: lessonTimePicker24HourBuilder,
+    );
+    if (!mounted || time == null) return;
+    _updateDraft(
+      _draft.withTime(time.hour, time.minute),
+      scheduleChanged: true,
     );
   }
 
-  LessonEditorDraft applyActionSuggestion(ScheduleSuggestion value) =>
-      _schedule.applySuggestion(_draft, value);
-  void focusActionConstraint(String lessonId) => _focusConstraint(lessonId);
+  Future<void> applySuggestion(ScheduleSuggestion value) async {
+    final draft = _schedule.applySuggestion(_draft, value);
+    _updateDraft(draft, scheduleChanged: true);
+    await analyzeSchedule();
+  }
+
+  void openConstraint(LessonConstraintViolation value) {
+    if (value.conflictingLessonIds.firstOrNull case final lessonId?) {
+      _focusConstraint(lessonId);
+    }
+  }
 
   Future<void> _requestPatch(
     Future<LessonEditorLoadPatch?> request,
@@ -219,16 +227,12 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
   }
 
   Future<void> analyzeSchedule() async {
-    setState(() {
-      _analyzing = true;
-      _scheduleError = null;
-    });
+    setState(() => _scheduleState = (true, null));
     final result = await _schedule.inspect(_session, _draft);
     if (!mounted) return;
     setState(() {
-      _analyzing = false;
       _conflicts = result.analysis;
-      _scheduleError = lessonScheduleErrorMessage(result.error);
+      _scheduleState = (false, lessonScheduleErrorMessage(result.error));
     });
   }
 
@@ -252,10 +256,8 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
         case LessonSaveInvalid(:final validation):
           setState(() => _valid = validation);
         case LessonSaveViolations(:final violations):
-          setState(
-            () =>
-                _conflicts = LessonScheduleAnalysis.fromViolations(violations),
-          );
+          final analysis = LessonScheduleAnalysis.fromViolations(violations);
+          setState(() => _conflicts = analysis);
           await _showViolations(violations);
         case LessonSaveDecision(:final request):
           final changed = await showLessonDecisionFlow(
@@ -294,11 +296,9 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
           onFix: () => Navigator.pop(dialogContext),
         ),
       );
-
   void _focusConstraint(String lessonId) {
-    ref
-        .read(scheduleNavigationProvider.notifier)
-        .focus(_draft.localStart, lessonId);
+    final navigation = ref.read(scheduleNavigationProvider.notifier);
+    navigation.focus(_draft.localStart, lessonId);
     Navigator.pop(context);
   }
 

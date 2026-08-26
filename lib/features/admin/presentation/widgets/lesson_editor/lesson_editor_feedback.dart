@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
-import 'lesson_editor_decision_policy.dart';
 import 'lesson_editor_models.dart';
 
 String lessonEditorTitle(LessonEditorSession session, bool hasLeadPreset) =>
@@ -25,38 +24,22 @@ String? lessonScheduleErrorMessage(Object? error) => error == null
 String lessonEditorErrorMessage(Object error, String fallback) =>
     userErrorMessage(error, fallback: fallback);
 
+Widget lessonTimePicker24HourBuilder(BuildContext context, Widget? child) =>
+    MediaQuery(
+      data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+      child: child!,
+    );
+
 abstract interface class LessonEditorActions {
   Future<List<LessonClientRef>> searchClients(String query);
 
   void selectClient(LessonClientRef? value);
 
-  void selectBranch(String? value);
+  void edit(LessonEditorEdit<Object?> edit);
 
-  void selectRoom(String? value);
+  Future<void> selectDate(LessonDatePickerRequest request);
 
-  void selectTeacher(String? value);
-
-  void selectDate(DateTime value);
-
-  void selectTime(TimeOfDay value);
-
-  void selectDuration(int value);
-
-  void selectTrial(bool value);
-
-  void selectCompletion(String value);
-
-  void selectSettlement(String? value);
-
-  void selectCompensationRule(String? value);
-
-  void changeCompensationValue(String value);
-
-  void changePlannedSettlementReason(String value);
-
-  void selectFunding(String value);
-
-  void selectSubscription(String? value);
+  Future<void> selectTime(LessonTimePickerRequest request);
 
   Future<void> analyzeSchedule();
 
@@ -67,119 +50,6 @@ abstract interface class LessonEditorActions {
   void cancel();
 
   void openConstraint(LessonConstraintViolation value);
-}
-
-mixin LessonEditorDraftActions implements LessonEditorActions {
-  LessonEditorDraft get actionDraft;
-  LessonEditorReferenceState get actionReferences;
-  LessonEditorDecisionPolicy get actionPolicy;
-
-  void updateActionDraft(
-    LessonEditorDraft value, {
-    bool scheduleChanged = false,
-  });
-
-  void loadActionBranch(String branchId);
-  LessonEditorDraft applyActionSuggestion(ScheduleSuggestion value);
-  void focusActionConstraint(String lessonId);
-
-  @override
-  void selectBranch(String? value) {
-    if (value == null) return;
-    updateActionDraft(
-      actionPolicy.branchSelection(actionDraft, actionReferences, value),
-      scheduleChanged: true,
-    );
-    loadActionBranch(value);
-  }
-
-  @override
-  void selectRoom(String? value) => updateActionDraft(
-    actionDraft.copyWith(roomId: value),
-    scheduleChanged: true,
-  );
-
-  @override
-  void selectTeacher(String? value) => updateActionDraft(
-    actionDraft.copyWith(teacherId: value),
-    scheduleChanged: true,
-  );
-
-  @override
-  void selectDate(DateTime value) =>
-      updateActionDraft(actionDraft.withDate(value), scheduleChanged: true);
-
-  @override
-  void selectTime(TimeOfDay value) => updateActionDraft(
-    actionDraft.withTime(value.hour, value.minute),
-    scheduleChanged: true,
-  );
-
-  @override
-  void selectDuration(int value) => updateActionDraft(
-    actionDraft.copyWith(durationMinutes: value),
-    scheduleChanged: true,
-  );
-
-  @override
-  void selectTrial(bool value) =>
-      updateActionDraft(actionDraft.copyWith(isTrial: value));
-
-  @override
-  void selectCompletion(String value) =>
-      updateActionDraft(actionDraft.copyWith(completionType: value));
-
-  @override
-  void selectSettlement(String? value) => updateActionDraft(
-    actionPolicy.applyFundingDefault(
-      draft: actionDraft.copyWith(settlementTypeKey: value),
-      references: actionReferences,
-    ),
-  );
-
-  @override
-  void selectCompensationRule(String? value) => updateActionDraft(
-    actionPolicy.compensationRuleSelection(
-      actionDraft,
-      actionReferences,
-      value,
-    ),
-  );
-
-  @override
-  void changeCompensationValue(String value) => updateActionDraft(
-    actionPolicy.compensationValueChange(actionDraft, actionReferences, value),
-  );
-
-  @override
-  void changePlannedSettlementReason(String value) =>
-      updateActionDraft(actionDraft.copyWith(plannedSettlementReason: value));
-
-  @override
-  void selectFunding(String value) => updateActionDraft(
-    actionDraft.copyWith(
-      clientChargeType: value,
-      subscriptionId: value == 'subscription'
-          ? actionDraft.subscriptionId
-          : null,
-    ),
-  );
-
-  @override
-  void selectSubscription(String? value) =>
-      updateActionDraft(actionDraft.copyWith(subscriptionId: value));
-
-  @override
-  Future<void> applySuggestion(ScheduleSuggestion value) async {
-    updateActionDraft(applyActionSuggestion(value), scheduleChanged: true);
-    await analyzeSchedule();
-  }
-
-  @override
-  void openConstraint(LessonConstraintViolation value) {
-    final lessonId = value.conflictingLessonIds.firstOrNull;
-    if (lessonId != null) focusActionConstraint(lessonId);
-  }
 }
 
 class LessonConstraintDialog extends StatelessWidget {

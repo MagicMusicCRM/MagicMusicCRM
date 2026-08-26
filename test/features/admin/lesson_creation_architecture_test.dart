@@ -14,6 +14,7 @@ void main() {
     expect(shell, isNot(contains("part 'create_lesson_dialog_view.dart'")));
     expect(shell, isNot(contains('part of ')));
     expect(shell, isNot(contains('_CreateLessonDialogState')));
+    expect(shell, isNot(contains('with LessonEditorDraftActions')));
     expect(shell, isNot(contains('magicApiClientProvider')));
     expect(shell, isNot(contains('MagicApiClient')));
     for (final oldHelper in [
@@ -32,6 +33,8 @@ void main() {
     }
     expect(shell, contains('class _LessonEditorDialogState'));
     expect(shell, contains('implements LessonEditorActions'));
+    expect(shell, contains('showDatePicker('));
+    expect(shell, contains('showTimePicker('));
     expect(shell, contains('LessonEditorDataController'));
     expect(shell, contains('LessonEditorScheduleController'));
     expect(shell, contains('LessonEditorSaveFlow'));

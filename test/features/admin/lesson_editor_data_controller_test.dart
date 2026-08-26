@@ -6,6 +6,7 @@ import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_models.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_editor_data_controller.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_editor_decision_policy.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_editor_models.dart';
 
 void main() {
@@ -414,7 +415,16 @@ void main() {
       ];
       final newCatalog = LessonDecisionCatalog(
         settlementTypes: sourceSettlementTypes,
-        compensationRules: const [],
+        compensationRules: const [
+          LessonDecisionCatalogItem(
+            key: 'rule-b',
+            label: 'Rule B',
+            order: 1,
+            mode: 'fixed',
+            value: '250000',
+          ),
+        ],
+        defaultDurationMinutes: 75,
       );
       final controller = LessonEditorDataController.forTesting(
         listRooms: (_) async => const [
@@ -460,6 +470,8 @@ void main() {
           subscriptionId: 'subscription-a',
           settlementTypeKey: 'settlement-a',
           compensationRuleKey: 'rule-a',
+          compensationValueMinor: '999000',
+          plannedSettlementReason: 'Старое индивидуальное значение',
         ),
         references: references,
       );
@@ -471,7 +483,10 @@ void main() {
       expect(patch?.draft?.roomId, isNull);
       expect(patch?.draft?.settlementTypeKey, isNull);
       expect(patch?.draft?.compensationRuleKey, isNull);
+      expect(patch?.draft?.compensationValueMinor, isNull);
+      expect(patch?.draft?.plannedSettlementReason, isEmpty);
       expect(patch?.draft?.subscriptionId, isNull);
+      expect(patch?.appliesCatalogDefaults, isTrue);
       sourceAllowedContexts.add('cancel');
       sourceSettlementTypes.add(
         const LessonDecisionCatalogItem(
@@ -506,7 +521,86 @@ void main() {
       expect(patch?.references.subscriptions.map((item) => item.id), [
         'subscription-b',
       ]);
+
+      const policy = LessonEditorDecisionPolicy();
+      final projected = policy.applyReferenceDefaults(
+        _session(),
+        patch!.draft!,
+        patch.references,
+        patch.appliesCatalogDefaults,
+      );
+      final ready = projected.draft.copyWith(
+        teacherId: 'teacher-b',
+        roomId: 'room-b',
+      );
+      expect(projected.draft.durationMinutes, 75);
+      expect(projected.draft.compensationRuleKey, 'rule-b');
+      expect(projected.draft.compensationValueMinor, '250000');
+      expect(projected.draft.plannedSettlementReason, isEmpty);
+      expect(
+        policy
+            .createPayload(
+              session: _session(),
+              draft: ready,
+              references: patch.references,
+            )
+            .containsKey('plannedSettlementReason'),
+        isFalse,
+      );
     });
+
+    test(
+      'catalog defaults are scoped away from same-branch client and subscription patches',
+      () async {
+        final controller = LessonEditorDataController.forTesting(
+          listRooms: (_) async => const [],
+          loadCatalog: (_) async => const LessonDecisionCatalog(
+            settlementTypes: [],
+            compensationRules: [],
+            defaultDurationMinutes: 75,
+          ),
+          listSubscriptions: (_) async => const [
+            {'id': 'subscription-a', 'status': 'active'},
+          ],
+        );
+        final references = _references(
+          branches: const [
+            LessonEditorReferenceItem(
+              id: 'branch-a',
+              label: 'A',
+              raw: {'id': 'branch-a'},
+            ),
+          ],
+          catalog: emptyCatalog,
+        );
+        final draft = _draft(branchId: 'branch-a');
+
+        final branch = await controller.loadBranch(
+          'branch-a',
+          draft: draft,
+          references: references,
+        );
+        final client = await controller.selectClient(
+          const LessonClientRef(
+            type: 'student',
+            id: 'student-a',
+            label: 'A',
+            branchId: 'branch-a',
+          ),
+          draft: draft,
+          references: branch!.references,
+        );
+        final subscriptions = await controller.loadSubscriptions(
+          client!.draft!.client,
+          draft: client.draft,
+          references: client.references,
+        );
+
+        expect(branch.appliesCatalogDefaults, isTrue);
+        expect(client.appliesCatalogDefaults, isFalse);
+        expect(subscriptions?.appliesCatalogDefaults, isFalse);
+      },
+    );
 
     test(
       'invalid client branch preserves the existing branch selections',
@@ -925,6 +1019,8 @@ LessonEditorDraft _draft({
   String? subscriptionId,
   String? settlementTypeKey,
   String? compensationRuleKey,
+  String? compensationValueMinor,
+  String plannedSettlementReason = '',
 }) => LessonEditorDraft(
   localStart: DateTime(2026, 8, 25, 10),
   durationMinutes: 60,
@@ -938,6 +1034,8 @@ LessonEditorDraft _draft({
   subscriptionId: subscriptionId,
   settlementTypeKey: settlementTypeKey,
   compensationRuleKey: compensationRuleKey,
+  compensationValueMinor: compensationValueMinor,
+  plannedSettlementReason: plannedSettlementReason,
 );
 
 LessonEditorReferenceState _references({

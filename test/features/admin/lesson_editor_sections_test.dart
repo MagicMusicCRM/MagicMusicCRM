@@ -254,6 +254,12 @@ final _forbiddenPresentationUses = <String, RegExp>{
   'stateful widget ownership': RegExp(r'\bStatefulWidget\b'),
   'State ownership': RegExp(r'\bState\s*<'),
   'setState ownership': RegExp(r'\bsetState\s*\('),
+  'Flutter dialog lifecycle': RegExp(
+    r'\b(?:showDatePicker|showTimePicker|showDialog)\s*\(',
+  ),
+  'action mixin ownership': RegExp(
+    r'\bmixin\s+\w*Actions\b|\bwith\s+\w*Actions\b',
+  ),
   'notifier type ownership': RegExp(
     r'\b(?:ChangeNotifier|ValueNotifier|StateNotifier|AsyncNotifier|Notifier)\b',
   ),
@@ -285,8 +291,8 @@ void main() {
           onAnalyze: () => analyzed = true,
           onApplySuggestion: (value) => applied = value,
           onOpenConstraint: (_) {},
-          onDateChanged: (_) {},
-          onTimeChanged: (_) {},
+          onDateRequested: (_) {},
+          onTimeRequested: (_) {},
           onDurationChanged: (_) {},
         ),
       ),
@@ -312,8 +318,8 @@ void main() {
           onAnalyze: () {},
           onApplySuggestion: (_) {},
           onOpenConstraint: (value) => opened = value,
-          onDateChanged: (_) {},
-          onTimeChanged: (_) {},
+          onDateRequested: (_) {},
+          onTimeRequested: (_) {},
           onDurationChanged: (_) {},
         ),
       ),
@@ -334,8 +340,8 @@ void main() {
           onAnalyze: () {},
           onApplySuggestion: (_) {},
           onOpenConstraint: (_) {},
-          onDateChanged: (_) {},
-          onTimeChanged: (_) {},
+          onDateRequested: (_) {},
+          onTimeRequested: (_) {},
           onDurationChanged: (_) {},
         ),
       ),
@@ -351,11 +357,11 @@ void main() {
     expect(analyzer.onPressed, isNull);
   });
 
-  testWidgets('schedule controls emit date time and duration changes', (
+  testWidgets('schedule controls emit picker and duration intents', (
     tester,
   ) async {
-    DateTime? selectedDate;
-    TimeOfDay? selectedTime;
+    var dateRequested = false;
+    var timeRequested = false;
     int? selectedDuration;
     await tester.pumpWidget(
       _host(
@@ -364,25 +370,15 @@ void main() {
           onAnalyze: () {},
           onApplySuggestion: (_) {},
           onOpenConstraint: (_) {},
-          onDateChanged: (value) => selectedDate = value,
-          onTimeChanged: (value) => selectedTime = value,
+          onDateRequested: (_) => dateRequested = true,
+          onTimeRequested: (_) => timeRequested = true,
           onDurationChanged: (value) => selectedDuration = value,
         ),
       ),
     );
 
     await tester.tap(find.byKey(const ValueKey('lesson-date-field')));
-    await tester.pumpAndSettle();
-    tester
-        .widget<CalendarDatePicker>(find.byType(CalendarDatePicker))
-        .onDateChanged(DateTime(2026, 8, 27));
-    await tester.tap(find.text('OK'));
-    await tester.pumpAndSettle();
-
     await tester.tap(find.byKey(const ValueKey('lesson-time-field')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('OK'));
-    await tester.pumpAndSettle();
 
     tester
         .widget<DropdownButtonFormField<int>>(
@@ -391,83 +387,34 @@ void main() {
         .onChanged
         ?.call(90);
 
-    expect(selectedDate, DateTime(2026, 8, 27));
-    expect(selectedTime, const TimeOfDay(hour: 13, minute: 0));
+    expect(dateRequested, isTrue);
+    expect(timeRequested, isTrue);
     expect(selectedDuration, 90);
   });
 
-  testWidgets(
-    'date picker uses rolling create minimum and keeps old edit date',
-    (tester) async {
-      final now = DateTime(2026, 8, 26, 18);
-      final oldDraft = _draft(localStart: DateTime(2026, 5, 10, 13));
-      final createModel = LessonScheduleSectionModel.fromEditor(
-        draft: _draft(),
-        analysis: null,
-        isAnalyzing: false,
-        isEdit: false,
-        now: now,
-      );
-      final editModel = LessonScheduleSectionModel.fromEditor(
-        draft: oldDraft,
-        analysis: null,
-        isAnalyzing: false,
-        isEdit: true,
-        now: now,
-      );
+  test('date bounds use rolling create minimum and keep old edit date', () {
+    final now = DateTime(2026, 8, 26, 18);
+    final oldDraft = _draft(localStart: DateTime(2026, 5, 10, 13));
+    final createModel = LessonScheduleSectionModel.fromEditor(
+      draft: _draft(),
+      analysis: null,
+      isAnalyzing: false,
+      isEdit: false,
+      now: now,
+    );
+    final editModel = LessonScheduleSectionModel.fromEditor(
+      draft: oldDraft,
+      analysis: null,
+      isAnalyzing: false,
+      isEdit: true,
+      now: now,
+    );
 
-      expect(createModel.minimumDate, DateTime(2026, 7, 27));
-      expect(createModel.maximumDate, DateTime(2027, 8, 26));
-      expect(editModel.minimumDate, DateTime(2026, 5, 10));
-      expect(editModel.maximumDate, DateTime(2027, 8, 26));
-
-      await tester.pumpWidget(
-        _host(
-          LessonScheduleSection(
-            model: editModel,
-            onAnalyze: () {},
-            onApplySuggestion: (_) {},
-            onOpenConstraint: (_) {},
-            onDateChanged: (_) {},
-            onTimeChanged: (_) {},
-            onDurationChanged: (_) {},
-          ),
-        ),
-      );
-      await tester.tap(find.byKey(const ValueKey('lesson-date-field')));
-      await tester.pumpAndSettle();
-
-      final picker = tester.widget<CalendarDatePicker>(
-        find.byType(CalendarDatePicker),
-      );
-      expect(picker.firstDate, DateTime(2026, 5, 10));
-      expect(picker.initialDate, DateTime(2026, 5, 10));
-      expect(picker.lastDate, DateTime(2027, 8, 26));
-      await tester.tap(find.text('Cancel'));
-      await tester.pumpAndSettle();
-
-      await tester.pumpWidget(
-        _host(
-          LessonScheduleSection(
-            model: createModel,
-            onAnalyze: () {},
-            onApplySuggestion: (_) {},
-            onOpenConstraint: (_) {},
-            onDateChanged: (_) {},
-            onTimeChanged: (_) {},
-            onDurationChanged: (_) {},
-          ),
-        ),
-      );
-      await tester.tap(find.byKey(const ValueKey('lesson-date-field')));
-      await tester.pumpAndSettle();
-      final createPicker = tester.widget<CalendarDatePicker>(
-        find.byType(CalendarDatePicker),
-      );
-      expect(createPicker.firstDate, DateTime(2026, 7, 27));
-      expect(createPicker.lastDate, DateTime(2027, 8, 26));
-    },
-  );
+    expect(createModel.minimumDate, DateTime(2026, 7, 27));
+    expect(createModel.maximumDate, DateTime(2027, 8, 26));
+    expect(editModel.minimumDate, DateTime(2026, 5, 10));
+    expect(editModel.maximumDate, DateTime(2027, 8, 26));
+  });
 
   testWidgets('participant section preserves controls and emits selections', (
     tester,
@@ -638,9 +585,9 @@ void main() {
             ),
             onSearchClients: actions.searchClients,
             onClientChanged: actions.selectClient,
-            onBranchChanged: actions.selectBranch,
-            onRoomChanged: actions.selectRoom,
-            onTeacherChanged: actions.selectTeacher,
+            onBranchChanged: (value) => actions.edit(LessonBranchEdit(value)),
+            onRoomChanged: (value) => actions.edit(LessonRoomEdit(value)),
+            onTeacherChanged: (value) => actions.edit(LessonTeacherEdit(value)),
           ),
         ),
       );
@@ -681,9 +628,9 @@ void main() {
             ),
             onSearchClients: actions.searchClients,
             onClientChanged: actions.selectClient,
-            onBranchChanged: actions.selectBranch,
-            onRoomChanged: actions.selectRoom,
-            onTeacherChanged: actions.selectTeacher,
+            onBranchChanged: (value) => actions.edit(LessonBranchEdit(value)),
+            onRoomChanged: (value) => actions.edit(LessonRoomEdit(value)),
+            onTeacherChanged: (value) => actions.edit(LessonTeacherEdit(value)),
           ),
         ),
       );
@@ -744,9 +691,9 @@ void main() {
             ),
             onSearchClients: actions.searchClients,
             onClientChanged: actions.selectClient,
-            onBranchChanged: actions.selectBranch,
-            onRoomChanged: actions.selectRoom,
-            onTeacherChanged: actions.selectTeacher,
+            onBranchChanged: (value) => actions.edit(LessonBranchEdit(value)),
+            onRoomChanged: (value) => actions.edit(LessonRoomEdit(value)),
+            onTeacherChanged: (value) => actions.edit(LessonTeacherEdit(value)),
           ),
         ),
       );
@@ -1466,7 +1413,6 @@ void main() {
             'package:flutter/material.dart',
             'package:magic_music_crm/core/api/magic_api_error.dart',
             'package:magic_music_crm/core/theme/design_tokens.dart',
-            'lesson_editor_decision_policy.dart',
             'lesson_editor_models.dart',
           },
     };
@@ -1505,6 +1451,11 @@ void main() {
           'controller or notifier construction',
       'final owner = StreamController<int>.broadcast();':
           'controller or notifier construction',
+      'mixin DraftActions {}': 'action mixin ownership',
+      'final date = showDatePicker(context: context);':
+          'Flutter dialog lifecycle',
+      'final time = showTimePicker(context: context);':
+          'Flutter dialog lifecycle',
     };
     for (final fixture in forbiddenFixtures.entries) {
       expect(
@@ -1538,8 +1489,8 @@ class _RecordingActions implements LessonEditorActions {
   String? branch;
   String? room;
   String? teacher;
-  DateTime? date;
-  TimeOfDay? time;
+  int dateRequests = 0;
+  int timeRequests = 0;
   int? duration;
   int saveCount = 0;
   int cancelCount = 0;
@@ -1554,11 +1505,34 @@ class _RecordingActions implements LessonEditorActions {
   void cancel() => cancelCount++;
 
   @override
-  void changeCompensationValue(String value) => compensationValue = value;
-
-  @override
-  void changePlannedSettlementReason(String value) =>
-      compensationReason = value;
+  void edit(LessonEditorEdit<Object?> edit) {
+    switch (edit) {
+      case LessonBranchEdit(:final value):
+        branch = value;
+      case LessonRoomEdit(:final value):
+        room = value;
+      case LessonTeacherEdit(:final value):
+        teacher = value;
+      case LessonDurationEdit(:final value):
+        duration = value;
+      case LessonTrialEdit(:final value):
+        trial = value;
+      case LessonCompletionEdit(:final value):
+        completion = value;
+      case LessonSettlementEdit(:final value):
+        settlement = value;
+      case LessonCompensationRuleEdit(:final value):
+        compensationRule = value;
+      case LessonCompensationValueEdit(:final value):
+        compensationValue = value;
+      case LessonSettlementReasonEdit(:final value):
+        compensationReason = value;
+      case LessonFundingEdit(:final value):
+        funding = value;
+      case LessonSubscriptionEdit(:final value):
+        subscription = value;
+    }
+  }
 
   @override
   void openConstraint(LessonConstraintViolation value) {}
@@ -1573,41 +1547,13 @@ class _RecordingActions implements LessonEditorActions {
   }
 
   @override
-  void selectBranch(String? value) => branch = value;
-
-  @override
   void selectClient(LessonClientRef? value) => client = value;
 
   @override
-  void selectCompensationRule(String? value) => compensationRule = value;
+  Future<void> selectDate(LessonDatePickerRequest request) async =>
+      dateRequests++;
 
   @override
-  void selectCompletion(String value) => completion = value;
-
-  @override
-  void selectDate(DateTime value) => date = value;
-
-  @override
-  void selectDuration(int value) => duration = value;
-
-  @override
-  void selectFunding(String value) => funding = value;
-
-  @override
-  void selectRoom(String? value) => room = value;
-
-  @override
-  void selectSettlement(String? value) => settlement = value;
-
-  @override
-  void selectSubscription(String? value) => subscription = value;
-
-  @override
-  void selectTeacher(String? value) => teacher = value;
-
-  @override
-  void selectTime(TimeOfDay value) => time = value;
-
-  @override
-  void selectTrial(bool value) => trial = value;
+  Future<void> selectTime(LessonTimePickerRequest request) async =>
+      timeRequests++;
 }
