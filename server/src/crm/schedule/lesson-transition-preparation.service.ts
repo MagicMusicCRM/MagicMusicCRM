@@ -36,6 +36,22 @@ import type {
   TransitionSuccessor,
 } from "./lesson-transition.types";
 
+type CompleteCommonSnapshotRow = TransitionLessonRow & {
+  completion_type: string;
+  teacher_compensation_type: "fixed" | "hourly" | "none";
+  teacher_compensation_value: number | string;
+  snapshot_trial: boolean;
+  validation_state: "valid" | "legacy_incomplete";
+};
+
+type CompleteIndividualSnapshotRow = TransitionLessonRow & {
+  snapshot_group_id: null;
+  snapshot_client_type: "lead" | "student";
+  snapshot_client_id: string;
+  client_charge_type: "subscription" | "personal_account" | "none";
+  client_charge_value: number | string;
+};
+
 @Injectable()
 export class LessonTransitionPreparationService {
   constructor(
@@ -249,11 +265,7 @@ export class LessonTransitionPreparationService {
   }
 
   private commonSnapshot(row: TransitionLessonRow) {
-    if (
-      !row.completion_type || !row.teacher_compensation_type ||
-      row.teacher_compensation_value === null || row.snapshot_trial === null ||
-      !row.validation_state
-    ) return null;
+    if (!this.hasCommonSnapshot(row)) return null;
     return {
       completionType: row.completion_type,
       teacherCompensationType: row.teacher_compensation_type,
@@ -267,11 +279,8 @@ export class LessonTransitionPreparationService {
     row: TransitionLessonRow,
     common: ReturnType<LessonTransitionPreparationService["commonSnapshot"]>,
   ) {
-    if (
-      row.snapshot_group_id || !row.snapshot_client_type ||
-      !row.snapshot_client_id || !row.client_charge_type ||
-      row.client_charge_value === null || !common
-    ) return null;
+    if (!common) return null;
+    if (!this.hasIndividualSnapshot(row)) return null;
     return {
       clientType: row.snapshot_client_type,
       clientId: row.snapshot_client_id,
@@ -280,6 +289,27 @@ export class LessonTransitionPreparationService {
       clientChargeValue: Number(row.client_charge_value),
       subscriptionId: row.subscription_id,
     };
+  }
+
+  private hasCommonSnapshot(
+    row: TransitionLessonRow,
+  ): row is CompleteCommonSnapshotRow {
+    if (!row.completion_type) return false;
+    if (!row.teacher_compensation_type) return false;
+    if (row.teacher_compensation_value === null) return false;
+    if (row.snapshot_trial === null) return false;
+    return Boolean(row.validation_state);
+  }
+
+  private hasIndividualSnapshot(
+    row: TransitionLessonRow,
+  ): row is CompleteIndividualSnapshotRow {
+    if (row.snapshot_group_id) return false;
+    if (!row.snapshot_client_type) return false;
+    if (!row.snapshot_client_id) return false;
+    if (!row.client_charge_type) return false;
+    if (row.client_charge_value === null) return false;
+    return true;
   }
 
   private assertTransitionAllowed(

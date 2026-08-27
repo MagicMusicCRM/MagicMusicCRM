@@ -11,6 +11,8 @@ export type {
   ExistingLessonDraft,
 } from "./lesson-draft.contracts";
 
+type ValidLessonSnapshot = NonNullable<ExistingLessonDraft["snapshot"]>;
+
 @Injectable()
 export class LessonRequiredFieldValidator {
   create(dto: LessonDraftInput): CompleteLessonDraft {
@@ -59,6 +61,20 @@ export class LessonRequiredFieldValidator {
     dto: LessonDraftInput,
     existing: ExistingLessonDraft,
   ): CompleteLessonDraft {
+    this.assertUpdateRequestAllowed(dto);
+    const snapshot = this.validSnapshot(existing);
+    this.assertImmutableSnapshotUnchanged(dto, snapshot);
+    const clientRef = {
+      type: snapshot.clientType,
+      id: snapshot.clientId,
+    };
+    return this.complete(
+      this.coerceUpdateDraft(dto, existing, snapshot, clientRef),
+      clientRef,
+    );
+  }
+
+  private assertUpdateRequestAllowed(dto: LessonDraftInput): void {
     if (dto.force === true) {
       this.fail(
         "CONSTRAINT_OVERRIDE_NOT_ALLOWED",
@@ -73,53 +89,25 @@ export class LessonRequiredFieldValidator {
         "Lesson lifecycle is server-managed.",
       );
     }
-    if (!existing.snapshot || existing.snapshot.validationState !== "valid") {
+  }
+
+  private validSnapshot(existing: ExistingLessonDraft): ValidLessonSnapshot {
+    const snapshot = existing.snapshot;
+    if (!snapshot || snapshot.validationState !== "valid") {
       this.fail(
         "LESSON_SNAPSHOT_INCOMPLETE",
         ["snapshot"],
         "Lesson requires a valid immutable snapshot before editing.",
       );
     }
-    const snapshot = existing.snapshot;
-    const requestedClient = this.clientRef(dto);
-    const immutableChanges = [
-      requestedClient &&
-      (requestedClient.type !== snapshot.clientType ||
-        requestedClient.id !== snapshot.clientId)
-        ? "clientRef"
-        : null,
-      dto.isTrial !== undefined && dto.isTrial !== snapshot.trial
-        ? "isTrial"
-        : null,
-      dto.completionType !== undefined &&
-      dto.completionType.trim() !== snapshot.completionType
-        ? "completionType"
-        : null,
-      dto.clientChargeType !== undefined &&
-      dto.clientChargeType !== snapshot.clientChargeType
-        ? "clientChargeType"
-        : null,
-      dto.clientChargeValue !== undefined &&
-      dto.clientChargeValue !== snapshot.clientChargeValue
-        ? "clientChargeValue"
-        : null,
-      dto.teacherCompensationType !== undefined &&
-      dto.teacherCompensationType !== snapshot.teacherCompensationType
-        ? "teacherCompensationType"
-        : null,
-      dto.teacherCompensationValue !== undefined &&
-      dto.teacherCompensationValue !== snapshot.teacherCompensationValue
-        ? "teacherCompensationValue"
-        : null,
-      dto.teacherRate !== undefined &&
-      dto.teacherRate !== snapshot.teacherCompensationValue
-        ? "teacherRate"
-        : null,
-      dto.subscriptionId !== undefined &&
-      dto.subscriptionId !== snapshot.subscriptionId
-        ? "subscriptionId"
-        : null,
-    ].filter((field): field is string => field !== null);
+    return snapshot;
+  }
+
+  private assertImmutableSnapshotUnchanged(
+    dto: LessonDraftInput,
+    snapshot: ValidLessonSnapshot,
+  ): void {
+    const immutableChanges = this.immutableSnapshotChanges(dto, snapshot);
     if (immutableChanges.length > 0) {
       this.fail(
         "IMMUTABLE_LESSON_SNAPSHOT",
@@ -127,34 +115,94 @@ export class LessonRequiredFieldValidator {
         "Lesson financial/completion snapshot is immutable.",
       );
     }
-    return this.complete(
-      {
-        ...dto,
-        clientRef: {
-          type: snapshot.clientType,
-          id: snapshot.clientId,
-        },
-        teacherId: dto.teacherId ?? existing.teacherId ?? undefined,
-        branchId: dto.branchId ?? existing.branchId ?? undefined,
-        roomId: dto.roomId ?? existing.roomId ?? undefined,
-        scheduledAt:
-          dto.scheduledAt ?? new Date(existing.scheduledAt).toISOString(),
-        durationMinutes:
-          dto.durationMinutes ?? existing.durationMinutes,
-        isTrial: snapshot.trial,
-        notes: dto.notes ?? existing.notes ?? undefined,
-        completionType: snapshot.completionType,
-        clientChargeType: snapshot.clientChargeType,
-        clientChargeValue: snapshot.clientChargeValue,
-        teacherCompensationType: snapshot.teacherCompensationType,
-        teacherCompensationValue: snapshot.teacherCompensationValue,
-        subscriptionId: snapshot.subscriptionId ?? undefined,
-      },
-      {
-        type: snapshot.clientType,
-        id: snapshot.clientId,
-      },
-    );
+  }
+
+  private immutableSnapshotChanges(
+    dto: LessonDraftInput,
+    snapshot: ValidLessonSnapshot,
+  ): string[] {
+    const requestedClient = this.clientRef(dto);
+    return [
+      requestedClient &&
+      (requestedClient.type !== snapshot.clientType ||
+        requestedClient.id !== snapshot.clientId)
+        ? "clientRef"
+        : null,
+      this.changedField("isTrial", dto.isTrial, snapshot.trial),
+      this.changedField(
+        "completionType",
+        this.trimIfProvided(dto.completionType),
+        snapshot.completionType,
+      ),
+      this.changedField(
+        "clientChargeType",
+        dto.clientChargeType,
+        snapshot.clientChargeType,
+      ),
+      this.changedField(
+        "clientChargeValue",
+        dto.clientChargeValue,
+        snapshot.clientChargeValue,
+      ),
+      this.changedField(
+        "teacherCompensationType",
+        dto.teacherCompensationType,
+        snapshot.teacherCompensationType,
+      ),
+      this.changedField(
+        "teacherCompensationValue",
+        dto.teacherCompensationValue,
+        snapshot.teacherCompensationValue,
+      ),
+      this.changedField(
+        "teacherRate",
+        dto.teacherRate,
+        snapshot.teacherCompensationValue,
+      ),
+      this.changedField(
+        "subscriptionId",
+        dto.subscriptionId,
+        snapshot.subscriptionId,
+      ),
+    ].filter((field): field is string => field !== null);
+  }
+
+  private changedField(
+    field: string,
+    requested: unknown,
+    current: unknown,
+  ): string | null {
+    return requested !== undefined && requested !== current ? field : null;
+  }
+
+  private trimIfProvided(value: string | undefined): string | undefined {
+    return value === undefined ? undefined : value.trim();
+  }
+
+  private coerceUpdateDraft(
+    dto: LessonDraftInput,
+    existing: ExistingLessonDraft,
+    snapshot: ValidLessonSnapshot,
+    clientRef: { type: LessonClientRefType; id: string },
+  ): LessonDraftInput {
+    return {
+      ...dto,
+      clientRef,
+      teacherId: dto.teacherId ?? existing.teacherId ?? undefined,
+      branchId: dto.branchId ?? existing.branchId ?? undefined,
+      roomId: dto.roomId ?? existing.roomId ?? undefined,
+      scheduledAt:
+        dto.scheduledAt ?? new Date(existing.scheduledAt).toISOString(),
+      durationMinutes: dto.durationMinutes ?? existing.durationMinutes,
+      isTrial: snapshot.trial,
+      notes: dto.notes ?? existing.notes ?? undefined,
+      completionType: snapshot.completionType,
+      clientChargeType: snapshot.clientChargeType,
+      clientChargeValue: snapshot.clientChargeValue,
+      teacherCompensationType: snapshot.teacherCompensationType,
+      teacherCompensationValue: snapshot.teacherCompensationValue,
+      subscriptionId: snapshot.subscriptionId ?? undefined,
+    };
   }
 
   private complete(
