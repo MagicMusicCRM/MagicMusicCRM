@@ -217,6 +217,17 @@ void caught(dynamic ref) {
   }
   crm.futureTryWrite();
 }
+void expressionBranches(dynamic ref, bool useProvider, int mode) {
+  final p = magicCrmServiceProvider;
+  final read = ref.read;
+  dynamic crm = useProvider ? read(p) : LocalSchedulePreview();
+  crm.futureConditionalExpressionWrite();
+  crm = switch (mode) {
+    0 => ref.read(p),
+    _ => LocalSchedulePreview(),
+  };
+  crm.futureSwitchExpressionWrite();
+}
 ''');
 
     expect(
@@ -231,6 +242,8 @@ void caught(dynamic ref) {
         'futureLoopBodyWrite',
         'futureForZeroIterationWrite',
         'futureTryWrite',
+        'futureConditionalExpressionWrite',
+        'futureSwitchExpressionWrite',
       },
     );
   });
@@ -256,6 +269,17 @@ void finallyLocal(dynamic ref) {
     crm = LocalSchedulePreview();
   }
   crm.refreshAfterFinally();
+}
+void localExpressions(bool first, int mode) {
+  dynamic crm = first
+      ? LocalSchedulePreview()
+      : OtherLocalSchedulePreview();
+  crm.refreshConditionalExpression();
+  crm = switch (mode) {
+    0 => LocalSchedulePreview(),
+    _ => OtherLocalSchedulePreview(),
+  };
+  crm.refreshSwitchExpression();
 }
 ''');
 

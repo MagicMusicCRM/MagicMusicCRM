@@ -11,19 +11,21 @@ The first controller/widget run failed because
 `schedule_reference_controller.dart`, `schedule_reference_models.dart`, and
 `ScheduleReferenceController` did not exist. The first architecture run found
 only the 796-line legacy owner instead of the six required semantic owners.
-After extraction and the boundary-hardening rounds, all 12 controller/widget
-contracts and all 13 AST guard tests pass.
+After extraction and the boundary-hardening rounds, all 17 controller/widget
+contracts and all 15 AST guard tests pass. The latest strict RED reproduced
+draft replacement during an in-flight save and transparent expression
+ownership bypasses before the fixes were applied.
 
 ## Owners and structural gate
 
 | Owner | Guard NLOC | Physical lines | Max CCN |
 | --- | ---: | ---: | ---: |
-| `schedule_reference_settings.dart` | 58 | 70 | 3 |
+| `schedule_reference_settings.dart` | 58 | 69 | 3 |
 | `schedule_reference_models.dart` | 169 | 188 | 8 |
-| `schedule_reference_controller.dart` | 369 | 401 | 7 |
+| `schedule_reference_controller.dart` | 369 | 400 | 7 |
 | `schedule_reference_view.dart` | 197 | 211 | 4 |
-| `schedule_reference_cards.dart` | 311 | 332 | 10 |
-| `schedule_reference_dialogs.dart` | 127 | 133 | 8 |
+| `schedule_reference_cards.dart` | 326 | 348 | 10 |
+| `schedule_reference_dialogs.dart` | 127 | 132 | 8 |
 
 The controller type is 364 token NLOC with 46 members and 30 callables. Its
 file has 35 executable nodes, including 5 nested callbacks/closures; the type
@@ -35,15 +37,19 @@ and 30 callables. Negative fixtures prove comment/string decoys, whitespace,
 service aliases, direct and derived provider receivers, transitive provider
 tokens, read tearoffs, constructor fields, parentheses, cascades, new owners,
 conditional/switch/loop/try alternatives, cross-method field writes, syntax
-errors, CCN, and type-callable bypasses fail. Positive fixtures prove same-name
-lexical bindings and class fields do not contaminate each other, unconditional
-and all-branch overwrites clear ownership, catch parameters shadow outer
+errors, CCN, and type-callable bypasses fail. Conditional, switch, cast, await,
+provider-token, and read-alias expression values preserve provider ownership.
+Positive fixtures prove same-name lexical bindings and class fields do not
+contaminate each other, unconditional and all-branch overwrites clear
+ownership, local expression arms stay clean, catch parameters shadow outer
 bindings, and `finally` applies after joins.
 
 Shared architecture support remains split into semantic owners below both
 limits: the facade is 277 token NLOC / 303 physical lines / max CCN 7, the
 metric visitors are 366 / 411 / 7, provider flow state is 94 / 114 / 4, and
-provider ownership dataflow is 430 / 478 / 8.
+provider ownership dataflow is 447 / 495 / 9. The expression-flow helper is
+66 / 74 / 3. The architecture fixture owners are 239 / 488 / 8 and 23 / 45 /
+1; the save-concurrency test owner is 301 / 327 / 5.
 
 ## Contract proof
 
@@ -59,14 +65,19 @@ provider ownership dataflow is 430 / 478 / 8.
 - `canEdit=false` blocks every controller mutation and service write. Existing
   settings keys, selector semantics, Russian copy, weekday numbering, time
   picker flow, success toasts, and retry text remain unchanged.
+- Every branch, assignment, and availability draft mutator also fails closed
+  while a save is pending. Disabled card controls cannot replace the captured
+  draft, so the returned version is applied and becomes the next request's
+  `expectedVersion`.
 
 ## Lane gate
 
-- Focused new tests: 25/25 PASS (12 controller/widget, 13 architecture).
+- Focused new tests: 32/32 PASS (17 controller/widget, 15 architecture).
+- Shared G/H/I architecture regression: 10/10 PASS.
 - Existing named workspace smoke: 2/2 PASS (read-only split view and director
   assignment/availability version chaining).
-- `flutter analyze --no-pub` on all six production owners and changed
-  architecture support/tests: PASS, no issues.
+- `flutter analyze --no-pub` on 15 production, support, and test owners: PASS,
+  no issues.
 - Explicit format, contract grep, `git diff --check`, generated registrant
   restoration, and six verify-only path checks: PASS.
 
