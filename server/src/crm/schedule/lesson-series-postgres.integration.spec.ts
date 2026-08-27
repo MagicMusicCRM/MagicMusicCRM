@@ -294,20 +294,38 @@ describe("Atomic LessonSeries (PostgreSQL)", () => {
   });
 
   it("stores a future individual series without materializing beyond 60 days", async () => {
+    const boundary = await pool.query<{
+      valid_from: string;
+      valid_until: string;
+      weekday: number;
+    }>(`
+      with branch_clock as (
+        select timezone('America/New_York', now())::date as local_today
+      )
+      select (local_today + 61)::text as valid_from,
+        (local_today + 75)::text as valid_until,
+        extract(isodow from local_today + 61)::int as weekday
+      from branch_clock
+    `);
+    const futureRange = boundary.rows[0]!;
     const fixture = await createFixture(pool);
     const actor = { userId: fixture.managerId, role: "manager" as const };
     let seriesId: string | undefined;
     try {
+      await pool.query(
+        `update app.branch_hours set weekday = $2 where branch_id = $1`,
+        [fixture.branchId, futureRange.weekday],
+      );
       const created = await commands.create(actor, {
         clientRef: { type: "student", id: fixture.studentId },
         teacherId: fixture.teacherId,
         branchId: fixture.branchId,
         roomId: fixture.roomId,
-        weekday: 1,
+        weekday: futureRange.weekday,
         beginTime: "11:00",
         durationMinutes: 60,
-        validFrom: "2026-10-26",
-        validUntil: "2026-11-09",
+        validFrom: futureRange.valid_from,
+        validUntil: futureRange.valid_until,
         isTrial: false,
         completionType: "standard.success",
         clientChargeType: "none",
