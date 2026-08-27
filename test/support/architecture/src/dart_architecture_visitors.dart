@@ -2,6 +2,8 @@ import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:analyzer/source/line_info.dart';
 
+import 'dart_provider_ownership_dataflow.dart';
+
 ArchitectureAstData collectArchitectureAst(
   CompilationUnit unit,
   LineInfo lineInfo,
@@ -18,6 +20,7 @@ ArchitectureAstData collectArchitectureAst(
     declaredTypes: typeVisitor.declaredTypes,
     methodNames: typeVisitor.methodNames,
     invocations: ownershipVisitor.invocations,
+    providerOwnership: collectProviderOwnershipDataflow(unit),
     aliases: AstAliasOwnership(
       aliasSources: ownershipVisitor.aliasSources,
       declaredTypes: ownershipVisitor.declaredTypes,
@@ -45,6 +48,7 @@ class ArchitectureAstData {
     required this.declaredTypes,
     required this.methodNames,
     required this.invocations,
+    required this.providerOwnership,
     required this.aliases,
   });
 
@@ -53,6 +57,7 @@ class ArchitectureAstData {
   final Set<String> declaredTypes;
   final Set<String> methodNames;
   final List<AstInvocation> invocations;
+  final ProviderOwnershipDataflow providerOwnership;
   final AstAliasOwnership aliases;
 }
 
@@ -102,12 +107,12 @@ class AstInvocation {
 
 class AstAliasOwnership {
   const AstAliasOwnership({
-    required Map<String, String> aliasSources,
+    required Map<String, Set<String>> aliasSources,
     required Map<String, String> declaredTypes,
   }) : _aliasSources = aliasSources,
        _declaredTypes = declaredTypes;
 
-  final Map<String, String> _aliasSources;
+  final Map<String, Set<String>> _aliasSources;
   final Map<String, String> _declaredTypes;
 
   Set<String> identifiers({
@@ -122,7 +127,9 @@ class AstAliasOwnership {
     while (changed) {
       changed = false;
       for (final entry in _aliasSources.entries) {
-        if (owned.contains(entry.value) && owned.add(entry.key)) changed = true;
+        if (entry.value.any(owned.contains) && owned.add(entry.key)) {
+          changed = true;
+        }
       }
     }
     return owned;
@@ -298,7 +305,7 @@ class _TypeVisitor extends RecursiveAstVisitor<void> {
 }
 
 class _OwnershipVisitor extends RecursiveAstVisitor<void> {
-  final aliasSources = <String, String>{};
+  final aliasSources = <String, Set<String>>{};
   final declaredTypes = <String, String>{};
   final invocations = <AstInvocation>[];
 
@@ -323,14 +330,14 @@ class _OwnershipVisitor extends RecursiveAstVisitor<void> {
 
   @override
   void visitVariableDeclaration(VariableDeclaration node) {
-    _recordAlias(node.name.lexeme, node.initializer);
+    _recordOwnership(node.name.lexeme, node.initializer);
     super.visitVariableDeclaration(node);
   }
 
   @override
   void visitAssignmentExpression(AssignmentExpression node) {
     final target = _expressionIdentifier(node.leftHandSide);
-    if (target != null) _recordAlias(target, node.rightHandSide);
+    if (target != null) _recordOwnership(target, node.rightHandSide);
     super.visitAssignmentExpression(node);
   }
 
@@ -383,9 +390,11 @@ class _OwnershipVisitor extends RecursiveAstVisitor<void> {
     super.visitFunctionExpressionInvocation(node);
   }
 
-  void _recordAlias(String target, Expression? expression) {
+  void _recordOwnership(String target, Expression? expression) {
     final source = _expressionIdentifier(expression);
-    if (source != null) aliasSources[target] = source;
+    if (source != null) {
+      aliasSources.putIfAbsent(target, () => <String>{}).add(source);
+    }
   }
 }
 
