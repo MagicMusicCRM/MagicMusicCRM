@@ -35,6 +35,10 @@ const moduleSource = readFileSync(
   resolve(__dirname, "..", "crm.module.ts"),
   "utf8",
 );
+const analyticsSupportModuleSource = readFileSync(
+  resolve(__dirname, "..", "crm-analytics-support.module.ts"),
+  "utf8",
+);
 
 const sourceNloc = (source: string) =>
   source
@@ -207,17 +211,21 @@ const importPathFor = (source: string, importedName: string) => {
     : null;
 };
 
-const moduleIdentifiers = (propertyName: "providers" | "exports") => {
+const moduleIdentifiers = (
+  source: string,
+  className: string,
+  propertyName: "providers" | "exports",
+) => {
   const file = ts.createSourceFile(
-    "crm.module.ts",
-    moduleSource,
+    `${className}.ts`,
+    source,
     ts.ScriptTarget.Latest,
     true,
     ts.ScriptKind.TS,
   );
   const classNode = file.statements.find(
     (node): node is ts.ClassDeclaration =>
-      ts.isClassDeclaration(node) && node.name?.text === "CrmModule",
+      ts.isClassDeclaration(node) && node.name?.text === className,
   );
   const decorator =
     classNode &&
@@ -428,9 +436,13 @@ describe("Schedule plan owner boundaries", () => {
     );
   });
 
-  it("registers extracted owners privately without changing CRM exports", () => {
-    const providers = moduleIdentifiers("providers");
-    const exports = moduleIdentifiers("exports");
+  it("registers extracted owners privately behind the narrow CRM export surface", () => {
+    const providers = moduleIdentifiers(
+      moduleSource,
+      "CrmModule",
+      "providers",
+    );
+    const exports = moduleIdentifiers(moduleSource, "CrmModule", "exports");
     for (const owner of [
       "SchedulePlanDefinitionService",
       "SchedulePlanQueryService",
@@ -444,13 +456,19 @@ describe("Schedule plan owner boundaries", () => {
       expect(exports).not.toContain(owner);
     }
     expect(exports).toEqual([
-      "CrmPolicy",
-      "DashboardService",
+      "CrmAnalyticsSupportModule",
       "ClientReferenceService",
       "ClientWriteValidator",
       "LEAD_INTAKE_PORT",
       "LESSON_SETTLEMENT_PORT",
       "LessonCompletionWorker",
     ]);
+    expect(
+      moduleIdentifiers(
+        analyticsSupportModuleSource,
+        "CrmAnalyticsSupportModule",
+        "exports",
+      ),
+    ).toEqual(["CrmPolicy", "DashboardService"]);
   });
 });
