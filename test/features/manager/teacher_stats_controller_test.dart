@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
@@ -29,6 +31,9 @@ class _FakeApiClient extends MagicApiClient {
   final String exportCsv = '\ufeffteacher,hours\nИван,1';
   final List<_RecordedRequest> gets = [];
   final List<_RecordedPatch> patches = [];
+  final List<Completer<Map<String, dynamic>>> reportRequests = [];
+  Completer<String>? exportRequest;
+  Completer<Map<String, dynamic>>? lessonRateRequest;
 
   @override
   Future<T> get<T>(
@@ -38,9 +43,14 @@ class _FakeApiClient extends MagicApiClient {
   }) async {
     gets.add(_RecordedRequest(path, {...?queryParameters}));
     if (path == '/crm/reports/teacher-stats/export') {
+      final request = exportRequest;
+      if (request != null) return await request.future as T;
       return exportCsv as T;
     }
     if (path == '/crm/reports/teacher-stats') {
+      if (reportRequests.isNotEmpty) {
+        return await reportRequests.removeAt(0).future as T;
+      }
       return <String, dynamic>{
             'items': <dynamic>[],
             'totals': <String, dynamic>{},
@@ -61,6 +71,10 @@ class _FakeApiClient extends MagicApiClient {
     bool authenticated = true,
   }) async {
     patches.add(_RecordedPatch(path, {...data as Map<String, dynamic>}));
+    if (path == '/crm/lessons/teacher-rate') {
+      final request = lessonRateRequest;
+      if (request != null) return await request.future as T;
+    }
     return <String, dynamic>{'id': 'group-a'} as T;
   }
 }
@@ -192,5 +206,178 @@ void main() {
     );
 
     expect(controller.state.selectedUnits, isEmpty);
+  });
+
+  test('initialize ignores a report success completed after dispose', () async {
+    final api = _FakeApiClient();
+    final reportRequest = Completer<Map<String, dynamic>>();
+    api.reportRequests.add(reportRequest);
+    final controller = _controller(api);
+
+    final initialization = controller.initialize();
+    await Future<void>.delayed(Duration.zero);
+    controller.dispose();
+    reportRequest.complete(<String, dynamic>{
+      'items': <dynamic>['late'],
+      'totals': <String, dynamic>{},
+    });
+
+    await expectLater(initialization, completes);
+    expect(controller.state.report, isEmpty);
+    expect(controller.state.error, isNull);
+  });
+
+  test('initialize ignores a report error completed after dispose', () async {
+    final api = _FakeApiClient();
+    final reportRequest = Completer<Map<String, dynamic>>();
+    api.reportRequests.add(reportRequest);
+    final controller = _controller(api);
+
+    final initialization = controller.initialize();
+    await Future<void>.delayed(Duration.zero);
+    controller.dispose();
+    reportRequest.completeError(StateError('late report failure'));
+
+    await expectLater(initialization, completes);
+    expect(controller.state.error, isNull);
+  });
+
+  test('a stale report request cannot overwrite the latest report', () async {
+    final api = _FakeApiClient();
+    final firstRequest = Completer<Map<String, dynamic>>();
+    final secondRequest = Completer<Map<String, dynamic>>();
+    api.reportRequests.addAll([firstRequest, secondRequest]);
+    final controller = _controller(api);
+
+    final firstLoad = controller.loadReport();
+    final secondLoad = controller.loadReport();
+    secondRequest.complete(<String, dynamic>{
+      'items': <dynamic>['latest'],
+      'totals': <String, dynamic>{},
+    });
+    await secondLoad;
+    firstRequest.complete(<String, dynamic>{
+      'items': <dynamic>['stale'],
+      'totals': <String, dynamic>{},
+    });
+    await firstLoad;
+
+    expect(controller.state.report['items'], <dynamic>['latest']);
+  });
+
+  test(
+    'rate success completed after dispose cannot mutate controller state',
+    () async {
+      final api = _FakeApiClient();
+      final rateRequest = Completer<Map<String, dynamic>>();
+      api.lessonRateRequest = rateRequest;
+      final controller = _controller(api);
+
+      final update = controller.applyRate(
+        const TeacherStatsRateChange(
+          lessonIds: ['lesson-a'],
+          teacherRate: 800,
+          reasonText: 'Correction',
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+      controller.dispose();
+      rateRequest.complete(<String, dynamic>{'updated': 1});
+
+      await expectLater(update, completes);
+      expect(controller.state.lastUpdatedCount, 0);
+      expect(controller.state.applyingRate, isTrue);
+    },
+  );
+
+  test(
+    'rate error completed after dispose preserves the service error',
+    () async {
+      final api = _FakeApiClient();
+      final rateRequest = Completer<Map<String, dynamic>>();
+      api.lessonRateRequest = rateRequest;
+      final controller = _controller(api);
+
+      final update = controller.applyRate(
+        const TeacherStatsRateChange(
+          lessonIds: ['lesson-a'],
+          teacherRate: 800,
+          reasonText: 'Correction',
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+      controller.dispose();
+      rateRequest.completeError(StateError('late rate failure'));
+
+      await expectLater(
+        update,
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'late rate failure',
+          ),
+        ),
+      );
+      expect(controller.state.applyingRate, isTrue);
+    },
+  );
+
+  test('export success completed after dispose preserves its result', () async {
+    final api = _FakeApiClient();
+    final exportRequest = Completer<String>();
+    api.exportRequest = exportRequest;
+    final controller = _controller(api);
+
+    final export = controller.export();
+    await Future<void>.delayed(Duration.zero);
+    controller.dispose();
+    exportRequest.complete(api.exportCsv);
+
+    final result = await export;
+    expect(result.path, 'C:/reports/teacher-stats-2026-08-01.csv');
+    expect(controller.state.exporting, isTrue);
+  });
+
+  test(
+    'export error completed after dispose preserves the service error',
+    () async {
+      final api = _FakeApiClient();
+      final exportRequest = Completer<String>();
+      api.exportRequest = exportRequest;
+      final controller = _controller(api);
+
+      final export = controller.export();
+      await Future<void>.delayed(Duration.zero);
+      controller.dispose();
+      exportRequest.completeError(StateError('late export failure'));
+
+      await expectLater(
+        export,
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'late export failure',
+          ),
+        ),
+      );
+      expect(controller.state.exporting, isTrue);
+    },
+  );
+
+  test('export cannot start new service I/O after dispose', () async {
+    final api = _FakeApiClient();
+    final controller = _controller(api);
+    controller.dispose();
+
+    await expectLater(controller.export(), throwsStateError);
+
+    expect(
+      api.gets.where(
+        (request) => request.path == '/crm/reports/teacher-stats/export',
+      ),
+      isEmpty,
+    );
   });
 }

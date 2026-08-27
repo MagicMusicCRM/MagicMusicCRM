@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
@@ -132,6 +134,51 @@ List<String> _normalizedTexts(WidgetTester tester, Finder parent) => tester
     .toList(growable: false);
 
 void main() {
+  testWidgets('disposing during preview ignores the late completion', (
+    tester,
+  ) async {
+    final preview = Completer<SubscriptionPurchasePreview>();
+    await _openSheet(
+      tester,
+      onPreview: (_) => preview.future,
+      onSubmit: (_) async {},
+    );
+
+    final submit = find.byKey(const Key('subscription-issue-submit'));
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await tester.pump();
+    await tester.pumpWidget(const SizedBox.shrink());
+
+    preview.complete(_preview());
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('disposing during commit ignores the late completion', (
+    tester,
+  ) async {
+    final commit = Completer<void>();
+    await _openSheet(
+      tester,
+      onPreview: (_) async => _preview(),
+      onSubmit: (_) => commit.future,
+    );
+    await _tap(tester, find.byKey(const Key('subscription-issue-submit')));
+
+    final submit = find.byKey(const Key('subscription-issue-submit'));
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await tester.pump();
+    await tester.pumpWidget(const SizedBox.shrink());
+
+    commit.complete();
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+  });
+
   test(
     'purchase uses preview + idempotent commit and never legacy issue',
     () async {

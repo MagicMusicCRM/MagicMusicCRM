@@ -203,6 +203,44 @@ describe("Messenger service boundaries", () => {
     expect(
       constructor.parameters.map((parameter) => identifierName(parameter.name)),
     ).toEqual(["systemChats", "queries", "delivery", "commands"]);
+    expect(
+      constructor.parameters.map((parameter) => ({
+        modifiers: parameter.modifiers?.map((modifier) => modifier.kind),
+        type:
+          parameter.type && ts.isTypeReferenceNode(parameter.type)
+            ? identifierName(parameter.type.typeName)
+            : null,
+      })),
+    ).toEqual([
+      {
+        modifiers: [
+          ts.SyntaxKind.PrivateKeyword,
+          ts.SyntaxKind.ReadonlyKeyword,
+        ],
+        type: "MessengerSystemChatService",
+      },
+      {
+        modifiers: [
+          ts.SyntaxKind.PrivateKeyword,
+          ts.SyntaxKind.ReadonlyKeyword,
+        ],
+        type: "MessengerChatQueryService",
+      },
+      {
+        modifiers: [
+          ts.SyntaxKind.PrivateKeyword,
+          ts.SyntaxKind.ReadonlyKeyword,
+        ],
+        type: "MessengerMessageDeliveryService",
+      },
+      {
+        modifiers: [
+          ts.SyntaxKind.PrivateKeyword,
+          ts.SyntaxKind.ReadonlyKeyword,
+        ],
+        type: "MessengerChatCommandService",
+      },
+    ]);
 
     const publicMethods = declaration.members.filter(ts.isMethodDeclaration);
     expect(publicMethods).toHaveLength(12);

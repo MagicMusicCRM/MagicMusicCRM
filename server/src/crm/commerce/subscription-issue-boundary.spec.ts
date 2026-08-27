@@ -178,6 +178,41 @@ describe("subscription issue owner boundaries", () => {
 
     expect(sourceNloc(facade)).toBeLessThanOrEqual(70);
     expect(constructor.parameters).toHaveLength(3);
+    expect(
+      constructor.parameters.map((parameter) => ({
+        modifiers: parameter.modifiers?.map((modifier) => modifier.kind),
+        name: identifierName(parameter.name),
+        type:
+          parameter.type && ts.isTypeReferenceNode(parameter.type)
+            ? identifierName(parameter.type.typeName)
+            : null,
+      })),
+    ).toEqual([
+      {
+        modifiers: [
+          ts.SyntaxKind.PrivateKeyword,
+          ts.SyntaxKind.ReadonlyKeyword,
+        ],
+        name: "preview",
+        type: "SubscriptionPurchasePreviewService",
+      },
+      {
+        modifiers: [
+          ts.SyntaxKind.PrivateKeyword,
+          ts.SyntaxKind.ReadonlyKeyword,
+        ],
+        name: "purchaseCommand",
+        type: "SubscriptionPurchaseCommandService",
+      },
+      {
+        modifiers: [
+          ts.SyntaxKind.PrivateKeyword,
+          ts.SyntaxKind.ReadonlyKeyword,
+        ],
+        name: "grantCommand",
+        type: "SubscriptionGrantCommandService",
+      },
+    ]);
     expect(publicMethods).toHaveLength(3);
     expect(publicMethods.map((method) => identifierName(method.name))).toEqual(
       facadeContracts.map(({ method }) => method),

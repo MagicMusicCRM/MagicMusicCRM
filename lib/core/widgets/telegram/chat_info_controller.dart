@@ -4,6 +4,8 @@ import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
 import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/core/widgets/telegram/chat_info_models.dart';
 
+const _disposedControllerMessage = 'Chat info controller is disposed';
+
 class ChatInfoController extends ChangeNotifier {
   ChatInfoController({
     required ChatInfoRequest request,
@@ -25,6 +27,10 @@ class ChatInfoController extends ChangeNotifier {
   bool _initialIsMuted;
   ChatInfoSnapshot _snapshot;
   int _loadGeneration = 0;
+  int _requestGeneration = 0;
+  int _muteGeneration = 0;
+  int _membershipGeneration = 0;
+  bool _disposed = false;
 
   ChatInfoRequest get request => _request;
   ChatInfoSnapshot get snapshot => _snapshot;
@@ -53,8 +59,13 @@ class ChatInfoController extends ChangeNotifier {
   }
 
   Future<void> load() async {
+    if (_disposed) return;
     final generation = ++_loadGeneration;
-    _snapshot = ChatInfoSnapshot.initial(_initialIsMuted);
+    final requestGeneration = _requestGeneration;
+    final muteGeneration = _muteGeneration;
+    final request = _request;
+    final initialIsMuted = _initialIsMuted;
+    _snapshot = ChatInfoSnapshot.initial(initialIsMuted);
     notifyListeners();
 
     Map<String, dynamic>? data;
@@ -62,43 +73,43 @@ class ChatInfoController extends ChangeNotifier {
     var notes = const <Map<String, dynamic>>[];
     var history = const ChatHistoryBuckets.empty();
     try {
-      if (_request.chatId == 'admin_chat') {
+      if (request.chatId == 'admin_chat') {
         final avatarUrl = await _settings.getAdminChatAvatar();
         data = {
           'name': 'Администрация (Чат с клиентами)',
           'avatar_url': avatarUrl,
         };
-      } else if (_request.chatType == 'direct' ||
-          _request.chatType == 'group') {
-        data = await _messenger.getChat(_request.chatId);
-        members = await _messenger.listChatMembers(_request.chatId);
-      } else if (_request.chatType == 'channel') {
+      } else if (request.chatType == 'direct' || request.chatType == 'group') {
+        data = await _messenger.getChat(request.chatId);
+        members = await _messenger.listChatMembers(request.chatId);
+      } else if (request.chatType == 'channel') {
         final channels = await _messenger.listChannels();
         data = channels
-            .where((channel) => channel['id']?.toString() == _request.chatId)
+            .where((channel) => channel['id']?.toString() == request.chatId)
             .firstOrNull;
       }
 
-      if (_canLoadNotes(members)) {
-        final profileId = _profileIdFromMembers(members);
-        if (profileId != null) {
-          notes = await _profiles.listProfileNotes(profileId);
-        }
-      }
-
-      history = await _loadHistory();
+      notes = await _loadNotes(request, members);
+      history = await _loadHistory(request);
     } catch (error) {
+      if (!_isCurrentLoad(requestGeneration, generation)) return;
       debugPrint('Error loading chat info: $error');
     }
 
-    if (generation != _loadGeneration) return;
+    if (!_isCurrentLoad(requestGeneration, generation)) return;
     _snapshot = ChatInfoSnapshot(
       loading: false,
       data: data,
       members: immutableChatInfoItems(members),
       history: history,
       notes: immutableChatInfoItems(notes),
-      isMuted: data?['is_muted'] == true || _initialIsMuted,
+      isMuted: _resolvedLoadedMute(
+        loadMuteGeneration: muteGeneration,
+        currentMuteGeneration: _muteGeneration,
+        currentIsMuted: _snapshot.isMuted,
+        serverIsMuted: data?['is_muted'] == true,
+        initialIsMuted: _initialIsMuted,
+      ),
     );
     notifyListeners();
   }
@@ -107,13 +118,19 @@ class ChatInfoController extends ChangeNotifier {
     ChatInfoRequest request, {
     required bool initialIsMuted,
   }) async {
+    if (_disposed) return;
     _request = request;
     _initialIsMuted = initialIsMuted;
+    _requestGeneration++;
+    _muteGeneration++;
+    _membershipGeneration++;
     await load();
   }
 
   void replaceInitialMuted(bool value) {
+    if (_disposed) return;
     _initialIsMuted = value;
+    _muteGeneration++;
     _snapshot = _snapshot.copyWith(isMuted: value);
     notifyListeners();
   }
@@ -122,12 +139,18 @@ class ChatInfoController extends ChangeNotifier {
     bool value,
     Future<void> Function(bool value)? persist,
   ) async {
+    if (_disposed) return;
+    final requestGeneration = _requestGeneration;
+    final muteGeneration = ++_muteGeneration;
     final previous = _snapshot.isMuted;
     _snapshot = _snapshot.copyWith(isMuted: value);
     notifyListeners();
     try {
       await persist?.call(value);
     } catch (_) {
+      if (!_isActive(requestGeneration) || muteGeneration != _muteGeneration) {
+        rethrow;
+      }
       _snapshot = _snapshot.copyWith(isMuted: previous);
       notifyListeners();
       rethrow;
@@ -135,14 +158,17 @@ class ChatInfoController extends ChangeNotifier {
   }
 
   Future<Map<String, dynamic>> createNote(String body) async {
+    if (_disposed) throw StateError(_disposedControllerMessage);
     final profileId = notesProfileId;
     if (profileId == null) {
       throw StateError('Chat partner profile is unavailable');
     }
+    final requestGeneration = _requestGeneration;
     final note = await _profiles.createProfileNote(
       profileId: profileId,
       body: body,
     );
+    if (!_isActive(requestGeneration)) return note;
     _snapshot = _snapshot.copyWith(
       notes: immutableChatInfoItems([note, ..._snapshot.notes]),
     );
@@ -151,22 +177,34 @@ class ChatInfoController extends ChangeNotifier {
   }
 
   Future<void> addMembers(Set<String> userIds) async {
-    if (!access.canManageGroup || userIds.isEmpty) return;
-    await _messenger.updateGroupMembers(
-      _request.chatId,
-      addUserIds: userIds.toList(),
-    );
-    final members = await _messenger.listChatMembers(_request.chatId);
+    if (_disposed || !access.canManageGroup || userIds.isEmpty) return;
+    final requestGeneration = _requestGeneration;
+    final membershipGeneration = ++_membershipGeneration;
+    final chatId = _request.chatId;
+    await _messenger.updateGroupMembers(chatId, addUserIds: userIds.toList());
+    if (!_isActive(requestGeneration) ||
+        membershipGeneration != _membershipGeneration) {
+      return;
+    }
+    final members = await _messenger.listChatMembers(chatId);
+    if (!_isActive(requestGeneration) ||
+        membershipGeneration != _membershipGeneration) {
+      return;
+    }
     _snapshot = _snapshot.copyWith(members: immutableChatInfoItems(members));
     notifyListeners();
   }
 
   Future<void> removeMember(String userId) async {
-    if (!access.canManageGroup || userId.isEmpty) return;
-    await _messenger.updateGroupMembers(
-      _request.chatId,
-      removeUserIds: [userId],
-    );
+    if (_disposed || !access.canManageGroup || userId.isEmpty) return;
+    final requestGeneration = _requestGeneration;
+    final membershipGeneration = ++_membershipGeneration;
+    final chatId = _request.chatId;
+    await _messenger.updateGroupMembers(chatId, removeUserIds: [userId]);
+    if (!_isActive(requestGeneration) ||
+        membershipGeneration != _membershipGeneration) {
+      return;
+    }
     _snapshot = _snapshot.copyWith(
       members: immutableChatInfoItems(
         _snapshot.members.where(
@@ -177,25 +215,27 @@ class ChatInfoController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> leaveGroup() => _messenger.leaveGroup(_request.chatId);
-
-  Future<Map<String, dynamic>> ensureDirectChat(String userId) =>
-      _messenger.ensureDirectChat(userId);
-
-  Future<List<Map<String, dynamic>>> listProfilesForMembership() =>
-      _profiles.listProfiles(limit: 100);
-
-  void replaceChannel(Map<String, dynamic> channel) {
-    _snapshot = _snapshot.copyWith(data: channel);
-    notifyListeners();
+  Future<void> leaveGroup() async {
+    if (_disposed) return;
+    await _messenger.leaveGroup(_request.chatId);
   }
 
-  bool _canLoadNotes(List<Map<String, dynamic>> members) {
-    return ChatInfoAccessPolicy(
-          request: _request,
-          isSystemGroup: false,
-        ).hasNotes &&
-        _profileIdFromMembers(members) != null;
+  Future<Map<String, dynamic>> ensureDirectChat(String userId) {
+    if (_disposed) {
+      return Future.error(StateError(_disposedControllerMessage));
+    }
+    return _messenger.ensureDirectChat(userId);
+  }
+
+  Future<List<Map<String, dynamic>>> listProfilesForMembership() {
+    if (_disposed) return Future.value(const <Map<String, dynamic>>[]);
+    return _profiles.listProfiles(limit: 100);
+  }
+
+  void replaceChannel(Map<String, dynamic> channel) {
+    if (_disposed) return;
+    _snapshot = _snapshot.copyWith(data: channel);
+    notifyListeners();
   }
 
   String? _profileIdFromMembers(List<Map<String, dynamic>> members) {
@@ -208,16 +248,32 @@ class ChatInfoController extends ChangeNotifier {
     return profileId == null || profileId.trim().isEmpty ? null : profileId;
   }
 
-  Future<ChatHistoryBuckets> _loadHistory() async {
+  Future<List<Map<String, dynamic>>> _loadNotes(
+    ChatInfoRequest request,
+    List<Map<String, dynamic>> members,
+  ) async {
+    final hasNotes = ChatInfoAccessPolicy(
+      request: request,
+      isSystemGroup: false,
+    ).hasNotes;
+    if (!hasNotes) {
+      return const <Map<String, dynamic>>[];
+    }
+    final profileId = _profileIdFromMembers(members);
+    if (profileId == null) return const <Map<String, dynamic>>[];
+    return _profiles.listProfileNotes(profileId);
+  }
+
+  Future<ChatHistoryBuckets> _loadHistory(ChatInfoRequest request) async {
     try {
       List<Map<String, dynamic>> messages;
-      if (_request.chatType == 'group' || _request.chatType == 'direct') {
+      if (request.chatType == 'group' || request.chatType == 'direct') {
         messages = await _messenger
-            .listMessages(_request.chatId, limit: 100)
+            .listMessages(request.chatId, limit: 100)
             .timeout(const Duration(seconds: 15));
-      } else if (_request.chatType == 'channel') {
+      } else if (request.chatType == 'channel') {
         messages = await _messenger
-            .listChannelPosts(_request.chatId, limit: 100)
+            .listChannelPosts(request.chatId, limit: 100)
             .timeout(const Duration(seconds: 15));
       } else {
         return const ChatHistoryBuckets.empty();
@@ -228,4 +284,31 @@ class ChatInfoController extends ChangeNotifier {
       return const ChatHistoryBuckets.empty();
     }
   }
+
+  bool _isActive(int requestGeneration) =>
+      !_disposed && requestGeneration == _requestGeneration;
+
+  bool _isCurrentLoad(int requestGeneration, int loadGeneration) =>
+      _isActive(requestGeneration) && loadGeneration == _loadGeneration;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _loadGeneration++;
+    _requestGeneration++;
+    _muteGeneration++;
+    _membershipGeneration++;
+    super.dispose();
+  }
+}
+
+bool _resolvedLoadedMute({
+  required int loadMuteGeneration,
+  required int currentMuteGeneration,
+  required bool currentIsMuted,
+  required bool serverIsMuted,
+  required bool initialIsMuted,
+}) {
+  if (loadMuteGeneration != currentMuteGeneration) return currentIsMuted;
+  return serverIsMuted || initialIsMuted;
 }

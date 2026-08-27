@@ -7,6 +7,35 @@ import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/features/manager/presentation/reporting/report_export_files.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/teacher_stats_models.dart';
 
+enum _TeacherStatsRequest { references, report, query, rate, groupRate, export }
+
+class _TeacherStatsAsyncLifecycle {
+  final Map<_TeacherStatsRequest, int> _generations = {
+    for (final request in _TeacherStatsRequest.values) request: 0,
+  };
+  bool _disposed = false;
+
+  bool get isDisposed => _disposed;
+
+  int begin(_TeacherStatsRequest request) {
+    if (_disposed) throw StateError('Teacher stats controller is disposed');
+    final generation = _generations[request]! + 1;
+    _generations[request] = generation;
+    return generation;
+  }
+
+  bool isCurrent(_TeacherStatsRequest request, int generation) {
+    return !_disposed && _generations[request] == generation;
+  }
+
+  void dispose() {
+    _disposed = true;
+    for (final request in _TeacherStatsRequest.values) {
+      _generations[request] = _generations[request]! + 1;
+    }
+  }
+}
+
 class TeacherStatsController extends ChangeNotifier {
   TeacherStatsController({
     required MagicCrmService crm,
@@ -36,30 +65,57 @@ class TeacherStatsController extends ChangeNotifier {
   final ReportFileOpener _reportFileOpener;
   final NumberFormat _money = NumberFormat('#,##0', 'ru');
   final DateFormat _dayFormat = DateFormat('dd.MM');
+  final _TeacherStatsAsyncLifecycle _lifecycle = _TeacherStatsAsyncLifecycle();
   late TeacherStatsState _state;
 
   TeacherStatsState get state => _state;
 
+  void _notifyListenersIfActive() {
+    if (!_lifecycle.isDisposed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _lifecycle.dispose();
+    super.dispose();
+  }
+
   Future<void> initialize() async {
+    if (_lifecycle.isDisposed) return;
     await Future.wait([loadReferences(), loadReport()]);
   }
 
   Future<void> loadReferences() async {
+    if (_lifecycle.isDisposed) return;
+    final requestGeneration = _lifecycle.begin(_TeacherStatsRequest.references);
+    final usesExternalRange = _state.usesExternalRange;
     try {
       final results = await Future.wait([
-        if (!_state.usesExternalRange) _crm.listBranches(limit: 100),
+        if (!usesExternalRange) _crm.listBranches(limit: 100),
         _crm.listTeachers(limit: 100),
         _crm.listDisciplines(),
       ]);
-      final offset = _state.usesExternalRange ? 0 : 1;
+      if (!_lifecycle.isCurrent(
+        _TeacherStatsRequest.references,
+        requestGeneration,
+      )) {
+        return;
+      }
+      final offset = usesExternalRange ? 0 : 1;
       _state = _state.copyWith(
         branches: offset == 1 ? results[0] : const [],
         teachers: results[offset],
         disciplines: results[offset + 1],
       );
-      notifyListeners();
+      _notifyListenersIfActive();
       try {
         final fields = await _settings.getCrmCustomFields();
+        if (!_lifecycle.isCurrent(
+          _TeacherStatsRequest.references,
+          requestGeneration,
+        )) {
+          return;
+        }
         final categories =
             fields
                 .where(
@@ -71,7 +127,7 @@ class TeacherStatsController extends ChangeNotifier {
                 .toList()
               ..sort();
         _state = _state.copyWith(categoryOptions: categories);
-        notifyListeners();
+        _notifyListenersIfActive();
       } catch (_) {
         // Optional custom-field settings do not block the report.
       }
@@ -84,6 +140,8 @@ class TeacherStatsController extends ChangeNotifier {
     DateTimeRange? filterRange,
     String? branchId,
   ) async {
+    if (_lifecycle.isDisposed) return;
+    final operationGeneration = _lifecycle.begin(_TeacherStatsRequest.query);
     final now = DateTime.now();
     _state = _state.copyWith(
       usesExternalRange: filterRange != null,
@@ -96,10 +154,17 @@ class TeacherStatsController extends ChangeNotifier {
       ),
     );
     await loadReferences();
+    if (!_lifecycle.isCurrent(
+      _TeacherStatsRequest.query,
+      operationGeneration,
+    )) {
+      return;
+    }
     await loadReport();
   }
 
   void updateCorrectionPolicy(bool canCorrectSettledPayroll) {
+    if (_lifecycle.isDisposed) return;
     if (_state.canCorrectSettledPayroll == canCorrectSettledPayroll) return;
     _state = _state.copyWith(
       canCorrectSettledPayroll: canCorrectSettledPayroll,
@@ -107,17 +172,21 @@ class TeacherStatsController extends ChangeNotifier {
   }
 
   Future<void> setQuery(TeacherStatsQuery query) async {
+    if (_lifecycle.isDisposed) return;
+    _lifecycle.begin(_TeacherStatsRequest.query);
     _state = _state.copyWith(query: query);
     await loadReport();
   }
 
   Future<void> loadReport() async {
+    if (_lifecycle.isDisposed) return;
+    final requestGeneration = _lifecycle.begin(_TeacherStatsRequest.report);
     _state = _state.copyWith(
       loading: true,
       error: null,
       selectedUnits: const {},
     );
-    notifyListeners();
+    _notifyListenersIfActive();
     try {
       final query = _state.query;
       final report = await _crm.getTeacherStatsReport(
@@ -130,39 +199,70 @@ class TeacherStatsController extends ChangeNotifier {
         discipline: query.discipline,
         category: query.category,
       );
+      if (!_lifecycle.isCurrent(
+        _TeacherStatsRequest.report,
+        requestGeneration,
+      )) {
+        return;
+      }
       _state = _state.copyWith(report: report, loading: false, error: null);
     } catch (error) {
+      if (!_lifecycle.isCurrent(
+        _TeacherStatsRequest.report,
+        requestGeneration,
+      )) {
+        return;
+      }
       _state = _state.copyWith(loading: false, error: error);
     }
-    notifyListeners();
+    _notifyListenersIfActive();
   }
 
   Future<void> applyRate(TeacherStatsRateChange change) async {
-    if (change.lessonIds.isEmpty || _state.applyingRate) return;
+    if (_lifecycle.isDisposed ||
+        change.lessonIds.isEmpty ||
+        _state.applyingRate) {
+      return;
+    }
+    final requestGeneration = _lifecycle.begin(_TeacherStatsRequest.rate);
     _state = _state.copyWith(applyingRate: true);
-    notifyListeners();
+    _notifyListenersIfActive();
     try {
       final updated = await _crm.setLessonsTeacherRate(
         lessonIds: change.lessonIds,
         teacherRate: change.teacherRate,
         reasonText: change.reasonText,
       );
+      if (!_lifecycle.isCurrent(_TeacherStatsRequest.rate, requestGeneration)) {
+        return;
+      }
       _state = _state.copyWith(lastUpdatedCount: updated);
       await loadReport();
     } finally {
-      _state = _state.copyWith(applyingRate: false);
-      notifyListeners();
+      if (_lifecycle.isCurrent(_TeacherStatsRequest.rate, requestGeneration)) {
+        _state = _state.copyWith(applyingRate: false);
+        _notifyListenersIfActive();
+      }
     }
   }
 
   Future<void> updateGroupRate(String groupId, num? rate) async {
+    if (_lifecycle.isDisposed) return;
+    final requestGeneration = _lifecycle.begin(_TeacherStatsRequest.groupRate);
     await _crm.updateGroup(groupId, teacherRate: rate, setTeacherRate: true);
+    if (!_lifecycle.isCurrent(
+      _TeacherStatsRequest.groupRate,
+      requestGeneration,
+    )) {
+      return;
+    }
     await loadReport();
   }
 
   Future<ReportFileOpenResult> export() async {
+    final requestGeneration = _lifecycle.begin(_TeacherStatsRequest.export);
     _state = _state.copyWith(exporting: true);
-    notifyListeners();
+    _notifyListenersIfActive();
     try {
       final query = _state.query;
       final csv = await _crm.exportTeacherStatsReport(
@@ -180,12 +280,18 @@ class TeacherStatsController extends ChangeNotifier {
       final stamp = DateFormat('yyyy-MM-dd').format(query.from);
       return _reportFileOpener(bytes, 'teacher-stats-$stamp.csv');
     } finally {
-      _state = _state.copyWith(exporting: false);
-      notifyListeners();
+      if (_lifecycle.isCurrent(
+        _TeacherStatsRequest.export,
+        requestGeneration,
+      )) {
+        _state = _state.copyWith(exporting: false);
+        _notifyListenersIfActive();
+      }
     }
   }
 
   void toggleUnit(String unitKey, List<String> lessonIds) {
+    if (_lifecycle.isDisposed) return;
     final selected = {
       for (final entry in _state.selectedUnits.entries)
         entry.key: List<String>.unmodifiable(entry.value),
@@ -196,13 +302,14 @@ class TeacherStatsController extends ChangeNotifier {
       selected[unitKey] = List<String>.unmodifiable(lessonIds);
     }
     _state = _state.copyWith(selectedUnits: Map.unmodifiable(selected));
-    notifyListeners();
+    _notifyListenersIfActive();
   }
 
   void clearSelection() {
+    if (_lifecycle.isDisposed) return;
     if (_state.selectedUnits.isEmpty) return;
     _state = _state.copyWith(selectedUnits: const {});
-    notifyListeners();
+    _notifyListenersIfActive();
   }
 
   List<String> editableLessonIdsFor(Map<String, dynamic> unit) {

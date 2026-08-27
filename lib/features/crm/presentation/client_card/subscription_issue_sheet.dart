@@ -114,12 +114,13 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
     _exitController.setBusy(true);
     try {
       final result = await _controller.submit();
+      if (!mounted) return false;
       if (result != SubscriptionIssueSubmitResult.committed) return false;
       _exitController.markClean();
-      if (closeOnSuccess && mounted) Navigator.pop(context, true);
+      if (closeOnSuccess) Navigator.pop(context, true);
       return true;
     } finally {
-      _exitController.setBusy(false);
+      if (mounted) _exitController.setBusy(false);
     }
   }
 
