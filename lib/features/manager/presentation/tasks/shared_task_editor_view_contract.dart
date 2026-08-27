@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_task_editor_draft.dart';
 
+export 'shared_task_editor_draft.dart' show SharedTaskEditorDraft;
+
 @immutable
 class SharedTaskEditorViewSnapshot {
   const SharedTaskEditorViewSnapshot({

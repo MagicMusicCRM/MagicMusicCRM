@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/models/payment.dart';
 
+export 'package:magic_music_crm/core/models/payment.dart' show Payment;
+
 const _unset = Object();
 
 @immutable

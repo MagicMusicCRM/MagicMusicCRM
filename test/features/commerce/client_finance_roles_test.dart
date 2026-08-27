@@ -9,6 +9,7 @@ import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/models/commerce_projection.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
+import 'package:magic_music_crm/core/widgets/magic_toast.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/features/client/presentation/screens/client_dashboard_screen.dart';
 import 'package:magic_music_crm/features/client/presentation/widgets/subscription_status_card.dart';
@@ -694,6 +695,50 @@ void main() {
     expect(find.textContaining('Новый расход'), findsOneWidget);
     await tester.pump(const Duration(seconds: 4));
   });
+
+  for (final testCase in <({String label, Object? id, String actionKey})>[
+    (label: 'null', id: null, actionKey: 'expense-actions-null'),
+    (label: 'empty', id: '', actionKey: 'expense-actions-'),
+    (label: 'blank', id: '   ', actionKey: 'expense-actions-   '),
+  ]) {
+    testWidgets(
+      'invalid ${testCase.label} edit expense id skips mutation and success toast',
+      (tester) async {
+        MagicToast.dismiss();
+        addTearDown(MagicToast.dismiss);
+        final api = _ExpenseApiClient(
+          seed: [
+            {
+              'id': testCase.id,
+              'amount': 1200,
+              'category': 'rent',
+              'description': 'Некорректный расход',
+              'createdAt': '2026-08-12T08:00:00.000Z',
+            },
+          ],
+        );
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [magicApiClientProvider.overrideWithValue(api)],
+            child: const MaterialApp(home: Scaffold(body: FinanceWidget())),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(ValueKey(testCase.actionKey)));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Изменить').last);
+        await tester.pumpAndSettle();
+        final save = find.text('Сохранить изменения');
+        await tester.ensureVisible(save);
+        await tester.tap(save);
+        await tester.pumpAndSettle();
+
+        expect(api.mutations, isEmpty);
+        expect(find.text('Расход изменён'), findsNothing);
+      },
+    );
+  }
 
   testWidgets('director can reach the full loaded expense history', (
     tester,

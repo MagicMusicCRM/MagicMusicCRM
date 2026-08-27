@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
-import 'package:magic_music_crm/features/manager/presentation/tasks/shared_task_editor_draft.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_task_editor_view_contract.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_data_source.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_models.dart';

@@ -234,13 +234,16 @@ class PreferredScheduleEditorController extends ChangeNotifier {
   }
 
   bool validate({required String title}) {
-    final error = _requiredFieldError(title) ?? _scheduleError();
+    final error =
+        _identityValidationError(title) ??
+        _resourceValidationError() ??
+        _scheduleError();
     _state = _state.copyWith(validationError: error);
     notifyListeners();
     return error == null;
   }
 
-  String? _requiredFieldError(String title) {
+  String? _identityValidationError(String title) {
     if (_state.branchId.isEmpty) return 'Выберите филиал.';
     if (planMode && title.trim().isEmpty) {
       return 'Укажите название расписания.';
@@ -251,6 +254,10 @@ class PreferredScheduleEditorController extends ChangeNotifier {
     if (_state.weekdays.isEmpty) {
       return 'Выберите хотя бы один день недели.';
     }
+    return null;
+  }
+
+  String? _resourceValidationError() {
     if (_state.teacherId == null || _state.teacherId!.isEmpty) {
       return 'Выберите педагога.';
     }

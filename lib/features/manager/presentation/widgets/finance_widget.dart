@@ -15,6 +15,30 @@ import 'package:magic_music_crm/features/manager/presentation/reporting/report_e
 import 'finance_controller.dart';
 import 'finance_widget_widgets.dart';
 
+typedef _ExpenseDialogCopy = ({
+  String title,
+  String subtitle,
+  IconData icon,
+  String successMessage,
+  String errorMessage,
+});
+
+_ExpenseDialogCopy _expenseDialogCopy(bool editing) => editing
+    ? (
+        title: 'Изменить расход',
+        subtitle: 'Исправьте сумму, категорию или комментарий',
+        icon: Icons.edit_rounded,
+        successMessage: 'Расход изменён',
+        errorMessage: 'Не удалось изменить расход',
+      )
+    : (
+        title: 'Добавить расход',
+        subtitle: 'Сумма, категория и комментарий',
+        icon: Icons.receipt_long_rounded,
+        successMessage: 'Расход добавлен',
+        errorMessage: 'Не удалось добавить расход',
+      );
+
 class FinanceWidget extends ConsumerStatefulWidget {
   const FinanceWidget({super.key, this.filterRange, this.branchId});
 
@@ -71,53 +95,58 @@ class _FinanceWidgetState extends ConsumerState<FinanceWidget> {
   }
 
   Future<void> _saveExpense([Map<String, dynamic>? expense]) async {
-    final editing = expense != null;
+    final copy = _expenseDialogCopy(expense != null);
     final result = await showMagicAdaptiveSurface<Map<String, dynamic>>(
       context,
       kind: AppSurfaceKind.quickView,
-      title: editing ? 'Изменить расход' : 'Добавить расход',
-      subtitle: editing
-          ? 'Исправьте сумму, категорию или комментарий'
-          : 'Сумма, категория и комментарий',
-      icon: editing ? Icons.edit_rounded : Icons.receipt_long_rounded,
+      title: copy.title,
+      subtitle: copy.subtitle,
+      icon: copy.icon,
       builder: (_) => ExpenseSheetForm(initialExpense: expense),
     );
     if (result == null || !mounted) return;
     try {
-      if (editing) {
-        final expenseId = expense['id']?.toString();
-        if (expenseId == null || expenseId.isEmpty) return;
-        await _controller.updateExpense(
-          expenseId: expenseId,
-          amount: result['amount'] as num,
-          category: result['category'] as String,
-          description: result['description'] as String?,
-          branchId:
-              expense['branchId'] as String? ?? result['branchId'] as String?,
-        );
-      } else {
-        await _controller.createExpense(
-          amount: result['amount'] as num,
-          category: result['category'] as String,
-          description: result['description'] as String?,
-          branchId: result['branchId'] as String?,
-        );
-      }
-      if (!mounted) return;
+      final persisted = await _persistExpense(expense, result);
+      if (!mounted || !persisted) return;
       MagicToast.show(
         context,
-        editing ? 'Расход изменён' : 'Расход добавлен',
+        copy.successMessage,
         type: MagicToastType.success,
       );
     } catch (error) {
       if (!mounted) return;
       MagicToast.show(
         context,
-        editing ? 'Не удалось изменить расход' : 'Не удалось добавить расход',
+        copy.errorMessage,
         detail: userErrorMessage(error),
         type: MagicToastType.danger,
       );
     }
+  }
+
+  Future<bool> _persistExpense(
+    Map<String, dynamic>? expense,
+    Map<String, dynamic> result,
+  ) async {
+    if (expense == null) {
+      await _controller.createExpense(
+        amount: result['amount'] as num,
+        category: result['category'] as String,
+        description: result['description'] as String?,
+        branchId: result['branchId'] as String?,
+      );
+      return true;
+    }
+    final expenseId = expense['id'];
+    if (expenseId is! String || expenseId.trim().isEmpty) return false;
+    await _controller.updateExpense(
+      expenseId: expenseId,
+      amount: result['amount'] as num,
+      category: result['category'] as String,
+      description: result['description'] as String?,
+      branchId: expense['branchId'] as String? ?? result['branchId'] as String?,
+    );
+    return true;
   }
 
   Future<void> _deleteExpense(Map<String, dynamic> expense) async {

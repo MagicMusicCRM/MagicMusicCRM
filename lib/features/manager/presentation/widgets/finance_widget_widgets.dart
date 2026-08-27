@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
-import 'package:magic_music_crm/core/models/payment.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/magic_desktop_scrollbar.dart';
@@ -29,6 +28,85 @@ String _expenseCategoryLabel(String? key) {
     if (category.key == key) return category.label;
   }
   return 'Прочее';
+}
+
+Widget _financeTotals({
+  required BoxConstraints constraints,
+  required FinanceState state,
+  required ColorScheme colors,
+  required NumberFormat format,
+}) {
+  final range = state.customRange;
+  return SizedBox(
+    width: constraints.maxWidth >= 760 ? 300 : constraints.maxWidth,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Итого поступлений',
+          style: TextStyle(color: colors.onSurfaceVariant, fontSize: 13),
+        ),
+        Text(
+          '${format.format(state.total)} ₽',
+          style: const TextStyle(
+            color: AppTheme.success,
+            fontSize: 26,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        if (range != null && !state.usesExternalRange)
+          Text(
+            '${DateFormat('d MMM yyyy', 'ru').format(range.start)} - '
+            '${DateFormat('d MMM yyyy', 'ru').format(range.end)}',
+            style: TextStyle(color: colors.onSurfaceVariant, fontSize: 11),
+          ),
+        if (state.totalCount > state.payments.length)
+          Text(
+            'Всего платежей: ${state.totalCount} · '
+            'показаны первые ${state.payments.length}',
+            style: TextStyle(color: colors.onSurfaceVariant, fontSize: 11),
+          ),
+      ],
+    ),
+  );
+}
+
+List<Widget> _financeRangeControls({
+  required FinanceState state,
+  required ColorScheme colors,
+  required FinanceVoidAction onPickRange,
+  required FinanceVoidAction onClearRange,
+  required FinanceValueAction<String> onPeriodChanged,
+}) {
+  final range = state.customRange;
+  return [
+    if (!state.usesExternalRange)
+      IconButton(
+        tooltip: 'Выбрать диапазон',
+        onPressed: onPickRange,
+        icon: Icon(
+          Icons.calendar_today_rounded,
+          size: 20,
+          color: range != null ? AppTheme.success : colors.onSurfaceVariant,
+        ),
+      ),
+    if (range != null && !state.usesExternalRange)
+      IconButton(
+        tooltip: 'Сбросить диапазон',
+        onPressed: onClearRange,
+        icon: Icon(
+          Icons.close_rounded,
+          size: 20,
+          color: colors.onSurfaceVariant,
+        ),
+      ),
+    if (!state.usesExternalRange)
+      _PeriodSelector(
+        period: state.period,
+        colors: colors,
+        onChanged: onPeriodChanged,
+      ),
+  ];
 }
 
 class FinanceView extends StatefulWidget {
@@ -133,7 +211,6 @@ class _FinanceSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final fmt = NumberFormat('#,##0', 'ru');
-    final range = state.customRange;
     return Container(
       margin: const EdgeInsets.all(14),
       padding: const EdgeInsets.all(14),
@@ -148,79 +225,23 @@ class _FinanceSummary extends StatelessWidget {
           runSpacing: 10,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            SizedBox(
-              width: constraints.maxWidth >= 760 ? 300 : constraints.maxWidth,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Итого поступлений',
-                    style: TextStyle(
-                      color: colors.onSurfaceVariant,
-                      fontSize: 13,
-                    ),
-                  ),
-                  Text(
-                    '${fmt.format(state.total)} ₽',
-                    style: const TextStyle(
-                      color: AppTheme.success,
-                      fontSize: 26,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  if (range != null && !state.usesExternalRange)
-                    Text(
-                      '${DateFormat('d MMM yyyy', 'ru').format(range.start)} - '
-                      '${DateFormat('d MMM yyyy', 'ru').format(range.end)}',
-                      style: TextStyle(
-                        color: colors.onSurfaceVariant,
-                        fontSize: 11,
-                      ),
-                    ),
-                  if (state.totalCount > state.payments.length)
-                    Text(
-                      'Всего платежей: ${state.totalCount} · '
-                      'показаны первые ${state.payments.length}',
-                      style: TextStyle(
-                        color: colors.onSurfaceVariant,
-                        fontSize: 11,
-                      ),
-                    ),
-                ],
-              ),
+            _financeTotals(
+              constraints: constraints,
+              state: state,
+              colors: colors,
+              format: fmt,
             ),
             const Text(
               'Новая оплата проводится в карточке ученика',
               style: TextStyle(color: AppColor.text2, fontSize: 12),
             ),
-            if (!state.usesExternalRange)
-              IconButton(
-                tooltip: 'Выбрать диапазон',
-                onPressed: onPickRange,
-                icon: Icon(
-                  Icons.calendar_today_rounded,
-                  size: 20,
-                  color: range != null
-                      ? AppTheme.success
-                      : colors.onSurfaceVariant,
-                ),
-              ),
-            if (range != null && !state.usesExternalRange)
-              IconButton(
-                tooltip: 'Сбросить диапазон',
-                onPressed: onClearRange,
-                icon: Icon(
-                  Icons.close_rounded,
-                  size: 20,
-                  color: colors.onSurfaceVariant,
-                ),
-              ),
-            if (!state.usesExternalRange)
-              _PeriodSelector(
-                period: state.period,
-                colors: colors,
-                onChanged: onPeriodChanged,
-              ),
+            ..._financeRangeControls(
+              state: state,
+              colors: colors,
+              onPickRange: onPickRange,
+              onClearRange: onClearRange,
+              onPeriodChanged: onPeriodChanged,
+            ),
             if (state.branchId != null)
               SizedBox(
                 width: constraints.maxWidth,
