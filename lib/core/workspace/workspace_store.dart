@@ -186,14 +186,37 @@ class WorkspacePersistenceBinding {
   final WorkspaceController _controller;
   final AccountWorkspaceStore _store;
   Future<void> _pending = Future.value();
+  WorkspaceState? _bufferedState;
+  bool _suspended = false;
   bool _disposed = false;
 
   void _scheduleSave() {
     if (_disposed) return;
     final snapshot = _controller.state;
+    if (_suspended) {
+      _bufferedState = snapshot;
+      return;
+    }
+    _enqueue(snapshot);
+  }
+
+  void _enqueue(WorkspaceState snapshot) {
     _pending = _pending
         .catchError((Object _) {})
         .then((_) => _store.save(snapshot));
+  }
+
+  void suspend() {
+    if (_disposed) return;
+    _suspended = true;
+  }
+
+  void resume() {
+    if (_disposed || !_suspended) return;
+    _suspended = false;
+    final buffered = _bufferedState;
+    _bufferedState = null;
+    if (buffered != null) _enqueue(buffered);
   }
 
   Future<void> flush() => _pending;
@@ -201,6 +224,7 @@ class WorkspacePersistenceBinding {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    _bufferedState = null;
     _controller.removeListener(_scheduleSave);
   }
 }

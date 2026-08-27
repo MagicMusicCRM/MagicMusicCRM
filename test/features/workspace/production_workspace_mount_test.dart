@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
 import 'package:magic_music_crm/core/providers/crm_navigation_provider.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
+import 'package:magic_music_crm/core/services/section_unseen_service.dart';
 import 'package:magic_music_crm/core/workspace/desktop_workspace_shell.dart';
 import 'package:magic_music_crm/core/workspace/production_workspace_host.dart';
+import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
+import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:magic_music_crm/core/workspace/workspace_store.dart';
 import 'package:magic_music_crm/core/navigation/responsive_navigation_shell.dart';
 import 'package:magic_music_crm/features/admin/presentation/screens/profile_detail_screen.dart';
@@ -573,6 +577,126 @@ void main() {
     expect(find.byType(ResponsiveNavigationShell), findsOneWidget);
   });
 
+  testWidgets(
+    'constrained 839 host routes CRM requests through the mobile authority',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(1200, 800);
+      addTearDown(tester.view.reset);
+      late WorkspaceController controller;
+      final router = GoRouter(
+        initialLocation: '/manager',
+        routes: [
+          GoRoute(
+            path: '/manager',
+            builder: (context, state) => Scaffold(
+              body: Align(
+                alignment: Alignment.topLeft,
+                child: SizedBox(
+                  width: 839,
+                  child: ProductionWorkspaceHost(
+                    snapshot: snapshot,
+                    tabBuilder: (context, tab) {
+                      controller = WorkspaceNavigationScope.maybeOf(
+                        context,
+                      )!.controller;
+                      return Text(tab.currentRoute.link.entityId);
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+      addTearDown(router.dispose);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            accountWorkspaceStoreProvider.overrideWithValue(
+              AccountWorkspaceStore(InMemoryWorkspaceKeyValueStore()),
+            ),
+          ],
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ProductionWorkspaceHost)),
+      );
+      container
+          .read(crmNavigationRequestProvider.notifier)
+          .navigateTo(
+            CrmNavigationRequest(
+              link: EntityLink.typed(
+                entityType: EntityLinkType.client,
+                entityId: 'mobile-client',
+                variant: 'student',
+              ),
+              sourceState: ContextViewState(),
+              openInNewTab: true,
+            ),
+          );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(DesktopWorkspaceShell), findsNothing);
+      expect(router.state.uri.queryParameters['entityId'], 'mobile-client');
+      expect(controller.state.tabs, hasLength(1));
+    },
+  );
+
+  testWidgets('dirty Save cannot mutate a replacement runtime', (tester) async {
+    await _expectDirtyDecisionGuard(tester, actionLabel: 'Сохранить');
+  });
+
+  testWidgets('dirty Discard cannot mutate a replacement runtime', (
+    tester,
+  ) async {
+    await _expectDirtyDecisionGuard(tester, actionLabel: 'Не сохранять');
+  });
+
+  testWidgets('same section is marked again after workspace identity changes', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 800);
+    addTearDown(tester.view.reset);
+    final actor = ValueNotifier(_workspaceSnapshot('account-a'));
+    addTearDown(actor.dispose);
+    final marks = <String>[];
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          accountWorkspaceStoreProvider.overrideWithValue(
+            AccountWorkspaceStore(InMemoryWorkspaceKeyValueStore()),
+          ),
+          sectionUnseenServiceProvider.overrideWith(
+            (ref) => _RecordingSectionUnseenService(ref, marks),
+          ),
+        ],
+        child: MaterialApp(
+          home: ValueListenableBuilder(
+            valueListenable: actor,
+            builder: (context, current, _) => ProductionWorkspaceHost(
+              snapshot: current,
+              initialLink: _studentLink('same-section-client'),
+              tabBuilder: (_, tab) => Text(tab.currentRoute.link.entityId),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(marks, ['clients']);
+
+    actor.value = _workspaceSnapshot('account-b', accessVersion: 2);
+    await tester.pumpAndSettle();
+
+    expect(marks, ['clients', 'clients']);
+  });
+
   test(
     'user links mount profile and permissions inside the same workspace',
     () {
@@ -603,4 +727,115 @@ void main() {
       }
     },
   );
+}
+
+Future<void> _expectDirtyDecisionGuard(
+  WidgetTester tester, {
+  required String actionLabel,
+}) async {
+  tester.view.devicePixelRatio = 1;
+  tester.view.physicalSize = const Size(1200, 800);
+  addTearDown(tester.view.reset);
+  final actor = ValueNotifier(_workspaceSnapshot('account-a'));
+  addTearDown(actor.dispose);
+  var replacementSaves = 0;
+  var replacementDiscards = 0;
+
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        accountWorkspaceStoreProvider.overrideWithValue(
+          AccountWorkspaceStore(InMemoryWorkspaceKeyValueStore()),
+        ),
+      ],
+      child: MaterialApp(
+        home: ValueListenableBuilder(
+          valueListenable: actor,
+          builder: (context, current, _) => Scaffold(
+            body: ProductionWorkspaceHost(
+              key: const ValueKey('generation-safe-host'),
+              snapshot: current,
+              tabBuilder: (_, tab) => Text(tab.currentRoute.link.entityId),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+
+  final oldController = tester
+      .widget<DesktopWorkspaceShell>(find.byType(DesktopWorkspaceShell))
+      .controller;
+  final oldTabId = oldController.state.activeTabId;
+  oldController.push(oldTabId, _studentLink('old-client'));
+  oldController.registerForm(oldTabId, 'editor');
+  oldController.updateForm(oldTabId, 'editor', dirty: true);
+  await tester.pump();
+
+  await tester.tap(find.byKey(const ValueKey('context-back')));
+  await tester.pump();
+  expect(find.text('Сохранить изменения?'), findsOneWidget);
+
+  actor.value = _workspaceSnapshot('account-b', accessVersion: 2);
+  await tester.pumpAndSettle();
+  final replacement = tester
+      .widget<DesktopWorkspaceShell>(find.byType(DesktopWorkspaceShell))
+      .controller;
+  expect(replacement, isNot(same(oldController)));
+  final replacementTabId = replacement.state.activeTabId;
+  replacement.push(replacementTabId, _studentLink('replacement-client'));
+  replacement.registerForm(
+    replacementTabId,
+    'editor',
+    onSave: () async {
+      replacementSaves++;
+      return true;
+    },
+    onDiscard: () => replacementDiscards++,
+  );
+  replacement.updateForm(replacementTabId, 'editor', dirty: true);
+  await tester.pump();
+
+  await tester.tap(find.text(actionLabel));
+  await tester.pumpAndSettle();
+
+  expect(replacementSaves, 0);
+  expect(replacementDiscards, 0);
+  expect(
+    replacement.state.activeTab.currentRoute.link.entityId,
+    'replacement-client',
+  );
+  expect(replacement.state.activeTab.forms['editor']!.dirty, isTrue);
+}
+
+CapabilitySnapshot _workspaceSnapshot(
+  String accountId, {
+  int accessVersion = 1,
+}) => CapabilitySnapshot(
+  accountId: accountId,
+  role: 'manager',
+  accessVersion: accessVersion,
+  capabilities: const {'crm.client.read.basic'},
+  scopes: const {},
+);
+
+EntityLink _studentLink(String id) => EntityLink.typed(
+  entityType: EntityLinkType.client,
+  entityId: id,
+  variant: 'student',
+);
+
+class _RecordingSectionUnseenService extends SectionUnseenService {
+  _RecordingSectionUnseenService(super.ref, this.marks);
+
+  final List<String> marks;
+
+  @override
+  Future<Map<String, int>> unseen() async => const {};
+
+  @override
+  Future<void> markSeen(String section) async {
+    marks.add(section);
+  }
 }

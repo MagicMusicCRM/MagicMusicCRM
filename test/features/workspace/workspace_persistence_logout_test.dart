@@ -132,6 +132,34 @@ void main() {
   });
 
   test(
+    'suspended binding buffers only the latest state until resume',
+    () async {
+      final backend = _CountingWorkspaceStore();
+      final store = AccountWorkspaceStore(backend);
+      final workspace = controller('account-1');
+      final binding = WorkspacePersistenceBinding(
+        controller: workspace,
+        store: store,
+      )..suspend();
+      addTearDown(binding.dispose);
+      addTearDown(workspace.dispose);
+
+      workspace.push('tab-1', link('client-1'));
+      workspace.push('tab-1', link('client-2'));
+      await binding.flush();
+
+      expect(backend.values, isEmpty);
+      expect(backend.writeCount, 0);
+
+      binding.resume();
+      await binding.flush();
+
+      expect(backend.writeCount, 1);
+      expect(backend.values.values.single, contains('client-2'));
+    },
+  );
+
+  test(
     'global logout clears two windows and persisted state under 2 seconds',
     () async {
       final backend = InMemoryWorkspaceKeyValueStore();
@@ -154,4 +182,14 @@ void main() {
       expect(() => first.open(link('late-event')), throwsA(isA<StateError>()));
     },
   );
+}
+
+class _CountingWorkspaceStore extends InMemoryWorkspaceKeyValueStore {
+  var writeCount = 0;
+
+  @override
+  Future<void> write(String key, String value) {
+    writeCount++;
+    return super.write(key, value);
+  }
 }

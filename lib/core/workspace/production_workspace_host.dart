@@ -1,27 +1,27 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/forms/dirty_form_exit.dart';
 import 'package:magic_music_crm/core/navigation/context_route_state.dart';
+import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_link_navigator.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
-import 'package:magic_music_crm/core/providers/crm_navigation_provider.dart';
 import 'package:magic_music_crm/core/providers/chat_providers.dart';
+import 'package:magic_music_crm/core/providers/crm_navigation_provider.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/alert_policy.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_realtime_service.dart';
 import 'package:magic_music_crm/core/services/section_unseen_service.dart';
 import 'package:magic_music_crm/core/workspace/desktop_workspace_shell.dart';
-import 'package:magic_music_crm/core/workspace/magic_context_bar.dart';
+import 'package:magic_music_crm/core/workspace/production_workspace_runtime.dart';
+import 'package:magic_music_crm/core/workspace/production_workspace_view.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 import 'package:magic_music_crm/core/workspace/workspace_state.dart';
 import 'package:magic_music_crm/core/workspace/workspace_store.dart';
-import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
-import 'package:magic_music_crm/core/forms/dirty_form_exit.dart';
-import 'package:magic_music_crm/core/navigation/responsive_navigation_shell.dart';
-import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
 
 class ProductionWorkspaceHost extends ConsumerStatefulWidget {
   const ProductionWorkspaceHost({
@@ -42,187 +42,99 @@ class ProductionWorkspaceHost extends ConsumerStatefulWidget {
 
 class _ProductionWorkspaceHostState
     extends ConsumerState<ProductionWorkspaceHost> {
-  late WorkspaceController _controller;
-  late WorkspacePersistenceBinding _persistence;
-  late WorkspaceLogoutCoordinator _logoutCoordinator;
-  var _generation = 0;
-  String? _lastMarkedSection;
+  late final ProductionWorkspaceRuntime _runtime;
+  final _sectionEffect = _WorkspaceSectionEffect();
+  final Map<WorkspaceTabState, _DirtyRuntimeLease> _dirtyLeases =
+      HashMap.identity();
+  var _isDesktop = false;
+
+  WorkspaceController get _controller => _runtime.controller;
 
   @override
   void initState() {
     super.initState();
-    _initialize();
+    final store = ref.read(accountWorkspaceStoreProvider);
+    _runtime = ProductionWorkspaceRuntime(
+      snapshot: widget.snapshot,
+      initialLink: widget.initialLink,
+      store: store,
+      logoutCoordinator: ref.read(workspaceLogoutCoordinatorProvider),
+      realtime: ref.read(magicRealtimeServiceProvider),
+    );
   }
 
   @override
   void didUpdateWidget(covariant ProductionWorkspaceHost oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.snapshot.cacheKey != widget.snapshot.cacheKey) {
-      final reset =
-          oldWidget.snapshot.accountId != widget.snapshot.accountId ||
-              oldWidget.snapshot.role != widget.snapshot.role
-          ? _logoutCoordinator.logout(oldWidget.snapshot.accountId)
-          : Future<void>.value();
-      _disposeController();
-      _initialize(beforeRestore: reset);
-    } else if (!_sameLink(oldWidget.initialLink, widget.initialLink) &&
-        widget.initialLink != null) {
-      final resolution = EntityRouteRegistry().resolve(
-        widget.initialLink!,
-        widget.snapshot,
-      );
-      if (resolution.canOpen &&
-          !_sameLink(
-            _controller.state.activeTab.currentRoute.link,
-            widget.initialLink,
-          )) {
-        _controller.push(_controller.state.activeTabId, widget.initialLink!);
-      }
-    }
-  }
-
-  void _initialize({Future<void>? beforeRestore}) {
-    final generation = ++_generation;
-    final store = ref.read(accountWorkspaceStoreProvider);
-    _logoutCoordinator = ref.read(workspaceLogoutCoordinatorProvider);
-    final registry = EntityRouteRegistry();
-    final requested =
-        widget.initialLink ??
-        EntityLink.typed(entityType: EntityLinkType.chat, entityId: 'home');
-    final initialLink = registry.resolve(requested, widget.snapshot).canOpen
-        ? requested
-        : EntityLink.typed(entityType: EntityLinkType.chat, entityId: 'home');
-    final title =
-        registry
-            .resolve(initialLink, widget.snapshot)
-            .canonicalLocation
-            ?.title ??
-        'Главная';
-    _controller = WorkspaceController(
-      accountId: widget.snapshot.accountId,
-      initialLink: initialLink,
-      initialTitle: title,
-      sharedScope: WorkspaceSharedScope(
-        session: widget.snapshot,
-        cache: store,
-        realtime: ref.read(magicRealtimeServiceProvider),
-      ),
-      titleResolver: (link) =>
-          registry.resolve(link, widget.snapshot).canonicalLocation?.title ??
-          'Главная',
-    );
-    _logoutCoordinator.attach(_controller);
-    _persistence = WorkspacePersistenceBinding(
-      controller: _controller,
-      store: store,
-    );
-    unawaited(
-      Future<void>.sync(() async {
-            await beforeRestore;
-          })
-          .then(
-            (_) => store.restore(
-              accountId: widget.snapshot.accountId,
-              fallback: _controller.state,
-              routeAllowed: (link) =>
-                  registry.resolve(link, widget.snapshot).canOpen,
-            ),
-          )
-          .then((restored) {
-            if (!mounted || generation != _generation) return;
-            _controller.restore(restored);
-            final directLink = widget.initialLink;
-            if (directLink != null &&
-                registry.resolve(directLink, widget.snapshot).canOpen &&
-                !_sameLink(
-                  _controller.state.activeTab.currentRoute.link,
-                  directLink,
-                )) {
-              _controller.push(_controller.state.activeTabId, directLink);
-            }
-          }),
-    );
+    _runtime.update(snapshot: widget.snapshot, initialLink: widget.initialLink);
   }
 
   @override
   void dispose() {
-    _disposeController();
+    _runtime.dispose();
     super.dispose();
   }
 
-  void _disposeController() {
-    _generation++;
-    _logoutCoordinator.detach(_controller);
-    _persistence.dispose();
-    _controller.dispose();
-  }
-
   Future<DirtyCloseDecision> _resolveDirty(WorkspaceTabState tab) async {
-    final decision = await showDirtyFormExitDialog(context);
-    return switch (decision) {
+    final lease = _DirtyRuntimeLease(_controller, _runtime.generation);
+    _dirtyLeases[tab] = lease;
+    final decision = switch (await showDirtyFormExitDialog(context)) {
       DirtyFormExitDecision.save => DirtyCloseDecision.save,
       DirtyFormExitDecision.discard => DirtyCloseDecision.discard,
       DirtyFormExitDecision.cancel || null => DirtyCloseDecision.cancel,
     };
+    if (!_runtime.owns(lease.controller, lease.generation)) {
+      _removeLease(tab, lease);
+      return DirtyCloseDecision.cancel;
+    }
+    if (decision == DirtyCloseDecision.cancel) _removeLease(tab, lease);
+    return decision;
   }
 
-  Future<void> _saveDirty(WorkspaceTabState tab) =>
-      _controller.saveDirtyForms(tab);
+  Future<void> _saveDirty(WorkspaceTabState tab) async {
+    final lease = _dirtyLeases.remove(tab);
+    _requireCurrent(lease);
+    await lease!.controller.saveDirtyForms(tab);
+    _requireCurrent(lease);
+  }
 
-  Future<void> _discardDirty(WorkspaceTabState tab) =>
-      _controller.discardDirtyForms(tab);
+  Future<void> _discardDirty(WorkspaceTabState tab) async {
+    final lease = _dirtyLeases.remove(tab);
+    _requireCurrent(lease);
+    await lease!.controller.discardDirtyForms(tab);
+    _requireCurrent(lease);
+  }
 
-  Future<bool> _canLeaveTab(String tabId) {
-    return _controller.resolveDirtyTab(
-      tabId,
+  void _requireCurrent(_DirtyRuntimeLease? lease) {
+    if (lease == null || !_runtime.owns(lease.controller, lease.generation)) {
+      throw StateError('Workspace runtime changed during dirty resolution.');
+    }
+  }
+
+  void _removeLease(WorkspaceTabState tab, _DirtyRuntimeLease lease) {
+    if (identical(_dirtyLeases[tab], lease)) _dirtyLeases.remove(tab);
+  }
+
+  Future<void> _afterDirty(
+    WorkspaceTabState tab,
+    void Function(WorkspaceController controller) navigate,
+  ) async {
+    final controller = _controller;
+    final generation = _runtime.generation;
+    final allowed = await controller.resolveDirtyTab(
+      tab.tabId,
       resolveDirty: _resolveDirty,
       saveDirty: _saveDirty,
       discardDirty: _discardDirty,
     );
+    if (allowed && _runtime.owns(controller, generation)) navigate(controller);
   }
 
-  Future<void> _back(WorkspaceTabState tab) async {
-    if (await _canLeaveTab(tab.tabId)) _controller.back(tab.tabId);
-  }
+  Future<void> _back(WorkspaceTabState tab) =>
+      _afterDirty(tab, (controller) => controller.back(tab.tabId));
 
-  Future<void> _navigate(WorkspaceTabState tab, AppBreadcrumbNode node) async {
-    if (await _canLeaveTab(tab.tabId)) {
-      _controller.push(tab.tabId, node.link);
-    }
-  }
-
-  void _syncActiveSection(WorkspaceTabState tab, {required bool isDesktop}) {
-    final visible = crmVisibleTabsForCapabilities(
-      widget.snapshot,
-      isDesktop: isDesktop,
-    );
-    final requested =
-        crmTabForEntityLink(tab.currentRoute.link, widget.snapshot.role) ??
-        visible.first;
-    final selected = crmResolveVisibleTab(
-      visibleTabs: visible,
-      requestedTab: requested,
-      currentTab: visible.first,
-    );
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      ref.read(activeViewProvider.notifier).set(crmTab: selected, chatId: null);
-      final section = sectionKeyForTab(selected);
-      if (section == null) {
-        _lastMarkedSection = null;
-        return;
-      }
-      if (section == _lastMarkedSection) return;
-      _lastMarkedSection = section;
-      unawaited(
-        ref
-            .read(sectionUnseenServiceProvider)
-            .markSeen(section)
-            .then((_) => ref.invalidate(sectionUnseenProvider))
-            .catchError((_) {}),
-      );
-    });
-  }
+  Future<void> _navigate(WorkspaceTabState tab, AppBreadcrumbNode node) =>
+      _afterDirty(tab, (controller) => controller.push(tab.tabId, node.link));
 
   void _selectSection(int tab) {
     final link = EntityRouteRegistry.sectionRootLink(
@@ -231,219 +143,225 @@ class _ProductionWorkspaceHostState
     _controller.replaceCurrentLink(_controller.state.activeTabId, link);
   }
 
-  Widget _mobileContent(BuildContext context, WorkspaceTabState tab) {
-    final visible = crmVisibleTabsForCapabilities(
-      widget.snapshot,
-      isDesktop: false,
-    );
-    final requested =
-        crmTabForEntityLink(tab.currentRoute.link, widget.snapshot.role) ??
-        visible.first;
-    final selected = crmResolveVisibleTab(
-      visibleTabs: visible,
-      requestedTab: requested,
-      currentTab: visible.first,
-    );
-    final unseen = ref.watch(sectionUnseenProvider).asData?.value ?? const {};
-    return Scaffold(
-      body: widget.tabBuilder(context, tab),
-      bottomNavigationBar: ResponsiveNavigationShell(
-        isDesktop: false,
-        destinations: [
-          for (final tab in visible)
-            crmDestinationForTab(
-              widget.snapshot.role,
-              tab,
-              badgeCount: unseen[sectionKeyForTab(tab)] ?? 0,
-            ),
-        ],
-        selectedIndex: visible.indexOf(selected),
-        onSelected: (index) => _selectSection(visible[index]),
-      ),
-    );
-  }
-
-  Widget _desktopContent(BuildContext context, WorkspaceTabState tab) {
-    final visible = crmVisibleTabsForCapabilities(
-      widget.snapshot,
-      isDesktop: true,
-    );
-    final requested =
-        crmTabForEntityLink(tab.currentRoute.link, widget.snapshot.role) ??
-        visible.first;
-    final selected = crmResolveVisibleTab(
-      visibleTabs: visible,
-      requestedTab: requested,
-      currentTab: visible.first,
-    );
-    final unseen = ref.watch(sectionUnseenProvider).asData?.value ?? const {};
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Material(
-          child: ResponsiveNavigationShell(
-            isDesktop: true,
-            destinations: [
-              for (final tab in visible)
-                crmDestinationForTab(
-                  widget.snapshot.role,
-                  tab,
-                  badgeCount: unseen[sectionKeyForTab(tab)] ?? 0,
-                ),
-            ],
-            selectedIndex: visible.indexOf(selected),
-            onSelected: (index) => _selectSection(visible[index]),
-          ),
-        ),
-        Expanded(child: widget.tabBuilder(context, tab)),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    ref.listen(crmRealtimeProvider, (previous, next) {
-      final event = next.value;
-      if (event == null || !mounted || event.isFallbackPoll) return;
-      if (sectionForEntity(event.entity) != null) {
-        ref.invalidate(sectionUnseenProvider);
-      }
-    });
-    ref.listen<CrmNavigationRequest?>(crmNavigationRequestProvider, (
-      previous,
-      next,
-    ) {
-      if (next == null || !mounted) return;
-      _navigateCrmRequest(next);
-      Future.microtask(
-        () => ref.read(crmNavigationRequestProvider.notifier).clear(),
-      );
-    });
-    ref.listen<MessengerNavigationState?>(messengerNavigationProvider, (
-      previous,
-      next,
-    ) {
-      if (next == null || !mounted) return;
-      final link = EntityRouteRegistry.sectionRootLink('chat');
-      final current = _controller.state.activeTab.currentRoute.link;
-      if (current.entityType != EntityLinkType.chat) {
-        _controller.replaceCurrentLink(_controller.state.activeTabId, link);
-      }
-    });
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth < 840) {
-          return WorkspaceNavigationScope(
-            controller: _controller,
-            isDesktop: false,
-            child: ListenableBuilder(
-              listenable: _controller,
-              builder: (context, _) {
-                if (_controller.state.loggedOut) {
-                  return const SizedBox.shrink();
+    _bindWorkspaceProviders(
+      ref,
+      isMounted: () => mounted,
+      controller: () => _controller,
+      onCrmRequest: (request) => _routeCrmRequest(
+        context,
+        widget.snapshot,
+        _controller,
+        request,
+        isDesktop: _isDesktop,
+        onLimitReached: _showLimit,
+      ),
+    );
+    final unseen = ref.watch(sectionUnseenProvider).asData?.value ?? const {};
+    return ProductionWorkspaceView(
+      controller: _controller,
+      tabBuilder: widget.tabBuilder,
+      navigationFor: (tab, {required isDesktop}) => _workspaceNavigation(
+        widget.snapshot,
+        tab,
+        isDesktop: isDesktop,
+        unseen: unseen,
+      ),
+      locationFor: (tab) => EntityRouteRegistry()
+          .resolve(tab.currentRoute.link, widget.snapshot)
+          .canonicalLocation,
+      onLayoutModeChanged: (value) => _isDesktop = value,
+      onTabVisible: (tab, {required isDesktop}) => _sectionEffect.onVisible(
+        ref,
+        snapshot: widget.snapshot,
+        tab: tab,
+        isDesktop: isDesktop,
+        runtimeGeneration: _runtime.generation,
+        isMounted: () => mounted,
+      ),
+      onSectionSelected: _selectSection,
+      onBack: _back,
+      onNavigate: _navigate,
+      onLimitReached: _showLimit,
+      resolveDirty: _resolveDirty,
+      saveDirty: _saveDirty,
+      discardDirty: _discardDirty,
+    );
+  }
+
+  void _showLimit() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Можно открыть не больше 10 вкладок.')),
+    );
+  }
+}
+
+class _DirtyRuntimeLease {
+  const _DirtyRuntimeLease(this.controller, this.generation);
+
+  final WorkspaceController controller;
+  final int generation;
+}
+
+ProductionWorkspaceNavigationData _workspaceNavigation(
+  CapabilitySnapshot snapshot,
+  WorkspaceTabState tab, {
+  required bool isDesktop,
+  required Map<String, int> unseen,
+}) {
+  final visible = crmVisibleTabsForCapabilities(snapshot, isDesktop: isDesktop);
+  final requested =
+      crmTabForEntityLink(tab.currentRoute.link, snapshot.role) ??
+      visible.first;
+  final selected = crmResolveVisibleTab(
+    visibleTabs: visible,
+    requestedTab: requested,
+    currentTab: visible.first,
+  );
+  return ProductionWorkspaceNavigationData(
+    sectionTabs: visible,
+    destinations: [
+      for (final sectionTab in visible)
+        crmDestinationForTab(
+          snapshot.role,
+          sectionTab,
+          badgeCount: unseen[sectionKeyForTab(sectionTab)] ?? 0,
+        ),
+    ],
+    selectedIndex: visible.indexOf(selected),
+  );
+}
+
+class _WorkspaceSectionEffect {
+  String? _lastMarkedSection;
+  (String, int)? _token;
+
+  void onVisible(
+    WidgetRef ref, {
+    required CapabilitySnapshot snapshot,
+    required WorkspaceTabState tab,
+    required bool isDesktop,
+    required int runtimeGeneration,
+    required bool Function() isMounted,
+  }) {
+    final token = (snapshot.accountId, runtimeGeneration);
+    if (_token != token) {
+      _token = token;
+      _lastMarkedSection = null;
+    }
+    final navigation = _workspaceNavigation(
+      snapshot,
+      tab,
+      isDesktop: isDesktop,
+      unseen: const {},
+    );
+    final selected = navigation.sectionTabs[navigation.selectedIndex];
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!isMounted() || _token != token) return;
+      ref.read(activeViewProvider.notifier).set(crmTab: selected, chatId: null);
+      final section = sectionKeyForTab(selected);
+      if (section == null) {
+        _lastMarkedSection = null;
+      } else if (section != _lastMarkedSection) {
+        _lastMarkedSection = section;
+        unawaited(
+          ref
+              .read(sectionUnseenServiceProvider)
+              .markSeen(section)
+              .then((_) {
+                if (isMounted() && _token == token) {
+                  ref.invalidate(sectionUnseenProvider);
                 }
-                final tab = _controller.state.activeTab;
-                _syncActiveSection(tab, isDesktop: false);
-                return _mobileContent(context, tab);
-              },
-            ),
-          );
-        }
-        return WorkspaceNavigationScope(
-          controller: _controller,
-          isDesktop: true,
-          child: DesktopWorkspaceShell(
-            controller: _controller,
-            tabBuilder: (context, tab) {
-              if (tab.tabId == _controller.state.activeTabId) {
-                _syncActiveSection(tab, isDesktop: true);
-              }
-              final location = EntityRouteRegistry()
-                  .resolve(tab.currentRoute.link, widget.snapshot)
-                  .canonicalLocation;
-              if (location == null) return _desktopContent(context, tab);
-              return Column(
-                children: [
-                  MagicContextBar(
-                    controller: _controller,
-                    tab: tab,
-                    location: location,
-                    currentTitle: tab.titleHint,
-                    onBack: () => unawaited(_back(tab)),
-                    onNavigate: (node) => unawaited(_navigate(tab, node)),
-                  ),
-                  Expanded(child: _desktopContent(context, tab)),
-                ],
-              );
-            },
-            onLimitReached: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Можно открыть не больше 10 вкладок.'),
-                ),
-              );
-            },
-            resolveDirty: _resolveDirty,
-            saveDirty: _saveDirty,
-            discardDirty: _discardDirty,
-          ),
+              })
+              .catchError((_) {}),
         );
-      },
-    );
+      }
+    });
   }
+}
 
-  void _navigateCrmRequest(CrmNavigationRequest request) {
-    if (MediaQuery.sizeOf(context).width < 840) {
-      unawaited(
-        navigateEntityLink(
-          context,
-          widget.snapshot,
-          request.link,
-          target: request.openInNewTab
-              ? EntityOpenTarget.newTab
-              : EntityOpenTarget.current,
-          sourceViewState: request.sourceState,
-        ),
-      );
-      return;
+void _bindWorkspaceProviders(
+  WidgetRef ref, {
+  required bool Function() isMounted,
+  required WorkspaceController Function() controller,
+  required ValueChanged<CrmNavigationRequest> onCrmRequest,
+}) {
+  ref.listen(crmRealtimeProvider, (previous, next) {
+    final event = next.value;
+    if (event != null &&
+        isMounted() &&
+        !event.isFallbackPoll &&
+        sectionForEntity(event.entity) != null) {
+      ref.invalidate(sectionUnseenProvider);
     }
+  });
+  ref.listen<CrmNavigationRequest?>(crmNavigationRequestProvider, (_, next) {
+    if (next == null || !isMounted()) return;
+    onCrmRequest(next);
+    Future.microtask(
+      () => ref.read(crmNavigationRequestProvider.notifier).clear(),
+    );
+  });
+  ref.listen<MessengerNavigationState?>(messengerNavigationProvider, (_, next) {
+    if (next == null || !isMounted()) return;
+    final current = controller();
+    if (current.state.activeTab.currentRoute.link.entityType !=
+        EntityLinkType.chat) {
+      current.replaceCurrentLink(
+        current.state.activeTabId,
+        EntityRouteRegistry.sectionRootLink('chat'),
+      );
+    }
+  });
+}
 
-    final resolution = EntityRouteRegistry().resolve(
+void _routeCrmRequest(
+  BuildContext context,
+  CapabilitySnapshot snapshot,
+  WorkspaceController controller,
+  CrmNavigationRequest request, {
+  required bool isDesktop,
+  required VoidCallback onLimitReached,
+}) {
+  if (!isDesktop) {
+    unawaited(
+      navigateEntityLink(
+        context,
+        snapshot,
+        request.link,
+        target: request.openInNewTab
+            ? EntityOpenTarget.newTab
+            : EntityOpenTarget.current,
+        sourceViewState: request.sourceState,
+      ),
+    );
+    return;
+  }
+  final resolution = EntityRouteRegistry().resolve(request.link, snapshot);
+  if (!resolution.canOpen) {
+    unawaited(navigateEntityLink(context, snapshot, request.link));
+    return;
+  }
+  try {
+    controller.updateCurrentView(
+      controller.state.activeTabId,
+      request.sourceState,
+    );
+    final tabId = controller.open(
       request.link,
-      widget.snapshot,
+      titleHint: resolution.canonicalLocation?.title,
+      explicitNew: request.openInNewTab,
     );
-    if (!resolution.canOpen) {
-      unawaited(navigateEntityLink(context, widget.snapshot, request.link));
-      return;
-    }
-    try {
-      _controller.updateCurrentView(
-        _controller.state.activeTabId,
-        request.sourceState,
-      );
-      final tabId = _controller.open(
-        request.link,
-        titleHint: resolution.canonicalLocation?.title,
-        explicitNew: request.openInNewTab,
-      );
-      _controller.replaceCurrentLink(
-        tabId,
-        request.link,
-        viewState: ContextViewState(
-          filters: request.link.optionalFocus?.filter ?? const {},
-          date: request.sourceState.date,
-        ),
-      );
-    } on WorkspaceLimitReached {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Можно открыть не больше 10 вкладок.')),
-      );
-    }
-  }
-
-  static bool _sameLink(EntityLink? left, EntityLink? right) {
-    return left?.rawEntityType == right?.rawEntityType &&
-        left?.entityId == right?.entityId &&
-        left?.optionalFocus?.focus == right?.optionalFocus?.focus;
+    controller.replaceCurrentLink(
+      tabId,
+      request.link,
+      viewState: ContextViewState(
+        filters: request.link.optionalFocus?.filter ?? const {},
+        date: request.sourceState.date,
+      ),
+    );
+  } on WorkspaceLimitReached {
+    onLimitReached();
   }
 }
