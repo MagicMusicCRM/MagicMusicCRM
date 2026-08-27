@@ -44,6 +44,10 @@ class SubscriptionIssueController extends ChangeNotifier {
   PurchaseSubscriptionInput? _frozenPurchase;
   bool _busy = false;
   bool _attempted = false;
+  bool _disposed = false;
+  int _draftGeneration = 0;
+  int _previewRequestSequence = 0;
+  int? _activePreviewRequest;
   String? _error;
 
   SubscriptionIssueDraft get draft => _draft;
@@ -155,34 +159,29 @@ class SubscriptionIssueController extends ChangeNotifier {
   }
 
   Future<SubscriptionIssueSubmitResult> submit() async {
-    if (_busy) return SubscriptionIssueSubmitResult.blocked;
+    if (_disposed || _busy) return SubscriptionIssueSubmitResult.blocked;
     final currentPricing = pricing;
     if (!currentPricing.isValid) {
       _error = currentPricing.error;
-      notifyListeners();
+      _notifyListeners();
       return SubscriptionIssueSubmitResult.blocked;
     }
     final purchase = buildPurchase();
     _busy = true;
     _error = null;
-    notifyListeners();
+    _notifyListeners();
+    final currentPreview = _preview;
+    if (currentPreview == null) return _loadPreview(purchase);
     try {
-      final currentPreview = _preview;
-      if (currentPreview == null) {
-        _preview = await _onPreview(purchase);
-        _busy = false;
-        notifyListeners();
-        return SubscriptionIssueSubmitResult.previewLoaded;
-      }
       if (!currentPreview.canCommit) {
         _busy = false;
         _error = 'На личном счёте недостаточно средств.';
-        notifyListeners();
+        _notifyListeners();
         return SubscriptionIssueSubmitResult.blocked;
       }
       _attempted = true;
       _frozenPurchase = purchase;
-      notifyListeners();
+      _notifyListeners();
       await _onSubmit(
         SubscriptionIssueSubmission(
           purchase: purchase,
@@ -191,7 +190,7 @@ class SubscriptionIssueController extends ChangeNotifier {
         ),
       );
       _busy = false;
-      notifyListeners();
+      _notifyListeners();
       return SubscriptionIssueSubmitResult.committed;
     } catch (caught) {
       _busy = false;
@@ -199,17 +198,74 @@ class SubscriptionIssueController extends ChangeNotifier {
         caught,
         fallback: 'Не удалось оформить абонемент.',
       );
-      notifyListeners();
+      _notifyListeners();
       return SubscriptionIssueSubmitResult.failed;
     }
   }
 
+  Future<SubscriptionIssueSubmitResult> _loadPreview(
+    PurchaseSubscriptionInput purchase,
+  ) async {
+    final requestId = ++_previewRequestSequence;
+    final generation = _draftGeneration;
+    final identity = _identity;
+    _activePreviewRequest = requestId;
+    try {
+      final preview = await _onPreview(purchase);
+      if (!_isCurrentPreviewRequest(requestId, generation, identity)) {
+        return SubscriptionIssueSubmitResult.blocked;
+      }
+      _activePreviewRequest = null;
+      _preview = preview;
+      _busy = false;
+      _notifyListeners();
+      return SubscriptionIssueSubmitResult.previewLoaded;
+    } catch (caught) {
+      if (!_isCurrentPreviewRequest(requestId, generation, identity)) {
+        return SubscriptionIssueSubmitResult.blocked;
+      }
+      _activePreviewRequest = null;
+      _busy = false;
+      _error = userErrorMessage(
+        caught,
+        fallback: 'Не удалось оформить абонемент.',
+      );
+      _notifyListeners();
+      return SubscriptionIssueSubmitResult.failed;
+    }
+  }
+
+  bool _isCurrentPreviewRequest(
+    int requestId,
+    int generation,
+    MagicMutationIdentity identity,
+  ) =>
+      !_disposed &&
+      _activePreviewRequest == requestId &&
+      _draftGeneration == generation &&
+      identical(_identity, identity);
+
   void _updateDraft(SubscriptionIssueDraft next) {
-    if (!fieldsEnabled) return;
+    if (_disposed || !fieldsEnabled) return;
+    _draftGeneration++;
+    _activePreviewRequest = null;
     _draft = next;
     _preview = null;
+    _busy = false;
     _error = null;
     _identity = _identityFactory();
-    notifyListeners();
+    _notifyListeners();
+  }
+
+  void _notifyListeners() {
+    if (!_disposed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _draftGeneration++;
+    _activePreviewRequest = null;
+    super.dispose();
   }
 }

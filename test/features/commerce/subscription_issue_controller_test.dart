@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -16,6 +18,7 @@ Map<String, dynamic> _package({String basePriceMinor = '800000'}) => {
 SubscriptionPurchasePreview _preview({
   required PurchaseSubscriptionInput input,
   bool canCommit = true,
+  String previewToken = 'signed-preview',
 }) => SubscriptionPurchasePreview(
   recipientStudentId: _recipientId,
   payerStudentId: input.payerStudentId,
@@ -26,7 +29,7 @@ SubscriptionPurchasePreview _preview({
   balanceAfterMinor: canCommit ? BigInt.from(160000) : BigInt.from(-1),
   canCommit: canCommit,
   shortageMinor: canCommit ? BigInt.zero : BigInt.one,
-  previewToken: 'signed-preview',
+  previewToken: previewToken,
 );
 
 SubscriptionIssueController _controller({
@@ -174,6 +177,71 @@ void main() {
         isNot(initialIdentity.idempotencyKey),
       );
       expect(controller.error, isNull);
+    },
+  );
+
+  test(
+    'late preview after pricing mutation cannot replace the current preview',
+    () async {
+      var identitySequence = 0;
+      final previewRequests = <PurchaseSubscriptionInput>[];
+      final previewCompleters = <Completer<SubscriptionPurchasePreview>>[];
+      final submissions = <SubscriptionIssueSubmission>[];
+      final controller = _controller(
+        identityFactory: () {
+          identitySequence++;
+          return MagicMutationIdentity(
+            idempotencyKey: 'key-$identitySequence',
+            requestId: 'request-$identitySequence',
+          );
+        },
+        onPreview: (input) {
+          previewRequests.add(input);
+          final completer = Completer<SubscriptionPurchasePreview>();
+          previewCompleters.add(completer);
+          return completer.future;
+        },
+        onSubmit: (submission) async => submissions.add(submission),
+      );
+      addTearDown(controller.dispose);
+
+      final identityA = controller.identity;
+      final pendingA = controller.submit();
+      expect(previewCompleters, hasLength(1));
+
+      controller.selectDiscountMode(SubscriptionIssueDiscountMode.percent);
+      controller.setDiscountValue('20');
+      controller.setDiscountReason('Семейная скидка');
+      final identityB = controller.identity;
+      expect(identityB.idempotencyKey, isNot(identityA.idempotencyKey));
+      expect(controller.preview, isNull);
+
+      final pendingB = controller.submit();
+      expect(previewCompleters, hasLength(2));
+      previewCompleters[1].complete(
+        _preview(input: previewRequests[1], previewToken: 'preview-b'),
+      );
+      expect(await pendingB, SubscriptionIssueSubmitResult.previewLoaded);
+      expect(controller.preview?.previewToken, 'preview-b');
+
+      previewCompleters[0].complete(
+        _preview(input: previewRequests[0], previewToken: 'preview-a'),
+      );
+      expect(await pendingA, SubscriptionIssueSubmitResult.blocked);
+      expect(controller.preview?.previewToken, 'preview-b');
+      expect(controller.error, isNull);
+
+      expect(
+        await controller.submit(),
+        SubscriptionIssueSubmitResult.committed,
+      );
+      expect(submissions, hasLength(1));
+      expect(submissions.single.preview.previewToken, 'preview-b');
+      expect(submissions.single.purchase.toJson(), previewRequests[1].toJson());
+      expect(
+        submissions.single.identity.idempotencyKey,
+        identityB.idempotencyKey,
+      );
     },
   );
 
