@@ -4,11 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
-import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_reference_controller.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_reference_models.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_reference_settings.dart';
 
 void main() {
@@ -169,6 +168,28 @@ void main() {
       expect(controller.state.error, isNull);
     });
 
+    test('catalogs select the first valid non-empty ids', () async {
+      final api = _ScheduleReferenceApi(
+        branches: const [
+          {'name': 'Без идентификатора'},
+          {'id': '  ', 'name': 'Пустой идентификатор'},
+          {'id': 'branch-a', 'name': 'Сокол'},
+        ],
+        teachers: const [
+          {'id': null, 'firstName': 'Нет'},
+          {'id': '', 'firstName': 'Пусто'},
+          {'id': 'teacher-a', 'firstName': 'Мария', 'lastName': 'Петрова'},
+        ],
+      );
+      final controller = _controller(api);
+
+      await controller.loadCatalogs();
+
+      expect(controller.state.branchId, 'branch-a');
+      expect(controller.state.teacherId, 'teacher-a');
+      expect(controller.canLoadReference, isTrue);
+    });
+
     test(
       'new recurring and interval rules keep deterministic time semantics',
       () async {
@@ -288,6 +309,51 @@ void main() {
         expect(find.widgetWithText(FilledButton, 'Повторить'), findsOneWidget);
       });
     }
+
+    for (final entry in const {
+      ScheduleReferenceSection.branchHours: 'branch-a',
+      ScheduleReferenceSection.teacherSchedule: 'teacher-a',
+    }.entries) {
+      testWidgets('${entry.key.name} picker omits malformed catalogue ids', (
+        tester,
+      ) async {
+        final api = _ScheduleReferenceApi(
+          branches: const [
+            {'name': 'Без идентификатора'},
+            {'id': ' ', 'name': 'Пустой идентификатор'},
+            {'id': 'branch-a', 'name': 'Сокол'},
+          ],
+          teachers: const [
+            {'id': null, 'firstName': 'Нет'},
+            {'id': '', 'firstName': 'Пусто'},
+            {'id': 'teacher-a', 'firstName': 'Мария', 'lastName': 'Петрова'},
+          ],
+        );
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              magicCrmServiceProvider.overrideWithValue(MagicCrmService(api)),
+            ],
+            child: MaterialApp(
+              home: Scaffold(
+                body: ScheduleReferenceSettings(
+                  canEdit: false,
+                  section: entry.key,
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final picker = tester.widget<SearchablePickerField>(
+          find.byType(SearchablePickerField),
+        );
+        expect(picker.items.map((item) => item.id), [entry.value]);
+        expect(picker.selectedId, entry.value);
+        expect(picker.items.map((item) => item.id), isNot(contains('null')));
+      });
+    }
   });
 }
 
@@ -307,6 +373,8 @@ class _ScheduleReferenceApi extends MagicApiClient {
     this.failCatalogs = false,
     this.teacherAvailability = _defaultAvailability,
     this.scheduleGates = const {},
+    this.branches = _branches,
+    this.teachers = _teachers,
   }) : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   static const _defaultAvailability = <Map<String, dynamic>>[
@@ -324,6 +392,8 @@ class _ScheduleReferenceApi extends MagicApiClient {
   final bool failCatalogs;
   final List<Map<String, dynamic>> teacherAvailability;
   final Map<String, Completer<Map<String, dynamic>>> scheduleGates;
+  final List<Map<String, dynamic>> branches;
+  final List<Map<String, dynamic>> teachers;
   final puts = <String, List<Map<String, dynamic>>>{};
 
   @override
@@ -334,10 +404,10 @@ class _ScheduleReferenceApi extends MagicApiClient {
   }) async {
     if (path == '/crm/branches') {
       if (failCatalogs) throw StateError('offline');
-      return <String, dynamic>{'items': _branches} as T;
+      return <String, dynamic>{'items': branches} as T;
     }
     if (path == '/crm/teachers') {
-      return <String, dynamic>{'items': _teachers} as T;
+      return <String, dynamic>{'items': teachers} as T;
     }
     if (path == '/crm/schedule-reference/branches/branch-a/hours') {
       return _branchHours as T;

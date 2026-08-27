@@ -121,13 +121,7 @@ class ScheduleReferenceView extends StatelessWidget {
         label: 'Филиал',
         selectedId: controller.state.branchId,
         isNullable: false,
-        items: [
-          for (final branch in controller.state.branches)
-            SearchableSelectItem(
-              id: branch['id'].toString(),
-              label: branch['name']?.toString() ?? 'Филиал',
-            ),
-        ],
+        items: _branchPickerItems(),
         onSelected: (item) {
           final value = item?.id;
           if (value != null) unawaited(controller.selectBranch(value));
@@ -140,18 +134,37 @@ class ScheduleReferenceView extends StatelessWidget {
       hintText: 'Введите имя или ФИО преподавателя',
       selectedId: controller.state.teacherId,
       isNullable: false,
-      items: [
-        for (final teacher in controller.state.teachers)
-          SearchableSelectItem(
-            id: teacher['id'].toString(),
-            label: _teacherName(teacher),
-          ),
-      ],
+      items: _teacherPickerItems(),
       onSelected: (item) {
         final value = item?.id;
         if (value != null) unawaited(controller.selectTeacher(value));
       },
     );
+  }
+
+  List<SearchableSelectItem> _branchPickerItems() {
+    final items = <SearchableSelectItem>[];
+    for (final branch in controller.state.branches) {
+      final id = scheduleReferenceId(branch);
+      if (id == null) continue;
+      items.add(
+        SearchableSelectItem(
+          id: id,
+          label: branch['name']?.toString() ?? 'Филиал',
+        ),
+      );
+    }
+    return items;
+  }
+
+  List<SearchableSelectItem> _teacherPickerItems() {
+    final items = <SearchableSelectItem>[];
+    for (final teacher in controller.state.teachers) {
+      final id = scheduleReferenceId(teacher);
+      if (id == null) continue;
+      items.add(SearchableSelectItem(id: id, label: _teacherName(teacher)));
+    }
+    return items;
   }
 
   Future<void> _save(

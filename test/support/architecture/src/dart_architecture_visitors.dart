@@ -21,6 +21,7 @@ ArchitectureAstData collectArchitectureAst(
     aliases: AstAliasOwnership(
       aliasSources: ownershipVisitor.aliasSources,
       declaredTypes: ownershipVisitor.declaredTypes,
+      providerOrigins: ownershipVisitor.providerOrigins,
     ),
   );
 }
@@ -102,13 +103,16 @@ class AstInvocation {
 
 class AstAliasOwnership {
   const AstAliasOwnership({
-    required Map<String, String> aliasSources,
+    required Map<String, Set<String>> aliasSources,
     required Map<String, String> declaredTypes,
+    required Map<String, List<AstProviderOrigin>> providerOrigins,
   }) : _aliasSources = aliasSources,
-       _declaredTypes = declaredTypes;
+       _declaredTypes = declaredTypes,
+       _providerOrigins = providerOrigins;
 
-  final Map<String, String> _aliasSources;
+  final Map<String, Set<String>> _aliasSources;
   final Map<String, String> _declaredTypes;
+  final Map<String, List<AstProviderOrigin>> _providerOrigins;
 
   Set<String> identifiers({
     Set<String> names = const {},
@@ -122,11 +126,40 @@ class AstAliasOwnership {
     while (changed) {
       changed = false;
       for (final entry in _aliasSources.entries) {
-        if (owned.contains(entry.value) && owned.add(entry.key)) changed = true;
+        if (entry.value.any(owned.contains) && owned.add(entry.key)) {
+          changed = true;
+        }
       }
     }
     return owned;
   }
+
+  Set<String> providerDerivedIdentifiers({
+    required Set<String> providerNames,
+    Set<String> receiverNames = const {'ref'},
+  }) {
+    final ownedReceivers = identifiers(names: receiverNames);
+    final providerOwned = <String>{};
+    for (final entry in _providerOrigins.entries) {
+      final derivesFromProvider = entry.value.any(
+        (origin) =>
+            providerNames.contains(origin.providerIdentifier) &&
+            ownedReceivers.contains(origin.receiverIdentifier),
+      );
+      if (derivesFromProvider) providerOwned.add(entry.key);
+    }
+    return identifiers(names: providerOwned);
+  }
+}
+
+class AstProviderOrigin {
+  const AstProviderOrigin({
+    required this.providerIdentifier,
+    required this.receiverIdentifier,
+  });
+
+  final String providerIdentifier;
+  final String receiverIdentifier;
 }
 
 class _ExecutableVisitor extends RecursiveAstVisitor<void> {
@@ -298,8 +331,9 @@ class _TypeVisitor extends RecursiveAstVisitor<void> {
 }
 
 class _OwnershipVisitor extends RecursiveAstVisitor<void> {
-  final aliasSources = <String, String>{};
+  final aliasSources = <String, Set<String>>{};
   final declaredTypes = <String, String>{};
+  final providerOrigins = <String, List<AstProviderOrigin>>{};
   final invocations = <AstInvocation>[];
 
   @override
@@ -323,14 +357,14 @@ class _OwnershipVisitor extends RecursiveAstVisitor<void> {
 
   @override
   void visitVariableDeclaration(VariableDeclaration node) {
-    _recordAlias(node.name.lexeme, node.initializer);
+    _recordOwnership(node.name.lexeme, node.initializer);
     super.visitVariableDeclaration(node);
   }
 
   @override
   void visitAssignmentExpression(AssignmentExpression node) {
     final target = _expressionIdentifier(node.leftHandSide);
-    if (target != null) _recordAlias(target, node.rightHandSide);
+    if (target != null) _recordOwnership(target, node.rightHandSide);
     super.visitAssignmentExpression(node);
   }
 
@@ -383,10 +417,37 @@ class _OwnershipVisitor extends RecursiveAstVisitor<void> {
     super.visitFunctionExpressionInvocation(node);
   }
 
-  void _recordAlias(String target, Expression? expression) {
+  void _recordOwnership(String target, Expression? expression) {
     final source = _expressionIdentifier(expression);
-    if (source != null) aliasSources[target] = source;
+    if (source != null) {
+      aliasSources.putIfAbsent(target, () => <String>{}).add(source);
+    }
+    final providerOrigin = _providerOrigin(expression);
+    if (providerOrigin != null) {
+      providerOrigins.putIfAbsent(target, () => []).add(providerOrigin);
+    }
   }
+}
+
+AstProviderOrigin? _providerOrigin(Expression? expression) {
+  if (expression is ParenthesizedExpression) {
+    return _providerOrigin(expression.expression);
+  }
+  if (expression is! MethodInvocation ||
+      (expression.methodName.name != 'read' &&
+          expression.methodName.name != 'watch')) {
+    return null;
+  }
+  final receiver = _expressionIdentifier(expression.target);
+  final provider = expression.argumentList.arguments
+      .map(_expressionIdentifier)
+      .whereType<String>()
+      .firstOrNull;
+  if (receiver == null || provider == null) return null;
+  return AstProviderOrigin(
+    providerIdentifier: provider,
+    receiverIdentifier: receiver,
+  );
 }
 
 String? _typeName(TypeAnnotation? type) => type?.toSource().replaceAll('?', '');

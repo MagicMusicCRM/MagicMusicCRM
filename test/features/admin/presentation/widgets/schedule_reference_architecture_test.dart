@@ -85,6 +85,34 @@ void providerLeak(dynamic ref) {
     },
   );
 
+  test('provider-derived receivers cannot hide future service effects', () {
+    final violations = _architectureViolations([
+      inspectDartSource(_shellFilename, r'''
+void direct(dynamic ref) {
+  ref.read(magicCrmServiceProvider).futureScheduleWrite();
+}
+void alias(dynamic ref) {
+  final crm = ref.read(magicCrmServiceProvider);
+  crm.futureAliasedScheduleWrite();
+}
+void reassigned(dynamic ref) {
+  dynamic crm;
+  crm = ref.read(magicCrmServiceProvider);
+  crm.futureReassignedScheduleWrite();
+}
+'''),
+    ]);
+
+    expect(
+      violations,
+      containsAll([
+        contains('futureScheduleWrite outside controller'),
+        contains('futureAliasedScheduleWrite outside controller'),
+        contains('futureReassignedScheduleWrite outside controller'),
+      ]),
+    );
+  });
+
   test('dynamic discovery and syntax guard reject a new malformed owner', () {
     final directory = Directory.systemTemp.createTempSync(
       'schedule-reference-architecture-',
@@ -156,6 +184,10 @@ List<String> _architectureViolations(
       ...inspection.invocationNames.intersection(_serviceEffects),
       ...inspection.invocationsOn(receiverTypeNames: const {'MagicCrmService'}),
       ...inspection.invokedCallableAliases(names: _serviceEffects),
+      ...inspection.invocationsOnProviders(const {'magicCrmServiceProvider'}),
+      ...inspection.invocationsOnProviderDerivedReceivers(const {
+        'magicCrmServiceProvider',
+      }),
     };
     for (final effect in effects) {
       violations.add(

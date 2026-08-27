@@ -232,6 +232,22 @@ class DartSourceInspection {
         .toSet();
   }
 
+  Set<String> invocationsOnProviderDerivedReceivers(
+    Set<String> providerNames, {
+    Set<String> receiverNames = const {'ref'},
+  }) {
+    final providerOwned = _aliases.providerDerivedIdentifiers(
+      providerNames: providerNames,
+      receiverNames: receiverNames,
+    );
+    return invocations
+        .where(
+          (invocation) => providerOwned.contains(invocation.targetIdentifier),
+        )
+        .map((invocation) => invocation.name)
+        .toSet();
+  }
+
   Set<String> providerReads({Set<String> receiverNames = const {'ref'}}) {
     final owned = _aliases.identifiers(names: receiverNames);
     return invocations

@@ -146,7 +146,12 @@ Map<String, dynamic> cleanScheduleReferenceMap(Map<String, dynamic> source) => {
 };
 
 bool containsScheduleReferenceId(List<Map<String, dynamic>> items, String id) =>
-    items.any((item) => item['id']?.toString() == id);
+    items.any((item) => scheduleReferenceId(item) == id);
+
+String? scheduleReferenceId(Map<String, dynamic> item) {
+  final id = item['id']?.toString().trim();
+  return id == null || id.isEmpty ? null : id;
+}
 
 String? validScheduleReferenceSelection(
   String? selected,
@@ -155,7 +160,11 @@ String? validScheduleReferenceSelection(
   if (selected != null && containsScheduleReferenceId(items, selected)) {
     return selected;
   }
-  return items.isEmpty ? null : items.first['id']?.toString();
+  for (final item in items) {
+    final id = scheduleReferenceId(item);
+    if (id != null) return id;
+  }
+  return null;
 }
 
 Map<int, Map<String, dynamic>> copyIndexedScheduleRows(
