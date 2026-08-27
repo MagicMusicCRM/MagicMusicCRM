@@ -1,6 +1,24 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import type { Type } from "@nestjs/common";
+import { Test } from "@nestjs/testing";
 import * as ts from "typescript";
+import { DatabaseService } from "../../db/database.service";
+import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
+import { LessonSettlementService } from "../commerce/lesson-settlement.service";
+import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
+import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
+import { CrmPolicy } from "../crm.policy";
+import { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
+import { LessonSeriesCommandService } from "./lesson-series-command.service";
+import { SchedulePlanConstraintPreviewService } from "./schedule-plan-constraint-preview.service";
+import { SchedulePlanDefinitionService } from "./schedule-plan-definition.service";
+import { SchedulePlanEndService } from "./schedule-plan-end.service";
+import { SchedulePlanMutationService } from "./schedule-plan-mutation.service";
+import { SchedulePlanQueryService } from "./schedule-plan-query.service";
+import { SchedulePlanRepository } from "./schedule-plan.repository";
+import { SchedulePlanService } from "./schedule-plan.service";
+import { ScheduleSeriesMaterializerService } from "./schedule-series-materializer.service";
 
 const readSource = (name: string) =>
   readFileSync(resolve(__dirname, name), "utf8");
@@ -224,6 +242,104 @@ const moduleIdentifiers = (propertyName: "providers" | "exports") => {
 };
 
 describe("Schedule plan owner boundaries", () => {
+  it("preserves runtime DI metadata and resolves the facade through Nest", async () => {
+    const ownerDependencies = new Map<Type<unknown>, Type<unknown>[]>([
+      [SchedulePlanDefinitionService, [SchedulePlanRepository]],
+      [SchedulePlanQueryService, [SchedulePlanRepository]],
+      [
+        SchedulePlanConstraintPreviewService,
+        [
+          CrmPolicy,
+          DatabaseService,
+          SchedulePlanDefinitionService,
+          LessonSeriesCommandService,
+          LessonSettlementService,
+        ],
+      ],
+      [
+        SchedulePlanMutationService,
+        [
+          PlatformIntegrityService,
+          CrmPolicy,
+          SchedulePlanRepository,
+          LessonSeriesCommandService,
+          ScheduleSeriesMaterializerService,
+          LessonSettlementService,
+          SchedulePlanDefinitionService,
+        ],
+      ],
+      [
+        SchedulePlanEndService,
+        [
+          PlatformIntegrityService,
+          CrmPolicy,
+          SchedulePlanRepository,
+          DatabaseService,
+          SubscriptionPreviewTokenService,
+          LessonLifecycleRepository,
+          SubscriptionReservationService,
+          SchedulePlanDefinitionService,
+        ],
+      ],
+      [
+        SchedulePlanService,
+        [
+          SchedulePlanQueryService,
+          SchedulePlanConstraintPreviewService,
+          SchedulePlanMutationService,
+          SchedulePlanEndService,
+        ],
+      ],
+    ]);
+    const owners = [...ownerDependencies.keys()];
+    for (const [owner, dependencies] of ownerDependencies) {
+      expect(Reflect.getMetadata("design:paramtypes", owner)).toEqual(
+        dependencies,
+      );
+    }
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        ...owners,
+        SchedulePlanRepository,
+        CrmPolicy,
+        DatabaseService,
+        PlatformIntegrityService,
+        LessonSettlementService,
+        SubscriptionPreviewTokenService,
+        SubscriptionReservationService,
+        LessonLifecycleRepository,
+        LessonSeriesCommandService,
+        ScheduleSeriesMaterializerService,
+      ],
+    })
+      .overrideProvider(SchedulePlanRepository)
+      .useValue({})
+      .overrideProvider(CrmPolicy)
+      .useValue({})
+      .overrideProvider(DatabaseService)
+      .useValue({})
+      .overrideProvider(PlatformIntegrityService)
+      .useValue({})
+      .overrideProvider(LessonSettlementService)
+      .useValue({})
+      .overrideProvider(SubscriptionPreviewTokenService)
+      .useValue({})
+      .overrideProvider(SubscriptionReservationService)
+      .useValue({})
+      .overrideProvider(LessonLifecycleRepository)
+      .useValue({})
+      .overrideProvider(LessonSeriesCommandService)
+      .useValue({})
+      .overrideProvider(ScheduleSeriesMaterializerService)
+      .useValue({})
+      .compile();
+    expect(moduleRef.get(SchedulePlanService)).toBeInstanceOf(
+      SchedulePlanService,
+    );
+    await moduleRef.close();
+  });
+
   it("keeps the facade as eight direct controller-facing delegations", () => {
     expect(sourceNloc(sources.facade)).toBeLessThanOrEqual(150);
     expect(exactConstructorTypes(sources.facade)).toEqual([

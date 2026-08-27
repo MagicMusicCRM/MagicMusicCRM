@@ -1,19 +1,19 @@
 import { Injectable } from "@nestjs/common";
 import type { PoolClient } from "pg";
 import type { ActorContext } from "../../common/security/actor-context";
-import type { DatabaseService } from "../../db/database.service";
-import type { LessonSettlementService } from "../commerce/lesson-settlement.service";
-import type { CrmPolicy } from "../crm.policy";
+import { DatabaseService } from "../../db/database.service";
+import { LessonSettlementService } from "../commerce/lesson-settlement.service";
+import { CrmPolicy } from "../crm.policy";
 import type {
   SchedulePlanConstraintPreviewDto,
   SchedulePlanRowDto,
   UpdateSchedulePlanDto,
 } from "../dto/schedule-plan.dto";
-import type { LessonSeriesCommandService } from "./lesson-series-command.service";
+import { LessonSeriesCommandService } from "./lesson-series-command.service";
 import { groupScheduleConflicts } from "./schedule-analyzer";
-import type {
-  NormalizedSchedulePlanCreate,
-  PreparedSchedulePlanUpdate,
+import {
+  type NormalizedSchedulePlanCreate,
+  type PreparedSchedulePlanUpdate,
   SchedulePlanDefinitionService,
 } from "./schedule-plan-definition.service";
 import { schedulePlanStableId } from "./schedule-plan-definition.service";

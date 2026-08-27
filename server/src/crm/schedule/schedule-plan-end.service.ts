@@ -1,27 +1,27 @@
 import { ConflictException, Injectable } from "@nestjs/common";
 import type { PoolClient } from "pg";
 import type { ActorContext } from "../../common/security/actor-context";
-import type { DatabaseService } from "../../db/database.service";
-import type { PlatformIntegrityService } from "../../platform/platform-integrity.service";
+import { DatabaseService } from "../../db/database.service";
+import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
 import { fingerprintPayload } from "../../platform/platform-integrity.util";
-import type { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
-import type { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
-import type { CrmPolicy } from "../crm.policy";
+import { SubscriptionPreviewTokenService } from "../commerce/subscription-preview-token.service";
+import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
+import { CrmPolicy } from "../crm.policy";
 import type {
   SchedulePlanEndCommandDto,
   SchedulePlanEndPreviewDto,
 } from "../dto/schedule-plan.dto";
 import type { LessonCommandMetadata } from "./lesson-command-metadata";
-import type { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
+import { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
 import { lockSchedulePlanSeries } from "./schedule-locks";
-import type {
-  NormalizedSchedulePlanEnd,
+import {
+  type NormalizedSchedulePlanEnd,
   SchedulePlanDefinitionService,
 } from "./schedule-plan-definition.service";
 import { failSchedulePlan } from "./schedule-plan-definition.service";
-import type {
-  LockedSchedulePlan,
-  SchedulePlanEndImpact,
+import {
+  type LockedSchedulePlan,
+  type SchedulePlanEndImpact,
   SchedulePlanRepository,
 } from "./schedule-plan.repository";
 

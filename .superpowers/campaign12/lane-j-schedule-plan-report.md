@@ -56,11 +56,25 @@ read, so this isolated lane did not mutate the shared index.
 
 ## Focused lane gate
 
-- Unit + AST boundary: 9 passed in 5.954 s.
-- PostgreSQL selected cases: 4 passed, 5 skipped in 10.2 s:
+- Unit + AST boundary: 10 passed in 7.065 s.
+- PostgreSQL selected cases: 4 passed, 5 skipped in 9.747 s:
   create open-ended plan, concurrent effective edit, stale end preview, bounded
   tray paging.
 - Restricted TypeScript typecheck passed with zero errors; all 11 changed
   TypeScript files match Prettier 3.6.2; `git diff --check` passed. No global
   backend suite, coverage, RepoWise update, or Sentrux scan was run in this
   lane.
+
+## DI metadata fix-round
+
+The independent pre-review found that type-only imports on injected
+constructor collaborators emitted `Function`/`Object` metadata and would fail
+under Nest runtime resolution even though the manually assembled PostgreSQL
+fixture passed. A strict RED regression reproduced the failure in
+`TestingModule.compile()` for `SchedulePlanDefinitionService`.
+
+All injected class collaborators now use runtime value imports; Actor, DTO,
+Pool, metadata, projection, and repository-row interfaces remain type-only.
+The permanent regression verifies that the facade and all five injectable
+owners have no `Object` in `design:paramtypes`, compiles the six-owner Nest
+graph with dependency overrides, and resolves `SchedulePlanService`.

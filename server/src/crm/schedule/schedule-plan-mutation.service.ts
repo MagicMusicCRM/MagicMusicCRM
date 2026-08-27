@@ -1,25 +1,25 @@
 import { Injectable } from "@nestjs/common";
 import type { PoolClient } from "pg";
 import type { ActorContext } from "../../common/security/actor-context";
-import type { PlatformIntegrityService } from "../../platform/platform-integrity.service";
-import type { LessonSettlementService } from "../commerce/lesson-settlement.service";
-import type { CrmPolicy } from "../crm.policy";
+import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
+import { LessonSettlementService } from "../commerce/lesson-settlement.service";
+import { CrmPolicy } from "../crm.policy";
 import type {
   CreateSchedulePlanDto,
   SchedulePlanRowDto,
   UpdateSchedulePlanDto,
 } from "../dto/schedule-plan.dto";
 import type { LessonCommandMetadata } from "./lesson-command-metadata";
-import type { LessonSeriesCommandService } from "./lesson-series-command.service";
+import { LessonSeriesCommandService } from "./lesson-series-command.service";
 import { lockSchedulePlanSeries } from "./schedule-locks";
-import type {
-  NormalizedSchedulePlanCreate,
-  PreparedSchedulePlanUpdate,
+import {
+  type NormalizedSchedulePlanCreate,
+  type PreparedSchedulePlanUpdate,
   SchedulePlanDefinitionService,
 } from "./schedule-plan-definition.service";
 import { failSchedulePlan } from "./schedule-plan-definition.service";
-import type { SchedulePlanRepository } from "./schedule-plan.repository";
-import type { ScheduleSeriesMaterializerService } from "./schedule-series-materializer.service";
+import { SchedulePlanRepository } from "./schedule-plan.repository";
+import { ScheduleSeriesMaterializerService } from "./schedule-series-materializer.service";
 
 export interface SchedulePlanMutationResult {
   id: string;

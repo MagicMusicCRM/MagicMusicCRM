@@ -12,8 +12,8 @@ import type {
   SchedulePlanRowDto,
   UpdateSchedulePlanDto,
 } from "../dto/schedule-plan.dto";
-import type {
-  LockedSchedulePlan,
+import {
+  type LockedSchedulePlan,
   SchedulePlanRepository,
 } from "./schedule-plan.repository";
 

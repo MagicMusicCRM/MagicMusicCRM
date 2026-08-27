@@ -5,9 +5,9 @@ import type {
   SchedulePlanTrayQuery,
 } from "../dto/schedule-plan.dto";
 import { failSchedulePlan } from "./schedule-plan-definition.service";
-import type {
+import {
   SchedulePlanRepository,
-  SchedulePlanTrayCursor,
+  type SchedulePlanTrayCursor,
 } from "./schedule-plan.repository";
 
 export interface SchedulePlanTrayProjection {
