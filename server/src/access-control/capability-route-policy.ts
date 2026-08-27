@@ -215,7 +215,7 @@ function isAnalyticsOrReportPath(path: string): boolean {
   return path.startsWith("/analytics") || path.includes("/reports");
 }
 
-function clientFinanceRoles(): readonly AccessRole[] {
+function clientAndStaffRoles(): readonly AccessRole[] {
   return ["client", ...staffRoles];
 }
 
@@ -498,13 +498,13 @@ function resolveClientCommercePolicy({
     return policy(
       "commerce.client_finance.read",
       "self",
-      clientFinanceRoles(),
+      clientAndStaffRoles(),
       "CommerceProjectionService actor-scoped client finance",
     );
   return policy(
     "commerce.client_finance.read",
     "self_or_assigned",
-    clientFinanceRoles(),
+    clientAndStaffRoles(),
     "CommerceProjectionService actor-scoped client finance",
   );
 }
@@ -577,7 +577,7 @@ function resolveClientFinanceResourcePolicy({
     return policy(
       "commerce.client_finance.read",
       "self_or_assigned",
-      clientFinanceRoles(),
+      clientAndStaffRoles(),
       "CrmPolicy student-finance/resource scope",
     );
   return policy(
@@ -808,7 +808,7 @@ function resolveContactPolicy({
     return policy(
       "crm.client.read.contacts",
       "self_or_assigned",
-      clientFinanceRoles(),
+      clientAndStaffRoles(),
       "CRM contact/family resource policy",
     );
   return policy(
@@ -867,7 +867,7 @@ function resolveDefaultPolicy(): CapabilityRoutePolicy {
   );
 }
 
-function resolveGenericReadPolicyStage(
+function resolveTimelineContactsAndReportingPolicyStage(
   context: RoutePolicyContext,
 ): CapabilityRoutePolicy | null {
   return (
@@ -877,7 +877,7 @@ function resolveGenericReadPolicyStage(
   );
 }
 
-function resolveGenericMutationPolicyStage(
+function resolveSettingsMutationAndDefaultPolicyStage(
   context: RoutePolicyContext,
 ): CapabilityRoutePolicy {
   return (
@@ -891,8 +891,8 @@ function resolveGenericCrmAndDefaultPolicy(
   context: RoutePolicyContext,
 ): CapabilityRoutePolicy {
   return (
-    resolveGenericReadPolicyStage(context) ??
-    resolveGenericMutationPolicyStage(context)
+    resolveTimelineContactsAndReportingPolicyStage(context) ??
+    resolveSettingsMutationAndDefaultPolicyStage(context)
   );
 }
 

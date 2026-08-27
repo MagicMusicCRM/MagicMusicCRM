@@ -289,6 +289,34 @@ describe("capability route policy", () => {
     );
   });
 
+  it("kills a regression that drops HEAD student balances from global school-finance read policy", () => {
+    expect(
+      resolveCapabilityRoutePolicy("HEAD", "/crm/student-balances"),
+    ).toEqual({
+      capabilityKey: "commerce.school_finance.read",
+      scope: "global",
+      legacyAllowedRoles: ["director", "system_admin"],
+      legacyPolicy: "CrmPolicy.assertCanReadSchoolFinance",
+    });
+  });
+
+  it("kills a regression that drops OPTIONS access-me from the authenticated self snapshot", () => {
+    expect(resolveCapabilityRoutePolicy("OPTIONS", "/access/me")).toEqual({
+      capabilityKey: "crm.client.read.basic",
+      scope: "self",
+      legacyAllowedRoles: [
+        "client",
+        "teacher",
+        "admin",
+        "manager",
+        "director",
+        "system_admin",
+      ],
+      legacyPolicy: "Authenticated actor reads own effective capability snapshot",
+      authenticatedOnly: true,
+    });
+  });
+
   it.each([
     [
       "normalizing /api, duplicate slashes, query, case, and a lower-case method for /access/me",
