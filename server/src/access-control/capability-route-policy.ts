@@ -270,7 +270,7 @@ function resolvePayrollAndReportingPolicy({
   return null;
 }
 
-function resolveClientCommerceAndTasksPolicy({
+function resolveClientCommerceReadAndContextPolicy({
   path,
   read,
 }: RoutePolicyContext): CapabilityRoutePolicy | null {
@@ -328,6 +328,13 @@ function resolveClientCommerceAndTasksPolicy({
     );
   }
 
+  return null;
+}
+
+function resolveSubscriptionFinancePolicy({
+  path,
+  read,
+}: RoutePolicyContext): CapabilityRoutePolicy | null {
   const legacySubscriptionIssue =
     !read &&
     (path === "/crm/subscriptions" ||
@@ -358,6 +365,13 @@ function resolveClientCommerceAndTasksPolicy({
     );
   }
 
+  return null;
+}
+
+function resolveSharedTasksPolicy({
+  path,
+  read,
+}: RoutePolicyContext): CapabilityRoutePolicy | null {
   if (path.includes("/shared-tasks")) {
     const sharedTaskClose =
       path.includes("/shared-tasks/") && path.endsWith("/close");
@@ -372,7 +386,17 @@ function resolveClientCommerceAndTasksPolicy({
   return null;
 }
 
-function resolveScheduleAndFacilitiesPolicy({
+function resolveClientCommerceAndTasksPolicy(
+  context: RoutePolicyContext,
+): CapabilityRoutePolicy | null {
+  return (
+    resolveClientCommerceReadAndContextPolicy(context) ??
+    resolveSubscriptionFinancePolicy(context) ??
+    resolveSharedTasksPolicy(context)
+  );
+}
+
+function resolveAttendanceAndLessonLifecyclePolicy({
   path,
   read,
 }: RoutePolicyContext): CapabilityRoutePolicy | null {
@@ -395,6 +419,13 @@ function resolveScheduleAndFacilitiesPolicy({
     );
   }
 
+  return null;
+}
+
+function resolveScheduleReferenceAndFacilitiesPolicy({
+  path,
+  read,
+}: RoutePolicyContext): CapabilityRoutePolicy | null {
   if (path.includes("/schedule-reference")) {
     return policy(
       read ? "schedule.lesson.read.assigned" : "config.crm.edit",
@@ -417,6 +448,13 @@ function resolveScheduleAndFacilitiesPolicy({
     );
   }
 
+  return null;
+}
+
+function resolveScheduleResourcePolicy({
+  path,
+  read,
+}: RoutePolicyContext): CapabilityRoutePolicy | null {
   if (
     !read &&
     (path === "/crm/branches" ||
@@ -457,6 +495,16 @@ function resolveScheduleAndFacilitiesPolicy({
   }
 
   return null;
+}
+
+function resolveScheduleAndFacilitiesPolicy(
+  context: RoutePolicyContext,
+): CapabilityRoutePolicy | null {
+  return (
+    resolveAttendanceAndLessonLifecyclePolicy(context) ??
+    resolveScheduleReferenceAndFacilitiesPolicy(context) ??
+    resolveScheduleResourcePolicy(context)
+  );
 }
 
 function resolveGenericCrmAndDefaultPolicy({
