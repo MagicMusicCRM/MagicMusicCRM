@@ -29,5 +29,21 @@ void main() {
     expect(view, isNot(contains('flutter_riverpod')));
     expect(view, isNot(contains('MagicCrmService')));
     expect(view, isNot(contains('magicCrmServiceProvider')));
+    expect(view, contains("import 'finance_state.dart';"));
+    expect(view, isNot(contains("import 'finance_controller.dart';")));
+  });
+
+  test('finance state is a service-free data boundary', () {
+    final stateFile = File(
+      'lib/features/manager/presentation/widgets/finance_state.dart',
+    );
+    expect(stateFile.existsSync(), isTrue);
+    final state = stateFile.readAsStringSync();
+
+    expect(state, isNot(contains('MagicCrmService')));
+    expect(state, isNot(contains('flutter_riverpod')));
+    expect(state, isNot(contains('reportFileOpenerProvider')));
+    expect(state, isNot(contains('finance_controller.dart')));
+    expect(state, isNot(contains('finance_widget')));
   });
 }

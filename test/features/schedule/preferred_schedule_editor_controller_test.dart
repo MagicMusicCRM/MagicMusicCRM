@@ -224,6 +224,8 @@ void main() {
     expect(view, isNot(contains('/services/')));
     expect(view, isNot(contains('MagicCrmService')));
     expect(view, isNot(contains('WidgetRef')));
+    expect(view, isNot(contains('preferred_schedule_editor_controller.dart')));
+    expect(view, contains('preferred_schedule_editor_state.dart'));
     expect(shell, contains('DirtyFormExitController'));
     expect(shell, contains('showDatePicker'));
     expect(shell, contains('showTimePicker'));

@@ -4,7 +4,7 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_models.dart';
 
-import 'preferred_schedule_editor_controller.dart';
+import 'preferred_schedule_editor_state.dart';
 
 class PreferredScheduleEditorView extends StatelessWidget {
   const PreferredScheduleEditorView({

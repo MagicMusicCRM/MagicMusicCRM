@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
-import 'package:magic_music_crm/features/manager/presentation/tasks/shared_task_editor_controller.dart';
+import 'package:magic_music_crm/features/manager/presentation/tasks/shared_task_editor_view_contract.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_models.dart';
 
 class SharedTaskEditorView extends StatelessWidget {
   const SharedTaskEditorView({
     super.key,
-    required this.controller,
+    required this.contract,
     required this.titleController,
     required this.bodyController,
     required this.audienceOptions,
@@ -16,7 +16,7 @@ class SharedTaskEditorView extends StatelessWidget {
     required this.onSubmit,
   });
 
-  final SharedTaskEditorController controller;
+  final SharedTaskEditorViewContract contract;
   final TextEditingController titleController, bodyController;
   final List<SharedTaskAudienceOption> audienceOptions;
   final bool embedded;
@@ -24,8 +24,9 @@ class SharedTaskEditorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final draft = controller.draft;
-    final frozen = controller.draftFrozen;
+    final snapshot = contract.snapshot;
+    final draft = snapshot.draft;
+    final frozen = snapshot.draftFrozen;
     final options = audienceOptions
         .where((option) => option.type == draft.audienceType)
         .toList();
@@ -41,7 +42,7 @@ class SharedTaskEditorView extends StatelessWidget {
               readOnly: frozen,
               enableInteractiveSelection: !frozen,
               decoration: const InputDecoration(labelText: 'Название'),
-              onChanged: controller.setTitle,
+              onChanged: contract.setTitle,
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField<String>(
@@ -54,7 +55,7 @@ class SharedTaskEditorView extends StatelessWidget {
                 DropdownMenuItem(value: 'medium', child: Text('Обычный')),
                 DropdownMenuItem(value: 'low', child: Text('Низкий')),
               ],
-              onChanged: frozen ? null : controller.setPriority,
+              onChanged: frozen ? null : contract.setPriority,
             ),
             const SizedBox(height: 10),
             TextField(
@@ -64,27 +65,27 @@ class SharedTaskEditorView extends StatelessWidget {
               minLines: 2,
               maxLines: 4,
               decoration: const InputDecoration(labelText: 'Описание'),
-              onChanged: controller.setBody,
+              onChanged: contract.setBody,
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('На весь день'),
               value: draft.allDay,
-              onChanged: frozen ? null : controller.setAllDay,
+              onChanged: frozen ? null : contract.setAllDay,
             ),
             SharedTaskDateTimeButton(
               label: 'Начало',
               value: draft.start,
               dateOnly: draft.allDay,
-              canInteract: () => !controller.draftFrozen,
-              onChanged: controller.setStart,
+              canInteract: () => !contract.snapshot.draftFrozen,
+              onChanged: contract.setStart,
             ),
             if (!draft.allDay)
               SharedTaskDateTimeButton(
                 label: 'Окончание',
                 value: draft.end ?? draft.start.add(const Duration(hours: 1)),
-                canInteract: () => !controller.draftFrozen,
-                onChanged: controller.setEnd,
+                canInteract: () => !contract.snapshot.draftFrozen,
+                onChanged: contract.setEnd,
               ),
             if (!draft.hasValidInterval) ...[
               const SizedBox(height: AppSpace.xs),
@@ -104,7 +105,7 @@ class SharedTaskEditorView extends StatelessWidget {
                 ButtonSegment(value: 'allBranches', label: Text('Вся школа')),
               ],
               selected: {draft.audienceType},
-              onSelectionChanged: frozen ? null : controller.setAudienceType,
+              onSelectionChanged: frozen ? null : contract.setAudienceType,
             ),
             if (draft.audienceType != 'allBranches') ...[
               const SizedBox(height: 10),
@@ -125,14 +126,12 @@ class SharedTaskEditorView extends StatelessWidget {
                       ),
                     )
                     .toList(),
-                onChanged: frozen ? null : controller.setAudienceTarget,
+                onChanged: frozen ? null : contract.setAudienceTarget,
               ),
             ],
             const SizedBox(height: 8),
             OutlinedButton.icon(
-              onPressed: controller.canAddAudience
-                  ? controller.addAudience
-                  : null,
+              onPressed: snapshot.canAddAudience ? contract.addAudience : null,
               icon: const Icon(Icons.group_add_outlined),
               label: const Text('Добавить получателя'),
             ),
@@ -144,29 +143,29 @@ class SharedTaskEditorView extends StatelessWidget {
                       label: Text(_audienceLabel(audience)),
                       onDeleted: frozen || draft.audiences.length == 1
                           ? null
-                          : () => controller.removeAudience(audience),
+                          : () => contract.removeAudience(audience),
                     ),
                   )
                   .toList(),
             ),
             const SizedBox(height: AppSpace.sm),
-            _AudiencePreview(controller: controller),
+            _AudiencePreview(contract: contract),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Напомнить в приложении'),
               subtitle: const Text('Можно выбрать точные дату и время'),
               value: draft.reminder,
-              onChanged: frozen ? null : controller.setReminder,
+              onChanged: frozen ? null : contract.setReminder,
             ),
             if (draft.reminder)
               SharedTaskDateTimeButton(
                 key: const Key('shared-task-reminder-at'),
                 label: 'Напомнить',
-                value: controller.effectiveReminderAt,
-                canInteract: () => !controller.draftFrozen,
-                onChanged: controller.setReminderAt,
+                value: snapshot.effectiveReminderAt,
+                canInteract: () => !contract.snapshot.draftFrozen,
+                onChanged: contract.setReminderAt,
               ),
-            if (controller.saveError != null) ...[
+            if (snapshot.saveError != null) ...[
               const SizedBox(height: AppSpace.sm),
               Text(
                 'Не удалось сохранить задачу. Повторите.',
@@ -188,7 +187,7 @@ class SharedTaskEditorView extends StatelessWidget {
         child: const Text('Отмена'),
       ),
       FilledButton(
-        onPressed: controller.canSubmit ? onSubmit : null,
+        onPressed: snapshot.canSubmit ? onSubmit : null,
         child: Text(draft.created ? 'Создать' : 'Сохранить'),
       ),
     ];
@@ -227,84 +226,87 @@ class SharedTaskEditorView extends StatelessWidget {
 }
 
 class _AudiencePreview extends StatelessWidget {
-  const _AudiencePreview({required this.controller});
+  const _AudiencePreview({required this.contract});
 
-  final SharedTaskEditorController controller;
+  final SharedTaskEditorViewContract contract;
 
   @override
-  Widget build(BuildContext context) => Container(
-    key: const Key('shared-task-audience-preview'),
-    padding: const EdgeInsets.all(AppSpace.md),
-    decoration: BoxDecoration(
-      color: Theme.of(context).colorScheme.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(AppRadius.control),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          'Кто получит задачу',
-          style: Theme.of(context).textTheme.titleSmall,
-        ),
-        const SizedBox(height: AppSpace.xs),
-        if (controller.previewLoading)
-          const LinearProgressIndicator(
-            key: Key('shared-task-audience-preview-loading'),
-          )
-        else if (controller.previewError != null) ...[
-          const Text(
-            'Не удалось проверить получателей. Задача не будет отправлена '
-            'без точного расчёта.',
-          ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
-              onPressed: controller.refreshAudiencePreview,
-              child: const Text('Повторить расчёт'),
-            ),
-          ),
-        ] else if (controller.preview case final preview?) ...[
+  Widget build(BuildContext context) {
+    final snapshot = contract.snapshot;
+    return Container(
+      key: const Key('shared-task-audience-preview'),
+      padding: const EdgeInsets.all(AppSpace.md),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppRadius.control),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
           Text(
-            'Сейчас получат: ${preview['totalRecipients'] ?? 0}',
-            key: const Key('shared-task-recipient-total'),
-            style: Theme.of(
-              context,
-            ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w700),
+            'Кто получит задачу',
+            style: Theme.of(context).textTheme.titleSmall,
           ),
-          for (final selector in controller.previewSelectors)
-            Padding(
-              padding: const EdgeInsets.only(top: AppSpace.xs),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    selector['mode'] == 'fixed'
-                        ? Icons.person_outline_rounded
-                        : Icons.account_tree_outlined,
-                    size: 18,
-                  ),
-                  const SizedBox(width: AppSpace.sm),
-                  Expanded(
-                    child: Text(
-                      '${selector['label'] ?? 'Получатель'}: '
-                      '${selector['mode'] == 'fixed' ? 'лично' : 'динамический состав'}; '
-                      'сейчас ${selector['currentRecipientCount'] ?? 0}',
-                    ),
-                  ),
-                ],
+          const SizedBox(height: AppSpace.xs),
+          if (snapshot.previewLoading)
+            const LinearProgressIndicator(
+              key: Key('shared-task-audience-preview-loading'),
+            )
+          else if (snapshot.previewError != null) ...[
+            const Text(
+              'Не удалось проверить получателей. Задача не будет отправлена '
+              'без точного расчёта.',
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: contract.refreshAudiencePreview,
+                child: const Text('Повторить расчёт'),
               ),
             ),
-          if (preview['hasDynamicMembership'] == true) ...[
-            const SizedBox(height: AppSpace.sm),
-            const Text(
-              'Для филиала и всей школы состав обновляется автоматически: '
-              'задачу увидят сотрудники, которые входят туда на момент работы.',
+          ] else if (snapshot.preview case final preview?) ...[
+            Text(
+              'Сейчас получат: ${preview['totalRecipients'] ?? 0}',
+              key: const Key('shared-task-recipient-total'),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w700),
             ),
+            for (final selector in snapshot.previewSelectors)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpace.xs),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      selector['mode'] == 'fixed'
+                          ? Icons.person_outline_rounded
+                          : Icons.account_tree_outlined,
+                      size: 18,
+                    ),
+                    const SizedBox(width: AppSpace.sm),
+                    Expanded(
+                      child: Text(
+                        '${selector['label'] ?? 'Получатель'}: '
+                        '${selector['mode'] == 'fixed' ? 'лично' : 'динамический состав'}; '
+                        'сейчас ${selector['currentRecipientCount'] ?? 0}',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (preview['hasDynamicMembership'] == true) ...[
+              const SizedBox(height: AppSpace.sm),
+              const Text(
+                'Для филиала и всей школы состав обновляется автоматически: '
+                'задачу увидят сотрудники, которые входят туда на момент работы.',
+              ),
+            ],
           ],
         ],
-      ],
-    ),
-  );
+      ),
+    );
+  }
 }
 
 class SharedTaskDateTimeButton extends StatelessWidget {

@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_task_editor_draft.dart';
+import 'package:magic_music_crm/features/manager/presentation/tasks/shared_task_editor_view_contract.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_data_source.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_models.dart';
 
@@ -38,7 +39,8 @@ class _MutationAttempt {
   final MagicMutationIdentity identity;
 }
 
-class SharedTaskEditorController extends ChangeNotifier {
+class SharedTaskEditorController extends ChangeNotifier
+    implements SharedTaskEditorViewContract {
   SharedTaskEditorController({
     required this.dataSource,
     Map<String, dynamic>? task,
@@ -93,18 +95,42 @@ class SharedTaskEditorController extends ChangeNotifier {
         : const [];
   }
 
+  @override
+  SharedTaskEditorViewSnapshot get snapshot => SharedTaskEditorViewSnapshot(
+    draft: _draft,
+    preview: _preview,
+    previewError: _previewError,
+    saveError: _saveError,
+    previewLoading: _previewLoading,
+    draftFrozen: draftFrozen,
+    canAddAudience: canAddAudience,
+    canSubmit: canSubmit,
+    effectiveReminderAt: effectiveReminderAt,
+    previewSelectors: List.unmodifiable(previewSelectors),
+  );
+
+  @override
   void setTitle(String value) => _updateDraft(_draft.copyWith(title: value));
+
+  @override
   void setBody(String value) => _updateDraft(_draft.copyWith(body: value));
 
+  @override
   void setPriority(String? value) {
     if (value == null) return;
     _updateDraft(_draft.copyWith(priority: value));
   }
 
+  @override
   void setAllDay(bool value) => _updateDraft(_draft.setAllDay(value));
+
+  @override
   void setStart(DateTime value) => _updateDraft(_draft.setStart(value));
+
+  @override
   void setEnd(DateTime value) => _updateDraft(_draft.copyWith(end: value));
 
+  @override
   void setAudienceType(Set<String> selection) {
     if (selection.isEmpty) return;
     _updateDraft(
@@ -112,14 +138,18 @@ class SharedTaskEditorController extends ChangeNotifier {
     );
   }
 
+  @override
   void setAudienceTarget(String? value) =>
       _updateDraft(_draft.copyWith(targetId: value));
 
+  @override
   void setReminder(bool value) => _updateDraft(_draft.setReminder(value));
 
+  @override
   void setReminderAt(DateTime value) =>
       _updateDraft(_draft.setReminderAt(value));
 
+  @override
   void addAudience() {
     if (_disposed || draftFrozen) return;
     final next = _draft.addAudience();
@@ -129,6 +159,7 @@ class SharedTaskEditorController extends ChangeNotifier {
     unawaited(refreshAudiencePreview());
   }
 
+  @override
   void removeAudience(Map<String, dynamic> audience) {
     if (_disposed || draftFrozen || _draft.audiences.length == 1) return;
     _draft = _draft.removeAudience(audience);
@@ -136,6 +167,7 @@ class SharedTaskEditorController extends ChangeNotifier {
     unawaited(refreshAudiencePreview());
   }
 
+  @override
   Future<void> refreshAudiencePreview() async {
     if (_disposed || draftFrozen) return;
     final generation = ++_previewGeneration;

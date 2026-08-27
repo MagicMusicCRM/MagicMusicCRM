@@ -129,7 +129,7 @@ class _SharedTaskEditorState extends State<SharedTaskEditor> {
 
   @override
   Widget build(BuildContext context) => SharedTaskEditorView(
-    controller: _controller,
+    contract: _controller,
     titleController: _title,
     bodyController: _body,
     audienceOptions: widget.audienceOptions,

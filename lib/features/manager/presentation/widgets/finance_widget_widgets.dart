@@ -8,7 +8,7 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/magic_desktop_scrollbar.dart';
 import 'package:magic_music_crm/core/widgets/magic_shimmer.dart';
 
-import 'finance_controller.dart';
+import 'finance_state.dart';
 
 typedef FinanceVoidAction = Future<void> Function();
 typedef FinanceValueAction<T> = Future<void> Function(T value);
