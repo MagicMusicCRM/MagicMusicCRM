@@ -5,21 +5,28 @@ import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
 import 'client_card_ui.dart';
 import 'subscription_issue_components.dart';
-import 'subscription_issue_controller.dart';
 import 'subscription_issue_models.dart';
 
 class SubscriptionIssueDiscountSection extends StatelessWidget {
   const SubscriptionIssueDiscountSection({
     super.key,
-    required this.controller,
     required this.draft,
     required this.fieldsEnabled,
+    required this.selectMode,
+    required this.validateValue,
+    required this.setValue,
+    required this.validateReason,
+    required this.setReason,
     required this.onChanged,
   });
 
-  final SubscriptionIssueController controller;
   final SubscriptionIssueDraft draft;
   final bool fieldsEnabled;
+  final ValueChanged<SubscriptionIssueDiscountMode> selectMode;
+  final FormFieldValidator<String> validateValue;
+  final ValueChanged<String> setValue;
+  final FormFieldValidator<String> validateReason;
+  final ValueChanged<String> setReason;
   final VoidCallback onChanged;
 
   @override
@@ -84,8 +91,8 @@ class SubscriptionIssueDiscountSection extends StatelessWidget {
                       : 'Скидка, ₽',
                   isDense: true,
                 ),
-                validator: controller.validateDiscountValue,
-                onChanged: controller.setDiscountValue,
+                validator: validateValue,
+                onChanged: setValue,
               ),
             ),
             second: TextFormField(
@@ -99,8 +106,8 @@ class SubscriptionIssueDiscountSection extends StatelessWidget {
                 hint: 'Например: семейная скидка',
                 isDense: true,
               ),
-              validator: controller.validateDiscountReason,
-              onChanged: controller.setDiscountReason,
+              validator: validateReason,
+              onChanged: setReason,
             ),
           ),
         ],
@@ -109,7 +116,7 @@ class SubscriptionIssueDiscountSection extends StatelessWidget {
   }
 
   void _selectMode(SubscriptionIssueDiscountMode mode) {
-    controller.selectDiscountMode(mode);
+    selectMode(mode);
     onChanged();
   }
 }
@@ -117,15 +124,23 @@ class SubscriptionIssueDiscountSection extends StatelessWidget {
 class SubscriptionIssueSurchargeSection extends StatelessWidget {
   const SubscriptionIssueSurchargeSection({
     super.key,
-    required this.controller,
     required this.draft,
     required this.fieldsEnabled,
+    required this.setEnabled,
+    required this.validateAmount,
+    required this.setAmount,
+    required this.validateReason,
+    required this.setReason,
     required this.onChanged,
   });
 
-  final SubscriptionIssueController controller;
   final SubscriptionIssueDraft draft;
   final bool fieldsEnabled;
+  final ValueChanged<bool> setEnabled;
+  final FormFieldValidator<String> validateAmount;
+  final ValueChanged<String> setAmount;
+  final FormFieldValidator<String> validateReason;
+  final ValueChanged<String> setReason;
   final VoidCallback onChanged;
 
   @override
@@ -159,8 +174,8 @@ class SubscriptionIssueSurchargeSection extends StatelessWidget {
                 label: 'Доплата, ₽',
                 isDense: true,
               ),
-              validator: controller.validateSurchargeAmount,
-              onChanged: controller.setSurchargeAmount,
+              validator: validateAmount,
+              onChanged: setAmount,
             ),
             second: TextFormField(
               key: const Key('subscription-surcharge-reason'),
@@ -173,8 +188,8 @@ class SubscriptionIssueSurchargeSection extends StatelessWidget {
                 hint: 'Например: дополнительное занятие',
                 isDense: true,
               ),
-              validator: controller.validateSurchargeReason,
-              onChanged: controller.setSurchargeReason,
+              validator: validateReason,
+              onChanged: setReason,
             ),
           ),
         ],
@@ -183,7 +198,7 @@ class SubscriptionIssueSurchargeSection extends StatelessWidget {
   }
 
   void _setEnabled(bool value) {
-    controller.setSurchargeEnabled(value);
+    setEnabled(value);
     onChanged();
   }
 }
@@ -191,20 +206,21 @@ class SubscriptionIssueSurchargeSection extends StatelessWidget {
 class SubscriptionIssueInstallmentSection extends StatelessWidget {
   const SubscriptionIssueInstallmentSection({
     super.key,
-    required this.controller,
     required this.draft,
     required this.fieldsEnabled,
+    required this.installments,
+    required this.setInstallmentCount,
     required this.onChanged,
   });
 
-  final SubscriptionIssueController controller;
   final SubscriptionIssueDraft draft;
   final bool fieldsEnabled;
+  final List<SubscriptionInstallmentInput> installments;
+  final ValueChanged<int> setInstallmentCount;
   final VoidCallback onChanged;
 
   @override
   Widget build(BuildContext context) {
-    final installments = controller.pricing.installments;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -241,7 +257,7 @@ class SubscriptionIssueInstallmentSection extends StatelessWidget {
 
   void _setInstallmentCount(int? value) {
     if (value == null) return;
-    controller.setInstallmentCount(value);
+    setInstallmentCount(value);
     onChanged();
   }
 }

@@ -5,23 +5,28 @@ import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 
 import 'client_card_ui.dart';
 import 'subscription_issue_components.dart';
-import 'subscription_issue_controller.dart';
 import 'subscription_issue_models.dart';
 
 class SubscriptionIssuePaymentSection extends StatelessWidget {
   const SubscriptionIssuePaymentSection({
     super.key,
-    required this.controller,
     required this.draft,
     required this.fieldsEnabled,
     required this.searchPayers,
+    required this.selectPayer,
+    required this.selectFundingMode,
+    required this.validatePurchaseReason,
+    required this.setPurchaseReason,
     required this.onChanged,
   });
 
-  final SubscriptionIssueController controller;
   final SubscriptionIssueDraft draft;
   final bool fieldsEnabled;
   final Future<List<SearchableSelectItem>> Function(String query) searchPayers;
+  final ValueChanged<SearchableSelectItem> selectPayer;
+  final ValueChanged<SubscriptionFundingMode> selectFundingMode;
+  final FormFieldValidator<String> validatePurchaseReason;
+  final ValueChanged<String> setPurchaseReason;
   final VoidCallback onChanged;
 
   void _change(VoidCallback action) {
@@ -55,7 +60,7 @@ class SubscriptionIssuePaymentSection extends StatelessWidget {
           enabled: fieldsEnabled,
           onSearch: searchPayers,
           onSelected: (item) {
-            if (item != null) _change(() => controller.selectPayer(item));
+            if (item != null) _change(() => selectPayer(item));
           },
         ),
         const SizedBox(height: AppSpace.md),
@@ -70,9 +75,8 @@ class SubscriptionIssuePaymentSection extends StatelessWidget {
                   draft.fundingMode == SubscriptionFundingMode.personalAccount,
               enabled: fieldsEnabled,
               onSelected: () => _change(
-                () => controller.selectFundingMode(
-                  SubscriptionFundingMode.personalAccount,
-                ),
+                () =>
+                    selectFundingMode(SubscriptionFundingMode.personalAccount),
               ),
             ),
             SubscriptionIssueModeChip(
@@ -82,9 +86,7 @@ class SubscriptionIssuePaymentSection extends StatelessWidget {
                   draft.fundingMode == SubscriptionFundingMode.installment,
               enabled: fieldsEnabled,
               onSelected: () => _change(
-                () => controller.selectFundingMode(
-                  SubscriptionFundingMode.installment,
-                ),
+                () => selectFundingMode(SubscriptionFundingMode.installment),
               ),
             ),
           ],
@@ -97,8 +99,8 @@ class SubscriptionIssuePaymentSection extends StatelessWidget {
           maxLength: 500,
           minLines: 1,
           maxLines: 3,
-          validator: controller.validatePurchaseReason,
-          onChanged: controller.setPurchaseReason,
+          validator: validatePurchaseReason,
+          onChanged: setPurchaseReason,
           decoration: clientCardInputDecoration(
             Theme.of(context).colorScheme,
             label: draft.payerStudentId == draft.recipientStudentId
