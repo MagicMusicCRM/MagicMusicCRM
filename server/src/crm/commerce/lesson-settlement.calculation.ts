@@ -68,6 +68,107 @@ export function calculateClientSettlement(input: {
   };
 }
 
+function parseTeacherValues(
+  configuredValue: string,
+  overrideValue: string | undefined,
+): { configured: bigint; overridden: bigint } {
+  if (
+    !/^\d+$/.test(configuredValue) ||
+    (overrideValue !== undefined && !/^\d+$/.test(overrideValue))
+  ) {
+    throw new LessonSettlementCalculationError("INVALID_TEACHER_VALUE");
+  }
+  const configured = BigInt(configuredValue);
+  const overridden = overrideValue === undefined
+    ? configured
+    : BigInt(overrideValue);
+  if (configured > maxMinor || overridden > maxMinor) {
+    throw new LessonSettlementCalculationError("TEACHER_VALUE_TOO_LARGE");
+  }
+  return { configured, overridden };
+}
+
+function teacherOverrideState(
+  mode: TeacherCompensationFactType,
+  overrideValue: string | undefined,
+  configured: bigint,
+  overridden: bigint,
+  overrideReason: string | undefined,
+): { hasOverride: boolean; normalizedReason: string | undefined } {
+  if (
+    (mode === "none" || mode === "standard") &&
+    overrideValue !== undefined
+  ) {
+    throw new LessonSettlementCalculationError("TEACHER_OVERRIDE_NOT_ALLOWED");
+  }
+  if (mode === "percent" && overridden > 20_000n) {
+    throw new LessonSettlementCalculationError("INVALID_TEACHER_PERCENT");
+  }
+  const hasOverride =
+    overrideValue !== undefined && overridden !== configured;
+  const normalizedReason = overrideReason?.trim() || undefined;
+  if (hasOverride && !normalizedReason) {
+    throw new LessonSettlementCalculationError(
+      "TEACHER_OVERRIDE_REASON_REQUIRED",
+    );
+  }
+  return { hasOverride, normalizedReason };
+}
+
+function resolveTeacherModeValues(
+  mode: TeacherCompensationFactType,
+  standardAmount: bigint,
+  configured: bigint,
+  overridden: bigint,
+  durationMinutes: number,
+): {
+  defaultValue: bigint;
+  actualValue: bigint;
+  rate: bigint;
+  amount: bigint;
+} {
+  switch (mode) {
+    case "none":
+      return { defaultValue: 0n, actualValue: 0n, rate: 0n, amount: 0n };
+    case "standard":
+      return {
+        defaultValue: standardAmount,
+        actualValue: standardAmount,
+        rate: standardAmount,
+        amount: standardAmount,
+      };
+    case "percent":
+      return {
+        defaultValue: standardAmount,
+        actualValue: overridden,
+        rate: standardAmount,
+        amount: roundRatio(standardAmount * overridden, 10_000n),
+      };
+    case "fixed":
+      return {
+        defaultValue: configured,
+        actualValue: overridden,
+        rate: overridden,
+        amount: overridden,
+      };
+    case "hourly":
+      return {
+        defaultValue: configured,
+        actualValue: overridden,
+        rate: overridden,
+        amount: roundRatio(overridden * BigInt(durationMinutes), 60n),
+      };
+    default:
+      mode satisfies never;
+      return {
+        defaultValue: configured,
+        actualValue: overridden,
+        rate: overridden,
+        amount: overridden,
+      };
+  }
+}
+
 export function calculateTeacherCompensation(input: {
   durationMinutes: number;
   legacyType: "fixed" | "hourly" | "none";
@@ -86,42 +187,24 @@ export function calculateTeacherCompensation(input: {
     : input.legacyType === "hourly"
       ? roundRatio(legacyRate * BigInt(input.durationMinutes), 60n)
       : 0n;
-  if (!/^\d+$/.test(input.configuredValue) ||
-      (input.overrideValue !== undefined && !/^\d+$/.test(input.overrideValue))) {
-    throw new LessonSettlementCalculationError("INVALID_TEACHER_VALUE");
-  }
-  const configured = BigInt(input.configuredValue);
-  const overridden = input.overrideValue === undefined
-    ? configured
-    : BigInt(input.overrideValue);
-  if (configured > maxMinor || overridden > maxMinor) {
-    throw new LessonSettlementCalculationError("TEACHER_VALUE_TOO_LARGE");
-  }
-  if ((input.mode === "none" || input.mode === "standard") &&
-      input.overrideValue !== undefined) {
-    throw new LessonSettlementCalculationError("TEACHER_OVERRIDE_NOT_ALLOWED");
-  }
-  if (input.mode === "percent" && overridden > 20_000n) {
-    throw new LessonSettlementCalculationError("INVALID_TEACHER_PERCENT");
-  }
-  const hasOverride = input.overrideValue !== undefined && overridden !== configured;
-  const overrideReason = input.overrideReason?.trim() || undefined;
-  if (hasOverride && !overrideReason) {
-    throw new LessonSettlementCalculationError("TEACHER_OVERRIDE_REASON_REQUIRED");
-  }
-
-  const defaultValue = input.mode === "standard" || input.mode === "percent"
-    ? standardAmount
-    : input.mode === "none" ? 0n : configured;
-  const actualValue = input.mode === "standard"
-    ? standardAmount
-    : input.mode === "none" ? 0n : overridden;
-  const rate = input.mode === "percent" ? standardAmount : actualValue;
-  const amount = input.mode === "hourly"
-    ? roundRatio(actualValue * BigInt(input.durationMinutes), 60n)
-    : input.mode === "percent"
-      ? roundRatio(standardAmount * actualValue, 10_000n)
-      : actualValue;
+  const { configured, overridden } = parseTeacherValues(
+    input.configuredValue,
+    input.overrideValue,
+  );
+  const { hasOverride, normalizedReason } = teacherOverrideState(
+    input.mode,
+    input.overrideValue,
+    configured,
+    overridden,
+    input.overrideReason,
+  );
+  const { defaultValue, actualValue, rate, amount } = resolveTeacherModeValues(
+    input.mode,
+    standardAmount,
+    configured,
+    overridden,
+    input.durationMinutes,
+  );
   if (standardAmount > maxMinor || amount > maxMinor) {
     throw new LessonSettlementCalculationError("TEACHER_AMOUNT_TOO_LARGE");
   }
@@ -132,6 +215,6 @@ export function calculateTeacherCompensation(input: {
     rateMinor: rate.toString(),
     snapshotRate: minorToRubles(rate),
     amountMinor: amount.toString(),
-    overrideReason: hasOverride ? overrideReason! : null,
+    overrideReason: hasOverride ? normalizedReason! : null,
   };
 }
