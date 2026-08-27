@@ -297,6 +297,129 @@ describe("SettingsService", () => {
     ]);
   });
 
+  it("projects canonical teacher options from configured fields in source order", async () => {
+    const { service } = createService([
+      {
+        key: "crm_custom_fields",
+        value: [
+          {
+            entity: "teachers",
+            key: "level",
+            label: "Уровень преподавателя",
+            type: "text",
+            required: false,
+          },
+          {
+            entity: "teachers",
+            key: "bio",
+            label: "О преподавателе",
+            type: "text",
+            required: true,
+          },
+          {
+            entity: "students",
+            key: "note",
+            label: "Заметка",
+            type: "text",
+            required: false,
+          },
+        ],
+        updated_at: "2026-08-28T00:00:00.000Z",
+        configuration_snapshot: {
+          fields: [
+            {
+              entityType: "lead",
+              key: "level",
+              options: [
+                " Начальный ",
+                "Начальный",
+                { label: " Средний ", active: true },
+                { label: "Архив", active: false },
+              ],
+            },
+            {
+              entityType: "contact",
+              key: "category",
+              options: ["Не использовать"],
+            },
+            {
+              entityType: "student",
+              key: "category",
+              active: false,
+              options: ["Архивная категория"],
+            },
+            {
+              entityType: "teacher",
+              key: "category",
+              optionSetKey: "categories",
+            },
+            {
+              key: "levels",
+              options: ["Средний", " Продвинутый "],
+            },
+          ],
+          optionSets: [
+            { key: "categories", options: ["Старый набор"] },
+            {
+              key: "categories",
+              options: [
+                " Взрослые ",
+                "Взрослые",
+                { label: " Дети ", active: true },
+                { label: "Архив", active: false },
+              ],
+            },
+          ],
+        },
+      },
+    ]);
+
+    await expect(service.getCrmCustomFields(admin)).resolves.toEqual({
+      key: "crm_custom_fields",
+      fields: [
+        {
+          entity: "teachers",
+          key: "level",
+          label: "Уровень преподавателя",
+          type: "select",
+          required: false,
+          options: ["Начальный", "Средний", "Продвинутый"],
+        },
+        {
+          entity: "teachers",
+          key: "bio",
+          label: "О преподавателе",
+          type: "text",
+          required: true,
+        },
+        {
+          entity: "students",
+          key: "note",
+          label: "Заметка",
+          type: "text",
+          required: false,
+        },
+        {
+          entity: "teachers",
+          key: "levels",
+          label: "Уровни обучения",
+          type: "select",
+          required: false,
+          options: ["Начальный", "Средний", "Продвинутый"],
+        },
+        {
+          entity: "teachers",
+          key: "categories",
+          label: "Категории",
+          type: "select",
+          required: false,
+          options: ["Взрослые", "Дети"],
+        },
+      ],
+      updatedAt: "2026-08-28T00:00:00.000Z",
+    });
+  });
+
   it("updates CRM custom field schema only for admins and records audit", async () => {
     const savedFields: CrmCustomFieldDefinitionDto[] = [
       {

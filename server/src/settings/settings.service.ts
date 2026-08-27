@@ -583,6 +583,137 @@ const DEFAULT_CRM_CUSTOM_FIELDS: CrmCustomFieldDefinition[] = [
   },
 ];
 
+type TeacherOptionTarget = "levels" | "categories";
+
+type CanonicalTeacherOptions = Record<TeacherOptionTarget, string[]>;
+
+const TEACHER_OPTION_SOURCE_ENTITIES = new Set([
+  "lead",
+  "leads",
+  "student",
+  "students",
+  "teacher",
+  "teachers",
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function indexOptionSets(value: unknown): Map<string, Record<string, unknown>> {
+  const optionSets = new Map<string, Record<string, unknown>>();
+  if (!Array.isArray(value)) return optionSets;
+  for (const item of value) {
+    if (!isRecord(item) || typeof item.key !== "string" || !item.key) continue;
+    optionSets.set(item.key, item);
+  }
+  return optionSets;
+}
+
+function teacherOptionTarget(key: unknown): TeacherOptionTarget | null {
+  if (key === "level" || key === "levels") return "levels";
+  if (key === "category" || key === "categories") return "categories";
+  return null;
+}
+
+function isTeacherOptionSourceEntity(value: unknown): boolean {
+  if (typeof value !== "string") return true;
+  const entity = value.trim().toLowerCase();
+  return !entity || TEACHER_OPTION_SOURCE_ENTITIES.has(entity);
+}
+
+function configuredFieldOptions(
+  field: Record<string, unknown>,
+  optionSets: Map<string, Record<string, unknown>>,
+): unknown {
+  const key = typeof field.optionSetKey === "string" ? field.optionSetKey : null;
+  return key ? optionSets.get(key)?.options : field.options;
+}
+
+function configuredOptionLabel(value: unknown): string | null {
+  if (typeof value === "string") return value;
+  if (!isRecord(value) || value.active === false) return null;
+  return typeof value.label === "string" ? value.label : null;
+}
+
+function configuredOptionLabels(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const labels: string[] = [];
+  for (const option of value) {
+    const raw = configuredOptionLabel(option);
+    if (raw === null) continue;
+    const label = raw.trim();
+    if (label.length > 0 && label.length <= 80) labels.push(label);
+  }
+  return labels;
+}
+
+function collectCanonicalTeacherOptions(
+  snapshot: Record<string, unknown>,
+): CanonicalTeacherOptions {
+  const canonical: CanonicalTeacherOptions = { levels: [], categories: [] };
+  const seen = { levels: new Set<string>(), categories: new Set<string>() };
+  const fields = Array.isArray(snapshot.fields) ? snapshot.fields : [];
+  const optionSets = indexOptionSets(snapshot.optionSets);
+  for (const value of fields) {
+    if (!isRecord(value) || value.active === false) continue;
+    if (!isTeacherOptionSourceEntity(value.entityType)) continue;
+    const key = typeof value.key === "string" ? value.key.toLowerCase() : "";
+    const target = teacherOptionTarget(key);
+    if (target === null) continue;
+    for (const label of configuredOptionLabels(configuredFieldOptions(value, optionSets))) {
+      if (seen[target].has(label)) continue;
+      seen[target].add(label);
+      canonical[target].push(label);
+    }
+  }
+  return canonical;
+}
+
+function projectTeacherField(
+  value: unknown,
+  canonical: CanonicalTeacherOptions,
+): unknown {
+  if (!isRecord(value) || value.entity !== "teachers") return value;
+  const target = teacherOptionTarget(value.key);
+  if (target === null || canonical[target].length === 0) return value;
+  return { ...value, type: "select", options: canonical[target] };
+}
+
+function appendMissingTeacherProjections(
+  fields: unknown[],
+  canonical: CanonicalTeacherOptions,
+): void {
+  const keys = new Set<string>();
+  for (const value of fields) {
+    if (!isRecord(value) || value.entity !== "teachers") continue;
+    if (typeof value.key === "string") keys.add(value.key);
+  }
+  for (const projection of [
+    { key: "levels", label: "Уровни обучения", options: canonical.levels },
+    { key: "categories", label: "Категории", options: canonical.categories },
+  ]) {
+    if (projection.options.length === 0 || keys.has(projection.key)) continue;
+    fields.push({
+      entity: "teachers",
+      key: projection.key,
+      label: projection.label,
+      type: "select",
+      required: false,
+      options: projection.options,
+    });
+  }
+}
+
+function projectTeacherFields(
+  fields: unknown[],
+  canonical: CanonicalTeacherOptions,
+): unknown[] {
+  const projected = fields.map((value) => projectTeacherField(value, canonical));
+  appendMissingTeacherProjections(projected, canonical);
+  return projected;
+}
+
 @Injectable()
 export class SettingsService {
   constructor(
@@ -797,163 +928,11 @@ export class SettingsService {
     fields: unknown[],
     snapshotValue: unknown,
   ): unknown[] {
-    if (
-      snapshotValue === null ||
-      typeof snapshotValue !== "object" ||
-      Array.isArray(snapshotValue)
-    ) {
-      return fields;
-    }
-    const snapshot = snapshotValue as Record<string, unknown>;
-    const configuredFields = Array.isArray(snapshot.fields)
-      ? snapshot.fields
-      : [];
-    const optionSets = new Map<string, Record<string, unknown>>();
-    if (Array.isArray(snapshot.optionSets)) {
-      for (const value of snapshot.optionSets) {
-        if (
-          value === null ||
-          typeof value !== "object" ||
-          Array.isArray(value)
-        ) {
-          continue;
-        }
-        const optionSet = value as Record<string, unknown>;
-        const key = typeof optionSet.key === "string" ? optionSet.key : null;
-        if (key) optionSets.set(key, optionSet);
-      }
-    }
-
-    const canonical = {
-      levels: [] as string[],
-      categories: [] as string[],
-    };
-    const seen = {
-      levels: new Set<string>(),
-      categories: new Set<string>(),
-    };
-    for (const value of configuredFields) {
-      if (value === null || typeof value !== "object" || Array.isArray(value)) {
-        continue;
-      }
-      const field = value as Record<string, unknown>;
-      if (field.active === false) continue;
-      const entity =
-        typeof field.entityType === "string"
-          ? field.entityType.trim().toLowerCase()
-          : "";
-      if (
-        entity.length > 0 &&
-        ![
-          "lead",
-          "leads",
-          "student",
-          "students",
-          "teacher",
-          "teachers",
-        ].includes(entity)
-      ) {
-        continue;
-      }
-      const key = typeof field.key === "string" ? field.key.toLowerCase() : "";
-      const target =
-        key === "level" || key === "levels"
-          ? "levels"
-          : key === "category" || key === "categories"
-            ? "categories"
-            : null;
-      if (target === null) continue;
-      const optionSetKey =
-        typeof field.optionSetKey === "string" ? field.optionSetKey : null;
-      const options = optionSetKey
-        ? optionSets.get(optionSetKey)?.options
-        : field.options;
-      for (const label of this.configuredOptionLabels(options)) {
-        if (seen[target].has(label)) continue;
-        seen[target].add(label);
-        canonical[target].push(label);
-      }
-    }
-
-    const projectedFields = fields.map((value) => {
-      if (value === null || typeof value !== "object" || Array.isArray(value)) {
-        return value;
-      }
-      const field = value as Record<string, unknown>;
-      if (field.entity !== "teachers") return field;
-      const target =
-        field.key === "level" || field.key === "levels"
-          ? "levels"
-          : field.key === "category" || field.key === "categories"
-            ? "categories"
-            : null;
-      if (target === null || canonical[target].length === 0) return field;
-      return { ...field, type: "select", options: canonical[target] };
-    });
-
-    const teacherKeys = new Set(
-      projectedFields.flatMap((value) => {
-        if (
-          value === null ||
-          typeof value !== "object" ||
-          Array.isArray(value)
-        ) {
-          return [];
-        }
-        const field = value as Record<string, unknown>;
-        return field.entity === "teachers" && typeof field.key === "string"
-          ? [field.key]
-          : [];
-      }),
+    if (!isRecord(snapshotValue)) return fields;
+    return projectTeacherFields(
+      fields,
+      collectCanonicalTeacherOptions(snapshotValue),
     );
-    const teacherProjections = [
-      {
-        key: "levels",
-        label: "Уровни обучения",
-        options: canonical.levels,
-      },
-      {
-        key: "categories",
-        label: "Категории",
-        options: canonical.categories,
-      },
-    ];
-    for (const projection of teacherProjections) {
-      if (projection.options.length === 0 || teacherKeys.has(projection.key)) {
-        continue;
-      }
-      projectedFields.push({
-        entity: "teachers",
-        key: projection.key,
-        label: projection.label,
-        type: "select",
-        required: false,
-        options: projection.options,
-      });
-    }
-
-    return projectedFields;
-  }
-
-  private configuredOptionLabels(value: unknown): string[] {
-    if (!Array.isArray(value)) return [];
-    const labels: string[] = [];
-    for (const option of value) {
-      const raw =
-        typeof option === "string"
-          ? option
-          : option !== null &&
-              typeof option === "object" &&
-              !Array.isArray(option)
-            ? (option as Record<string, unknown>).active === false
-              ? null
-              : (option as Record<string, unknown>).label
-            : null;
-      if (typeof raw !== "string") continue;
-      const label = raw.trim();
-      if (label.length > 0 && label.length <= 80) labels.push(label);
-    }
-    return labels;
   }
 
   private normalizeFieldKey(value: unknown): string {
