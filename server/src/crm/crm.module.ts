@@ -147,6 +147,11 @@ import { PaymentReversalRepository } from "./commerce/payment-reversal.repositor
 import { PaymentReversalService } from "./commerce/payment-reversal.service";
 import { PaymentCorrectionService } from "./commerce/payment-correction.service";
 import { SchedulePlanRepository } from "./schedule/schedule-plan.repository";
+import { SchedulePlanDefinitionService } from "./schedule/schedule-plan-definition.service";
+import { SchedulePlanQueryService } from "./schedule/schedule-plan-query.service";
+import { SchedulePlanConstraintPreviewService } from "./schedule/schedule-plan-constraint-preview.service";
+import { SchedulePlanMutationService } from "./schedule/schedule-plan-mutation.service";
+import { SchedulePlanEndService } from "./schedule/schedule-plan-end.service";
 import { SchedulePlanService } from "./schedule/schedule-plan.service";
 import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-correction.service";
 
@@ -256,6 +261,11 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     LessonCommandService,
     LessonSeriesCommandService,
     SchedulePlanRepository,
+    SchedulePlanDefinitionService,
+    SchedulePlanQueryService,
+    SchedulePlanConstraintPreviewService,
+    SchedulePlanMutationService,
+    SchedulePlanEndService,
     SchedulePlanService,
     LessonTransitionPreparationService,
     LessonTransitionFinancialService,
