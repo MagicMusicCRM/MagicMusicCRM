@@ -18,6 +18,11 @@ import { ScheduleSeriesMaterializerService } from "./schedule-series-materialize
 import { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
 import { LessonRequiredFieldValidator } from "./lesson-required-field.validator";
 import { LessonSeriesCommandService } from "./lesson-series-command.service";
+import { SchedulePlanConstraintPreviewService } from "./schedule-plan-constraint-preview.service";
+import { SchedulePlanDefinitionService } from "./schedule-plan-definition.service";
+import { SchedulePlanEndService } from "./schedule-plan-end.service";
+import { SchedulePlanMutationService } from "./schedule-plan-mutation.service";
+import { SchedulePlanQueryService } from "./schedule-plan-query.service";
 import { SchedulePlanRepository } from "./schedule-plan.repository";
 import { SchedulePlanService } from "./schedule-plan.service";
 
@@ -68,8 +73,12 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       reservations,
     );
     const availability = new AvailabilityRepository(database);
+    const platform = new PlatformIntegrityService(
+      database,
+      new PlatformIntegrityRepository(),
+    );
     const series = new LessonSeriesCommandService(
-      new PlatformIntegrityService(database, new PlatformIntegrityRepository()),
+      platform,
       policy,
       new ClientReferenceService(database),
       new LessonRequiredFieldValidator(),
@@ -77,22 +86,43 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       lifecycle,
       reservations,
     );
+    const repository = new SchedulePlanRepository(database);
+    const definition = new SchedulePlanDefinitionService(repository);
+    const settlement = new LessonSettlementService(database);
+    const previewTokens = new SubscriptionPreviewTokenService({
+      get: (key: string, fallback: string) =>
+        key === "COMMERCE_PREVIEW_SECRET"
+          ? "schedule-plan-test-preview-secret-0123456789abcdef"
+          : fallback,
+    } as unknown as ConfigService);
     plans = new SchedulePlanService(
-      new PlatformIntegrityService(database, new PlatformIntegrityRepository()),
-      policy,
-      new SchedulePlanRepository(database),
-      series,
-      materializer,
-      database,
-      new SubscriptionPreviewTokenService({
-        get: (key: string, fallback: string) =>
-          key === "COMMERCE_PREVIEW_SECRET"
-            ? "schedule-plan-test-preview-secret-0123456789abcdef"
-            : fallback,
-      } as unknown as ConfigService),
-      lifecycle,
-      reservations,
-      new LessonSettlementService(database),
+      new SchedulePlanQueryService(repository),
+      new SchedulePlanConstraintPreviewService(
+        policy,
+        database,
+        definition,
+        series,
+        settlement,
+      ),
+      new SchedulePlanMutationService(
+        platform,
+        policy,
+        repository,
+        series,
+        materializer,
+        settlement,
+        definition,
+      ),
+      new SchedulePlanEndService(
+        platform,
+        policy,
+        repository,
+        database,
+        previewTokens,
+        lifecycle,
+        reservations,
+        definition,
+      ),
     );
   });
 
@@ -106,7 +136,8 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
     const actor = { userId: fixture.managerId, role: "manager" as const };
     const key = `plan-individual-${randomUUID()}`;
     let additional:
-      Awaited<ReturnType<typeof createAdditionalPlanResource>> | undefined;
+      | Awaited<ReturnType<typeof createAdditionalPlanResource>>
+      | undefined;
     try {
       additional = await createAdditionalPlanResource(pool, fixture.branchId);
       const dto = {
