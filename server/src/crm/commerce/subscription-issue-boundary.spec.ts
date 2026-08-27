@@ -12,6 +12,7 @@ const purchaseSource = readSource("subscription-purchase-command.service.ts");
 const grantSource = readSource("subscription-grant-command.service.ts");
 const resultSource = readSource("subscription-issue-result.service.ts");
 const contractsSource = readSource("subscription-issue.contracts.ts");
+const repositorySource = readSource("subscription-issue.repository.ts");
 const moduleSource = readFileSync(resolve(__dirname, "..", "crm.module.ts"), "utf8");
 
 const sourceNloc = (source: string) => {
@@ -105,6 +106,15 @@ const facadeContracts = [
 ] as const;
 
 describe("subscription issue owner boundaries", () => {
+  it("keeps shared contracts independent from persistence", () => {
+    expect(contractsSource).not.toMatch(
+      /from ["']\.\/subscription-issue\.repository["']/,
+    );
+    expect(repositorySource).toMatch(
+      /from ["']\.\/subscription-issue\.contracts["']/,
+    );
+  });
+
   it("wires every subscription issue owner privately and retains the facade pair", () => {
     const owners = [
       "SubscriptionCommercialTermsService",

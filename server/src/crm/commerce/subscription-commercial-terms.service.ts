@@ -8,15 +8,13 @@ import {
 } from "../dto/issue-subscription.dto";
 import { IssuedCommercialSnapshot } from "./commerce-schema.types";
 import {
+  PlannedInstallment,
   NormalizedDiscount,
   NormalizedIssue,
   NormalizedPurchase,
   NormalizedSurcharge,
 } from "./subscription-issue.contracts";
-import {
-  IssuePackageRow,
-  PlannedInstallment,
-} from "./subscription-issue.repository";
+import { IssuePackageRow } from "./subscription-issue.repository";
 
 @Injectable()
 export class SubscriptionCommercialTermsService {

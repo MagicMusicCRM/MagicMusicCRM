@@ -3,10 +3,6 @@ import {
   IssuedDiscountSnapshot,
   IssuedSurchargeSnapshot,
 } from "./commerce-schema.types";
-import {
-  IssueDiscountColumns,
-  PlannedInstallment,
-} from "./subscription-issue.repository";
 import { SubscriptionPurchasePreviewTokenPayload } from "./subscription-preview-token";
 
 export interface CommerceMutationMetadata {
@@ -17,6 +13,19 @@ export interface CommerceMutationMetadata {
 export interface IssueMutationResult extends Record<string, unknown> {
   entityId: string;
   version: number;
+}
+
+export interface IssueDiscountColumns {
+  type: "none" | "percent" | "fixed";
+  percentBasisPoints: number | null;
+  fixedMinor: string | null;
+  reason: string | null;
+}
+
+export interface PlannedInstallment {
+  installmentNumber: number;
+  dueAt: Date;
+  amountMinor: string;
 }
 
 export interface NormalizedDiscount {

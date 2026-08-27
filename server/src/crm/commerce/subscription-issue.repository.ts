@@ -4,6 +4,10 @@ import { ActorContext } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
 import { branchIdExpr } from "../branch-scope";
 import { IssuedCommercialSnapshot } from "./commerce-schema.types";
+import {
+  IssueDiscountColumns,
+  PlannedInstallment,
+} from "./subscription-issue.contracts";
 
 export interface IssuePackageRow {
   id: string;
@@ -105,19 +109,6 @@ export interface PaymentAdjustmentSourceRow {
 interface IssuedPaymentTargetRow {
   id: string;
   currency_code: string;
-}
-
-export interface IssueDiscountColumns {
-  type: "none" | "percent" | "fixed";
-  percentBasisPoints: number | null;
-  fixedMinor: string | null;
-  reason: string | null;
-}
-
-export interface PlannedInstallment {
-  installmentNumber: number;
-  dueAt: Date;
-  amountMinor: string;
 }
 
 export interface PurchaseStudentRow {
