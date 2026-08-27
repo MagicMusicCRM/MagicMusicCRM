@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
-import 'package:magic_music_crm/core/widgets/telegram/chat_info_member_dialogs.dart';
 import 'package:magic_music_crm/core/widgets/telegram/chat_info_models.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -115,6 +114,86 @@ class ChatInfoMediaGrid extends StatelessWidget {
             ),
           ),
           child: ResolvedChatAttachmentImage(url: url, fit: BoxFit.cover),
+        );
+      },
+    );
+  }
+}
+
+class ResolvedChatAttachmentImage extends ConsumerStatefulWidget {
+  const ResolvedChatAttachmentImage({
+    super.key,
+    required this.url,
+    required this.fit,
+  });
+
+  final String url;
+  final BoxFit fit;
+
+  @override
+  ConsumerState<ResolvedChatAttachmentImage> createState() =>
+      _ResolvedChatAttachmentImageState();
+}
+
+class _ResolvedChatAttachmentImageState
+    extends ConsumerState<ResolvedChatAttachmentImage> {
+  String? _resolvedUrl;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolveUrl();
+  }
+
+  @override
+  void didUpdateWidget(covariant ResolvedChatAttachmentImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.url != widget.url) _resolveUrl();
+  }
+
+  Future<void> _resolveUrl() async {
+    setState(() {
+      _isLoading = true;
+      _resolvedUrl = null;
+    });
+    try {
+      final resolved = await ref
+          .read(chatAttachmentServiceProvider)
+          .resolveUrl(widget.url);
+      if (!mounted || widget.url.isEmpty) return;
+      setState(() {
+        _resolvedUrl = resolved;
+        _isLoading = false;
+      });
+    } catch (error) {
+      debugPrint('Media URL resolve error: $error');
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+    }
+    if (_resolvedUrl == null) {
+      return Container(
+        color: Colors.grey.shade800,
+        alignment: Alignment.center,
+        child: const Icon(Icons.broken_image_rounded, color: Colors.white70),
+      );
+    }
+    return LayoutBuilder(
+      builder: (_, constraints) {
+        final dpr = MediaQuery.of(context).devicePixelRatio;
+        int? cacheDimension(double extent) =>
+            !extent.isFinite || extent <= 0 ? null : (extent * dpr).round();
+        return Image.network(
+          _resolvedUrl!,
+          fit: widget.fit,
+          cacheWidth: cacheDimension(constraints.maxWidth),
+          cacheHeight: cacheDimension(constraints.maxHeight),
         );
       },
     );
@@ -254,77 +333,6 @@ class ChatInfoNotesList extends StatelessWidget {
         itemCount: notes.length,
         itemBuilder: (_, index) =>
             _NoteCard(note: notes[index], isDark: isDark),
-      ),
-    );
-  }
-}
-
-class ChatInfoTabHeaderDelegate extends SliverPersistentHeaderDelegate {
-  ChatInfoTabHeaderDelegate(this.tabBar);
-
-  final Widget tabBar;
-
-  @override
-  double get minExtent => 48;
-  @override
-  double get maxExtent => 48;
-  @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) => tabBar;
-  @override
-  bool shouldRebuild(ChatInfoTabHeaderDelegate oldDelegate) => false;
-}
-
-class ChatInfoActionButton extends StatelessWidget {
-  const ChatInfoActionButton({
-    super.key,
-    required this.icon,
-    required this.label,
-    required this.isDark,
-    this.onTap,
-    this.color,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool isDark;
-  final VoidCallback? onTap;
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) {
-    final iconColor = color ?? (isDark ? Colors.white : Colors.black);
-    final labelColor =
-        color ??
-        (isDark
-            ? TelegramColors.darkTextSecondary
-            : TelegramColors.lightTextSecondary);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                color: isDark
-                    ? TelegramColors.darkSurface
-                    : TelegramColors.lightSurface,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Icon(icon, color: iconColor),
-            ),
-            const SizedBox(height: 8),
-            Text(label, style: TextStyle(fontSize: 12, color: labelColor)),
-          ],
-        ),
       ),
     );
   }

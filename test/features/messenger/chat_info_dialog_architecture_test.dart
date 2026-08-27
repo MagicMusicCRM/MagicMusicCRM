@@ -17,7 +17,8 @@ const _serviceEffects = {
 const _budget = DartArchitectureBudget(
   ownerNlocLimit: 500,
   shellFileName: _shellFileName,
-  shellNlocLimit: 260,
+  // The shell owns tab composition so the view stays dependency-leaf UI.
+  shellNlocLimit: 275,
   shellImportLimit: 12,
   executableCcnLimit: 10,
   executableNlocLimit: 100,
@@ -48,6 +49,32 @@ void main() {
         reason: '$legacyName must stay deleted',
       );
     }
+  });
+
+  test('dialog composes tabs while the view stays presentation-only', () {
+    final shellSource = File(
+      '$_telegramPath/$_shellFileName',
+    ).readAsStringSync();
+    final viewSource = File(
+      '$_telegramPath/chat_info_view.dart',
+    ).readAsStringSync();
+    final tabsSource = File(
+      '$_telegramPath/chat_info_tabs.dart',
+    ).readAsStringSync();
+    final memberDialogsSource = File(
+      '$_telegramPath/chat_info_member_dialogs.dart',
+    ).readAsStringSync();
+
+    expect(shellSource, contains("chat_info_tabs.dart"));
+    expect(viewSource, isNot(contains("chat_info_tabs.dart")));
+    expect(viewSource, contains('required this.tabBar'));
+    expect(viewSource, contains('required this.tabBody'));
+    expect(tabsSource, isNot(contains("chat_info_member_dialogs.dart")));
+    expect(tabsSource, contains('class ResolvedChatAttachmentImage'));
+    expect(
+      memberDialogsSource,
+      isNot(contains('class ResolvedChatAttachmentImage')),
+    );
   });
 
   test('AST guard resists lexical and fixed-owner bypasses', () {

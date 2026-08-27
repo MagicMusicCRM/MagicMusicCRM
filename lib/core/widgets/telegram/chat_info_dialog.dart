@@ -8,6 +8,7 @@ import 'package:magic_music_crm/core/widgets/telegram/channel_editor_dialog.dart
 import 'package:magic_music_crm/core/widgets/telegram/chat_info_controller.dart';
 import 'package:magic_music_crm/core/widgets/telegram/chat_info_member_dialogs.dart';
 import 'package:magic_music_crm/core/widgets/telegram/chat_info_models.dart';
+import 'package:magic_music_crm/core/widgets/telegram/chat_info_tabs.dart';
 import 'package:magic_music_crm/core/widgets/telegram/chat_info_view.dart';
 
 class ChatInfoDialog extends ConsumerStatefulWidget {
@@ -104,12 +105,25 @@ class _ChatInfoDialogState extends ConsumerState<ChatInfoDialog>
   }
 
   @override
-  Widget build(BuildContext context) => ChatInfoView(
-    model: _controller.viewModel,
-    tabController: _tabController,
-    actions: this,
-    hasCloseAction: widget.onClose != null,
-  );
+  Widget build(BuildContext context) {
+    final model = _controller.viewModel;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return ChatInfoView(
+      model: model,
+      actions: this,
+      hasCloseAction: widget.onClose != null,
+      tabBar: ChatInfoTabBar(
+        tabController: _tabController,
+        isDark: isDark,
+        hasNotes: model.access.hasNotes,
+      ),
+      tabBody: ChatInfoTabBody(
+        model: model,
+        tabController: _tabController,
+        actions: this,
+      ),
+    );
+  }
 
   @override
   void close() => _closePanel();

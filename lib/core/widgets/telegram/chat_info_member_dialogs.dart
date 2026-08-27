@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'package:magic_music_crm/core/widgets/telegram/avatar_widget.dart';
 import 'package:magic_music_crm/core/widgets/telegram/chat_info_models.dart';
@@ -371,84 +369,4 @@ class ChatInfoMembersDialog extends StatelessWidget {
       ),
     ],
   );
-}
-
-class ResolvedChatAttachmentImage extends ConsumerStatefulWidget {
-  const ResolvedChatAttachmentImage({
-    super.key,
-    required this.url,
-    required this.fit,
-  });
-
-  final String url;
-  final BoxFit fit;
-
-  @override
-  ConsumerState<ResolvedChatAttachmentImage> createState() =>
-      _ResolvedChatAttachmentImageState();
-}
-
-class _ResolvedChatAttachmentImageState
-    extends ConsumerState<ResolvedChatAttachmentImage> {
-  String? _resolvedUrl;
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _resolveUrl();
-  }
-
-  @override
-  void didUpdateWidget(covariant ResolvedChatAttachmentImage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.url != widget.url) _resolveUrl();
-  }
-
-  Future<void> _resolveUrl() async {
-    setState(() {
-      _isLoading = true;
-      _resolvedUrl = null;
-    });
-    try {
-      final resolved = await ref
-          .read(chatAttachmentServiceProvider)
-          .resolveUrl(widget.url);
-      if (!mounted || widget.url.isEmpty) return;
-      setState(() {
-        _resolvedUrl = resolved;
-        _isLoading = false;
-      });
-    } catch (error) {
-      debugPrint('Media URL resolve error: $error');
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
-    }
-    if (_resolvedUrl == null) {
-      return Container(
-        color: Colors.grey.shade800,
-        alignment: Alignment.center,
-        child: const Icon(Icons.broken_image_rounded, color: Colors.white70),
-      );
-    }
-    return LayoutBuilder(
-      builder: (_, constraints) {
-        final dpr = MediaQuery.of(context).devicePixelRatio;
-        int? cacheDimension(double extent) =>
-            !extent.isFinite || extent <= 0 ? null : (extent * dpr).round();
-        return Image.network(
-          _resolvedUrl!,
-          fit: widget.fit,
-          cacheWidth: cacheDimension(constraints.maxWidth),
-          cacheHeight: cacheDimension(constraints.maxHeight),
-        );
-      },
-    );
-  }
 }

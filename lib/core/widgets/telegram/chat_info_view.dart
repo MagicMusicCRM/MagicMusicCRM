@@ -2,21 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'package:magic_music_crm/core/widgets/telegram/avatar_widget.dart';
 import 'package:magic_music_crm/core/widgets/telegram/chat_info_models.dart';
-import 'package:magic_music_crm/core/widgets/telegram/chat_info_tabs.dart';
+import 'package:magic_music_crm/core/widgets/telegram/chat_info_view_components.dart';
 
 class ChatInfoView extends StatelessWidget {
   const ChatInfoView({
     super.key,
     required this.model,
-    required this.tabController,
     required this.actions,
     required this.hasCloseAction,
+    required this.tabBar,
+    required this.tabBody,
   });
 
   final ChatInfoViewModel model;
-  final TabController tabController;
   final ChatInfoActions actions;
   final bool hasCloseAction;
+  final Widget tabBar;
+  final Widget tabBody;
 
   @override
   Widget build(BuildContext context) {
@@ -40,20 +42,10 @@ class ChatInfoView extends StatelessWidget {
             ),
             SliverPersistentHeader(
               pinned: true,
-              delegate: ChatInfoTabHeaderDelegate(
-                ChatInfoTabBar(
-                  tabController: tabController,
-                  isDark: isDark,
-                  hasNotes: model.access.hasNotes,
-                ),
-              ),
+              delegate: ChatInfoTabHeaderDelegate(tabBar),
             ),
           ],
-          body: ChatInfoTabBody(
-            model: model,
-            tabController: tabController,
-            actions: actions,
-          ),
+          body: tabBody,
         ),
       ),
     );
