@@ -2419,7 +2419,7 @@ In `chat_info_dialog_architecture_test.dart`, compute NLOC as nonblank, non-`//`
 flutter test test/features/messenger/chat_info_dialog_contract_test.dart test/features/messenger/chat_info_dialog_architecture_test.dart
 flutter test test/features/messenger/channel_group_lifecycle_widget_test.dart --plain-name "manager removes another participant from a group"
 flutter analyze --no-pub lib/core/widgets/telegram/chat_info_dialog.dart lib/core/widgets/telegram/chat_info_models.dart lib/core/widgets/telegram/chat_info_controller.dart lib/core/widgets/telegram/chat_info_view.dart lib/core/widgets/telegram/chat_info_tabs.dart lib/core/widgets/telegram/chat_info_member_dialogs.dart
-dart format --output=none --set-exit-if-changed lib/core/widgets/telegram test/features/messenger/chat_info_dialog_contract_test.dart test/features/messenger/chat_info_dialog_architecture_test.dart
+dart format --output=none --set-exit-if-changed lib/core/widgets/telegram/chat_info_dialog.dart lib/core/widgets/telegram/chat_info_models.dart lib/core/widgets/telegram/chat_info_controller.dart lib/core/widgets/telegram/chat_info_view.dart lib/core/widgets/telegram/chat_info_tabs.dart lib/core/widgets/telegram/chat_info_member_dialogs.dart test/features/messenger/chat_info_dialog_contract_test.dart test/features/messenger/chat_info_dialog_architecture_test.dart
 rg -n "limit: 100|Duration\(seconds: 15\)|onLeftGroup|onNavigateToChat|is_current_user|is_system|listProfileNotes|createProfileNote" lib/core/widgets/telegram -g "chat_info_*.dart"
 git diff --check
 repowise update --index-only
@@ -2449,6 +2449,7 @@ git commit -m "refactor(messenger-ui): split chat info dialog owners"
 - Create: `lib/features/manager/presentation/widgets/teacher_stats_models.dart`
 - Create: `lib/features/manager/presentation/widgets/teacher_stats_controller.dart`
 - Create: `lib/features/manager/presentation/widgets/teacher_stats_view.dart`
+- Create: `lib/features/manager/presentation/widgets/teacher_stats_components.dart`
 - Create: `lib/features/manager/presentation/widgets/teacher_stats_rate_dialogs.dart`
 - Create: `test/features/manager/teacher_stats_controller_test.dart`
 - Create: `test/features/manager/teacher_stats_architecture_test.dart`
@@ -2536,7 +2537,7 @@ Move report/catalog loading, query updates, selection, rate commands, export, nu
 
 - [ ] **Step H4: Extract the stateless report view**
 
-Move filters, selection bar, error/empty body, cards, unit rows, totals, and badges to `teacher_stats_view.dart`. The shell keeps the public constructor, provider reads used to instantiate/update the controller, controller listener, and lifecycle disposal.
+Move filters, selection bar, and the error/empty body to `teacher_stats_view.dart`; keep the coherent card, unit-row, total, and badge continuation in `teacher_stats_components.dart` so neither stateless owner exceeds 500 NLOC. The shell keeps the public constructor, provider reads used to instantiate/update the controller, controller listener, and lifecycle disposal.
 
 - [ ] **Step H5: Add structural guard**
 
@@ -2546,7 +2547,7 @@ Assert main NLOC `<= 240`, imports `<= 12`, every new file `<= 500` NLOC, and ab
 
 ```powershell
 flutter test test/features/manager/teacher_stats_bulk_rate_test.dart test/features/manager/teacher_stats_controller_test.dart test/features/manager/teacher_stats_architecture_test.dart
-flutter analyze --no-pub lib/features/manager/presentation/widgets/teacher_stats_widget.dart lib/features/manager/presentation/widgets/teacher_stats_models.dart lib/features/manager/presentation/widgets/teacher_stats_controller.dart lib/features/manager/presentation/widgets/teacher_stats_view.dart lib/features/manager/presentation/widgets/teacher_stats_rate_dialogs.dart
+flutter analyze --no-pub lib/features/manager/presentation/widgets/teacher_stats_widget.dart lib/features/manager/presentation/widgets/teacher_stats_models.dart lib/features/manager/presentation/widgets/teacher_stats_controller.dart lib/features/manager/presentation/widgets/teacher_stats_view.dart lib/features/manager/presentation/widgets/teacher_stats_components.dart lib/features/manager/presentation/widgets/teacher_stats_rate_dialogs.dart
 dart format --output=none --set-exit-if-changed lib/features/manager/presentation/widgets/teacher_stats_*.dart test/features/manager/teacher_stats_*_test.dart
 rg -n "editableLessonIds|settledLessons|setLessonsTeacherRate|setTeacherRate: true|teacher-stats-|validateReportExportBytes" lib/features/manager/presentation/widgets/teacher_stats_*.dart
 git diff --check
@@ -2559,7 +2560,7 @@ repowise health --file lib/features/manager/presentation/widgets/teacher_stats_w
 Record Tier B dependency SHA, commands, pass counts, metrics, all extracted-owner health results, and verify-only diff confirmation in `lane-h-teacher-stats.md`.
 
 ```powershell
-git add lib/features/manager/presentation/widgets/teacher_stats_widget.dart lib/features/manager/presentation/widgets/teacher_stats_models.dart lib/features/manager/presentation/widgets/teacher_stats_controller.dart lib/features/manager/presentation/widgets/teacher_stats_view.dart lib/features/manager/presentation/widgets/teacher_stats_rate_dialogs.dart test/features/manager/teacher_stats_controller_test.dart test/features/manager/teacher_stats_architecture_test.dart docs/superpowers/reports/campaign-12/lane-h-teacher-stats.md
+git add lib/features/manager/presentation/widgets/teacher_stats_widget.dart lib/features/manager/presentation/widgets/teacher_stats_models.dart lib/features/manager/presentation/widgets/teacher_stats_controller.dart lib/features/manager/presentation/widgets/teacher_stats_view.dart lib/features/manager/presentation/widgets/teacher_stats_components.dart lib/features/manager/presentation/widgets/teacher_stats_rate_dialogs.dart test/features/manager/teacher_stats_controller_test.dart test/features/manager/teacher_stats_architecture_test.dart docs/superpowers/reports/campaign-12/lane-h-teacher-stats.md
 git commit -m "refactor(reports): split teacher statistics owners"
 ```
 
@@ -2579,6 +2580,7 @@ git commit -m "refactor(reports): split teacher statistics owners"
 - Create: `lib/features/crm/presentation/client_card/subscription_issue_components.dart`
 - Create: `test/features/commerce/subscription_issue_controller_test.dart`
 - Create: `test/features/commerce/subscription_issue_architecture_test.dart`
+- Create: `test/features/commerce/subscription_issue_ui_regression_test.dart`
 - Create: `docs/superpowers/reports/campaign-12/lane-i-subscription-issue.md`
 
 **Verify only:** `client_card_student.dart`, `client_card.dart`, `magic_crm_service.dart`, `magic_crm_service_finance.dart`, and `subscription_issue_form_test.dart`.
@@ -2595,6 +2597,7 @@ class SubscriptionIssuePricing {
     required this.discountMinor,
     required this.surchargeMinor,
     required this.finalPriceMinor,
+    required this.amountsValid,
     required this.installments,
   });
 
@@ -2642,11 +2645,11 @@ class SubscriptionIssueController extends ChangeNotifier {
 
 Keep `showSubscriptionIssueFormSheet`, `SubscriptionIssueForm`, `SubscriptionIssueSubmission`, `SubscriptionIssueSubmit`, `SubscriptionIssuePreview`, and `SubscriptionIssueDiscountMode` import-compatible through declarations or exports from the public shell.
 
-**Invariants:** first submit previews and second commits; preview and commit inputs match; pricing change clears preview/error and rotates identity; attempted commit freezes fields; retry reuses identity/input; percent supports two decimals and PostgreSQL half-up; fixed discount is positive and no more than base; surcharge is positive with reason; foreign payer requires reason; installment count is `2..12`, remainder goes to first payments, dates are UTC month-clamped; insufficient balance never commits; all existing `subscription-*` keys and submit labels remain exact.
+**Invariants:** first submit previews and second commits; preview and commit inputs match; pricing change clears preview/error and rotates identity; a stale in-flight preview can never publish after the draft/identity changes; attempted commit freezes fields; retry reuses identity/input; percent supports two decimals and PostgreSQL half-up; changing discount mode clears both draft and visible amount; fixed discount is positive and no more than base; malformed/invalid monetary inputs render the total as `Не указано`; surcharge is positive with reason; foreign payer requires reason; installment count is `2..12`, remainder goes to first payments, dates are UTC month-clamped; insufficient balance never commits; all existing `subscription-*` keys and submit labels remain exact.
 
 - [ ] **Step I1: Add RED pricing/controller tests**
 
-Test exact cases: `0,01` percent produces one basis point; `100,01` is rejected; fixed amount above base is rejected; enabled surcharge needs positive amount and reason; final minor amount below installment count yields `Итог должен позволять 3 положительных платежа.`; `canCommit=false` never invokes submit and exposes `На личном счёте недостаточно средств.`; a pricing change after preview rotates identity; a failed commit retry keeps identity and purchase JSON.
+Test exact cases: `0,01` percent produces one basis point; `100,01` is rejected; fixed amount above base is rejected; enabled surcharge needs positive amount and reason; final minor amount below installment count yields `Итог должен позволять 3 положительных платежа.`; `canCommit=false` never invokes submit and exposes `На личном счёте недостаточно средств.`; a pricing change after preview rotates identity; a late preview is discarded after draft/identity rotation; a failed commit retry keeps identity and purchase JSON. Add widget regressions for percent-to-fixed visible-value reset and unavailable totals for malformed, over-base, and non-positive monetary inputs.
 
 - [ ] **Step I2: Run RED**
 
@@ -2666,12 +2669,12 @@ Move price/preview/installment/error/retry components and the form sections to i
 
 - [ ] **Step I5: Add structural guard**
 
-Assert shell `<= 220` NLOC, imports `<= 12`, `_SubscriptionIssueFormState <= 160` NLOC, every new file `<= 500` NLOC, and absence from shell of `_parseMoneyMinor`, `_parsePercentBasisPoints`, `_installments`, `_buildPurchase`, and pricing switches. Assert `onPreview` and `onSubmit` occur only in `subscription_issue_controller.dart`.
+Discover every `subscription_issue_*.dart` owner and parse it with analyzer AST. Assert shell `<= 220` NLOC, imports `<= 12`, `_SubscriptionIssueFormState <= 160` NLOC, every new file `<= 500` NLOC, every executable max CCN `<= 10`, bounded callable/type/member god/brain proxies, and absence from shell of pricing orchestration. Assert preview and submit effects occur only in `subscription_issue_controller.dart`, including aliases and typed/property invocations; negative fixtures must prove comments, strings, whitespace, aliases, a new owner, CCN, and type growth cannot bypass the guard.
 
 - [ ] **Step I6: Run lane smoke**
 
 ```powershell
-flutter test test/features/commerce/subscription_issue_form_test.dart test/features/commerce/subscription_issue_controller_test.dart test/features/commerce/subscription_issue_architecture_test.dart
+flutter test test/features/commerce/subscription_issue_form_test.dart test/features/commerce/subscription_issue_controller_test.dart test/features/commerce/subscription_issue_architecture_test.dart test/features/commerce/subscription_issue_ui_regression_test.dart
 flutter analyze --no-pub lib/features/crm/presentation/client_card/subscription_issue_sheet.dart lib/features/crm/presentation/client_card/subscription_issue_models.dart lib/features/crm/presentation/client_card/subscription_issue_pricing.dart lib/features/crm/presentation/client_card/subscription_issue_controller.dart lib/features/crm/presentation/client_card/subscription_issue_form_view.dart lib/features/crm/presentation/client_card/subscription_issue_components.dart
 dart format --output=none --set-exit-if-changed lib/features/crm/presentation/client_card/subscription_issue_*.dart test/features/commerce/subscription_issue_*_test.dart
 rg -n "previewToken|MagicMutationIdentity|canCommit|purchaseReason|installments|subscription-issue-submit|subscription-purchase-preview" lib/features/crm/presentation/client_card/subscription_issue_*.dart
@@ -2685,13 +2688,13 @@ repowise health --file lib/features/crm/presentation/client_card/subscription_is
 Record Tier C dependency SHA, exact smoke output, idempotency assertions, metrics, extracted-owner health, and verify-only diff confirmation in `lane-i-subscription-issue.md`.
 
 ```powershell
-git add lib/features/crm/presentation/client_card/subscription_issue_sheet.dart lib/features/crm/presentation/client_card/subscription_issue_models.dart lib/features/crm/presentation/client_card/subscription_issue_pricing.dart lib/features/crm/presentation/client_card/subscription_issue_controller.dart lib/features/crm/presentation/client_card/subscription_issue_form_view.dart lib/features/crm/presentation/client_card/subscription_issue_components.dart test/features/commerce/subscription_issue_controller_test.dart test/features/commerce/subscription_issue_architecture_test.dart docs/superpowers/reports/campaign-12/lane-i-subscription-issue.md
+git add lib/features/crm/presentation/client_card/subscription_issue_sheet.dart lib/features/crm/presentation/client_card/subscription_issue_models.dart lib/features/crm/presentation/client_card/subscription_issue_pricing.dart lib/features/crm/presentation/client_card/subscription_issue_controller.dart lib/features/crm/presentation/client_card/subscription_issue_form_view.dart lib/features/crm/presentation/client_card/subscription_issue_components.dart test/features/commerce/subscription_issue_controller_test.dart test/features/commerce/subscription_issue_architecture_test.dart test/features/commerce/subscription_issue_ui_regression_test.dart docs/superpowers/reports/campaign-12/lane-i-subscription-issue.md
 git commit -m "refactor(commerce-ui): split subscription issue form owners"
 ```
 
 ## Tier 3 Shared Boundary
 
-Lanes G/H/I may start only after Tier A/B/C and Tier D are integrated as specified. Their commits must not modify any verify-only file above. After cherry-picking G, H, and I, the integrator verifies `git diff $Tier3Base..HEAD --` against those paths, runs each listed lane smoke against the integrated graph, and owns any shared wiring commit. No lane adds shared wiring opportunistically.
+Lanes G/H/I may start only after Tier A/B/C and Tier D are integrated as specified. Their commits must not modify any verify-only file above. After cherry-picking G, H, and I, the integrator verifies `git diff $Tier3Base..HEAD --` against those paths, runs each listed lane smoke against the integrated graph, and owns any shared wiring commit. Shared review hardening centralizes the analyzer-AST metric machinery under `test/support/architecture/` and declares `analyzer` once as a direct dev dependency; raw RepoWise health/history/coverage remains an exact indexed tier/global gate rather than a flaky Dart unit property. No lane adds shared wiring opportunistically.
 
 ---
 
@@ -2731,11 +2734,17 @@ $Tier3VerifyOnly = @(
   'lib/core/services/magic_crm_service_core.dart',
   'lib/core/services/magic_crm_service_schedule.dart',
   'lib/core/services/magic_crm_service_finance.dart',
+  'lib/features/manager/presentation/reporting/report_export_files.dart',
   'lib/features/manager/presentation/widgets/reports_widget.dart',
   'lib/features/crm/presentation/client_card/client_card_student.dart',
   'lib/features/crm/presentation/client_card/client_card.dart',
+  'test/features/manager/teacher_stats_bulk_rate_test.dart',
+  'integration_test/teacher_payroll_device_test.dart',
   'test/features/commerce/subscription_issue_form_test.dart'
 )
+if ($Tier3VerifyOnly.Count -ne 19) {
+  throw "Tier 3 verify-only inventory drifted: $($Tier3VerifyOnly.Count)"
+}
 $Tier3SharedDiff = @(git diff --name-only "$Tier3Base..HEAD" -- $Tier3VerifyOnly)
 if ($Tier3SharedDiff.Count -ne 0) {
   throw "Tier 3 modified verify-only paths: $($Tier3SharedDiff -join ', ')"
@@ -2750,7 +2759,7 @@ Expected: the command exits without throwing and `$Tier3SharedDiff` is empty.
 flutter test test/features/messenger/chat_info_dialog_contract_test.dart test/features/messenger/chat_info_dialog_architecture_test.dart
 flutter test test/features/messenger/channel_group_lifecycle_widget_test.dart --plain-name "manager removes another participant from a group"
 flutter analyze --no-pub lib/core/widgets/telegram/chat_info_dialog.dart lib/core/widgets/telegram/chat_info_models.dart lib/core/widgets/telegram/chat_info_controller.dart lib/core/widgets/telegram/chat_info_view.dart lib/core/widgets/telegram/chat_info_tabs.dart lib/core/widgets/telegram/chat_info_member_dialogs.dart
-dart format --output=none --set-exit-if-changed lib/core/widgets/telegram test/features/messenger/chat_info_dialog_contract_test.dart test/features/messenger/chat_info_dialog_architecture_test.dart
+dart format --output=none --set-exit-if-changed lib/core/widgets/telegram/chat_info_dialog.dart lib/core/widgets/telegram/chat_info_models.dart lib/core/widgets/telegram/chat_info_controller.dart lib/core/widgets/telegram/chat_info_view.dart lib/core/widgets/telegram/chat_info_tabs.dart lib/core/widgets/telegram/chat_info_member_dialogs.dart test/features/messenger/chat_info_dialog_contract_test.dart test/features/messenger/chat_info_dialog_architecture_test.dart
 rg -n "limit: 100|Duration\(seconds: 15\)|onLeftGroup|onNavigateToChat|is_current_user|is_system|listProfileNotes|createProfileNote" lib/core/widgets/telegram -g "chat_info_*.dart"
 git diff --check
 repowise update --index-only
@@ -2762,8 +2771,8 @@ Expected: focused tests/analyze/format/diff pass; source check shows each listed
 - [ ] **T3.4 Re-run the exact Lane H smoke on the integrated graph**
 
 ```powershell
-flutter test test/features/manager/teacher_stats_bulk_rate_test.dart test/features/manager/teacher_stats_controller_test.dart test/features/manager/teacher_stats_architecture_test.dart
-flutter analyze --no-pub lib/features/manager/presentation/widgets/teacher_stats_widget.dart lib/features/manager/presentation/widgets/teacher_stats_models.dart lib/features/manager/presentation/widgets/teacher_stats_controller.dart lib/features/manager/presentation/widgets/teacher_stats_view.dart lib/features/manager/presentation/widgets/teacher_stats_rate_dialogs.dart
+flutter test test/features/manager/teacher_stats_bulk_rate_test.dart test/features/manager/teacher_stats_controller_test.dart test/features/manager/teacher_stats_architecture_test.dart test/features/manager/teacher_stats_rate_dialogs_test.dart
+flutter analyze --no-pub lib/features/manager/presentation/widgets/teacher_stats_widget.dart lib/features/manager/presentation/widgets/teacher_stats_models.dart lib/features/manager/presentation/widgets/teacher_stats_controller.dart lib/features/manager/presentation/widgets/teacher_stats_view.dart lib/features/manager/presentation/widgets/teacher_stats_components.dart lib/features/manager/presentation/widgets/teacher_stats_rate_dialogs.dart
 dart format --output=none --set-exit-if-changed lib/features/manager/presentation/widgets/teacher_stats_*.dart test/features/manager/teacher_stats_*_test.dart
 rg -n "editableLessonIds|settledLessons|setLessonsTeacherRate|setTeacherRate: true|teacher-stats-|validateReportExportBytes" lib/features/manager/presentation/widgets/teacher_stats_*.dart
 git diff --check
@@ -2776,7 +2785,7 @@ Expected: all named tests and checks pass with the Tier B backend contract alrea
 - [ ] **T3.5 Re-run the exact Lane I smoke on the integrated graph**
 
 ```powershell
-flutter test test/features/commerce/subscription_issue_form_test.dart test/features/commerce/subscription_issue_controller_test.dart test/features/commerce/subscription_issue_architecture_test.dart
+flutter test test/features/commerce/subscription_issue_form_test.dart test/features/commerce/subscription_issue_controller_test.dart test/features/commerce/subscription_issue_architecture_test.dart test/features/commerce/subscription_issue_ui_regression_test.dart
 flutter analyze --no-pub lib/features/crm/presentation/client_card/subscription_issue_sheet.dart lib/features/crm/presentation/client_card/subscription_issue_models.dart lib/features/crm/presentation/client_card/subscription_issue_pricing.dart lib/features/crm/presentation/client_card/subscription_issue_controller.dart lib/features/crm/presentation/client_card/subscription_issue_form_view.dart lib/features/crm/presentation/client_card/subscription_issue_components.dart
 dart format --output=none --set-exit-if-changed lib/features/crm/presentation/client_card/subscription_issue_*.dart test/features/commerce/subscription_issue_*_test.dart
 rg -n "previewToken|MagicMutationIdentity|canCommit|purchaseReason|installments|subscription-issue-submit|subscription-purchase-preview" lib/features/crm/presentation/client_card/subscription_issue_*.dart
