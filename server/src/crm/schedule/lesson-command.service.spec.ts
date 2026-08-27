@@ -1,7 +1,7 @@
 import { ActorContext } from "../../common/security/actor-context";
-import { LessonCommandService } from "./lesson-command.service";
+import { LessonConstraintPreviewService } from "./lesson-constraint-preview.service";
 
-describe("LessonCommandService constraint preview", () => {
+describe("LessonConstraintPreviewService", () => {
   it("uses the unified analyzer and preserves the requested lesson interval", async () => {
     const policy = { assertCanWriteCrm: jest.fn() };
     const analysis = {
@@ -13,17 +13,9 @@ describe("LessonCommandService constraint preview", () => {
     const constraints = {
       analyze: jest.fn().mockResolvedValue(analysis),
     };
-    const service = new LessonCommandService(
-      {} as never,
-      {} as never,
+    const service = new LessonConstraintPreviewService(
       policy as never,
-      {} as never,
-      {} as never,
       constraints as never,
-      {} as never,
-      {} as never,
-      {} as never,
-      {} as never,
     );
     const actor = {
       userId: "00000000-0000-4000-8000-000000000001",

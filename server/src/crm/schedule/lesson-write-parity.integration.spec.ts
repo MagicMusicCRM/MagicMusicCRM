@@ -11,9 +11,13 @@ import { CrmPolicy } from "../crm.policy";
 import { AvailabilityRepository } from "./availability.repository";
 import { ConstraintEngineRepository } from "./constraint-engine.repository";
 import { ScheduleConstraintEngine } from "./constraint-engine.service";
+import { LessonCommandRepository } from "./lesson-command.repository";
 import { LessonCommandService } from "./lesson-command.service";
+import { LessonConstraintPreviewService } from "./lesson-constraint-preview.service";
 import { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
+import { LessonPlannedSettlementCommandService } from "./lesson-planned-settlement-command.service";
 import { LessonRequiredFieldValidator } from "./lesson-required-field.validator";
+import { LessonWriteCommandService } from "./lesson-write-command.service";
 import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
 import { LessonSettlementService } from "../commerce/lesson-settlement.service";
 import { RealtimeBus } from "../../realtime/realtime-bus";
@@ -46,26 +50,48 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       getOrThrow: () => testDatabaseUrl,
     } as unknown as ConfigService);
     const availability = new AvailabilityRepository(database);
-    commands = new LessonCommandService(
+    const platform = new PlatformIntegrityService(
       database,
-      new PlatformIntegrityService(database, new PlatformIntegrityRepository()),
-      new CrmPolicy(),
-      new ClientReferenceService(database),
-      new LessonRequiredFieldValidator(),
-      new ScheduleConstraintEngine(
-        new ConstraintEngineRepository(database, availability),
-      ),
-      new LessonLifecycleRepository(database),
-      new SubscriptionReservationService(database, {
-        emitCrmChanged: jest.fn(),
-        emitFinanceChanged: jest.fn(),
-      } as unknown as RealtimeBus),
-      new LessonSettlementService(database),
-      new SubscriptionPreviewTokenService({
-        get: (key: string) => key === "COMMERCE_PREVIEW_SECRET"
+      new PlatformIntegrityRepository(),
+    );
+    const policy = new CrmPolicy();
+    const constraints = new ScheduleConstraintEngine(
+      new ConstraintEngineRepository(database, availability),
+    );
+    const reservations = new SubscriptionReservationService(database, {
+      emitCrmChanged: jest.fn(),
+      emitFinanceChanged: jest.fn(),
+    } as unknown as RealtimeBus);
+    const settlement = new LessonSettlementService(database);
+    const previewTokens = new SubscriptionPreviewTokenService({
+      get: (key: string) =>
+        key === "COMMERCE_PREVIEW_SECRET"
           ? "lesson-write-parity-preview-secret-32-bytes"
           : "",
-      } as unknown as ConfigService),
+    } as unknown as ConfigService);
+    const repository = new LessonCommandRepository(database);
+    commands = new LessonCommandService(
+      new LessonConstraintPreviewService(policy, constraints),
+      new LessonWriteCommandService(
+        platform,
+        policy,
+        new ClientReferenceService(database),
+        new LessonRequiredFieldValidator(),
+        constraints,
+        new LessonLifecycleRepository(database),
+        reservations,
+        settlement,
+        repository,
+      ),
+      new LessonPlannedSettlementCommandService(
+        database,
+        platform,
+        policy,
+        reservations,
+        settlement,
+        previewTokens,
+        repository,
+      ),
     );
   });
 
@@ -205,15 +231,17 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       );
       expect(count.rows[0]!.count).toBe("1");
 
-      await expect(commands.update(
-        actor,
-        editable.id,
-        {
-          expectedVersion: editable.version,
-          scheduledAt: "2026-07-27T11:00:00.000Z",
-        },
-        key("valid-drag"),
-      )).rejects.toMatchObject({ status: 422 });
+      await expect(
+        commands.update(
+          actor,
+          editable.id,
+          {
+            expectedVersion: editable.version,
+            scheduledAt: "2026-07-27T11:00:00.000Z",
+          },
+          key("valid-drag"),
+        ),
+      ).rejects.toMatchObject({ status: 422 });
     } finally {
       await cleanupFixture(pool, {
         ...fixture,
@@ -251,82 +279,88 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
     };
     try {
       await expectCommandError(
-        () => commands.create(
-          actor,
-          { ...complete, clientChargeType: undefined },
-          metadata("missing-source"),
-        ),
+        () =>
+          commands.create(
+            actor,
+            { ...complete, clientChargeType: undefined },
+            metadata("missing-source"),
+          ),
         {
           code: "LESSON_REQUIRED_FIELDS",
           fields: ["clientChargeType"],
         },
       );
       await expectCommandError(
-        () => commands.create(
-          actor,
-          { ...complete, financialDecision: undefined },
-          metadata("missing-decision"),
-        ),
+        () =>
+          commands.create(
+            actor,
+            { ...complete, financialDecision: undefined },
+            metadata("missing-decision"),
+          ),
         {
           code: "LESSON_SETTLEMENT_PLAN_REQUIRED",
           fields: ["financialDecision"],
         },
       );
       await expectCommandError(
-        () => commands.create(
-          actor,
-          {
-            ...complete,
-            financialDecision: {
-              teacherCompensationRuleKey: "none",
-            },
-          } as UpsertLessonDto,
-          metadata("missing-settlement"),
-        ),
+        () =>
+          commands.create(
+            actor,
+            {
+              ...complete,
+              financialDecision: {
+                teacherCompensationRuleKey: "none",
+              },
+            } as UpsertLessonDto,
+            metadata("missing-settlement"),
+          ),
         {
           code: "SETTLEMENT_TYPE_NOT_ALLOWED",
           field: "settlementTypeKey",
         },
       );
       await expectCommandError(
-        () => commands.create(
-          actor,
-          {
-            ...complete,
-            financialDecision: { settlementTypeKey: "lesson" },
-          } as UpsertLessonDto,
-          metadata("missing-pay-rule"),
-        ),
+        () =>
+          commands.create(
+            actor,
+            {
+              ...complete,
+              financialDecision: { settlementTypeKey: "lesson" },
+            } as UpsertLessonDto,
+            metadata("missing-pay-rule"),
+          ),
         {
           code: "TEACHER_COMPENSATION_RULE_NOT_FOUND",
           field: "teacherCompensationRuleKey",
         },
       );
       await expectCommandError(
-        () => commands.create(
-          actor,
-          {
-            ...complete,
-            clientChargeType: "subscription",
-            subscriptionId: undefined,
-          },
-          metadata("subscription-without-id"),
-        ),
+        () =>
+          commands.create(
+            actor,
+            {
+              ...complete,
+              clientChargeType: "subscription",
+              subscriptionId: undefined,
+            },
+            metadata("subscription-without-id"),
+          ),
         {
           code: "INVALID_FINANCIAL_SNAPSHOT",
           fields: ["clientChargeType", "subscriptionId"],
         },
       );
       await expectCommandError(
-        () => commands.create(
-          actor,
-          {
-            ...complete,
-            clientChargeType: "none",
-            clientChargeValue: 0,
-          },
-          metadata("paid-without-source"),
-        ),
+        () =>
+          commands.create(
+            actor,
+            {
+              ...complete,
+              clientChargeType: "none",
+              clientChargeValue: 0,
+            },
+            metadata("paid-without-source"),
+          ),
         { code: "CLIENT_FUNDING_SOURCE_REQUIRED" },
       );
 
@@ -877,18 +911,22 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
         commitMetadata,
       );
       expect(committed).toMatchObject({ version: 2, replayed: false });
-      await expect(commands.updateSettlementPlan(
-        actor,
-        lesson.id,
-        { ...change, previewToken: preview.previewToken, confirm: true },
-        metadata("stale"),
-      )).rejects.toMatchObject({ status: 409 });
-      await expect(commands.updateSettlementPlan(
-        actor,
-        lesson.id,
-        { ...change, previewToken: preview.previewToken, confirm: true },
-        commitMetadata,
-      )).resolves.toMatchObject({ version: 2, replayed: true });
+      await expect(
+        commands.updateSettlementPlan(
+          actor,
+          lesson.id,
+          { ...change, previewToken: preview.previewToken, confirm: true },
+          metadata("stale"),
+        ),
+      ).rejects.toMatchObject({ status: 409 });
+      await expect(
+        commands.updateSettlementPlan(
+          actor,
+          lesson.id,
+          { ...change, previewToken: preview.previewToken, confirm: true },
+          commitMetadata,
+        ),
+      ).resolves.toMatchObject({ version: 2, replayed: true });
 
       const persisted = await pool.query<{
         version: string;
@@ -1069,9 +1107,12 @@ async function createFixture(pool: Pool) {
       values ($1, 'Parity', 'Lead', $2)
       returning id
     `,
-    [branchId, `+7999${Math.floor(Math.random() * 10_000_000)
-      .toString()
-      .padStart(7, "0")}`],
+    [
+      branchId,
+      `+7999${Math.floor(Math.random() * 10_000_000)
+        .toString()
+        .padStart(7, "0")}`,
+    ],
   );
   return {
     branchId,
