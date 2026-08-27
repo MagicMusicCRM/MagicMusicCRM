@@ -1,0 +1,215 @@
+import 'package:flutter/foundation.dart';
+import 'package:magic_music_crm/core/api/magic_api_client.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
+import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
+
+import 'subscription_issue_models.dart';
+import 'subscription_issue_pricing.dart';
+
+class SubscriptionIssueController extends ChangeNotifier {
+  SubscriptionIssueController({
+    required Map<String, dynamic> package,
+    required String recipientStudentId,
+    required String recipientLabel,
+    required SubscriptionIssuePreview onPreview,
+    required SubscriptionIssueSubmit onSubmit,
+    DateTime? commandTimestamp,
+    SubscriptionIdentityFactory? identityFactory,
+  }) : _basePriceMinor = subscriptionPackageBasePriceMinor(package),
+       _commandTimestamp = (commandTimestamp ?? DateTime.now()).toUtc(),
+       _onPreview = onPreview,
+       _onSubmit = onSubmit,
+       _identityFactory = identityFactory ?? _createIdentity,
+       _draft = SubscriptionIssueDraft.fromPackage(
+         package: package,
+         recipientStudentId: recipientStudentId,
+         recipientLabel: recipientLabel,
+       ) {
+    _identity = _identityFactory();
+  }
+
+  static MagicMutationIdentity _createIdentity() =>
+      MagicMutationIdentity.create('subscription-purchase');
+
+  final BigInt _basePriceMinor;
+  final DateTime _commandTimestamp;
+  final SubscriptionIssuePreview _onPreview;
+  final SubscriptionIssueSubmit _onSubmit;
+  final SubscriptionIdentityFactory _identityFactory;
+
+  SubscriptionIssueDraft _draft;
+  late MagicMutationIdentity _identity;
+  SubscriptionPurchasePreview? _preview;
+  PurchaseSubscriptionInput? _frozenPurchase;
+  bool _busy = false;
+  bool _attempted = false;
+  String? _error;
+
+  SubscriptionIssueDraft get draft => _draft;
+  SubscriptionIssuePricing get pricing => SubscriptionIssuePricing.calculate(
+    draft: _draft,
+    basePriceMinor: _basePriceMinor,
+    commandTimestamp: _commandTimestamp,
+  );
+  SubscriptionPurchasePreview? get preview => _preview;
+  MagicMutationIdentity get identity => _identity;
+  bool get busy => _busy;
+  bool get attempted => _attempted;
+  bool get fieldsEnabled => !_attempted;
+  String? get error => _error;
+
+  void selectPayer(SearchableSelectItem item) {
+    _updateDraft(
+      _draft.copyWith(payerStudentId: item.id, payerLabel: item.label),
+    );
+  }
+
+  void selectFundingMode(SubscriptionFundingMode mode) {
+    _updateDraft(_draft.copyWith(fundingMode: mode));
+  }
+
+  void selectDiscountMode(SubscriptionIssueDiscountMode mode) {
+    if (!fieldsEnabled || _draft.discountMode == mode) return;
+    _updateDraft(_draft.copyWith(discountMode: mode, discountValue: ''));
+  }
+
+  void setDiscountValue(String value) {
+    _updateDraft(_draft.copyWith(discountValue: value));
+  }
+
+  void setDiscountReason(String value) {
+    _updateDraft(_draft.copyWith(discountReason: value));
+  }
+
+  void setSurchargeEnabled(bool value) {
+    _updateDraft(_draft.copyWith(surchargeEnabled: value));
+  }
+
+  void setSurchargeAmount(String value) {
+    _updateDraft(_draft.copyWith(surchargeAmount: value));
+  }
+
+  void setSurchargeReason(String value) {
+    _updateDraft(_draft.copyWith(surchargeReason: value));
+  }
+
+  void setPurchaseReason(String value) {
+    _updateDraft(_draft.copyWith(purchaseReason: value));
+  }
+
+  void setInstallmentCount(int value) {
+    _updateDraft(_draft.copyWith(installmentCount: value));
+  }
+
+  String? validateDiscountValue(String? _) =>
+      SubscriptionIssuePricing.validateDiscountValue(_draft, _basePriceMinor);
+  String? validateDiscountReason(String? _) =>
+      SubscriptionIssuePricing.validateDiscountReason(_draft);
+  String? validateSurchargeAmount(String? _) =>
+      SubscriptionIssuePricing.validateSurchargeAmount(_draft);
+  String? validateSurchargeReason(String? _) =>
+      SubscriptionIssuePricing.validateSurchargeReason(_draft);
+  String? validatePurchaseReason(String? _) =>
+      SubscriptionIssuePricing.validatePurchaseReason(_draft);
+
+  PurchaseSubscriptionInput buildPurchase() {
+    if (_frozenPurchase != null) return _frozenPurchase!;
+    final currentPricing = pricing;
+    if (!currentPricing.isValid) {
+      throw StateError(currentPricing.error!);
+    }
+    SubscriptionDiscountInput? discount;
+    switch (_draft.discountMode) {
+      case SubscriptionIssueDiscountMode.none:
+        break;
+      case SubscriptionIssueDiscountMode.percent:
+        discount = SubscriptionDiscountInput.percent(
+          basisPoints: currentPricing.discountBasisPoints!,
+          reason: _draft.discountReason,
+        );
+        break;
+      case SubscriptionIssueDiscountMode.fixed:
+        discount = SubscriptionDiscountInput.fixed(
+          fixedMinor: currentPricing.discountMinor,
+          reason: _draft.discountReason,
+        );
+        break;
+    }
+    return PurchaseSubscriptionInput(
+      payerStudentId: _draft.payerStudentId,
+      fundingMode: _draft.fundingMode,
+      purchaseReason: _draft.purchaseReason,
+      issue: IssueSubscriptionInput(
+        packageId: _draft.packageId,
+        discount: discount,
+        installments: currentPricing.installments,
+        surcharge: _draft.surchargeEnabled
+            ? SubscriptionSurchargeInput(
+                amountMinor: currentPricing.surchargeMinor,
+                reason: _draft.surchargeReason,
+              )
+            : null,
+      ),
+    );
+  }
+
+  Future<SubscriptionIssueSubmitResult> submit() async {
+    if (_busy) return SubscriptionIssueSubmitResult.blocked;
+    final currentPricing = pricing;
+    if (!currentPricing.isValid) {
+      _error = currentPricing.error;
+      notifyListeners();
+      return SubscriptionIssueSubmitResult.blocked;
+    }
+    final purchase = buildPurchase();
+    _busy = true;
+    _error = null;
+    notifyListeners();
+    try {
+      final currentPreview = _preview;
+      if (currentPreview == null) {
+        _preview = await _onPreview(purchase);
+        _busy = false;
+        notifyListeners();
+        return SubscriptionIssueSubmitResult.previewLoaded;
+      }
+      if (!currentPreview.canCommit) {
+        _busy = false;
+        _error = 'На личном счёте недостаточно средств.';
+        notifyListeners();
+        return SubscriptionIssueSubmitResult.blocked;
+      }
+      _attempted = true;
+      _frozenPurchase = purchase;
+      notifyListeners();
+      await _onSubmit(
+        SubscriptionIssueSubmission(
+          purchase: purchase,
+          preview: currentPreview,
+          identity: _identity,
+        ),
+      );
+      _busy = false;
+      notifyListeners();
+      return SubscriptionIssueSubmitResult.committed;
+    } catch (caught) {
+      _busy = false;
+      _error = userErrorMessage(
+        caught,
+        fallback: 'Не удалось оформить абонемент.',
+      );
+      notifyListeners();
+      return SubscriptionIssueSubmitResult.failed;
+    }
+  }
+
+  void _updateDraft(SubscriptionIssueDraft next) {
+    if (!fieldsEnabled) return;
+    _draft = next;
+    _preview = null;
+    _error = null;
+    _identity = _identityFactory();
+    notifyListeners();
+  }
+}
