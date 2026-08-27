@@ -267,6 +267,30 @@ void finallyLocal(dynamic ref) {
     );
   });
 
+  test('catch parameters shadow provider-owned outer bindings', () {
+    final inspection = inspectDartSource(_shellFilename, r'''
+void catchShadow(dynamic ref) {
+  final crm = ref.read(magicCrmServiceProvider);
+  final stack = crm;
+  try {
+    throw StateError('failed');
+  } catch (crm, stack) {
+    crm.refreshLocal();
+    stack.toString();
+  }
+  crm.futureOuterCrmWrite();
+  stack.futureOuterStackWrite();
+}
+''');
+
+    expect(
+      inspection.invocationsOnProviderDerivedReceivers(const {
+        'magicCrmServiceProvider',
+      }),
+      {'futureOuterCrmWrite', 'futureOuterStackWrite'},
+    );
+  });
+
   test('provider token and read aliases cannot hide derived receivers', () {
     final inspection = inspectDartSource(_shellFilename, r'''
 void transitiveProvider(dynamic ref) {

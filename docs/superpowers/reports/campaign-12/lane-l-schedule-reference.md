@@ -12,7 +12,7 @@ The first controller/widget run failed because
 `ScheduleReferenceController` did not exist. The first architecture run found
 only the 796-line legacy owner instead of the six required semantic owners.
 After extraction and the boundary-hardening rounds, all 12 controller/widget
-contracts and all 12 AST guard tests pass.
+contracts and all 13 AST guard tests pass.
 
 ## Owners and structural gate
 
@@ -37,12 +37,13 @@ tokens, read tearoffs, constructor fields, parentheses, cascades, new owners,
 conditional/switch/loop/try alternatives, cross-method field writes, syntax
 errors, CCN, and type-callable bypasses fail. Positive fixtures prove same-name
 lexical bindings and class fields do not contaminate each other, unconditional
-and all-branch overwrites clear ownership, and `finally` applies after joins.
+and all-branch overwrites clear ownership, catch parameters shadow outer
+bindings, and `finally` applies after joins.
 
 Shared architecture support remains split into semantic owners below both
 limits: the facade is 277 token NLOC / 303 physical lines / max CCN 7, the
 metric visitors are 366 / 411 / 7, provider flow state is 94 / 114 / 4, and
-provider ownership dataflow is 413 / 459 / 8.
+provider ownership dataflow is 430 / 478 / 8.
 
 ## Contract proof
 
@@ -61,7 +62,7 @@ provider ownership dataflow is 413 / 459 / 8.
 
 ## Lane gate
 
-- Focused new tests: 24/24 PASS (12 controller/widget, 12 architecture).
+- Focused new tests: 25/25 PASS (12 controller/widget, 13 architecture).
 - Existing named workspace smoke: 2/2 PASS (read-only split view and director
   assignment/availability version chaining).
 - `flutter analyze --no-pub` on all six production owners and changed

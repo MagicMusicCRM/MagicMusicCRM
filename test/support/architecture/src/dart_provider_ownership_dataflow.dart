@@ -195,7 +195,7 @@ class _ProviderOwnershipVisitor extends RecursiveAstVisitor<void> {
     final catchStart = _state.join([before, tryState]);
     final alternatives = <ProviderFlowSnapshot>[tryState];
     for (final clause in node.catchClauses) {
-      alternatives.add(_statementState(clause.body, catchStart));
+      alternatives.add(_catchState(clause, catchStart));
     }
     final joined = _state.join(alternatives);
     final finallyBlock = node.finallyBlock;
@@ -273,6 +273,25 @@ class _ProviderOwnershipVisitor extends RecursiveAstVisitor<void> {
       statement.accept(this);
     }
     return _state.snapshot();
+  }
+
+  ProviderFlowSnapshot _catchState(
+    CatchClause clause,
+    ProviderFlowSnapshot start,
+  ) {
+    _state.restore(start);
+    _state.pushScope();
+    _declareCatchParameter(clause.exceptionParameter);
+    _declareCatchParameter(clause.stackTraceParameter);
+    clause.body.accept(this);
+    _state.popScope();
+    return _state.snapshot();
+  }
+
+  void _declareCatchParameter(CatchClauseParameter? parameter) {
+    if (parameter != null) {
+      _state.declare(parameter.name.lexeme, ProviderFlowValue.empty);
+    }
   }
 
   void _prepareForLoop(ForLoopParts parts) {
