@@ -1,6 +1,8 @@
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
 
+import 'dart_provider_flow_state.dart';
+
 ProviderOwnershipDataflow collectProviderOwnershipDataflow(
   CompilationUnit unit,
 ) {
@@ -43,38 +45,41 @@ class ProviderOwnedInvocation {
 
 class _ProviderOwnershipVisitor extends RecursiveAstVisitor<void> {
   final invocations = <ProviderOwnedInvocation>[];
-  final _scopes = <Map<String, _Binding>>[{}];
-  final _values = <int, _FlowValue>{};
-  final _cascadeTargets = <_FlowValue>[];
-  var _nextBindingId = 0;
+  final _state = ProviderFlowState();
+  final _cascadeTargets = <ProviderFlowValue>[];
 
   @override
   void visitBlock(Block node) {
-    _pushScope();
+    _state.pushScope();
     super.visitBlock(node);
-    _popScope();
+    _state.popScope();
   }
 
   @override
   void visitClassDeclaration(ClassDeclaration node) {
-    _pushScope();
+    _state.pushScope();
     final body = node.body;
     if (body is! BlockClassBody) {
-      _popScope();
+      _state.popScope();
       return;
     }
     final members = body.members;
     final fields = _registerFields(members.whereType<FieldDeclaration>());
-    final baseState = _capture(fields);
+    final baseState = _state.capture(fields);
     final states = members
         .whereType<ConstructorDeclaration>()
         .map((constructor) => _constructorState(constructor, fields, baseState))
         .toList();
-    _restore(_joinStates(states.isEmpty ? [baseState] : states));
-    for (final method in members.whereType<MethodDeclaration>()) {
+    final classBase = _state.join(states.isEmpty ? [baseState] : states);
+    final methods = members.whereType<MethodDeclaration>().toList();
+    final methodStates = methods.map(
+      (method) => _methodState(method, fields, classBase),
+    );
+    _state.restore(_state.join([classBase, ...methodStates]));
+    for (final method in methods) {
       _visitExecutable(method.parameters, method.body);
     }
-    _popScope();
+    _state.popScope();
   }
 
   @override
@@ -100,7 +105,7 @@ class _ProviderOwnershipVisitor extends RecursiveAstVisitor<void> {
 
   @override
   void visitVariableDeclaration(VariableDeclaration node) {
-    _declare(node.name.lexeme, _evaluate(node.initializer));
+    _state.declare(node.name.lexeme, _evaluate(node.initializer));
   }
 
   @override
@@ -123,41 +128,173 @@ class _ProviderOwnershipVisitor extends RecursiveAstVisitor<void> {
     _evaluateCascade(node);
   }
 
-  List<_Binding> _registerFields(Iterable<FieldDeclaration> declarations) {
-    final fields = <_Binding>[];
+  @override
+  void visitIfStatement(IfStatement node) {
+    _evaluate(node.expression);
+    final before = _state.snapshot();
+    final thenState = _statementState(node.thenStatement, before);
+    final elseStatement = node.elseStatement;
+    final elseState = elseStatement == null
+        ? before
+        : _statementState(elseStatement, before);
+    _state.restore(_state.join([thenState, elseState]));
+  }
+
+  @override
+  void visitSwitchStatement(SwitchStatement node) {
+    _evaluate(node.expression);
+    final before = _state.snapshot();
+    final states = node.members
+        .map((member) => _switchMemberState(member, before))
+        .toList();
+    if (!node.members.any((member) => member is SwitchDefault)) {
+      states.add(before);
+    }
+    _state.restore(_state.join(states));
+  }
+
+  @override
+  void visitWhileStatement(WhileStatement node) {
+    _evaluate(node.condition);
+    final before = _state.snapshot();
+    final bodyState = _statementState(node.body, before);
+    _state.restore(_state.join([before, bodyState]));
+  }
+
+  @override
+  void visitDoStatement(DoStatement node) {
+    final firstState = _statementState(node.body, _state.snapshot());
+    _state.restore(firstState);
+    _evaluate(node.condition);
+    final afterCondition = _state.snapshot();
+    final repeatedState = _statementState(node.body, afterCondition);
+    _state.restore(_state.join([afterCondition, repeatedState]));
+  }
+
+  @override
+  void visitForStatement(ForStatement node) {
+    _state.pushScope();
+    final parts = node.forLoopParts;
+    _prepareForLoop(parts);
+    final before = _state.snapshot();
+    final bodyState = _statementState(node.body, before);
+    _state.restore(bodyState);
+    if (parts is ForParts) {
+      for (final updater in parts.updaters) {
+        _evaluate(updater);
+      }
+    }
+    _state.restore(_state.join([before, _state.snapshot()]));
+    _state.popScope();
+  }
+
+  @override
+  void visitTryStatement(TryStatement node) {
+    final before = _state.snapshot();
+    final tryState = _statementState(node.body, before);
+    final catchStart = _state.join([before, tryState]);
+    final alternatives = <ProviderFlowSnapshot>[tryState];
+    for (final clause in node.catchClauses) {
+      alternatives.add(_statementState(clause.body, catchStart));
+    }
+    final joined = _state.join(alternatives);
+    final finallyBlock = node.finallyBlock;
+    _state.restore(
+      finallyBlock == null ? joined : _statementState(finallyBlock, joined),
+    );
+  }
+
+  List<ProviderBinding> _registerFields(
+    Iterable<FieldDeclaration> declarations,
+  ) {
+    final fields = <ProviderBinding>[];
     for (final declaration in declarations) {
       for (final variable in declaration.fields.variables) {
         fields.add(
-          _declare(variable.name.lexeme, _evaluate(variable.initializer)),
+          _state.declare(variable.name.lexeme, _evaluate(variable.initializer)),
         );
       }
     }
     return fields;
   }
 
-  Map<int, _FlowValue> _constructorState(
+  ProviderFlowSnapshot _constructorState(
     ConstructorDeclaration node,
-    List<_Binding> fields,
-    Map<int, _FlowValue> baseState,
+    List<ProviderBinding> fields,
+    ProviderFlowSnapshot baseState,
   ) {
-    _restore(baseState);
-    final outerState = Map<int, _FlowValue>.from(_values);
-    _pushScope();
+    _state.restore(baseState);
+    final outerState = _state.snapshot();
+    _state.pushScope();
     _declareParameters(node.parameters);
     _applyFieldFormals(node.parameters);
     for (final initializer in node.initializers) {
       _visitConstructorInitializer(initializer);
     }
     node.body.accept(this);
-    final result = _capture(fields);
-    _popScope();
-    _restore(outerState);
+    final result = _state.capture(fields);
+    _state.popScope();
+    _state.restore(outerState);
     return result;
+  }
+
+  ProviderFlowSnapshot _methodState(
+    MethodDeclaration node,
+    List<ProviderBinding> fields,
+    ProviderFlowSnapshot baseState,
+  ) {
+    _state.restore(baseState);
+    final outerState = _state.snapshot();
+    _state.pushScope();
+    final parameters = node.parameters;
+    if (parameters != null) _declareParameters(parameters);
+    node.body.accept(this);
+    final result = _state.capture(fields);
+    _state.popScope();
+    _state.restore(outerState);
+    return result;
+  }
+
+  ProviderFlowSnapshot _statementState(
+    Statement statement,
+    ProviderFlowSnapshot start,
+  ) {
+    _state.restore(start);
+    statement.accept(this);
+    return _state.snapshot();
+  }
+
+  ProviderFlowSnapshot _switchMemberState(
+    SwitchMember member,
+    ProviderFlowSnapshot start,
+  ) {
+    _state.restore(start);
+    for (final statement in member.statements) {
+      statement.accept(this);
+    }
+    return _state.snapshot();
+  }
+
+  void _prepareForLoop(ForLoopParts parts) {
+    if (parts is ForPartsWithDeclarations) {
+      parts.variables.accept(this);
+    } else if (parts is ForPartsWithExpression) {
+      _evaluate(parts.initialization);
+    } else if (parts is ForEachPartsWithDeclaration) {
+      _evaluate(parts.iterable);
+      _state.declare(parts.loopVariable.name.lexeme, ProviderFlowValue.empty);
+    } else if (parts is ForEachParts) {
+      _evaluate(parts.iterable);
+    }
+    if (parts is ForParts) _evaluate(parts.condition);
   }
 
   void _visitConstructorInitializer(ConstructorInitializer initializer) {
     if (initializer is ConstructorFieldInitializer) {
-      _assign(initializer.fieldName.name, _evaluate(initializer.expression));
+      _state.assign(
+        initializer.fieldName.name,
+        _evaluate(initializer.expression),
+      );
       return;
     }
     initializer.visitChildren(this);
@@ -168,32 +305,34 @@ class _ProviderOwnershipVisitor extends RecursiveAstVisitor<void> {
       final unwrapped = _unwrapParameter(parameter);
       if (unwrapped is FieldFormalParameter) {
         final name = unwrapped.name.lexeme;
-        _assignOuter(name, _read(name));
+        _state.assignOuter(name, _state.read(name));
       }
     }
   }
 
   void _visitExecutable(FormalParameterList? parameters, FunctionBody body) {
-    final outerState = Map<int, _FlowValue>.from(_values);
-    _pushScope();
+    final outerState = _state.snapshot();
+    _state.pushScope();
     if (parameters != null) _declareParameters(parameters);
     body.accept(this);
-    _popScope();
-    _restore(outerState);
+    _state.popScope();
+    _state.restore(outerState);
   }
 
   void _declareParameters(FormalParameterList parameters) {
     for (final parameter in parameters.parameters) {
       final name = _unwrapParameter(parameter).name?.lexeme;
-      if (name != null) _declare(name, _FlowValue.symbol(name));
+      if (name != null) {
+        _state.declare(name, ProviderFlowValue.symbol(name));
+      }
     }
   }
 
   FormalParameter _unwrapParameter(FormalParameter parameter) =>
       parameter is DefaultFormalParameter ? parameter.parameter : parameter;
 
-  _FlowValue _evaluate(Expression? expression) {
-    if (expression == null) return _FlowValue.empty;
+  ProviderFlowValue _evaluate(Expression? expression) {
+    if (expression == null) return ProviderFlowValue.empty;
     if (expression is MethodInvocation) {
       return _evaluateMethodInvocation(expression);
     }
@@ -207,8 +346,8 @@ class _ProviderOwnershipVisitor extends RecursiveAstVisitor<void> {
     return _evaluateValue(expression);
   }
 
-  _FlowValue _evaluateValue(Expression expression) {
-    if (expression is SimpleIdentifier) return _read(expression.name);
+  ProviderFlowValue _evaluateValue(Expression expression) {
+    if (expression is SimpleIdentifier) return _state.read(expression.name);
     if (expression is ParenthesizedExpression) {
       return _evaluate(expression.expression);
     }
@@ -220,24 +359,24 @@ class _ProviderOwnershipVisitor extends RecursiveAstVisitor<void> {
     }
     if (expression is FunctionExpression) {
       _visitExecutable(expression.parameters, expression.body);
-      return _FlowValue.empty;
+      return ProviderFlowValue.empty;
     }
     expression.visitChildren(this);
-    return _FlowValue.empty;
+    return ProviderFlowValue.empty;
   }
 
-  _FlowValue _evaluateMember(Expression? target, String memberName) {
+  ProviderFlowValue _evaluateMember(Expression? target, String memberName) {
     final receiver = _evaluate(target);
     if (memberName == 'read' || memberName == 'watch') {
-      return _FlowValue(readReceivers: receiver.symbols);
+      return ProviderFlowValue(readReceivers: receiver.symbols);
     }
-    return _FlowValue.symbol(memberName);
+    return ProviderFlowValue.symbol(memberName);
   }
 
-  _FlowValue _evaluateMethodInvocation(MethodInvocation node) {
+  ProviderFlowValue _evaluateMethodInvocation(MethodInvocation node) {
     final callable = node.target == null && !node.isCascaded
-        ? _read(node.methodName.name)
-        : _FlowValue.empty;
+        ? _state.read(node.methodName.name)
+        : ProviderFlowValue.empty;
     final receiver = node.isCascaded && _cascadeTargets.isNotEmpty
         ? _cascadeTargets.last
         : _evaluate(node.target);
@@ -249,39 +388,46 @@ class _ProviderOwnershipVisitor extends RecursiveAstVisitor<void> {
     if (node.methodName.name == 'read' || node.methodName.name == 'watch') {
       return _serviceValue(receiver.symbols, arguments);
     }
-    return _FlowValue.empty;
+    return ProviderFlowValue.empty;
   }
 
-  _FlowValue _evaluateFunctionInvocation(FunctionExpressionInvocation node) {
+  ProviderFlowValue _evaluateFunctionInvocation(
+    FunctionExpressionInvocation node,
+  ) {
     final callable = _evaluate(node.function);
     final arguments = _evaluateArguments(node.argumentList);
     return _serviceValue(callable.readReceivers, arguments);
   }
 
-  List<_FlowValue> _evaluateArguments(ArgumentList arguments) =>
+  List<ProviderFlowValue> _evaluateArguments(ArgumentList arguments) =>
       arguments.arguments.map(_evaluate).toList();
 
-  _FlowValue _serviceValue(Set<String> receivers, List<_FlowValue> arguments) {
-    if (receivers.isEmpty || arguments.isEmpty) return _FlowValue.empty;
+  ProviderFlowValue _serviceValue(
+    Set<String> receivers,
+    List<ProviderFlowValue> arguments,
+  ) {
+    if (receivers.isEmpty || arguments.isEmpty) {
+      return ProviderFlowValue.empty;
+    }
     final providers = arguments.first.symbols;
-    if (providers.isEmpty) return _FlowValue.empty;
-    return _FlowValue(
+    if (providers.isEmpty) return ProviderFlowValue.empty;
+    return ProviderFlowValue(
       services: [
-        _ProviderOrigin(providerSymbols: providers, receiverSymbols: receivers),
+        ProviderOrigin(providerSymbols: providers, receiverSymbols: receivers),
       ],
     );
   }
 
-  _FlowValue _evaluateAssignment(AssignmentExpression node) {
+  ProviderFlowValue _evaluateAssignment(AssignmentExpression node) {
     final value = _evaluate(node.rightHandSide);
     if (node.operator.lexeme == '=') {
       final name = _assignedName(node.leftHandSide);
-      if (name != null) _assign(name, value);
+      if (name != null) _state.assign(name, value);
     }
     return value;
   }
 
-  _FlowValue _evaluateCascade(CascadeExpression node) {
+  ProviderFlowValue _evaluateCascade(CascadeExpression node) {
     final target = _evaluate(node.target);
     _cascadeTargets.add(target);
     for (final section in node.cascadeSections) {
@@ -291,7 +437,7 @@ class _ProviderOwnershipVisitor extends RecursiveAstVisitor<void> {
     return target;
   }
 
-  void _recordInvocation(String name, int offset, _FlowValue receiver) {
+  void _recordInvocation(String name, int offset, ProviderFlowValue receiver) {
     for (final origin in receiver.services) {
       invocations.add(
         ProviderOwnedInvocation(
@@ -310,106 +456,4 @@ class _ProviderOwnershipVisitor extends RecursiveAstVisitor<void> {
     if (expression is PropertyAccess) return expression.propertyName.name;
     return null;
   }
-
-  _Binding _declare(String name, _FlowValue value) {
-    final binding = _Binding(_nextBindingId++);
-    _scopes.last[name] = binding;
-    _values[binding.id] = value;
-    return binding;
-  }
-
-  _FlowValue _read(String name) {
-    final binding = _lookup(name);
-    return binding == null ? _FlowValue.symbol(name) : _values[binding.id]!;
-  }
-
-  void _assign(String name, _FlowValue value) {
-    final binding = _lookup(name);
-    if (binding != null) _values[binding.id] = value;
-  }
-
-  void _assignOuter(String name, _FlowValue value) {
-    final binding = _lookup(name, skipCurrent: true);
-    if (binding != null) _values[binding.id] = value;
-  }
-
-  _Binding? _lookup(String name, {bool skipCurrent = false}) {
-    final start = _scopes.length - (skipCurrent ? 2 : 1);
-    for (var index = start; index >= 0; index--) {
-      final binding = _scopes[index][name];
-      if (binding != null) return binding;
-    }
-    return null;
-  }
-
-  Map<int, _FlowValue> _capture(Iterable<_Binding> bindings) => {
-    for (final binding in bindings) binding.id: _values[binding.id]!,
-  };
-
-  Map<int, _FlowValue> _joinStates(List<Map<int, _FlowValue>> states) {
-    final result = <int, _FlowValue>{};
-    for (final state in states) {
-      for (final entry in state.entries) {
-        result.update(
-          entry.key,
-          (value) => value.mergedWith(entry.value),
-          ifAbsent: () => entry.value,
-        );
-      }
-    }
-    return result;
-  }
-
-  void _restore(Map<int, _FlowValue> state) {
-    for (final entry in state.entries) {
-      if (_values.containsKey(entry.key)) _values[entry.key] = entry.value;
-    }
-  }
-
-  void _pushScope() => _scopes.add({});
-
-  void _popScope() {
-    final removed = _scopes.removeLast();
-    for (final binding in removed.values) {
-      _values.remove(binding.id);
-    }
-  }
-}
-
-class _Binding {
-  const _Binding(this.id);
-
-  final int id;
-}
-
-class _FlowValue {
-  const _FlowValue({
-    this.symbols = const {},
-    this.readReceivers = const {},
-    this.services = const [],
-  });
-
-  factory _FlowValue.symbol(String name) => _FlowValue(symbols: {name});
-
-  static const empty = _FlowValue();
-
-  final Set<String> symbols;
-  final Set<String> readReceivers;
-  final List<_ProviderOrigin> services;
-
-  _FlowValue mergedWith(_FlowValue other) => _FlowValue(
-    symbols: {...symbols, ...other.symbols},
-    readReceivers: {...readReceivers, ...other.readReceivers},
-    services: {...services, ...other.services}.toList(),
-  );
-}
-
-class _ProviderOrigin {
-  const _ProviderOrigin({
-    required this.providerSymbols,
-    required this.receiverSymbols,
-  });
-
-  final Set<String> providerSymbols;
-  final Set<String> receiverSymbols;
 }

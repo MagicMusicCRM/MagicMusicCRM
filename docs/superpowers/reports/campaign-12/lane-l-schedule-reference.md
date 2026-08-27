@@ -11,8 +11,8 @@ The first controller/widget run failed because
 `schedule_reference_controller.dart`, `schedule_reference_models.dart`, and
 `ScheduleReferenceController` did not exist. The first architecture run found
 only the 796-line legacy owner instead of the six required semantic owners.
-After extraction and both boundary-hardening rounds, all 12 controller/widget
-contracts and all nine AST guard tests pass.
+After extraction and the boundary-hardening rounds, all 12 controller/widget
+contracts and all 12 AST guard tests pass.
 
 ## Owners and structural gate
 
@@ -34,14 +34,15 @@ count with closures. The guard dynamically discovers every
 and 30 callables. Negative fixtures prove comment/string decoys, whitespace,
 service aliases, direct and derived provider receivers, transitive provider
 tokens, read tearoffs, constructor fields, parentheses, cascades, new owners,
-syntax errors, CCN, and type-callable bypasses fail. Positive fixtures prove
-same-name lexical bindings do not contaminate each other and reassignment away
-clears stale provider ownership.
+conditional/switch/loop/try alternatives, cross-method field writes, syntax
+errors, CCN, and type-callable bypasses fail. Positive fixtures prove same-name
+lexical bindings and class fields do not contaminate each other, unconditional
+and all-branch overwrites clear ownership, and `finally` applies after joins.
 
 Shared architecture support remains split into semantic owners below both
 limits: the facade is 277 token NLOC / 303 physical lines / max CCN 7, the
-metric visitors are 366 / 411 / 7, and provider ownership dataflow is
-361 / 415 / 8.
+metric visitors are 366 / 411 / 7, provider flow state is 94 / 114 / 4, and
+provider ownership dataflow is 413 / 459 / 8.
 
 ## Contract proof
 
@@ -60,10 +61,11 @@ metric visitors are 366 / 411 / 7, and provider ownership dataflow is
 
 ## Lane gate
 
-- Focused new tests: 21/21 PASS (12 controller/widget, 9 architecture).
+- Focused new tests: 24/24 PASS (12 controller/widget, 12 architecture).
 - Existing named workspace smoke: 2/2 PASS (read-only split view and director
   assignment/availability version chaining).
-- `flutter analyze --no-pub` on all six production owners: PASS, no issues.
+- `flutter analyze --no-pub` on all six production owners and changed
+  architecture support/tests: PASS, no issues.
 - Explicit format, contract grep, `git diff --check`, generated registrant
   restoration, and six verify-only path checks: PASS.
 

@@ -160,6 +160,113 @@ void reassignedAway(dynamic ref) {
     );
   });
 
+  test('control-flow joins retain every feasible provider origin', () {
+    final inspection = inspectDartSource(_shellFilename, r'''
+void conditionalClear(dynamic ref, bool useLocal) {
+  dynamic crm = ref.read(magicCrmServiceProvider);
+  if (useLocal) crm = LocalSchedulePreview();
+  crm.futureConditionalClearWrite();
+}
+void branched(dynamic ref, bool useProvider) {
+  dynamic crm = LocalSchedulePreview();
+  if (useProvider) {
+    crm = ref.read(magicCrmServiceProvider);
+  } else {
+    crm = LocalSchedulePreview();
+  }
+  crm.futureIfElseWrite();
+}
+void switched(dynamic ref, int mode) {
+  dynamic crm = LocalSchedulePreview();
+  switch (mode) {
+    case 0:
+      crm = ref.read(magicCrmServiceProvider);
+      break;
+    default:
+      crm = LocalSchedulePreview();
+  }
+  crm.futureSwitchWrite();
+}
+void zeroIteration(dynamic ref, bool enabled) {
+  dynamic crm = ref.read(magicCrmServiceProvider);
+  while (enabled) {
+    crm = LocalSchedulePreview();
+  }
+  crm.futureZeroIterationWrite();
+}
+void loopBody(dynamic ref, bool enabled) {
+  dynamic crm = LocalSchedulePreview();
+  while (enabled) {
+    crm = ref.read(magicCrmServiceProvider);
+  }
+  crm.futureLoopBodyWrite();
+}
+void forZeroIteration(dynamic ref, int count) {
+  dynamic crm = ref.read(magicCrmServiceProvider);
+  for (var index = 0; index < count; index++) {
+    crm = LocalSchedulePreview();
+  }
+  crm.futureForZeroIterationWrite();
+}
+void caught(dynamic ref) {
+  dynamic crm = LocalSchedulePreview();
+  try {
+    crm = ref.read(magicCrmServiceProvider);
+  } catch (_) {
+    crm = LocalSchedulePreview();
+  }
+  crm.futureTryWrite();
+}
+''');
+
+    expect(
+      inspection.invocationsOnProviderDerivedReceivers(const {
+        'magicCrmServiceProvider',
+      }),
+      {
+        'futureConditionalClearWrite',
+        'futureIfElseWrite',
+        'futureSwitchWrite',
+        'futureZeroIterationWrite',
+        'futureLoopBodyWrite',
+        'futureForZeroIterationWrite',
+        'futureTryWrite',
+      },
+    );
+  });
+
+  test('definite branch and finally overwrites clear provider ownership', () {
+    final inspection = inspectDartSource(_shellFilename, r'''
+void allBranchesLocal(dynamic ref, bool first) {
+  dynamic crm = ref.read(magicCrmServiceProvider);
+  if (first) {
+    crm = LocalSchedulePreview();
+  } else {
+    crm = OtherLocalSchedulePreview();
+  }
+  crm.refreshAfterBranches();
+}
+void finallyLocal(dynamic ref) {
+  dynamic crm = LocalSchedulePreview();
+  try {
+    crm = ref.read(magicCrmServiceProvider);
+  } catch (_) {
+    crm = ref.read(magicCrmServiceProvider);
+  } finally {
+    crm = LocalSchedulePreview();
+  }
+  crm.refreshAfterFinally();
+}
+''');
+
+    expect(
+      inspection.invocationsOnProviderDerivedReceivers(const {
+        'magicCrmServiceProvider',
+      }),
+      isEmpty,
+    );
+  });
+
   test('provider token and read aliases cannot hide derived receivers', () {
     final inspection = inspectDartSource(_shellFilename, r'''
 void transitiveProvider(dynamic ref) {
@@ -208,6 +315,42 @@ void cascaded(dynamic ref) {
         'magicCrmServiceProvider',
       }),
       {'futureFieldWrite', 'futureParenthesizedWrite', 'futureCascadeWrite'},
+    );
+  });
+
+  test('cross-method field summaries stay class scoped', () {
+    final inspection = inspectDartSource(_shellFilename, r'''
+class ProviderFieldOwner {
+  dynamic crm = LocalSchedulePreview();
+
+  void mutate() {
+    crm.futureCrossMethodWrite();
+  }
+
+  void initialize(dynamic ref) {
+    final p = magicCrmServiceProvider;
+    final read = ref.read;
+    crm = read(p);
+  }
+}
+class LocalFieldOwner {
+  dynamic crm = LocalSchedulePreview();
+
+  void mutate() {
+    crm.refreshLocalField();
+  }
+
+  void initialize() {
+    crm = OtherLocalSchedulePreview();
+  }
+}
+''');
+
+    expect(
+      inspection.invocationsOnProviderDerivedReceivers(const {
+        'magicCrmServiceProvider',
+      }),
+      {'futureCrossMethodWrite'},
     );
   });
 
