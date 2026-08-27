@@ -156,8 +156,8 @@ class TeacherStatsView extends StatelessWidget {
     return SizedBox(
       width: width,
       child: DropdownButtonFormField<String?>(
-        key: key,
         menuMaxHeight: 256,
+        key: key,
         isExpanded: true,
         initialValue: value,
         decoration: InputDecoration(labelText: label, isDense: true),
