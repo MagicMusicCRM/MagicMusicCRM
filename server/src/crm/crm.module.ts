@@ -29,6 +29,10 @@ import { HomeworkService } from "./homework.service";
 import { ReferenceDataService } from "./reference-data.service";
 import { ReferenceCatalogLifecycleService } from "./reference-catalog-lifecycle.service";
 import { SubscriptionsService } from "./subscriptions.service";
+import { ExpenseService } from "./finance/expense.service";
+import { FinancePaymentService } from "./finance/finance-payment.service";
+import { StudentAccountTransferService } from "./finance/student-account-transfer.service";
+import { StudentFinanceQueryService } from "./finance/student-finance-query.service";
 import { FinanceService } from "./finance.service";
 import { StaffService } from "./staff.service";
 import { TeachersService } from "./teachers.service";
@@ -88,6 +92,10 @@ import { AvailabilityService } from "./schedule/availability.service";
 import { ConstraintEngineRepository } from "./schedule/constraint-engine.repository";
 import { ScheduleConstraintEngine } from "./schedule/constraint-engine.service";
 import { LessonRequiredFieldValidator } from "./schedule/lesson-required-field.validator";
+import { LessonCommandRepository } from "./schedule/lesson-command.repository";
+import { LessonConstraintPreviewService } from "./schedule/lesson-constraint-preview.service";
+import { LessonPlannedSettlementCommandService } from "./schedule/lesson-planned-settlement-command.service";
+import { LessonWriteCommandService } from "./schedule/lesson-write-command.service";
 import { LessonCommandService } from "./schedule/lesson-command.service";
 import { LessonSeriesCommandService } from "./schedule/lesson-series-command.service";
 import { LessonTransitionService } from "./schedule/lesson-transition.service";
@@ -131,6 +139,11 @@ import { SharedTaskRepository } from "./tasks/shared-task.repository";
 import { SharedTaskService } from "./tasks/shared-task.service";
 import { SharedTaskReminderWorker } from "./tasks/shared-task-reminder.worker";
 import { CrmClientPipelineController } from "./crm-student-funnel.controller";
+import { StudentFunnelQueryService } from "./student-funnel/student-funnel-query.service";
+import { StudentFunnelRepository } from "./student-funnel/student-funnel.repository";
+import { StudentFunnelResolverService } from "./student-funnel/student-funnel-resolver.service";
+import { StudentFunnelRevisionService } from "./student-funnel/student-funnel-revision.service";
+import { StudentFunnelTransitionPolicy } from "./student-funnel/student-funnel-transition.policy";
 import { StudentFunnelService } from "./student-funnel.service";
 import { StudentDirectoryService } from "./students/student-directory.service";
 import { StudentSelfSummaryService } from "./students/student-self-summary.service";
@@ -200,6 +213,10 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     ReferenceDataService,
     ReferenceCatalogLifecycleService,
     SubscriptionsService,
+    ExpenseService,
+    FinancePaymentService,
+    StudentAccountTransferService,
+    StudentFinanceQueryService,
     FinanceService,
     StaffService,
     TeachersService,
@@ -256,6 +273,10 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     ConstraintEngineRepository,
     ScheduleConstraintEngine,
     LessonRequiredFieldValidator,
+    LessonCommandRepository,
+    LessonConstraintPreviewService,
+    LessonWriteCommandService,
+    LessonPlannedSettlementCommandService,
     LessonCommandService,
     LessonSeriesCommandService,
     SchedulePlanRepository,
@@ -308,6 +329,11 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     SharedTaskRepository,
     SharedTaskService,
     SharedTaskReminderWorker,
+    StudentFunnelRepository,
+    StudentFunnelResolverService,
+    StudentFunnelQueryService,
+    StudentFunnelRevisionService,
+    StudentFunnelTransitionPolicy,
     StudentFunnelService,
     CrmConfigurationService,
     {
