@@ -2,16 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/reference_catalog_lifecycle_dialog.dart';
 
 class ReferenceLifecycleTestApi extends MagicApiClient {
-  ReferenceLifecycleTestApi({required this.blockers, this.activeStudents = 0})
-    : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
+  ReferenceLifecycleTestApi({
+    required this.blockers,
+    this.activeStudents = 0,
+    this.history = const [
+      {'operation': 'rename', 'reasonText': 'Первичное название'},
+    ],
+    this.renameError,
+  }) : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   final List<Map<String, dynamic>> blockers;
   final int activeStudents;
+  final List<Map<String, dynamic>> history;
+  final Object? renameError;
   String name = 'Вокал';
   int version = 1;
   Map<String, dynamic>? archiveBody;
@@ -24,12 +33,7 @@ class ReferenceLifecycleTestApi extends MagicApiClient {
     bool authenticated = true,
   }) async {
     if (path == '/crm/disciplines/discipline-a/history') {
-      return <String, dynamic>{
-            'items': const [
-              {'operation': 'rename', 'reasonText': 'Первичное название'},
-            ],
-          }
-          as T;
+      return <String, dynamic>{'items': history} as T;
     }
     throw StateError('Unexpected GET $path');
   }
@@ -82,6 +86,7 @@ class ReferenceLifecycleTestApi extends MagicApiClient {
   }) async {
     if (path == '/crm/disciplines/discipline-a') {
       renameBody = Map<String, dynamic>.from(data! as Map);
+      if (renameError != null) throw renameError!;
       name = renameBody!['name'] as String;
       version += 1;
       return <String, dynamic>{
@@ -210,4 +215,58 @@ void main() {
     );
     expect(field.controller!.text, 'Эстрадный вокал');
   });
+
+  testWidgets('rejected rename restores the canonical name in the field', (
+    tester,
+  ) async {
+    final api = ReferenceLifecycleTestApi(
+      blockers: const [],
+      renameError: const MagicApiException(
+        statusCode: 409,
+        message: 'VERSION_CONFLICT',
+      ),
+    );
+    await pumpReferenceLifecycleDialog(tester, api);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('reference-name-field')),
+      'Отклонённое имя',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('reference-reason-field')),
+      'Уточнение названия',
+    );
+    await tester.tap(find.byKey(const ValueKey('rename-reference-button')));
+    await tester.pumpAndSettle();
+
+    final field = tester.widget<TextField>(
+      find.byKey(const ValueKey('reference-name-field')),
+    );
+    expect(field.controller!.text, 'Вокал');
+  });
+
+  testWidgets(
+    'history reports the full count but renders at most ten entries',
+    (tester) async {
+      final api = ReferenceLifecycleTestApi(
+        blockers: const [],
+        history: List.generate(
+          12,
+          (index) => {
+            'operation': 'rename',
+            'reasonText': 'Изменение ${index + 1}',
+          },
+        ),
+      );
+      await pumpReferenceLifecycleDialog(tester, api);
+
+      expect(find.text('История (12)'), findsOneWidget);
+      await tester.tap(find.text('История (12)'));
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.history_rounded), findsNWidgets(10));
+      expect(find.text('Изменение 10'), findsOneWidget);
+      expect(find.text('Изменение 11'), findsNothing);
+    },
+  );
 }
