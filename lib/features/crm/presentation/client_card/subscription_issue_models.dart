@@ -1,5 +1,5 @@
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
-import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/models/subscription_purchase.dart';
 
 enum SubscriptionIssueDiscountMode { none, percent, fixed }
 

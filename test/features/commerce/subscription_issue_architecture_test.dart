@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/architecture/dart_architecture_guard.dart';
 
 const _directory = 'lib/features/crm/presentation/client_card';
+const _purchaseModelPath = 'lib/core/models/subscription_purchase.dart';
+const _serviceBarrelPath = 'lib/core/services/magic_crm_service.dart';
 const _shellFilename = 'subscription_issue_sheet.dart';
 const _controllerFilename = 'subscription_issue_controller.dart';
 const _callbackNames = {'onPreview', '_onPreview', 'onSubmit', '_onSubmit'};
@@ -23,6 +25,37 @@ const _budget = DartArchitectureBudget(
 );
 
 void main() {
+  test('purchase contracts stay independent from the CRM service barrel', () {
+    final violations = <String>[];
+    final issueModels = File(
+      '$_directory/subscription_issue_models.dart',
+    ).readAsStringSync();
+    final purchaseModel = File(_purchaseModelPath);
+    final serviceBarrel = File(_serviceBarrelPath).readAsStringSync();
+
+    if (issueModels.contains('/services/magic_crm_service.dart')) {
+      violations.add('subscription issue models import the CRM service barrel');
+    }
+    if (!purchaseModel.existsSync()) {
+      violations.add('standalone subscription purchase model is missing');
+    } else {
+      final source = purchaseModel.readAsStringSync();
+      if (RegExp(r"(?:package:flutter|/api/|/services/)").hasMatch(source)) {
+        violations.add('subscription purchase model imports infrastructure');
+      }
+      if (RegExp(r'^\s*part(?:\s+of)?\s', multiLine: true).hasMatch(source)) {
+        violations.add('subscription purchase model is coupled as a part file');
+      }
+    }
+    if (!serviceBarrel.contains(
+      "export 'package:magic_music_crm/core/models/subscription_purchase.dart';",
+    )) {
+      violations.add('CRM service barrel no longer exports purchase contracts');
+    }
+
+    expect(violations, isEmpty);
+  });
+
   test('all discovered subscription issue owners pass the AST guard', () {
     final sources = discoverDartSources(
       directoryPath: _directory,
