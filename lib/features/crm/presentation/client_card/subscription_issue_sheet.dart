@@ -3,8 +3,10 @@ import 'package:magic_music_crm/core/forms/dirty_form_exit.dart';
 import 'package:magic_music_crm/core/widgets/magic_sheet.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 
+import 'subscription_issue_components.dart';
 import 'subscription_issue_controller.dart';
-import 'subscription_issue_form_view.dart';
+import 'subscription_issue_form_feedback.dart';
+import 'subscription_issue_form_sections.dart';
 import 'subscription_issue_models.dart';
 
 export 'subscription_issue_controller.dart' show SubscriptionIssueController;
@@ -132,18 +134,45 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
 
   @override
   Widget build(BuildContext context) {
+    final draft = _controller.draft;
+    final pricing = _controller.pricing;
     return DirtyFormExitScope(
       controller: _exitController,
       savedResult: true,
       discardedResult: false,
-      child: SubscriptionIssueFormView(
-        formKey: _formKey,
-        packageName: widget.package['name']?.toString() ?? 'Абонемент',
-        controller: _controller,
-        searchPayers: widget.searchPayers,
+      child: Form(
+        key: _formKey,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
         onChanged: _exitController.markDirty,
-        onClose: _requestClose,
-        submitPressed: _submit,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SubscriptionIssuePriceSummary(
+              packageName: widget.package['name']?.toString() ?? 'Абонемент',
+              basePriceMinor: pricing.basePriceMinor,
+              discountMinor: pricing.discountMinor,
+              surchargeMinor: pricing.surchargeMinor,
+              finalPriceMinor: pricing.amountsValid
+                  ? pricing.finalPriceMinor
+                  : null,
+              currencyCode: draft.currencyCode,
+            ),
+            SubscriptionIssueFormSections(
+              controller: _controller,
+              searchPayers: widget.searchPayers,
+              onChanged: _exitController.markDirty,
+            ),
+            SubscriptionIssueFormFeedback(
+              draft: draft,
+              preview: _controller.preview,
+              attempted: _controller.attempted,
+              error: _controller.error,
+              busy: _controller.busy,
+              onClose: _requestClose,
+              onSubmit: _submit,
+            ),
+          ],
+        ),
       ),
     );
   }
