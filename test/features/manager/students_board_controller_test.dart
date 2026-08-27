@@ -431,6 +431,323 @@ void main() {
         expect(refreshes, 0);
       },
     );
+
+    test(
+      'latest branch load wins without replacing a transfer branch',
+      () async {
+        final first = Completer<List<Map<String, dynamic>>>();
+        final second = Completer<List<Map<String, dynamic>>>();
+        var loadCount = 0;
+        final controller = StudentsBoardController(
+          loadBranches: () => loadCount++ == 0 ? first.future : second.future,
+          loadStudentsPage: _unusedPageLoader,
+          updateStudentStatus: _unusedStatusUpdater,
+        );
+        addTearDown(controller.dispose);
+
+        final staleLoad = controller.loadBranches();
+        controller.selectBranch('branch-transfer');
+        final latestLoad = controller.loadBranches();
+        second.complete([
+          {'id': 'branch-latest', 'name': 'Новый список'},
+        ]);
+        await latestLoad;
+        first.complete([
+          {'id': 'branch-stale', 'name': 'Старый список'},
+        ]);
+        await staleLoad;
+
+        expect(controller.state.selectedBranchId, 'branch-transfer');
+        expect(controller.state.branches.single['id'], 'branch-latest');
+      },
+    );
+
+    test('resetPages invalidates an in-flight page completion', () async {
+      final page = Completer<StudentsBoardPageResult>();
+      final controller = StudentsBoardController(
+        loadBranches: () async => const [],
+        loadStudentsPage: ({required branchId, required cursor}) => page.future,
+        updateStudentStatus: _unusedStatusUpdater,
+      );
+      addTearDown(controller.dispose);
+      controller.selectBranch('branch-a');
+
+      final loading = controller.loadMoreStudents(
+        branchId: 'branch-a',
+        cursor: 'cursor-1',
+        initialStudents: const [],
+      );
+      controller.resetPages();
+      final resetState = controller.state;
+      page.complete(
+        StudentsBoardPageResult(
+          items: const [
+            {'id': 'student-stale'},
+          ],
+          nextCursor: 'cursor-2',
+        ),
+      );
+      await loading;
+
+      expect(identical(controller.state, resetState), isTrue);
+      expect(controller.state.extraStudents, isEmpty);
+      expect(controller.state.loadingMoreStudents, isFalse);
+    });
+
+    test(
+      'late direct readback cannot mutate a replacement branch context',
+      () async {
+        final readbackStarted = Completer<void>();
+        final readback = Completer<void>();
+        final controller = StudentsBoardController(
+          loadBranches: () async => const [],
+          loadStudentsPage: _unusedPageLoader,
+          updateStudentStatus: ({required studentId, required status}) async {},
+        );
+        addTearDown(controller.dispose);
+        controller.selectBranch('branch-a');
+
+        final move = controller.moveStatus(
+          const {'id': 'student-a', 'status': 'learning'},
+          'paused',
+          refreshAndReadback: (_) {
+            readbackStarted.complete();
+            return readback.future;
+          },
+        );
+        await readbackStarted.future;
+        controller.selectBranch('branch-b');
+        final branchBState = controller.state;
+        readback.complete();
+        final result = await move;
+
+        expect(result.succeeded, isTrue);
+        expect(identical(controller.state, branchBState), isTrue);
+        expect(controller.state.selectedBranchId, 'branch-b');
+        expect(controller.state.optimisticStatuses, isEmpty);
+      },
+    );
+
+    test('older failed readback cannot cancel a newer student retry', () async {
+      final firstReadbacks = <String, Completer<void>>{
+        'student-a': Completer<void>(),
+        'student-b': Completer<void>(),
+      };
+      final readbackStarted = <String, Completer<void>>{
+        'student-a': Completer<void>(),
+        'student-b': Completer<void>(),
+      };
+      final readbackCalls = <String, int>{};
+      final controller = StudentsBoardController(
+        realtimeDebounce: const Duration(milliseconds: 20),
+        loadBranches: () async => const [],
+        loadStudentsPage: _unusedPageLoader,
+        updateStudentStatus: ({required studentId, required status}) async {},
+      );
+      addTearDown(controller.dispose);
+      controller.selectBranch('branch-a');
+
+      Future<void> readback(String studentId) {
+        final call = (readbackCalls[studentId] ?? 0) + 1;
+        readbackCalls[studentId] = call;
+        if (call == 1) {
+          readbackStarted[studentId]!.complete();
+          return firstReadbacks[studentId]!.future;
+        }
+        return Future.value();
+      }
+
+      final moveA = controller.moveStatus(
+        const {'id': 'student-a', 'status': 'learning'},
+        'paused',
+        refreshAndReadback: (_) => readback('student-a'),
+      );
+      await readbackStarted['student-a']!.future;
+      final moveB = controller.moveStatus(
+        const {'id': 'student-b', 'status': 'learning'},
+        'paused',
+        refreshAndReadback: (_) => readback('student-b'),
+      );
+      await readbackStarted['student-b']!.future;
+
+      firstReadbacks['student-b']!.completeError(StateError('offline-b'));
+      expect((await moveB).reconciliationPending, isTrue);
+      firstReadbacks['student-a']!.completeError(StateError('offline-a'));
+      expect((await moveA).reconciliationPending, isTrue);
+      await Future<void>.delayed(const Duration(milliseconds: 45));
+
+      expect(readbackCalls['student-a'], 1);
+      expect(readbackCalls['student-b'], 2);
+      expect(controller.state.optimisticStatuses, isEmpty);
+      expect(controller.state.pendingStudentIds, isEmpty);
+    });
+
+    test(
+      'newer board readback settles an older move before its failure arrives',
+      () async {
+        final firstReadbacks = <String, Completer<void>>{
+          'student-a': Completer<void>(),
+          'student-b': Completer<void>(),
+        };
+        final readbackStarted = <String, Completer<void>>{
+          'student-a': Completer<void>(),
+          'student-b': Completer<void>(),
+        };
+        final readbackCalls = <String, int>{};
+        final controller = StudentsBoardController(
+          realtimeDebounce: const Duration(milliseconds: 20),
+          loadBranches: () async => const [],
+          loadStudentsPage: _unusedPageLoader,
+          updateStudentStatus: ({required studentId, required status}) async {},
+        );
+        addTearDown(controller.dispose);
+        controller.selectBranch('branch-a');
+
+        Future<void> readback(String studentId) {
+          readbackCalls[studentId] = (readbackCalls[studentId] ?? 0) + 1;
+          readbackStarted[studentId]!.complete();
+          return firstReadbacks[studentId]!.future;
+        }
+
+        final moveA = controller.moveStatus(
+          const {'id': 'student-a', 'status': 'learning'},
+          'paused',
+          refreshAndReadback: (_) => readback('student-a'),
+        );
+        await readbackStarted['student-a']!.future;
+        final moveB = controller.moveStatus(
+          const {'id': 'student-b', 'status': 'learning'},
+          'paused',
+          refreshAndReadback: (_) => readback('student-b'),
+        );
+        await readbackStarted['student-b']!.future;
+
+        firstReadbacks['student-b']!.complete();
+        expect((await moveB).reconciliationPending, isFalse);
+        expect(controller.state.optimisticStatuses, isEmpty);
+        firstReadbacks['student-a']!.completeError(
+          StateError('late-offline-a'),
+        );
+        expect((await moveA).reconciliationPending, isFalse);
+        await Future<void>.delayed(const Duration(milliseconds: 35));
+
+        expect(readbackCalls, {'student-a': 1, 'student-b': 1});
+        expect(controller.state.optimisticStatuses, isEmpty);
+        expect(controller.state.pendingStudentIds, isEmpty);
+      },
+    );
+
+    test(
+      'older board snapshot cannot settle a move confirmed after it started',
+      () async {
+        final firstReadbacks = <String, Completer<void>>{
+          'student-a': Completer<void>(),
+          'student-b': Completer<void>(),
+        };
+        final readbackStarted = <String, Completer<void>>{
+          'student-a': Completer<void>(),
+          'student-b': Completer<void>(),
+        };
+        final readbackCalls = <String, int>{};
+        final controller = StudentsBoardController(
+          realtimeDebounce: const Duration(milliseconds: 20),
+          loadBranches: () async => const [],
+          loadStudentsPage: _unusedPageLoader,
+          updateStudentStatus: ({required studentId, required status}) async {},
+        );
+        addTearDown(controller.dispose);
+        controller.selectBranch('branch-a');
+
+        Future<void> readback(String studentId) {
+          final call = (readbackCalls[studentId] ?? 0) + 1;
+          readbackCalls[studentId] = call;
+          if (call == 1) {
+            readbackStarted[studentId]!.complete();
+            return firstReadbacks[studentId]!.future;
+          }
+          return Future.value();
+        }
+
+        final moveA = controller.moveStatus(
+          const {'id': 'student-a', 'status': 'learning'},
+          'paused',
+          refreshAndReadback: (_) => readback('student-a'),
+        );
+        await readbackStarted['student-a']!.future;
+        final moveB = controller.moveStatus(
+          const {'id': 'student-b', 'status': 'learning'},
+          'paused',
+          refreshAndReadback: (_) => readback('student-b'),
+        );
+        await readbackStarted['student-b']!.future;
+
+        firstReadbacks['student-a']!.complete();
+        expect((await moveA).reconciliationPending, isFalse);
+        expect(controller.state.optimisticStatuses, {'student-b': 'paused'});
+        expect(controller.state.pendingStudentIds, {'student-b'});
+        firstReadbacks['student-b']!.completeError(StateError('offline-b'));
+        expect((await moveB).reconciliationPending, isTrue);
+        await Future<void>.delayed(const Duration(milliseconds: 45));
+
+        expect(readbackCalls, {'student-a': 1, 'student-b': 2});
+        expect(controller.state.optimisticStatuses, isEmpty);
+        expect(controller.state.pendingStudentIds, isEmpty);
+      },
+    );
+
+    test('older successful snapshot cannot cancel a newer retry', () async {
+      final firstReadbacks = <String, Completer<void>>{
+        'student-a': Completer<void>(),
+        'student-b': Completer<void>(),
+      };
+      final readbackStarted = <String, Completer<void>>{
+        'student-a': Completer<void>(),
+        'student-b': Completer<void>(),
+      };
+      final readbackCalls = <String, int>{};
+      final controller = StudentsBoardController(
+        realtimeDebounce: const Duration(milliseconds: 20),
+        loadBranches: () async => const [],
+        loadStudentsPage: _unusedPageLoader,
+        updateStudentStatus: ({required studentId, required status}) async {},
+      );
+      addTearDown(controller.dispose);
+      controller.selectBranch('branch-a');
+
+      Future<void> readback(String studentId) {
+        final call = (readbackCalls[studentId] ?? 0) + 1;
+        readbackCalls[studentId] = call;
+        if (call == 1) {
+          readbackStarted[studentId]!.complete();
+          return firstReadbacks[studentId]!.future;
+        }
+        return Future.value();
+      }
+
+      final moveA = controller.moveStatus(
+        const {'id': 'student-a', 'status': 'learning'},
+        'paused',
+        refreshAndReadback: (_) => readback('student-a'),
+      );
+      await readbackStarted['student-a']!.future;
+      final moveB = controller.moveStatus(
+        const {'id': 'student-b', 'status': 'learning'},
+        'paused',
+        refreshAndReadback: (_) => readback('student-b'),
+      );
+      await readbackStarted['student-b']!.future;
+
+      firstReadbacks['student-b']!.completeError(StateError('offline-b'));
+      expect((await moveB).reconciliationPending, isTrue);
+      firstReadbacks['student-a']!.complete();
+      expect((await moveA).reconciliationPending, isFalse);
+      expect(controller.state.optimisticStatuses, {'student-b': 'paused'});
+      await Future<void>.delayed(const Duration(milliseconds: 45));
+
+      expect(readbackCalls, {'student-a': 1, 'student-b': 2});
+      expect(controller.state.optimisticStatuses, isEmpty);
+      expect(controller.state.pendingStudentIds, isEmpty);
+    });
   });
 
   test('auto-scroll owner stops permanently on dispose', () {
