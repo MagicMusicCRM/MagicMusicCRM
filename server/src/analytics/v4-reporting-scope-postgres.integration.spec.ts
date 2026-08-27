@@ -8,6 +8,10 @@ import { AuditService } from "../audit/audit.service";
 import { ActorContext } from "../common/security/actor-context";
 import { CrmPolicy } from "../crm/crm.policy";
 import { FinanceService } from "../crm/finance.service";
+import { ExpenseService } from "../crm/finance/expense.service";
+import { FinancePaymentService } from "../crm/finance/finance-payment.service";
+import { StudentAccountTransferService } from "../crm/finance/student-account-transfer.service";
+import { StudentFinanceQueryService } from "../crm/finance/student-finance-query.service";
 import { DatabaseService } from "../db/database.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { ClientStatusReadService } from "./client-status-read.service";
@@ -164,11 +168,14 @@ describe("ReportingReadService hard scopes (PostgreSQL)", () => {
   it("keeps Director expense CRUD, Manager deny and Analytics in one projection", async () => {
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
     const realtime = { emitCrmChanged: jest.fn() };
+    const policy = new CrmPolicy();
+    const typedAudit = audit as unknown as AuditService;
+    const typedRealtime = realtime as unknown as RealtimeBus;
     const finance = new FinanceService(
-      database,
-      audit as unknown as AuditService,
-      new CrmPolicy(),
-      realtime as unknown as RealtimeBus,
+      new FinancePaymentService(database, typedAudit, policy, typedRealtime),
+      new StudentFinanceQueryService(database, policy),
+      new StudentAccountTransferService(database, typedAudit, policy),
+      new ExpenseService(database, typedAudit, policy, typedRealtime),
     );
 
     await expect(

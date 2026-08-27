@@ -3,6 +3,10 @@ import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { CrmPolicy } from "./crm.policy";
+import { ExpenseService } from "./finance/expense.service";
+import { FinancePaymentService } from "./finance/finance-payment.service";
+import { StudentAccountTransferService } from "./finance/student-account-transfer.service";
+import { StudentFinanceQueryService } from "./finance/student-finance-query.service";
 import { FinanceService } from "./finance.service";
 
 type EmbeddedClient = {
@@ -117,11 +121,15 @@ describe("FinanceService subscription-backed lesson costs", () => {
       `);
 
       const policy = { assertCanReadSchoolFinance: jest.fn() };
+      const database = databaseFor(db);
+      const audit = {} as AuditService;
+      const typedPolicy = policy as unknown as CrmPolicy;
+      const realtime = {} as RealtimeBus;
       const service = new FinanceService(
-        databaseFor(db),
-        {} as AuditService,
-        policy as unknown as CrmPolicy,
-        {} as RealtimeBus,
+        new FinancePaymentService(database, audit, typedPolicy, realtime),
+        new StudentFinanceQueryService(database, typedPolicy),
+        new StudentAccountTransferService(database, audit, typedPolicy),
+        new ExpenseService(database, audit, typedPolicy, realtime),
       );
       const actor = { userId: "director-a", role: "director" as const };
 

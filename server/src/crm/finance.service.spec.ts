@@ -7,6 +7,10 @@ import { AuditService } from "../audit/audit.service";
 import { DatabaseService } from "../db/database.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { CrmPolicy } from "./crm.policy";
+import { ExpenseService } from "./finance/expense.service";
+import { FinancePaymentService } from "./finance/finance-payment.service";
+import { StudentAccountTransferService } from "./finance/student-account-transfer.service";
+import { StudentFinanceQueryService } from "./finance/student-finance-query.service";
 import { FinanceService } from "./finance.service";
 
 describe("FinanceService", () => {
@@ -32,11 +36,29 @@ describe("FinanceService", () => {
       emitCrmChanged: jest.fn(),
       emitFinanceChanged: jest.fn(),
     };
+    const typedDatabase = database as unknown as DatabaseService;
+    const typedAudit = audit as unknown as AuditService;
+    const typedPolicy = policy as unknown as CrmPolicy;
+    const typedRealtime = realtime as unknown as RealtimeBus;
     const service = new FinanceService(
-      database as unknown as DatabaseService,
-      audit as unknown as AuditService,
-      policy as unknown as CrmPolicy,
-      realtime as unknown as RealtimeBus,
+      new FinancePaymentService(
+        typedDatabase,
+        typedAudit,
+        typedPolicy,
+        typedRealtime,
+      ),
+      new StudentFinanceQueryService(typedDatabase, typedPolicy),
+      new StudentAccountTransferService(
+        typedDatabase,
+        typedAudit,
+        typedPolicy,
+      ),
+      new ExpenseService(
+        typedDatabase,
+        typedAudit,
+        typedPolicy,
+        typedRealtime,
+      ),
     );
     return { service, query, audit, policy, realtime };
   };
