@@ -19,6 +19,11 @@ import { StudentCommandService } from "./students/student-command.service";
 import { ScheduleReadService } from "./schedule/schedule-read.service";
 import { StudentFunnelStageDto } from "./dto/student-funnel.dto";
 import { StudentFunnelService } from "./student-funnel.service";
+import { StudentFunnelQueryService } from "./student-funnel/student-funnel-query.service";
+import { StudentFunnelRepository } from "./student-funnel/student-funnel.repository";
+import { StudentFunnelResolverService } from "./student-funnel/student-funnel-resolver.service";
+import { StudentFunnelRevisionService } from "./student-funnel/student-funnel-revision.service";
+import { StudentFunnelTransitionPolicy } from "./student-funnel/student-funnel-transition.policy";
 
 const databaseUrl =
   process.env.V4_PLATFORM_TEST_DATABASE_URL ??
@@ -108,7 +113,20 @@ describe("Student funnel effective configuration (PostgreSQL)", () => {
       listUpcomingLessonsForStudents: jest.fn().mockResolvedValue([]),
       listLessons: jest.fn().mockResolvedValue({ items: [] }),
     } as unknown as ScheduleReadService;
-    service = new StudentFunnelService(database, audit, policy, realtime);
+    const repository = new StudentFunnelRepository(database);
+    const resolver = new StudentFunnelResolverService(repository);
+    service = new StudentFunnelService(
+      new StudentFunnelQueryService(database, policy, repository, resolver),
+      new StudentFunnelRevisionService(
+        database,
+        audit,
+        policy,
+        realtime,
+        repository,
+        resolver,
+      ),
+      new StudentFunnelTransitionPolicy(repository, resolver),
+    );
     const directory = new StudentDirectoryService(database, policy);
     const commands = new StudentCommandService(
       database,
