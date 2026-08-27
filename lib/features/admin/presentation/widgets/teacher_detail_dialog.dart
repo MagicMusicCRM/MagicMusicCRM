@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/person_access_role_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/person_lifecycle_dialog.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/provision_access_dialog.dart';
@@ -13,6 +14,9 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_deta
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_employment_fields.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_payroll_controller.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_payroll_dialogs.dart';
+
+import 'magic_teacher_employment_reference_gateway.dart';
+import 'teacher_employment_reference_gateway.dart';
 
 class TeacherDetailDialog extends ConsumerStatefulWidget {
   const TeacherDetailDialog({super.key, required this.teacher});
@@ -41,6 +45,7 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
   late String _canonicalPhone;
   late final TeacherEmploymentInitial _employmentInitial;
   late final TeacherPayrollController _payrollController;
+  late final TeacherEmploymentReferenceGateway _employmentReferenceGateway;
   final _employmentKey = GlobalKey<TeacherEmploymentFieldsState>();
   bool _saving = false;
 
@@ -57,6 +62,10 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
     _emailController = TextEditingController(text: initial.email);
     _canonicalPhone = initial.phone;
     _employmentInitial = initial.employment;
+    _employmentReferenceGateway = MagicTeacherEmploymentReferenceGateway(
+      crm: ref.read(magicCrmServiceProvider),
+      settings: ref.read(magicSettingsServiceProvider),
+    );
     _payrollController = TeacherPayrollController(
       service: ref.read(magicCrmServiceProvider),
       teacherId: _teacherId,
@@ -212,6 +221,7 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
             onPhoneChanged: (phone) => _canonicalPhone = phone,
             employmentKey: _employmentKey,
             employmentInitial: _employmentInitial,
+            employmentReferenceGateway: _employmentReferenceGateway,
             payrollController: _payrollController,
             actorRole: role,
             canManageCredentials: canManageCredentials,

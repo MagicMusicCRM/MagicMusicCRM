@@ -1,31 +1,25 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:magic_music_crm/core/api/magic_api_client.dart';
-import 'package:magic_music_crm/core/api/magic_token_store.dart';
-import 'package:magic_music_crm/core/services/magic_crm_service.dart';
-import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_employment_fields.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_employment_reference_gateway.dart';
 
 void main() {
   testWidgets(
     'shared teacher fields return branches disciplines configured options and rate',
     (tester) async {
-      final api = _TeacherFieldsApi();
+      final gateway = _FakeTeacherEmploymentReferenceGateway();
       final key = GlobalKey<TeacherEmploymentFieldsState>();
 
       await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            magicCrmServiceProvider.overrideWithValue(MagicCrmService(api)),
-            magicSettingsServiceProvider.overrideWithValue(
-              MagicSettingsService(api),
-            ),
-          ],
-          child: MaterialApp(
-            home: Scaffold(
-              body: SingleChildScrollView(
-                child: TeacherEmploymentFields(key: key, requireRate: true),
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: TeacherEmploymentFields(
+                key: key,
+                gateway: gateway,
+                requireRate: true,
               ),
             ),
           ),
@@ -68,20 +62,16 @@ void main() {
   testWidgets('disciplines categories and levels are optional metadata', (
     tester,
   ) async {
-    final api = _TeacherFieldsApi();
+    final gateway = _FakeTeacherEmploymentReferenceGateway();
     final key = GlobalKey<TeacherEmploymentFieldsState>();
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          magicCrmServiceProvider.overrideWithValue(MagicCrmService(api)),
-          magicSettingsServiceProvider.overrideWithValue(
-            MagicSettingsService(api),
-          ),
-        ],
-        child: MaterialApp(
-          home: Scaffold(
-            body: SingleChildScrollView(
-              child: TeacherEmploymentFields(key: key, requireRate: true),
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: TeacherEmploymentFields(
+              key: key,
+              gateway: gateway,
+              requireRate: true,
             ),
           ),
         ),
@@ -102,54 +92,195 @@ void main() {
     expect(value.levels, isEmpty);
     expect(value.categories, isEmpty);
   });
+
+  testWidgets('selected fallback options remain when settings has no option', (
+    tester,
+  ) async {
+    final key = GlobalKey<TeacherEmploymentFieldsState>();
+    final gateway = _FakeTeacherEmploymentReferenceGateway(
+      customOptionsByKey: const {},
+    );
+    const initial = TeacherEmploymentInitial(
+      branches: [
+        {'id': 'branch-a', 'name': 'Центральный'},
+      ],
+      levels: {'Сохранённый уровень'},
+      categories: {'Сохранённая категория'},
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: TeacherEmploymentFields(
+              key: key,
+              gateway: gateway,
+              initial: initial,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Центральный'), findsOneWidget);
+    await tester.tap(find.text('Уровни'));
+    await tester.pump();
+    expect(find.text('Сохранённый уровень'), findsOneWidget);
+    await tester.tap(find.text('Категории'));
+    await tester.pump();
+    expect(find.text('Сохранённая категория'), findsOneWidget);
+
+    final value = key.currentState!.validateAndRead();
+    expect(value?.levels, ['Сохранённый уровень']);
+    expect(value?.categories, ['Сохранённая категория']);
+  });
+
+  testWidgets('settings failure keeps branch and discipline selection usable', (
+    tester,
+  ) async {
+    final key = GlobalKey<TeacherEmploymentFieldsState>();
+    final gateway = _FakeTeacherEmploymentReferenceGateway(
+      customOptionsError: StateError('settings unavailable'),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: TeacherEmploymentFields(key: key, gateway: gateway),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Центральный'), findsOneWidget);
+    expect(find.text('Вокал'), findsOneWidget);
+    expect(
+      find.text('Не удалось загрузить настройки преподавателя.'),
+      findsNothing,
+    );
+  });
+
+  testWidgets('branch failure shows the canonical Russian terminal error', (
+    tester,
+  ) async {
+    final key = GlobalKey<TeacherEmploymentFieldsState>();
+    final gateway = _FakeTeacherEmploymentReferenceGateway(
+      branchError: StateError('branches unavailable'),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TeacherEmploymentFields(key: key, gateway: gateway),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Не удалось загрузить настройки преподавателя.'),
+      findsOneWidget,
+    );
+    expect(find.text('Повторить'), findsOneWidget);
+    expect(key.currentState!.validateAndRead(), isNull);
+  });
+
+  testWidgets('late discipline load cannot overwrite a newer fields owner', (
+    tester,
+  ) async {
+    final staleDisciplines =
+        Completer<List<TeacherEmploymentReferenceOption>>();
+    final firstKey = GlobalKey<TeacherEmploymentFieldsState>();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: TeacherEmploymentFields(
+              key: firstKey,
+              gateway: _FakeTeacherEmploymentReferenceGateway(
+                disciplineFuture: staleDisciplines.future,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Центральный'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: TeacherEmploymentFields(
+              key: GlobalKey<TeacherEmploymentFieldsState>(),
+              gateway: _FakeTeacherEmploymentReferenceGateway(),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    staleDisciplines.complete(const [
+      TeacherEmploymentReferenceOption(
+        id: 'discipline-stale',
+        name: 'Устаревшая дисциплина',
+      ),
+    ]);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Вокал'), findsOneWidget);
+    expect(find.text('Устаревшая дисциплина'), findsNothing);
+  });
 }
 
-class _TeacherFieldsApi extends MagicApiClient {
-  _TeacherFieldsApi()
-    : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
+class _FakeTeacherEmploymentReferenceGateway
+    implements TeacherEmploymentReferenceGateway {
+  _FakeTeacherEmploymentReferenceGateway({
+    this.branchError,
+    this.customOptionsError,
+    this.customOptionsByKey,
+    this.disciplineFuture,
+  });
+
+  final Object? branchError;
+  final Object? customOptionsError;
+  final Map<String, List<String>>? customOptionsByKey;
+  final Future<List<TeacherEmploymentReferenceOption>>? disciplineFuture;
 
   @override
-  Future<T> get<T>(
-    String path, {
-    Map<String, dynamic>? queryParameters,
-    bool authenticated = true,
-  }) async {
-    final body = switch (path) {
-      '/crm/branches' => {
-        'items': [
-          {'id': 'branch-a', 'name': 'Центральный'},
-        ],
-      },
-      '/crm/disciplines' => {
-        'items': [
-          {
-            'id': 'discipline-a',
-            'name': 'Вокал',
-            'lifecycleState': 'active',
-            'version': 1,
-          },
-        ],
-      },
-      '/settings/crm-custom-fields' => {
-        'fields': [
-          {
-            'entity': 'teachers',
-            'key': 'levels',
-            'label': 'Уровни обучения',
-            'type': 'select',
-            'options': ['Начальный', 'Средний'],
-          },
-          {
-            'entity': 'teachers',
-            'key': 'categories',
-            'label': 'Категории',
-            'type': 'select',
-            'options': ['Дети', 'Взрослые'],
-          },
-        ],
-      },
-      _ => throw StateError('Unexpected GET $path'),
+  Future<List<TeacherEmploymentReferenceOption>> loadBranches() async {
+    if (branchError case final error?) throw error;
+    return const [
+      TeacherEmploymentReferenceOption(id: 'branch-a', name: 'Центральный'),
+    ];
+  }
+
+  @override
+  Future<List<TeacherEmploymentReferenceOption>> loadDisciplines() {
+    return disciplineFuture ??
+        Future.value(const [
+          TeacherEmploymentReferenceOption(id: 'discipline-a', name: 'Вокал'),
+        ]);
+  }
+
+  @override
+  Future<List<String>> loadTeacherCustomOptions(String key) async {
+    if (customOptionsError case final error?) throw error;
+    final configured = customOptionsByKey;
+    if (configured != null) return configured[key] ?? const [];
+    return switch (key) {
+      'levels' => const ['Начальный', 'Средний'],
+      'categories' => const ['Дети', 'Взрослые'],
+      _ => const [],
     };
-    return body as T;
   }
 }

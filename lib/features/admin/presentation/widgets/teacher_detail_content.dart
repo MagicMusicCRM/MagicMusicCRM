@@ -6,6 +6,8 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_empl
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_payroll_controller.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_payroll_section.dart';
 
+import 'teacher_employment_reference_gateway.dart';
+
 class TeacherDetailContent extends StatelessWidget {
   const TeacherDetailContent({
     super.key,
@@ -16,6 +18,7 @@ class TeacherDetailContent extends StatelessWidget {
     required this.onPhoneChanged,
     required this.employmentKey,
     required this.employmentInitial,
+    required this.employmentReferenceGateway,
     required this.payrollController,
     required this.actorRole,
     required this.canManageCredentials,
@@ -32,6 +35,7 @@ class TeacherDetailContent extends StatelessWidget {
   final ValueChanged<String> onPhoneChanged;
   final GlobalKey<TeacherEmploymentFieldsState> employmentKey;
   final TeacherEmploymentInitial employmentInitial;
+  final TeacherEmploymentReferenceGateway employmentReferenceGateway;
   final TeacherPayrollController payrollController;
   final String actorRole;
   final bool canManageCredentials;
@@ -123,6 +127,7 @@ class TeacherDetailContent extends StatelessWidget {
         const SizedBox(height: 22),
         TeacherEmploymentFields(
           key: employmentKey,
+          gateway: employmentReferenceGateway,
           initial: employmentInitial,
           enabled: !saving,
         ),

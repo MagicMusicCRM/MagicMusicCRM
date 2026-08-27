@@ -6,10 +6,14 @@ import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/security/password_policy.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/core/widgets/adaptive_surface.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_employment_fields.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/person_access_role_dialog.dart';
+
+import 'magic_teacher_employment_reference_gateway.dart';
+import 'teacher_employment_reference_gateway.dart';
 
 Future<bool?> showCreateTeacherSurface(BuildContext context) {
   return showMagicAdaptiveSurface<bool>(
@@ -38,10 +42,20 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   final _passwordAgain = TextEditingController();
+  late final TeacherEmploymentReferenceGateway _employmentReferenceGateway;
   String _phone = '';
   String _accessRole = 'teacher';
   bool _saving = false;
   bool _showPassword = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _employmentReferenceGateway = MagicTeacherEmploymentReferenceGateway(
+      crm: ref.read(magicCrmServiceProvider),
+      settings: ref.read(magicSettingsServiceProvider),
+    );
+  }
 
   @override
   void dispose() {
@@ -230,6 +244,7 @@ class _CreateTeacherDialogState extends ConsumerState<CreateTeacherDialog> {
         const SizedBox(height: 22),
         TeacherEmploymentFields(
           key: _employmentKey,
+          gateway: _employmentReferenceGateway,
           requireRate: true,
           enabled: !_saving,
         ),

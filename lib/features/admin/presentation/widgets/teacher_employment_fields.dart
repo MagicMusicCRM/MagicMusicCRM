@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:magic_music_crm/core/api/magic_api_error.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:magic_music_crm/core/services/magic_crm_service.dart';
-import 'package:magic_music_crm/core/services/magic_settings_service.dart';
 import 'package:magic_music_crm/core/widgets/teacher_rate_selector.dart';
+
+import 'teacher_employment_reference_gateway.dart';
 
 class TeacherEmploymentInitial {
   final List<Map<String, dynamic>> branches;
@@ -76,25 +74,26 @@ class TeacherEmploymentValue {
   };
 }
 
-class TeacherEmploymentFields extends ConsumerStatefulWidget {
+class TeacherEmploymentFields extends StatefulWidget {
+  final TeacherEmploymentReferenceGateway gateway;
   final TeacherEmploymentInitial initial;
   final bool requireRate;
   final bool enabled;
 
   const TeacherEmploymentFields({
     super.key,
+    required this.gateway,
     this.initial = const TeacherEmploymentInitial(),
     this.requireRate = false,
     this.enabled = true,
   });
 
   @override
-  ConsumerState<TeacherEmploymentFields> createState() =>
+  State<TeacherEmploymentFields> createState() =>
       TeacherEmploymentFieldsState();
 }
 
-class TeacherEmploymentFieldsState
-    extends ConsumerState<TeacherEmploymentFields> {
+class TeacherEmploymentFieldsState extends State<TeacherEmploymentFields> {
   final _formKey = GlobalKey<FormState>();
   final _salaryController = TextEditingController();
   final Set<String> _branchIds = {};
@@ -102,8 +101,8 @@ class TeacherEmploymentFieldsState
   final Set<String> _levels = {};
   final Set<String> _categories = {};
 
-  List<Map<String, dynamic>> _branches = const [];
-  List<Map<String, dynamic>> _disciplines = const [];
+  List<TeacherEmploymentReferenceOption> _branches = const [];
+  List<TeacherEmploymentReferenceOption> _disciplines = const [];
   List<String> _levelOptions = const [];
   List<String> _categoryOptions = const [];
   DateTime? _birthday;
@@ -124,8 +123,8 @@ class TeacherEmploymentFieldsState
   void initState() {
     super.initState();
     final initial = widget.initial;
-    _branches = [...initial.branches];
-    _disciplines = [...initial.disciplines];
+    _branches = _optionsOf(initial.branches);
+    _disciplines = _optionsOf(initial.disciplines);
     _branchIds.addAll(_idsOf(initial.branches));
     _disciplineIds.addAll(_idsOf(initial.disciplines));
     _levels.addAll(initial.levels);
@@ -150,6 +149,10 @@ class TeacherEmploymentFieldsState
       if (row['id']?.toString().isNotEmpty == true) row['id'].toString(),
   };
 
+  static List<TeacherEmploymentReferenceOption> _optionsOf(
+    List<Map<String, dynamic>> rows,
+  ) => rows.map(TeacherEmploymentReferenceOption.fromRow).toList();
+
   Future<void> _loadReferences() async {
     if (mounted) {
       setState(() {
@@ -158,65 +161,55 @@ class TeacherEmploymentFieldsState
       });
     }
     try {
-      final crm = ref.read(magicCrmServiceProvider);
-      final settings = ref.read(magicSettingsServiceProvider);
-      final branches = await crm.listBranches(limit: 100);
-      List<CrmCustomFieldDefinition> fields = const [];
+      final branches = await widget.gateway.loadBranches();
+      List<String> levelOptions = const [];
+      List<String> categoryOptions = const [];
       try {
-        fields = await settings.getCrmCustomFields();
+        levelOptions = await widget.gateway.loadTeacherCustomOptions('levels');
+        categoryOptions = await widget.gateway.loadTeacherCustomOptions(
+          'categories',
+        );
       } catch (_) {
         // Branch and discipline selection remain usable without custom fields.
       }
       if (!mounted) return;
       setState(() {
-        _branches = _mergeOptions(branches, widget.initial.branches);
-        _levelOptions = _customOptions(fields, 'levels', _levels);
-        _categoryOptions = _customOptions(fields, 'categories', _categories);
+        _branches = _mergeOptions(
+          branches,
+          _optionsOf(widget.initial.branches),
+        );
+        _levelOptions = _mergeStringOptions(levelOptions, _levels);
+        _categoryOptions = _mergeStringOptions(categoryOptions, _categories);
         _loading = false;
       });
       await _loadDisciplines();
-    } catch (error) {
+    } catch (_) {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _loadError = userErrorMessage(
-          error,
-          fallback: 'Не удалось загрузить условия работы.',
-        );
+        _loadError = 'Не удалось загрузить настройки преподавателя.';
       });
     }
   }
 
-  static List<Map<String, dynamic>> _mergeOptions(
-    List<Map<String, dynamic>> current,
-    List<Map<String, dynamic>> initial,
+  static List<TeacherEmploymentReferenceOption> _mergeOptions(
+    List<TeacherEmploymentReferenceOption> current,
+    List<TeacherEmploymentReferenceOption> initial,
   ) {
-    final byId = <String, Map<String, dynamic>>{};
+    final byId = <String, TeacherEmploymentReferenceOption>{};
     for (final row in [...current, ...initial]) {
-      final id = row['id']?.toString();
-      if (id != null && id.isNotEmpty) byId[id] = row;
+      if (row.id.isNotEmpty) byId[row.id] = row;
     }
     final result = byId.values.toList();
-    result.sort(
-      (a, b) =>
-          (a['name']?.toString() ?? '').compareTo(b['name']?.toString() ?? ''),
-    );
+    result.sort((a, b) => a.name.compareTo(b.name));
     return result;
   }
 
-  static List<String> _customOptions(
-    List<CrmCustomFieldDefinition> fields,
-    String key,
+  static List<String> _mergeStringOptions(
+    List<String> options,
     Set<String> selected,
   ) {
-    CrmCustomFieldDefinition? definition;
-    for (final field in fields) {
-      if (field.entity == 'teachers' && field.key == key) {
-        definition = field;
-        break;
-      }
-    }
-    final values = <String>{...selected, ...?definition?.options}.toList();
+    final values = <String>{...selected, ...options}.toList();
     values.sort();
     return values;
   }
@@ -225,12 +218,14 @@ class TeacherEmploymentFieldsState
     final generation = ++_disciplineLoadGeneration;
     setState(() => _loadingDisciplines = true);
     try {
-      final crm = ref.read(magicCrmServiceProvider);
-      final rows = await crm.listDisciplines();
+      final rows = await widget.gateway.loadDisciplines();
       if (!mounted || generation != _disciplineLoadGeneration) return;
       setState(() {
-        _disciplines = _mergeOptions(rows, widget.initial.disciplines);
-        final available = _idsOf(_disciplines);
+        _disciplines = _mergeOptions(
+          rows,
+          _optionsOf(widget.initial.disciplines),
+        );
+        final available = {for (final option in _disciplines) option.id};
         _disciplineIds.removeWhere((id) => !available.contains(id));
         _loadingDisciplines = false;
       });
@@ -289,7 +284,7 @@ class TeacherEmploymentFieldsState
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('Не удалось загрузить настройки преподавателя.'),
+          Text(_loadError!),
           const SizedBox(height: 8),
           OutlinedButton(
             onPressed: _loadReferences,
@@ -455,7 +450,7 @@ class TeacherEmploymentFieldsState
 
   Widget _chips({
     required String title,
-    required List<Map<String, dynamic>> options,
+    required List<TeacherEmploymentReferenceOption> options,
     required Set<String> selected,
     String? emptyText,
     VoidCallback? onChanged,
@@ -474,20 +469,18 @@ class TeacherEmploymentFieldsState
             for (final option in options)
               FilterChip(
                 label: Text(
-                  '${option['name']?.toString() ?? 'Не указано'}'
-                  '${lockArchived && (option['lifecycleState'] == 'archived' || option['lifecycle_state'] == 'archived') ? ' (в архиве)' : ''}',
+                  '${option.name.isEmpty ? 'Не указано' : option.name}'
+                  '${lockArchived && option.lifecycleState == 'archived' ? ' (в архиве)' : ''}',
                 ),
-                selected: selected.contains(option['id']?.toString()),
+                selected: selected.contains(option.id),
                 onSelected:
                     !widget.enabled ||
                         (lockArchived &&
-                            (option['lifecycleState'] == 'archived' ||
-                                option['lifecycle_state'] == 'archived') &&
-                            !selected.contains(option['id']?.toString()))
+                            option.lifecycleState == 'archived' &&
+                            !selected.contains(option.id))
                     ? null
                     : (value) {
-                        final id = option['id']?.toString();
-                        if (id == null) return;
+                        final id = option.id;
                         setState(() {
                           value ? selected.add(id) : selected.remove(id);
                           _selectionError = null;
@@ -510,7 +503,8 @@ class TeacherEmploymentFieldsState
     return _chips(
       title: title,
       options: [
-        for (final option in options) {'id': option, 'name': option},
+        for (final option in options)
+          TeacherEmploymentReferenceOption(id: option, name: option),
       ],
       selected: selected,
       emptyText: emptyText,
