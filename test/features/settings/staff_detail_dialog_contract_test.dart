@@ -16,16 +16,15 @@ class _StaffApi extends MagicApiClient {
     this.branchResponse,
     this.patchResponse,
     this.provisionResponse,
-    this.branches = const [
-      {'id': 'branch-a', 'name': 'Сокол'},
-    ],
   }) : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   int branchFailures;
   final Completer<List<Map<String, dynamic>>>? branchResponse;
   final Completer<Map<String, dynamic>>? patchResponse;
   final Completer<Map<String, dynamic>>? provisionResponse;
-  final List<Map<String, dynamic>> branches;
+  final List<Map<String, dynamic>> branches = const [
+    {'id': 'branch-a', 'name': 'Сокол'},
+  ];
   final patches = <String, Map<String, dynamic>>{};
   final posts = <String, Map<String, dynamic>>{};
   int branchReads = 0;
