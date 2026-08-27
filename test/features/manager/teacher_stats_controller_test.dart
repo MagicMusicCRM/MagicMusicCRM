@@ -23,10 +23,10 @@ class _RecordedPatch {
 }
 
 class _FakeApiClient extends MagicApiClient {
-  _FakeApiClient({this.exportCsv = '\ufeffteacher,hours\nИван,1'})
+  _FakeApiClient()
     : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
-  final String exportCsv;
+  final String exportCsv = '\ufeffteacher,hours\nИван,1';
   final List<_RecordedRequest> gets = [];
   final List<_RecordedPatch> patches = [];
 

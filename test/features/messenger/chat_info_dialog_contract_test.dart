@@ -242,7 +242,7 @@ void main() {
         child: MaterialApp(
           home: ValueListenableBuilder<String>(
             valueListenable: chatId,
-            builder: (_, value, __) => ChatInfoDialog(
+            builder: (_, value, _) => ChatInfoDialog(
               chatType: 'direct',
               chatId: value,
               userRole: 'manager',
