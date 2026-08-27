@@ -18,6 +18,7 @@ class BranchHoursCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final draft = controller.state.branchDraft;
+    final canMutate = _canMutate(controller.canEdit, controller.state.saving);
     return ScheduleReferenceCard(
       title: 'Рабочие часы филиала',
       action: controller.canEdit
@@ -34,7 +35,7 @@ class BranchHoursCard extends StatelessWidget {
           ScheduleTimeRow(
             label: day.value,
             value: draft?.weekly[day.key],
-            editable: controller.canEdit,
+            editable: canMutate,
             onEnabled: (enabled) =>
                 controller.setBranchDayEnabled(day.key, enabled),
             onTime: (field, value) =>
@@ -51,7 +52,10 @@ class BranchHoursCard extends StatelessWidget {
             ),
             if (controller.canEdit)
               TextButton.icon(
-                onPressed: () => _addException(context),
+                onPressed: _whenEnabled(
+                  canMutate,
+                  () => _addException(context),
+                ),
                 icon: const Icon(Icons.add_rounded),
                 label: const Text('Добавить'),
               ),
@@ -69,8 +73,11 @@ class BranchHoursCard extends StatelessWidget {
             trailing: controller.canEdit
                 ? IconButton(
                     tooltip: 'Удалить исключение',
-                    onPressed: () => controller.removeBranchException(
-                      row['date']?.toString() ?? '',
+                    onPressed: _whenEnabled(
+                      canMutate,
+                      () => controller.removeBranchException(
+                        row['date']?.toString() ?? '',
+                      ),
                     ),
                     icon: const Icon(Icons.delete_outline_rounded),
                   )
@@ -99,6 +106,7 @@ class TeacherAssignmentsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final assignments = controller.state.teacherDraft?.assignments;
+    final canMutate = _canMutate(controller.canEdit, controller.state.saving);
     return ScheduleReferenceCard(
       title: 'Филиалы преподавателя',
       action: controller.canEdit
@@ -116,12 +124,13 @@ class TeacherAssignmentsCard extends StatelessWidget {
             contentPadding: EdgeInsets.zero,
             value: assignments?.containsKey(branch['id']?.toString()) ?? false,
             title: Text(branch['name']?.toString() ?? 'Филиал'),
-            onChanged: !controller.canEdit
-                ? null
-                : (selected) => controller.setAssignment(
-                    branch['id'].toString(),
-                    selected == true,
-                  ),
+            onChanged: _whenEnabled<ValueChanged<bool?>>(
+              canMutate,
+              (selected) => controller.setAssignment(
+                branch['id'].toString(),
+                selected == true,
+              ),
+            ),
           ),
       ],
     );
@@ -142,6 +151,7 @@ class TeacherAvailabilityCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final draft = controller.state.teacherDraft;
     final canEdit = controller.canEdit && !controller.availabilityLocked;
+    final canMutate = _canMutate(canEdit, controller.state.saving);
     return ScheduleReferenceCard(
       title: 'Доступность преподавателя',
       action: canEdit
@@ -165,7 +175,7 @@ class TeacherAvailabilityCard extends StatelessWidget {
           ScheduleTimeRow(
             label: day.value,
             value: draft?.recurring[day.key],
-            editable: canEdit,
+            editable: canMutate,
             startKey: 'localStart',
             endKey: 'localEnd',
             onEnabled: (enabled) =>
@@ -184,7 +194,7 @@ class TeacherAvailabilityCard extends StatelessWidget {
             ),
             if (canEdit)
               TextButton.icon(
-                onPressed: () => _addInterval(context),
+                onPressed: _whenEnabled(canMutate, () => _addInterval(context)),
                 icon: const Icon(Icons.add_rounded),
                 label: const Text('Добавить'),
               ),
@@ -200,7 +210,10 @@ class TeacherAvailabilityCard extends StatelessWidget {
             trailing: canEdit
                 ? IconButton(
                     tooltip: 'Удалить период',
-                    onPressed: () => controller.removeUnavailableInterval(row),
+                    onPressed: _whenEnabled(
+                      canMutate,
+                      () => controller.removeUnavailableInterval(row),
+                    ),
                     icon: const Icon(Icons.delete_outline_rounded),
                   )
                 : null,
@@ -329,3 +342,7 @@ String _intervalLabel(Map<String, dynamic> row) {
       ? 'с ${format.format(start)}'
       : '${format.format(start)} - ${format.format(end)}';
 }
+
+T? _whenEnabled<T>(bool enabled, T callback) => enabled ? callback : null;
+
+bool _canMutate(bool canEdit, bool saving) => canEdit && !saving;

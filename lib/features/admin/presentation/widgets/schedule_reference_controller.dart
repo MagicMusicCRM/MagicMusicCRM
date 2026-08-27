@@ -134,7 +134,7 @@ class ScheduleReferenceController extends ChangeNotifier {
 
   void setBranchDayEnabled(int weekday, bool enabled) {
     final draft = _branchDraft;
-    if (!canEdit || draft == null) return;
+    if (!canEdit || _saving || draft == null) return;
     final weekly = copyIndexedScheduleRows(draft.weekly);
     if (enabled) {
       weekly[weekday] = {'weekday': weekday, 'open': '09:00', 'close': '21:00'};
@@ -148,7 +148,7 @@ class ScheduleReferenceController extends ChangeNotifier {
   void setBranchTime(int weekday, String field, String value) {
     final draft = _branchDraft;
     final row = draft?.weekly[weekday];
-    if (!canEdit || draft == null || row == null) return;
+    if (!canEdit || _saving || draft == null || row == null) return;
     final weekly = copyIndexedScheduleRows(draft.weekly);
     weekly[weekday] = {...row, field: value};
     _branchDraft = draft.copyWith(weekly: weekly);
@@ -158,7 +158,7 @@ class ScheduleReferenceController extends ChangeNotifier {
   void replaceBranchException(Map<String, dynamic> exception) {
     final draft = _branchDraft;
     final date = exception['date']?.toString();
-    if (!canEdit || draft == null || date == null) return;
+    if (!canEdit || _saving || draft == null || date == null) return;
     final exceptions =
         [
           for (final row in draft.exceptions)
@@ -174,7 +174,7 @@ class ScheduleReferenceController extends ChangeNotifier {
 
   void removeBranchException(String date) {
     final draft = _branchDraft;
-    if (!canEdit || draft == null) return;
+    if (!canEdit || _saving || draft == null) return;
     _branchDraft = draft.copyWith(
       exceptions: [
         for (final row in draft.exceptions)
@@ -186,7 +186,7 @@ class ScheduleReferenceController extends ChangeNotifier {
 
   void setAssignment(String branchId, bool selected) {
     final draft = _teacherDraft;
-    if (!canEdit || draft == null) return;
+    if (!canEdit || _saving || draft == null) return;
     final assignments = copyNamedScheduleRows(draft.assignments);
     if (selected) {
       assignments[branchId] = {
@@ -354,7 +354,7 @@ class ScheduleReferenceController extends ChangeNotifier {
     }
   }
 
-  bool get _canEditAvailability => canEdit && !availabilityLocked;
+  bool get _canEditAvailability => canEdit && !_saving && !availabilityLocked;
 
   void _startLoading() {
     _loading = true;

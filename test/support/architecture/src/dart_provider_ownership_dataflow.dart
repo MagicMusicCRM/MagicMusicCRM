@@ -1,6 +1,7 @@
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
 
+import 'dart_provider_expression_flow.dart';
 import 'dart_provider_flow_state.dart';
 
 ProviderOwnershipDataflow collectProviderOwnershipDataflow(
@@ -367,6 +368,22 @@ class _ProviderOwnershipVisitor extends RecursiveAstVisitor<void> {
 
   ProviderFlowValue _evaluateValue(Expression expression) {
     if (expression is SimpleIdentifier) return _state.read(expression.name);
+    final transparentOperand = transparentProviderFlowOperand(expression);
+    if (transparentOperand != null) return _evaluate(transparentOperand);
+    if (expression is ConditionalExpression) {
+      return evaluateConditionalProviderFlow(
+        expression: expression,
+        state: _state,
+        evaluate: _evaluate,
+      );
+    }
+    if (expression is SwitchExpression) {
+      return evaluateSwitchProviderFlow(
+        expression: expression,
+        state: _state,
+        evaluate: _evaluate,
+      );
+    }
     if (expression is ParenthesizedExpression) {
       return _evaluate(expression.expression);
     }
