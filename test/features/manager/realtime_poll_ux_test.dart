@@ -13,10 +13,20 @@ import 'package:magic_music_crm/features/manager/presentation/widgets/finance_wi
 import 'package:magic_music_crm/features/manager/presentation/widgets/leads_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/reports_widget.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/students_board_widget.dart';
+import 'package:magic_music_crm/features/manager/presentation/transfer/lead_transfer_controller.dart';
 
 class _CountingApiClient extends MagicApiClient {
   _CountingApiClient({
     List<Map<String, dynamic>> studentItems = const [],
+    this.studentNextCursor,
+    this.studentPageItems = const [],
+    this.branches = const [
+      {
+        'id': 'branch-a',
+        'name': 'Сокол',
+        'createdAt': '2026-06-25T00:00:00.000Z',
+      },
+    ],
     this.studentStages = const [
       {
         'key': 'learning',
@@ -33,8 +43,12 @@ class _CountingApiClient extends MagicApiClient {
 
   final counts = <String, int>{};
   final List<Map<String, dynamic>> studentItems;
+  final String? studentNextCursor;
+  final List<Map<String, dynamic>> studentPageItems;
+  final List<Map<String, dynamic>> branches;
   final List<Map<String, dynamic>> studentStages;
   final patches = <({String path, Map<String, dynamic> data})>[];
+  final studentSearchQueries = <Map<String, dynamic>>[];
 
   int count(String path) => counts[path] ?? 0;
 
@@ -45,6 +59,11 @@ class _CountingApiClient extends MagicApiClient {
     bool authenticated = true,
   }) async {
     counts[path] = count(path) + 1;
+    if (path == '/crm/students/search') {
+      studentSearchQueries.add(
+        Map<String, dynamic>.from(queryParameters ?? const {}),
+      );
+    }
     await Future<void>.delayed(Duration.zero);
     return switch (path) {
           '/crm/payments' => <String, dynamic>{
@@ -77,18 +96,15 @@ class _CountingApiClient extends MagicApiClient {
             'items': <dynamic>[],
           },
           '/crm/lead-statuses' => <String, dynamic>{'items': <dynamic>[]},
-          '/crm/branches' => <String, dynamic>{
-            'items': <dynamic>[
-              <String, dynamic>{
-                'id': 'branch-a',
-                'name': 'Сокол',
-                'createdAt': '2026-06-25T00:00:00.000Z',
-              },
-            ],
-          },
+          '/crm/branches' => <String, dynamic>{'items': branches},
           '/crm/students/search' => <String, dynamic>{
-            'items': studentItems,
+            'items': queryParameters?['cursor'] == null
+                ? studentItems
+                : studentPageItems,
             'totalCount': studentItems.length,
+            'nextCursor': queryParameters?['cursor'] == null
+                ? studentNextCursor
+                : null,
           },
           '/crm/client-pipelines' => <String, dynamic>{
             'clientType': queryParameters?['clientType'],
@@ -131,12 +147,15 @@ Widget _host({
     capabilities: <String>{},
     scopes: <String, String>{},
   ),
+  LeadTransferController? transfer,
 }) {
   return ProviderScope(
     overrides: [
       magicApiClientProvider.overrideWithValue(api),
       crmRealtimeProvider.overrideWith((ref) => realtime),
       capabilitySnapshotProvider.overrideWith((ref) async => snapshot),
+      if (transfer != null)
+        leadTransferControllerProvider.overrideWith((ref) => transfer),
     ],
     child: MaterialApp(home: Scaffold(body: child)),
   );
@@ -281,6 +300,128 @@ void main() {
 
     expect(api.count('/crm/students/search'), initialSearch);
   });
+
+  testWidgets(
+    'first mount transfer branch owns pagination and PATCH readback identity',
+    (tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final api = _CountingApiClient(
+        branches: const [
+          {
+            'id': 'branch-a',
+            'name': 'Сокол',
+            'createdAt': '2026-06-25T00:00:00.000Z',
+          },
+          {
+            'id': 'branch-b',
+            'name': 'Центр',
+            'createdAt': '2026-06-25T00:00:00.000Z',
+          },
+        ],
+        studentItems: const [
+          {
+            'id': 'student-transfer',
+            'status': 'learning',
+            'branch_id': 'branch-b',
+            'first_name': 'Анна',
+          },
+        ],
+        studentNextCursor: 'cursor-b',
+        studentPageItems: const [
+          {
+            'id': 'student-page-b',
+            'status': 'learning',
+            'branch_id': 'branch-b',
+            'first_name': 'Борис',
+          },
+        ],
+        studentStages: const [
+          {
+            'key': 'learning',
+            'label': 'Обучаются',
+            'style': 'green',
+            'active': true,
+            'allowedTransitions': <dynamic>['paused'],
+          },
+          {
+            'key': 'paused',
+            'label': 'Пауза',
+            'style': 'amber',
+            'active': true,
+            'allowedTransitions': <dynamic>[],
+          },
+        ],
+      );
+      final transfer = LeadTransferController()
+        ..setBranches(const [
+          {'id': 'branch-b', 'name': 'Центр'},
+        ])
+        ..selectBranch('branch-b', 'Центр')
+        ..debugSetPhase(LeadTransferPhase.students);
+      final realtime = StreamController<CrmChangedEvent>.broadcast();
+      addTearDown(realtime.close);
+
+      await tester.pumpWidget(
+        _host(
+          api: api,
+          realtime: realtime.stream,
+          transfer: transfer,
+          snapshot: const CapabilitySnapshot(
+            accountId: 'manager-test',
+            role: 'manager',
+            accessVersion: 1,
+            capabilities: <String>{'crm.client.write'},
+            scopes: <String, String>{'client': 'branch'},
+          ),
+          child: const StudentsBoardWidget(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        api.studentSearchQueries,
+        contains(
+          allOf(
+            containsPair('branchId', 'branch-b'),
+            containsPair('cursor', 'cursor-b'),
+          ),
+        ),
+      );
+      expect(
+        api.studentSearchQueries.every(
+          (query) => query['branchId'] == 'branch-b',
+        ),
+        isTrue,
+      );
+
+      Finder target(String label) => find.ancestor(
+        of: find.text(label),
+        matching: find.byType(DragTarget<Map<String, dynamic>>),
+      );
+      final paused = tester.widget<DragTarget<Map<String, dynamic>>>(
+        target('Пауза'),
+      );
+      paused.onAcceptWithDetails!(
+        DragTargetDetails<Map<String, dynamic>>(
+          data: api.studentItems.single,
+          offset: Offset.zero,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(api.patches, hasLength(1));
+      expect(
+        api.studentSearchQueries.every(
+          (query) => query['branchId'] == 'branch-b',
+        ),
+        isTrue,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('student chat action exists only for a linked app account', (
     tester,

@@ -1,718 +1,323 @@
-part of 'students_board_widget.dart';
+import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/widgets/magic_desktop_scrollbar.dart';
+import 'package:magic_music_crm/core/widgets/skeletons.dart';
+import 'package:magic_music_crm/features/manager/presentation/widgets/client_board_toolbar.dart';
 
-// ── Column data ────────────────────────────────────────────────────────────
+import 'students_board_columns.dart';
+import 'students_board_models.dart';
 
-class _StatusColumnData {
-  final String? status; // null → «Прочие», non-droppable
-  final String name;
-  final String style;
-  final Set<String> allowedTransitions;
-  final List<Map<String, dynamic>> students;
+typedef StudentsBoardColumnWrapper =
+    Widget Function(BuildContext, StudentsBoardColumnData, Widget);
 
-  _StatusColumnData({
-    required this.status,
-    required this.name,
-    required this.style,
-    required this.allowedTransitions,
-    required this.students,
-  });
-}
-
-// ── Column ───────────────────────────────────────────────────────────────────
-
-class _StatusColumn extends StatelessWidget {
-  final _StatusColumnData column;
-  final Map<String, Set<String>> transitions;
-  final Set<String> pendingStudentIds;
-  final ValueChanged<Map<String, dynamic>> onTap;
-  final Future<void> Function(Map<String, dynamic>, String) onMove;
-  final ValueChanged<Offset> onDragUpdate;
-  final VoidCallback onDragEnd;
-  final String? nextCursor;
-  final bool loadingMore;
-  final VoidCallback onLoadMore;
-
-  const _StatusColumn({
-    required this.column,
+class StudentsBoardView extends StatelessWidget {
+  const StudentsBoardView({
+    super.key,
+    required this.state,
+    required this.canWrite,
+    required this.transferActive,
+    required this.activeBranchId,
+    required this.contentState,
+    required this.columns,
     required this.transitions,
-    required this.pendingStudentIds,
-    required this.onTap,
-    required this.onMove,
+    required this.searchController,
+    required this.scrollController,
+    required this.onSearchChanged,
+    required this.onClearSearch,
+    required this.onToggleFilters,
+    required this.onSelectBranch,
+    required this.onRetryBranches,
+    required this.onRetryBoard,
+    required this.onCreateStudent,
+    required this.onOpenStudent,
+    required this.onMoveStatus,
+    required this.onOpenChat,
     required this.onDragUpdate,
     required this.onDragEnd,
-    required this.nextCursor,
-    required this.loadingMore,
     required this.onLoadMore,
+    this.nextCursor,
+    this.wrapColumn,
   });
 
-  bool get _droppable => column.status != null;
-
-  bool _canAccept(Map<String, dynamic> student) {
-    if (!_droppable) return false;
-    final current = student['status']?.toString().trim().toLowerCase() ?? '';
-    if (current == column.status) return false;
-    final allowed = transitions[current];
-    return allowed == null || allowed.contains(column.status);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return DragTarget<Map<String, dynamic>>(
-      onWillAcceptWithDetails: (details) => _canAccept(details.data),
-      onAcceptWithDetails: (details) {
-        onDragEnd();
-        if (column.status != null) {
-          onMove(details.data, column.status!);
-        }
-      },
-      builder: (context, candidateData, rejectedData) {
-        final hovering = candidateData.whereType<Map<String, dynamic>>().any(
-          _canAccept,
-        );
-        final denied = rejectedData.whereType<Map<String, dynamic>>().any(
-          (student) => !_canAccept(student),
-        );
-        final accent = denied
-            ? AppColor.danger
-            : _studentStageColor(column.style);
-        final screenWidth = MediaQuery.of(context).size.width;
-        final columnWidth = screenWidth < 360
-            ? (screenWidth - 24).clamp(220.0, 300.0)
-            : 300.0;
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          curve: Curves.easeOut,
-          width: columnWidth,
-          margin: const EdgeInsets.symmetric(horizontal: 6),
-          decoration: BoxDecoration(
-            color: hovering
-                ? accent.withAlpha(30)
-                : Theme.of(context).colorScheme.surface.withAlpha(127),
-            borderRadius: BorderRadius.circular(AppRadius.card),
-            border: Border.all(
-              color: hovering ? accent : accent.withAlpha(65),
-              width: hovering ? 1.5 : 1,
-            ),
-          ),
-          child: Column(
-            children: [
-              // ── Header ──────────────────────────────────────────────────
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  children: [
-                    Icon(Icons.school_rounded, size: 14, color: accent),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        column.name,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surface,
-                        borderRadius: BorderRadius.circular(AppRadius.chip),
-                        border: Border.all(
-                          color: accent.withAlpha(90),
-                          width: 1,
-                        ),
-                      ),
-                      child: Text(
-                        '${column.students.length}',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // ── Drop hint ─────────────────────────────────────────────────
-              AnimatedSize(
-                duration: const Duration(milliseconds: 160),
-                curve: Curves.easeOut,
-                child: hovering || denied
-                    ? Container(
-                        height: 40,
-                        margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: accent),
-                          borderRadius: BorderRadius.circular(
-                            AppRadius.control,
-                          ),
-                          color: accent.withAlpha(25),
-                        ),
-                        child: Center(
-                          child: Text(
-                            denied
-                                ? 'Переход запрещён настройками'
-                                : 'Отпустите, чтобы перенести',
-                            style: TextStyle(
-                              color: accent,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      )
-                    : const SizedBox.shrink(),
-              ),
-              // ── Cards ─────────────────────────────────────────────────────
-              Expanded(
-                child: column.students.isEmpty
-                    ? _buildEmptyColumn(context)
-                    : MagicDesktopScrollbar(
-                        axis: Axis.vertical,
-                        builder: (context, controller) => ListView.builder(
-                          controller: controller,
-                          key: PageStorageKey(
-                            'students_col_${column.status ?? 'other'}',
-                          ),
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          itemCount:
-                              column.students.length +
-                              (nextCursor?.isNotEmpty == true ? 1 : 0),
-                          itemBuilder: (context, index) {
-                            if (index >= column.students.length) {
-                              return _AutomaticStudentPageLoader(
-                                cursor: nextCursor!,
-                                loading: loadingMore,
-                                onLoad: onLoadMore,
-                              );
-                            }
-                            final student = column.students[index];
-                            final id = student['id']?.toString() ?? '';
-                            return _StudentCard(
-                              student: student,
-                              isPending: pendingStudentIds.contains(id),
-                              onTap: () => onTap(student),
-                              onDragUpdate: onDragUpdate,
-                              onDragEnd: onDragEnd,
-                            );
-                          },
-                        ),
-                      ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildEmptyColumn(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpace.md,
-          vertical: AppSpace.lg,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.inbox_outlined,
-              size: 28,
-              color: cs.onSurfaceVariant.withAlpha(140),
-            ),
-            const SizedBox(height: AppSpace.sm),
-            Text(
-              'Нет учеников',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: cs.onSurfaceVariant,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            if (_droppable) ...[
-              const SizedBox(height: 2),
-              Text(
-                'Перетащите карточку сюда',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: cs.onSurfaceVariant.withAlpha(160),
-                  fontSize: 11,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AutomaticStudentPageLoader extends StatefulWidget {
-  final String cursor;
-  final bool loading;
-  final VoidCallback onLoad;
-
-  const _AutomaticStudentPageLoader({
-    required this.cursor,
-    required this.loading,
-    required this.onLoad,
-  });
-
-  @override
-  State<_AutomaticStudentPageLoader> createState() =>
-      _AutomaticStudentPageLoaderState();
-}
-
-class _AutomaticStudentPageLoaderState
-    extends State<_AutomaticStudentPageLoader> {
-  String? _requestedCursor;
-
-  @override
-  Widget build(BuildContext context) {
-    if (!widget.loading && _requestedCursor != widget.cursor) {
-      _requestedCursor = widget.cursor;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) widget.onLoad();
-      });
-    }
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 12),
-      child: Center(
-        child: SizedBox(
-          width: 18,
-          height: 18,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
-      ),
-    );
-  }
-}
-
-Color _studentStageColor(String style) => switch (style) {
-  'cyan' => AppColor.transferCyan,
-  'green' => AppColor.success,
-  'amber' => AppColor.warning,
-  'red' => AppColor.danger,
-  'slate' => AppColor.text2,
-  _ => AppColor.gold,
-};
-
-// ── Card ─────────────────────────────────────────────────────────────────────
-
-class _StudentCard extends StatelessWidget {
-  final Map<String, dynamic> student;
-  final bool isPending;
-  final VoidCallback onTap;
+  final StudentsBoardState state;
+  final bool canWrite;
+  final bool transferActive;
+  final String? activeBranchId;
+  final StudentsBoardContentState contentState;
+  final List<StudentsBoardColumnData> columns;
+  final Map<String, Set<String>> transitions;
+  final TextEditingController searchController;
+  final ScrollController scrollController;
+  final ValueChanged<String> onSearchChanged;
+  final VoidCallback onClearSearch;
+  final VoidCallback onToggleFilters;
+  final ValueChanged<String> onSelectBranch;
+  final VoidCallback onRetryBranches;
+  final VoidCallback onRetryBoard;
+  final VoidCallback onCreateStudent;
+  final ValueChanged<Map<String, dynamic>> onOpenStudent;
+  final Future<void> Function(Map<String, dynamic>, String) onMoveStatus;
+  final ValueChanged<String> onOpenChat;
   final ValueChanged<Offset> onDragUpdate;
   final VoidCallback onDragEnd;
-
-  const _StudentCard({
-    required this.student,
-    required this.isPending,
-    required this.onTap,
-    required this.onDragUpdate,
-    required this.onDragEnd,
-  });
+  final VoidCallback onLoadMore;
+  final String? nextCursor;
+  final StudentsBoardColumnWrapper? wrapColumn;
 
   @override
   Widget build(BuildContext context) {
-    final firstName = student['first_name']?.toString() ?? '';
-    final lastName = student['last_name']?.toString() ?? '';
-    final displayName = '$firstName $lastName'.trim();
-    final name = displayName.isEmpty ? 'Без имени' : displayName;
-    final phone = student['phone']?.toString() ?? '';
-
-    final Widget feedback = Transform.rotate(
-      angle: 0.03,
-      child: Material(
-        color: Colors.transparent,
-        child: Builder(
-          builder: (context) {
-            final screenWidth = MediaQuery.of(context).size.width;
-            final feedbackWidth = screenWidth < 360
-                ? (screenWidth - 24).clamp(220.0, 300.0) - 24
-                : 276.0;
-            return Container(
-              width: feedbackWidth,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(AppRadius.control),
-                border: Border.all(color: AppTheme.primaryGold, width: 2),
-                boxShadow: AppShadow.shLift,
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.school_rounded,
-                    size: 14,
-                    color: AppTheme.primaryGold,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        if (phone.isNotEmpty)
-                          Text(
-                            phone,
-                            style: TextStyle(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurfaceVariant,
-                              fontSize: 12,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  const Icon(Icons.drag_indicator_rounded, size: 18),
-                ],
-              ),
-            );
-          },
-        ),
-      ),
+    if (transferActive && activeBranchId != null) {
+      return Column(children: [Expanded(child: _buildBoard())]);
+    }
+    final toolbar = _StudentsToolbar(
+      state: state,
+      searchController: searchController,
+      onSearchChanged: onSearchChanged,
+      onClearSearch: onClearSearch,
+      onToggleFilters: onToggleFilters,
+      onSelectBranch: onSelectBranch,
     );
-    // Faded placeholder gap in the source column while dragging.
-    final Widget childWhenDragging = Opacity(
-      opacity: 0.3,
-      child: Card(
-        margin: const EdgeInsets.only(bottom: 10),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.control),
-          side: BorderSide(color: AppTheme.primaryGold.withAlpha(120)),
-        ),
-        child: const SizedBox(height: 64, width: double.infinity),
-      ),
-    );
-    final Widget cardChild = Opacity(
-      opacity: isPending ? 0.62 : 1,
-      child: AbsorbPointer(
-        absorbing: isPending,
-        child: GestureDetector(
-          onTap: onTap,
-          child: _CardBody(student: student, isPending: isPending),
-        ),
-      ),
-    );
-
-    final platform = Theme.of(context).platform;
-    final desktop =
-        platform == TargetPlatform.windows ||
-        platform == TargetPlatform.linux ||
-        platform == TargetPlatform.macOS;
-
-    // Desktop (mouse): an immediate Draggable so a plain click-drag moves the
-    // card — press-and-hold is a touch idiom. A motionless click still falls
-    // through to onTap (same pattern as the schedule day canvas).
-    if (desktop) {
-      return Draggable<Map<String, dynamic>>(
-        data: student,
-        maxSimultaneousDrags: isPending ? 0 : null,
-        onDragUpdate: (details) => onDragUpdate(details.globalPosition),
-        onDragEnd: (_) => onDragEnd(),
-        onDraggableCanceled: (_, _) => onDragEnd(),
-        onDragCompleted: onDragEnd,
-        feedback: feedback,
-        childWhenDragging: childWhenDragging,
-        child: cardChild,
+    if (!state.branchesLoaded && state.branchLoadError == null) {
+      return Column(
+        children: [
+          toolbar,
+          const Expanded(child: Center(child: CircularProgressIndicator())),
+        ],
       );
     }
-    return LongPressDraggable<Map<String, dynamic>>(
-      data: student,
-      maxSimultaneousDrags: isPending ? 0 : null,
-      // Snappier than the platform 500ms long-press while still separating a
-      // tap (tap → open) from a deliberate drag on touch.
-      delay: const Duration(milliseconds: 250),
-      hapticFeedbackOnStart: true,
-      onDragUpdate: (details) => onDragUpdate(details.globalPosition),
-      onDragEnd: (_) => onDragEnd(),
-      onDraggableCanceled: (_, _) => onDragEnd(),
-      onDragCompleted: onDragEnd,
-      feedback: feedback,
-      childWhenDragging: childWhenDragging,
-      child: cardChild,
+    if (state.branchLoadError != null) {
+      return Column(
+        children: [
+          toolbar,
+          Expanded(
+            child: _LoadError(
+              title: state.branchLoadError!,
+              onRetry: onRetryBranches,
+            ),
+          ),
+        ],
+      );
+    }
+    if (state.branches.isEmpty) {
+      return Column(
+        children: [
+          toolbar,
+          const Expanded(child: _NoBranches()),
+        ],
+      );
+    }
+    if (state.selectedBranchId == null) {
+      return Column(
+        children: [
+          toolbar,
+          const Expanded(child: KanbanSkeleton()),
+        ],
+      );
+    }
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      floatingActionButton: canWrite
+          ? FloatingActionButton(
+              key: const ValueKey('students-create'),
+              onPressed: onCreateStudent,
+              tooltip: 'Новый ученик',
+              child: const Icon(Icons.person_add_rounded),
+            )
+          : null,
+      body: Column(
+        children: [
+          toolbar,
+          Expanded(child: _buildBoard()),
+        ],
+      ),
     );
   }
-}
 
-class _CardBody extends ConsumerWidget {
-  final Map<String, dynamic> student;
-  final bool isPending;
-
-  const _CardBody({required this.student, required this.isPending});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final firstName = student['first_name']?.toString() ?? '';
-    final lastName = student['last_name']?.toString() ?? '';
-    final displayName = '$firstName $lastName'.trim();
-    final name = displayName.isEmpty ? 'Без имени' : displayName;
-    final phone = student['phone']?.toString() ?? '';
-    final linkedUserId = student['is_app_account'] == true
-        ? student['linked_user_id']?.toString() ?? ''
-        : '';
-    final branchName = student['branch_name']?.toString() ?? '';
-    final customData = student['custom_data'];
-    final discipline = customData is Map
-        ? customData['discipline']?.toString() ?? ''
-        : '';
-    final openTasks = _intValue(student['open_tasks_count']);
-    final lessonsCount = _intValue(student['lessons_count']);
-    final groupsCount = _intValue(student['groups_count']);
-    final tableFields = (student['table_custom_fields'] as List? ?? const [])
-        .whereType<Map<String, dynamic>>()
-        .toList(growable: false);
-
-    // Жёлтым — ученик, по которому не висит ни одной задачи: про него забыли
-    // (требование заказчика 17.07). Тот же приём, что на доске лидов, и то же
-    // правило — см. no_open_tasks_highlight.
-    final forgotten = hasNoOpenTasks(openTasks);
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      color: forgotten
-          ? noOpenTasksSurface(context)
-          : Theme.of(context).colorScheme.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadius.control),
-        side: forgotten
-            ? noOpenTasksBorder()
-            : BorderSide(
-                color: Theme.of(context).colorScheme.outlineVariant,
-                width: 1,
-              ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
+  Widget _buildBoard() => switch (contentState) {
+    StudentsBoardContentState.loading ||
+    StudentsBoardContentState.idle => const KanbanSkeleton(),
+    StudentsBoardContentState.error => _LoadError(
+      title: 'Не удалось загрузить учеников',
+      onRetry: onRetryBoard,
+    ),
+    StudentsBoardContentState.data => MagicDesktopScrollbar(
+      axis: Axis.horizontal,
+      controller: scrollController,
+      builder: (context, controller) => SingleChildScrollView(
+        controller: controller,
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Name + pending spinner ────────────────────────────────────
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    name,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (linkedUserId.isNotEmpty)
-                  IconButton(
-                    tooltip: 'Написать в чат',
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 32,
-                      minHeight: 32,
-                    ),
-                    onPressed: () => ref
-                        .read(crmNavigationRequestProvider.notifier)
-                        .navigateTo(
-                          CrmNavigationRequest.directChat(linkedUserId),
-                        ),
-                    icon: const Icon(
-                      Icons.chat_bubble_outline_rounded,
-                      size: 18,
-                      color: AppColor.gold,
-                    ),
-                  ),
-                if (isPending)
-                  const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-              ],
-            ),
-            // ── Phone ─────────────────────────────────────────────────────
-            if (phone.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  phone,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-            const SizedBox(height: 8),
-            // ── Discipline badge ──────────────────────────────────────────
-            if (discipline.isNotEmpty)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryGold.withAlpha(51),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  discipline,
-                  style: const TextStyle(
-                    color: AppTheme.primaryGold,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            if (tableFields.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  children: [
-                    for (final field in tableFields)
-                      KeyedSubtree(
-                        key: ValueKey('student-table-field-${field['key']}'),
-                        child: _IconBadge(
-                          icon: Icons.tune_rounded,
-                          text: clientTableFieldText(field),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            // ── Branch badge ──────────────────────────────────────────────
-            if (branchName.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: _IconBadge(
-                  icon: Icons.location_on_outlined,
-                  text: branchName,
-                ),
-              ),
-            // ── Metric badges (tasks / lessons / groups) ──────────────────
-            if (openTasks > 0 || lessonsCount > 0 || groupsCount > 0)
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  children: [
-                    if (openTasks > 0)
-                      _MetricBadge(
-                        icon: Icons.task_alt_rounded,
-                        text: '$openTasks',
-                      ),
-                    if (lessonsCount > 0)
-                      _MetricBadge(
-                        icon: Icons.event_rounded,
-                        text: '$lessonsCount',
-                      ),
-                    if (groupsCount > 0)
-                      _MetricBadge(
-                        icon: Icons.group_rounded,
-                        text: '$groupsCount',
-                      ),
-                  ],
-                ),
-              ),
-          ],
+          children: [for (final column in columns) _wrap(context, column)],
         ),
       ),
-    );
-  }
+    ),
+  };
 
-  int _intValue(Object? value) {
-    if (value is int) return value;
-    if (value is num) return value.toInt();
-    return int.tryParse(value?.toString() ?? '') ?? 0;
+  Widget _wrap(BuildContext context, StudentsBoardColumnData column) {
+    final child = StudentStatusColumn(
+      column: column,
+      transitions: transitions,
+      pendingStudentIds: state.pendingStudentIds,
+      onTap: onOpenStudent,
+      onMove: onMoveStatus,
+      onOpenChat: onOpenChat,
+      onDragUpdate: onDragUpdate,
+      onDragEnd: onDragEnd,
+      nextCursor: nextCursor,
+      loadingMore: state.loadingMoreStudents,
+      onLoadMore: onLoadMore,
+    );
+    return wrapColumn?.call(context, column, child) ?? child;
   }
 }
 
-// ── Shared badge widgets ──────────────────────────────────────────────────────
+class _StudentsToolbar extends StatelessWidget {
+  const _StudentsToolbar({
+    required this.state,
+    required this.searchController,
+    required this.onSearchChanged,
+    required this.onClearSearch,
+    required this.onToggleFilters,
+    required this.onSelectBranch,
+  });
 
-class _IconBadge extends StatelessWidget {
-  final IconData icon;
-  final String text;
-
-  const _IconBadge({required this.icon, required this.text});
+  final StudentsBoardState state;
+  final TextEditingController searchController;
+  final ValueChanged<String> onSearchChanged;
+  final VoidCallback onClearSearch;
+  final VoidCallback onToggleFilters;
+  final ValueChanged<String> onSelectBranch;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            size: 12,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(width: 4),
-          Flexible(
-            child: Text(
-              text,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
+    final seen = <String>{};
+    final items =
+        state.branches
+            .where((branch) => seen.add(branch['id']?.toString() ?? ''))
+            .map(
+              (branch) => DropdownMenuItem<String>(
+                value: branch['id']?.toString() ?? '',
+                child: Text(
+                  branch['name']?.toString() ?? branch['id']?.toString() ?? '',
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            )
+            .toList()
+          ..add(
+            const DropdownMenuItem(
+              value: '__none__',
+              child: Text('Без филиала'),
+            ),
+          );
+    final filter =
+        state.filtersOpen &&
+            state.branchesLoaded &&
+            state.branchLoadError == null &&
+            state.branches.isNotEmpty
+        ? Container(
+            key: const ValueKey('students-filters-panel'),
+            width: 360,
+            margin: const EdgeInsets.only(top: AppSpace.sm),
+            padding: const EdgeInsets.all(AppSpace.md),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(AppRadius.control),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outlineVariant,
               ),
             ),
-          ),
-        ],
-      ),
+            child: DropdownButtonFormField<String>(
+              menuMaxHeight: 256,
+              key: ValueKey('branch:${state.selectedBranchId}'),
+              initialValue: state.selectedBranchId,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Филиал',
+                isDense: true,
+              ),
+              items: items,
+              onChanged: (value) {
+                if (value?.isNotEmpty == true) onSelectBranch(value!);
+              },
+            ),
+          )
+        : null;
+    return ClientBoardToolbar(
+      title: 'Ученики',
+      searchKey: const ValueKey('students-search'),
+      searchController: searchController,
+      searchHint: 'Имя или телефон',
+      activeFilterCount: state.selectedBranchId == null ? 0 : 1,
+      onSearchChanged: onSearchChanged,
+      onSearchSubmitted: onSearchChanged,
+      onClearSearch: onClearSearch,
+      onFiltersPressed: onToggleFilters,
+      inlineFilters: filter,
     );
   }
 }
 
-class _MetricBadge extends StatelessWidget {
-  final IconData icon;
-  final String text;
+class _LoadError extends StatelessWidget {
+  const _LoadError({required this.title, required this.onRetry});
 
-  const _MetricBadge({required this.icon, required this.text});
+  final String title;
+  final VoidCallback onRetry;
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-      decoration: BoxDecoration(
-        color: AppTheme.primaryGold.withAlpha(36),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Row(
+  Widget build(BuildContext context) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: AppTheme.primaryGold),
-          const SizedBox(width: 4),
-          Text(
-            text,
-            style: const TextStyle(
-              color: AppTheme.primaryGold,
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-            ),
+          const Icon(
+            Icons.error_outline_rounded,
+            color: AppTheme.danger,
+            size: 42,
+          ),
+          const SizedBox(height: 10),
+          Text(title, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 6),
+          const Text(
+            'Проверьте подключение и попробуйте снова.',
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('Повторить'),
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
+
+class _NoBranches extends StatelessWidget {
+  const _NoBranches();
+
+  @override
+  Widget build(BuildContext context) => const Center(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.location_off_rounded, size: 42, color: Colors.grey),
+        SizedBox(height: 10),
+        Text(
+          'Нет филиалов',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+        ),
+        SizedBox(height: 4),
+        Text(
+          'Добавьте хотя бы один филиал в настройках.',
+          style: TextStyle(color: Colors.grey),
+        ),
+      ],
+    ),
+  );
 }
