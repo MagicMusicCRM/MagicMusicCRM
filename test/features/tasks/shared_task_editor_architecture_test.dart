@@ -34,4 +34,30 @@ void main() {
     expect(contract, isNot(contains('flutter_riverpod')));
     expect(contract, isNot(contains('MagicCrmService')));
   });
+
+  test('controller depends on the narrow editor gateway', () {
+    const root = 'lib/features/manager/presentation/tasks';
+    final gatewayFile = File('$root/shared_task_editor_gateway.dart');
+    expect(gatewayFile.existsSync(), isTrue);
+    if (!gatewayFile.existsSync()) return;
+
+    final gateway = gatewayFile.readAsStringSync();
+    final controller = _source('$root/shared_task_editor_controller.dart');
+    final dataSource = _source('$root/shared_tasks_data_source.dart');
+
+    expect(
+      gateway,
+      contains('abstract interface class SharedTaskEditorGateway'),
+    );
+    expect(controller, contains('shared_task_editor_gateway.dart'));
+    expect(controller, isNot(contains('shared_tasks_data_source.dart')));
+    expect(controller, contains('final SharedTaskEditorGateway dataSource'));
+    expect(dataSource, contains('shared_task_editor_gateway.dart'));
+    expect(
+      dataSource,
+      contains(
+        'abstract class SharedTasksDataSource implements SharedTaskEditorGateway',
+      ),
+    );
+  });
 }

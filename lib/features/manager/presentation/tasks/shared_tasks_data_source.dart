@@ -2,9 +2,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/services/magic_profile_admin_service.dart';
+import 'package:magic_music_crm/features/manager/presentation/tasks/shared_task_editor_gateway.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_models.dart';
 
-abstract class SharedTasksDataSource {
+abstract class SharedTasksDataSource implements SharedTaskEditorGateway {
   Future<Map<String, dynamic>> list({
     String? state,
     String? taskId,
@@ -66,15 +67,18 @@ abstract class SharedTasksDataSource {
 
   Future<List<Map<String, dynamic>>> history(String taskId);
 
+  @override
   Future<Map<String, dynamic>> previewAudience(
     List<Map<String, dynamic>> audiences,
   );
 
+  @override
   Future<Map<String, dynamic>> create(
     Map<String, dynamic> data,
     MagicMutationIdentity identity,
   );
 
+  @override
   Future<Map<String, dynamic>> update(
     String taskId,
     Map<String, dynamic> data,

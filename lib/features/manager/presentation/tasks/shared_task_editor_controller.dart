@@ -3,8 +3,8 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
+import 'package:magic_music_crm/features/manager/presentation/tasks/shared_task_editor_gateway.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_task_editor_view_contract.dart';
-import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_data_source.dart';
 import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks_models.dart';
 
 sealed class SharedTaskSubmitOutcome {
@@ -53,7 +53,7 @@ class SharedTaskEditorController extends ChangeNotifier
        ),
        _previewLoader = previewLoader ?? dataSource.previewAudience;
 
-  final SharedTasksDataSource dataSource;
+  final SharedTaskEditorGateway dataSource;
   final SharedTaskAudiencePreviewLoader _previewLoader;
 
   SharedTaskEditorDraft _draft;
