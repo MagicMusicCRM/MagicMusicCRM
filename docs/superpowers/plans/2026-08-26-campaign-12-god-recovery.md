@@ -3373,7 +3373,7 @@ Lanes K and L are independent leaf cuts and must not edit `lib/core/services/mag
 
 **Backend scope:** Task J files plus `server/src/crm/crm.module.ts`. Flutter lanes K/L must not edit backend files.
 
-- [ ] **T4.1 Integrate Task J before the two Flutter leaf commits**
+- [x] **T4.1 Integrate Task J before the two Flutter leaf commits**
 
 ```powershell
 git merge --no-ff codex/campaign12-schedule-plan -m "merge(campaign12): integrate schedule plan lane"
@@ -3385,7 +3385,7 @@ git diff --check HEAD~3..HEAD
 
 Expected: only Task J changes backend files; K/L introduce no `server/` diff.
 
-- [ ] **T4.2 Verify final backend wiring and metadata direction**
+- [x] **T4.2 Verify final backend wiring and metadata direction**
 
 ```powershell
 rg -n "SchedulePlanDefinitionService|SchedulePlanQueryService|SchedulePlanConstraintPreviewService|SchedulePlanMutationService|SchedulePlanEndService" server/src/crm/crm.module.ts
@@ -3395,7 +3395,7 @@ rg -n "LessonCommandMetadata.*lesson-command\.service" server/src/crm/schedule
 
 Expected: five private schedule-plan providers are present; all metadata imports are neutral; the final command returns no match.
 
-- [ ] **T4.3 Re-run Task J focused smoke on the integrated Tier 4 graph**
+- [x] **T4.3 Re-run Task J focused smoke on the integrated Tier 4 graph**
 
 ```powershell
 Set-Location server
@@ -3408,7 +3408,7 @@ git diff --check
 
 Expected: focused schedule-plan evidence passes after K/L integration. Do not run the campaign-wide backend suite in this task.
 
-- [ ] **T4.4 Perform the backend portion of the Tier 4 review**
+- [x] **T4.4 Perform the backend portion of the Tier 4 review**
 
 ```powershell
 repowise update --index-only
@@ -3417,16 +3417,30 @@ repowise risk -t server/src/crm/schedule/schedule-plan.service.ts -t server/src/
 
 Reviewer verifies eight public signatures, controller route/DTO/header stability, policy and platform capability checks, three preview transactions, three versioned mutations, lock order, append-only series/lesson history, audit/outbox payloads, neutral metadata direction, no new dependency cycle, and Critical/Important `0/0`.
 
-- [ ] **T4.5 Record the backend Tier 4 result**
+- [x] **T4.5 Record the backend Tier 4 result**
 
 Write the backend section of `.superpowers/campaign12/tier-4-review.md` with Task J and merge SHAs, smoke counts/durations, RepoWise health/risk arrays, module and metadata checks, and reviewer severity counts. This report hands the integrated candidate to the separate single campaign gate.
 
 
-- [ ] **T4.6 Prove Tier 4 Flutter shared paths remained unchanged**
+- [x] **T4.6 Prove Tier 4 Flutter shared paths remained unchanged**
 
 ```powershell
 $Tier4Base = (git merge-base codex/campaign12-schedule-plan codex/campaign12-staff-detail).Trim()
 $Tier4VerifyOnly = @(
+  'server/src/crm/crm-schedule.controller.ts',
+  'server/src/crm/dto/schedule-plan.dto.ts',
+  'server/src/crm/schedule/schedule-plan.repository.ts',
+  'server/src/crm/schedule/schedule-plan.types.ts',
+  'server/src/crm/schedule/lesson-series-command.service.ts',
+  'server/src/crm/schedule/schedule-series-materializer.service.ts',
+  'server/src/crm/schedule/lesson-lifecycle.repository.ts',
+  'server/src/crm/commerce/subscription-reservation.service.ts',
+  'server/src/crm/commerce/lesson-settlement.service.ts',
+  'server/src/crm/commerce/subscription-preview-token.service.ts',
+  'server/src/crm/schedule/constraint-engine.service.ts',
+  'server/src/crm/schedule/constraint-engine.repository.ts',
+  'server/src/crm/schedule/constraint-engine.rules.ts',
+  'server/src/crm/schedule/constraint-engine.types.ts',
   'lib/core/services/magic_crm_service.dart',
   'lib/core/services/magic_crm_service_core.dart',
   'lib/core/services/magic_crm_service_schedule.dart',
@@ -3436,9 +3450,12 @@ $Tier4VerifyOnly = @(
   'lib/features/admin/presentation/widgets/person_lifecycle_dialog.dart',
   'lib/features/admin/presentation/widgets/person_access_role_dialog.dart',
   'test/features/settings/system_settings_workspace_test.dart',
-  'test/features/settings/settings_test_api.dart',
-  'test/features/settings/configuration_settings_device_test.dart'
+  'test/support/settings_test_api.dart',
+  'integration_test/configuration_settings_device_test.dart'
 )
+if ($Tier4VerifyOnly.Count -ne 25) {
+  throw "Tier 4 verify-only inventory drifted: $($Tier4VerifyOnly.Count)"
+}
 $Tier4SharedDiff = @(git diff --name-only "$Tier4Base..HEAD" -- $Tier4VerifyOnly)
 if ($Tier4SharedDiff.Count -ne 0) {
   throw "Tier 4 modified verify-only paths: $($Tier4SharedDiff -join ', ')"
@@ -3454,7 +3471,7 @@ if ($Tier4BackendDiffFromFlutter.Count -ne 0) {
 
 Expected: both arrays are empty.
 
-- [ ] **T4.7 Re-run the exact Lane K smoke on the integrated graph**
+- [x] **T4.7 Re-run the exact Lane K smoke on the integrated graph**
 
 ```powershell
 flutter test test/features/settings/staff_detail_dialog_contract_test.dart test/features/admin/presentation/widgets/staff_detail_architecture_test.dart
@@ -3470,7 +3487,7 @@ repowise health --file lib/features/admin/presentation/widgets/staff_detail_dial
 
 Expected: all named tests and checks pass; save/access/linking invariants remain exact.
 
-- [ ] **T4.8 Re-run the exact Lane L smoke on the integrated graph**
+- [x] **T4.8 Re-run the exact Lane L smoke on the integrated graph**
 
 ```powershell
 flutter test test/features/settings/schedule_reference_controller_test.dart test/features/admin/presentation/widgets/schedule_reference_architecture_test.dart
@@ -3486,13 +3503,13 @@ repowise health --file lib/features/admin/presentation/widgets/schedule_referenc
 
 Expected: all named tests and checks pass; version chaining, duplicate recurring preservation, and fail-closed read-only behavior remain exact.
 
-- [ ] **T4.9 Complete and commit the integrated Tier 4 review**
+- [x] **T4.9 Complete and commit the integrated Tier 4 review**
 
 Append the Flutter scope, K/L lane and merge SHAs, exact smoke counts/durations, verify-only proof, targeted RepoWise health/risk, and reviewer findings to `.superpowers/campaign12/tier-4-review.md`. The independent reviewer examines the complete J/K/L tier diff for backend lock/version/idempotency/audit/outbox/history contracts, Flutter provider/payload/key/copy/navigation contracts, all permanent guards, neutral metadata direction, and scope ownership. Require Critical/Important `0/0`, then commit:
 
 ```powershell
 git diff --check
-git add .superpowers/campaign12/tier-4-review.md
+git add .superpowers/campaign12/tier-4-review.md docs/superpowers/plans/2026-08-26-campaign-12-god-recovery.md
 git commit -m "docs(health): record Campaign-12 tier 4 review"
 git rev-parse HEAD
 ```
