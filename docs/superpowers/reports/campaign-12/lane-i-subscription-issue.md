@@ -81,3 +81,22 @@ the raw model score remains `8.09` without adjustment.
 The shell has seven imports and `_SubscriptionIssueFormState` has 76 physical
 lines. The structural guard enforces shell `<=220` NLOC, state `<=160` NLOC,
 imports `<=12`, and every extracted owner `<=500` NLOC.
+
+## Integrated review hardening
+
+The independent Tier 3 review found and the integration branch fixed a stale
+preview race, residual form-view complexity, stale percent-to-fixed input, and
+invalid total presentation. The controller now rejects stale success and error
+by request id, draft generation, and command identity; the runtime test proves
+that only the latest preview payload and identity can be committed. The discount
+field remounts on mode changes, while malformed, zero, or over-base amounts show
+`Итого: Не указано`.
+
+The three lane guards now share analyzer-AST infrastructure and dynamically
+discover semantic owners, preventing comment/string/alias/new-file bypasses.
+At exact integration HEAD `b586a29dc362b8a860d233f3846d9caff1d2c6a6`,
+the form view is health `8.10`, NLOC `404`, max CCN `6`; every extracted owner
+is at least `8.09`, every production owner is `<=500` NLOC and `<=10` CCN, and
+no god/brain marker remains. Final Lane I smoke is `21/21`; combined Tier 3
+smoke is `48/48`, analyzer `23/23`, format `20/20`, and all `19/19`
+verify-only paths are unchanged.

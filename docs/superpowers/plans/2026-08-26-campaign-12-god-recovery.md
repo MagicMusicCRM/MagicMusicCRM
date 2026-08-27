@@ -2705,7 +2705,7 @@ Lanes G/H/I may start only after Tier A/B/C and Tier D are integrated as specifi
 
 **Files reviewed together:** every file in Tasks G/H/I and every verify-only path named by those tasks. No shared Flutter parent or shared characterization test may change.
 
-- [ ] **T3.1 Integrate the three accepted lane commits in G/H/I order**
+- [x] **T3.1 Integrate the three accepted lane commits in G/H/I order**
 
 ```powershell
 $Tier3Base = (git rev-parse HEAD).Trim()
@@ -2718,7 +2718,7 @@ git diff --check "$Tier3Base..HEAD"
 
 Expected: clean merges, no unresolved paths, and no unrelated file.
 
-- [ ] **T3.2 Prove every shared and verify-only path remained unchanged**
+- [x] **T3.2 Prove every shared and verify-only path remained unchanged**
 
 ```powershell
 $Tier3VerifyOnly = @(
@@ -2753,7 +2753,7 @@ if ($Tier3SharedDiff.Count -ne 0) {
 
 Expected: the command exits without throwing and `$Tier3SharedDiff` is empty.
 
-- [ ] **T3.3 Re-run the exact Lane G smoke on the integrated graph**
+- [x] **T3.3 Re-run the exact Lane G smoke on the integrated graph**
 
 ```powershell
 flutter test test/features/messenger/chat_info_dialog_contract_test.dart test/features/messenger/chat_info_dialog_architecture_test.dart
@@ -2768,7 +2768,7 @@ repowise health --file lib/core/widgets/telegram/chat_info_dialog.dart --format 
 
 Expected: focused tests/analyze/format/diff pass; source check shows each listed invariant.
 
-- [ ] **T3.4 Re-run the exact Lane H smoke on the integrated graph**
+- [x] **T3.4 Re-run the exact Lane H smoke on the integrated graph**
 
 ```powershell
 flutter test test/features/manager/teacher_stats_bulk_rate_test.dart test/features/manager/teacher_stats_controller_test.dart test/features/manager/teacher_stats_architecture_test.dart test/features/manager/teacher_stats_rate_dialogs_test.dart
@@ -2782,7 +2782,7 @@ repowise health --file lib/features/manager/presentation/widgets/teacher_stats_w
 
 Expected: all named tests and checks pass with the Tier B backend contract already integrated.
 
-- [ ] **T3.5 Re-run the exact Lane I smoke on the integrated graph**
+- [x] **T3.5 Re-run the exact Lane I smoke on the integrated graph**
 
 ```powershell
 flutter test test/features/commerce/subscription_issue_form_test.dart test/features/commerce/subscription_issue_controller_test.dart test/features/commerce/subscription_issue_architecture_test.dart test/features/commerce/subscription_issue_ui_regression_test.dart
@@ -2796,7 +2796,7 @@ repowise health --file lib/features/crm/presentation/client_card/subscription_is
 
 Expected: all named tests and checks pass; preview/commit identity and blocker contracts remain exact.
 
-- [ ] **T3.6 Run one integrated Tier 3 risk and ownership review**
+- [x] **T3.6 Run one integrated Tier 3 risk and ownership review**
 
 ```powershell
 repowise update --index-only
@@ -2805,7 +2805,7 @@ repowise risk -t lib/core/widgets/telegram/chat_info_dialog.dart -t lib/features
 
 The independent reviewer receives `$Tier3Base..HEAD`, the three lane reports, the exact smoke output, and the approved spec. Review exact public constructors and callbacks, provider/service ownership, request and mutation payloads, optimistic identity/version behavior, keys/copy/navigation/toasts/accessibility, structural guards, verify-only scope, and new dependency cycles. Write all findings and dispositions to `.superpowers/campaign12/tier-3-review.md`; Tier 4 cannot start with a Critical or Important finding.
 
-- [ ] **T3.7 Commit the accepted Tier 3 review evidence**
+- [x] **T3.7 Commit the accepted Tier 3 review evidence**
 
 ```powershell
 git diff --check
