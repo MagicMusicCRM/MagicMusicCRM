@@ -1,210 +1,175 @@
-// ignore_for_file: depend_on_referenced_packages
-
 import 'dart:io';
 
-import 'package:analyzer/dart/analysis/utilities.dart';
-import 'package:analyzer/dart/analysis/results.dart';
-import 'package:analyzer/dart/ast/ast.dart';
-import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-const _directory =
-    'lib/features/crm/presentation/client_card/subscription_issue_';
+import '../../support/architecture/dart_architecture_guard.dart';
 
-String _source(String suffix) =>
-    File('$_directory$suffix.dart').readAsStringSync();
-
-({String source, ParseStringResult parsed}) _parsed(String suffix) {
-  final source = _source(suffix);
-  return (
-    source: source,
-    parsed: parseString(content: source, path: '$_directory$suffix.dart'),
-  );
-}
-
-int _nloc(String source) => source.split('\n').where((line) {
-  final trimmed = line.trim();
-  return trimmed.isNotEmpty &&
-      !trimmed.startsWith('//') &&
-      !trimmed.startsWith('///');
-}).length;
-
-String _classBody(String source, String className) {
-  final declaration = source.indexOf('class $className');
-  expect(declaration, isNonNegative, reason: className);
-  final openingBrace = source.indexOf('{', declaration);
-  var depth = 0;
-  for (var index = openingBrace; index < source.length; index++) {
-    if (source[index] == '{') depth++;
-    if (source[index] == '}') {
-      depth--;
-      if (depth == 0) return source.substring(openingBrace, index + 1);
-    }
-  }
-  fail('Unclosed class $className');
-}
-
-class _ComplexityVisitor extends RecursiveAstVisitor<void> {
-  var branches = 0;
-
-  @override
-  void visitIfStatement(IfStatement node) {
-    branches++;
-    super.visitIfStatement(node);
-  }
-
-  @override
-  void visitForStatement(ForStatement node) {
-    branches++;
-    super.visitForStatement(node);
-  }
-
-  @override
-  void visitWhileStatement(WhileStatement node) {
-    branches++;
-    super.visitWhileStatement(node);
-  }
-
-  @override
-  void visitDoStatement(DoStatement node) {
-    branches++;
-    super.visitDoStatement(node);
-  }
-
-  @override
-  void visitConditionalExpression(ConditionalExpression node) {
-    branches++;
-    super.visitConditionalExpression(node);
-  }
-
-  @override
-  void visitIfElement(IfElement node) {
-    branches++;
-    super.visitIfElement(node);
-  }
-
-  @override
-  void visitForElement(ForElement node) {
-    branches++;
-    super.visitForElement(node);
-  }
-
-  @override
-  void visitCatchClause(CatchClause node) {
-    branches++;
-    super.visitCatchClause(node);
-  }
-
-  @override
-  void visitBinaryExpression(BinaryExpression node) {
-    if (node.operator.lexeme == '&&' || node.operator.lexeme == '||') {
-      branches++;
-    }
-    super.visitBinaryExpression(node);
-  }
-}
-
-class _EffectInvocationVisitor extends RecursiveAstVisitor<void> {
-  final names = <String>[];
-
-  @override
-  void visitMethodInvocation(MethodInvocation node) {
-    names.add(node.methodName.name);
-    super.visitMethodInvocation(node);
-  }
-
-  @override
-  void visitFunctionExpressionInvocation(FunctionExpressionInvocation node) {
-    names.add(node.function.toSource());
-    super.visitFunctionExpressionInvocation(node);
-  }
-}
+const _directory = 'lib/features/crm/presentation/client_card';
+const _shellFilename = 'subscription_issue_sheet.dart';
+const _controllerFilename = 'subscription_issue_controller.dart';
+const _callbackNames = {'onPreview', '_onPreview', 'onSubmit', '_onSubmit'};
+const _callbackTypes = {'SubscriptionIssuePreview', 'SubscriptionIssueSubmit'};
+const _budget = DartArchitectureBudget(
+  ownerNlocLimit: 500,
+  shellFileName: _shellFilename,
+  shellNlocLimit: 220,
+  shellImportLimit: 12,
+  executableCcnLimit: 10,
+  executableNlocLimit: 130,
+  typeNlocLimit: 420,
+  typeMemberLimit: 50,
+  typeCallableLimit: 40,
+  namedTypeNlocLimits: {'_SubscriptionIssueFormState': 160},
+);
 
 void main() {
-  test('subscription issue shell stays a bounded lifecycle adapter', () {
-    final shell = _source('sheet');
-    final imports = shell
-        .split('\n')
-        .where((line) => line.trimLeft().startsWith('import '))
-        .length;
-    final state = _classBody(shell, '_SubscriptionIssueFormState');
+  test('all discovered subscription issue owners pass the AST guard', () {
+    final sources = discoverDartSources(
+      directoryPath: _directory,
+      filePrefix: 'subscription_issue_',
+    );
+    final inspections = inspectDartSources(sources);
 
-    expect(_nloc(shell), lessThanOrEqualTo(220));
-    expect(imports, lessThanOrEqualTo(12));
-    expect(_nloc(state), lessThanOrEqualTo(160));
-    for (final forbidden in [
-      '_parseMoneyMinor',
-      '_parsePercentBasisPoints',
-      '_installments',
-      '_buildPurchase',
-    ]) {
-      expect(shell, isNot(contains(forbidden)), reason: forbidden);
-    }
-    expect(shell, isNot(contains('switch (')));
+    expect(sources, isNotEmpty);
+    expect(sources, contains(_shellFilename));
+    expect(_architectureViolations(inspections), isEmpty);
+
+    final shell = inspections.singleWhere(
+      (inspection) => inspection.fileName == _shellFilename,
+    );
+    final forbiddenExecutables =
+        <String>{
+          ...shell.executables.map((executable) => executable.name),
+          ...shell.invocationNames,
+        }.intersection(const {
+          '_parseMoneyMinor',
+          '_parsePercentBasisPoints',
+          '_installments',
+          '_buildPurchase',
+        });
+    expect(forbiddenExecutables, isEmpty);
+    expect(
+      shell.executables.any((executable) => executable.switchCount > 0),
+      isFalse,
+      reason: 'pricing switches belong outside the lifecycle shell',
+    );
+
+    final controller = inspections.singleWhere(
+      (inspection) => inspection.fileName == _controllerFilename,
+    );
+    expect(
+      controller.invokedCallableAliases(
+        names: _callbackNames,
+        typeNames: _callbackTypes,
+      ),
+      containsAll(const {'_onPreview', '_onSubmit'}),
+    );
   });
 
-  test('every extracted subscription issue owner stays bounded', () {
-    for (final suffix in [
-      'models',
-      'pricing',
-      'controller',
-      'form_view',
-      'components',
-    ]) {
-      expect(_nloc(_source(suffix)), lessThanOrEqualTo(500), reason: suffix);
-    }
-    final (:source, :parsed) = _parsed('form_view');
-    expect(parsed.errors, isEmpty);
-    final view = parsed.unit.declarations
-        .whereType<ClassDeclaration>()
-        .singleWhere(
-          (declaration) =>
-              declaration.namePart.toSource() == 'SubscriptionIssueFormView',
-        );
-    final methods = view.members.whereType<MethodDeclaration>();
+  test('AST effects ignore lexical decoys and follow whitespace aliases', () {
+    final violations = _architectureViolations([
+      inspectDartSource('subscription_issue_future.dart', r'''
+void leak(SubscriptionIssuePreview onPreview, dynamic input) {
+  // onSubmit(input) is not executable code.
+  const example = 'onPreview(input)';
+  final previewAlias = onPreview;
+  previewAlias
+      (input);
+}
+class HiddenSubmit {
+  HiddenSubmit(this.onSubmit);
+  final SubscriptionIssueSubmit onSubmit;
+  void leak(dynamic input) => this.onSubmit (input);
+}
+'''),
+    ]);
 
-    for (final method in methods) {
-      final visitor = _ComplexityVisitor();
-      method.body.accept(visitor);
-      final methodSource = source.substring(method.offset, method.end);
-      expect(
-        visitor.branches + 1,
-        lessThanOrEqualTo(10),
-        reason: '${method.name.lexeme} complexity',
-      );
-      expect(
-        _nloc(methodSource),
-        lessThanOrEqualTo(120),
-        reason: '${method.name.lexeme} NLOC',
-      );
-    }
+    expect(
+      violations,
+      contains(
+        'subscription_issue_future.dart: preview/submit effect previewAlias outside controller',
+      ),
+    );
+    expect(
+      violations,
+      contains(
+        'subscription_issue_future.dart: preview/submit effect onSubmit outside controller',
+      ),
+    );
   });
 
-  test('preview and commit effects are orchestrated only by controller', () {
-    for (final suffix in [
-      'sheet',
-      'models',
-      'pricing',
-      'controller',
-      'form_view',
-      'components',
-    ]) {
-      final parsed = _parsed(suffix).parsed;
-      expect(parsed.errors, isEmpty, reason: suffix);
-      final visitor = _EffectInvocationVisitor();
-      parsed.unit.accept(visitor);
-      final effects = visitor.names.where(
-        (name) =>
-            name.endsWith('onPreview') ||
-            name.endsWith('_onPreview') ||
-            name.endsWith('onSubmit') ||
-            name.endsWith('_onSubmit'),
-      );
-      if (suffix == 'controller') {
-        expect(effects, containsAll(<String>['_onPreview', '_onSubmit']));
-      } else {
-        expect(effects, isEmpty, reason: suffix);
-      }
-    }
+  test('dynamic discovery audits new subscription issue owners', () {
+    final directory = Directory.systemTemp.createTempSync(
+      'subscription-issue-architecture-',
+    );
+    addTearDown(() => directory.deleteSync(recursive: true));
+    File(
+      '${directory.path}${Platform.pathSeparator}subscription_issue_future.dart',
+    ).writeAsStringSync('''
+void leak(SubscriptionIssueSubmit onSubmit, dynamic input) {
+  final alias = onSubmit;
+  alias(input);
+}
+''');
+    File(
+      '${directory.path}${Platform.pathSeparator}subscription_other.dart',
+    ).writeAsStringSync('void unrelated() {}');
+
+    final sources = discoverDartSources(
+      directoryPath: directory.path,
+      filePrefix: 'subscription_issue_',
+    );
+    expect(sources.keys, ['subscription_issue_future.dart']);
+    expect(
+      _architectureViolations(inspectDartSources(sources)),
+      contains(contains('preview/submit effect alias outside controller')),
+    );
   });
+
+  test('CCN and type proxies reject future brain and god owners', () {
+    final methods = List.generate(41, (index) => 'void m$index() {}').join();
+    final inspections = [
+      inspectDartSource('subscription_issue_tangled.dart', '''
+int tangled(List<int> values, int x) {
+  if (x > 0) x++;
+  for (final value in values) { x += value; }
+  while (x < 3) { x++; }
+  do { x--; } while (x > 20);
+  try { x++; } catch (_) { x--; }
+  final choice = x > 0 ? 1 : 0;
+  final boolean = x > 0 && x < 10 || x == 20;
+  final collection = <int>[if (x > 0) choice, for (final v in values) v];
+  return switch (x) { 1 => collection.length, _ => boolean ? 1 : 0 };
+}
+'''),
+      inspectDartSource(
+        'subscription_issue_brain.dart',
+        'class FutureOwner {$methods}',
+      ),
+    ];
+    final violations = _architectureViolations(inspections);
+
+    expect(violations, contains(contains('CCN ')));
+    expect(violations, contains(contains('callables 41 exceeds 40')));
+  });
+}
+
+List<String> _architectureViolations(
+  Iterable<DartSourceInspection> inspections,
+) {
+  final inspected = inspections.toList();
+  final violations = auditDartArchitecture(inspected, _budget);
+  for (final inspection in inspected) {
+    if (inspection.fileName == _controllerFilename) continue;
+    final effects = inspection.invokedCallableAliases(
+      names: _callbackNames,
+      typeNames: _callbackTypes,
+    );
+    for (final effect in effects) {
+      violations.add(
+        '${inspection.fileName}: preview/submit effect $effect outside controller',
+      );
+    }
+  }
+  return violations.toSet().toList()..sort();
 }
