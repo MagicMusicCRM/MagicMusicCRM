@@ -681,20 +681,21 @@ function projectTeacherField(
 }
 
 function appendMissingTeacherProjections(
-  fields: unknown[],
+  fields: readonly unknown[],
   canonical: CanonicalTeacherOptions,
-): void {
+): unknown[] {
   const keys = new Set<string>();
   for (const value of fields) {
     if (!isRecord(value) || value.entity !== "teachers") continue;
     if (typeof value.key === "string") keys.add(value.key);
   }
+  const missing: unknown[] = [];
   for (const projection of [
     { key: "levels", label: "Уровни обучения", options: canonical.levels },
     { key: "categories", label: "Категории", options: canonical.categories },
   ]) {
     if (projection.options.length === 0 || keys.has(projection.key)) continue;
-    fields.push({
+    missing.push({
       entity: "teachers",
       key: projection.key,
       label: projection.label,
@@ -703,6 +704,7 @@ function appendMissingTeacherProjections(
       options: projection.options,
     });
   }
+  return [...fields, ...missing];
 }
 
 function projectTeacherFields(
@@ -710,8 +712,7 @@ function projectTeacherFields(
   canonical: CanonicalTeacherOptions,
 ): unknown[] {
   const projected = fields.map((value) => projectTeacherField(value, canonical));
-  appendMissingTeacherProjections(projected, canonical);
-  return projected;
+  return appendMissingTeacherProjections(projected, canonical);
 }
 
 @Injectable()

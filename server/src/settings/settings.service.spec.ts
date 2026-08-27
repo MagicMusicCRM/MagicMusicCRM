@@ -420,6 +420,44 @@ describe("SettingsService", () => {
     });
   });
 
+  it("keeps a trimmed 80-character option and rejects an overlong configured option", async () => {
+    const { service } = createService([
+      {
+        key: "crm_custom_fields",
+        value: [],
+        updated_at: "2026-08-28T00:00:00.000Z",
+        configuration_snapshot: {
+          fields: [
+            {
+              key: "level",
+              options: [
+                " 12345678901234567890123456789012345678901234567890123456789012345678901234567890 ",
+                "123456789012345678901234567890123456789012345678901234567890123456789012345678901",
+              ],
+            },
+          ],
+        },
+      },
+    ]);
+
+    await expect(service.getCrmCustomFields(admin)).resolves.toEqual({
+      key: "crm_custom_fields",
+      fields: [
+        {
+          entity: "teachers",
+          key: "levels",
+          label: "Уровни обучения",
+          type: "select",
+          required: false,
+          options: [
+            "12345678901234567890123456789012345678901234567890123456789012345678901234567890",
+          ],
+        },
+      ],
+      updatedAt: "2026-08-28T00:00:00.000Z",
+    });
+  });
+
   it("updates CRM custom field schema only for admins and records audit", async () => {
     const savedFields: CrmCustomFieldDefinitionDto[] = [
       {
