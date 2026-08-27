@@ -8,6 +8,7 @@ class SubscriptionIssuePricing {
     required this.discountMinor,
     required this.surchargeMinor,
     required this.finalPriceMinor,
+    required this.amountsValid,
     required this.installments,
     this.discountBasisPoints,
     this.error,
@@ -17,6 +18,7 @@ class SubscriptionIssuePricing {
   final BigInt discountMinor;
   final BigInt surchargeMinor;
   final BigInt finalPriceMinor;
+  final bool amountsValid;
   final List<SubscriptionInstallmentInput> installments;
   final int? discountBasisPoints;
   final String? error;
@@ -28,6 +30,9 @@ class SubscriptionIssuePricing {
     required BigInt basePriceMinor,
     required DateTime commandTimestamp,
   }) {
+    final amountsValid =
+        validateDiscountValue(draft, basePriceMinor) == null &&
+        validateSurchargeAmount(draft) == null;
     final discount = _discount(draft, basePriceMinor);
     final surcharge = _surcharge(draft);
     final finalPrice = basePriceMinor - discount.minor + surcharge.minor;
@@ -44,6 +49,7 @@ class SubscriptionIssuePricing {
       discountMinor: discount.minor,
       surchargeMinor: surcharge.minor,
       finalPriceMinor: finalPrice,
+      amountsValid: amountsValid,
       installments: installments,
       discountBasisPoints: discount.basisPoints,
       error: error,
@@ -126,7 +132,9 @@ class SubscriptionIssuePricing {
       case SubscriptionIssueDiscountMode.fixed:
         final fixed = parseSubscriptionMoneyMinor(draft.discountValue);
         return (
-          minor: fixed == null || fixed <= BigInt.zero ? BigInt.zero : fixed,
+          minor: fixed == null || fixed <= BigInt.zero || fixed > basePriceMinor
+              ? BigInt.zero
+              : fixed,
           basisPoints: null,
           error: error,
         );

@@ -51,7 +51,9 @@ class SubscriptionIssueFormView extends StatelessWidget {
             basePriceMinor: pricing.basePriceMinor,
             discountMinor: pricing.discountMinor,
             surchargeMinor: pricing.surchargeMinor,
-            finalPriceMinor: pricing.finalPriceMinor,
+            finalPriceMinor: pricing.amountsValid
+                ? pricing.finalPriceMinor
+                : null,
             currencyCode: draft.currencyCode,
           ),
           ..._paymentSection(context, draft, fieldsEnabled),
@@ -199,23 +201,29 @@ class SubscriptionIssueFormView extends StatelessWidget {
       if (draft.discountMode != SubscriptionIssueDiscountMode.none) ...[
         const SizedBox(height: AppSpace.md),
         SubscriptionIssueAdaptivePair(
-          first: TextFormField(
-            key: const Key('subscription-discount-value'),
-            initialValue: draft.discountValue,
-            enabled: fieldsEnabled,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'[0-9,.]')),
-            ],
-            decoration: clientCardInputDecoration(
-              Theme.of(context).colorScheme,
-              label: draft.discountMode == SubscriptionIssueDiscountMode.percent
-                  ? 'Скидка, %'
-                  : 'Скидка, ₽',
-              isDense: true,
+          first: KeyedSubtree(
+            key: ValueKey(draft.discountMode),
+            child: TextFormField(
+              key: const Key('subscription-discount-value'),
+              initialValue: draft.discountValue,
+              enabled: fieldsEnabled,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9,.]')),
+              ],
+              decoration: clientCardInputDecoration(
+                Theme.of(context).colorScheme,
+                label:
+                    draft.discountMode == SubscriptionIssueDiscountMode.percent
+                    ? 'Скидка, %'
+                    : 'Скидка, ₽',
+                isDense: true,
+              ),
+              validator: controller.validateDiscountValue,
+              onChanged: controller.setDiscountValue,
             ),
-            validator: controller.validateDiscountValue,
-            onChanged: controller.setDiscountValue,
           ),
           second: TextFormField(
             key: const Key('subscription-discount-reason'),

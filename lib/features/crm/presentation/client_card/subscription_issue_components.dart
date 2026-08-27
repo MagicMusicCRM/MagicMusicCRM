@@ -19,7 +19,7 @@ class SubscriptionIssuePriceSummary extends StatelessWidget {
   final BigInt basePriceMinor;
   final BigInt discountMinor;
   final BigInt surchargeMinor;
-  final BigInt finalPriceMinor;
+  final BigInt? finalPriceMinor;
   final String currencyCode;
 
   @override
@@ -65,7 +65,9 @@ class SubscriptionIssuePriceSummary extends StatelessWidget {
           SubscriptionIssuePriceLine(
             key: const Key('subscription-issue-final'),
             label: 'Итого',
-            value: formatSubscriptionMinor(finalPriceMinor, currencyCode),
+            value: finalPriceMinor == null
+                ? 'Не указано'
+                : formatSubscriptionMinor(finalPriceMinor!, currencyCode),
             emphasized: true,
           ),
         ],
