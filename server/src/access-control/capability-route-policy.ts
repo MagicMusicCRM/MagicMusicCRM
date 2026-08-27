@@ -89,14 +89,15 @@ function policy(
   return { capabilityKey, scope, legacyAllowedRoles, legacyPolicy };
 }
 
-export function resolveCapabilityRoutePolicy(
-  methodInput: string,
-  pathInput: string,
-): CapabilityRoutePolicy {
-  const method = methodInput.toUpperCase();
-  const path = normalizePath(pathInput).toLowerCase();
-  const read = isRead(method);
+interface RoutePolicyContext {
+  path: string;
+  read: boolean;
+}
 
+function resolveAccessAndConfigurationPolicy({
+  path,
+  read,
+}: RoutePolicyContext): CapabilityRoutePolicy | null {
   if (read && path === "/access/me") {
     return {
       ...policy(
@@ -197,6 +198,12 @@ export function resolveCapabilityRoutePolicy(
     );
   }
 
+  return null;
+}
+
+function resolvePayrollAndReportingPolicy({
+  path,
+}: RoutePolicyContext): CapabilityRoutePolicy | null {
   if (
     /^\/crm\/teachers\/[^/]+\/payroll$/.test(path) ||
     path === "/crm/reports/teacher-stats"
@@ -260,6 +267,13 @@ export function resolveCapabilityRoutePolicy(
     );
   }
 
+  return null;
+}
+
+function resolveClientCommerceAndTasksPolicy({
+  path,
+  read,
+}: RoutePolicyContext): CapabilityRoutePolicy | null {
   if (
     read &&
     (path === "/crm/me/commerce" ||
@@ -355,6 +369,14 @@ export function resolveCapabilityRoutePolicy(
     );
   }
 
+  return null;
+}
+
+function resolveScheduleAndFacilitiesPolicy({
+  path,
+  read,
+}: RoutePolicyContext): CapabilityRoutePolicy | null {
+
   if (path.includes("/attendance") || path.includes("/lesson-participation")) {
     return policy(
       read ? "schedule.lesson.read.assigned" : "schedule.attendance.write",
@@ -434,6 +456,14 @@ export function resolveCapabilityRoutePolicy(
     );
   }
 
+  return null;
+}
+
+function resolveGenericCrmAndDefaultPolicy({
+  path,
+  read,
+}: RoutePolicyContext): CapabilityRoutePolicy {
+
   if (path.includes("/comments")) {
     return policy(
       read ? "crm.client.read.basic" : "crm.comment.read.shared",
@@ -488,5 +518,23 @@ export function resolveCapabilityRoutePolicy(
     "resource",
     allRoles,
     "Authenticated compatibility facade; domain service enforces resource scope",
+  );
+}
+
+export function resolveCapabilityRoutePolicy(
+  methodInput: string,
+  pathInput: string,
+): CapabilityRoutePolicy {
+  const context = {
+    path: normalizePath(pathInput).toLowerCase(),
+    read: isRead(methodInput.toUpperCase()),
+  };
+
+  return (
+    resolveAccessAndConfigurationPolicy(context) ??
+    resolvePayrollAndReportingPolicy(context) ??
+    resolveClientCommerceAndTasksPolicy(context) ??
+    resolveScheduleAndFacilitiesPolicy(context) ??
+    resolveGenericCrmAndDefaultPolicy(context)
   );
 }

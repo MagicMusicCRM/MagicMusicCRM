@@ -288,4 +288,98 @@ describe("capability route policy", () => {
       BASELINE_CAPABILITY_ROLES["commerce.teacher_payroll.read"],
     );
   });
+
+  it.each([
+    [
+      "normalizing /api, duplicate slashes, query, case, and a lower-case method for /access/me",
+      "removing /api normalization or authenticatedOnly",
+      "get",
+      "/api//ACCESS/ME/?ignored=true",
+      {
+        capabilityKey: "crm.client.read.basic",
+        scope: "self",
+        legacyAllowedRoles: [
+          "client",
+          "teacher",
+          "admin",
+          "manager",
+          "director",
+          "system_admin",
+        ],
+        legacyPolicy: "Authenticated actor reads own effective capability snapshot",
+        authenticatedOnly: true,
+      },
+    ],
+    [
+      "preserving teacher-stats export precedence over generic exports",
+      "routing teacher-stats export through the generic report export policy",
+      "GET",
+      "/crm/reports/teacher-stats/export",
+      {
+        capabilityKey: "commerce.teacher_payroll.read",
+        scope: "resource",
+        legacyAllowedRoles: ["admin", "manager", "director", "system_admin"],
+        legacyPolicy:
+          "Teacher payroll capability with versioned create/correct/void integrity",
+      },
+    ],
+    [
+      "preserving global student-balances precedence over student finance fallback",
+      "changing the student-balances collision scope or legacy roles",
+      "GET",
+      "/crm/student-balances",
+      {
+        capabilityKey: "commerce.school_finance.read",
+        scope: "global",
+        legacyAllowedRoles: ["director", "system_admin"],
+        legacyPolicy: "CrmPolicy.assertCanReadSchoolFinance",
+      },
+    ],
+    [
+      "preserving the legacy subscription issue exception before finance fallback",
+      "letting subscription issue fall through to commerce.client_finance.write",
+      "POST",
+      "/crm/students/id/subscriptions/issue",
+      {
+        capabilityKey: "commerce.subscription.issue",
+        scope: "self_or_assigned",
+        legacyAllowedRoles: ["admin", "manager", "director", "system_admin"],
+        legacyPolicy: "Legacy subscription issue adapter with client resource scope",
+      },
+    ],
+    [
+      "preserving read-only branch history before generic schedule routing",
+      "moving branch history after the generic branches route family",
+      "GET",
+      "/crm/branches/id/history",
+      {
+        capabilityKey: "config.crm.edit",
+        scope: "branch",
+        legacyAllowedRoles: ["director", "system_admin"],
+        legacyPolicy: "Organization lifecycle director-only immutable history",
+      },
+    ],
+    [
+      "preserving the generic fallback policy",
+      "changing fallback scope, roles, or legacy policy text",
+      "HEAD",
+      "/unmapped/resource",
+      {
+        capabilityKey: "crm.client.read.basic",
+        scope: "resource",
+        legacyAllowedRoles: [
+          "client",
+          "teacher",
+          "admin",
+          "manager",
+          "director",
+          "system_admin",
+        ],
+        legacyPolicy:
+          "Authenticated compatibility facade; domain service enforces resource scope",
+      },
+    ],
+  ])("guards %s against %s", (_scenario, _mutation, method, path, expected) => {
+    expect(resolveCapabilityRoutePolicy(method, path)).toEqual(expected);
+  });
 });
