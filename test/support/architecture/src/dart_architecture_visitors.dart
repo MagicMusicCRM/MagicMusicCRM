@@ -2,6 +2,8 @@ import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:analyzer/source/line_info.dart';
 
+import 'dart_provider_ownership_dataflow.dart';
+
 ArchitectureAstData collectArchitectureAst(
   CompilationUnit unit,
   LineInfo lineInfo,
@@ -18,10 +20,10 @@ ArchitectureAstData collectArchitectureAst(
     declaredTypes: typeVisitor.declaredTypes,
     methodNames: typeVisitor.methodNames,
     invocations: ownershipVisitor.invocations,
+    providerOwnership: collectProviderOwnershipDataflow(unit),
     aliases: AstAliasOwnership(
       aliasSources: ownershipVisitor.aliasSources,
       declaredTypes: ownershipVisitor.declaredTypes,
-      providerOrigins: ownershipVisitor.providerOrigins,
     ),
   );
 }
@@ -46,6 +48,7 @@ class ArchitectureAstData {
     required this.declaredTypes,
     required this.methodNames,
     required this.invocations,
+    required this.providerOwnership,
     required this.aliases,
   });
 
@@ -54,6 +57,7 @@ class ArchitectureAstData {
   final Set<String> declaredTypes;
   final Set<String> methodNames;
   final List<AstInvocation> invocations;
+  final ProviderOwnershipDataflow providerOwnership;
   final AstAliasOwnership aliases;
 }
 
@@ -105,14 +109,11 @@ class AstAliasOwnership {
   const AstAliasOwnership({
     required Map<String, Set<String>> aliasSources,
     required Map<String, String> declaredTypes,
-    required Map<String, List<AstProviderOrigin>> providerOrigins,
   }) : _aliasSources = aliasSources,
-       _declaredTypes = declaredTypes,
-       _providerOrigins = providerOrigins;
+       _declaredTypes = declaredTypes;
 
   final Map<String, Set<String>> _aliasSources;
   final Map<String, String> _declaredTypes;
-  final Map<String, List<AstProviderOrigin>> _providerOrigins;
 
   Set<String> identifiers({
     Set<String> names = const {},
@@ -133,33 +134,6 @@ class AstAliasOwnership {
     }
     return owned;
   }
-
-  Set<String> providerDerivedIdentifiers({
-    required Set<String> providerNames,
-    Set<String> receiverNames = const {'ref'},
-  }) {
-    final ownedReceivers = identifiers(names: receiverNames);
-    final providerOwned = <String>{};
-    for (final entry in _providerOrigins.entries) {
-      final derivesFromProvider = entry.value.any(
-        (origin) =>
-            providerNames.contains(origin.providerIdentifier) &&
-            ownedReceivers.contains(origin.receiverIdentifier),
-      );
-      if (derivesFromProvider) providerOwned.add(entry.key);
-    }
-    return identifiers(names: providerOwned);
-  }
-}
-
-class AstProviderOrigin {
-  const AstProviderOrigin({
-    required this.providerIdentifier,
-    required this.receiverIdentifier,
-  });
-
-  final String providerIdentifier;
-  final String receiverIdentifier;
 }
 
 class _ExecutableVisitor extends RecursiveAstVisitor<void> {
@@ -333,7 +307,6 @@ class _TypeVisitor extends RecursiveAstVisitor<void> {
 class _OwnershipVisitor extends RecursiveAstVisitor<void> {
   final aliasSources = <String, Set<String>>{};
   final declaredTypes = <String, String>{};
-  final providerOrigins = <String, List<AstProviderOrigin>>{};
   final invocations = <AstInvocation>[];
 
   @override
@@ -422,32 +395,7 @@ class _OwnershipVisitor extends RecursiveAstVisitor<void> {
     if (source != null) {
       aliasSources.putIfAbsent(target, () => <String>{}).add(source);
     }
-    final providerOrigin = _providerOrigin(expression);
-    if (providerOrigin != null) {
-      providerOrigins.putIfAbsent(target, () => []).add(providerOrigin);
-    }
   }
-}
-
-AstProviderOrigin? _providerOrigin(Expression? expression) {
-  if (expression is ParenthesizedExpression) {
-    return _providerOrigin(expression.expression);
-  }
-  if (expression is! MethodInvocation ||
-      (expression.methodName.name != 'read' &&
-          expression.methodName.name != 'watch')) {
-    return null;
-  }
-  final receiver = _expressionIdentifier(expression.target);
-  final provider = expression.argumentList.arguments
-      .map(_expressionIdentifier)
-      .whereType<String>()
-      .firstOrNull;
-  if (receiver == null || provider == null) return null;
-  return AstProviderOrigin(
-    providerIdentifier: provider,
-    receiverIdentifier: receiver,
-  );
 }
 
 String? _typeName(TypeAnnotation? type) => type?.toSource().replaceAll('?', '');

@@ -4,6 +4,7 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 
 import 'src/dart_architecture_visitors.dart';
+import 'src/dart_provider_ownership_dataflow.dart';
 
 export 'src/dart_architecture_visitors.dart' show ExecutableMetric, TypeMetric;
 
@@ -56,6 +57,7 @@ DartSourceInspection inspectDartSource(String fileName, String source) {
     declaredTypes: ast.declaredTypes,
     methodNames: ast.methodNames,
     invocations: ast.invocations,
+    providerOwnership: ast.providerOwnership,
     aliases: ast.aliases,
   );
 }
@@ -94,72 +96,116 @@ List<String> auditDartArchitecture(
 ) {
   final violations = <String>[];
   for (final inspection in inspections) {
-    final fileName = inspection.fileName;
-    if (inspection.parseErrors.isNotEmpty) {
-      violations.add(
-        '$fileName: parse errors: ${inspection.parseErrors.join('; ')}',
-      );
-      continue;
-    }
-    if (inspection.ownerNloc > budget.ownerNlocLimit) {
-      violations.add(
-        '$fileName: owner NLOC ${inspection.ownerNloc} exceeds ${budget.ownerNlocLimit}',
-      );
-    }
-    if (fileName == budget.shellFileName) {
-      final shellNlocLimit = budget.shellNlocLimit;
-      if (shellNlocLimit != null && inspection.ownerNloc > shellNlocLimit) {
-        violations.add(
-          '$fileName: shell NLOC ${inspection.ownerNloc} exceeds $shellNlocLimit',
-        );
-      }
-      final shellImportLimit = budget.shellImportLimit;
-      if (shellImportLimit != null &&
-          inspection.importCount > shellImportLimit) {
-        violations.add(
-          '$fileName: shell imports ${inspection.importCount} exceeds $shellImportLimit',
-        );
-      }
-    }
-    if (budget.forbidPartDirectives && inspection.hasPartDirective) {
-      violations.add('$fileName: part/part-of directives are forbidden');
-    }
-    for (final executable in inspection.executables) {
-      if (executable.ccn > budget.executableCcnLimit) {
-        violations.add(
-          '$fileName: executable ${executable.name} CCN ${executable.ccn} exceeds ${budget.executableCcnLimit}',
-        );
-      }
-      final nlocLimit = budget.executableNlocLimit;
-      if (nlocLimit != null && executable.nloc > nlocLimit) {
-        violations.add(
-          '$fileName: executable ${executable.name} NLOC ${executable.nloc} exceeds $nlocLimit',
-        );
-      }
-    }
-    for (final type in inspection.types) {
-      final nlocLimit =
-          budget.namedTypeNlocLimits[type.name] ?? budget.typeNlocLimit;
-      if (nlocLimit != null && type.nloc > nlocLimit) {
-        violations.add(
-          '$fileName: type ${type.name} NLOC ${type.nloc} exceeds $nlocLimit',
-        );
-      }
-      final memberLimit = budget.typeMemberLimit;
-      if (memberLimit != null && type.memberCount > memberLimit) {
-        violations.add(
-          '$fileName: type ${type.name} members ${type.memberCount} exceeds $memberLimit',
-        );
-      }
-      final callableLimit = budget.typeCallableLimit;
-      if (callableLimit != null && type.callableCount > callableLimit) {
-        violations.add(
-          '$fileName: type ${type.name} callables ${type.callableCount} exceeds $callableLimit',
-        );
-      }
-    }
+    violations.addAll(_auditInspection(inspection, budget));
   }
   return violations.toSet().toList()..sort();
+}
+
+List<String> _auditInspection(
+  DartSourceInspection inspection,
+  DartArchitectureBudget budget,
+) {
+  final fileName = inspection.fileName;
+  if (inspection.parseErrors.isNotEmpty) {
+    return ['$fileName: parse errors: ${inspection.parseErrors.join('; ')}'];
+  }
+  final violations = _auditOwner(inspection, budget);
+  for (final executable in inspection.executables) {
+    violations.addAll(_auditExecutable(fileName, executable, budget));
+  }
+  for (final type in inspection.types) {
+    violations.addAll(_auditType(fileName, type, budget));
+  }
+  return violations;
+}
+
+List<String> _auditOwner(
+  DartSourceInspection inspection,
+  DartArchitectureBudget budget,
+) {
+  final fileName = inspection.fileName;
+  final violations = <String>[];
+  if (inspection.ownerNloc > budget.ownerNlocLimit) {
+    violations.add(
+      '$fileName: owner NLOC ${inspection.ownerNloc} exceeds ${budget.ownerNlocLimit}',
+    );
+  }
+  if (fileName == budget.shellFileName) {
+    violations.addAll(_auditShell(inspection, budget));
+  }
+  if (budget.forbidPartDirectives && inspection.hasPartDirective) {
+    violations.add('$fileName: part/part-of directives are forbidden');
+  }
+  return violations;
+}
+
+List<String> _auditShell(
+  DartSourceInspection inspection,
+  DartArchitectureBudget budget,
+) {
+  final fileName = inspection.fileName;
+  final violations = <String>[];
+  final nlocLimit = budget.shellNlocLimit;
+  if (nlocLimit != null && inspection.ownerNloc > nlocLimit) {
+    violations.add(
+      '$fileName: shell NLOC ${inspection.ownerNloc} exceeds $nlocLimit',
+    );
+  }
+  final importLimit = budget.shellImportLimit;
+  if (importLimit != null && inspection.importCount > importLimit) {
+    violations.add(
+      '$fileName: shell imports ${inspection.importCount} exceeds $importLimit',
+    );
+  }
+  return violations;
+}
+
+List<String> _auditExecutable(
+  String fileName,
+  ExecutableMetric executable,
+  DartArchitectureBudget budget,
+) {
+  final violations = <String>[];
+  if (executable.ccn > budget.executableCcnLimit) {
+    violations.add(
+      '$fileName: executable ${executable.name} CCN ${executable.ccn} exceeds ${budget.executableCcnLimit}',
+    );
+  }
+  final nlocLimit = budget.executableNlocLimit;
+  if (nlocLimit != null && executable.nloc > nlocLimit) {
+    violations.add(
+      '$fileName: executable ${executable.name} NLOC ${executable.nloc} exceeds $nlocLimit',
+    );
+  }
+  return violations;
+}
+
+List<String> _auditType(
+  String fileName,
+  TypeMetric type,
+  DartArchitectureBudget budget,
+) {
+  final violations = <String>[];
+  final nlocLimit =
+      budget.namedTypeNlocLimits[type.name] ?? budget.typeNlocLimit;
+  if (nlocLimit != null && type.nloc > nlocLimit) {
+    violations.add(
+      '$fileName: type ${type.name} NLOC ${type.nloc} exceeds $nlocLimit',
+    );
+  }
+  final memberLimit = budget.typeMemberLimit;
+  if (memberLimit != null && type.memberCount > memberLimit) {
+    violations.add(
+      '$fileName: type ${type.name} members ${type.memberCount} exceeds $memberLimit',
+    );
+  }
+  final callableLimit = budget.typeCallableLimit;
+  if (callableLimit != null && type.callableCount > callableLimit) {
+    violations.add(
+      '$fileName: type ${type.name} callables ${type.callableCount} exceeds $callableLimit',
+    );
+  }
+  return violations;
 }
 
 class DartSourceInspection {
@@ -174,8 +220,10 @@ class DartSourceInspection {
     required this.declaredTypes,
     required this.methodNames,
     required this.invocations,
+    required ProviderOwnershipDataflow providerOwnership,
     required AstAliasOwnership aliases,
-  }) : _aliases = aliases;
+  }) : _providerOwnership = providerOwnership,
+       _aliases = aliases;
 
   final String fileName;
   final List<String> parseErrors;
@@ -187,6 +235,7 @@ class DartSourceInspection {
   final Set<String> declaredTypes;
   final Set<String> methodNames;
   final List<AstInvocation> invocations;
+  final ProviderOwnershipDataflow _providerOwnership;
   final AstAliasOwnership _aliases;
 
   Set<String> get invocationNames =>
@@ -235,18 +284,10 @@ class DartSourceInspection {
   Set<String> invocationsOnProviderDerivedReceivers(
     Set<String> providerNames, {
     Set<String> receiverNames = const {'ref'},
-  }) {
-    final providerOwned = _aliases.providerDerivedIdentifiers(
-      providerNames: providerNames,
-      receiverNames: receiverNames,
-    );
-    return invocations
-        .where(
-          (invocation) => providerOwned.contains(invocation.targetIdentifier),
-        )
-        .map((invocation) => invocation.name)
-        .toSet();
-  }
+  }) => _providerOwnership.invocationNames(
+    providerNames: providerNames,
+    receiverNames: receiverNames,
+  );
 
   Set<String> providerReads({Set<String> receiverNames = const {'ref'}}) {
     final owned = _aliases.identifiers(names: receiverNames);

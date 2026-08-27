@@ -11,17 +11,17 @@ The first controller/widget run failed because
 `schedule_reference_controller.dart`, `schedule_reference_models.dart`, and
 `ScheduleReferenceController` did not exist. The first architecture run found
 only the 796-line legacy owner instead of the six required semantic owners.
-After extraction, all nine controller/widget contracts and all four AST guard
-tests pass.
+After extraction and both boundary-hardening rounds, all 12 controller/widget
+contracts and all nine AST guard tests pass.
 
 ## Owners and structural gate
 
 | Owner | Guard NLOC | Physical lines | Max CCN |
 | --- | ---: | ---: | ---: |
 | `schedule_reference_settings.dart` | 58 | 70 | 3 |
-| `schedule_reference_models.dart` | 161 | 180 | 8 |
+| `schedule_reference_models.dart` | 169 | 188 | 8 |
 | `schedule_reference_controller.dart` | 369 | 401 | 7 |
-| `schedule_reference_view.dart` | 186 | 199 | 4 |
+| `schedule_reference_view.dart` | 197 | 211 | 4 |
 | `schedule_reference_cards.dart` | 311 | 332 | 10 |
 | `schedule_reference_dialogs.dart` | 127 | 133 | 8 |
 
@@ -32,8 +32,16 @@ count with closures. The guard dynamically discovers every
 `schedule_reference_*.dart`, rejects parse/part bypasses, caps each owner at
 500 NLOC and each executable at CCN 10, and caps types at 400 NLOC, 50 members,
 and 30 callables. Negative fixtures prove comment/string decoys, whitespace,
-service aliases, new owners, syntax errors, CCN, and type-callable bypasses
-fail.
+service aliases, direct and derived provider receivers, transitive provider
+tokens, read tearoffs, constructor fields, parentheses, cascades, new owners,
+syntax errors, CCN, and type-callable bypasses fail. Positive fixtures prove
+same-name lexical bindings do not contaminate each other and reassignment away
+clears stale provider ownership.
+
+Shared architecture support remains split into semantic owners below both
+limits: the facade is 277 token NLOC / 303 physical lines / max CCN 7, the
+metric visitors are 366 / 411 / 7, and provider ownership dataflow is
+361 / 415 / 8.
 
 ## Contract proof
 
@@ -52,7 +60,7 @@ fail.
 
 ## Lane gate
 
-- Focused new tests: 13/13 PASS (9 controller/widget, 4 architecture).
+- Focused new tests: 21/21 PASS (12 controller/widget, 9 architecture).
 - Existing named workspace smoke: 2/2 PASS (read-only split view and director
   assignment/availability version chaining).
 - `flutter analyze --no-pub` on all six production owners: PASS, no issues.

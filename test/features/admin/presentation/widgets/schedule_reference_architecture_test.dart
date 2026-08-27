@@ -113,6 +113,104 @@ void reassigned(dynamic ref) {
     );
   });
 
+  test('provider ownership stays inside its lexical binding scope', () {
+    final inspection = inspectDartSource(_shellFilename, r'''
+void providerOwner(dynamic ref) {
+  final crm = ref.read(magicCrmServiceProvider);
+  crm.futureScopedWrite();
+}
+void unrelatedOwner() {
+  final crm = LocalSchedulePreview();
+  crm.refreshUnrelatedPreview();
+}
+void nestedOwners(dynamic ref) {
+  {
+    final crm = ref.read(magicCrmServiceProvider);
+    crm.futureNestedWrite();
+  }
+  {
+    final crm = LocalSchedulePreview();
+    crm.refreshNestedPreview();
+  }
+}
+''');
+
+    expect(
+      inspection.invocationsOnProviderDerivedReceivers(const {
+        'magicCrmServiceProvider',
+      }),
+      {'futureScopedWrite', 'futureNestedWrite'},
+    );
+  });
+
+  test('reassignment clears provider ownership before unrelated calls', () {
+    final inspection = inspectDartSource(_shellFilename, r'''
+void reassignedAway(dynamic ref) {
+  dynamic crm = ref.read(magicCrmServiceProvider);
+  crm = LocalSchedulePreview();
+  crm.refreshLocalPreview();
+}
+''');
+
+    expect(
+      inspection.invocationsOnProviderDerivedReceivers(const {
+        'magicCrmServiceProvider',
+      }),
+      isEmpty,
+    );
+  });
+
+  test('provider token and read aliases cannot hide derived receivers', () {
+    final inspection = inspectDartSource(_shellFilename, r'''
+void transitiveProvider(dynamic ref) {
+  final p = magicCrmServiceProvider;
+  final p2 = p;
+  final crm = ref.read(p2);
+  crm.futureTransitiveProviderWrite();
+}
+void readTearoff(dynamic ref) {
+  final p = magicCrmServiceProvider;
+  final read = ref.read;
+  final crm = read(p);
+  crm.futureReadTearoffWrite();
+}
+''');
+
+    expect(
+      inspection.invocationsOnProviderDerivedReceivers(const {
+        'magicCrmServiceProvider',
+      }),
+      {'futureTransitiveProviderWrite', 'futureReadTearoffWrite'},
+    );
+  });
+
+  test('field parenthesized and cascade origins stay provider-derived', () {
+    final inspection = inspectDartSource(_shellFilename, r'''
+class FieldOwner {
+  FieldOwner(dynamic ref) : crm = ref.read(magicCrmServiceProvider);
+
+  final dynamic crm;
+
+  void mutate() {
+    crm.futureFieldWrite();
+  }
+}
+void parenthesized(dynamic ref) {
+  ((ref.read(magicCrmServiceProvider))).futureParenthesizedWrite();
+}
+void cascaded(dynamic ref) {
+  (ref.read(magicCrmServiceProvider))..futureCascadeWrite();
+}
+''');
+
+    expect(
+      inspection.invocationsOnProviderDerivedReceivers(const {
+        'magicCrmServiceProvider',
+      }),
+      {'futureFieldWrite', 'futureParenthesizedWrite', 'futureCascadeWrite'},
+    );
+  });
+
   test('dynamic discovery and syntax guard reject a new malformed owner', () {
     final directory = Directory.systemTemp.createTempSync(
       'schedule-reference-architecture-',
