@@ -14,6 +14,8 @@ class _StaffApi extends MagicApiClient {
   _StaffApi({
     this.branchFailures = 0,
     this.branchResponse,
+    this.patchResponse,
+    this.provisionResponse,
     this.branches = const [
       {'id': 'branch-a', 'name': 'Сокол'},
     ],
@@ -21,6 +23,8 @@ class _StaffApi extends MagicApiClient {
 
   int branchFailures;
   final Completer<List<Map<String, dynamic>>>? branchResponse;
+  final Completer<Map<String, dynamic>>? patchResponse;
+  final Completer<Map<String, dynamic>>? provisionResponse;
   final List<Map<String, dynamic>> branches;
   final patches = <String, Map<String, dynamic>>{};
   final posts = <String, Map<String, dynamic>>{};
@@ -62,6 +66,7 @@ class _StaffApi extends MagicApiClient {
   }) async {
     final body = Map<String, dynamic>.from(data! as Map);
     patches[path] = body;
+    if (patchResponse != null) return await patchResponse!.future as T;
     return <String, dynamic>{'id': path.split('/').last, ...body} as T;
   }
 
@@ -74,6 +79,9 @@ class _StaffApi extends MagicApiClient {
   }) async {
     final body = Map<String, dynamic>.from(data! as Map);
     posts[path] = body;
+    if (provisionResponse != null) {
+      return await provisionResponse!.future as T;
+    }
     return <String, dynamic>{
           'id': path.split('/')[3],
           'isAppAccount': true,
@@ -194,21 +202,110 @@ void main() {
       expect(controller.branches.single['name'], 'Сокол');
     });
 
-    test('ignores a branch response after controller disposal', () async {
-      final response = Completer<List<Map<String, dynamic>>>();
-      final controller = _controller(
-        _StaffApi(branchResponse: response),
-        _staff(),
+    for (final fails in const [false, true]) {
+      test(
+        'ignores a late branch ${fails ? 'error' : 'result'} after disposal',
+        () async {
+          final response = Completer<List<Map<String, dynamic>>>();
+          final controller = _controller(
+            _StaffApi(branchResponse: response),
+            _staff(),
+          );
+
+          final loading = controller.loadBranches();
+          final originalStaff = Map<String, dynamic>.from(controller.staff);
+          final originalEmail = controller.draft.email;
+          controller.dispose();
+          if (fails) {
+            response.completeError(StateError('late branch failure'));
+          } else {
+            response.complete(const [
+              {'id': 'branch-late', 'name': 'Поздний филиал'},
+            ]);
+          }
+
+          await expectLater(loading, completes);
+          expect(controller.branches, isEmpty);
+          expect(controller.loadingBranches, isTrue);
+          expect(controller.branchesError, isNull);
+          expect(controller.staff, originalStaff);
+          expect(controller.draft.email, originalEmail);
+          expect(controller.saving, isFalse);
+        },
       );
+    }
 
-      final loading = controller.loadBranches();
-      controller.dispose();
-      response.complete(const [
-        {'id': 'branch-late', 'name': 'Поздний филиал'},
-      ]);
+    for (final fails in const [false, true]) {
+      test(
+        'ignores a late provision ${fails ? 'error' : 'result'} after disposal',
+        () async {
+          final response = Completer<Map<String, dynamic>>();
+          final controller = _controller(
+            _StaffApi(provisionResponse: response),
+            _staff(),
+          );
+          final originalStaff = Map<String, dynamic>.from(controller.staff);
+          final originalEmail = controller.draft.email;
 
-      await expectLater(loading, completes);
-    });
+          final provision = controller.provisionAccess(
+            email: 'late@example.test',
+            password: 'late-password',
+          );
+          controller.dispose();
+          if (fails) {
+            response.completeError(StateError('late provision failure'));
+            await expectLater(provision, throwsStateError);
+          } else {
+            response.complete({
+              ...originalStaff,
+              'email': 'late@example.test',
+              'is_app_account': true,
+            });
+            await expectLater(provision, completes);
+          }
+
+          expect(controller.branches, isEmpty);
+          expect(controller.loadingBranches, isTrue);
+          expect(controller.branchesError, isNull);
+          expect(controller.staff, originalStaff);
+          expect(controller.draft.email, originalEmail);
+          expect(controller.saving, isFalse);
+        },
+      );
+    }
+
+    for (final fails in const [false, true]) {
+      test(
+        'keeps save state unchanged after a late ${fails ? 'error' : 'result'} and disposal',
+        () async {
+          final response = Completer<Map<String, dynamic>>();
+          final controller = _controller(
+            _StaffApi(patchResponse: response),
+            _staff(),
+          );
+          final originalStaff = Map<String, dynamic>.from(controller.staff);
+          final originalEmail = controller.draft.email;
+
+          final save = controller.save();
+          expect(controller.saving, isTrue);
+          controller.dispose();
+          if (fails) {
+            response.completeError(StateError('late save failure'));
+            await expectLater(save, throwsStateError);
+          } else {
+            response.complete(originalStaff);
+            await expectLater(save, completes);
+          }
+
+          expect(controller.branches, isEmpty);
+          expect(controller.loadingBranches, isTrue);
+          expect(controller.branchesError, isNull);
+          expect(controller.staff, originalStaff);
+          expect(controller.draft.email, originalEmail);
+          expect(controller.saving, isTrue);
+        },
+      );
+    }
 
     test('saves the exact profile payload without access keys', () async {
       final api = _StaffApi();

@@ -55,14 +55,15 @@ The shared analyzer-AST guard dynamically discovers every `staff_detail_*.dart`
 owner, rejects parse errors, `part`/`part of`, future files above `500` NLOC,
 executables above CCN `10`, oversized type/callable proxies, provider ownership
 leaks, and CRM effects outside the controller. Negative fixtures prove that
-comments and strings are ignored while aliases, future god/brain owners, and
-decision shapes are caught.
+comments and strings are ignored while receiver aliases, callable tear-offs,
+provider-read tear-offs, future god/brain owners, and decision shapes are
+caught.
 
 | Owner | Token NLOC | Imports | Max CCN | Max executable NLOC |
 | --- | ---: | ---: | ---: | ---: |
 | `staff_detail_dialog.dart` | 140 | 9 | 8 | 29 |
 | `staff_detail_model.dart` | 144 | 0 | 8 | 14 |
-| `staff_detail_controller.dart` | 146 | 4 | 6 | 21 |
+| `staff_detail_controller.dart` | 177 | 4 | 6 | 24 |
 | `staff_detail_content.dart` | 471 | 5 | 9 | 50 |
 | `staff_detail_access_flow.dart` | 62 | 5 | 5 | 23 |
 
@@ -79,7 +80,7 @@ above is the live analyzer-AST evidence consumed by the permanent guard.
 
 ## Lane smoke and scope
 
-- Contract plus architecture suites: `16/16` PASS.
+- Contract plus architecture suites: `21/21` PASS.
 - Existing shared workspace smoke: `2/2` PASS for profile save without
   credentials and legacy staff access creation.
 - Targeted Flutter analyze of all five production owners: `No issues found`.
@@ -89,3 +90,14 @@ above is the live analyzer-AST evidence consumed by the permanent guard.
   `test/support/settings_test_api.dart`.
 - Flutter-generated registrants were restored exactly to Tier 4 base and are
   excluded from the lane commit.
+
+## Independent review fix round
+
+- RED: six focused failures reproduced the callable tear-off ownership bypass
+  and late branch/provision/save state commits after controller disposal.
+- Branch loads now reject stale success and error completions by request
+  generation. Provisioning additionally requires the original staff identity;
+  save-finally commits only while its request remains current.
+- Late branch and provision success/error plus late save success/error fixtures
+  assert branches, staff, draft email, saving, and error state remain unchanged
+  after disposal. The focused suites then passed `21/21`.

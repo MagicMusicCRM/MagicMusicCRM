@@ -73,6 +73,10 @@ void leak(MagicCrmService crm, dynamic ref) {
   final refAlias = ref;
   serviceAlias . updateStaff ('staff-a');
   refAlias . read (magicCrmServiceProvider);
+  final mutate = crm.updateStaff;
+  mutate('staff-b');
+  final read = ref.read;
+  read(magicCrmServiceProvider);
 }
 ''',
       _shellFilename: r'''
@@ -88,6 +92,7 @@ void shell(dynamic ref) {
       violations,
       containsAll(<String>[
         'staff_detail_future.dart: MagicCrmService invocation updateStaff outside controller',
+        'staff_detail_future.dart: MagicCrmService invocation mutate outside controller',
         'staff_detail_future.dart: provider read outside shell',
       ]),
     );
@@ -132,7 +137,7 @@ List<String> _auditSources(Map<String, String> sources) {
     for (final type in requiredTypes.difference(inspection.declaredTypes)) {
       violations.add('${inspection.fileName}: required type $type missing');
     }
-    final providers = inspection.providerReads();
+    final providers = _providerReads(inspection);
     if (inspection.fileName != _shellFilename && providers.isNotEmpty) {
       violations.add('${inspection.fileName}: provider read outside shell');
     }
@@ -141,6 +146,7 @@ List<String> _auditSources(Map<String, String> sources) {
       ...inspection.invocationsOn(receiverTypeNames: const {'MagicCrmService'}),
       ...inspection.invocationsOnProviders(const {'magicCrmServiceProvider'}),
       ...inspection.invocationNames.intersection(_serviceEffects),
+      ...inspection.invokedCallableAliases(names: _serviceEffects),
     };
     if (inspection.fileName != _controllerFilename) {
       for (final method in serviceInvocations) {
@@ -170,6 +176,19 @@ List<String> _auditSources(Map<String, String> sources) {
     }
   }
   return violations.toSet().toList()..sort();
+}
+
+Set<String> _providerReads(DartSourceInspection inspection) {
+  const providerNames = {'magicCrmServiceProvider'};
+  final callableAliases = inspection.invokedCallableAliases(
+    names: const {'read', 'watch'},
+  );
+  return {
+    ...inspection.providerReads(),
+    for (final invocation in inspection.invocations)
+      if (callableAliases.contains(invocation.name))
+        ...invocation.argumentIdentifiers.intersection(providerNames),
+  };
 }
 
 int _identifierCount(String source, String name) {

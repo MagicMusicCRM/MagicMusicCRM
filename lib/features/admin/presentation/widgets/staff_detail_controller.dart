@@ -30,6 +30,9 @@ class StaffDetailController extends ChangeNotifier {
   bool _saving = false;
   bool _disposed = false;
   String? _branchesError;
+  int _branchLoadGeneration = 0;
+  int _saveGeneration = 0;
+  int _provisionGeneration = 0;
 
   Map<String, dynamic> get staff => _staff;
   List<Map<String, dynamic>> get branches => _branches;
@@ -43,20 +46,26 @@ class StaffDetailController extends ChangeNotifier {
   String get profileUserId => _staff['profile_user_id']?.toString() ?? '';
 
   Future<void> loadBranches() async {
+    final generation = ++_branchLoadGeneration;
     _loadingBranches = true;
     _branchesError = null;
     _notify();
     try {
-      _branches = await _crm.listBranches();
+      final branches = await _crm.listBranches();
+      if (!_requestIsCurrent(generation, _branchLoadGeneration)) return;
+      _branches = branches;
     } catch (error) {
+      if (!_requestIsCurrent(generation, _branchLoadGeneration)) return;
       _branches = const [];
       _branchesError = userErrorMessage(
         error,
         fallback: 'Не удалось загрузить филиалы.',
       );
     } finally {
-      _loadingBranches = false;
-      _notify();
+      if (_requestIsCurrent(generation, _branchLoadGeneration)) {
+        _loadingBranches = false;
+        _notify();
+      }
     }
   }
 
@@ -82,6 +91,7 @@ class StaffDetailController extends ChangeNotifier {
   Future<void> save() async {
     _validateSave();
     final id = _staffId();
+    final generation = ++_saveGeneration;
     _saving = true;
     _notify();
     try {
@@ -96,8 +106,10 @@ class StaffDetailController extends ChangeNotifier {
         customDataPatch: draft.customDataPatch(),
       );
     } finally {
-      _saving = false;
-      _notify();
+      if (_requestIsCurrent(generation, _saveGeneration)) {
+        _saving = false;
+        _notify();
+      }
     }
   }
 
@@ -109,11 +121,17 @@ class StaffDetailController extends ChangeNotifier {
     String? email,
     String? password,
   }) async {
+    final staffId = _staffId();
+    final staffIdentity = _staff;
+    final generation = ++_provisionGeneration;
     final updated = await _crm.provisionStaffAccess(
-      staffId: _staffId(),
+      staffId: staffId,
       email: email,
       password: password,
     );
+    if (!_provisionIsCurrent(generation, staffId, staffIdentity)) {
+      return updated;
+    }
     _staff = Map<String, dynamic>.from(updated);
     draft.email = _staff['email']?.toString() ?? '';
     _notify();
@@ -130,9 +148,24 @@ class StaffDetailController extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
+  bool _requestIsCurrent(int request, int current) =>
+      !_disposed && request == current;
+
+  bool _provisionIsCurrent(
+    int generation,
+    String staffId,
+    Map<String, dynamic> staffIdentity,
+  ) =>
+      _requestIsCurrent(generation, _provisionGeneration) &&
+      identical(_staff, staffIdentity) &&
+      _staff['id']?.toString() == staffId;
+
   @override
   void dispose() {
     _disposed = true;
+    _branchLoadGeneration++;
+    _saveGeneration++;
+    _provisionGeneration++;
     super.dispose();
   }
 
