@@ -11,7 +11,6 @@ import {
   type LessonSettlementResult,
 } from "../commerce/lesson-settlement.port";
 import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
-import type { LessonReschedulePreviewDto } from "../dto/lesson-transition.dto";
 import { LessonLifecycleRepository } from "./lesson-lifecycle.repository";
 import { LessonTransitionFinancialService } from "./lesson-transition-financial.service";
 import { LessonTransitionPreparationService } from "./lesson-transition-preparation.service";
@@ -60,7 +59,7 @@ export class LessonTransitionCommitService {
     const dto = effectiveTransitionDto(source, input.dto, input.operation);
     const successor = input.operation === "reschedule"
       ? this.preparation.successorDraft(
-          (input.dto as LessonReschedulePreviewDto).successor,
+          input.dto.successor!,
           source,
         )
       : null;

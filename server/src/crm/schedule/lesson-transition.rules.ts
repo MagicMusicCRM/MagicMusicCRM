@@ -2,13 +2,11 @@ import { UnprocessableEntityException } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import { fingerprintPayload } from "../../platform/platform-integrity.util";
 import type { LessonFinancialDecision } from "../commerce/lesson-settlement.port";
-import type {
-  LessonBulkTransitionItemDto,
-  LessonBulkTransitionPreviewDto,
-} from "../dto/lesson-transition.dto";
 import type { LessonCommandMetadata } from "./lesson-command-metadata";
 import type {
   BulkFingerprintItem,
+  BulkTransitionDto,
+  BulkTransitionItem,
   TransitionFinancialProjection,
   TransitionFingerprintInput,
   TransitionOperation,
@@ -91,7 +89,7 @@ export function stableTransitionId(seed: string): string {
   ].join("-");
 }
 
-const assertBulkHeader = (dto: LessonBulkTransitionPreviewDto): void => {
+const assertBulkHeader = (dto: BulkTransitionDto): void => {
   const reasonText = dto.reasonText?.trim();
   const reasonCode = dto.reasonCode?.trim() || "manual";
   const validReason = Boolean(reasonText) && reasonText.length <= 500 &&
@@ -109,7 +107,7 @@ const assertBulkHeader = (dto: LessonBulkTransitionPreviewDto): void => {
 };
 
 const assertBulkItem = (
-  item: LessonBulkTransitionItemDto,
+  item: BulkTransitionItem,
   index: number,
   ids: Set<string>,
 ): void => {
@@ -132,8 +130,8 @@ const assertBulkItem = (
 };
 
 export function normalizeBulkTransitionItems(
-  dto: LessonBulkTransitionPreviewDto,
-): LessonBulkTransitionItemDto[] {
+  dto: BulkTransitionDto,
+): BulkTransitionItem[] {
   assertBulkHeader(dto);
   const ids = new Set<string>();
   dto.items.forEach((item, index) => {
@@ -211,7 +209,7 @@ export function transitionFingerprint(input: TransitionFingerprintInput): string
 }
 
 export function bulkTransitionFingerprint(
-  dto: LessonBulkTransitionPreviewDto,
+  dto: BulkTransitionDto,
   items: BulkFingerprintItem[],
 ): string {
   return fingerprintPayload({
@@ -226,8 +224,8 @@ export function bulkTransitionFingerprint(
 }
 
 export const bulkTransitionItemDto = (
-  bulk: LessonBulkTransitionPreviewDto,
-  item: LessonBulkTransitionItemDto,
+  bulk: BulkTransitionDto,
+  item: BulkTransitionItem,
 ): TransitionPreviewDto => {
   const common = {
     expectedVersion: item.expectedVersion,
@@ -240,7 +238,7 @@ export const bulkTransitionItemDto = (
     : common;
 };
 
-export const bulkTransitionPreviewId = (items: LessonBulkTransitionItemDto[]) =>
+export const bulkTransitionPreviewId = (items: BulkTransitionItem[]) =>
   stableTransitionId(
     `schedule.lesson.bulk-preview\0${fingerprintPayload(items.map((item) => ({
       lessonId: item.lessonId,

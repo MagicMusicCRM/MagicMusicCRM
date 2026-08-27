@@ -13,8 +13,8 @@ import {
   type LessonSettlementPort,
 } from "../commerce/lesson-settlement.port";
 import { SubscriptionReservationService } from "../commerce/subscription-reservation.service";
-import type { UpsertLessonDto } from "../dto/upsert-lesson.dto";
 import { ScheduleConstraintEngine } from "./constraint-engine.service";
+import type { LessonDraftInput } from "./lesson-draft.contracts";
 import { LessonRequiredFieldValidator } from "./lesson-required-field.validator";
 import { LessonTransitionFinancialService } from "./lesson-transition-financial.service";
 import {
@@ -123,7 +123,7 @@ export class LessonTransitionPreparationService {
   }
 
   successorDraft(
-    dto: UpsertLessonDto,
+    dto: LessonDraftInput,
     source: TransitionSource,
   ): TransitionSuccessor {
     if (source.groupId) return this.groupSuccessorDraft(dto, source);
@@ -171,7 +171,7 @@ export class LessonTransitionPreparationService {
     await this.assertSettlementReviewPlan(client, lessonId, operation);
     const effectiveDto = effectiveTransitionDto(source, dto, operation);
     const successor = operation === "reschedule"
-      ? this.successorDraft((dto as { successor: UpsertLessonDto }).successor, source)
+      ? this.successorDraft(dto.successor!, source)
       : null;
     const validation = successor
       ? await this.validateSuccessor(client, lessonId, successor)
@@ -336,7 +336,7 @@ export class LessonTransitionPreparationService {
   }
 
   private groupSuccessorDraft(
-    dto: UpsertLessonDto,
+    dto: LessonDraftInput,
     source: TransitionSource,
   ): GroupLessonDraft {
     const snapshot = source.groupSnapshot;
@@ -355,7 +355,7 @@ export class LessonTransitionPreparationService {
     return this.buildGroupDraft(dto, source, snapshot!);
   }
 
-  private groupSubjectChanges(dto: UpsertLessonDto, source: TransitionSource) {
+  private groupSubjectChanges(dto: LessonDraftInput, source: TransitionSource) {
     return [
       dto.clientRef || dto.studentId || dto.leadId ? "clientRef" : null,
       dto.groupId !== undefined && dto.groupId !== source.groupId ? "groupId" : null,
@@ -363,7 +363,7 @@ export class LessonTransitionPreparationService {
     ].filter((field): field is string => field !== null);
   }
 
-  private groupFinancialChanges(dto: UpsertLessonDto) {
+  private groupFinancialChanges(dto: LessonDraftInput) {
     return [
       dto.clientChargeType !== undefined && dto.clientChargeType !== "none"
         ? "clientChargeType" : null,
@@ -374,7 +374,7 @@ export class LessonTransitionPreparationService {
   }
 
   private groupCompensationChanges(
-    dto: UpsertLessonDto,
+    dto: LessonDraftInput,
     snapshot: NonNullable<TransitionSource["groupSnapshot"]>,
   ) {
     return [
@@ -391,7 +391,7 @@ export class LessonTransitionPreparationService {
   }
 
   private groupControlChanges(
-    dto: UpsertLessonDto,
+    dto: LessonDraftInput,
     snapshot: NonNullable<TransitionSource["groupSnapshot"]>,
   ) {
     return [
@@ -404,7 +404,7 @@ export class LessonTransitionPreparationService {
   }
 
   private buildGroupDraft(
-    dto: UpsertLessonDto,
+    dto: LessonDraftInput,
     source: TransitionSource,
     snapshot: NonNullable<TransitionSource["groupSnapshot"]>,
   ): GroupLessonDraft {
@@ -424,7 +424,7 @@ export class LessonTransitionPreparationService {
     };
   }
 
-  private groupResources(dto: UpsertLessonDto, source: TransitionSource) {
+  private groupResources(dto: LessonDraftInput, source: TransitionSource) {
     const teacherId = dto.teacherId ?? source.teacherId;
     const branchId = dto.branchId ?? source.branchId;
     const roomId = dto.roomId ?? source.roomId;
@@ -434,7 +434,7 @@ export class LessonTransitionPreparationService {
     return { teacherId: teacherId!, branchId: branchId!, roomId: roomId! };
   }
 
-  private groupInterval(dto: UpsertLessonDto, source: TransitionSource) {
+  private groupInterval(dto: LessonDraftInput, source: TransitionSource) {
     const start = new Date(dto.scheduledAt ?? source.scheduledAt);
     const durationMinutes = dto.durationMinutes ?? source.durationMinutes;
     const end = new Date(start.getTime() + durationMinutes * 60_000);
@@ -448,7 +448,7 @@ export class LessonTransitionPreparationService {
     };
   }
 
-  private groupNotes(dto: UpsertLessonDto, source: TransitionSource) {
+  private groupNotes(dto: LessonDraftInput, source: TransitionSource) {
     return dto.notes === undefined ? source.notes : dto.notes.trim() || null;
   }
 }

@@ -6,19 +6,10 @@ import type {
 } from "../commerce/lesson-settlement.port";
 import type { LessonSettlementCoverageSnapshot } from "../commerce/subscription-reservation.service";
 import type {
-  LessonBulkTransitionItemDto,
-  LessonBulkTransitionPreviewDto,
-  LessonCancelCommandDto,
-  LessonCancelPreviewDto,
-  LessonRescheduleCommandDto,
-  LessonReschedulePreviewDto,
-  LessonSettleCommandDto,
-  LessonSettlePreviewDto,
-} from "../dto/lesson-transition.dto";
-import type {
   CompleteLessonDraft,
   ExistingLessonDraft,
-} from "./lesson-required-field.validator";
+  LessonDraftInput,
+} from "./lesson-draft.contracts";
 
 export type TransitionOperation = "reschedule" | "cancel" | "settle";
 export type TransitionState =
@@ -102,14 +93,19 @@ export type TransitionSource = ExistingLessonDraft & {
   participants: GroupParticipantSnapshot[];
 };
 
-export type TransitionPreviewDto =
-  | LessonCancelPreviewDto
-  | LessonReschedulePreviewDto
-  | LessonSettlePreviewDto;
-export type TransitionCommandDto =
-  | LessonCancelCommandDto
-  | LessonRescheduleCommandDto
-  | LessonSettleCommandDto;
+/** Internal workflow contract. Transport DTO classes are adapters to this shape. */
+export interface TransitionPreviewDto {
+  expectedVersion: number;
+  reasonCode?: string;
+  reasonText?: string;
+  financialDecision: LessonFinancialDecision;
+  successor?: LessonDraftInput;
+}
+
+export interface TransitionCommandDto extends TransitionPreviewDto {
+  previewToken: string;
+  confirm: true;
+}
 
 export interface CommittedTransition {
   [key: string]: unknown;
@@ -209,5 +205,16 @@ export interface TransitionCommitContext {
   input: CommitTransitionInput;
 }
 
-export type BulkTransitionDto = LessonBulkTransitionPreviewDto;
-export type BulkTransitionItem = LessonBulkTransitionItemDto;
+export interface BulkTransitionItem {
+  lessonId: string;
+  operation: TransitionOperation;
+  expectedVersion: number;
+  financialDecision: LessonFinancialDecision;
+  successor?: LessonDraftInput;
+}
+
+export interface BulkTransitionDto {
+  reasonCode?: string;
+  reasonText: string;
+  items: BulkTransitionItem[];
+}

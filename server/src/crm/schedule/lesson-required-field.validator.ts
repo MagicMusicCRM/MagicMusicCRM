@@ -1,54 +1,19 @@
 import { Injectable, UnprocessableEntityException } from "@nestjs/common";
-import { ClientRefType } from "../dto/client-ref.dto";
-import { UpsertLessonDto } from "../dto/upsert-lesson.dto";
+import type {
+  CompleteLessonDraft,
+  ExistingLessonDraft,
+  LessonClientRefType,
+  LessonDraftInput,
+} from "./lesson-draft.contracts";
 
-export interface ExistingLessonDraft {
-  id: string;
-  version: number;
-  studentId: string | null;
-  leadId: string | null;
-  teacherId: string | null;
-  branchId: string | null;
-  roomId: string | null;
-  scheduledAt: string | Date;
-  durationMinutes: number;
-  isTrial: boolean;
-  notes: string | null;
-  snapshot: {
-    clientType: ClientRefType;
-    clientId: string;
-    completionType: string;
-    clientChargeType: "subscription" | "personal_account" | "none";
-    clientChargeValue: number;
-    teacherCompensationType: "fixed" | "hourly" | "none";
-    teacherCompensationValue: number;
-    subscriptionId: string | null;
-    trial: boolean;
-    validationState: "valid" | "legacy_incomplete";
-  } | null;
-}
-
-export interface CompleteLessonDraft {
-  clientRef: { type: ClientRefType; id: string };
-  teacherId: string;
-  branchId: string;
-  roomId: string;
-  scheduledAt: string;
-  durationMinutes: number;
-  endAt: string;
-  isTrial: boolean;
-  notes: string | null;
-  completionType: string;
-  clientChargeType: "subscription" | "personal_account" | "none";
-  clientChargeValue: number;
-  teacherCompensationType: "fixed" | "hourly" | "none";
-  teacherCompensationValue: number;
-  subscriptionId: string | null;
-}
+export type {
+  CompleteLessonDraft,
+  ExistingLessonDraft,
+} from "./lesson-draft.contracts";
 
 @Injectable()
 export class LessonRequiredFieldValidator {
-  create(dto: UpsertLessonDto): CompleteLessonDraft {
+  create(dto: LessonDraftInput): CompleteLessonDraft {
     if (dto.force === true) {
       this.fail(
         "CONSTRAINT_OVERRIDE_NOT_ALLOWED",
@@ -91,7 +56,7 @@ export class LessonRequiredFieldValidator {
   }
 
   update(
-    dto: UpsertLessonDto,
+    dto: LessonDraftInput,
     existing: ExistingLessonDraft,
   ): CompleteLessonDraft {
     if (dto.force === true) {
@@ -193,8 +158,8 @@ export class LessonRequiredFieldValidator {
   }
 
   private complete(
-    dto: UpsertLessonDto,
-    clientRef: { type: ClientRefType; id: string },
+    dto: LessonDraftInput,
+    clientRef: { type: LessonClientRefType; id: string },
   ): CompleteLessonDraft {
     const missingResources = [
       !dto.teacherId ? "teacherId" : null,
@@ -254,8 +219,8 @@ export class LessonRequiredFieldValidator {
   }
 
   private clientRef(
-    dto: UpsertLessonDto,
-  ): { type: ClientRefType; id: string } | null {
+    dto: LessonDraftInput,
+  ): { type: LessonClientRefType; id: string } | null {
     if (dto.clientRef) return dto.clientRef;
     if (dto.studentId && !dto.leadId && !dto.groupId) {
       return { type: "student", id: dto.studentId };

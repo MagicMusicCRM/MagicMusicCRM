@@ -24,6 +24,8 @@ const otherNewSources = [
   readSource("lesson-transition.types.ts"),
   readSource("lesson-transition.rules.ts"),
 ];
+const transitionTypesSource = readSource("lesson-transition.types.ts");
+const requiredFieldValidatorSource = readSource("lesson-required-field.validator.ts");
 
 const sourceNloc = (source: string) => {
   const withoutBlockComments = source.replace(/\/\*[\s\S]*?\*\//g, "");
@@ -239,6 +241,17 @@ const facadeContractErrors = (source: string): string[] => {
 };
 
 describe("Lesson transition owner boundaries", () => {
+  it("keeps internal transition contracts independent from transport DTOs", () => {
+    expect([
+      transitionTypesSource,
+      requiredFieldValidatorSource,
+      sources.preparation,
+      sources.commit,
+      readSource("lesson-transition.rules.ts"),
+    ].join("\n"))
+      .not.toMatch(/\.\.\/dto\//);
+  });
+
   it("keeps the compatibility facade as eight direct delegations", () => {
     expect(sourceNloc(sources.facade)).toBeLessThanOrEqual(130);
     expect(facadeContractErrors(sources.facade)).toEqual([]);
