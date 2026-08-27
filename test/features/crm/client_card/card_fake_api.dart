@@ -909,25 +909,28 @@ Future<void> pumpClientCard(
   bool routed = false,
   ContextViewState? initialViewState,
   ProviderContainer? container,
+  ValueChanged<bool?>? onClosed,
 }) async {
   final app = MaterialApp(
     home: Builder(
       builder: (context) => Scaffold(
         body: Center(
           child: ElevatedButton(
-            onPressed: () => showDialog<bool>(
-              context: context,
-              builder: (_) {
-                final card = ClientCard(
-                  lead: seed,
-                  entityType: entityType,
-                  allStatuses: statuses,
-                  routed: routed,
-                  initialViewState: initialViewState,
-                );
-                return routed ? Material(child: card) : card;
-              },
-            ),
+            onPressed: () {
+              showDialog<bool>(
+                context: context,
+                builder: (_) {
+                  final card = ClientCard(
+                    lead: seed,
+                    entityType: entityType,
+                    allStatuses: statuses,
+                    routed: routed,
+                    initialViewState: initialViewState,
+                  );
+                  return routed ? Material(child: card) : card;
+                },
+              ).then((result) => onClosed?.call(result));
+            },
             child: const Text('open'),
           ),
         ),

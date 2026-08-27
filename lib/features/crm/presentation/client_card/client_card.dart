@@ -59,6 +59,9 @@ import 'recurring_schedule_plan_section.dart';
 import 'client_payment_form.dart';
 import 'client_payment_correction_sheet.dart';
 import 'client_internal_context_widgets.dart';
+import 'client_card_access_policy.dart';
+import 'client_card_shell.dart';
+import 'client_card_workspace_controller.dart';
 
 part 'client_card_widgets.dart';
 part 'client_card_display.dart';
@@ -145,7 +148,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
   Map<String, dynamic>? _leadCard;
   List<Map<String, dynamic>> _duplicateCandidates = [];
   bool _loadingDuplicates = true;
-  bool _dirty = false;
   List<Map<String, dynamic>> _statusHistory = [];
   List<Map<String, dynamic>> _studentCardTimeline = const [];
   bool _loadingHistory = true;
@@ -160,19 +162,28 @@ class _ClientCardState extends ConsumerState<ClientCard>
   String? _clientAccessError;
   List<Map<String, dynamic>> _linkedUsers = const [];
   List<Map<String, dynamic>> _clientUserCandidates = const [];
-  // True while a task create is in flight — disables the add-task control.
-  // True once the user has edited a field but not saved — used to warn before
-  // discarding unsaved changes on close.
-  bool _edited = false;
   String? _duplicateDecisionId;
 
-  String _selectedSection = 'overview';
-  late final ScrollController _taskScrollController;
-  late final ScrollController _paymentScrollController;
-  late final ScrollController _subscriptionScrollController;
-  late final ScrollController _desktopScrollController;
-  bool _desktopCalendarExpanded = false;
-  bool _customFieldsExpanded = false;
+  late final ClientCardWorkspaceController _workspaceController;
+  bool get _dirty => _workspaceController.dirty;
+  bool get _edited => _workspaceController.edited;
+  set _edited(bool value) => _workspaceController.edited = value;
+  String get _selectedSection => _workspaceController.selectedSection;
+  ScrollController get _taskScrollController =>
+      _workspaceController.taskScrollController;
+  ScrollController get _paymentScrollController =>
+      _workspaceController.paymentScrollController;
+  ScrollController get _subscriptionScrollController =>
+      _workspaceController.subscriptionScrollController;
+  ScrollController get _desktopScrollController =>
+      _workspaceController.desktopScrollController;
+  bool get _desktopCalendarExpanded =>
+      _workspaceController.desktopCalendarExpanded;
+  set _desktopCalendarExpanded(bool value) =>
+      _workspaceController.desktopCalendarExpanded = value;
+  bool get _customFieldsExpanded => _workspaceController.customFieldsExpanded;
+  set _customFieldsExpanded(bool value) =>
+      _workspaceController.customFieldsExpanded = value;
   bool _internalContextAllowed = false;
   bool _internalContextLoading = false;
   bool _operationalHistoryLoadingMore = false;
@@ -222,47 +233,6 @@ class _ClientCardState extends ConsumerState<ClientCard>
   String get _leadId =>
       _resolvedLeadId ?? (widget.entityType == 'lead' ? _entityId : '');
 
-  static const List<(IconData, String, String)> _leadTabs = [
-    (Icons.dashboard_outlined, 'Обзор', 'overview'),
-    (Icons.event_note_rounded, 'Занятия', 'lessons'),
-    (Icons.confirmation_number_outlined, 'Абонементы', 'subscriptions'),
-    (Icons.insights_rounded, 'Прогресс', 'progress'),
-    (Icons.history_rounded, 'История и задачи', 'history_tasks'),
-    (Icons.people_alt_outlined, 'Контакты', 'contacts'),
-    (Icons.folder_outlined, 'Документы', 'documents'),
-  ];
-
-  static const List<(IconData, String, String)> _studentTabs = [
-    (Icons.dashboard_outlined, 'Обзор', 'overview'),
-    (Icons.event_note_rounded, 'Занятия', 'lessons'),
-    (Icons.account_balance_wallet_rounded, 'Оплаты', 'payments'),
-    (Icons.confirmation_number_outlined, 'Абонементы', 'subscriptions'),
-    (Icons.insights_rounded, 'Прогресс', 'progress'),
-    (Icons.history_rounded, 'История и задачи', 'history_tasks'),
-    (Icons.people_alt_outlined, 'Контакты', 'contacts'),
-    (Icons.folder_outlined, 'Документы', 'documents'),
-  ];
-
-  List<(IconData, String, String)> _tabsFor({
-    required bool canReadClientFinance,
-    required bool canReadTasks,
-  }) {
-    final source = !_isStudent
-        ? _leadTabs
-        : canReadClientFinance
-        ? _studentTabs
-        : _studentTabs.where(
-            (tab) => tab.$3 != 'payments' && tab.$3 != 'subscriptions',
-          );
-    return [
-      for (final tab in source)
-        if (tab.$3 == 'history_tasks' && !canReadTasks)
-          (tab.$1, 'История', tab.$3)
-        else
-          tab,
-    ];
-  }
-
   // The (entityType, entityId) pairs whose comment / task / history streams the
   // card aggregates. A single-side card returns one pair; a converted client
   // returns both halves so merged lists de-dup and origin-badge correctly.
@@ -309,8 +279,8 @@ class _ClientCardState extends ConsumerState<ClientCard>
   bool _blacklistBusy = false;
 
   Future<void> _handleClose() async {
-    if (!_edited) {
-      _closeCard(_dirty ? true : null);
+    if (!_workspaceController.requiresDiscardConfirmation) {
+      _closeCard(_workspaceController.terminalCloseResult);
       return;
     }
     final leave = await showDialog<bool>(
@@ -334,7 +304,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
       ),
     );
     if (leave == true && mounted) {
-      _closeCard(_dirty ? true : null);
+      _closeCard(_workspaceController.terminalCloseResult);
     }
   }
 
@@ -436,33 +406,19 @@ class _ClientCardState extends ConsumerState<ClientCard>
   @override
   void initState() {
     super.initState();
-    _customFieldsExpanded = widget.initialSection == 'custom_fields';
-    _selectedSection = _customFieldsExpanded
-        ? 'overview'
-        : widget.initialSection;
     final restoredOffset = widget.initialViewState?.scrollOffset ?? 0;
-    _taskScrollController = ScrollController(
-      initialScrollOffset: _selectedSection == 'history_tasks'
-          ? restoredOffset
-          : 0,
-    );
-    _paymentScrollController = ScrollController(
-      initialScrollOffset: _selectedSection == 'payments' ? restoredOffset : 0,
-    );
-    _subscriptionScrollController = ScrollController(
-      initialScrollOffset: _selectedSection == 'subscriptions'
-          ? restoredOffset
-          : 0,
-    );
-    _desktopScrollController = ScrollController(
-      initialScrollOffset: _selectedSection == 'overview' ? restoredOffset : 0,
+    _workspaceController = ClientCardWorkspaceController(
+      initialSection: widget.initialSection,
+      restoredOffset: restoredOffset,
     );
     if (_selectedSection != 'overview') {
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _ensureDesktopSectionVisible(
-          _selectedSection,
-          animated: false,
-          additionalOffset: restoredOffset,
+      _workspaceController.schedulePostFrameIntent(
+        () => unawaited(
+          _ensureDesktopSectionVisible(
+            _selectedSection,
+            animated: false,
+            additionalOffset: restoredOffset,
+          ),
         ),
       );
     }
@@ -501,12 +457,9 @@ class _ClientCardState extends ConsumerState<ClientCard>
   void didUpdateWidget(covariant ClientCard oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.initialSection != widget.initialSection) {
-      _customFieldsExpanded = widget.initialSection == 'custom_fields';
-      _selectedSection = _customFieldsExpanded
-          ? 'overview'
-          : widget.initialSection;
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _ensureDesktopSectionVisible(_selectedSection),
+      _workspaceController.restoreSection(widget.initialSection);
+      _workspaceController.schedulePostFrameIntent(
+        () => unawaited(_ensureDesktopSectionVisible(_selectedSection)),
       );
     }
   }
@@ -525,11 +478,18 @@ class _ClientCardState extends ConsumerState<ClientCard>
     if (mounted) setState(fn);
   }
 
+  void _markDirty([VoidCallback? update]) {
+    _emitState(() {
+      update?.call();
+      _workspaceController.dirty = true;
+    });
+  }
+
   void _selectSection(String section) {
-    _emitState(() => _selectedSection = section);
+    _emitState(() => _workspaceController.selectSection(section));
     widget.onSectionChanged?.call(section);
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _ensureDesktopSectionVisible(section),
+    _workspaceController.schedulePostFrameIntent(
+      () => unawaited(_ensureDesktopSectionVisible(section)),
     );
   }
 
@@ -553,11 +513,11 @@ class _ClientCardState extends ConsumerState<ClientCard>
     );
     if (!mounted ||
         additionalOffset <= 0 ||
-        !_desktopScrollController.hasClients) {
+        !_workspaceController.desktopScrollController.hasClients) {
       return;
     }
-    final position = _desktopScrollController.position;
-    _desktopScrollController.jumpTo(
+    final position = _workspaceController.desktopScrollController.position;
+    _workspaceController.desktopScrollController.jumpTo(
       (position.pixels + additionalOffset).clamp(
         position.minScrollExtent,
         position.maxScrollExtent,
@@ -592,10 +552,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
   @override
   void dispose() {
     _commentCtrl.dispose();
-    _taskScrollController.dispose();
-    _paymentScrollController.dispose();
-    _subscriptionScrollController.dispose();
-    _desktopScrollController.dispose();
+    _workspaceController.dispose();
     super.dispose();
   }
 
@@ -612,32 +569,14 @@ class _ClientCardState extends ConsumerState<ClientCard>
     });
 
     final cs = Theme.of(context).colorScheme;
-    final media = MediaQuery.of(context);
     final actorRole = ref.watch(releaseGateStatusProvider).asData?.value.role;
-    final canReadClientFinance = crmHasClientCardFinanceAccess(actorRole ?? '');
-    final canWriteSchedule =
-        widget.capabilitySnapshot?.allows('schedule.lesson.write') ??
-        crmHasManagerAccess(actorRole ?? '');
-    final canReadSchedule = widget.capabilitySnapshot == null
-        ? crmHasManagerAccess(actorRole ?? '')
-        : widget.capabilitySnapshot!.allows('schedule.lesson.read.assigned') ||
-              canWriteSchedule;
-    final canReadTasks =
-        widget.capabilitySnapshot?.allows('workflow.task.read') ??
-        const {
-          'teacher',
-          'manager',
-          'director',
-          'system_admin',
-        }.contains(actorRole);
-    final tabs = _tabsFor(
-      canReadClientFinance: canReadClientFinance,
-      canReadTasks: canReadTasks,
+    final access = ClientCardAccessPolicy.project(
+      actorRole: actorRole ?? '',
+      capabilitySnapshot: widget.capabilitySnapshot,
+      hasStudentHalf: _isStudent,
     );
-    final visibleTabIndex = tabs.indexWhere(
-      (tab) => tab.$3 == _selectedSection,
-    );
-    final selectedIndex = visibleTabIndex < 0 ? 0 : visibleTabIndex;
+    final tabs = access.sections;
+    final selectedIndex = access.selectedIndexFor(_selectedSection);
     final fallbackStatus = _statuses.isNotEmpty
         ? _statuses.first
         : ('new', 'Новый', AppTheme.primaryGold);
@@ -646,93 +585,48 @@ class _ClientCardState extends ConsumerState<ClientCard>
       orElse: () => fallbackStatus,
     );
 
-    final card = Container(
-      width: widget.routed
-          ? double.infinity
-          : (media.size.width * 0.92).clamp(0.0, 600.0).toDouble(),
-      height: widget.routed ? double.infinity : null,
-      constraints: widget.routed
-          ? null
-          : BoxConstraints(maxHeight: media.size.height * 0.85),
-      color: cs.surface,
-      child: Column(
+    return ClientCardShell(
+      routed: widget.routed,
+      edited: _edited,
+      dirty: _dirty,
+      header: _isStudent
+          ? _buildStudentHeader(cs, curStatus)
+          : _buildHeader(cs, curStatus),
+      blacklistBanner: _isBlacklisted ? _buildBlacklistBanner(cs) : null,
+      desktopWorkspaceBuilder: (_) => _buildDesktopWorkspaceCanvas(
+        cs,
+        curStatus,
+        tabs,
+        canReadClientFinance: access.canReadClientFinance,
+        canReadSchedule: access.canReadSchedule,
+        canWriteSchedule: access.canWriteSchedule,
+        canReadTasks: access.canReadTasks,
+      ),
+      compactWorkspaceBuilder: (_) => Column(
         children: [
-          _isStudent
-              ? _buildStudentHeader(cs, curStatus)
-              : _buildHeader(cs, curStatus),
-          if (_isBlacklisted) _buildBlacklistBanner(cs),
+          _buildTabBar(cs, tabs, selectedIndex: selectedIndex),
           Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.6)),
           Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                if (widget.routed && constraints.maxWidth >= 840) {
-                  return _buildDesktopWorkspaceCanvas(
+            child: IndexedStack(
+              index: selectedIndex,
+              children: [
+                for (final tab in tabs)
+                  _buildWorkspaceSection(
                     cs,
                     curStatus,
-                    tabs,
-                    canReadClientFinance: canReadClientFinance,
-                    canReadSchedule: canReadSchedule,
-                    canWriteSchedule: canWriteSchedule,
-                    canReadTasks: canReadTasks,
-                  );
-                }
-                return Column(
-                  children: [
-                    _buildTabBar(cs, tabs, selectedIndex: selectedIndex),
-                    Divider(
-                      height: 1,
-                      color: cs.outlineVariant.withValues(alpha: 0.6),
-                    ),
-                    Expanded(
-                      child: IndexedStack(
-                        index: selectedIndex,
-                        children: [
-                          for (final tab in tabs)
-                            _buildWorkspaceSection(
-                              cs,
-                              curStatus,
-                              tab.$3,
-                              canReadClientFinance: canReadClientFinance,
-                              canReadSchedule: canReadSchedule,
-                              canWriteSchedule: canWriteSchedule,
-                              canReadTasks: canReadTasks,
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-                );
-              },
+                    tab.$3,
+                    canReadClientFinance: access.canReadClientFinance,
+                    canReadSchedule: access.canReadSchedule,
+                    canWriteSchedule: access.canWriteSchedule,
+                    canReadTasks: access.canReadTasks,
+                  ),
+              ],
             ),
           ),
-          Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.6)),
-          _isStudent ? _buildStudentActionBar(cs) : _buildActionBar(cs),
         ],
       ),
-    );
-    return PopScope(
-      canPop: !_edited,
-      onPopInvokedWithResult: (didPop, result) async {
-        if (didPop) return;
-        await _handleClose();
-      },
-      child: widget.routed
-          ? card
-          : MediaQuery.removeViewInsets(
-              context: context,
-              removeBottom: true,
-              child: Dialog(
-                backgroundColor: cs.surface,
-                clipBehavior: Clip.antiAlias,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.card),
-                  side: BorderSide(
-                    color: cs.outlineVariant.withValues(alpha: 0.5),
-                  ),
-                ),
-                child: card,
-              ),
-            ),
+      actionBar: _isStudent ? _buildStudentActionBar(cs) : _buildActionBar(cs),
+      onCloseRequested: _handleClose,
     );
   }
 }

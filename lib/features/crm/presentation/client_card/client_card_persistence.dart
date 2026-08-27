@@ -118,10 +118,7 @@ extension _ClientCardPersistence on _ClientCardState {
       }
       if (_mode.hasStudentHalf) ref.invalidate(studentBoardProvider);
       if (mounted) {
-        _emitState(() {
-          _edited = false;
-          _dirty = true;
-        });
+        _markDirty(() => _edited = false);
       }
       if (mounted && closeOnSuccess) {
         _closeCard(true);
@@ -272,7 +269,7 @@ extension _ClientCardPersistence on _ClientCardState {
             status: 'attached',
             notes: 'Связано из карточки лида',
           );
-      _dirty = true;
+      _markDirty();
       await Future.wait([_fetchCard(), _fetchDuplicateCandidates()]);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

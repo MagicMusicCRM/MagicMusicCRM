@@ -690,7 +690,7 @@ extension _ClientCardStudent on _ClientCardState {
         },
       );
       if (issued != true || !mounted) return;
-      _dirty = true;
+      _markDirty();
       MagicToast.show(
         context,
         'Абонемент куплен',
@@ -709,7 +709,7 @@ extension _ClientCardStudent on _ClientCardState {
       if (_edited && !await _persistEdits()) return;
       await crm.issueLeadSubscription(_leadId, packageId);
       if (!mounted) return;
-      _dirty = true;
+      _markDirty();
       MagicToast.show(
         context,
         'Абонемент выдан. Лид стал учеником',
@@ -792,7 +792,7 @@ extension _ClientCardStudent on _ClientCardState {
       );
       if (replaced != true || !mounted) return;
 
-      _dirty = true;
+      _markDirty();
       await _fetchStudentData();
       if (!mounted) return;
       MagicToast.show(
@@ -849,7 +849,7 @@ extension _ClientCardStudent on _ClientCardState {
       );
       if (cancelled != true || !mounted) return;
 
-      _dirty = true;
+      _markDirty();
       await _fetchStudentData();
       if (!mounted) return;
       MagicToast.show(
@@ -945,8 +945,7 @@ extension _ClientCardStudent on _ClientCardState {
               );
         } catch (error) {
           if (!mounted) return;
-          _dirty = true;
-          _emitState(() => _homeworkRefreshKey++);
+          _markDirty(() => _homeworkRefreshKey++);
           MagicToast.show(
             context,
             'ДЗ создано, но файл не прикреплён',
@@ -960,9 +959,8 @@ extension _ClientCardStudent on _ClientCardState {
         }
       }
       if (!mounted) return;
-      _dirty = true;
       // Refresh the «Прогресс» tab so the just-assigned homework shows up.
-      _emitState(() => _homeworkRefreshKey++);
+      _markDirty(() => _homeworkRefreshKey++);
       MagicToast.show(
         context,
         'ДЗ создано',
