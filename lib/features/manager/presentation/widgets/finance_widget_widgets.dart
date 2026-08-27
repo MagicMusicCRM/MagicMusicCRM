@@ -1,4 +1,406 @@
-part of 'finance_widget.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
+import 'package:magic_music_crm/core/models/payment.dart';
+import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
+import 'package:magic_music_crm/core/widgets/magic_desktop_scrollbar.dart';
+import 'package:magic_music_crm/core/widgets/magic_shimmer.dart';
+
+import 'finance_controller.dart';
+
+typedef FinanceVoidAction = Future<void> Function();
+typedef FinanceValueAction<T> = Future<void> Function(T value);
+
+const List<({String key, String label})> _kExpenseCategories = [
+  (key: 'rent', label: 'Аренда'),
+  (key: 'salary', label: 'Зарплата'),
+  (key: 'utilities', label: 'Коммуналка'),
+  (key: 'marketing', label: 'Маркетинг'),
+  (key: 'equipment', label: 'Оборудование'),
+  (key: 'supplies', label: 'Расходники'),
+  (key: 'tax', label: 'Налоги'),
+  (key: 'other', label: 'Прочее'),
+];
+
+String _expenseCategoryLabel(String? key) {
+  for (final category in _kExpenseCategories) {
+    if (category.key == key) return category.label;
+  }
+  return 'Прочее';
+}
+
+class FinanceView extends StatefulWidget {
+  const FinanceView({
+    super.key,
+    required this.state,
+    required this.onPickRange,
+    required this.onClearRange,
+    required this.onPeriodChanged,
+    required this.onExportCsv,
+    required this.onExportXlsx,
+    required this.onAddExpense,
+    required this.onEditExpense,
+    required this.onDeleteExpense,
+    required this.onRetryPayments,
+    required this.onRefreshPayments,
+    required this.onOpenStudent,
+  });
+
+  final FinanceState state;
+  final FinanceVoidAction onPickRange;
+  final FinanceVoidAction onClearRange;
+  final FinanceValueAction<String> onPeriodChanged;
+  final FinanceVoidAction onExportCsv;
+  final FinanceVoidAction onExportXlsx;
+  final FinanceVoidAction onAddExpense;
+  final FinanceValueAction<Map<String, dynamic>> onEditExpense;
+  final FinanceValueAction<Map<String, dynamic>> onDeleteExpense;
+  final FinanceVoidAction onRetryPayments;
+  final FinanceVoidAction onRefreshPayments;
+  final Future<void> Function(String id, String name) onOpenStudent;
+
+  @override
+  State<FinanceView> createState() => _FinanceViewState();
+}
+
+class _FinanceViewState extends State<FinanceView> {
+  final _paymentsScrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _paymentsScrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = widget.state;
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Column(
+        children: [
+          _FinanceSummary(
+            state: state,
+            onPickRange: widget.onPickRange,
+            onClearRange: widget.onClearRange,
+            onPeriodChanged: widget.onPeriodChanged,
+          ),
+          _ExportBar(
+            exporting: state.exporting,
+            onExportCsv: widget.onExportCsv,
+            onExportXlsx: widget.onExportXlsx,
+          ),
+          _ExpensesPanel(
+            loading: state.expensesLoading,
+            saving: state.savingExpense,
+            total: state.expensesTotal,
+            expenses: state.expenses,
+            onAdd: widget.onAddExpense,
+            onEdit: widget.onEditExpense,
+            onDelete: widget.onDeleteExpense,
+          ),
+          Expanded(
+            child: _PaymentsPanel(
+              state: state,
+              scrollController: _paymentsScrollController,
+              onRetry: widget.onRetryPayments,
+              onRefresh: widget.onRefreshPayments,
+              onOpenStudent: widget.onOpenStudent,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FinanceSummary extends StatelessWidget {
+  const _FinanceSummary({
+    required this.state,
+    required this.onPickRange,
+    required this.onClearRange,
+    required this.onPeriodChanged,
+  });
+
+  final FinanceState state;
+  final FinanceVoidAction onPickRange;
+  final FinanceVoidAction onClearRange;
+  final FinanceValueAction<String> onPeriodChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final fmt = NumberFormat('#,##0', 'ru');
+    final range = state.customRange;
+    return Container(
+      margin: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: colors.outlineVariant.withAlpha(90)),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) => Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            SizedBox(
+              width: constraints.maxWidth >= 760 ? 300 : constraints.maxWidth,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Итого поступлений',
+                    style: TextStyle(
+                      color: colors.onSurfaceVariant,
+                      fontSize: 13,
+                    ),
+                  ),
+                  Text(
+                    '${fmt.format(state.total)} ₽',
+                    style: const TextStyle(
+                      color: AppTheme.success,
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  if (range != null && !state.usesExternalRange)
+                    Text(
+                      '${DateFormat('d MMM yyyy', 'ru').format(range.start)} - '
+                      '${DateFormat('d MMM yyyy', 'ru').format(range.end)}',
+                      style: TextStyle(
+                        color: colors.onSurfaceVariant,
+                        fontSize: 11,
+                      ),
+                    ),
+                  if (state.totalCount > state.payments.length)
+                    Text(
+                      'Всего платежей: ${state.totalCount} · '
+                      'показаны первые ${state.payments.length}',
+                      style: TextStyle(
+                        color: colors.onSurfaceVariant,
+                        fontSize: 11,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const Text(
+              'Новая оплата проводится в карточке ученика',
+              style: TextStyle(color: AppColor.text2, fontSize: 12),
+            ),
+            if (!state.usesExternalRange)
+              IconButton(
+                tooltip: 'Выбрать диапазон',
+                onPressed: onPickRange,
+                icon: Icon(
+                  Icons.calendar_today_rounded,
+                  size: 20,
+                  color: range != null
+                      ? AppTheme.success
+                      : colors.onSurfaceVariant,
+                ),
+              ),
+            if (range != null && !state.usesExternalRange)
+              IconButton(
+                tooltip: 'Сбросить диапазон',
+                onPressed: onClearRange,
+                icon: Icon(
+                  Icons.close_rounded,
+                  size: 20,
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+            if (!state.usesExternalRange)
+              _PeriodSelector(
+                period: state.period,
+                colors: colors,
+                onChanged: onPeriodChanged,
+              ),
+            if (state.branchId != null)
+              SizedBox(
+                width: constraints.maxWidth,
+                child: Text(
+                  'Филиал применён к расходам; платежи показаны по всей школе.',
+                  style: TextStyle(
+                    color: colors.onSurfaceVariant,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PeriodSelector extends StatelessWidget {
+  const _PeriodSelector({
+    required this.period,
+    required this.colors,
+    required this.onChanged,
+  });
+
+  final String period;
+  final ColorScheme colors;
+  final FinanceValueAction<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SegmentedButton<String>(
+      segments: const [
+        ButtonSegment(value: 'week', label: Text('Нед.')),
+        ButtonSegment(value: 'month', label: Text('Мес.')),
+        ButtonSegment(value: 'year', label: Text('Год')),
+      ],
+      selected: {period},
+      onSelectionChanged: (selection) => onChanged(selection.first),
+      style: ButtonStyle(
+        backgroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? AppTheme.success.withAlpha(30)
+              : Colors.transparent,
+        ),
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? AppTheme.success
+              : colors.onSurfaceVariant,
+        ),
+        side: WidgetStateProperty.all(BorderSide(color: colors.outlineVariant)),
+      ),
+    );
+  }
+}
+
+class _PaymentsPanel extends StatelessWidget {
+  const _PaymentsPanel({
+    required this.state,
+    required this.scrollController,
+    required this.onRetry,
+    required this.onRefresh,
+    required this.onOpenStudent,
+  });
+
+  final FinanceState state;
+  final ScrollController scrollController;
+  final FinanceVoidAction onRetry;
+  final FinanceVoidAction onRefresh;
+  final Future<void> Function(String id, String name) onOpenStudent;
+
+  @override
+  Widget build(BuildContext context) {
+    if (state.loading) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppTheme.success),
+      );
+    }
+    if (state.loadError != null) {
+      return _FinanceError(error: state.loadError, onRetry: onRetry);
+    }
+    if (state.payments.isEmpty) {
+      return Center(
+        child: Text(
+          'Нет платежей за период',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
+    return MagicDesktopScrollbar(
+      axis: Axis.vertical,
+      controller: scrollController,
+      builder: (context, controller) => RefreshIndicator(
+        color: AppTheme.success,
+        onRefresh: onRefresh,
+        child: ListView.builder(
+          controller: controller,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          itemCount: state.payments.length,
+          itemBuilder: (context, index) => _PaymentTile(
+            payment: state.payments[index],
+            onOpenStudent: onOpenStudent,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PaymentTile extends StatelessWidget {
+  const _PaymentTile({required this.payment, required this.onOpenStudent});
+
+  final Payment payment;
+  final Future<void> Function(String id, String name) onOpenStudent;
+
+  String _typeLabel() => switch (payment.type) {
+    'extra_lesson' => 'Доп. занятие',
+    'other' => 'Прочее',
+    _ => 'Абонемент',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final name = payment.hasStudent
+        ? payment.studentName
+        : 'Неизвестный ученик';
+    final rawDate = payment.paymentDate ?? payment.createdAt;
+    final date = rawDate == null ? null : DateTime.tryParse(rawDate);
+    final dateLabel = date == null
+        ? ''
+        : DateFormat('d MMM yyyy, HH:mm', 'ru').format(date.toLocal());
+    final subtitle = [
+      _typeLabel(),
+      if (dateLabel.isNotEmpty) dateLabel,
+      if (payment.note.isNotEmpty) payment.note,
+    ].join(' · ');
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        onTap: payment.hasStudent ? () => _openStudent(name) : null,
+        leading: Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: AppTheme.success.withAlpha(25),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(Icons.payments_rounded, color: AppTheme.success),
+        ),
+        title: Text(
+          name.isEmpty ? 'Без имени' : name,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            fontSize: 12,
+          ),
+        ),
+        trailing: Text(
+          '${NumberFormat('#,##0', 'ru').format(payment.amount)} ₽',
+          style: const TextStyle(
+            color: AppTheme.success,
+            fontWeight: FontWeight.w700,
+            fontSize: 15,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openStudent(String name) async {
+    final id = payment.studentEntityId;
+    if (id == null || id.isEmpty) return;
+    await onOpenStudent(id, name);
+  }
+}
 
 class _FinanceError extends StatelessWidget {
   final Object? error;
@@ -403,17 +805,17 @@ class _ExpenseRow extends StatelessWidget {
 
 /// Body of the v7 «Добавить расход» sheet: amount (required > 0), category
 /// dropdown, optional description, and a flat-gold «Сохранить» that pops the
-/// sheet with the payload for [_FinanceWidgetState._addExpense].
-class _ExpenseSheetForm extends StatefulWidget {
-  const _ExpenseSheetForm({this.initialExpense});
+/// sheet with the payload consumed by the finance composition shell.
+class ExpenseSheetForm extends StatefulWidget {
+  const ExpenseSheetForm({super.key, this.initialExpense});
 
   final Map<String, dynamic>? initialExpense;
 
   @override
-  State<_ExpenseSheetForm> createState() => _ExpenseSheetFormState();
+  State<ExpenseSheetForm> createState() => _ExpenseSheetFormState();
 }
 
-class _ExpenseSheetFormState extends State<_ExpenseSheetForm> {
+class _ExpenseSheetFormState extends State<ExpenseSheetForm> {
   late final TextEditingController _amountCtrl;
   late final TextEditingController _descriptionCtrl;
   late String _category;
