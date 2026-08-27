@@ -3,6 +3,9 @@ import { fileURLToPath } from 'node:url';
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 
+// The explicit filename avoids collisions with package imports such as
+// `@nestjs/config` in repository-wide structural scanners.
+
 export const RUNNER_ROOT = path.resolve(moduleDir, '..');
 export const APP_PACKAGE = 'magic.crm';
 export const APP_ACTIVITY = 'com.magicmusiccrm.magic_music_crm.MainActivity';

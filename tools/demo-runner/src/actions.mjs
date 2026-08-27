@@ -1,4 +1,4 @@
-import { APP_PACKAGE, LOGIN_LOCATORS } from './config.mjs';
+import { APP_PACKAGE, LOGIN_LOCATORS } from './demo-runner-config.mjs';
 import { findElement, isDisplayed, locatorSelector } from './locators.mjs';
 import { waitForOperator } from './operator.mjs';
 import { poll, sleep } from './time.mjs';

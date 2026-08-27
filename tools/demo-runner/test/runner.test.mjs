@@ -4,12 +4,22 @@ import test from 'node:test';
 import { ActionExecutor, formatClockValue } from '../src/actions.mjs';
 import { parsePackageVersion, resolveAndroidEnvironment } from '../src/adb.mjs';
 import { parseArgs } from '../src/cli-options.mjs';
-import { EXPECTED_APP_VERSION, LOGIN_LOCATORS, ROLE_CONFIG } from '../src/config.mjs';
+import { EXPECTED_APP_VERSION, LOGIN_LOCATORS, ROLE_CONFIG } from '../src/demo-runner-config.mjs';
 import { CredentialProvider } from '../src/credentials.mjs';
 import { locatorSelector } from '../src/locators.mjs';
 import { SecretVault, sanitizedChildEnvironment } from '../src/redaction.mjs';
 import { selectSteps } from '../src/scenario.mjs';
 import { StepEngine } from '../src/step-engine.mjs';
+
+test('runner configuration uses an explicit module name for structural scanners', async () => {
+  await assert.doesNotReject(
+    fs.access(new URL('../src/demo-runner-config.mjs', import.meta.url)),
+  );
+  await assert.rejects(
+    fs.access(new URL('../src/config.mjs', import.meta.url)),
+    { code: 'ENOENT' },
+  );
+});
 
 test('role mapping has exact unique AVD, serial, and system-port guards', () => {
   assert.deepEqual(

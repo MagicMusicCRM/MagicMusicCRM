@@ -1,5 +1,5 @@
 import { remote } from 'webdriverio';
-import { APP_ACTIVITY, APP_PACKAGE } from './config.mjs';
+import { APP_ACTIVITY, APP_PACKAGE } from './demo-runner-config.mjs';
 
 function connectionOptions(appiumUrl) {
   const url = new URL(appiumUrl);

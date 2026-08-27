@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { poll } from './time.mjs';
-import { RUNNER_ROOT } from './config.mjs';
+import { RUNNER_ROOT } from './demo-runner-config.mjs';
 import { sanitizedChildEnvironment } from './redaction.mjs';
 
 const require = createRequire(import.meta.url);

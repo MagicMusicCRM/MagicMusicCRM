@@ -1,4 +1,4 @@
-import { APP_PACKAGE, EXPECTED_APP_VERSION } from './config.mjs';
+import { APP_PACKAGE, EXPECTED_APP_VERSION } from './demo-runner-config.mjs';
 import { parsePackageVersion } from './adb.mjs';
 
 export async function runPreflight({ adb, roles, logger, expectedVersion = EXPECTED_APP_VERSION }) {

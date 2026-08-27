@@ -4,7 +4,7 @@ import { ActionExecutor } from './actions.mjs';
 import { LocalAppiumServer } from './appium-server.mjs';
 import { CheckpointStore } from './checkpoint.mjs';
 import { HELP, parseArgs } from './cli-options.mjs';
-import { DEFAULTS, ROLE_CONFIG } from './config.mjs';
+import { DEFAULTS, ROLE_CONFIG } from './demo-runner-config.mjs';
 import { CredentialProvider } from './credentials.mjs';
 import { SafeLogger } from './logger.mjs';
 import { runPreflight } from './preflight.mjs';

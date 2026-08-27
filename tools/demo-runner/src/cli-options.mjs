@@ -1,4 +1,4 @@
-import { DEFAULTS } from './config.mjs';
+import { DEFAULTS } from './demo-runner-config.mjs';
 
 export function parseArgs(argv) {
   const options = {
