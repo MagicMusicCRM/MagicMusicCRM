@@ -3846,3 +3846,24 @@ git status --short --branch
 ```
 
 Expected: the evidence commit contains only the four evidence files and two Results-bearing docs; both LCOV artifacts remain ignored; RepoWise is exact at the evidence HEAD; the worktree is clean. Campaign-12 is complete only with all twelve accepted lanes, production `god_class 23 -> 11`, no changed brain finding, new-owner health/CCN and task-specific NLOC gates green, hard arrays empty, Sentrux `5757/13/10000/2-of-2` or better, and whole-review Critical/Important `0/0`.
+
+## Results
+
+- M1–M8: **PASS** at code HEAD
+  `734a5f0f44b6bd9ec8861c05ec4e0c3959f697f1`, baseline
+  `9cb1f506a5c5418650926fe53b81fe2667ba9bd7`; accepted lanes 12/12.
+- Backend: 251/251 suites, 1,723/1,723 tests, typecheck/build PASS. Flutter:
+  1,214/1,214 tests, analyzer zero. Backend/Flutter LCOV are 814,225/442,301
+  bytes with SHA-256 recorded in the global evidence; RepoWise ingested 829
+  files and a 290-test/6,586-record map.
+- RepoWise: production gods `23 -> 11`, brains unchanged at zero for changed
+  production, 80/80 new owners meet health/CCN gates, weighted recovery
+  `55,420` (`90.62%`). Full-range percentile is 100/high/Elevated; all hard,
+  conformance, cycle, governance, and security arrays are empty.
+- Sentrux: quality 5,829, depth 13, cycles 0/10,000, rules 2/2; all root scores
+  meet or improve the campaign baseline. Review: Critical 0, Important 0,
+  Minor 1 with an explicit Auth-consolidation owner ruling.
+- M9 evidence sources are the four `.superpowers/campaign12/*` files and this
+  Results-bearing plan/spec. The evidence commit SHA and RepoWise index
+  equality are verified post-commit because a commit cannot contain its own
+  hash.

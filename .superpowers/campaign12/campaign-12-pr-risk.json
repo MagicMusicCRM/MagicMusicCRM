@@ -1,0 +1,67 @@
+{
+  "source_command": "repowise risk <106 production targets> <199 changed files> --format json --full",
+  "range": "9cb1f506a5c5418650926fe53b81fe2667ba9bd7..734a5f0f44b6bd9ec8861c05ec4e0c3959f697f1",
+  "changed_file_count": 199,
+  "reported_pr_file_count": 167,
+  "production_target_count": 106,
+  "target_count": 106,
+  "pr_blast_radius": {
+    "direct_risk_count": 167,
+    "transitive_affected_returned": 15,
+    "transitive_affected_truncated_total": 272,
+    "cochange_warnings_returned": 10,
+    "cochange_warnings_truncated_total": 532,
+    "recommended_reviewer_count": 5,
+    "test_gaps_returned": 10,
+    "test_gaps_truncated_total": 121,
+    "overall_risk_score": 6.11
+  },
+  "directive": {
+    "will_break": [
+      "lib/core/services/magic_crm_service_core.dart",
+      "lib/core/services/magic_crm_service_leads.dart",
+      "lib/core/services/magic_crm_service_legacy_map_adapter.dart",
+      "lib/core/services/magic_crm_service_org.dart",
+      "lib/core/services/magic_crm_service_schedule.dart"
+    ],
+    "will_break_tests": [
+      "integration_test/channel_group_device_test.dart",
+      "integration_test/lesson_settlement_device_test.dart",
+      "integration_test/modal_device_test.dart"
+    ],
+    "missing_cochanges": ["server/src/crm/crm.service.ts", "server/src/crm/crm.service.spec.ts", "AGENTS.md"],
+    "missing_tests": [
+      "lib/features/crm/presentation/client_card/subscription_issue_form_feedback.dart",
+      "server/src/auth/auth-email-challenge.service.ts",
+      "server/src/crm/schedule/lesson-draft.contracts.ts"
+    ],
+    "tests_to_run": [
+      "server/src/app.module.spec.ts",
+      "server/src/auth/auth.controller.spec.ts",
+      "server/src/auth/auth.service.spec.ts",
+      "server/src/crm/commerce/subscription-cancel-postgres.integration.spec.ts",
+      "server/src/crm/commerce/subscription-issue-postgres.integration.spec.ts",
+      "server/src/crm/commerce/subscription-replace-postgres.integration.spec.ts",
+      "server/src/crm/crm-schedule.controller.spec.ts",
+      "server/src/crm/crm-students.controller.spec.ts",
+      "server/src/crm/payroll-postgres.integration.spec.ts",
+      "server/src/crm/payroll.service.spec.ts"
+    ],
+    "will_break_consumers": [],
+    "missing_cross_repo_cochanges": [],
+    "breaking_changes": [],
+    "conformance_violations": [],
+    "dependency_cycles": [],
+    "governance_risk": [],
+    "overall_risk_score": 6.11,
+    "summary": "PR touches 167 file(s). ~5 downstream file(s) likely affected, 3 test(s) likely broken, 3 historical co-changer(s) missing, 3 file(s) without tests. 101 coverage-backed test(s) guard the change - run these."
+  },
+  "security_signal_count": 0,
+  "security_signals_by_target": {},
+  "meta": {
+    "index_age_days": 0,
+    "indexed_commit": "734a5f0f44b6",
+    "index_behind": false,
+    "embedder_degraded": false
+  }
+}

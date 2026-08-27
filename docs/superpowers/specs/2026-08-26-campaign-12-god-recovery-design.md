@@ -197,3 +197,28 @@ Campaign-12 uses four three-lane tiers. The planning target is 14–24 hours of
 continuous wall-clock work, followed by the single global gate. This is a
 planning range, not an acceptance shortcut: campaign completion is determined
 only by the exact final evidence.
+
+## Results
+
+Campaign-12 is **ACCEPTED** for the literal range
+`9cb1f506a5c5418650926fe53b81fe2667ba9bd7..734a5f0f44b6bd9ec8861c05ec4e0c3959f697f1`.
+All twelve lanes and four tier reviews integrated. The exact lane/tier commit
+ledger, 92-owner health/coverage ledger, production filter, LCOV provenance,
+risk arrays, Sentrux ruling, and eleven remaining owners are recorded in
+`.superpowers/campaign12/campaign-12-global-evidence.md`; independent review
+and every corrective disposition are in
+`.superpowers/campaign12/campaign-12-whole-review.md`.
+
+Measured acceptance: production god owners `23 -> 11`; weighted deficit
+`61,154 -> 5,734` (`90.62%` recovered); no changed production brain finding;
+all 80 added production owners meet health `>=7.0` and CCN `<=10`. Backend is
+251/251 suites and 1,723/1,723 tests plus typecheck/build PASS. Flutter is
+1,214/1,214 plus analyzer zero. RepoWise hard/security arrays are empty.
+Sentrux is quality 5,829, depth 13, cycles 0/10,000, rules 2/2, with equality,
+modularity, and redundancy all improved from the campaign baseline. Independent
+review is Critical 0, Important 0, Minor 1; the duplicate active-account
+lookup is explicitly deferred to Auth repository consolidation.
+
+The evidence commit is the commit containing these Results and cannot embed
+its own SHA. Its full SHA and exact RepoWise index equality are verified
+immediately after commit.
