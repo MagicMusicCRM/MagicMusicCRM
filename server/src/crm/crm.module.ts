@@ -21,8 +21,8 @@ import { CrmEngagementController } from "./crm-engagement.controller";
 import { CrmFinanceController } from "./crm-finance.controller";
 import { CrmLeadsController } from "./crm-leads.controller";
 import { CrmContactsController } from "./crm-contacts.controller";
+import { CrmAnalyticsSupportModule } from "./crm-analytics-support.module";
 import { HolliHopMetadataService } from "./hollihop-metadata.service";
-import { CrmPolicy } from "./crm.policy";
 import { CrmService } from "./crm.service";
 import { BlacklistService } from "./blacklist.service";
 import { HomeworkService } from "./homework.service";
@@ -42,7 +42,6 @@ import { LessonScheduleMutationService } from "./schedule/lesson-schedule-mutati
 import { LessonTeacherRateService } from "./schedule/lesson-teacher-rate.service";
 import { SectionViewsService } from "./section-views.service";
 import { TimelineService } from "./timeline.service";
-import { DashboardService } from "./dashboard.service";
 import { ClientLinkingService } from "./client-linking.service";
 import { FamilyService } from "./family.service";
 import { DuplicatesService } from "./duplicates.service";
@@ -160,6 +159,7 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     AuditModule,
     AuthModule,
     AccessControlModule,
+    CrmAnalyticsSupportModule,
     DatabaseModule,
     JwtModule.register({}),
     NotificationDeliveryModule,
@@ -213,7 +213,6 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     LessonTeacherRateService,
     TimelineService,
     SectionViewsService,
-    DashboardService,
     ClientLinkingService,
     FamilyService,
     DuplicatesService,
@@ -239,7 +238,6 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     TeacherStatsReportService,
     TeacherStatsCsvService,
     PayrollService,
-    CrmPolicy,
     HolliHopMetadataService,
     ScheduleSeriesWorker,
     CommentSharingService,
@@ -325,10 +323,10 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
   ],
   // CrmService is not exported: it is only injected by this module's own
   // controllers. Other modules consume the stable contract surface —
-  // DashboardService (analytics), CrmPolicy, and LEAD_INTAKE_PORT (messenger).
+  // CrmAnalyticsSupportModule (policy/dashboard), LEAD_INTAKE_PORT (messenger),
+  // and the other narrow contracts below are the only cross-module surface.
   exports: [
-    CrmPolicy,
-    DashboardService,
+    CrmAnalyticsSupportModule,
     ClientReferenceService,
     ClientWriteValidator,
     LEAD_INTAKE_PORT,

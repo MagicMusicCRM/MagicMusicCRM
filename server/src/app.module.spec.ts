@@ -3,8 +3,11 @@ import type { NestContainer } from "@nestjs/core/injector/container";
 import type { InstanceWrapper } from "@nestjs/core/injector/instance-wrapper";
 import type { Module as CompiledModule } from "@nestjs/core/injector/module";
 import { Test, TestingModule } from "@nestjs/testing";
+import { AnalyticsModule } from "./analytics/analytics.module";
 import { AuthModule } from "./auth/auth.module";
+import { CrmPolicy } from "./crm/crm.policy";
 import { CrmModule } from "./crm/crm.module";
+import { DashboardService } from "./crm/dashboard.service";
 import { ScheduleConflictService } from "./crm/schedule/schedule-conflict.service";
 import { LessonScheduleMutationService } from "./crm/schedule/lesson-schedule-mutation.service";
 import { LessonTeacherRateService } from "./crm/schedule/lesson-teacher-rate.service";
@@ -168,6 +171,41 @@ describe("AppModule", () => {
       moduleRef.get(LessonTeacherRateService, { strict: false }),
     ).toBeDefined();
   });
+
+  it.each([CrmPolicy, DashboardService])(
+    "%p has one compiled provider instance owned by the analytics support module",
+    (provider) => {
+      const owners = findProviderOwners(modules, provider);
+      const instances = owners
+        .map(({ wrapper }) => wrapper.instance)
+        .filter((instance) => instance !== null && instance !== undefined);
+
+      expect({
+        provider: provider.name,
+        ownerNames: owners.map(({ module }) => module.metatype.name),
+        wrapperCount: owners.length,
+        uniqueInstanceCount: new Set(instances).size,
+      }).toEqual({
+        provider: provider.name,
+        ownerNames: ["CrmAnalyticsSupportModule"],
+        wrapperCount: 1,
+        uniqueInstanceCount: 1,
+      });
+
+      const supportInstance = owners[0].wrapper.instance;
+      expect(moduleRef.get(provider, { strict: false })).toBe(supportInstance);
+
+      for (const consumer of [CrmModule, AnalyticsModule]) {
+        const consumerModule = expectSoleCompiledModule(modules, consumer);
+        expect([...consumerModule.imports].map((module) => module.metatype.name)).toContain(
+          "CrmAnalyticsSupportModule",
+        );
+        expect(moduleRef.select(consumer).get(provider, { strict: false })).toBe(
+          supportInstance,
+        );
+      }
+    },
+  );
 
   it("mounts the notification API shell directly", () => {
     const appModule = expectSoleCompiledModule(modules, appModuleType);
