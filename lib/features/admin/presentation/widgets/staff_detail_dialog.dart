@@ -1,13 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/providers/crm_navigation_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
-import 'package:magic_music_crm/core/theme/app_theme.dart';
-import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/provision_access_dialog.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/person_lifecycle_dialog.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/person_access_role_dialog.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/staff_detail_access_flow.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/staff_detail_content.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/staff_detail_controller.dart';
 
 class StaffDetailDialog extends ConsumerStatefulWidget {
   final Map<String, dynamic> staff;
@@ -36,109 +36,33 @@ class StaffDetailDialog extends ConsumerStatefulWidget {
 
 class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
   final _formKey = GlobalKey<FormState>();
-  late Map<String, dynamic> _staff;
-  late TextEditingController _firstNameController;
-  late TextEditingController _lastNameController;
-  late TextEditingController _emailController;
-  late TextEditingController _positionController;
-  late TextEditingController _birthdayController;
-  late String _canonicalPhone;
-  late String _role;
-  late String _status;
-  List<Map<String, dynamic>> _allBranches = const [];
-  final Set<String> _branchIds = {};
-  bool _loadingBranches = true;
-  String? _branchesError;
-  bool _saving = false;
-
-  static const _statusLabels = {'working': 'Работает', 'active': 'Активен'};
+  late final StaffDetailController _controller;
+  late final StaffDetailAccessFlow _accessFlow;
 
   @override
   void initState() {
     super.initState();
-    _staff = Map<String, dynamic>.from(widget.staff);
-    final profile = _profile;
-    final customData = _customData;
-    _firstNameController = TextEditingController(
-      text: _staff['first_name']?.toString() ?? profile['first_name'] ?? '',
+    _controller = StaffDetailController(
+      crm: ref.read(magicCrmServiceProvider),
+      staff: widget.staff,
+    )..addListener(_onControllerChanged);
+    _accessFlow = StaffDetailAccessFlow(
+      controller: _controller,
+      currentRole: widget.currentRole,
     );
-    _lastNameController = TextEditingController(
-      text: _staff['last_name']?.toString() ?? profile['last_name'] ?? '',
-    );
-    _canonicalPhone =
-        _staff['phone']?.toString() ?? profile['phone']?.toString() ?? '';
-    _emailController = TextEditingController(
-      text: _staff['email']?.toString() ?? '',
-    );
-    _positionController = TextEditingController(
-      text: _staff['position']?.toString() ?? '',
-    );
-    _birthdayController = TextEditingController(
-      text: customData['birthday']?.toString() ?? '',
-    );
-    _role = _staff['role']?.toString().trim() ?? '';
-    _status = _staff['status']?.toString().trim() ?? '';
-    final branches = _staff['branches'];
-    if (branches is List) {
-      for (final branch in branches) {
-        if (branch is Map && branch['id'] != null) {
-          _branchIds.add(branch['id'].toString());
-        }
-      }
-    }
-    _loadBranches();
-  }
-
-  Future<void> _loadBranches() async {
-    try {
-      final branches = await ref.read(magicCrmServiceProvider).listBranches();
-      if (!mounted) return;
-      setState(() {
-        _allBranches = branches;
-        _loadingBranches = false;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _loadingBranches = false;
-        _branchesError = userErrorMessage(
-          error,
-          fallback: 'Не удалось загрузить филиалы.',
-        );
-      });
-    }
+    unawaited(_controller.loadBranches());
   }
 
   @override
   void dispose() {
-    _firstNameController.dispose();
-    _lastNameController.dispose();
-    _emailController.dispose();
-    _positionController.dispose();
-    _birthdayController.dispose();
+    _controller
+      ..removeListener(_onControllerChanged)
+      ..dispose();
     super.dispose();
   }
 
-  Map<String, dynamic> get _profile {
-    final value = _staff['profiles'];
-    return value is Map<String, dynamic> ? value : const <String, dynamic>{};
-  }
-
-  Map<String, dynamic> get _customData {
-    final value = _staff['custom_data'];
-    return value is Map<String, dynamic> ? value : const <String, dynamic>{};
-  }
-
-  String? _linkSearchValue() {
-    final phone = _canonicalPhone.trim();
-    if (phone.isNotEmpty) return phone;
-    final email = _emailController.text.trim().toLowerCase();
-    if (email.isNotEmpty &&
-        !email.endsWith('@local.magicmusiccrm.invalid') &&
-        !email.endsWith('@migration.invalid')) {
-      return email;
-    }
-    return null;
+  void _onControllerChanged() {
+    if (mounted) setState(() {});
   }
 
   void _openUserLinking(String value) {
@@ -149,546 +73,82 @@ class _StaffDetailDialogState extends ConsumerState<StaffDetailDialog> {
   }
 
   Future<void> _provisionAccess() async {
-    final id = _staff['id']?.toString();
-    if (id == null || id.isEmpty) return;
-    final accessExists = _staff['is_app_account'] == true;
-    Map<String, dynamic>? credentials;
-    if (accessExists) {
-      try {
-        credentials = await ref
-            .read(magicCrmServiceProvider)
-            .getStaffAccess(id);
-      } catch (error) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                userErrorMessage(
-                  error,
-                  fallback: 'Не удалось получить данные для входа.',
-                ),
-              ),
-            ),
-          );
-        }
-        return;
-      }
-    }
-    if (!mounted) return;
-    Map<String, dynamic>? updated;
-    final saved = await showProvisionAccessDialog(
-      context,
-      personLabel: '${_lastNameController.text} ${_firstNameController.text}'
-          .trim(),
-      initialEmail: credentials?['email']?.toString() ?? _emailController.text,
-      currentPassword: credentials?['password']?.toString(),
-      accessExists: accessExists,
-      onSubmit: (email, password) async {
-        updated = await ref
-            .read(magicCrmServiceProvider)
-            .provisionStaffAccess(
-              staffId: id,
-              email: email,
-              password: password,
-            );
-      },
-    );
-    if (saved == true && mounted && updated != null) {
-      setState(() {
-        _staff = updated!;
-        _emailController.text = updated!['email']?.toString() ?? '';
-      });
+    try {
+      final saved = await _accessFlow.provision(context);
+      if (!mounted || !saved) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Доступ сотрудника создан')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            userErrorMessage(
+              error,
+              fallback: 'Не удалось получить данные для входа.',
+            ),
+          ),
+        ),
+      );
     }
   }
 
   Future<void> _manageLifecycle() async {
-    final id = _staff['id']?.toString();
-    if (id == null || id.isEmpty) return;
-    final saved = await showPersonLifecycleDialog(
-      context,
-      personType: 'staff',
-      personId: id,
-      personName: '${_lastNameController.text} ${_firstNameController.text}'
-          .trim(),
-    );
-    if (saved == true && mounted) Navigator.pop(context, true);
+    final saved = await _accessFlow.manageLifecycle(context);
+    if (saved && mounted) Navigator.pop(context, true);
   }
 
   Future<void> _changeAccessRole() async {
-    final userId = _staff['profile_user_id']?.toString() ?? '';
-    if (userId.isEmpty) return;
-    final selectedRole = await showPersonAccessRoleDialog(
-      context,
-      actorRole: widget.currentRole,
-      userId: userId,
-      personLabel: '${_lastNameController.text} ${_firstNameController.text}'
-          .trim(),
-      teacher: false,
-    );
-    if (selectedRole == null || !mounted) return;
-    setState(() {
-      _role = selectedRole;
-      _staff = {..._staff, 'role': selectedRole, 'app_role': selectedRole};
-    });
+    final saved = await _accessFlow.changeRole(context);
+    if (!saved || !mounted) return;
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Роль доступа обновлена')));
   }
 
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate() || _saving) return;
-    if (_branchIds.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Выберите хотя бы один филиал.')),
-      );
-      return;
-    }
-    final id = _staff['id']?.toString();
-    if (id == null || id.isEmpty) return;
-
-    setState(() => _saving = true);
+    if (!_formKey.currentState!.validate() || _controller.saving) return;
     try {
-      final currentBirthday = _customData['birthday']?.toString() ?? '';
-      final birthday = _birthdayController.text.trim();
-      final customDataPatch = <String, dynamic>{};
-      if (birthday.isNotEmpty && birthday != currentBirthday) {
-        customDataPatch['birthday'] = birthday;
-      }
-
-      await ref
-          .read(magicCrmServiceProvider)
-          .updateStaff(
-            id,
-            firstName: _firstNameController.text,
-            lastName: _lastNameController.text,
-            phone: _canonicalPhone,
-            position: _positionController.text,
-            status: _status,
-            branchIds: _branchIds.toList(),
-            customDataPatch: customDataPatch,
-          );
-
+      await _controller.save();
       if (!mounted) return;
       final messenger = ScaffoldMessenger.of(context);
       Navigator.of(context).pop(true);
       messenger.showSnackBar(
         const SnackBar(content: Text('Данные сотрудника сохранены')),
       );
-    } catch (e) {
+    } on StaffDetailValidationException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            userErrorMessage(e, fallback: 'Не удалось сохранить сотрудника.'),
+            userErrorMessage(
+              error,
+              fallback: 'Не удалось сохранить сотрудника.',
+            ),
           ),
         ),
       );
-    } finally {
-      if (mounted) setState(() => _saving = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final linkSearchValue = _linkSearchValue();
-    final branches = _branchesText(_staff['branches']);
-    final isAppAccount = _staff['is_app_account'] == true;
-    final appRole = _staff['app_role']?.toString() ?? '';
-    final canManageCredentials = const {
-      'director',
-      'system_admin',
-    }.contains(widget.currentRole);
-
-    return AlertDialog(
-      title: const Text('Карточка сотрудника'),
-      content: SizedBox(
-        width: 460,
-        child: SingleChildScrollView(
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _SummaryChip(
-                      icon: Icons.badge_outlined,
-                      label: 'Роль в системе',
-                      value: _staffRoleLabel(_role),
-                      color: AppTheme.primaryGold,
-                    ),
-                    _SummaryChip(
-                      icon: isAppAccount
-                          ? Icons.verified_user_rounded
-                          : Icons.person_off_rounded,
-                      label: 'Аккаунт',
-                      value: isAppAccount ? _staffRoleLabel(appRole) : 'Нет',
-                      color: isAppAccount
-                          ? AppTheme.success
-                          : Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                    if (canManageCredentials)
-                      _SummaryChip(
-                        icon: _staff['password_configured'] == true
-                            ? Icons.password_rounded
-                            : Icons.no_encryption_gmailerrorred_rounded,
-                        label: 'Пароль',
-                        value: _staff['password_configured'] == true
-                            ? 'Настроен'
-                            : 'Не задан',
-                        color: _staff['password_configured'] == true
-                            ? AppTheme.success
-                            : Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    if (branches.isNotEmpty)
-                      _SummaryChip(
-                        icon: Icons.location_on_outlined,
-                        label: 'Филиалы',
-                        value: branches,
-                        color: AppTheme.secondaryGold,
-                        wide: true,
-                      ),
-                  ],
-                ),
-                if (const {
-                  'director',
-                  'system_admin',
-                }.contains(widget.currentRole)) ...[
-                  const SizedBox(height: 12),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: FilledButton.tonalIcon(
-                      onPressed: _staff['lifecycle_state'] == 'archived'
-                          ? null
-                          : _provisionAccess,
-                      icon: const Icon(Icons.key_rounded),
-                      label: Text(
-                        isAppAccount ? 'Данные для входа' : 'Создать доступ',
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: OutlinedButton.icon(
-                      onPressed: _manageLifecycle,
-                      icon: Icon(
-                        _staff['lifecycle_state'] == 'archived'
-                            ? Icons.restore_rounded
-                            : Icons.person_off_outlined,
-                      ),
-                      label: Text(
-                        _staff['lifecycle_state'] == 'archived'
-                            ? 'Восстановить сотрудника'
-                            : 'Отключить сотрудника',
-                      ),
-                    ),
-                  ),
-                ],
-                if (isAppAccount && linkSearchValue != null) ...[
-                  const SizedBox(height: 12),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      onPressed: () => _openUserLinking(linkSearchValue),
-                      icon: const Icon(Icons.manage_accounts_rounded),
-                      label: const Text('Найти в пользователях'),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _lastNameController,
-                  decoration: const InputDecoration(labelText: 'Фамилия'),
-                  validator: _required,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _firstNameController,
-                  decoration: const InputDecoration(labelText: 'Имя'),
-                  validator: _required,
-                ),
-                const SizedBox(height: 12),
-                RuPhoneField(
-                  initialCanonical: _canonicalPhone,
-                  onCanonicalChanged: (c) =>
-                      setState(() => _canonicalPhone = c),
-                ),
-                const SizedBox(height: 12),
-                if (canManageCredentials) ...[
-                  TextFormField(
-                    controller: _emailController,
-                    readOnly: true,
-                    decoration: InputDecoration(
-                      labelText: 'Почта для входа',
-                      helperText: _credentialHelper(_staff),
-                    ),
-                    keyboardType: TextInputType.emailAddress,
-                    validator: _emailValidator,
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'Роль доступа',
-                    helperText: 'Определяет права пользователя в приложении',
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          _staffRoleLabel(
-                            _staff['app_role']?.toString() ?? _role,
-                          ),
-                        ),
-                      ),
-                      if (const {
-                            'director',
-                            'system_admin',
-                          }.contains(widget.currentRole) &&
-                          (_staff['profile_user_id']?.toString().isNotEmpty ??
-                              false))
-                        TextButton(
-                          key: const Key('staff-change-access-role'),
-                          onPressed: _saving ? null : _changeAccessRole,
-                          child: const Text('Изменить'),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Text('Филиалы *'),
-                const SizedBox(height: 6),
-                if (_loadingBranches)
-                  const Center(child: CircularProgressIndicator())
-                else if (_branchesError != null)
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Text('Не удалось загрузить филиалы.'),
-                      ),
-                      TextButton(
-                        onPressed: _loadBranches,
-                        child: const Text('Повторить'),
-                      ),
-                    ],
-                  )
-                else
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      for (final branch in _allBranches)
-                        FilterChip(
-                          label: Text(branch['name']?.toString() ?? 'Филиал'),
-                          selected: _branchIds.contains(
-                            branch['id']?.toString(),
-                          ),
-                          onSelected: (selected) {
-                            final id = branch['id']?.toString();
-                            if (id == null) return;
-                            setState(() {
-                              if (selected) {
-                                _branchIds.add(id);
-                              } else {
-                                _branchIds.remove(id);
-                              }
-                            });
-                          },
-                        ),
-                    ],
-                  ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _positionController,
-                  decoration: const InputDecoration(labelText: 'Должность'),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  menuMaxHeight: 256,
-                  initialValue: _status.isEmpty ? null : _status,
-                  decoration: const InputDecoration(labelText: 'Статус'),
-                  items: _dropdownItems(_statusLabels, _status),
-                  onChanged: (value) =>
-                      setState(() => _status = value ?? _status),
-                  validator: _required,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _birthdayController,
-                  decoration: const InputDecoration(
-                    labelText: 'Дата рождения',
-                    hintText: '1990-06-01',
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.pop(context),
-          child: Text(
-            'Отмена',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
-        FilledButton(
-          onPressed: _saving || _staff['lifecycle_state'] == 'archived'
-              ? null
-              : _save,
-          child: _saving
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Сохранить'),
-        ),
-      ],
+    return StaffDetailContent(
+      controller: _controller,
+      formKey: _formKey,
+      currentRole: widget.currentRole,
+      onProvision: _provisionAccess,
+      onLifecycle: _manageLifecycle,
+      onRole: _changeAccessRole,
+      onLink: _openUserLinking,
+      onSave: _save,
+      onCancel: () => Navigator.pop(context),
     );
   }
-
-  String? _required(String? value) {
-    return value == null || value.trim().isEmpty ? 'Обязательное поле' : null;
-  }
-
-  String? _emailValidator(String? value) {
-    final email = value?.trim() ?? '';
-    if (email.isEmpty) return null;
-    if (!email.contains('@')) return 'Некорректная почта';
-    return null;
-  }
-
-  String _credentialHelper(Map<String, dynamic> data) {
-    final passwordChanged = data['password_changed_at']?.toString();
-    final emailChanged = data['email_changed_at']?.toString();
-    final parts = <String>[
-      if (data['password_configured'] == true) 'Пароль настроен',
-      if (emailChanged != null && emailChanged.isNotEmpty)
-        'почта обновлена ${_shortDate(emailChanged)}',
-      if (passwordChanged != null && passwordChanged.isNotEmpty)
-        'пароль обновлён ${_shortDate(passwordChanged)}',
-    ];
-    return parts.isEmpty
-        ? 'Доступ не создан. Карточку можно сохранить без него'
-        : parts.join(' · ');
-  }
-
-  String _shortDate(String value) {
-    final parsed = DateTime.tryParse(value)?.toLocal();
-    if (parsed == null) return value;
-    String two(int number) => number.toString().padLeft(2, '0');
-    return '${two(parsed.day)}.${two(parsed.month)}.${parsed.year} '
-        '${two(parsed.hour)}:${two(parsed.minute)}';
-  }
-
-  List<DropdownMenuItem<String>> _dropdownItems(
-    Map<String, String> labels,
-    String current,
-  ) {
-    final values = <String>{...labels.keys};
-    if (current.trim().isNotEmpty) values.add(current.trim());
-    return values
-        .map(
-          (value) => DropdownMenuItem<String>(
-            value: value,
-            child: Text(labels[value] ?? value),
-          ),
-        )
-        .toList();
-  }
-}
-
-class _SummaryChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color color;
-  final bool wide;
-
-  const _SummaryChip({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.color,
-    this.wide = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: wide ? 220 : 132,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withAlpha(24),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withAlpha(54)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 17, color: color),
-          const SizedBox(width: 7),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontSize: 11,
-                  ),
-                ),
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-String _branchesText(dynamic value) {
-  if (value is! List) return '';
-  return value
-      .map((branch) {
-        if (branch is Map) {
-          return (branch['name'] ?? branch['branch_name'] ?? '').toString();
-        }
-        return branch.toString();
-      })
-      .where((name) => name.trim().isNotEmpty)
-      .join(', ');
-}
-
-String _staffRoleLabel(String role) {
-  return switch (role) {
-    'admin' => 'Администратор',
-    'manager' => 'Управляющий',
-    'director' => 'Директор',
-    'teacher' => 'Преподаватель',
-    'system_admin' => 'Администратор системы',
-    _ => role.isEmpty ? 'Сотрудник' : role,
-  };
 }
