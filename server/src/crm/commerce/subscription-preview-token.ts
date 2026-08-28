@@ -394,40 +394,70 @@ export function verifySchedulePlanEndPreview(
   );
 }
 
-function assertSchedulePlanEndPayload(
-  value: unknown,
-): asserts value is SchedulePlanEndPreviewTokenPayload {
+type PreviewPayload = Record<string, unknown>;
+
+type PreviewPayloadRule = readonly [
+  key: string,
+  isInvalid: (payload: PreviewPayload) => boolean,
+];
+
+function asPreviewPayload(value: unknown): PreviewPayload {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
   }
-  const payload = value as Record<string, unknown>;
+  return value as PreviewPayload;
+}
+
+function assertExactPayload(
+  value: unknown,
+  expectedKind: string,
+  rules: readonly PreviewPayloadRule[],
+): void {
+  const payload = asPreviewPayload(value);
   const exactKeys = [
     "kind",
-    "actorUserId",
-    "planId",
-    "expectedVersion",
-    "lastDate",
-    "impactFingerprint",
+    ...rules.map((rule) => rule[0]),
     "issuedAtSeconds",
     "expiresAtSeconds",
   ];
   if (
     Object.keys(payload).length !== exactKeys.length ||
     exactKeys.some((key) => !(key in payload)) ||
-    payload.kind !== "schedule.plan.end" ||
-    !isUuid(payload.actorUserId) ||
-    !isUuid(payload.planId) ||
-    !isPositiveInteger(payload.expectedVersion) ||
-    typeof payload.lastDate !== "string" ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(payload.lastDate) ||
-    typeof payload.impactFingerprint !== "string" ||
-    !/^[a-f0-9]{64}$/.test(payload.impactFingerprint) ||
+    payload.kind !== expectedKind ||
+    rules.some((rule) => rule[1](payload)) ||
     !isPositiveInteger(payload.issuedAtSeconds) ||
     !isPositiveInteger(payload.expiresAtSeconds) ||
     payload.expiresAtSeconds < payload.issuedAtSeconds
   ) {
     throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
   }
+}
+
+const schedulePlanEndRules: readonly PreviewPayloadRule[] = [
+  ["actorUserId", (payload) => !isUuid(payload.actorUserId)],
+  ["planId", (payload) => !isUuid(payload.planId)],
+  [
+    "expectedVersion",
+    (payload) => !isPositiveInteger(payload.expectedVersion),
+  ],
+  [
+    "lastDate",
+    (payload) =>
+      typeof payload.lastDate !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(payload.lastDate),
+  ],
+  [
+    "impactFingerprint",
+    (payload) =>
+      typeof payload.impactFingerprint !== "string" ||
+      !/^[a-f0-9]{64}$/.test(payload.impactFingerprint),
+  ],
+];
+
+function assertSchedulePlanEndPayload(
+  value: unknown,
+): asserts value is SchedulePlanEndPreviewTokenPayload {
+  assertExactPayload(value, "schedule.plan.end", schedulePlanEndRules);
 }
 
 function signPayload<T>(
@@ -506,422 +536,449 @@ function assertSecret(secret: string): void {
   }
 }
 
+const replaceRules: readonly PreviewPayloadRule[] = [
+  ["actorUserId", (payload) => !isUuid(payload.actorUserId)],
+  ["studentId", (payload) => !isUuid(payload.studentId)],
+  ["payerStudentId", (payload) => !isUuid(payload.payerStudentId)],
+  [
+    "issuedSubscriptionId",
+    (payload) => !isUuid(payload.issuedSubscriptionId),
+  ],
+  [
+    "expectedVersion",
+    (payload) => !isPositiveInteger(payload.expectedVersion),
+  ],
+  ["newPackageId", (payload) => !isUuid(payload.newPackageId)],
+  [
+    "newPackageVersion",
+    (payload) => !isPositiveInteger(payload.newPackageVersion),
+  ],
+  [
+    "currencyCode",
+    (payload) =>
+      typeof payload.currencyCode !== "string" ||
+      !/^[A-Z]{3}$/.test(payload.currencyCode),
+  ],
+  ["usedUnits", (payload) => !isUnits(payload.usedUnits)],
+  [
+    "reservedLessonCount",
+    (payload) => !isNonnegativeInteger(payload.reservedLessonCount),
+  ],
+  ["reservedUnits", (payload) => !isUnits(payload.reservedUnits)],
+  [
+    "transferableReservationCount",
+    (payload) =>
+      !isNonnegativeInteger(payload.transferableReservationCount),
+  ],
+  [
+    "transferableReservationUnits",
+    (payload) => !isUnits(payload.transferableReservationUnits),
+  ],
+  [
+    "releasedReservationCount",
+    (payload) => !isNonnegativeInteger(payload.releasedReservationCount),
+  ],
+  [
+    "releasedReservationUnits",
+    (payload) => !isUnits(payload.releasedReservationUnits),
+  ],
+  [
+    "reservationPlanFingerprint",
+    (payload) =>
+      typeof payload.reservationPlanFingerprint !== "string" ||
+      !/^[a-f0-9]{64}$/.test(payload.reservationPlanFingerprint),
+  ],
+  [
+    "futureLessonCount",
+    (payload) => !isNonnegativeInteger(payload.futureLessonCount),
+  ],
+  ["futureUnits", (payload) => !isUnits(payload.futureUnits)],
+  ["oldFinalMinor", (payload) => !isMinor(payload.oldFinalMinor)],
+  ["newFinalMinor", (payload) => !isMinor(payload.newFinalMinor)],
+  ["actualPaidMinor", (payload) => !isMinor(payload.actualPaidMinor)],
+  ["deltaMinor", (payload) => !isSignedMinor(payload.deltaMinor)],
+  [
+    "positionKind",
+    (payload) =>
+      !["debt", "overpayment", "settled"].includes(
+        payload.positionKind as string,
+      ),
+  ],
+  ["positionMinor", (payload) => !isMinor(payload.positionMinor)],
+];
+
 function assertReplacePayload(
   value: unknown,
 ): asserts value is SubscriptionReplacePreviewTokenPayload {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
-  }
-  const payload = value as Record<string, unknown>;
-  const exactKeys = [
-    "kind",
-    "actorUserId",
-    "studentId",
-    "payerStudentId",
-    "issuedSubscriptionId",
-    "expectedVersion",
-    "newPackageId",
-    "newPackageVersion",
-    "currencyCode",
-    "usedUnits",
-    "reservedLessonCount",
-    "reservedUnits",
-    "transferableReservationCount",
-    "transferableReservationUnits",
-    "releasedReservationCount",
-    "releasedReservationUnits",
-    "reservationPlanFingerprint",
-    "futureLessonCount",
-    "futureUnits",
-    "oldFinalMinor",
-    "newFinalMinor",
-    "actualPaidMinor",
-    "deltaMinor",
-    "positionKind",
-    "positionMinor",
-    "issuedAtSeconds",
-    "expiresAtSeconds",
-  ];
-  if (
-    Object.keys(payload).length !== exactKeys.length ||
-    exactKeys.some((key) => !(key in payload)) ||
-    payload.kind !== "subscription.replace" ||
-    !isUuid(payload.actorUserId) ||
-    !isUuid(payload.studentId) ||
-    !isUuid(payload.payerStudentId) ||
-    !isUuid(payload.issuedSubscriptionId) ||
-    !isPositiveInteger(payload.expectedVersion) ||
-    !isUuid(payload.newPackageId) ||
-    !isPositiveInteger(payload.newPackageVersion) ||
-    typeof payload.currencyCode !== "string" ||
-    !/^[A-Z]{3}$/.test(payload.currencyCode) ||
-    !isUnits(payload.usedUnits) ||
-    !isNonnegativeInteger(payload.reservedLessonCount) ||
-    !isUnits(payload.reservedUnits) ||
-    !isNonnegativeInteger(payload.transferableReservationCount) ||
-    !isUnits(payload.transferableReservationUnits) ||
-    !isNonnegativeInteger(payload.releasedReservationCount) ||
-    !isUnits(payload.releasedReservationUnits) ||
-    typeof payload.reservationPlanFingerprint !== "string" ||
-    !/^[a-f0-9]{64}$/.test(payload.reservationPlanFingerprint) ||
-    !isNonnegativeInteger(payload.futureLessonCount) ||
-    !isUnits(payload.futureUnits) ||
-    !isMinor(payload.oldFinalMinor) ||
-    !isMinor(payload.newFinalMinor) ||
-    !isMinor(payload.actualPaidMinor) ||
-    !isSignedMinor(payload.deltaMinor) ||
-    !["debt", "overpayment", "settled"].includes(
-      payload.positionKind as string,
-    ) ||
-    !isMinor(payload.positionMinor) ||
-    !isPositiveInteger(payload.issuedAtSeconds) ||
-    !isPositiveInteger(payload.expiresAtSeconds) ||
-    payload.expiresAtSeconds < payload.issuedAtSeconds
-  ) {
-    throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
-  }
+  assertExactPayload(value, "subscription.replace", replaceRules);
 }
+
+const cancelRules: readonly PreviewPayloadRule[] = [
+  ["actorUserId", (payload) => !isUuid(payload.actorUserId)],
+  ["studentId", (payload) => !isUuid(payload.studentId)],
+  ["payerStudentId", (payload) => !isUuid(payload.payerStudentId)],
+  [
+    "issuedSubscriptionId",
+    (payload) => !isUuid(payload.issuedSubscriptionId),
+  ],
+  [
+    "expectedVersion",
+    (payload) => !isPositiveInteger(payload.expectedVersion),
+  ],
+  ["packageId", (payload) => !isUuid(payload.packageId)],
+  [
+    "packageVersion",
+    (payload) => !isPositiveInteger(payload.packageVersion),
+  ],
+  ["unitCount", (payload) => !isUnits(payload.unitCount)],
+  ["usedUnits", (payload) => !isUnits(payload.usedUnits)],
+  [
+    "currencyCode",
+    (payload) =>
+      typeof payload.currencyCode !== "string" ||
+      !/^[A-Z]{3}$/.test(payload.currencyCode),
+  ],
+  ["finalMinor", (payload) => !isMinor(payload.finalMinor)],
+  ["actualPaidMinor", (payload) => !isMinor(payload.actualPaidMinor)],
+  [
+    "fundingMode",
+    (payload) =>
+      !["personal_account", "installment", "legacy"].includes(
+        payload.fundingMode as string,
+      ),
+  ],
+  [
+    "previousRefundMinor",
+    (payload) => !isMinor(payload.previousRefundMinor),
+  ],
+  ["writeoffMinor", (payload) => !isMinor(payload.writeoffMinor)],
+  ["balanceMinor", (payload) => !isSignedMinor(payload.balanceMinor)],
+  [
+    "openPaymentRecordCount",
+    (payload) => !isNonnegativeInteger(payload.openPaymentRecordCount),
+  ],
+  [
+    "openPaymentRecordMinor",
+    (payload) => !isMinor(payload.openPaymentRecordMinor),
+  ],
+  [
+    "futureLessonCount",
+    (payload) => !isNonnegativeInteger(payload.futureLessonCount),
+  ],
+  [
+    "reservedLessonCount",
+    (payload) => !isNonnegativeInteger(payload.reservedLessonCount),
+  ],
+  ["reservedUnits", (payload) => !isUnits(payload.reservedUnits)],
+  [
+    "impactFingerprint",
+    (payload) =>
+      typeof payload.impactFingerprint !== "string" ||
+      !/^[a-f0-9]{64}$/.test(payload.impactFingerprint),
+  ],
+];
 
 function assertCancelPayload(
   value: unknown,
 ): asserts value is SubscriptionCancelPreviewTokenPayload {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
-  }
-  const payload = value as Record<string, unknown>;
-  const exactKeys = [
-    "kind",
-    "actorUserId",
-    "studentId",
-    "payerStudentId",
-    "issuedSubscriptionId",
-    "expectedVersion",
-    "packageId",
-    "packageVersion",
-    "unitCount",
-    "usedUnits",
-    "currencyCode",
-    "finalMinor",
-    "actualPaidMinor",
-    "fundingMode",
-    "previousRefundMinor",
-    "writeoffMinor",
-    "balanceMinor",
-    "openPaymentRecordCount",
-    "openPaymentRecordMinor",
-    "futureLessonCount",
-    "reservedLessonCount",
-    "reservedUnits",
-    "impactFingerprint",
-    "issuedAtSeconds",
-    "expiresAtSeconds",
-  ];
-  if (
-    Object.keys(payload).length !== exactKeys.length ||
-    exactKeys.some((key) => !(key in payload)) ||
-    payload.kind !== "subscription.cancel" ||
-    !isUuid(payload.actorUserId) ||
-    !isUuid(payload.studentId) ||
-    !isUuid(payload.payerStudentId) ||
-    !isUuid(payload.issuedSubscriptionId) ||
-    !isPositiveInteger(payload.expectedVersion) ||
-    !isUuid(payload.packageId) ||
-    !isPositiveInteger(payload.packageVersion) ||
-    !isUnits(payload.unitCount) ||
-    !isUnits(payload.usedUnits) ||
-    typeof payload.currencyCode !== "string" ||
-    !/^[A-Z]{3}$/.test(payload.currencyCode) ||
-    !isMinor(payload.finalMinor) ||
-    !isMinor(payload.actualPaidMinor) ||
-    !["personal_account", "installment", "legacy"].includes(
-      payload.fundingMode as string,
-    ) ||
-    !isMinor(payload.previousRefundMinor) ||
-    !isMinor(payload.writeoffMinor) ||
-    !isSignedMinor(payload.balanceMinor) ||
-    !isNonnegativeInteger(payload.openPaymentRecordCount) ||
-    !isMinor(payload.openPaymentRecordMinor) ||
-    !isNonnegativeInteger(payload.futureLessonCount) ||
-    !isNonnegativeInteger(payload.reservedLessonCount) ||
-    !isUnits(payload.reservedUnits) ||
-    typeof payload.impactFingerprint !== "string" ||
-    !/^[a-f0-9]{64}$/.test(payload.impactFingerprint) ||
-    !isPositiveInteger(payload.issuedAtSeconds) ||
-    !isPositiveInteger(payload.expiresAtSeconds) ||
-    payload.expiresAtSeconds < payload.issuedAtSeconds
-  ) {
-    throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
-  }
+  assertExactPayload(value, "subscription.cancel", cancelRules);
 }
+
+const purchaseRules: readonly PreviewPayloadRule[] = [
+  ["actorUserId", (payload) => !isUuid(payload.actorUserId)],
+  [
+    "recipientStudentId",
+    (payload) => !isUuid(payload.recipientStudentId),
+  ],
+  ["payerStudentId", (payload) => !isUuid(payload.payerStudentId)],
+  [
+    "recipientVersion",
+    (payload) => !isPositiveInteger(payload.recipientVersion),
+  ],
+  [
+    "payerVersion",
+    (payload) => !isPositiveInteger(payload.payerVersion),
+  ],
+  [
+    "recipientBranchId",
+    (payload) =>
+      payload.recipientBranchId !== null &&
+      !isUuid(payload.recipientBranchId),
+  ],
+  [
+    "payerBranchId",
+    (payload) =>
+      payload.payerBranchId !== null && !isUuid(payload.payerBranchId),
+  ],
+  ["packageId", (payload) => !isUuid(payload.packageId)],
+  [
+    "packageVersion",
+    (payload) => !isPositiveInteger(payload.packageVersion),
+  ],
+  [
+    "currencyCode",
+    (payload) =>
+      typeof payload.currencyCode !== "string" ||
+      !/^[A-Z]{3}$/.test(payload.currencyCode),
+  ],
+  ["finalPriceMinor", (payload) => !isMinor(payload.finalPriceMinor)],
+  [
+    "payerBalanceMinor",
+    (payload) => !isSignedMinor(payload.payerBalanceMinor),
+  ],
+  [
+    "fundingMode",
+    (payload) =>
+      !["personal_account", "installment"].includes(
+        payload.fundingMode as string,
+      ),
+  ],
+  [
+    "purchaseFingerprint",
+    (payload) =>
+      typeof payload.purchaseFingerprint !== "string" ||
+      !/^[a-f0-9]{64}$/.test(payload.purchaseFingerprint),
+  ],
+];
 
 function assertPurchasePayload(
   value: unknown,
 ): asserts value is SubscriptionPurchasePreviewTokenPayload {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
-  }
-  const payload = value as Record<string, unknown>;
-  const exactKeys = [
-    "kind",
-    "actorUserId",
-    "recipientStudentId",
-    "payerStudentId",
-    "recipientVersion",
-    "payerVersion",
-    "recipientBranchId",
-    "payerBranchId",
-    "packageId",
-    "packageVersion",
-    "currencyCode",
-    "finalPriceMinor",
-    "payerBalanceMinor",
-    "fundingMode",
-    "purchaseFingerprint",
-    "issuedAtSeconds",
-    "expiresAtSeconds",
-  ];
-  if (
-    Object.keys(payload).length !== exactKeys.length ||
-    exactKeys.some((key) => !(key in payload)) ||
-    payload.kind !== "subscription.purchase" ||
-    !isUuid(payload.actorUserId) ||
-    !isUuid(payload.recipientStudentId) ||
-    !isUuid(payload.payerStudentId) ||
-    !isPositiveInteger(payload.recipientVersion) ||
-    !isPositiveInteger(payload.payerVersion) ||
-    (payload.recipientBranchId !== null &&
-      !isUuid(payload.recipientBranchId)) ||
-    (payload.payerBranchId !== null && !isUuid(payload.payerBranchId)) ||
-    !isUuid(payload.packageId) ||
-    !isPositiveInteger(payload.packageVersion) ||
-    typeof payload.currencyCode !== "string" ||
-    !/^[A-Z]{3}$/.test(payload.currencyCode) ||
-    !isMinor(payload.finalPriceMinor) ||
-    !isSignedMinor(payload.payerBalanceMinor) ||
-    !["personal_account", "installment"].includes(
-      payload.fundingMode as string,
-    ) ||
-    typeof payload.purchaseFingerprint !== "string" ||
-    !/^[a-f0-9]{64}$/.test(payload.purchaseFingerprint) ||
-    !isPositiveInteger(payload.issuedAtSeconds) ||
-    !isPositiveInteger(payload.expiresAtSeconds) ||
-    payload.expiresAtSeconds < payload.issuedAtSeconds
-  ) {
-    throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
-  }
+  assertExactPayload(value, "subscription.purchase", purchaseRules);
 }
+
+const paymentReversalRules: readonly PreviewPayloadRule[] = [
+  ["actorUserId", (payload) => !isUuid(payload.actorUserId)],
+  ["studentId", (payload) => !isUuid(payload.studentId)],
+  [
+    "recipientStudentId",
+    (payload) => !isUuid(payload.recipientStudentId),
+  ],
+  ["paymentRecordId", (payload) => !isUuid(payload.paymentRecordId)],
+  [
+    "expectedVersion",
+    (payload) => !isPositiveInteger(payload.expectedVersion),
+  ],
+  [
+    "status",
+    (payload) =>
+      !["unpaid", "posted_pending", "paid"].includes(
+        payload.status as string,
+      ),
+  ],
+  [
+    "actualPaymentId",
+    (payload) =>
+      payload.actualPaymentId !== null && !isUuid(payload.actualPaymentId),
+  ],
+  [
+    "issuedSubscriptionId",
+    (payload) =>
+      payload.issuedSubscriptionId !== null &&
+      !isUuid(payload.issuedSubscriptionId),
+  ],
+  [
+    "amountMinor",
+    (payload) => !isMinor(payload.amountMinor) || payload.amountMinor === "0",
+  ],
+  [
+    "currencyCode",
+    (payload) =>
+      typeof payload.currencyCode !== "string" ||
+      !/^[A-Z]{3}$/.test(payload.currencyCode),
+  ],
+  [
+    "walletBalanceMinor",
+    (payload) => !isSignedMinor(payload.walletBalanceMinor),
+  ],
+  [
+    "resultingBalanceMinor",
+    (payload) => !isSignedMinor(payload.resultingBalanceMinor),
+  ],
+];
 
 function assertPaymentReversalPayload(
   value: unknown,
 ): asserts value is PaymentReversalPreviewTokenPayload {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
-  }
-  const payload = value as Record<string, unknown>;
-  const exactKeys = [
-    "kind",
-    "actorUserId",
-    "studentId",
-    "recipientStudentId",
-    "paymentRecordId",
-    "expectedVersion",
-    "status",
-    "actualPaymentId",
-    "issuedSubscriptionId",
-    "amountMinor",
-    "currencyCode",
-    "walletBalanceMinor",
-    "resultingBalanceMinor",
-    "issuedAtSeconds",
-    "expiresAtSeconds",
-  ];
-  if (
-    Object.keys(payload).length !== exactKeys.length ||
-    exactKeys.some((key) => !(key in payload)) ||
-    payload.kind !== "payment.reversal" ||
-    !isUuid(payload.actorUserId) ||
-    !isUuid(payload.studentId) ||
-    !isUuid(payload.recipientStudentId) ||
-    !isUuid(payload.paymentRecordId) ||
-    !isPositiveInteger(payload.expectedVersion) ||
-    !["unpaid", "posted_pending", "paid"].includes(payload.status as string) ||
-    (payload.actualPaymentId !== null && !isUuid(payload.actualPaymentId)) ||
-    (payload.issuedSubscriptionId !== null &&
-      !isUuid(payload.issuedSubscriptionId)) ||
-    !isMinor(payload.amountMinor) ||
-    payload.amountMinor === "0" ||
-    typeof payload.currencyCode !== "string" ||
-    !/^[A-Z]{3}$/.test(payload.currencyCode) ||
-    !isSignedMinor(payload.walletBalanceMinor) ||
-    !isSignedMinor(payload.resultingBalanceMinor) ||
-    !isPositiveInteger(payload.issuedAtSeconds) ||
-    !isPositiveInteger(payload.expiresAtSeconds) ||
-    payload.expiresAtSeconds < payload.issuedAtSeconds
-  ) {
-    throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
-  }
+  assertExactPayload(value, "payment.reversal", paymentReversalRules);
 }
+
+const paymentCorrectionRules: readonly PreviewPayloadRule[] = [
+  ["actorUserId", (payload) => !isUuid(payload.actorUserId)],
+  ["studentId", (payload) => !isUuid(payload.studentId)],
+  [
+    "recipientStudentId",
+    (payload) => !isUuid(payload.recipientStudentId),
+  ],
+  ["paymentRecordId", (payload) => !isUuid(payload.paymentRecordId)],
+  [
+    "expectedVersion",
+    (payload) => !isPositiveInteger(payload.expectedVersion),
+  ],
+  [
+    "oldStatus",
+    (payload) =>
+      !["unpaid", "posted_pending", "paid"].includes(
+        payload.oldStatus as string,
+      ),
+  ],
+  [
+    "oldActualPaymentId",
+    (payload) =>
+      payload.oldActualPaymentId !== null &&
+      !isUuid(payload.oldActualPaymentId),
+  ],
+  [
+    "issuedSubscriptionId",
+    (payload) =>
+      payload.issuedSubscriptionId !== null &&
+      !isUuid(payload.issuedSubscriptionId),
+  ],
+  [
+    "installmentId",
+    (payload) =>
+      payload.installmentId !== null && !isUuid(payload.installmentId),
+  ],
+  [
+    "oldAmountMinor",
+    (payload) =>
+      !isMinor(payload.oldAmountMinor) || payload.oldAmountMinor === "0",
+  ],
+  [
+    "currencyCode",
+    (payload) =>
+      typeof payload.currencyCode !== "string" ||
+      !/^[A-Z]{3}$/.test(payload.currencyCode),
+  ],
+  [
+    "amountMinor",
+    (payload) => !isMinor(payload.amountMinor) || payload.amountMinor === "0",
+  ],
+  [
+    "status",
+    (payload) =>
+      !["unpaid", "posted_pending", "paid"].includes(
+        payload.status as string,
+      ),
+  ],
+  [
+    "dueAt",
+    (payload) => payload.dueAt !== null && typeof payload.dueAt !== "string",
+  ],
+  [
+    "method",
+    (payload) =>
+      payload.method !== null &&
+      !["cash", "cashless"].includes(payload.method as string),
+  ],
+  [
+    "externalIdentifier",
+    (payload) =>
+      payload.externalIdentifier !== null &&
+      typeof payload.externalIdentifier !== "string",
+  ],
+  [
+    "occurredAt",
+    (payload) =>
+      payload.occurredAt !== null && typeof payload.occurredAt !== "string",
+  ],
+  [
+    "branchId",
+    (payload) => payload.branchId !== null && !isUuid(payload.branchId),
+  ],
+  [
+    "verificationNote",
+    (payload) =>
+      payload.verificationNote !== null &&
+      typeof payload.verificationNote !== "string",
+  ],
+  [
+    "walletBalanceMinor",
+    (payload) => !isSignedMinor(payload.walletBalanceMinor),
+  ],
+  [
+    "resultingBalanceMinor",
+    (payload) => !isSignedMinor(payload.resultingBalanceMinor),
+  ],
+];
 
 function assertPaymentCorrectionPayload(
   value: unknown,
 ): asserts value is PaymentCorrectionPreviewTokenPayload {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
-  }
-  const payload = value as Record<string, unknown>;
-  const exactKeys = [
-    "kind",
-    "actorUserId",
-    "studentId",
-    "recipientStudentId",
-    "paymentRecordId",
-    "expectedVersion",
-    "oldStatus",
-    "oldActualPaymentId",
-    "issuedSubscriptionId",
-    "installmentId",
-    "oldAmountMinor",
-    "currencyCode",
-    "amountMinor",
-    "status",
-    "dueAt",
-    "method",
-    "externalIdentifier",
-    "occurredAt",
-    "branchId",
-    "verificationNote",
-    "walletBalanceMinor",
-    "resultingBalanceMinor",
-    "issuedAtSeconds",
-    "expiresAtSeconds",
-  ];
-  if (
-    Object.keys(payload).length !== exactKeys.length ||
-    exactKeys.some((key) => !(key in payload)) ||
-    payload.kind !== "payment.correction" ||
-    !isUuid(payload.actorUserId) ||
-    !isUuid(payload.studentId) ||
-    !isUuid(payload.recipientStudentId) ||
-    !isUuid(payload.paymentRecordId) ||
-    !isPositiveInteger(payload.expectedVersion) ||
-    !["unpaid", "posted_pending", "paid"].includes(
-      payload.oldStatus as string,
-    ) ||
-    (payload.oldActualPaymentId !== null &&
-      !isUuid(payload.oldActualPaymentId)) ||
-    (payload.issuedSubscriptionId !== null &&
-      !isUuid(payload.issuedSubscriptionId)) ||
-    (payload.installmentId !== null && !isUuid(payload.installmentId)) ||
-    !isMinor(payload.oldAmountMinor) ||
-    payload.oldAmountMinor === "0" ||
-    typeof payload.currencyCode !== "string" ||
-    !/^[A-Z]{3}$/.test(payload.currencyCode) ||
-    !isMinor(payload.amountMinor) ||
-    payload.amountMinor === "0" ||
-    !["unpaid", "posted_pending", "paid"].includes(payload.status as string) ||
-    (payload.dueAt !== null && typeof payload.dueAt !== "string") ||
-    (payload.method !== null &&
-      !["cash", "cashless"].includes(payload.method as string)) ||
-    (payload.externalIdentifier !== null &&
-      typeof payload.externalIdentifier !== "string") ||
-    (payload.occurredAt !== null && typeof payload.occurredAt !== "string") ||
-    (payload.branchId !== null && !isUuid(payload.branchId)) ||
-    (payload.verificationNote !== null &&
-      typeof payload.verificationNote !== "string") ||
-    !isSignedMinor(payload.walletBalanceMinor) ||
-    !isSignedMinor(payload.resultingBalanceMinor) ||
-    !isPositiveInteger(payload.issuedAtSeconds) ||
-    !isPositiveInteger(payload.expiresAtSeconds) ||
-    payload.expiresAtSeconds < payload.issuedAtSeconds
-  ) {
-    throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
-  }
+  assertExactPayload(value, "payment.correction", paymentCorrectionRules);
 }
+
+const accountAdjustmentReversalRules: readonly PreviewPayloadRule[] = [
+  ["actorUserId", (payload) => !isUuid(payload.actorUserId)],
+  ["studentId", (payload) => !isUuid(payload.studentId)],
+  ["adjustmentId", (payload) => !isUuid(payload.adjustmentId)],
+  [
+    "expectedVersion",
+    (payload) => !isPositiveInteger(payload.expectedVersion),
+  ],
+  ["sourcePaymentId", (payload) => !isUuid(payload.sourcePaymentId)],
+  [
+    "amountMinor",
+    (payload) =>
+      !isSignedMinor(payload.amountMinor) || payload.amountMinor === "0",
+  ],
+  [
+    "currencyCode",
+    (payload) =>
+      typeof payload.currencyCode !== "string" ||
+      !/^[A-Z]{3}$/.test(payload.currencyCode),
+  ],
+  [
+    "walletBalanceMinor",
+    (payload) => !isSignedMinor(payload.walletBalanceMinor),
+  ],
+  [
+    "resultingBalanceMinor",
+    (payload) => !isSignedMinor(payload.resultingBalanceMinor),
+  ],
+];
 
 function assertAccountAdjustmentReversalPayload(
   value: unknown,
 ): asserts value is AccountAdjustmentReversalPreviewTokenPayload {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
-  }
-  const payload = value as Record<string, unknown>;
-  const exactKeys = [
-    "kind",
-    "actorUserId",
-    "studentId",
-    "adjustmentId",
-    "expectedVersion",
-    "sourcePaymentId",
-    "amountMinor",
-    "currencyCode",
-    "walletBalanceMinor",
-    "resultingBalanceMinor",
-    "issuedAtSeconds",
-    "expiresAtSeconds",
-  ];
-  if (
-    Object.keys(payload).length !== exactKeys.length ||
-    exactKeys.some((key) => !(key in payload)) ||
-    payload.kind !== "account.adjustment.reversal" ||
-    !isUuid(payload.actorUserId) ||
-    !isUuid(payload.studentId) ||
-    !isUuid(payload.adjustmentId) ||
-    !isPositiveInteger(payload.expectedVersion) ||
-    !isUuid(payload.sourcePaymentId) ||
-    !isSignedMinor(payload.amountMinor) ||
-    payload.amountMinor === "0" ||
-    typeof payload.currencyCode !== "string" ||
-    !/^[A-Z]{3}$/.test(payload.currencyCode) ||
-    !isSignedMinor(payload.walletBalanceMinor) ||
-    !isSignedMinor(payload.resultingBalanceMinor) ||
-    !isPositiveInteger(payload.issuedAtSeconds) ||
-    !isPositiveInteger(payload.expiresAtSeconds) ||
-    payload.expiresAtSeconds < payload.issuedAtSeconds
-  ) {
-    throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
-  }
+  assertExactPayload(
+    value,
+    "account.adjustment.reversal",
+    accountAdjustmentReversalRules,
+  );
 }
+
+const lessonTransitionRules: readonly PreviewPayloadRule[] = [
+  [
+    "operation",
+    (payload) =>
+      ![
+        "reschedule",
+        "cancel",
+        "settle",
+        "bulk",
+        "correct",
+        "planned-settlement",
+      ].includes(payload.operation as string),
+  ],
+  ["actorUserId", (payload) => !isUuid(payload.actorUserId)],
+  ["lessonId", (payload) => !isUuid(payload.lessonId)],
+  [
+    "expectedVersion",
+    (payload) => !isPositiveInteger(payload.expectedVersion),
+  ],
+  [
+    "transitionFingerprint",
+    (payload) =>
+      typeof payload.transitionFingerprint !== "string" ||
+      !/^[a-f0-9]{64}$/.test(payload.transitionFingerprint),
+  ],
+];
 
 function assertLessonTransitionPayload(
   value: unknown,
 ): asserts value is LessonTransitionPreviewTokenPayload {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
-  }
-  const payload = value as Record<string, unknown>;
-  const exactKeys = [
-    "kind",
-    "operation",
-    "actorUserId",
-    "lessonId",
-    "expectedVersion",
-    "transitionFingerprint",
-    "issuedAtSeconds",
-    "expiresAtSeconds",
-  ];
-  if (
-    Object.keys(payload).length !== exactKeys.length ||
-    exactKeys.some((key) => !(key in payload)) ||
-    payload.kind !== "lesson.transition" ||
-    ![
-      "reschedule",
-      "cancel",
-      "settle",
-      "bulk",
-      "correct",
-      "planned-settlement",
-    ].includes(payload.operation as string) ||
-    !isUuid(payload.actorUserId) ||
-    !isUuid(payload.lessonId) ||
-    !isPositiveInteger(payload.expectedVersion) ||
-    typeof payload.transitionFingerprint !== "string" ||
-    !/^[a-f0-9]{64}$/.test(payload.transitionFingerprint) ||
-    !isPositiveInteger(payload.issuedAtSeconds) ||
-    !isPositiveInteger(payload.expiresAtSeconds) ||
-    payload.expiresAtSeconds < payload.issuedAtSeconds
-  ) {
-    throw new SubscriptionPreviewTokenError("PREVIEW_TOKEN_INVALID");
-  }
+  assertExactPayload(value, "lesson.transition", lessonTransitionRules);
 }
 
 function isUuid(value: unknown): value is string {
