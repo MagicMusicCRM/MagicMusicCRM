@@ -193,7 +193,10 @@ export class ClientConfigService {
     this.policy.assertCanManageClientConfiguration(actor);
     const label = this.requiredText(dto.label, "label");
     const options = this.normalizeOptions(dto.valueType, dto.options);
-    const visibility = this.visibility(dto.visibleOnLead, dto.visibleOnStudent);
+    const visibility = this.visibility(
+      dto.visibleOnLead,
+      dto.visibleOnStudent,
+    );
     let field: ClientCustomFieldDefinitionRow;
     try {
       field = await this.database.transaction((client) =>
@@ -208,7 +211,9 @@ export class ClientConfigService {
       );
     } catch (error) {
       if (isUniqueViolation(error)) {
-        throw new ConflictException("Поле с таким ключом уже существует.");
+        throw new ConflictException(
+          "Поле с таким ключом уже существует.",
+        );
       }
       throw error;
     }
@@ -447,7 +452,8 @@ export class ClientConfigService {
       throw new UnprocessableEntityException({
         code: "FIELD_VISIBILITY_REQUIRED",
         field: "visibility",
-        message: "Поле должно быть видно хотя бы в карточке лида или ученика.",
+        message:
+          "Поле должно быть видно хотя бы в карточке лида или ученика.",
       });
     }
     return visibility;
