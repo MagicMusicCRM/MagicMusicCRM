@@ -639,7 +639,7 @@ function tokenForBody(domain: string, body: string): string {
   return `v1.${body}.${signature}`;
 }
 
-function exactBoundaryToken(family: FamilyCase): string {
+function decoderToleratedBoundaryToken(family: FamilyCase): string {
   const json = JSON.stringify(family.fixture);
   const paddedJson = `${json}${" ".repeat(12_252 - Buffer.byteLength(json))}`;
   const canonicalBody = Buffer.from(paddedJson, "utf8").toString("base64url");
@@ -1030,9 +1030,9 @@ describe("subscription preview token public codec", () => {
     );
   });
 
-  it("accepts a valid token at the exact 16384-character boundary", () => {
+  it("accepts a decoder-tolerated noncanonical token at the 16384-character boundary", () => {
     const family = FAMILIES[0]!;
-    const token = exactBoundaryToken(family);
+    const token = decoderToleratedBoundaryToken(family);
     expect(token).toHaveLength(16_384);
     expect(family.verify(token, NOW)).toEqual(family.fixture);
   });
