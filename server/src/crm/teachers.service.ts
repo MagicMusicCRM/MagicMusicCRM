@@ -95,10 +95,10 @@ export class TeachersService {
     return Number.isFinite(numeric) ? numeric : 0;
   }
 
-  private toTeacherDto(row: TeacherRow, actor: ActorContext) {
+  private toTeacherDto(row: TeacherRow, actor: ActorContext): Record<string, unknown> {
     const canReadCredentials =
       actor.role === "director" || actor.role === "system_admin";
-    const teacher: Record<string, unknown> = {
+    return {
       id: row.id,
       status: row.status,
       specialization: row.specialization,
@@ -107,59 +107,90 @@ export class TeachersService {
       firstName: row.first_name,
       lastName: row.last_name,
       phone: row.phone,
+      ...this.teacherCredentials(row, canReadCredentials),
+      ...this.teacherAccountAndLifecycle(row),
+      ...this.teacherStatistics(row),
+      ...this.teacherCompensationAndRelations(row),
     };
-    if (canReadCredentials) {
-      teacher.email = presentableEmail(row.email);
-      teacher.passwordConfigured = row.password_configured ?? false;
-      teacher.passwordChangedAt = row.password_changed_at ?? null;
-      teacher.emailChangedAt = row.email_changed_at ?? null;
-    }
+  }
+
+  private teacherCredentials(
+    row: TeacherRow,
+    canReadCredentials: boolean,
+  ): Record<string, unknown> {
+    if (!canReadCredentials) return {};
+    return {
+      email: presentableEmail(row.email),
+      passwordConfigured: row.password_configured ?? false,
+      passwordChangedAt: row.password_changed_at ?? null,
+      emailChangedAt: row.email_changed_at ?? null,
+    };
+  }
+
+  private teacherAccountAndLifecycle(
+    row: TeacherRow,
+  ): Record<string, unknown> {
+    const account: Record<string, unknown> = {};
     if (row.custom_data !== undefined) {
-      teacher.customData = row.custom_data ?? {};
+      account.customData = row.custom_data ?? {};
     }
     if (row.app_role !== undefined) {
-      teacher.appRole = row.app_role;
+      account.appRole = row.app_role;
     }
     if (row.is_app_account !== undefined) {
-      teacher.isAppAccount = row.is_app_account ?? false;
+      account.isAppAccount = row.is_app_account ?? false;
     }
-    teacher.lifecycleState = row.lifecycle_state ?? "active";
-    teacher.version = Number(row.version ?? 1);
-    teacher.offboardedAt = row.offboarded_at ?? null;
-    teacher.offboardReason = row.offboard_reason ?? null;
+    account.lifecycleState = row.lifecycle_state ?? "active";
+    account.version = Number(row.version ?? 1);
+    account.offboardedAt = row.offboarded_at ?? null;
+    account.offboardReason = row.offboard_reason ?? null;
+    return account;
+  }
+
+  private teacherStatistics(row: TeacherRow): Record<string, unknown> {
+    const statistics: Record<string, unknown> = {};
     if (row.branches !== undefined) {
-      teacher.branches = row.branches ?? [];
+      statistics.branches = row.branches ?? [];
     }
     if (row.students_count !== undefined) {
-      teacher.studentsCount = this.toNumericStat(row.students_count);
+      statistics.studentsCount = this.toNumericStat(row.students_count);
     }
     if (row.lessons_count !== undefined) {
-      teacher.lessonsCount = this.toNumericStat(row.lessons_count);
+      statistics.lessonsCount = this.toNumericStat(row.lessons_count);
     }
-    if (row.rating !== undefined) {
-      teacher.rating =
-        row.rating === null || row.rating === undefined
-          ? null
-          : this.toNumericStat(row.rating);
+    if (row.rating === null) {
+      statistics.rating = null;
+    } else if (row.rating !== undefined) {
+      statistics.rating = this.toNumericStat(row.rating);
     }
     if (row.created_at !== undefined) {
-      teacher.createdAt = row.created_at;
+      statistics.createdAt = row.created_at;
     }
+    return statistics;
+  }
+
+  private teacherCompensationAndRelations(
+    row: TeacherRow,
+  ): Record<string, unknown> {
+    const compensation: Record<string, unknown> = {};
     // KVA-238: зарплатные поля и явные связи карточки педагога.
-    if (row.salary !== undefined) {
-      teacher.salary = row.salary === null ? null : Number(row.salary);
+    if (row.salary === null) {
+      compensation.salary = null;
+    } else if (row.salary !== undefined) {
+      compensation.salary = Number(row.salary);
     }
-    if (row.current_rate !== undefined) {
-      teacher.currentRate =
-        row.current_rate === null ? null : Number(row.current_rate);
+    if (row.current_rate === null) {
+      compensation.currentRate = null;
+    } else if (row.current_rate !== undefined) {
+      compensation.currentRate = Number(row.current_rate);
     }
     if (row.disciplines !== undefined) {
-      teacher.disciplines = row.disciplines ?? [];
+      compensation.disciplines = row.disciplines ?? [];
     }
     if (row.assigned_branches !== undefined) {
-      teacher.assignedBranches = row.assigned_branches ?? [];
+      compensation.assignedBranches = row.assigned_branches ?? [];
     }
-    return teacher;
+    return compensation;
   }
 
   // teacherId narrows the very same query (and, crucially, the very same

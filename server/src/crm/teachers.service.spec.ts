@@ -53,6 +53,247 @@ describe("TeachersService", () => {
     return { service, query, audit, policy, accounts, integrity };
   };
 
+  describe("teacher DTO composition", () => {
+    const credentialRow = {
+      id: "teacher-credentials",
+      status: "active",
+      specialization: "Вокал",
+      profile_id: "profile-credentials",
+      profile_user_id: "user-credentials",
+      first_name: "Ирина",
+      last_name: "Петрова",
+      phone: "+79991111111",
+      email: "teacher@example.com",
+      password_configured: true,
+      password_changed_at: "2026-08-14T10:00:00.000Z",
+      email_changed_at: "2026-08-14T09:00:00.000Z",
+    };
+    const expectedCredentials = {
+      email: "teacher@example.com",
+      passwordConfigured: true,
+      passwordChangedAt: "2026-08-14T10:00:00.000Z",
+      emailChangedAt: "2026-08-14T09:00:00.000Z",
+    };
+    const credentialKeys = Object.keys(expectedCredentials);
+
+    it.each([
+      ["client", {}],
+      ["teacher", {}],
+      ["admin", {}],
+      ["manager", {}],
+      ["director", expectedCredentials],
+      ["system_admin", expectedCredentials],
+    ] as const)("exposes credential keys only to the exact allowed role=%s", async (role, expected) => {
+      const { service } = createService([credentialRow]);
+
+      const { items } = await service.listTeachers(
+        { userId: `${role}-a`, role },
+        { limit: 1 },
+      );
+      const teacher = items[0]!;
+      const credentials = Object.fromEntries(
+        credentialKeys
+          .filter((key) => Object.prototype.hasOwnProperty.call(teacher, key))
+          .map((key) => [key, teacher[key]]),
+      );
+
+      expect(credentials).toEqual(expected);
+    });
+
+    it("preserves the full DTO values, insertion order, coercions, and references", async () => {
+      const customData = { level: "advanced" };
+      const branches = [{ id: "branch-a", name: "Центр" }];
+      const disciplines = [
+        { id: "discipline-a", name: "Вокал", lifecycleState: "active" },
+      ];
+      const assignedBranches = [{ id: "branch-b", name: "Север" }];
+      const passwordChangedAt = new Date("2026-08-14T10:00:00.000Z");
+      const emailChangedAt = new Date("2026-08-14T09:00:00.000Z");
+      const offboardedAt = new Date("2026-08-15T11:00:00.000Z");
+      const createdAt = new Date("2026-06-15T00:00:00.000Z");
+      const row = {
+        id: "teacher-full",
+        status: "archived",
+        specialization: "Вокал",
+        profile_id: "profile-full",
+        profile_user_id: "user-full",
+        first_name: "Мария",
+        last_name: "Петрова",
+        phone: "+79992222222",
+        email: " Teacher@Example.com ",
+        password_configured: true,
+        password_changed_at: passwordChangedAt,
+        email_changed_at: emailChangedAt,
+        custom_data: customData,
+        app_role: "teacher",
+        is_app_account: true,
+        lifecycle_state: "archived",
+        version: "7",
+        offboarded_at: offboardedAt,
+        offboard_reason: "contract-ended",
+        branches,
+        students_count: "12.5",
+        lessons_count: "-0",
+        rating: "not-a-number",
+        created_at: createdAt,
+        salary: "not-a-number",
+        current_rate: "-0",
+        disciplines,
+        assigned_branches: assignedBranches,
+      };
+      const { service } = createService([row]);
+
+      const { items } = await service.listTeachers(
+        { userId: "director-a", role: "director" },
+        { limit: 1 },
+      );
+      const teacher = items[0]!;
+
+      expect(teacher).toStrictEqual({
+        id: "teacher-full",
+        status: "archived",
+        specialization: "Вокал",
+        profileId: "profile-full",
+        profileUserId: "user-full",
+        firstName: "Мария",
+        lastName: "Петрова",
+        phone: "+79992222222",
+        email: " Teacher@Example.com ",
+        passwordConfigured: true,
+        passwordChangedAt,
+        emailChangedAt,
+        customData,
+        appRole: "teacher",
+        isAppAccount: true,
+        lifecycleState: "archived",
+        version: 7,
+        offboardedAt,
+        offboardReason: "contract-ended",
+        branches,
+        studentsCount: 12.5,
+        lessonsCount: -0,
+        rating: 0,
+        createdAt,
+        salary: NaN,
+        currentRate: -0,
+        disciplines,
+        assignedBranches,
+      });
+      expect(Object.keys(teacher)).toEqual([
+        "id",
+        "status",
+        "specialization",
+        "profileId",
+        "profileUserId",
+        "firstName",
+        "lastName",
+        "phone",
+        "email",
+        "passwordConfigured",
+        "passwordChangedAt",
+        "emailChangedAt",
+        "customData",
+        "appRole",
+        "isAppAccount",
+        "lifecycleState",
+        "version",
+        "offboardedAt",
+        "offboardReason",
+        "branches",
+        "studentsCount",
+        "lessonsCount",
+        "rating",
+        "createdAt",
+        "salary",
+        "currentRate",
+        "disciplines",
+        "assignedBranches",
+      ]);
+      expect(teacher.customData).toBe(customData);
+      expect(teacher.branches).toBe(branches);
+      expect(teacher.disciplines).toBe(disciplines);
+      expect(teacher.assignedBranches).toBe(assignedBranches);
+      expect(teacher.passwordChangedAt).toBe(passwordChangedAt);
+      expect(teacher.emailChangedAt).toBe(emailChangedAt);
+      expect(teacher.offboardedAt).toBe(offboardedAt);
+      expect(teacher.createdAt).toBe(createdAt);
+      expect(teacher.lessonsCount).toBe(-0);
+      expect(teacher.salary).toBeNaN();
+      expect(teacher.currentRate).toBe(-0);
+    });
+
+    it("preserves sparse and null omission/default distinctions", async () => {
+      const { service } = createService([
+        {
+          id: undefined,
+          status: null,
+          specialization: null,
+          profile_id: undefined,
+          profile_user_id: null,
+          first_name: undefined,
+          last_name: null,
+          phone: undefined,
+          email: null,
+          password_configured: null,
+          password_changed_at: undefined,
+          email_changed_at: null,
+          custom_data: null,
+          app_role: null,
+          is_app_account: null,
+          lifecycle_state: undefined,
+          version: null,
+          offboarded_at: undefined,
+          offboard_reason: null,
+          branches: null,
+          students_count: null,
+          lessons_count: undefined,
+          rating: null,
+          created_at: undefined,
+          salary: null,
+          current_rate: null,
+          disciplines: null,
+          assigned_branches: null,
+        },
+      ]);
+
+      const { items } = await service.listTeachers(
+        { userId: "director-a", role: "director" },
+        { limit: 1 },
+      );
+
+      expect(items[0]).toStrictEqual({
+        id: undefined,
+        status: null,
+        specialization: null,
+        profileId: undefined,
+        profileUserId: null,
+        firstName: undefined,
+        lastName: null,
+        phone: undefined,
+        email: null,
+        passwordConfigured: false,
+        passwordChangedAt: null,
+        emailChangedAt: null,
+        customData: {},
+        appRole: null,
+        isAppAccount: false,
+        lifecycleState: "active",
+        version: 1,
+        offboardedAt: null,
+        offboardReason: null,
+        branches: [],
+        studentsCount: 0,
+        rating: null,
+        salary: null,
+        currentRate: null,
+        disciplines: [],
+        assignedBranches: [],
+      });
+      expect(items[0]).not.toHaveProperty("lessonsCount");
+      expect(items[0]).not.toHaveProperty("createdAt");
+    });
+  });
+
   describe("getTeacher", () => {
     it("narrows the shared list query to one id", async () => {
       const { service, query } = createService([
