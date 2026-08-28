@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/update/release_history.dart';
@@ -9,9 +11,9 @@ void main() {
     final raw = await rootBundle.loadString(releaseHistoryAssetPath);
     final releases = parseReleaseHistory(raw);
 
-    expect(releases.first.version, '1.5.18+198');
-    expect(releases.first.buildNumber, 198);
-    expect(releases, hasLength(38));
+    expect(releases.first.version, '1.5.19+199');
+    expect(releases.first.buildNumber, 199);
+    expect(releases, hasLength(39));
     expect(releases.last.version, '1.0.0');
     expect(
       releases.map((release) => release.buildNumber),
@@ -33,6 +35,7 @@ void main() {
         196,
         197,
         198,
+        199,
       ]),
     );
     expect(raw, isNot(contains('—')));
@@ -52,6 +55,23 @@ void main() {
 
     expect(version.version, '1.5.11+191');
     expect(version.shortVersion, '1.5.11');
+  });
+
+  test('release package metadata matches the newest history entry', () async {
+    final raw = await rootBundle.loadString(releaseHistoryAssetPath);
+    final latest = parseReleaseHistory(raw).first;
+    final dottedVersion = latest.version.replaceFirst('+', '.');
+    final dashedVersion = latest.version.replaceFirst('+', '-');
+    final pubspec = await File('pubspec.yaml').readAsString();
+    final installer = await File('windows_installer.iss').readAsString();
+
+    expect(pubspec, contains('version: ${latest.version}'));
+    expect(pubspec, contains('msix_version: $dottedVersion'));
+    expect(installer, contains('AppVersion=$dottedVersion'));
+    expect(
+      installer,
+      contains('OutputBaseFilename=MagicMusicCRM-$dashedVersion-Setup'),
+    );
   });
 
   test('history endpoint accepts only the production HTTPS location', () {
