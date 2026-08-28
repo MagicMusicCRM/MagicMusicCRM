@@ -55,14 +55,6 @@ interface StaffRow {
   created_at: Date | string;
 }
 
-interface StaffUpdateTarget {
-  role: string | null;
-  app_role: string | null;
-  profile_user_id: string | null;
-  email: string | null;
-  status: string;
-}
-
 const USER_ROLES = new Set<UserRole>([
   "client",
   "teacher",
@@ -93,105 +85,6 @@ function canEditStaffTarget(
     ROLE_LEVEL[targetRole] < ROLE_LEVEL[actorRole]
   );
 }
-
-const UPDATE_STAFF_SQL = `
-          with target as (
-            select sm.id, sm.profile_id, p.user_id
-            from app.staff_members sm
-            left join app.profiles p on p.id = sm.profile_id and p.deleted_at is null
-            where sm.id = $1 and sm.deleted_at is null
-              and sm.lifecycle_state = 'active'
-            limit 1
-          ),
-          valid_branches as (
-            select id, name
-            from app.branches
-            where $8::uuid[] is not null
-              and id = any($8::uuid[]) and deleted_at is null
-          ),
-          reference_guard as (
-            select $8::uuid[] is null
-              or (select count(*) from valid_branches) = cardinality($8::uuid[])
-              as valid
-          ),
-          updated_profile as (
-            update app.profiles p
-            set first_name = coalesce($2, p.first_name),
-              last_name = coalesce($3, p.last_name),
-              phone = coalesce($4, p.phone),
-              updated_at = now()
-            from target
-            cross join reference_guard
-            where p.id = target.profile_id and reference_guard.valid
-            returning p.id, p.user_id, p.first_name, p.last_name, p.phone
-          ),
-          updated_staff as (
-            update app.staff_members sm
-            set position = coalesce($5, sm.position),
-              status = coalesce($6, sm.status),
-              custom_data = coalesce(sm.custom_data, '{}'::jsonb) || $7::jsonb,
-              updated_at = now()
-            from target
-            cross join reference_guard
-            where sm.id = target.id
-              and reference_guard.valid
-            returning sm.*
-          ),
-          restored_assignments as (
-            insert into app.staff_branch_assignments (staff_member_id, branch_id)
-            select updated_staff.id, valid_branches.id
-            from updated_staff cross join valid_branches
-            on conflict (staff_member_id, branch_id)
-            do update set deleted_at = null
-            returning branch_id
-          ),
-          removed_assignments as (
-            update app.staff_branch_assignments assignment
-            set deleted_at = now()
-            from updated_staff
-            where $8::uuid[] is not null
-              and assignment.staff_member_id = updated_staff.id
-              and assignment.deleted_at is null
-              and not (assignment.branch_id = any($8::uuid[]))
-            returning assignment.branch_id
-          )
-          select us.id, us.role, us.position, us.status, us.custom_data,
-            us.profile_id,
-            coalesce(up.user_id, p.user_id) as profile_user_id,
-            u.role as app_role,
-            coalesce(u.is_app_account, false) as is_app_account,
-            u.password_hash is not null as password_configured,
-            u.password_changed_at, u.email_changed_at,
-            us.lifecycle_state, us.version, us.offboarded_at,
-            us.offboard_reason,
-            coalesce(up.first_name, p.first_name) as first_name,
-            coalesce(up.last_name, p.last_name) as last_name,
-            u.email,
-            coalesce(up.phone, p.phone) as phone,
-            case when $8::uuid[] is not null then
-              coalesce((select jsonb_agg(
-                jsonb_build_object('id', vb.id, 'name', vb.name)
-                order by vb.name) from valid_branches vb), '[]'::jsonb)
-            else coalesce(
-              jsonb_agg(distinct jsonb_build_object('id', b.id, 'name', b.name))
-                filter (where b.id is not null), '[]'::jsonb
-            ) end as branches,
-            us.created_at
-          from updated_staff us
-          left join updated_profile up on true
-          left join app.profiles p on p.id = us.profile_id and p.deleted_at is null
-          left join app.users u on u.id = coalesce(up.user_id, p.user_id)
-            and u.deleted_at is null
-          left join app.staff_branch_assignments sba
-            on sba.staff_member_id = us.id and sba.deleted_at is null
-          left join app.branches b on b.id = sba.branch_id and b.deleted_at is null
-          group by us.id, us.role, us.position, us.status, us.custom_data,
-            us.profile_id, us.lifecycle_state, us.version, us.offboarded_at,
-            us.offboard_reason, us.created_at, p.id, u.id,
-            up.user_id, up.first_name, up.last_name, up.phone,
-            u.email, u.role, u.is_app_account
-          limit 1
-        `;
 
 /**
  * Staff domain, extracted from CrmService (SRP): staff-member listing (with
@@ -523,18 +416,24 @@ export class StaffService {
     return this.accounts.readAccess(actor, "staff", staffId);
   }
 
-  private assertStaffEditor(actor: ActorContext): void {
+  async updateStaff(actor: ActorContext, staffId: string, dto: UpdateStaffDto) {
     if (!STAFF_EDITOR_ROLES.has(actor.role)) {
       throw new ForbiddenException(
         "Недостаточно прав для редактирования сотрудников.",
       );
     }
-  }
 
-  private async readStaffUpdateTarget(
-    staffId: string,
-  ): Promise<StaffUpdateTarget> {
-    const current = await this.database.query<StaffUpdateTarget>(
+    // Authorization is based on the linked app.users role (the actual auth
+    // privilege), never merely on the free-form staff-card display role. This
+    // prevents a branch admin from editing a manager/system administrator and
+    // closes the old email -> password-reset account-takeover path.
+    const current = await this.database.query<{
+      role: string | null;
+      app_role: string | null;
+      profile_user_id: string | null;
+      email: string | null;
+      status: string;
+    }>(
       `select sm.role, sm.status, u.role::text as app_role,
          p.user_id as profile_user_id, u.email
        from app.staff_members sm
@@ -550,13 +449,7 @@ export class StaffService {
     if (!target) {
       throw new NotFoundException("Сотрудник не найден.");
     }
-    return target;
-  }
 
-  private assertStaffTargetAccess(
-    actor: ActorContext,
-    target: StaffUpdateTarget,
-  ): void {
     const authRole = target.app_role?.trim() ?? null;
     if (authRole !== null && !isUserRole(authRole)) {
       throw new ForbiddenException(
@@ -575,12 +468,10 @@ export class StaffService {
         "Недостаточно прав для редактирования этого сотрудника.",
       );
     }
-  }
 
-  private assertStaffIdentityUnchanged(
-    dto: UpdateStaffDto,
-    target: StaffUpdateTarget,
-  ): void {
+    // The staff-card endpoint is not an identity-management endpoint. Keep an
+    // unchanged email in legacy form submissions as a no-op, but never mutate
+    // app.users.email here; email changes require a dedicated verified flow.
     if (dto.email !== undefined) {
       const requestedEmail = trimOptional(dto.email)?.toLowerCase() ?? null;
       const currentEmail = target.email?.trim().toLowerCase() ?? null;
@@ -590,9 +481,13 @@ export class StaffService {
         );
       }
     }
+
+    // Cards cannot elevate or relabel access. The canonical access command also
+    // synchronizes staff_members.role after a settings-only role change. Keep a
+    // runtime guard as defense in depth for non-controller callers.
     if ("role" in dto) {
       const requestedRole = String(dto.role).trim();
-      const currentRole = target.role?.trim() ?? null;
+      const currentRole = displayRole;
       const unchangedDisplayRole = requestedRole === currentRole;
       if (!unchangedDisplayRole) {
         throw new ForbiddenException(
@@ -600,12 +495,6 @@ export class StaffService {
         );
       }
     }
-  }
-
-  private assertStaffStatusUnchanged(
-    dto: UpdateStaffDto,
-    target: StaffUpdateTarget,
-  ): void {
     if (
       dto.status !== undefined &&
       ["inactive", "archived"].includes(dto.status.trim().toLowerCase()) &&
@@ -615,50 +504,124 @@ export class StaffService {
         "Отключение сотрудника выполняется через сценарий offboarding.",
       );
     }
-  }
-
-  private async assertStaffBranchScope(
-    actor: ActorContext,
-    branchIds: string[] | undefined,
-  ): Promise<void> {
-    if (!branchIds) return;
-    for (const branchId of branchIds) {
-      await assertSettingsBranchScope(this.database, actor, branchId);
-    }
-  }
-
-  async updateStaff(actor: ActorContext, staffId: string, dto: UpdateStaffDto) {
-    this.assertStaffEditor(actor);
-    const target = await this.readStaffUpdateTarget(staffId);
-
-    // Authorization is based on the linked app.users role (the actual auth
-    // privilege), never merely on the free-form staff-card display role. This
-    // prevents a branch admin from editing a manager/system administrator and
-    // closes the old email -> password-reset account-takeover path.
-    this.assertStaffTargetAccess(actor, target);
-
-    // The staff-card endpoint is not an identity-management endpoint. Keep an
-    // unchanged email in legacy form submissions as a no-op, but never mutate
-    // app.users.email here; email changes require a dedicated verified flow.
-    // Cards cannot elevate or relabel access. The canonical access command also
-    // synchronizes staff_members.role after a settings-only role change. Keep a
-    // runtime guard as defense in depth for non-controller callers.
-    this.assertStaffIdentityUnchanged(dto, target);
-    this.assertStaffStatusUnchanged(dto, target);
     const customDataPatch = sanitizeJsonObject(dto.customDataPatch);
-    await this.assertStaffBranchScope(actor, dto.branchIds);
+    if (dto.branchIds) {
+      for (const branchId of dto.branchIds) {
+        await assertSettingsBranchScope(this.database, actor, branchId);
+      }
+    }
 
     try {
-      const result = await this.database.query<StaffRow>(UPDATE_STAFF_SQL, [
-        staffId,
-        trimOptional(dto.firstName),
-        trimOptional(dto.lastName),
-        trimOptional(dto.phone),
-        trimOptional(dto.position),
-        trimOptional(dto.status),
-        JSON.stringify(customDataPatch),
-        dto.branchIds ?? null,
-      ]);
+      const result = await this.database.query<StaffRow>(
+        `
+          with target as (
+            select sm.id, sm.profile_id, p.user_id
+            from app.staff_members sm
+            left join app.profiles p on p.id = sm.profile_id and p.deleted_at is null
+            where sm.id = $1 and sm.deleted_at is null
+              and sm.lifecycle_state = 'active'
+            limit 1
+          ),
+          valid_branches as (
+            select id, name
+            from app.branches
+            where $8::uuid[] is not null
+              and id = any($8::uuid[]) and deleted_at is null
+          ),
+          reference_guard as (
+            select $8::uuid[] is null
+              or (select count(*) from valid_branches) = cardinality($8::uuid[])
+              as valid
+          ),
+          updated_profile as (
+            update app.profiles p
+            set first_name = coalesce($2, p.first_name),
+              last_name = coalesce($3, p.last_name),
+              phone = coalesce($4, p.phone),
+              updated_at = now()
+            from target
+            cross join reference_guard
+            where p.id = target.profile_id and reference_guard.valid
+            returning p.id, p.user_id, p.first_name, p.last_name, p.phone
+          ),
+          updated_staff as (
+            update app.staff_members sm
+            set position = coalesce($5, sm.position),
+              status = coalesce($6, sm.status),
+              custom_data = coalesce(sm.custom_data, '{}'::jsonb) || $7::jsonb,
+              updated_at = now()
+            from target
+            cross join reference_guard
+            where sm.id = target.id
+              and reference_guard.valid
+            returning sm.*
+          ),
+          restored_assignments as (
+            insert into app.staff_branch_assignments (staff_member_id, branch_id)
+            select updated_staff.id, valid_branches.id
+            from updated_staff cross join valid_branches
+            on conflict (staff_member_id, branch_id)
+            do update set deleted_at = null
+            returning branch_id
+          ),
+          removed_assignments as (
+            update app.staff_branch_assignments assignment
+            set deleted_at = now()
+            from updated_staff
+            where $8::uuid[] is not null
+              and assignment.staff_member_id = updated_staff.id
+              and assignment.deleted_at is null
+              and not (assignment.branch_id = any($8::uuid[]))
+            returning assignment.branch_id
+          )
+          select us.id, us.role, us.position, us.status, us.custom_data,
+            us.profile_id,
+            coalesce(up.user_id, p.user_id) as profile_user_id,
+            u.role as app_role,
+            coalesce(u.is_app_account, false) as is_app_account,
+            u.password_hash is not null as password_configured,
+            u.password_changed_at, u.email_changed_at,
+            us.lifecycle_state, us.version, us.offboarded_at,
+            us.offboard_reason,
+            coalesce(up.first_name, p.first_name) as first_name,
+            coalesce(up.last_name, p.last_name) as last_name,
+            u.email,
+            coalesce(up.phone, p.phone) as phone,
+            case when $8::uuid[] is not null then
+              coalesce((select jsonb_agg(
+                jsonb_build_object('id', vb.id, 'name', vb.name)
+                order by vb.name) from valid_branches vb), '[]'::jsonb)
+            else coalesce(
+              jsonb_agg(distinct jsonb_build_object('id', b.id, 'name', b.name))
+                filter (where b.id is not null), '[]'::jsonb
+            ) end as branches,
+            us.created_at
+          from updated_staff us
+          left join updated_profile up on true
+          left join app.profiles p on p.id = us.profile_id and p.deleted_at is null
+          left join app.users u on u.id = coalesce(up.user_id, p.user_id)
+            and u.deleted_at is null
+          left join app.staff_branch_assignments sba
+            on sba.staff_member_id = us.id and sba.deleted_at is null
+          left join app.branches b on b.id = sba.branch_id and b.deleted_at is null
+          group by us.id, us.role, us.position, us.status, us.custom_data,
+            us.profile_id, us.lifecycle_state, us.version, us.offboarded_at,
+            us.offboard_reason, us.created_at, p.id, u.id,
+            up.user_id, up.first_name, up.last_name, up.phone,
+            u.email, u.role, u.is_app_account
+          limit 1
+        `,
+        [
+          staffId,
+          trimOptional(dto.firstName),
+          trimOptional(dto.lastName),
+          trimOptional(dto.phone),
+          trimOptional(dto.position),
+          trimOptional(dto.status),
+          JSON.stringify(customDataPatch),
+          dto.branchIds ?? null,
+        ],
+      );
       const staff = result.rows[0];
       if (!staff) throw new NotFoundException("Сотрудник не найден.");
       await this.audit.record({
