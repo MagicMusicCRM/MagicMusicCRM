@@ -51,6 +51,11 @@ export interface ValidatedCustomFields {
   warnings: ClientValidationWarning[];
 }
 
+type ConvertedCustomValue = {
+  value: TypedClientCustomValue;
+  warnings: ClientValidationWarning[];
+};
+
 @Injectable()
 export class ClientWriteValidator {
   constructor(private readonly repository: ClientConfigRepository) {}
@@ -178,64 +183,177 @@ export class ClientWriteValidator {
   private convertValue(
     definition: ClientCustomFieldDefinitionRow,
     raw: unknown,
-  ): {
-    value: TypedClientCustomValue;
-    warnings: ClientValidationWarning[];
-  } {
-    const empty: TypedClientCustomValue = {
-      definitionId: definition.id,
+  ): ConvertedCustomValue {
+    const empty = this.emptyTypedValue(definition.id);
+    const field = `customFields.${definition.field_key}`;
+    const type = definition.value_type;
+    if (this.isNumericValueType(type)) {
+      return this.convertNumericValue(empty, raw, field, type);
+    }
+    if (this.isBooleanValueType(type)) {
+      return this.convertBooleanValue(empty, raw, field, type);
+    }
+    if (this.isListOptionValueType(type)) {
+      return this.convertListOptionValue(definition, empty, raw, field, type);
+    }
+    return this.convertTextValue(definition, empty, raw, field, type);
+  }
+
+  private emptyTypedValue(definitionId: string): TypedClientCustomValue {
+    return {
+      definitionId,
       valueText: null,
       valueNumber: null,
       valueBoolean: null,
       valueDate: null,
       valueJson: null,
     };
-    const field = `customFields.${definition.field_key}`;
-    const type = definition.value_type;
+  }
 
-    if (type === "number" || type === "money" || type === "duration") {
-      if (typeof raw !== "number" || !Number.isFinite(raw)) {
-        this.invalidType(field, type);
-      }
-      return {
-        value: { ...empty, valueNumber: raw },
-        warnings: [],
-      };
-    }
-    if (type === "boolean" || type === "toggle") {
-      if (typeof raw !== "boolean") {
-        this.invalidType(field, type);
-      }
-      return {
-        value: { ...empty, valueBoolean: raw },
-        warnings: [],
-      };
-    }
+  private isNumericValueType(type: ClientCustomValueType): boolean {
+    return type === "number" || type === "money" || type === "duration";
+  }
 
-    if (type === "multi_select" || type === "checkbox_group") {
-      if (!Array.isArray(raw) || raw.some((item) => typeof item !== "string")) {
-        this.invalidType(field, type);
-      }
-      const options = Array.isArray(definition.options)
-        ? definition.options.filter(
-            (option): option is string => typeof option === "string",
-          )
-        : [];
-      const selected = [...new Set(raw as string[])];
-      if (selected.some((item) => !options.includes(item))) {
-        this.fail(
-          field,
-          "OPTION_INACTIVE",
-          `Значение поля «${definition.label}» отсутствует в справочнике.`,
-        );
-      }
-      return { value: { ...empty, valueJson: selected }, warnings: [] };
-    }
+  private isBooleanValueType(type: ClientCustomValueType): boolean {
+    return type === "boolean" || type === "toggle";
+  }
 
+  private isListOptionValueType(type: ClientCustomValueType): boolean {
+    return type === "multi_select" || type === "checkbox_group";
+  }
+
+  private isSingleOptionValueType(type: ClientCustomValueType): boolean {
+    return type === "select" || type === "radio";
+  }
+
+  private convertNumericValue(
+    empty: TypedClientCustomValue,
+    raw: unknown,
+    field: string,
+    type: ClientCustomValueType,
+  ): ConvertedCustomValue {
+    if (typeof raw !== "number" || !Number.isFinite(raw)) {
+      this.invalidType(field, type);
+    }
+    return {
+      value: { ...empty, valueNumber: raw },
+      warnings: [],
+    };
+  }
+
+  private convertBooleanValue(
+    empty: TypedClientCustomValue,
+    raw: unknown,
+    field: string,
+    type: ClientCustomValueType,
+  ): ConvertedCustomValue {
+    if (typeof raw !== "boolean") {
+      this.invalidType(field, type);
+    }
+    return {
+      value: { ...empty, valueBoolean: raw },
+      warnings: [],
+    };
+  }
+
+  private stringOptions(options: unknown): string[] {
+    return Array.isArray(options)
+      ? options.filter(
+          (option): option is string => typeof option === "string",
+        )
+      : [];
+  }
+
+  private convertListOptionValue(
+    definition: ClientCustomFieldDefinitionRow,
+    empty: TypedClientCustomValue,
+    raw: unknown,
+    field: string,
+    type: ClientCustomValueType,
+  ): ConvertedCustomValue {
+    if (!Array.isArray(raw) || raw.some((item) => typeof item !== "string")) {
+      this.invalidType(field, type);
+    }
+    const options = this.stringOptions(definition.options);
+    const selected = [...new Set(raw as string[])];
+    if (selected.some((item) => !options.includes(item))) {
+      this.fail(
+        field,
+        "OPTION_INACTIVE",
+        `Значение поля «${definition.label}» отсутствует в справочнике.`,
+      );
+    }
+    return { value: { ...empty, valueJson: selected }, warnings: [] };
+  }
+
+  private requireTrimmedText(
+    raw: unknown,
+    field: string,
+    type: ClientCustomValueType,
+  ): string {
     if (typeof raw !== "string" || !raw.trim()) {
       this.invalidType(field, type);
     }
-    const text = raw.trim();
+    return raw.trim();
+  }
+
+  private validateDateTime(
+    text: string,
+    field: string,
+    type: ClientCustomValueType,
+  ): void {
+    if (Number.isNaN(Date.parse(text))) {
+      this.invalidType(field, type);
+    }
+  }
+
+  private validateEmail(
+    text: string,
+    field: string,
+    type: ClientCustomValueType,
+  ): void {
+    if (!isEmail(text)) {
+      this.invalidType(field, type);
+    }
+  }
+
+  private validateSingleOption(
+    definition: ClientCustomFieldDefinitionRow,
+    text: string,
+    field: string,
+  ): void {
+    if (!this.stringOptions(definition.options).includes(text)) {
+      this.fail(
+        field,
+        "OPTION_INACTIVE",
+        `Значение поля «${definition.label}» отсутствует в справочнике.`,
+      );
+    }
+  }
+
+  private validateHttpUrl(
+    text: string,
+    field: string,
+    type: ClientCustomValueType,
+  ): void {
+    try {
+      const parsed = new URL(text);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        this.invalidType(field, type);
+      }
+    } catch {
+      this.invalidType(field, type);
+    }
+  }
+
+  private convertTextValue(
+    definition: ClientCustomFieldDefinitionRow,
+    empty: TypedClientCustomValue,
+    raw: unknown,
+    field: string,
+    type: ClientCustomValueType,
+  ): ConvertedCustomValue {
+    const text = this.requireTrimmedText(raw, field, type);
     if (type === "date") {
       if (!this.isIsoDate(text)) {
         this.invalidType(field, type);
@@ -245,25 +363,14 @@ export class ClientWriteValidator {
         warnings: [],
       };
     }
-    if (type === "datetime" && Number.isNaN(Date.parse(text))) {
-      this.invalidType(field, type);
+    if (type === "datetime") {
+      this.validateDateTime(text, field, type);
     }
-    if (type === "email" && !isEmail(text)) {
-      this.invalidType(field, type);
+    if (type === "email") {
+      this.validateEmail(text, field, type);
     }
-    if (type === "select" || type === "radio") {
-      const options = Array.isArray(definition.options)
-        ? definition.options.filter(
-            (option): option is string => typeof option === "string",
-          )
-        : [];
-      if (!options.includes(text)) {
-        this.fail(
-          field,
-          "OPTION_INACTIVE",
-          `Значение поля «${definition.label}» отсутствует в справочнике.`,
-        );
-      }
+    if (this.isSingleOptionValueType(type)) {
+      this.validateSingleOption(definition, text, field);
     }
     if (type === "phone") {
       const phone = this.normalizeRequiredPhone(text, field);
@@ -273,14 +380,7 @@ export class ClientWriteValidator {
       };
     }
     if (type === "url") {
-      try {
-        const parsed = new URL(text);
-        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-          this.invalidType(field, type);
-        }
-      } catch {
-        this.invalidType(field, type);
-      }
+      this.validateHttpUrl(text, field, type);
     }
     return {
       value: { ...empty, valueText: text },
