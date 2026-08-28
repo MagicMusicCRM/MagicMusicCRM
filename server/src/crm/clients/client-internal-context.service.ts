@@ -98,11 +98,6 @@ const ACTION_LABELS: Record<string, string> = {
   "crm.client_unblacklisted": "Клиент убран из чёрного списка",
 };
 
-const TEACHER_SHARING_SUMMARIES = [
-  "Скрыт от преподавателя",
-  "Опубликован преподавателю",
-] as const;
-
 @Injectable()
 export class ClientInternalContextService {
   constructor(
@@ -431,18 +426,14 @@ export class ClientInternalContextService {
       return `Версия ${before["version"] ?? 0} → ${after["version"] ?? "—"}`;
     }
     if (action === "crm.comment_teacher_sharing_changed") {
-      return TEACHER_SHARING_SUMMARIES[
+      return ["Скрыт от преподавателя", "Опубликован преподавателю"][
         Number(after["sharedWithTeacher"] === true)
       ];
     }
-    if (
-      action === "crm.lessons_bulk_transitioned" &&
-      Array.isArray(before["items"])
-    ) {
-      return `Изменено занятий: ${before["items"].length}`;
-    }
-    if (action === "crm.lessons_bulk_transitioned") return "Изменено занятий: 0";
-    return null;
+    if (action !== "crm.lessons_bulk_transitioned") return null;
+    const items = before["items"];
+    const count = Array.isArray(items) ? items.length : 0;
+    return `Изменено занятий: ${count}`;
   }
 
   private historyReason(
