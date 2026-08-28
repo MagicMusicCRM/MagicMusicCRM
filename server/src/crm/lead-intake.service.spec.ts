@@ -46,6 +46,32 @@ describe("LeadIntakeService", () => {
     return { query, transaction, ...makeLeads({ query, transaction }) };
   };
 
+  const automaticProfileRows = (phone: string | null) => [
+    { rows: [] },
+    { rows: [{ profile_id: "profile-1", first_name: "Иван", last_name: "Петров", phone }] },
+    { rows: [] },
+    { rows: [] },
+  ];
+
+  const convertedLeadRows = (
+    count: string,
+    unavailableCount: string,
+    id: string | null,
+  ) => [
+    ...automaticProfileRows("+79991234567"),
+    { rows: [] },
+    { rows: [{ id: null, count: "0" }] },
+    { rows: [{ id: "lead-phone", count: "1" }] },
+    { rows: [{ id, count, unavailable_count: unavailableCount }] },
+  ];
+
+  const noPhoneLeadRows = () => [
+    ...automaticProfileRows(null),
+    { rows: [{ id: "status-new" }] },
+    { rows: [{ id: "lead-new" }] },
+    { rows: [] },
+  ];
+
   it("resolves a lead chat user via an explicit crm link", async () => {
     const { service } = createServiceWithQueryResults([
       { rows: [{ id: "lead-a", name: "Иван", phone: "+7 999 000-00-00" }] },
@@ -388,11 +414,22 @@ describe("LeadIntakeService", () => {
       async (work: (client: { query: jest.Mock }) => Promise<unknown>) =>
         work({ query: clientQuery }),
     );
-    const { service, audit } = makeLeads({ transaction });
+    const outsideQuery = jest.fn();
+    const { service, audit, realtime } = makeLeads({
+      query: outsideQuery,
+      transaction,
+    });
     const result = await service.autoCreateLeadFromChat(actor, "user-1");
     expect(result).toEqual({ leadId: "lead-new", created: true });
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(outsideQuery).not.toHaveBeenCalled();
     expect(clientQuery).toHaveBeenCalledTimes(10);
     expect(String(clientQuery.mock.calls[0][0])).toContain("pg_advisory_xact_lock");
+    expect(clientQuery.mock.calls[0][1]).toEqual(["lead-intake:user-1"]);
+    expect(clientQuery.mock.calls[4][1]).toEqual(["lead-phone:+79991234567"]);
+    expect(String(clientQuery.mock.calls[4][0])).toContain("pg_advisory_xact_lock");
+    expect(String(clientQuery.mock.calls[5][0])).toContain("from app.students student");
+    expect(String(clientQuery.mock.calls[6][0])).toContain("from app.leads lead");
     const statusCall = clientQuery.mock.calls.find((c: unknown[]) => String(c[0]).includes("новый"));
     expect(statusCall).toBeDefined();
     expect(String(statusCall![0])).toContain("'новый'");
@@ -403,14 +440,14 @@ describe("LeadIntakeService", () => {
     const linkCall = clientQuery.mock.calls.find((c: unknown[]) => String(c[0]).includes("insert into app.user_crm_links"));
     expect(linkCall).toBeDefined();
     expect(String(linkCall![0])).toContain("'auto_phone'");
-    expect(audit.record).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: "crm.lead_created",
-        entityType: "lead",
-        entityId: "lead-new",
-        metadata: expect.objectContaining({ fromApp: true, userId: "user-1" }),
-      }),
-    );
+    expect(audit.record).toHaveBeenCalledWith({
+      actor,
+      action: "crm.lead_created",
+      entityType: "lead",
+      entityId: "lead-new",
+      metadata: { fromApp: true, userId: "user-1", intakeTrigger: "chat" },
+    });
+    expect(realtime.emitCrmChanged).toHaveBeenCalledWith({ entity: "lead", action: "created", id: "lead-new" });
   });
 
   it("autoCreateLeadFromChat returns {leadId:null, created:false} when user has no profile", async () => {
@@ -430,35 +467,37 @@ describe("LeadIntakeService", () => {
     expect(audit.record).not.toHaveBeenCalled();
   });
 
-  it("autoCreateLeadFromChat does not create a duplicate lead for a profile-owned student", async () => {
-    const clientQuery = jest
-      .fn()
-      .mockResolvedValueOnce({ rows: [] }) // advisory lock
-      .mockResolvedValueOnce({
-        rows: [{
-          profile_id: "profile-1",
-          first_name: "Иван",
-          last_name: "Петров",
-          phone: "+79991234567",
-        }],
-      })
-      .mockResolvedValueOnce({ rows: [{ id: "student-existing" }] });
+  it("prefers an existing Student identity without evaluating an existing Lead", async () => {
+    const clientQuery = jest.fn(async (sql: string) => {
+      const text = String(sql);
+      if (text.includes("from app.profiles p"))
+        return { rows: [{ profile_id: "profile-1", first_name: "Иван", last_name: "Петров", phone: "+79991234567" }] };
+      if (text.includes("from app.students s"))
+        return { rows: [{ id: "student-existing" }] };
+      if (text.includes("link.entity_type = 'lead'"))
+        return { rows: [{ entity_id: "lead-would-win-if-queried" }] };
+      return { rows: [] };
+    });
     const transaction = jest.fn(
       async (work: (client: { query: jest.Mock }) => Promise<unknown>) =>
         work({ query: clientQuery }),
     );
-    const { service, audit } = makeLeads({ transaction });
+    const { service, audit, realtime } = makeLeads({ transaction });
 
     await expect(
       service.autoCreateLeadFromChat(actor, "user-student"),
     ).resolves.toEqual({ leadId: null, created: false });
 
-    const allSql = clientQuery.mock.calls
-      .map((call: unknown[]) => String(call[0]))
-      .join("\n");
+    const allSql = clientQuery.mock.calls.map((call: unknown[]) => String(call[0])).join("\n");
     expect(allSql).toContain("s.profile_id = $2");
+    expect(
+      clientQuery.mock.calls.some((call: unknown[]) =>
+        String(call[0]).includes("link.entity_type = 'lead'"),
+      ),
+    ).toBe(false);
     expect(allSql).not.toContain("insert into app.leads");
     expect(audit.record).not.toHaveBeenCalled();
+    expect(realtime.emitCrmChanged).not.toHaveBeenCalled();
   });
 
   it("autoCreateLeadFromChat links one matching student and never evaluates leads", async () => {
@@ -591,6 +630,161 @@ describe("LeadIntakeService", () => {
         entityId: "lead-phone",
       }),
     );
+  });
+
+  it("links a unique converted Student instead of its matching Lead", async () => {
+    const { service, query, audit, realtime } = createServiceWithQueryResults([
+      ...convertedLeadRows("1", "0", "student-converted"),
+      { rows: [{ entity_id: "student-converted" }] },
+      { rows: [{ id: "student-converted" }] },
+    ]);
+    await expect(
+      service.autoCreateLeadFromChat(actor, "user-converted", "onboarding"),
+    ).resolves.toEqual({ leadId: null, created: false });
+    const studentLink = query.mock.calls.find((call: unknown[]) =>
+      String(call[0]).includes("values ($1, 'student'"),
+    );
+    expect(studentLink?.[1]).toEqual(["user-converted", "student-converted", "+79991234567", "manager-a"]);
+    expect(query.mock.calls.some((call: unknown[]) => String(call[0]).includes("update app.students"))).toBe(true);
+    expect(
+      query.mock.calls.some((call: unknown[]) => String(call[0]).includes("values ($1, 'lead'")),
+    ).toBe(false);
+    expect(audit.record).toHaveBeenCalledWith({
+      actor,
+      action: "crm.client_user_linked",
+      entityType: "student",
+      entityId: "student-converted",
+      metadata: { fromApp: true, userId: "user-converted", intakeTrigger: "onboarding" },
+    });
+    expect(realtime.emitCrmChanged).toHaveBeenCalledWith({
+      entity: "student", action: "updated", id: "student-converted",
+    });
+  });
+
+  it.each([
+    ["leaves an ambiguous converted Student set for manual review", "2", "0", { leadId: null, created: false }],
+    ["leaves an unavailable converted Student identity for manual review", "1", "1", { leadId: null, created: false }],
+  ])("%s", async (_name, count, unavailableCount, expected) => {
+    const { service, query, audit, realtime } = createServiceWithQueryResults(
+      convertedLeadRows(count as string, unavailableCount as string, "student-converted"),
+    );
+    await expect(
+      service.autoCreateLeadFromChat(actor, "user-review"),
+    ).resolves.toEqual(expected);
+    expect(query.mock.calls.some((call: unknown[]) => String(call[0]).includes("insert into"))).toBe(false);
+    expect(audit.record).not.toHaveBeenCalled();
+    expect(realtime.emitCrmChanged).not.toHaveBeenCalled();
+  });
+
+  it("treats a concurrent Student link claim as manual review", async () => {
+    const { service, query, audit, realtime } = createServiceWithQueryResults([
+      ...automaticProfileRows("+79991234567"),
+      { rows: [] },
+      { rows: [{ id: "student-phone", count: "1" }] },
+      { rows: [] },
+    ]);
+    await expect(
+      service.autoCreateLeadFromChat(actor, "user-race"),
+    ).resolves.toEqual({ leadId: null, created: false });
+    const sql = query.mock.calls.map((call: unknown[]) => String(call[0]));
+    expect(sql.some((text: string) => text.includes("update app.students"))).toBe(false);
+    expect(
+      sql.some((text: string) => text.includes("with candidates as") && text.includes("from app.leads lead")),
+    ).toBe(false);
+    expect(audit.record).not.toHaveBeenCalled();
+    expect(realtime.emitCrmChanged).not.toHaveBeenCalled();
+  });
+
+  it("throws the exact conflict when Student profile assignment loses its race", async () => {
+    const { service, audit, realtime } = createServiceWithQueryResults([
+      ...automaticProfileRows("+79991234567"),
+      { rows: [] },
+      { rows: [{ id: "student-phone", count: "1" }] },
+      { rows: [{ entity_id: "student-phone" }] },
+      { rows: [] },
+    ]);
+    await expect(
+      service.autoCreateLeadFromChat(actor, "user-conflict"),
+    ).rejects.toMatchObject({
+      name: "ConflictException",
+      message: "Карточка ученика изменилась во время привязки. Повторите попытку.",
+    });
+    expect(audit.record).not.toHaveBeenCalled();
+    expect(realtime.emitCrmChanged).not.toHaveBeenCalled();
+  });
+
+  it("creates an app Lead without taking a phone lock when the profile has no phone", async () => {
+    const { service, query, audit, realtime } = createServiceWithQueryResults(noPhoneLeadRows());
+    await expect(
+      service.autoCreateLeadFromChat(actor, "user-no-phone"),
+    ).resolves.toEqual({ leadId: "lead-new", created: true });
+    expect(
+      query.mock.calls.some((call: unknown[]) =>
+        String((call[1] as unknown[] | undefined)?.[0]).startsWith("lead-phone:"),
+      ),
+    ).toBe(false);
+    const sql = query.mock.calls.map((call: unknown[]) => String(call[0]));
+    expect(sql.some((text: string) => text.includes("with candidates as"))).toBe(false);
+    const link = query.mock.calls.find((call: unknown[]) =>
+      String(call[0]).includes("insert into app.user_crm_links"),
+    );
+    expect(link?.[1]).toEqual(["user-no-phone", "lead-new", null, "manager-a"]);
+    expect(audit.record).toHaveBeenCalledWith({
+      actor,
+      action: "crm.lead_created",
+      entityType: "lead",
+      entityId: "lead-new",
+      metadata: { fromApp: true, userId: "user-no-phone", intakeTrigger: "chat" },
+    });
+    expect(realtime.emitCrmChanged).toHaveBeenCalledWith({ entity: "lead", action: "created", id: "lead-new" });
+  });
+
+  it("commits identity before awaiting audit and delays realtime until audit settles", async () => {
+    const events: string[] = [];
+    const { service, query, transaction, audit, realtime } =
+      createServiceWithQueryResults(noPhoneLeadRows());
+    transaction.mockImplementation(async (work) => {
+      events.push("transaction:start");
+      const result = await work({ query });
+      events.push("transaction:commit");
+      return result;
+    });
+    let resolveAudit!: () => void;
+    let signalAudit!: () => void;
+    const auditStarted = new Promise<void>((resolve) => (signalAudit = resolve));
+    const deferredAudit = new Promise<void>((resolve) => (resolveAudit = resolve));
+    audit.record.mockImplementation(() => {
+      events.push("audit:start");
+      signalAudit();
+      return deferredAudit;
+    });
+    realtime.emitCrmChanged.mockImplementation(() =>
+      events.push("realtime:lead:created"),
+    );
+    const pending = service.autoCreateLeadFromChat(actor, "user-deferred");
+    await auditStarted;
+    expect(events).toEqual(["transaction:start", "transaction:commit", "audit:start"]);
+    expect(realtime.emitCrmChanged).not.toHaveBeenCalled();
+    resolveAudit();
+    await expect(pending).resolves.toEqual({ leadId: "lead-new", created: true });
+    expect(events).toEqual(["transaction:start", "transaction:commit", "audit:start", "realtime:lead:created"]);
+  });
+
+  it("continues realtime publication when post-commit audit fails", async () => {
+    const { service, audit, realtime } = createServiceWithQueryResults(noPhoneLeadRows());
+    audit.record.mockRejectedValueOnce(new Error("audit unavailable"));
+    await expect(
+      service.autoCreateLeadFromChat(actor, "user-audit-failure"),
+    ).resolves.toEqual({ leadId: "lead-new", created: true });
+    expect(audit.record).toHaveBeenCalledTimes(1);
+    expect(audit.record).toHaveBeenCalledWith({
+      actor,
+      action: "crm.lead_created",
+      entityType: "lead",
+      entityId: "lead-new",
+      metadata: { fromApp: true, userId: "user-audit-failure", intakeTrigger: "chat" },
+    });
+    expect(realtime.emitCrmChanged).toHaveBeenCalledWith({ entity: "lead", action: "created", id: "lead-new" });
   });
 
   it("counts app-sourced leads", async () => {
