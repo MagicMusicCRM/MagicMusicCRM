@@ -6,6 +6,9 @@ import { StaffService } from "./staff.service";
 
 describe("StaffService", () => {
   const actor = { userId: "manager-a", role: "manager" as const };
+  const systemActor = { userId: "sys-a", role: "system_admin" as const };
+  // prettier-ignore
+  const updateTarget = { role: "admin", app_role: "admin", profile_user_id: "user-a", email: "staff@example.com", status: "working" };
 
   const createService = (rows: Record<string, unknown>[] = []) => {
     const query = jest.fn().mockResolvedValue({ rows });
@@ -172,6 +175,27 @@ describe("StaffService", () => {
         firstName: "Ольга",
       }),
     ).rejects.toThrow("Недостаточно прав");
+  });
+
+  // prettier-ignore
+  it.each([
+    { name: "rejects a missing staff target", updateActor: systemActor, dto: {}, responses: [[]], error: "Сотрудник не найден.", queryFragments: ["select sm.role"] },
+    { name: "fails closed for an unknown auth role", updateActor: systemActor, dto: {}, responses: [[{ ...updateTarget, app_role: "legacy_admin" }]], error: "Недостаточно прав для редактирования этого сотрудника.", queryFragments: ["select sm.role"] },
+    { name: "routes changed inactive status through offboarding", updateActor: systemActor, dto: { status: "inactive" as const }, responses: [[updateTarget]], error: "Отключение сотрудника выполняется через сценарий offboarding.", queryFragments: ["select sm.role"] },
+    { name: "routes changed archived status through offboarding", updateActor: systemActor, dto: { status: "archived" as const }, responses: [[updateTarget]], error: "Отключение сотрудника выполняется через сценарий offboarding.", queryFragments: ["select sm.role"] },
+    { name: "checks manager branch scope before the write", updateActor: actor, dto: { branchIds: ["branch-denied"] }, responses: [[updateTarget], []], error: "Филиал не входит в область доступа.", queryFragments: ["select sm.role", "from app.user_crm_links"] },
+    { name: "rejects an active write returning no staff row", updateActor: systemActor, dto: { phone: "+79991112233" }, responses: [[updateTarget], []], error: "Сотрудник не найден.", queryFragments: ["select sm.role", "with target as"] },
+  ])("$name", async ({ updateActor, dto, responses, error, queryFragments }) => {
+    const { service, query, audit } = createService();
+    query.mockReset();
+    for (const rows of responses) query.mockResolvedValueOnce({ rows });
+
+    await expect(service.updateStaff(updateActor, "staff-a", dto)).rejects.toThrow(error);
+    expect(query).toHaveBeenCalledTimes(queryFragments.length);
+    queryFragments.forEach((fragment, index) =>
+      expect(String(query.mock.calls[index][0])).toContain(fragment),
+    );
+    expect(audit.record).not.toHaveBeenCalled();
   });
 
   it("updates staff profile and CRM fields, changing the role as system_admin", async () => {
