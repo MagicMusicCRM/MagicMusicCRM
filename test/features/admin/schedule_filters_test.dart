@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
 
 /// Schedule lesson filters (пробные / конфликты / педагог) and the removal of
@@ -110,7 +111,7 @@ Widget _host(Widget child) {
 Future<void> _enterTodayDayView(WidgetTester tester) async {
   final todayDay = DateTime.now().day.toString();
   final todayText = find.byWidgetPredicate(
-    (w) => w is Text && w.data == todayDay && w.style?.color == Colors.white,
+    (w) => w is Text && w.data == todayDay && w.style?.color == AppColor.onGold,
   );
   expect(todayText, findsOneWidget);
   await tester.tap(todayText);

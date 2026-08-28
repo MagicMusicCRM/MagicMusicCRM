@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/features/client/presentation/widgets/upcoming_lessons_list.dart';
 
 void main() {
@@ -33,7 +35,10 @@ void main() {
           ),
           pastLessonsRichProvider.overrideWith((ref) async => const []),
         ],
-        child: const MaterialApp(home: Scaffold(body: UpcomingLessonsList())),
+        child: MaterialApp(
+          theme: AppTheme.production,
+          home: const Scaffold(body: UpcomingLessonsList()),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -41,5 +46,9 @@ void main() {
     expect(find.text('Пробное'), findsOneWidget);
     expect(find.textContaining('Ирина Петрова'), findsOneWidget);
     expect(find.textContaining('Сокол'), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.text('Предстоящие')).style?.color,
+      AppColor.onGold,
+    );
   });
 }

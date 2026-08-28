@@ -102,7 +102,7 @@ class _LeadCard extends ConsumerWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            color: Colors.white,
+                            color: AppColor.text,
                             fontWeight: FontWeight.bold,
                           ),
                         ),

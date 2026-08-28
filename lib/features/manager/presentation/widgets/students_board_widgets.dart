@@ -306,7 +306,7 @@ class _NoBranches extends StatelessWidget {
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.location_off_rounded, size: 42, color: Colors.grey),
+        Icon(Icons.location_off_rounded, size: 42, color: AppColor.text3),
         SizedBox(height: 10),
         Text(
           'Нет филиалов',
@@ -315,7 +315,7 @@ class _NoBranches extends StatelessWidget {
         SizedBox(height: 4),
         Text(
           'Добавьте хотя бы один филиал в настройках.',
-          style: TextStyle(color: Colors.grey),
+          style: TextStyle(color: AppColor.text2),
         ),
       ],
     ),

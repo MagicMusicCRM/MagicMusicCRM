@@ -180,7 +180,7 @@ class _AttentionPanel extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.white.withAlpha(10)),
+          border: Border.all(color: AppColor.borderSoft),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -233,7 +233,7 @@ class _AttentionRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.white.withAlpha(10)),
+            border: Border.all(color: AppColor.borderSoft),
           ),
           child: Row(
             children: [
@@ -295,7 +295,7 @@ class _KpiTile extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.white.withAlpha(10)),
+            border: Border.all(color: AppColor.borderSoft),
           ),
           child: Row(
             children: [

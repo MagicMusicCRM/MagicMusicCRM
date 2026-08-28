@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/students_board_card.dart';
 
 void main() {
@@ -30,6 +31,10 @@ void main() {
     expect(
       (decoration! as BoxDecoration).border,
       Border.all(color: AppTheme.primaryGold, width: 2),
+    );
+    expect(
+      tester.widget<Text>(find.text('Анна Иванова').last).style?.color,
+      AppColor.text,
     );
 
     await gesture.up();
@@ -71,7 +76,7 @@ Future<void> _pumpCard(WidgetTester tester, {required double width}) {
   addTearDown(tester.view.resetPhysicalSize);
   return tester.pumpWidget(
     MaterialApp(
-      theme: ThemeData.dark().copyWith(platform: TargetPlatform.windows),
+      theme: AppTheme.production.copyWith(platform: TargetPlatform.windows),
       home: MediaQuery(
         data: MediaQueryData(size: Size(width, 800)),
         child: Scaffold(

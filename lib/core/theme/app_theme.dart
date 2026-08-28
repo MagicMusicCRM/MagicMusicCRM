@@ -1,51 +1,119 @@
 import 'package:flutter/material.dart';
+
 import 'design_tokens.dart';
-import 'telegram_colors.dart';
 
 class AppTheme {
-  // ── Live presentation aliases; remove after consumers use AppColor. ──────
-  static const Color primaryGold = TelegramColors.primaryGold;
-  static const Color secondaryGold = TelegramColors.secondaryGold;
-  static const Color softGold = TelegramColors.softGold;
-  static const Color bgDark = TelegramColors.darkBg;
-  static const Color surfaceDark = TelegramColors.darkSurface;
-  static const Color cardDark = TelegramColors.darkInputBg;
-  static const Color textPrimary = TelegramColors.darkTextPrimary;
-  static const Color textSecondary = TelegramColors.darkTextSecondary;
-  static const Color success = TelegramColors.success;
-  static const Color danger = TelegramColors.danger;
-  static const Color warning = TelegramColors.warning;
-  static const Color surfaceColor = cardDark;
+  AppTheme._();
 
-  // ── Dark Theme (Telegram-inspired) ─────────────────────────────────────
-  static ThemeData get dark {
-    final theme = ThemeData.dark(useMaterial3: true).copyWith(
-      colorScheme: ColorScheme.dark(
-        primary: TelegramColors.brandGold,
-        secondary: AppColor.actionBlue,
-        tertiary: AppColor.transferCyan,
-        surface: TelegramColors.darkSurface,
-        onPrimary: AppColor.onGold,
-        onSecondary: Colors.white,
-        onSurface: TelegramColors.darkTextPrimary,
-        error: AppColor.danger,
-      ),
-      scaffoldBackgroundColor: TelegramColors.darkBg,
+  // Compatibility aliases while widgets move to AppColor semantic names.
+  static const Color primaryGold = AppColor.gold;
+  static const Color secondaryGold = AppColor.gold2;
+  static const Color softGold = AppColor.goldSoft;
+  static const Color bgDark = AppColor.bg;
+  static const Color surfaceDark = AppColor.surface;
+  static const Color cardDark = AppColor.input;
+  static const Color textPrimary = AppColor.text;
+  static const Color textSecondary = AppColor.text2;
+  static const Color success = AppColor.success;
+  static const Color danger = AppColor.danger;
+  static const Color warning = AppColor.warning;
+  static const Color surfaceColor = AppColor.surface;
+
+  /// The only runtime theme. The name is theme-neutral so new widgets do not
+  /// branch between parallel design systems.
+  static ThemeData get production => light;
+
+  static ThemeData get light {
+    final base = ThemeData.light(useMaterial3: true);
+    final textTheme = base.textTheme
+        .apply(
+          fontFamily: 'Inter',
+          bodyColor: AppColor.text,
+          displayColor: AppColor.text,
+        )
+        .copyWith(
+          titleSmall: base.textTheme.titleSmall?.copyWith(
+            color: AppColor.text2,
+            fontFamily: 'Inter',
+          ),
+          bodySmall: base.textTheme.bodySmall?.copyWith(
+            color: AppColor.text2,
+            fontFamily: 'Inter',
+          ),
+          labelMedium: base.textTheme.labelMedium?.copyWith(
+            color: AppColor.text2,
+            fontFamily: 'Inter',
+          ),
+        );
+
+    const scheme = ColorScheme.light(
+      primary: AppColor.brandSolid,
+      onPrimary: AppColor.onBrand,
+      primaryContainer: AppColor.selectionBg,
+      onPrimaryContainer: AppColor.selectionText,
+      secondary: AppColor.actionBlue,
+      onSecondary: AppPalette.white,
+      secondaryContainer: AppColor.infoSoft,
+      onSecondaryContainer: AppColor.text,
+      tertiary: AppColor.transferCyan,
+      onTertiary: AppPalette.white,
+      surface: AppColor.surface,
+      onSurface: AppColor.text,
+      onSurfaceVariant: AppColor.text2,
+      surfaceContainerLowest: AppColor.surface,
+      surfaceContainerLow: AppColor.surfaceSoft,
+      surfaceContainer: AppColor.surfaceSoft,
+      surfaceContainerHigh: AppColor.surfaceActive,
+      surfaceContainerHighest: AppColor.surfaceActive,
+      surfaceBright: AppColor.surface,
+      surfaceDim: AppColor.surfaceSoft,
+      error: AppColor.danger,
+      onError: AppPalette.white,
+      errorContainer: AppColor.dangerSoft,
+      onErrorContainer: AppColor.danger,
+      outline: AppColor.borderStrong,
+      outlineVariant: AppColor.divider,
+      shadow: Color(0x29302819),
+      scrim: AppColor.scrim,
+      inverseSurface: AppColor.text,
+      onInverseSurface: AppColor.bg,
+      inversePrimary: AppColor.gold2,
+      surfaceTint: Colors.transparent,
+    );
+
+    return base.copyWith(
+      colorScheme: scheme,
+      scaffoldBackgroundColor: AppColor.bg,
+      canvasColor: AppColor.bg,
+      disabledColor: AppColor.disabledText,
+      dividerColor: AppColor.divider,
+      focusColor: AppColor.focus.withValues(alpha: 0.16),
+      hoverColor: AppColor.selectionHover,
+      highlightColor: AppColor.selectionBg,
+      splashColor: AppColor.selectionBg.withValues(alpha: 0.72),
+      iconTheme: const IconThemeData(color: AppColor.text2),
+      primaryIconTheme: const IconThemeData(color: AppColor.text),
+      textTheme: textTheme,
+      primaryTextTheme: textTheme,
       cardTheme: CardThemeData(
-        color: TelegramColors.darkSurface,
+        color: AppColor.surface,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.card),
+          side: const BorderSide(color: AppColor.divider),
         ),
       ),
       appBarTheme: const AppBarTheme(
-        backgroundColor: TelegramColors.darkSurface,
-        foregroundColor: TelegramColors.darkTextPrimary,
+        backgroundColor: AppColor.surface,
+        foregroundColor: AppColor.text,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
         titleTextStyle: TextStyle(
-          color: TelegramColors.darkTextPrimary,
+          color: AppColor.text,
+          fontFamily: 'Inter',
           fontSize: 17,
           fontWeight: FontWeight.w600,
           letterSpacing: -0.2,
@@ -60,55 +128,72 @@ class AppTheme {
         },
       ),
       scrollbarTheme: _scrollbarTheme(
-        thumb: TelegramColors.darkTextSecondary,
-        track: TelegramColors.darkDivider,
+        thumb: AppColor.text3,
+        track: AppColor.surfaceSoft,
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: TelegramColors.darkSurface,
-        selectedItemColor: TelegramColors.brandGold,
-        unselectedItemColor: TelegramColors.darkTextSecondary,
+        backgroundColor: AppColor.surface,
+        selectedItemColor: AppColor.gold,
+        unselectedItemColor: AppColor.text2,
         type: BottomNavigationBarType.fixed,
         elevation: 0,
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: TelegramColors.darkSurface,
-        indicatorColor: TelegramColors.brandGold.withAlpha(34),
+        backgroundColor: AppColor.surface,
+        indicatorColor: AppColor.selectionBg,
         elevation: 0,
         iconTheme: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return const IconThemeData(color: TelegramColors.brandGold);
+            return const IconThemeData(color: AppColor.gold);
           }
-          return const IconThemeData(color: TelegramColors.darkTextSecondary);
+          return const IconThemeData(color: AppColor.text2);
         }),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
             return const TextStyle(
-              color: TelegramColors.brandGold,
+              color: AppColor.selectionText,
+              fontFamily: 'Inter',
               fontWeight: FontWeight.w600,
               fontSize: 12,
             );
           }
           return const TextStyle(
-            color: TelegramColors.darkTextSecondary,
+            color: AppColor.text2,
+            fontFamily: 'Inter',
             fontSize: 12,
           );
         }),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: TelegramColors.darkInputBg,
-        labelStyle: const TextStyle(color: TelegramColors.darkTextSecondary),
-        hintStyle: TextStyle(
-          color: TelegramColors.darkTextSecondary.withAlpha(130),
-        ),
-        prefixIconColor: TelegramColors.darkTextSecondary,
+        fillColor: AppColor.input,
+        labelStyle: const TextStyle(color: AppColor.text2),
+        hintStyle: const TextStyle(color: AppColor.text3),
+        prefixIconColor: AppColor.text2,
+        suffixIconColor: AppColor.text2,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(22),
-          borderSide: BorderSide.none,
+          borderSide: const BorderSide(color: AppColor.borderSoft),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(22),
+          borderSide: const BorderSide(color: AppColor.borderSoft),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(22),
-          borderSide: const BorderSide(color: AppColor.actionBlue, width: 1.5),
+          borderSide: const BorderSide(color: AppColor.focus, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(22),
+          borderSide: const BorderSide(color: AppColor.danger),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(22),
+          borderSide: const BorderSide(color: AppColor.danger, width: 1.5),
+        ),
+        disabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(22),
+          borderSide: const BorderSide(color: AppColor.borderSoft),
         ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
@@ -117,73 +202,78 @@ class AppTheme {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: AppColor.actionBlue,
-          foregroundColor: Colors.white,
+          backgroundColor: AppColor.brandSolid,
+          foregroundColor: AppColor.onBrand,
+          disabledBackgroundColor: AppColor.disabledSurface,
+          disabledForegroundColor: AppColor.disabledText,
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
-          textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+          textStyle: const TextStyle(
+            fontFamily: 'Inter',
+            fontWeight: FontWeight.w600,
+            fontSize: 15,
+          ),
+        ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColor.brandSolid,
+          foregroundColor: AppColor.onBrand,
+          disabledBackgroundColor: AppColor.disabledSurface,
+          disabledForegroundColor: AppColor.disabledText,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColor.text,
+          disabledForegroundColor: AppColor.disabledText,
+          side: const BorderSide(color: AppColor.borderStrong),
+          elevation: 0,
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: AppColor.actionBlue,
+          disabledForegroundColor: AppColor.disabledText,
           elevation: 0,
         ),
       ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(
+          foregroundColor: AppColor.text2,
+          disabledForegroundColor: AppColor.disabledText,
+          highlightColor: AppColor.selectionBg,
+        ),
+      ),
       dividerTheme: const DividerThemeData(
-        color: TelegramColors.darkDivider,
+        color: AppColor.divider,
         thickness: 1,
         space: 0,
       ),
-      textTheme: const TextTheme(
-        headlineLarge: TextStyle(
-          color: TelegramColors.darkTextPrimary,
-          fontWeight: FontWeight.w700,
-        ),
-        headlineMedium: TextStyle(
-          color: TelegramColors.darkTextPrimary,
-          fontWeight: FontWeight.w700,
-        ),
-        headlineSmall: TextStyle(
-          color: TelegramColors.darkTextPrimary,
-          fontWeight: FontWeight.w600,
-        ),
-        titleLarge: TextStyle(
-          color: TelegramColors.darkTextPrimary,
-          fontWeight: FontWeight.w600,
-        ),
-        titleMedium: TextStyle(
-          color: TelegramColors.darkTextPrimary,
-          fontWeight: FontWeight.w500,
-        ),
-        titleSmall: TextStyle(
-          color: TelegramColors.darkTextSecondary,
-          fontWeight: FontWeight.w500,
-        ),
-        bodyLarge: TextStyle(color: TelegramColors.darkTextPrimary),
-        bodyMedium: TextStyle(color: TelegramColors.darkTextPrimary),
-        bodySmall: TextStyle(color: TelegramColors.darkTextSecondary),
-        labelLarge: TextStyle(
-          color: TelegramColors.darkTextPrimary,
-          fontWeight: FontWeight.w600,
-        ),
-        labelMedium: TextStyle(color: TelegramColors.darkTextSecondary),
-      ),
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: TelegramColors.darkSurface,
+        backgroundColor: AppColor.overlay,
         contentTextStyle: const TextStyle(
-          color: TelegramColors.darkTextPrimary,
+          color: AppColor.text,
+          fontFamily: 'Inter',
         ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        actionTextColor: AppColor.actionBlue,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.control),
+          side: const BorderSide(color: AppColor.divider),
+        ),
         behavior: SnackBarBehavior.floating,
         elevation: 0,
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: AppColor.actionBlue,
-        foregroundColor: Colors.white,
+        backgroundColor: AppColor.brandSolid,
+        foregroundColor: AppColor.onBrand,
         shape: CircleBorder(),
         elevation: 0,
         focusElevation: 0,
@@ -192,21 +282,101 @@ class AppTheme {
         highlightElevation: 0,
       ),
       popupMenuTheme: PopupMenuThemeData(
-        color: TelegramColors.darkSurface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        color: AppColor.overlay,
+        surfaceTintColor: Colors.transparent,
+        textStyle: const TextStyle(color: AppColor.menuItemText),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: AppColor.divider),
+        ),
         elevation: 0,
       ),
       dialogTheme: DialogThemeData(
-        backgroundColor: TelegramColors.darkSurface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: AppColor.surface,
+        surfaceTintColor: Colors.transparent,
+        titleTextStyle: textTheme.titleLarge,
+        contentTextStyle: textTheme.bodyMedium,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColor.divider),
+        ),
         elevation: 0,
       ),
-    );
-    return theme.copyWith(
-      textTheme: theme.textTheme.apply(fontFamily: 'Inter'),
-      primaryTextTheme: theme.primaryTextTheme.apply(fontFamily: 'Inter'),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: AppColor.surface,
+        surfaceTintColor: Colors.transparent,
+        modalBackgroundColor: AppColor.surface,
+        modalBarrierColor: AppColor.scrim,
+        elevation: 0,
+        modalElevation: 0,
+      ),
+      chipTheme: base.chipTheme.copyWith(
+        backgroundColor: AppColor.surfaceSoft,
+        selectedColor: AppColor.selectionBg,
+        disabledColor: AppColor.disabledSurface,
+        labelStyle: const TextStyle(color: AppColor.text),
+        secondaryLabelStyle: const TextStyle(color: AppColor.selectionText),
+        side: const BorderSide(color: AppColor.divider),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.chip),
+        ),
+      ),
+      tooltipTheme: TooltipThemeData(
+        decoration: BoxDecoration(
+          color: AppColor.text,
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+        ),
+        textStyle: const TextStyle(color: AppColor.bg, fontFamily: 'Inter'),
+      ),
+      checkboxTheme: CheckboxThemeData(
+        fillColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return AppColor.brandSolid;
+          }
+          return AppColor.surface;
+        }),
+        checkColor: const WidgetStatePropertyAll(AppColor.onBrand),
+        side: const BorderSide(color: AppColor.borderStrong),
+      ),
+      radioTheme: RadioThemeData(
+        fillColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return AppColor.brandSolid;
+          return AppColor.text2;
+        }),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return AppColor.onBrand;
+          return AppColor.text3;
+        }),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return AppColor.brandSolid;
+          return AppColor.divider;
+        }),
+      ),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(
+        color: AppColor.brandSolid,
+        linearTrackColor: AppColor.surfaceSoft,
+        circularTrackColor: AppColor.surfaceSoft,
+      ),
+      listTileTheme: const ListTileThemeData(
+        textColor: AppColor.text,
+        iconColor: AppColor.text2,
+        selectedColor: AppColor.selectionText,
+        selectedTileColor: AppColor.selectionBg,
+      ),
+      textSelectionTheme: const TextSelectionThemeData(
+        cursorColor: AppColor.focus,
+        selectionColor: Color(0x553B73D1),
+        selectionHandleColor: AppColor.focus,
+      ),
     );
   }
+
+  /// Compile-compatible bridge for existing tests and widgets. It resolves to
+  /// the same light ThemeData; there is no dark runtime design system.
+  @Deprecated('Use AppTheme.production')
+  static ThemeData get dark => production;
 
   static ScrollbarThemeData _scrollbarTheme({
     required Color thumb,

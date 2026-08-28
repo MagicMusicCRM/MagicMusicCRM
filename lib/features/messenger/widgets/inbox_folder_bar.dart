@@ -27,15 +27,14 @@ class InboxFolderBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? AppColor.input : const Color(0xFFE8E8EC);
+    const bgColor = AppColor.input;
     final selectedBg = AppColor.gold;
     final selectedFg = AppColor.onGold;
     final unselectedFg = AppColor.text2;
 
     return Container(
       height: 40,
-      color: isDark ? AppColor.surface : const Color(0xFFF2F2F7),
+      color: AppColor.surfaceSoft,
       padding: const EdgeInsets.symmetric(horizontal: AppSpace.md, vertical: 4),
       child: Row(
         children: InboxFolder.values.map((folder) {
@@ -65,14 +64,15 @@ class InboxFolderBar extends StatelessWidget {
                       const SizedBox(width: 4),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           // Badge on selected tab: dark; badge on unselected: gold
                           color: isSelected
                               ? AppColor.onGold.withAlpha(40)
                               : AppColor.gold,
-                          borderRadius:
-                              BorderRadius.circular(AppRadius.icon),
+                          borderRadius: BorderRadius.circular(AppRadius.icon),
                         ),
                         constraints: const BoxConstraints(minWidth: 22),
                         child: Text(

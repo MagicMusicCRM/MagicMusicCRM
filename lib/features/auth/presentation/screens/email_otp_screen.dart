@@ -189,7 +189,7 @@ class _EmailOtpScreenState extends ConsumerState<EmailOtpScreen> {
           gradient: RadialGradient(
             center: Alignment(0.0, -1.0),
             radius: 1.1,
-            colors: [Color(0x1AC5A059), AppColor.bg],
+            colors: [AppColor.selectionBg, AppColor.bg],
             stops: [0.0, 0.6],
           ),
         ),
@@ -352,12 +352,12 @@ class _EmailOtpScreenState extends ConsumerState<EmailOtpScreen> {
       ),
       decoration: BoxDecoration(
         color: AppColor.dangerSoft,
-        border: Border.all(color: const Color(0x52E53935)),
+        border: Border.all(color: AppColor.danger),
         borderRadius: BorderRadius.circular(AppRadius.chip),
       ),
       child: Text(
         message,
-        style: const TextStyle(color: Color(0xFFF4A3A1), fontSize: 12),
+        style: const TextStyle(color: AppColor.danger, fontSize: 12),
       ),
     );
   }

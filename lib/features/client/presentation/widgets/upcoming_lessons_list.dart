@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/lesson_state_badges.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/core/widgets/magic_page_state.dart';
@@ -294,7 +295,7 @@ class _TabButton extends StatelessWidget {
             label,
             style: TextStyle(
               color: isActive
-                  ? Colors.white
+                  ? AppColor.onGold
                   : Theme.of(context).colorScheme.onSurfaceVariant,
               fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
               fontSize: 13,

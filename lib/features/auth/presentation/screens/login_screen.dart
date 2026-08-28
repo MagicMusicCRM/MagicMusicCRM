@@ -120,7 +120,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           gradient: RadialGradient(
             center: Alignment(0.0, -1.0),
             radius: 1.1,
-            colors: [Color(0x1AC5A059), AppColor.bg],
+            colors: [AppColor.selectionBg, AppColor.bg],
             stops: [0.0, 0.6],
           ),
         ),
@@ -230,9 +230,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ),
                             decoration: BoxDecoration(
                               color: AppColor.dangerSoft,
-                              border: Border.all(
-                                color: const Color(0x52E53935),
-                              ),
+                              border: Border.all(color: AppColor.danger),
                               borderRadius: BorderRadius.circular(
                                 AppRadius.chip,
                               ),
@@ -240,7 +238,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             child: Text(
                               _errorMessage!,
                               style: const TextStyle(
-                                color: Color(0xFFF4A3A1),
+                                color: AppColor.danger,
                                 fontSize: 12,
                               ),
                             ),

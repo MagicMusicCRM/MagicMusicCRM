@@ -178,7 +178,7 @@ class _NotificationBellWidgetState
         children: [
           const Icon(
             Icons.notifications_outlined,
-            color: Colors.white,
+            color: AppColor.text2,
             size: 26,
           ),
           if (_unreadCount > 0)

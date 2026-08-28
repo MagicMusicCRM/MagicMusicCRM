@@ -291,8 +291,10 @@ DECISION: Lead loss reason хранит `reason_name_snapshot` и
 
 ## UX
 
-DECISION: Приложение имеет единственную тёмную тему Deep Charcoal &
-Sophisticated Gold. Русский — язык UI; desktop и mobile используют общий
+DECISION: Приложение имеет единственную светлую тему Warm Ivory &
+Sophisticated Gold. Базовый reskin меняет только семантические токены и
+общие primitives; маршруты, компоновка, providers/services, API и RBAC остаются
+без изменений. Русский — язык UI; desktop и mobile используют общий
 канонический navigation/entity contract.
 
 DECISION: Desktop workspace держит subtree каждой открытой вкладки смонтированным

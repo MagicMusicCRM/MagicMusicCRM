@@ -6,6 +6,7 @@ import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
 /// Widget for recording voice messages.
 /// Calls [onVoiceRecorded] with the recorded bytes and duration when done.
@@ -171,7 +172,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        border: Border(top: BorderSide(color: Colors.white10)),
+        border: const Border(top: BorderSide(color: AppColor.divider)),
       ),
       child: SafeArea(
         child: Row(
@@ -238,7 +239,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
                 ),
                 child: IconButton(
                   tooltip: 'Остановить и отправить запись',
-                  icon: const Icon(Icons.send_rounded, color: Colors.white),
+                  icon: const Icon(Icons.send_rounded, color: AppColor.onGold),
                   onPressed: _isRecording ? _stopAndSend : null,
                 ),
               ),

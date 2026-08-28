@@ -89,7 +89,7 @@ class _LegalConsentScreenState extends ConsumerState<LegalConsentScreen> {
           gradient: RadialGradient(
             center: Alignment(0.0, -1.0),
             radius: 1.1,
-            colors: [Color(0x1AC5A059), AppColor.bg],
+            colors: [AppColor.selectionBg, AppColor.bg],
             stops: [0.0, 0.6],
           ),
         ),
@@ -230,12 +230,12 @@ class _LegalConsentScreenState extends ConsumerState<LegalConsentScreen> {
               ),
               decoration: BoxDecoration(
                 color: AppColor.dangerSoft,
-                border: Border.all(color: const Color(0x52E53935)),
+                border: Border.all(color: AppColor.danger),
                 borderRadius: BorderRadius.circular(AppRadius.chip),
               ),
               child: const Text(
                 'Отметьте все три документа, чтобы войти',
-                style: TextStyle(color: Color(0xFFF4A3A1), fontSize: 12),
+                style: TextStyle(color: AppColor.danger, fontSize: 12),
               ),
             ),
           ],
@@ -293,7 +293,7 @@ class _ConsentRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: accepted ? const Color(0x0FC5A059) : AppColor.input,
+      color: accepted ? AppColor.selectionBg : AppColor.input,
       borderRadius: BorderRadius.circular(AppRadius.control),
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadius.control),

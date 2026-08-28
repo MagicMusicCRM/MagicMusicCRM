@@ -227,8 +227,8 @@ class _MagicMusicAppState extends ConsumerState<MagicMusicApp>
       child: MaterialApp.router(
         title: 'MagicMusic',
         debugShowCheckedModeBanner: false,
-        theme: AppTheme.dark,
-        themeMode: ThemeMode.dark,
+        theme: AppTheme.production,
+        themeMode: ThemeMode.light,
         routerConfig: router,
         // #16: every ScaffoldMessenger.of() in the app resolves to this
         // messenger, which strips Flutter 3.41's «action ⇒ persist forever»

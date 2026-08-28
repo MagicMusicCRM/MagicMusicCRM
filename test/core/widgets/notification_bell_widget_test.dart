@@ -5,6 +5,8 @@ import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_presentation_resolver.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/magic_notifications_service.dart';
+import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/notification_bell_widget.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
@@ -52,6 +54,28 @@ class _FakeNotifications implements MagicNotificationsService {
 }
 
 void main() {
+  testWidgets('bell stays visible on the light app bar', (tester) async {
+    final notifications = _FakeNotifications(items: const []);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          magicNotificationsServiceProvider.overrideWithValue(notifications),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.production,
+          home: const Scaffold(body: NotificationBellWidget()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final icon = tester.widget<Icon>(
+      find.byIcon(Icons.notifications_outlined).first,
+    );
+    expect(icon.color, AppColor.text2);
+  });
+
   testWidgets('notification text opens its linked Lead in a desktop tab', (
     tester,
   ) async {

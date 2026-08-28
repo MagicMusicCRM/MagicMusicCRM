@@ -210,11 +210,11 @@ class _UserRolesWidgetState extends ConsumerState<UserRolesWidget> {
                       label: Text(_roleLabels[role] ?? role),
                       labelStyle: TextStyle(
                         color: selected
-                            ? Colors.white
+                            ? color
                             : Theme.of(context).colorScheme.onSurfaceVariant,
                         fontWeight: FontWeight.w600,
                       ),
-                      selectedColor: color,
+                      selectedColor: color.withAlpha(28),
                       backgroundColor: Theme.of(context).colorScheme.surface,
                       side: BorderSide(
                         color: selected

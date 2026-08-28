@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
 
 /// KVA-166 regression coverage for the schedule day view.
@@ -49,58 +50,61 @@ class _FakeScheduleApiClient extends MagicApiClient {
 
     if (path == '/crm/branches') {
       return <String, dynamic>{
-        'items': [
-          {
-            'id': _branchId,
-            'name': 'Главный филиал',
-            'utcOffsetMinutes': 0,
-          },
-        ],
-      } as T;
+            'items': [
+              {
+                'id': _branchId,
+                'name': 'Главный филиал',
+                'utcOffsetMinutes': 0,
+              },
+            ],
+          }
+          as T;
     }
     if (path == '/crm/rooms') {
       return <String, dynamic>{
-        'items': [
-          {'id': _roomId, 'branchId': _branchId, 'name': 'Кабинет 1'},
-        ],
-      } as T;
+            'items': [
+              {'id': _roomId, 'branchId': _branchId, 'name': 'Кабинет 1'},
+            ],
+          }
+          as T;
     }
     if (path == '/crm/schedule/matrix') {
       return <String, dynamic>{
-        'items': [
-          // Lesson A: duration_minutes as a STRING + an assigned room.
-          {
-            'id': 'lesson-string',
-            'studentId': 'student-a',
-            'studentName': 'Анна Стрингова',
-            'teacherId': 'teacher-a',
-            'teacherName': 'Педагог А',
-            'branchId': _branchId,
-            'roomId': _roomId,
-            'roomName': 'Кабинет 1',
-            'scheduledAt': iso,
-            // String — must not collapse the card. Tall enough that all three
-            // text rows fit without a 1px overflow in the narrow test viewport.
-            'durationMinutes': '90',
-            'status': 'scheduled',
-          },
-          // Lesson B: duration_minutes as a DOUBLE + NO room.
-          {
-            'id': 'lesson-double',
-            'studentId': 'student-b',
-            'studentName': 'Борис Даблов',
-            'teacherId': 'teacher-b',
-            'teacherName': 'Педагог Б',
-            'branchId': _branchId,
-            'roomId': null, // No room → «Без аудитории» column.
-            'scheduledAt': iso,
-            'durationMinutes': 90.0, // double — must not collapse the card.
-            'status': 'scheduled',
-          },
-        ],
-        'groups': const [],
-        'conflicts': const [],
-      } as T;
+            'items': [
+              // Lesson A: duration_minutes as a STRING + an assigned room.
+              {
+                'id': 'lesson-string',
+                'studentId': 'student-a',
+                'studentName': 'Анна Стрингова',
+                'teacherId': 'teacher-a',
+                'teacherName': 'Педагог А',
+                'branchId': _branchId,
+                'roomId': _roomId,
+                'roomName': 'Кабинет 1',
+                'scheduledAt': iso,
+                // String — must not collapse the card. Tall enough that all three
+                // text rows fit without a 1px overflow in the narrow test viewport.
+                'durationMinutes': '90',
+                'status': 'scheduled',
+              },
+              // Lesson B: duration_minutes as a DOUBLE + NO room.
+              {
+                'id': 'lesson-double',
+                'studentId': 'student-b',
+                'studentName': 'Борис Даблов',
+                'teacherId': 'teacher-b',
+                'teacherName': 'Педагог Б',
+                'branchId': _branchId,
+                'roomId': null, // No room → «Без аудитории» column.
+                'scheduledAt': iso,
+                'durationMinutes': 90.0, // double — must not collapse the card.
+                'status': 'scheduled',
+              },
+            ],
+            'groups': const [],
+            'conflicts': const [],
+          }
+          as T;
     }
     if (path == '/crm/schedule/month-summary') {
       // Empty so the month cells fall back to the detailed lesson list and the
@@ -124,20 +128,17 @@ Widget _host(Widget child) {
 }
 
 /// Taps today's month cell to switch the schedule into the day (by-room) view.
-/// Today's day-number is the only cell rendered with white text, so we locate
-/// that Text and tap it.
+/// Today's day-number is the only cell rendered with the on-gold foreground,
+/// so we locate that Text and tap it.
 Future<void> _enterTodayDayView(WidgetTester tester) async {
   final todayDay = DateTime.now().day.toString();
   final todayText = find.byWidgetPredicate(
-    (w) =>
-        w is Text &&
-        w.data == todayDay &&
-        w.style?.color == Colors.white,
+    (w) => w is Text && w.data == todayDay && w.style?.color == AppColor.onGold,
   );
   expect(
     todayText,
     findsOneWidget,
-    reason: 'today cell should be uniquely highlighted in white',
+    reason: 'today cell should be uniquely highlighted with on-gold ink',
   );
   await tester.tap(todayText);
   await tester.pumpAndSettle();
@@ -145,21 +146,20 @@ Future<void> _enterTodayDayView(WidgetTester tester) async {
 
 void main() {
   group('KVA-166 schedule day view rendering', () {
-    testWidgets(
-      'lesson with String or double duration_minutes still renders',
-      (tester) async {
-        await tester.pumpWidget(_host(const ScheduleWidget()));
-        await tester.pumpAndSettle();
+    testWidgets('lesson with String or double duration_minutes still renders', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_host(const ScheduleWidget()));
+      await tester.pumpAndSettle();
 
-        await _enterTodayDayView(tester);
+      await _enterTodayDayView(tester);
 
-        // Both cards must be painted — if the cast bug regressed, the String /
-        // double lesson would collapse to SizedBox.shrink and its student name
-        // would be absent.
-        expect(find.text('Анна Стрингова'), findsOneWidget);
-        expect(find.text('Борис Даблов'), findsOneWidget);
-      },
-    );
+      // Both cards must be painted — if the cast bug regressed, the String /
+      // double lesson would collapse to SizedBox.shrink and its student name
+      // would be absent.
+      expect(find.text('Анна Стрингова'), findsOneWidget);
+      expect(find.text('Борис Даблов'), findsOneWidget);
+    });
 
     testWidgets(
       'lesson with no room_id appears in the «Без аудитории» column',

@@ -8,6 +8,7 @@ import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/router/app_router.dart';
 import 'package:magic_music_crm/core/services/notification_service.dart';
+import 'package:magic_music_crm/core/widgets/app_logo.dart';
 import 'package:magic_music_crm/features/auth/data/models/release_gate_models.dart';
 import 'package:magic_music_crm/features/auth/data/services/magic_auth_service.dart';
 import 'package:magic_music_crm/features/auth/data/services/magic_release_gate_service.dart';
@@ -38,14 +39,18 @@ void main() {
       ),
     );
 
-    await _pumpUntilVisible(tester, find.text('Войдите в систему'));
+    await _pumpUntilVisible(tester, find.text('Вход в систему'));
 
-    expect(find.text('MagicMusic CRM'), findsOneWidget);
-    expect(find.text('Электронная почта'), findsOneWidget);
+    final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    expect(app.theme?.brightness, Brightness.light);
+    expect(app.themeMode, ThemeMode.light);
+
+    expect(find.byType(AppLogo), findsOneWidget);
+    expect(find.text('Телефон или почта'), findsOneWidget);
     expect(find.text('Пароль'), findsOneWidget);
     expect(find.text('Войти'), findsOneWidget);
     expect(find.text('Забыли пароль?'), findsOneWidget);
-    expect(find.text('Нет аккаунта? Зарегистрироваться'), findsOneWidget);
+    expect(find.text('Создать аккаунт'), findsOneWidget);
 
     await tester.tap(find.text('Войти'));
     await tester.pumpAndSettle();

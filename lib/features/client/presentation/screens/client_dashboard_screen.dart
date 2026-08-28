@@ -6,6 +6,7 @@ import 'package:magic_music_crm/core/models/payment.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/skeletons.dart';
 import 'package:magic_music_crm/core/widgets/lazy_indexed_stack.dart';
 import 'package:magic_music_crm/core/widgets/magic_page_state.dart';
@@ -232,7 +233,7 @@ class _SegmentButton extends StatelessWidget {
             label,
             style: TextStyle(
               color: isActive
-                  ? Colors.white
+                  ? AppColor.onGold
                   : Theme.of(context).colorScheme.onSurfaceVariant,
               fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
               fontSize: 13,
@@ -325,7 +326,7 @@ class _ClientPaymentsView extends ConsumerWidget {
                   margin: EdgeInsets.zero,
                   child: ListTile(
                     leading: const CircleAvatar(
-                      backgroundColor: Color(0x3322C55E),
+                      backgroundColor: AppColor.successSoft,
                       child: Icon(
                         Icons.payments_rounded,
                         color: AppTheme.success,

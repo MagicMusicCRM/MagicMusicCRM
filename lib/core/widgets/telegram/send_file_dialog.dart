@@ -4,6 +4,7 @@ import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
 /// A Telegram-style dialog for confirming file sending with an optional caption.
 class SendFileDialog extends StatefulWidget {
@@ -309,8 +310,8 @@ class _SendFileDialogState extends State<SendFileDialog> {
               child: ElevatedButton(
                 onPressed: _isSending ? null : _send,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryGold,
-                  foregroundColor: Colors.white,
+                  backgroundColor: AppColor.brandSolid,
+                  foregroundColor: AppColor.onBrand,
                   elevation: 0,
                   minimumSize: const Size(double.infinity, 54),
                   shape: RoundedRectangleBorder(
@@ -323,7 +324,7 @@ class _SendFileDialogState extends State<SendFileDialog> {
                         height: 22,
                         child: CircularProgressIndicator(
                           strokeWidth: 2.5,
-                          color: Colors.white,
+                          color: AppColor.onBrand,
                         ),
                       )
                     : const Text(

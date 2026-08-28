@@ -1,88 +1,82 @@
 import 'package:flutter/material.dart';
 
-/// Retained presentation aliases map to the live Deep Charcoal & Sophisticated
-/// Gold palette and are removed only after their consumers use AppColor directly.
+import 'design_tokens.dart';
+
+/// Compile-compatible aliases for Telegram-style widgets.
+///
+/// Both historical light/dark names resolve to the single production palette.
+/// New widgets must use [AppColor] directly.
 class TelegramColors {
   TelegramColors._();
 
-  // ── Brand ──────────────────────────────────────────────────────────────────
-  static const Color primaryGold = Color(0xFFC9A85E); // Brand gold
-  static const Color secondaryGold = Color(0xFFD6B778); // Soft brand gold
-  static const Color premiumGold = Color(0xFFC9A85E);
-  static const Color softGold = Color(0xFFD6B778);
+  static const Color primaryGold = AppColor.gold;
+  static const Color secondaryGold = AppColor.gold2;
+  static const Color premiumGold = AppColor.gold;
+  static const Color softGold = AppColor.goldSoft;
+  static const Color brandGold = AppColor.gold;
 
-  // Live presentation aliases; remove only after all consumers use AppColor.
-  static const Color brandGold = primaryGold;
+  static const Color actionBlue = AppColor.actionBlue;
+  static const Color transferCyan = AppColor.transferCyan;
+  static const Color infoViolet = AppColor.infoViolet;
 
-  // ── Work accents ───────────────────────────────────────────────────────────
-  static const Color actionBlue = Color(0xFF3B82F6);
-  static const Color transferCyan = Color(0xFF14B8A6);
-  static const Color infoViolet = Color(0xFF8B5CF6);
+  static const Color darkBg = AppColor.bg;
+  static const Color darkSurface = AppColor.surface;
+  static const Color darkChatBg = AppColor.bg;
+  static const Color darkSidebar = AppColor.sidebar;
+  static const Color darkInputBg = AppColor.input;
+  static const Color darkDivider = AppColor.divider;
+  static const Color darkOutgoingBubble = AppColor.brandSolid;
+  static const Color darkIncomingBubble = AppColor.surfaceSoft;
+  static const Color darkTextPrimary = AppColor.text;
+  static const Color darkTextSecondary = AppColor.text2;
+  static const Color darkChatListActive = AppColor.selectionBg;
+  static const Color darkChatListHover = AppColor.selectionHover;
+  static const Color darkUnreadBadge = AppColor.actionBlue;
+  static const Color darkOnlineDot = AppColor.success;
+  static const Color darkMutedBadge = AppColor.borderStrong;
 
-  // ── Dark Theme (MagicMusic Real Style) ─────────────────────────────────────
-  static const Color darkBg = Color(0xFF101114); // App background
-  static const Color darkSurface = Color(0xFF181B20); // Cards/panels
-  static const Color darkChatBg = Color(0xFF101114);
-  static const Color darkSidebar = Color(0xFF14161A);
-  static const Color darkInputBg = Color(0xFF20242B);
-  static const Color darkDivider = Color(0xFF313741);
-  static const Color darkOutgoingBubble =
-      primaryGold; // Brand gold for messages
-  static const Color darkIncomingBubble = Color(0xFF20242B);
-  static const Color darkTextPrimary = Color(0xFFF1F3F5);
-  static const Color darkTextSecondary = Color(0xFFAAB2BF);
-  static const Color darkChatListActive = Color(0xFF20242B);
-  static const Color darkChatListHover = Color(0xFF252A31);
-  static const Color darkUnreadBadge = actionBlue;
-  static const Color darkOnlineDot = Color(0xFF22C55E);
-  static const Color darkMutedBadge = Color(0xFF3A414C);
+  static const Color lightBg = AppColor.bg;
+  static const Color lightSurface = AppColor.surface;
+  static const Color lightChatBg = AppColor.bg;
+  static const Color lightSidebar = AppColor.sidebar;
+  static const Color lightInputBg = AppColor.input;
+  static const Color lightDivider = AppColor.divider;
+  static const Color lightOutgoingBubble = AppColor.brandSolid;
+  static const Color lightIncomingBubble = AppColor.surfaceSoft;
+  static const Color lightTextPrimary = AppColor.text;
+  static const Color lightTextSecondary = AppColor.text2;
+  static const Color lightChatListActive = AppColor.selectionBg;
+  static const Color lightChatListHover = AppColor.selectionHover;
+  static const Color lightUnreadBadge = AppColor.actionBlue;
+  static const Color lightOnlineDot = AppColor.success;
+  static const Color lightMutedBadge = AppColor.borderStrong;
 
-  // ── Light Theme (MagicMusic Real Style) ────────────────────────────────
-  static const Color lightBg = Color(0xFFF4F4F5); // Zinc-100
-  static const Color lightSurface = Color(0xFFFFFFFF);
-  static const Color lightChatBg = Color(0xFFF4F4F5);
-  static const Color lightSidebar = Color(0xFFFFFFFF);
-  static const Color lightInputBg = Color(0xFFF4F4F5);
-  static const Color lightDivider = Color(0xFFE4E4E7);
-  static const Color lightOutgoingBubble = brandGold;
-  static const Color lightIncomingBubble = Color(0xFFFFFFFF);
-  static const Color lightTextPrimary = Color(0xFF18181B); // Zinc-900
-  static const Color lightTextSecondary = Color(0xFF71717A); // Zinc-500
-  static const Color lightChatListActive = Color(0xFFE4E4E7);
-  static const Color lightChatListHover = Color(0xFFF4F4F5);
-  static const Color lightUnreadBadge = actionBlue;
-  static const Color lightOnlineDot = Color(0xFF22C55E);
-  static const Color lightMutedBadge = Color(0xFFA1A1AA);
+  static const Color accent = AppColor.actionBlue;
+  static const Color success = AppColor.success;
+  static const Color danger = AppColor.danger;
+  static const Color warning = AppColor.warning;
+  static const Color link = AppColor.actionBlue;
 
-  // ── Shared Accent ──────────────────────────────────────────────────────────
-  static const Color accent = actionBlue;
-  static const Color success = Color(0xFF22C55E);
-  static const Color danger = Color(0xFFEF4444);
-  static const Color warning = Color(0xFFF59E0B);
-  static const Color link = actionBlue;
-
-  // ── Avatar Gradient Colors (deterministic by user ID) ──────────────────────
+  // Media/avatar colors are intentional decorative exceptions, not UI chrome.
   static const List<List<Color>> avatarGradients = [
-    [Color(0xFFFF512F), Color(0xFFDD2476)], // Crimson / Pink
-    [Color(0xFF4568DC), Color(0xFFB06AB3)], // Indigo / Purple
-    [Color(0xFF3B82F6), Color(0xFF14B8A6)], // Blue / Cyan
-    [Color(0xFF14B8A6), Color(0xFF22C55E)], // Green / Teal
-    [Color(0xFFF09819), Color(0xFFEDDE5D)], // Orange / Yellow
-    [Color(0xFF8E2DE2), Color(0xFF4A00E0)], // Deep Purple
-    [Color(0xFFD31027), Color(0xFFEA384D)], // Red
-    [Color(0xFF000428), Color(0xFF004E92)], // Midnight Blue
-    [Color(0xFF833ab4), Color(0xFFfd1d1d)], // Instagram-like Red/Purple
-    [Color(0xFFf9d423), Color(0xFFff4e50)], // Sunset
-    [Color(0xFFC9A85E), Color(0xFFD6B778)], // Brand Gold (Last)
+    [Color(0xFFFF512F), Color(0xFFDD2476)],
+    [Color(0xFF4568DC), Color(0xFFB06AB3)],
+    [Color(0xFF3B82F6), Color(0xFF14B8A6)],
+    [Color(0xFF14B8A6), Color(0xFF22C55E)],
+    [Color(0xFFF09819), Color(0xFFEDDE5D)],
+    [Color(0xFF8E2DE2), Color(0xFF4A00E0)],
+    [Color(0xFFD31027), Color(0xFFEA384D)],
+    [Color(0xFF000428), Color(0xFF004E92)],
+    [Color(0xFF833AB4), Color(0xFFFD1D1D)],
+    [Color(0xFFF9D423), Color(0xFFFF4E50)],
+    [AppColor.gold, AppColor.gold2],
   ];
 
-  /// Get a deterministic avatar gradient based on a string (user ID).
   static List<Color> avatarGradientFor(String id) {
     final hash = id.hashCode.abs();
     return avatarGradients[hash % avatarGradients.length];
   }
 
-  /// Get initials from a name string.
   static String initialsFrom(String name) {
     final parts = name.trim().split(RegExp(r'\s+'));
     if (parts.isEmpty || parts.first.isEmpty) return '?';

@@ -241,7 +241,7 @@ class ScheduleMonthView extends StatelessWidget {
                       '$day',
                       style: TextStyle(
                         color: isToday
-                            ? Colors.white
+                            ? AppColor.onGold
                             : isCurrentMonth
                             ? AppColor.text
                             : cs.onSurfaceVariant.withAlpha(90),

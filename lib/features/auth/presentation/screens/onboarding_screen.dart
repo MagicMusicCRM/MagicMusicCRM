@@ -155,7 +155,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           gradient: RadialGradient(
             center: Alignment(0.0, -1.0),
             radius: 1.1,
-            colors: [Color(0x1AC5A059), AppColor.bg],
+            colors: [AppColor.selectionBg, AppColor.bg],
             stops: [0.0, 0.6],
           ),
         ),
@@ -190,11 +190,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             height: 92,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(26),
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFF2A2418), Color(0xFF1D1A12)],
-              ),
+              color: AppColor.surfaceActive,
               border: Border.all(color: AppColor.goldLine),
             ),
             child: Icon(slide.icon, color: AppColor.gold, size: 40),

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/telegram_colors.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/telegram/avatar_widget.dart';
 import 'package:magic_music_crm/core/services/chat_attachment_service.dart';
 import 'package:magic_music_crm/core/widgets/avatar_cropper_dialog.dart';
@@ -281,21 +282,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final surfaceColor = isDark
         ? TelegramColors.darkSurface
         : TelegramColors.lightSurface;
-    final textColor = isDark ? Colors.white : Colors.black;
-    final secondaryTextColor = isDark
-        ? TelegramColors.darkTextSecondary
-        : TelegramColors.lightTextSecondary;
-
-    final checkmarkIcon = _isSaving
-        ? const SizedBox(
-            width: 24,
-            height: 24,
-            child: CircularProgressIndicator(
-              color: Colors.white,
-              strokeWidth: 2,
-            ),
-          )
-        : const Icon(Icons.check);
+    const textColor = AppColor.text;
+    const secondaryTextColor = AppColor.text2;
 
     return Scaffold(
       backgroundColor: backgroundColor,
@@ -313,7 +301,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         actions: [
           if (!isDesktop && _hasChanges) ...[
             IconButton(
-              icon: checkmarkIcon,
+              icon: _isSaving
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        color: AppColor.brandSolid,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Icon(Icons.check),
               onPressed: _isSaving ? null : _saveChanges,
               tooltip: 'Сохранить',
             ),
@@ -323,9 +320,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       floatingActionButton: (isDesktop && _hasChanges)
           ? FloatingActionButton(
               tooltip: 'Сохранить',
-              backgroundColor: AppTheme.primaryGold,
+              backgroundColor: AppColor.brandSolid,
+              foregroundColor: AppColor.onBrand,
               onPressed: _isSaving ? null : _saveChanges,
-              child: checkmarkIcon,
+              child: _isSaving
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        color: AppColor.onBrand,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Icon(Icons.check),
             )
           : null,
       body: SafeArea(
@@ -405,11 +412,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       textColor: textColor,
                       hintColor: secondaryTextColor,
                     ),
-                    Divider(
-                      height: 1,
-                      color: isDark ? Colors.white10 : Colors.black12,
-                      indent: 16,
-                    ),
+                    Divider(height: 1, color: AppColor.divider, indent: 16),
                     _buildTelegramTextField(
                       controller: _lastNameController,
                       label: 'Фамилия (необязательно)',
@@ -458,11 +461,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         },
                       ),
                     ),
-                    Divider(
-                      height: 1,
-                      color: isDark ? Colors.white10 : Colors.black12,
-                      indent: 16,
-                    ),
+                    Divider(height: 1, color: AppColor.divider, indent: 16),
                     _buildTelegramTextField(
                       controller: TextEditingController(
                         text: _roleLabel(_role),
@@ -502,7 +501,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         ? 'Не указано'
                         : _dobController.text,
                   ),
-                  trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                    color: AppColor.text3,
+                  ),
                   onTap: _selectDate,
                 ),
               ),
@@ -521,15 +523,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       subtitle: const Text('Пароль и код из письма'),
                       trailing: const Icon(
                         Icons.chevron_right,
-                        color: Colors.grey,
+                        color: AppColor.text3,
                       ),
                       onTap: () => context.push('/auth-methods'),
                     ),
-                    Divider(
-                      height: 1,
-                      color: isDark ? Colors.white10 : Colors.black12,
-                      indent: 16,
-                    ),
+                    Divider(height: 1, color: AppColor.divider, indent: 16),
                     ListTile(
                       leading: const Icon(Icons.description_outlined),
                       title: const Text('Юридические документы'),
@@ -538,15 +536,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ),
                       trailing: const Icon(
                         Icons.chevron_right,
-                        color: Colors.grey,
+                        color: AppColor.text3,
                       ),
                       onTap: () => context.push('/legal-documents'),
                     ),
-                    Divider(
-                      height: 1,
-                      color: isDark ? Colors.white10 : Colors.black12,
-                      indent: 16,
-                    ),
+                    Divider(height: 1, color: AppColor.divider, indent: 16),
                     ListTile(
                       leading: const Icon(
                         Icons.delete_forever_outlined,
@@ -559,7 +553,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       subtitle: const Text('Отправить запрос на удаление'),
                       trailing: const Icon(
                         Icons.chevron_right,
-                        color: Colors.grey,
+                        color: AppColor.text3,
                       ),
                       onTap: () => context.push('/delete-account'),
                     ),
