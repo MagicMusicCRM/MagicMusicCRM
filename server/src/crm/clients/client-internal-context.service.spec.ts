@@ -12,39 +12,33 @@ const actor = (role: Role): HistoryArguments[0] => ({
 
 const ref: HistoryArguments[1] = { type: "student", id: "student-a" };
 
-const actionEntries = [
-  ["crm.lead_converted", "Лид конвертирован в ученика"],
-  ["crm.subscription_purchased", "Абонемент куплен"],
-  ["crm.subscription_issued", "Абонемент выдан"],
-  ["crm.subscription_replaced", "Абонемент заменён"],
-  ["crm.subscription_cancelled", "Абонемент отменён"],
-  ["crm.payment_record_created", "Оплата добавлена"],
-  ["crm.payment_record_transitioned", "Статус оплаты изменён"],
-  [
-    "crm.installment_payment_due",
-    "Срок платежа рассрочки наступил — требуется проверка",
-  ],
-  ["crm.payment_reversed", "Оплата удалена из обычного учёта"],
-  ["crm.payment_adjustment_recorded", "Возврат или корректировка"],
-  ["crm.lesson_rescheduled", "Занятие перенесено"],
-  ["crm.lesson_cancelled", "Занятие отменено"],
-  ["crm.lesson_settled", "Занятие рассчитано"],
-  ["crm.lessons_bulk_transitioned", "Занятия изменены"],
-  ["crm.schedule_plan_ended", "Постоянное расписание завершено"],
-  ["crm.client_internal_note_changed", "Общая заметка изменена"],
-  ["crm.comment_created", "Комментарий добавлен"],
-  [
-    "crm.comment_teacher_sharing_changed",
-    "Видимость комментария изменена",
-  ],
-  ["workflow.shared_task_created", "Задача создана"],
-  ["workflow.shared_task_updated", "Задача изменена"],
-  ["workflow.shared_task_closed", "Задача закрыта"],
-  ["crm.client_blacklisted", "Клиент добавлен в чёрный список"],
-  ["crm.client_unblacklisted", "Клиент убран из чёрного списка"],
-] as const;
+const actionLabels = {
+  "crm.lead_converted": "Лид конвертирован в ученика",
+  "crm.subscription_purchased": "Абонемент куплен",
+  "crm.subscription_issued": "Абонемент выдан",
+  "crm.subscription_replaced": "Абонемент заменён",
+  "crm.subscription_cancelled": "Абонемент отменён",
+  "crm.payment_record_created": "Оплата добавлена",
+  "crm.payment_record_transitioned": "Статус оплаты изменён",
+  "crm.installment_payment_due": "Срок платежа рассрочки наступил — требуется проверка",
+  "crm.payment_reversed": "Оплата удалена из обычного учёта",
+  "crm.payment_adjustment_recorded": "Возврат или корректировка",
+  "crm.lesson_rescheduled": "Занятие перенесено",
+  "crm.lesson_cancelled": "Занятие отменено",
+  "crm.lesson_settled": "Занятие рассчитано",
+  "crm.lessons_bulk_transitioned": "Занятия изменены",
+  "crm.schedule_plan_ended": "Постоянное расписание завершено",
+  "crm.client_internal_note_changed": "Общая заметка изменена",
+  "crm.comment_created": "Комментарий добавлен",
+  "crm.comment_teacher_sharing_changed": "Видимость комментария изменена",
+  "workflow.shared_task_created": "Задача создана",
+  "workflow.shared_task_updated": "Задача изменена",
+  "workflow.shared_task_closed": "Задача закрыта",
+  "crm.client_blacklisted": "Клиент добавлен в чёрный список",
+  "crm.client_unblacklisted": "Клиент убран из чёрного списка",
+} as const;
 
-const historyActions = actionEntries.map(([action]) => action);
+const historyActions = Object.keys(actionLabels);
 
 const historyRow = (overrides: Record<string, unknown> = {}) => ({
   id: "event-a",
@@ -62,12 +56,8 @@ const historyRow = (overrides: Record<string, unknown> = {}) => ({
 const createService = (rows: Record<string, unknown>[] = []) => {
   const query = jest.fn().mockResolvedValue({ rows });
   const resolve = jest.fn().mockResolvedValue(ref);
-  const dependencies = [
-    { query },
-    { resolve },
-    {},
-    {},
-  ] as unknown as ConstructorParameters<typeof ClientInternalContextService>;
+  const dependencies = [{ query }, { resolve }, {}, {}] as unknown as
+    ConstructorParameters<typeof ClientInternalContextService>;
   const service = new ClientInternalContextService(...dependencies);
   return { service, query, resolve };
 };
@@ -84,11 +74,8 @@ describe("ClientInternalContextService operational history", () => {
         name: "ForbiddenException",
         message: "Внутренняя информация клиента недоступна.",
         status: 403,
-        response: {
-          message: "Внутренняя информация клиента недоступна.",
-          error: "Forbidden",
-          statusCode: 403,
-        },
+        response: { message: "Внутренняя информация клиента недоступна.",
+          error: "Forbidden", statusCode: 403 },
       });
       expect(resolve).not.toHaveBeenCalled();
       expect(query).not.toHaveBeenCalled();
@@ -143,9 +130,9 @@ describe("ClientInternalContextService operational history", () => {
     expect(sql).toContain("(audit.created_at, audit.id) <");
 
     const exact = createService(rows.slice(0, 2));
-    await expect(
-      exact.service.listOperationalHistory(actor("manager"), ref, { limit: 2 }),
-    ).resolves.toMatchObject({ nextCursor: null });
+    const exactResult = await exact.service.listOperationalHistory(
+      actor("manager"), ref, { limit: 2 });
+    expect(exactResult.nextCursor).toBeNull();
   });
 
   it("keeps the default and capped query limits exact", async () => {
@@ -174,8 +161,8 @@ describe("ClientInternalContextService operational history", () => {
 
   it("preserves every action label and the unknown-action fallback", async () => {
     const entries = [
-      ...actionEntries,
-      ["unknown.action", "Действие с клиентом"] as const,
+      ...Object.entries(actionLabels),
+      ["unknown.action", "Действие с клиентом"],
     ];
     const rows = entries.map(([actionKey], index) =>
       historyRow({ id: `event-${index}`, action: actionKey }),
@@ -271,24 +258,17 @@ describe("ClientInternalContextService operational history", () => {
       historyRow({ id: "unpaid", metadata: { targetStatus: "unpaid" } }),
       historyRow({ id: "custom", metadata: { targetStatus: "review" } }),
       historyRow({
-        id: "status-wins",
-        action: "crm.client_internal_note_changed",
+        id: "status-wins", action: "crm.client_internal_note_changed",
         metadata: { targetStatus: "paid" },
-        before_ref: { version: 3 },
-        after_ref: { version: 4 },
+        before_ref: { version: 3 }, after_ref: { version: 4 },
       }),
       historyRow({
-        id: "note",
-        action: "crm.client_internal_note_changed",
-        before_ref: { version: 3 },
-        after_ref: { version: 4 },
+        id: "note", action: "crm.client_internal_note_changed",
+        before_ref: { version: 3 }, after_ref: { version: 4 },
       }),
       historyRow({
-        id: "note-missing",
-        action: "crm.client_internal_note_changed",
-        metadata: { targetStatus: 0 },
-        before_ref: {},
-        after_ref: {},
+        id: "note-missing", action: "crm.client_internal_note_changed",
+        metadata: { targetStatus: 0 }, before_ref: {}, after_ref: {},
       }),
       historyRow({
         id: "shared",
