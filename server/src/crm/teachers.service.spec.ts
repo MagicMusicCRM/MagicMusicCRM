@@ -292,6 +292,82 @@ describe("TeachersService", () => {
       expect(items[0]).not.toHaveProperty("lessonsCount");
       expect(items[0]).not.toHaveProperty("createdAt");
     });
+
+    it("omits every undefined guarded field and retains inverse null fields", async () => {
+      const { service } = createService([
+        {
+          id: "teacher-inverse-sparse",
+          status: "active",
+          specialization: null,
+          profile_id: null,
+          profile_user_id: null,
+          first_name: null,
+          last_name: null,
+          phone: null,
+          custom_data: undefined,
+          app_role: undefined,
+          is_app_account: undefined,
+          branches: undefined,
+          students_count: undefined,
+          lessons_count: null,
+          rating: undefined,
+          created_at: null,
+          salary: undefined,
+          current_rate: undefined,
+          disciplines: undefined,
+          assigned_branches: undefined,
+        },
+      ]);
+
+      const { items } = await service.listTeachers(actor, { limit: 1 });
+      const teacher = items[0]!;
+      const guardedKeys = [
+        "customData",
+        "appRole",
+        "isAppAccount",
+        "branches",
+        "studentsCount",
+        "lessonsCount",
+        "rating",
+        "createdAt",
+        "salary",
+        "currentRate",
+        "disciplines",
+        "assignedBranches",
+      ];
+
+      expect(Object.keys(teacher).filter((key) => guardedKeys.includes(key))).toEqual([
+        "lessonsCount",
+        "createdAt",
+      ]);
+      expect({
+        lessonsCount: teacher.lessonsCount,
+        createdAt: teacher.createdAt,
+      }).toStrictEqual({ lessonsCount: 0, createdAt: null });
+    });
+
+    it.each([
+      ["invalid numeric string", "not-a-number", NaN],
+      ["negative-zero string", "-0", -0],
+    ] as const)("coerces version from %s through Number", async (_label, version, expected) => {
+      const { service } = createService([
+        {
+          id: "teacher-version",
+          status: "active",
+          specialization: null,
+          profile_id: null,
+          profile_user_id: null,
+          first_name: null,
+          last_name: null,
+          phone: null,
+          version,
+        },
+      ]);
+
+      const { items } = await service.listTeachers(actor, { limit: 1 });
+
+      expect(items[0]?.version).toBe(expected);
+    });
   });
 
   describe("getTeacher", () => {
