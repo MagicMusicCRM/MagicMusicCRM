@@ -8,6 +8,7 @@ import 'package:magic_music_crm/core/providers/crm_navigation_provider.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/services/section_unseen_service.dart';
 import 'package:magic_music_crm/core/workspace/desktop_workspace_shell.dart';
+import 'package:magic_music_crm/core/workspace/magic_context_bar.dart';
 import 'package:magic_music_crm/core/workspace/production_workspace_host.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
@@ -24,6 +25,36 @@ void main() {
     accessVersion: 1,
     capabilities: {'crm.client.read.basic'},
     scopes: {},
+  );
+
+  testWidgets(
+    'desktop section root omits the redundant history and title bar',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(1200, 800);
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            accountWorkspaceStoreProvider.overrideWithValue(
+              AccountWorkspaceStore(InMemoryWorkspaceKeyValueStore()),
+            ),
+          ],
+          child: MaterialApp(
+            home: ProductionWorkspaceHost(
+              snapshot: snapshot,
+              tabBuilder: (_, tab) => const Text('Корневой экран'),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(MagicContextBar), findsNothing);
+      expect(find.byType(ResponsiveNavigationShell), findsOneWidget);
+      expect(find.text('Корневой экран'), findsOneWidget);
+    },
   );
 
   testWidgets('desktop production content inherits the Material body style', (
@@ -920,9 +951,14 @@ Future<void> _expectDirtyDecisionGuard(
   oldController.push(oldTabId, _studentLink('old-client'));
   oldController.registerForm(oldTabId, 'editor');
   oldController.updateForm(oldTabId, 'editor', dirty: true);
+  oldController.open(
+    _studentLink('second-tab'),
+    titleHint: 'Вторая вкладка',
+    explicitNew: true,
+  );
   await tester.pump();
 
-  await tester.tap(find.byKey(const ValueKey('context-back')));
+  await tester.tap(find.byKey(ValueKey('workspace-tab-close-$oldTabId')));
   await tester.pump();
   expect(find.text('Сохранить изменения?'), findsOneWidget);
 

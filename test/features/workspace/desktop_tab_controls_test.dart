@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/navigation/entity_link.dart';
 import 'package:magic_music_crm/core/navigation/entity_presentation_resolver.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/workspace/desktop_workspace_shell.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 import 'package:magic_music_crm/core/workspace/workspace_store.dart';
@@ -151,6 +152,36 @@ void main() {
     await tester.pumpAndSettle();
     expect(workspace.state.tabs, hasLength(3));
     expect(workspace.state.tabs.any((tab) => tab.tabId == clientTab), isFalse);
+  });
+
+  testWidgets('active desktop tab uses one rounded warm surface', (
+    tester,
+  ) async {
+    final workspace = controller();
+    final activeTab = workspace.state.activeTabId;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: DesktopWorkspaceShell(
+            controller: workspace,
+            tabBuilder: (context, tab) => Text(tab.titleHint),
+          ),
+        ),
+      ),
+    );
+
+    final strip = tester.widget<Material>(
+      find.byKey(const ValueKey('workspace-tab-strip')),
+    );
+    final surface = tester.widget<Container>(
+      find.byKey(ValueKey('workspace-tab-surface-$activeTab')),
+    );
+    final decoration = surface.decoration! as BoxDecoration;
+
+    expect(strip.color, AppColor.sidebar);
+    expect(decoration.color, AppColor.surface);
+    expect(decoration.borderRadius, BorderRadius.circular(AppRadius.control));
+    expect(decoration.border, isNotNull);
   });
 
   testWidgets('narrow tab strip scrolls without arrows or a visible bar', (

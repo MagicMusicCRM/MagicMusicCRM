@@ -67,55 +67,64 @@ class _AppVersionButtonState extends State<AppVersionButton> {
         return Semantics(
           button: true,
           label: description,
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              key: const ValueKey('app-version-button'),
+          child: SizedBox(
+            width: 68,
+            height: 48,
+            child: Material(
+              color: Colors.transparent,
               borderRadius: BorderRadius.circular(AppRadius.control),
-              onTap: widget.onPressed,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Container(
-                    width: 62,
-                    constraints: const BoxConstraints(minHeight: 34),
-                    alignment: Alignment.center,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpace.xs,
-                      vertical: AppSpace.xs,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColor.sidebar.withAlpha(242),
-                      border: Border.all(color: AppColor.divider),
-                      borderRadius: BorderRadius.circular(AppRadius.control),
-                    ),
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColor.text2,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                key: const ValueKey('app-version-button'),
+                borderRadius: BorderRadius.circular(AppRadius.control),
+                hoverColor: AppColor.goldSoft,
+                highlightColor: AppColor.goldSoft,
+                onTap: widget.onPressed,
+                child: Stack(
+                  children: [
+                    Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.info_outline_rounded,
+                            size: 18,
+                            color: AppColor.text2,
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppColor.text2,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                  if (widget.hasUpdate)
-                    Positioned(
-                      key: const ValueKey('app-version-update-dot'),
-                      top: -3,
-                      right: -3,
-                      child: Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: AppColor.gold,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: AppColor.sidebar, width: 2),
+                    if (widget.hasUpdate)
+                      Positioned(
+                        key: const ValueKey('app-version-update-dot'),
+                        top: 6,
+                        right: 15,
+                        child: Container(
+                          width: 7,
+                          height: 7,
+                          decoration: BoxDecoration(
+                            color: AppColor.gold2,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: AppColor.sidebar,
+                              width: 1.5,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

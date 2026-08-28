@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/navigation/responsive_navigation_shell.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
 /// Behaviour + layout coverage for the responsive navigation shell. Visual
 /// fidelity needs on-device review, but this locks: correct destinations,
@@ -53,6 +54,37 @@ void main() {
     await tester.tap(find.text('Раздел 3'));
     expect(tapped, 3);
   });
+
+  testWidgets(
+    'selected desktop destination uses the shared selection surface',
+    (tester) async {
+      await tester.pumpWidget(
+        desktopHost(
+          ResponsiveNavigationShell(
+            isDesktop: true,
+            destinations: destinations(3),
+            selectedIndex: 0,
+            onSelected: (_) {},
+          ),
+        ),
+      );
+
+      final selectedItem = find
+          .byWidgetPredicate(
+            (widget) => widget.runtimeType.toString() == '_RailItem',
+          )
+          .first;
+      final selectedSurface = tester.widget<Container>(
+        find
+            .descendant(of: selectedItem, matching: find.byType(Container))
+            .first,
+      );
+      final decoration = selectedSurface.decoration! as BoxDecoration;
+
+      expect(decoration.color, AppColor.selectionBg);
+      expect(decoration.borderRadius, BorderRadius.circular(AppRadius.control));
+    },
+  );
 
   testWidgets('phone bar with <=5 destinations shows all, no «Ещё»', (
     tester,

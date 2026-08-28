@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/navigation/app_back_policy.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/navigation/responsive_navigation_shell.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/workspace/desktop_workspace_shell.dart';
 import 'package:magic_music_crm/core/workspace/magic_context_bar.dart';
 import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
@@ -123,20 +124,44 @@ class ProductionWorkspaceView extends StatelessWidget {
         if (tab.tabId == controller.state.activeTabId) {
           onTabVisible(tab, isDesktop: true);
         }
-        final content = _sectionContent(context, tab, isDesktop: true);
+        final content = tabBuilder(context, tab);
+        final navigation = navigationFor(tab, isDesktop: true);
+        final shell = ResponsiveNavigationShell(
+          isDesktop: true,
+          destinations: navigation.destinations,
+          selectedIndex: navigation.selectedIndex,
+          onSelected: (index) =>
+              onSectionSelected(navigation.sectionTabs[index]),
+        );
         final location = locationFor(tab);
-        if (location == null) return content;
-        return Column(
+        final entityId = tab.currentRoute.link.entityId;
+        final isWorkspaceRoot =
+            tab.routeStack.length == 1 &&
+            (entityId == '__section__' || entityId == 'home');
+        final showContextBar = location != null && !isWorkspaceRoot;
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            MagicContextBar(
-              controller: controller,
-              tab: tab,
-              location: location,
-              currentTitle: tab.titleHint,
-              onBack: () => unawaited(onBack(tab)),
-              onNavigate: (node) => unawaited(onNavigate(tab, node)),
+            Material(color: AppColor.sidebar, child: shell),
+            Expanded(
+              child: ColoredBox(
+                color: AppColor.surfaceSoft,
+                child: Column(
+                  children: [
+                    if (showContextBar)
+                      MagicContextBar(
+                        controller: controller,
+                        tab: tab,
+                        location: location,
+                        currentTitle: tab.titleHint,
+                        onBack: () => unawaited(onBack(tab)),
+                        onNavigate: (node) => unawaited(onNavigate(tab, node)),
+                      ),
+                    Expanded(child: content),
+                  ],
+                ),
+              ),
             ),
-            Expanded(child: content),
           ],
         );
       },
@@ -144,33 +169,6 @@ class ProductionWorkspaceView extends StatelessWidget {
       resolveDirty: resolveDirty,
       saveDirty: saveDirty,
       discardDirty: discardDirty,
-    );
-  }
-
-  Widget _sectionContent(
-    BuildContext context,
-    WorkspaceTabState tab, {
-    required bool isDesktop,
-  }) {
-    final navigation = navigationFor(tab, isDesktop: isDesktop);
-    final shell = ResponsiveNavigationShell(
-      isDesktop: isDesktop,
-      destinations: navigation.destinations,
-      selectedIndex: navigation.selectedIndex,
-      onSelected: (index) => onSectionSelected(navigation.sectionTabs[index]),
-    );
-    if (!isDesktop) {
-      return Scaffold(
-        body: tabBuilder(context, tab),
-        bottomNavigationBar: shell,
-      );
-    }
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Material(child: shell),
-        Expanded(child: tabBuilder(context, tab)),
-      ],
     );
   }
 }

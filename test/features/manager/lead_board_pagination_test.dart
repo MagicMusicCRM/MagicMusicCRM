@@ -8,6 +8,7 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/services/crm_realtime_provider.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/features/auth/data/models/release_gate_models.dart';
 import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/leads_widget.dart';
@@ -269,6 +270,23 @@ void main() {
       expect(find.text('B two'), findsOneWidget);
       expect(find.text('U two'), findsOneWidget);
       expect(find.text('Кампания: Август'), findsOneWidget);
+
+      final firstColumn = find
+          .byWidgetPredicate(
+            (widget) => widget.runtimeType.toString() == '_KanbanColumn',
+          )
+          .first;
+      final columnSurface = tester.widget<AnimatedContainer>(
+        find
+            .descendant(
+              of: firstColumn,
+              matching: find.byType(AnimatedContainer),
+            )
+            .first,
+      );
+      final columnDecoration = columnSurface.decoration! as BoxDecoration;
+      expect(columnDecoration.color, AppColor.bg);
+      expect((columnDecoration.border! as Border).top.color, AppColor.divider);
 
       await tester.tap(find.byType(PopupMenuButton<String>).first);
       await tester.pumpAndSettle();

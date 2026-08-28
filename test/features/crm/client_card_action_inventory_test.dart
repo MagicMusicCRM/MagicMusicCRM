@@ -58,6 +58,48 @@ void main() {
       findsOneWidget,
     );
     expect(
+      find.byKey(const Key('client-section-jump-documents')),
+      findsNothing,
+    );
+    const orderedSections = [
+      'overview',
+      'contacts',
+      'lessons',
+      'subscriptions',
+      'progress',
+      'payments',
+      'history_tasks',
+    ];
+    final tops = [
+      for (final section in orderedSections)
+        tester.getTopLeft(find.byKey(Key('client-section-jump-$section'))).dy,
+    ];
+    expect(tops, orderedEquals([...tops]..sort()));
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('client-section-jump-contacts')),
+        matching: find.text('Контакты'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('→ Контакты'), findsNothing);
+
+    for (final section in const ['history_tasks', 'contacts']) {
+      await tester.tap(find.byKey(Key('client-section-jump-$section')));
+      await tester.pumpAndSettle();
+      final target = find.byKey(Key('client-desktop-section-$section'));
+      expect(target, findsOneWidget);
+      expect(
+        tester
+            .getRect(target)
+            .overlaps(
+              tester.getRect(find.byKey(const Key('client-desktop-canvas'))),
+            ),
+        isTrue,
+        reason: section,
+      );
+    }
+    expect(
       find.byKey(const Key('subscription-add'), skipOffstage: false),
       findsOneWidget,
     );

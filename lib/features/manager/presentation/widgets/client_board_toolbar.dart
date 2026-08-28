@@ -41,38 +41,52 @@ class ClientBoardToolbar extends StatelessWidget {
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 10),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 240,
-                  child: TextField(
-                    key: searchKey,
-                    controller: searchController,
-                    decoration: InputDecoration(
-                      isDense: true,
-                      prefixIcon: const Icon(Icons.search_rounded, size: 18),
-                      hintText: searchHint,
-                      suffixIcon: searchController.text.isEmpty
-                          ? null
-                          : IconButton(
-                              tooltip: 'Очистить поиск',
-                              icon: const Icon(Icons.close_rounded, size: 18),
-                              onPressed: onClearSearch,
-                            ),
-                    ),
-                    onChanged: onSearchChanged,
-                    onSubmitted: onSearchSubmitted,
-                  ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 520;
+              final search = TextField(
+                key: searchKey,
+                controller: searchController,
+                decoration: InputDecoration(
+                  isDense: true,
+                  filled: true,
+                  fillColor: AppColor.bg,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                  prefixIcon: const Icon(Icons.search_rounded, size: 18),
+                  hintText: searchHint,
+                  suffixIcon: searchController.text.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: 'Очистить поиск',
+                          icon: const Icon(Icons.close_rounded, size: 18),
+                          onPressed: onClearSearch,
+                        ),
                 ),
-                const SizedBox(width: 8),
-                _ClientBoardFiltersButton(
-                  activeCount: activeFilterCount,
-                  onPressed: onFiltersPressed,
-                ),
-              ],
-            ),
+                onChanged: onSearchChanged,
+                onSubmitted: onSearchSubmitted,
+              );
+              final filters = _ClientBoardFiltersButton(
+                activeCount: activeFilterCount,
+                onPressed: onFiltersPressed,
+              );
+              if (compact) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    search,
+                    const SizedBox(height: 8),
+                    Align(alignment: Alignment.centerLeft, child: filters),
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  SizedBox(width: 320, child: search),
+                  const SizedBox(width: 8),
+                  filters,
+                ],
+              );
+            },
           ),
           ?inlineFilters,
           if (searching)
@@ -116,12 +130,18 @@ class _ClientBoardFiltersButton extends StatelessWidget {
     final hasActive = activeCount > 0;
     return OutlinedButton.icon(
       onPressed: onPressed,
-      style: hasActive
-          ? OutlinedButton.styleFrom(
-              foregroundColor: AppColor.gold,
-              side: const BorderSide(color: AppColor.goldLine),
-            )
-          : null,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: hasActive ? AppColor.selectionText : AppColor.text,
+        backgroundColor: hasActive ? AppColor.selectionBg : AppColor.bg,
+        minimumSize: const Size(0, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        side: BorderSide(
+          color: hasActive ? AppColor.selectionBorder : AppColor.borderStrong,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.control),
+        ),
+      ),
       icon: const Icon(Icons.tune_rounded, size: 18),
       label: Row(
         mainAxisSize: MainAxisSize.min,

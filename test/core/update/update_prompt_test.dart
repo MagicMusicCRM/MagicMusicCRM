@@ -76,6 +76,36 @@ void main() {
     },
   );
 
+  testWidgets('desktop version action is centered inside the 76px rail', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1280, 720);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final navigatorKey = GlobalKey<NavigatorState>();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: navigatorKey,
+        home: WindowsUpdateOverlay(
+          navigatorKey: navigatorKey,
+          manifest: null,
+          onVersionPressed: _noop,
+          child: const Scaffold(body: Text('CRM')),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final rect = tester.getRect(
+      find.byKey(const ValueKey('app-version-button')),
+    );
+    expect(rect.left, 4);
+    expect(rect.right, 72);
+    expect(rect.bottom, 716);
+  });
+
   testWidgets(
     'helper launch failure closes progress and shows recoverable error',
     (tester) async {

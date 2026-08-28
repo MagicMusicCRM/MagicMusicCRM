@@ -156,9 +156,14 @@ class _WorkspaceTabStripState extends State<_WorkspaceTabStrip> {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Theme.of(context).colorScheme.surfaceContainer,
-      child: SizedBox(
-        height: 48,
+      key: const ValueKey('workspace-tab-strip'),
+      color: AppColor.sidebar,
+      child: Container(
+        height: 52,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+        decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: AppColor.divider)),
+        ),
         child: ScrollConfiguration(
           behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
           child: ReorderableListView.builder(
@@ -167,17 +172,28 @@ class _WorkspaceTabStripState extends State<_WorkspaceTabStrip> {
             buildDefaultDragHandles: false,
             itemCount: widget.state.tabs.length,
             onReorder: widget.controller.reorderTab,
-            footer: IconButton(
-              key: const ValueKey('workspace-new-tab'),
-              tooltip: 'Новая вкладка',
-              onPressed: () {
-                try {
-                  widget.controller.duplicateTab(widget.state.activeTabId);
-                } on WorkspaceLimitReached {
-                  widget.onLimitReached?.call();
-                }
-              },
-              icon: const Icon(Icons.add_rounded),
+            footer: Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: IconButton(
+                key: const ValueKey('workspace-new-tab'),
+                tooltip: 'Новая вкладка',
+                style: IconButton.styleFrom(
+                  foregroundColor: AppColor.text2,
+                  minimumSize: const Size.square(38),
+                  maximumSize: const Size.square(38),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.control),
+                  ),
+                ),
+                onPressed: () {
+                  try {
+                    widget.controller.duplicateTab(widget.state.activeTabId);
+                  } on WorkspaceLimitReached {
+                    widget.onLimitReached?.call();
+                  }
+                },
+                icon: const Icon(Icons.add_rounded),
+              ),
             ),
             itemBuilder: (context, index) {
               final tab = widget.state.tabs[index];
@@ -219,9 +235,16 @@ class _WorkspaceTabButton extends StatelessWidget {
       selected: selected,
       button: true,
       child: Container(
-        color: selected
-            ? AppColor.gold.withValues(alpha: 0.12)
-            : Colors.transparent,
+        key: ValueKey('workspace-tab-surface-${tab.tabId}'),
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        decoration: BoxDecoration(
+          color: selected ? AppColor.surface : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppRadius.control),
+          border: Border.all(
+            color: selected ? AppColor.borderSoft : Colors.transparent,
+          ),
+          boxShadow: selected ? AppShadow.sh1 : null,
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -230,6 +253,14 @@ class _WorkspaceTabButton extends StatelessWidget {
               child: TextButton(
                 key: ValueKey('workspace-tab-select-${tab.tabId}'),
                 onPressed: onPressed,
+                style: TextButton.styleFrom(
+                  foregroundColor: selected ? AppColor.text : AppColor.text2,
+                  minimumSize: const Size(0, 38),
+                  padding: const EdgeInsets.fromLTRB(12, 0, 6, 0),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.control),
+                  ),
+                ),
                 child: Text(tab.titleHint),
               ),
             ),
@@ -238,6 +269,14 @@ class _WorkspaceTabButton extends StatelessWidget {
               tooltip: 'Закрыть вкладку',
               visualDensity: VisualDensity.compact,
               iconSize: 17,
+              color: selected ? AppColor.text2 : AppColor.text3,
+              style: IconButton.styleFrom(
+                minimumSize: const Size.square(34),
+                maximumSize: const Size.square(34),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.icon),
+                ),
+              ),
               onPressed: onClose,
               icon: const Icon(Icons.close_rounded),
             ),

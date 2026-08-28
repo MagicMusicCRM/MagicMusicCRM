@@ -308,15 +308,14 @@ extension _ClientCardPresentation on _ClientCardState {
               ],
             ),
           ),
-          IconButton(
-            tooltip: widget.routed ? 'Назад' : 'Закрыть форму',
-            onPressed: _handleClose,
-            icon: Icon(
-              widget.routed ? Icons.arrow_back_rounded : Icons.close_rounded,
+          if (!widget.routed)
+            IconButton(
+              tooltip: 'Закрыть форму',
+              onPressed: _handleClose,
+              icon: const Icon(Icons.close_rounded),
+              iconSize: 20,
+              color: cs.onSurfaceVariant,
             ),
-            iconSize: 20,
-            color: cs.onSurfaceVariant,
-          ),
         ],
       ),
     );

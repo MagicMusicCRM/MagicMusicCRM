@@ -48,23 +48,6 @@ class MagicContextBar extends StatelessWidget {
         ),
         child: Row(
           children: [
-            _HistoryButton(
-              key: const ValueKey('context-back'),
-              tooltip: 'Назад',
-              icon: Icons.arrow_back,
-              enabled: tab.routeStack.length > 1,
-              onPressed: onBack ?? () => controller.back(tab.tabId),
-            ),
-            _HistoryButton(
-              key: const ValueKey('context-forward'),
-              tooltip: 'Вперёд',
-              icon: Icons.arrow_forward,
-              enabled: tab.forwardStack.isNotEmpty,
-              onPressed: () => controller.forward(tab.tabId),
-            ),
-            const SizedBox(width: AppSpace.xs),
-            const VerticalDivider(width: 1, color: AppColor.divider),
-            const SizedBox(width: AppSpace.sm),
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) => _BreadcrumbTrail(
@@ -84,32 +67,6 @@ class MagicContextBar extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _HistoryButton extends StatelessWidget {
-  const _HistoryButton({
-    required super.key,
-    required this.tooltip,
-    required this.icon,
-    required this.enabled,
-    required this.onPressed,
-  });
-
-  final String tooltip;
-  final IconData icon;
-  final bool enabled;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      tooltip: tooltip,
-      iconSize: 19,
-      visualDensity: VisualDensity.compact,
-      onPressed: enabled ? onPressed : null,
-      icon: Icon(icon),
     );
   }
 }

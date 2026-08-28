@@ -42,6 +42,19 @@ void main() {
       find.byKey(const ValueKey('windows-update-indicator')),
       findsNothing,
     );
+
+    final button = find.byKey(const ValueKey('app-version-button'));
+    expect(tester.getSize(button), const Size(68, 48));
+    expect(find.byIcon(Icons.info_outline_rounded), findsOneWidget);
+    final ink = tester.widget<InkWell>(button);
+    expect(ink.borderRadius, BorderRadius.circular(10));
+
+    final buttonRect = tester.getRect(button);
+    final dotRect = tester.getRect(
+      find.byKey(const ValueKey('app-version-update-dot')),
+    );
+    expect(dotRect.top, greaterThanOrEqualTo(buttonRect.top));
+    expect(dotRect.right, lessThanOrEqualTo(buttonRect.right));
   });
 
   testWidgets('version button opens full update history and manual check', (
