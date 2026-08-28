@@ -442,26 +442,29 @@ describe("SubscriptionLifecycleRepository replacement context mapping", () => {
       });
     });
 
-    it("rejects an invalid reservation date with RangeError", async () => {
-      const { repository } = createRepository([
-        replacementRow({
-          reserved_rows: [
-            {
-              reservationId: "reservation-invalid",
-              lessonId: "lesson-invalid",
-              scheduledAt: "not-a-date",
-              units: "1",
-            },
-          ],
-        }),
-      ]);
+    it.each(["not-a-date", "", undefined])(
+      "rejects invalid reservation date %p with RangeError",
+      async (scheduledAt) => {
+        const { repository } = createRepository([
+          replacementRow({
+            reserved_rows: [
+              {
+                reservationId: "reservation-invalid",
+                lessonId: "lesson-invalid",
+                scheduledAt,
+                units: "1",
+              },
+            ],
+          }),
+        ]);
 
-      await expect(
-        repository.readReplacementContext(
-          issuedSubscriptionId,
-          newPackageId,
-        ),
-      ).rejects.toBeInstanceOf(RangeError);
-    });
+        await expect(
+          repository.readReplacementContext(
+            issuedSubscriptionId,
+            newPackageId,
+          ),
+        ).rejects.toBeInstanceOf(RangeError);
+      },
+    );
   });
 });
