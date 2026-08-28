@@ -33,6 +33,9 @@ const FINGERPRINT_A =
   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const FINGERPRINT_B =
   "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const UPPERCASE_UUID = "ABCDEFAB-CDEF-4ABC-ADEF-ABCDEFABCDEF";
+const ASCII_32_BYTE_SECRET = "12345678901234567890123456789012";
+const MULTIBYTE_32_BYTE_SECRET = "я".repeat(16);
 
 type Payload = Record<string, unknown>;
 type InvalidKind = keyof typeof INVALID_VALUES;
@@ -44,6 +47,19 @@ interface FamilyCase {
   fields: ReadonlyArray<readonly [field: string, invalidKind: InvalidKind]>;
   sign: (payload: unknown) => string;
   verify: (token: string, nowSeconds: number) => unknown;
+}
+
+type AcceptedAlternativeCase = readonly [
+  label: string,
+  family: FamilyCase,
+  field: string,
+  value: unknown,
+];
+
+interface PayloadRejectionCase {
+  label: string;
+  family: FamilyCase;
+  payload: unknown;
 }
 
 const INVALID_VALUES = {
@@ -446,6 +462,76 @@ const FAMILIES: readonly FamilyCase[] = [
   },
 ];
 
+const ACCEPTED_ALTERNATIVES: readonly AcceptedAlternativeCase[] = [
+  ["subscription replacement positionKind=debt", FAMILIES[0]!, "positionKind", "debt"],
+  ["subscription replacement positionKind=overpayment", FAMILIES[0]!, "positionKind", "overpayment"],
+  ["subscription replacement positionKind=settled", FAMILIES[0]!, "positionKind", "settled"],
+  ["subscription cancellation fundingMode=personal_account", FAMILIES[1]!, "fundingMode", "personal_account"],
+  ["subscription cancellation fundingMode=installment", FAMILIES[1]!, "fundingMode", "installment"],
+  ["subscription cancellation fundingMode=legacy", FAMILIES[1]!, "fundingMode", "legacy"],
+  ["subscription purchase fundingMode=personal_account", FAMILIES[2]!, "fundingMode", "personal_account"],
+  ["subscription purchase fundingMode=installment", FAMILIES[2]!, "fundingMode", "installment"],
+  ["payment reversal status=unpaid", FAMILIES[3]!, "status", "unpaid"],
+  ["payment reversal status=posted_pending", FAMILIES[3]!, "status", "posted_pending"],
+  ["payment reversal status=paid", FAMILIES[3]!, "status", "paid"],
+  ["payment correction oldStatus=unpaid", FAMILIES[4]!, "oldStatus", "unpaid"],
+  ["payment correction oldStatus=posted_pending", FAMILIES[4]!, "oldStatus", "posted_pending"],
+  ["payment correction oldStatus=paid", FAMILIES[4]!, "oldStatus", "paid"],
+  ["payment correction status=unpaid", FAMILIES[4]!, "status", "unpaid"],
+  ["payment correction status=posted_pending", FAMILIES[4]!, "status", "posted_pending"],
+  ["payment correction status=paid", FAMILIES[4]!, "status", "paid"],
+  ["payment correction method=null", FAMILIES[4]!, "method", null],
+  ["payment correction method=cash", FAMILIES[4]!, "method", "cash"],
+  ["payment correction method=cashless", FAMILIES[4]!, "method", "cashless"],
+  ["lesson transition operation=reschedule", FAMILIES[6]!, "operation", "reschedule"],
+  ["lesson transition operation=cancel", FAMILIES[6]!, "operation", "cancel"],
+  ["lesson transition operation=settle", FAMILIES[6]!, "operation", "settle"],
+  ["lesson transition operation=bulk", FAMILIES[6]!, "operation", "bulk"],
+  ["lesson transition operation=correct", FAMILIES[6]!, "operation", "correct"],
+  ["lesson transition operation=planned-settlement", FAMILIES[6]!, "operation", "planned-settlement"],
+  ["subscription purchase recipientBranchId=null", FAMILIES[2]!, "recipientBranchId", null],
+  ["subscription purchase recipientBranchId=uuid", FAMILIES[2]!, "recipientBranchId", UUID_6],
+  ["subscription purchase payerBranchId=null", FAMILIES[2]!, "payerBranchId", null],
+  ["subscription purchase payerBranchId=uuid", FAMILIES[2]!, "payerBranchId", UUID_6],
+  ["payment reversal actualPaymentId=null", FAMILIES[3]!, "actualPaymentId", null],
+  ["payment reversal actualPaymentId=uuid", FAMILIES[3]!, "actualPaymentId", UUID_5],
+  ["payment reversal issuedSubscriptionId=null", FAMILIES[3]!, "issuedSubscriptionId", null],
+  ["payment reversal issuedSubscriptionId=uuid", FAMILIES[3]!, "issuedSubscriptionId", UUID_5],
+  ["payment correction oldActualPaymentId=null", FAMILIES[4]!, "oldActualPaymentId", null],
+  ["payment correction oldActualPaymentId=uuid", FAMILIES[4]!, "oldActualPaymentId", UUID_5],
+  ["payment correction issuedSubscriptionId=null", FAMILIES[4]!, "issuedSubscriptionId", null],
+  ["payment correction issuedSubscriptionId=uuid", FAMILIES[4]!, "issuedSubscriptionId", UUID_5],
+  ["payment correction installmentId=null", FAMILIES[4]!, "installmentId", null],
+  ["payment correction installmentId=uuid", FAMILIES[4]!, "installmentId", UUID_6],
+  ["payment correction dueAt=null", FAMILIES[4]!, "dueAt", null],
+  ["payment correction dueAt=empty-string", FAMILIES[4]!, "dueAt", ""],
+  ["payment correction externalIdentifier=null", FAMILIES[4]!, "externalIdentifier", null],
+  ["payment correction externalIdentifier=empty-string", FAMILIES[4]!, "externalIdentifier", ""],
+  ["payment correction occurredAt=null", FAMILIES[4]!, "occurredAt", null],
+  ["payment correction occurredAt=empty-string", FAMILIES[4]!, "occurredAt", ""],
+  ["payment correction branchId=null", FAMILIES[4]!, "branchId", null],
+  ["payment correction branchId=uuid", FAMILIES[4]!, "branchId", UUID_6],
+  ["payment correction verificationNote=null", FAMILIES[4]!, "verificationNote", null],
+  ["payment correction verificationNote=empty-string", FAMILIES[4]!, "verificationNote", ""],
+  ["uppercase UUID", FAMILIES[0]!, "actorUserId", UPPERCASE_UUID],
+  ["zero units", FAMILIES[0]!, "usedUnits", "0"],
+  ["positive integer boundary one", FAMILIES[0]!, "expectedVersion", 1],
+  ["positive timestamp boundary one", FAMILIES[0]!, "issuedAtSeconds", 1],
+  ["alternate uppercase currency", FAMILIES[0]!, "currencyCode", "USD"],
+  ["numeric fingerprint", FAMILIES[0]!, "reservationPlanFingerprint", "0".repeat(64)],
+  ["zero unsigned minor", FAMILIES[0]!, "oldFinalMinor", "0"],
+  ["positive nonzero adjustment amount", FAMILIES[5]!, "amountMinor", "1"],
+  ["negative nonzero adjustment amount", FAMILIES[5]!, "amountMinor", "-1"],
+  ["maximum safe positive integer", FAMILIES[0]!, "expectedVersion", Number.MAX_SAFE_INTEGER],
+  ["maximum safe nonnegative integer", FAMILIES[0]!, "reservedLessonCount", Number.MAX_SAFE_INTEGER],
+  ["UUID version 1 variant 9", FAMILIES[0]!, "actorUserId", "abcdefab-cdef-1abc-9def-abcdefabcdef"],
+  ["UUID version 2 variant b", FAMILIES[0]!, "actorUserId", "abcdefab-cdef-2abc-bdef-abcdefabcdef"],
+  ["UUID version 3 variant 8", FAMILIES[0]!, "actorUserId", "abcdefab-cdef-3abc-8def-abcdefabcdef"],
+  ["UUID version 5 variant b", FAMILIES[0]!, "actorUserId", "abcdefab-cdef-5abc-bdef-abcdefabcdef"],
+  ["zero units with one decimal", FAMILIES[0]!, "usedUnits", "0.0"],
+  ["zero units with two decimals", FAMILIES[0]!, "usedUnits", "0.00"],
+];
+
 const GOLDENS: Readonly<Record<string, string>> = {
   "subscription replacement":
     "v1.eyJraW5kIjoic3Vic2NyaXB0aW9uLnJlcGxhY2UiLCJhY3RvclVzZXJJZCI6IjEwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMSIsInN0dWRlbnRJZCI6IjEwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMiIsInBheWVyU3R1ZGVudElkIjoiMTAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAzIiwiaXNzdWVkU3Vic2NyaXB0aW9uSWQiOiIxMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDQiLCJleHBlY3RlZFZlcnNpb24iOjMsIm5ld1BhY2thZ2VJZCI6IjEwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwNSIsIm5ld1BhY2thZ2VWZXJzaW9uIjo0LCJjdXJyZW5jeUNvZGUiOiJSVUIiLCJ1c2VkVW5pdHMiOiIxLjI1IiwicmVzZXJ2ZWRMZXNzb25Db3VudCI6MiwicmVzZXJ2ZWRVbml0cyI6IjIuNSIsInRyYW5zZmVyYWJsZVJlc2VydmF0aW9uQ291bnQiOjEsInRyYW5zZmVyYWJsZVJlc2VydmF0aW9uVW5pdHMiOiIxLjI1IiwicmVsZWFzZWRSZXNlcnZhdGlvbkNvdW50IjoxLCJyZWxlYXNlZFJlc2VydmF0aW9uVW5pdHMiOiIxLjI1IiwicmVzZXJ2YXRpb25QbGFuRmluZ2VycHJpbnQiOiJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwiZnV0dXJlTGVzc29uQ291bnQiOjMsImZ1dHVyZVVuaXRzIjoiMy43NSIsIm9sZEZpbmFsTWlub3IiOiIxMDAwMCIsIm5ld0ZpbmFsTWlub3IiOiIxMjAwMCIsImFjdHVhbFBhaWRNaW5vciI6IjkwMDAiLCJkZWx0YU1pbm9yIjoiLTAiLCJwb3NpdGlvbktpbmQiOiJkZWJ0IiwicG9zaXRpb25NaW5vciI6IjMwMDAiLCJpc3N1ZWRBdFNlY29uZHMiOjE4MDAwMDAwMDAsImV4cGlyZXNBdFNlY29uZHMiOjE4MDAwMDAzMDB9.KQUVuYlKNgiA3SFTOUWPqeiAHVV7Vcq9DV4F_ha_LTk",
@@ -478,6 +564,7 @@ function without(payload: Payload, field: string): Payload {
 function expectTokenError(
   run: () => unknown,
   code: "PREVIEW_TOKEN_INVALID" | "PREVIEW_TOKEN_EXPIRED",
+  label = `expected ${code}`,
 ): void {
   let caught: unknown;
   try {
@@ -485,22 +572,78 @@ function expectTokenError(
   } catch (error) {
     caught = error;
   }
-  expect(caught).toBeInstanceOf(SubscriptionPreviewTokenError);
-  const error = caught as SubscriptionPreviewTokenError;
-  expect({ name: error.name, message: error.message, code: error.code }).toEqual(
-    {
-      name: "SubscriptionPreviewTokenError",
-      message: code,
-      code,
-    },
+  expect({
+    label,
+    isSubscriptionPreviewTokenError:
+      caught instanceof SubscriptionPreviewTokenError,
+    name: caught instanceof Error ? caught.name : undefined,
+    message: caught instanceof Error ? caught.message : undefined,
+    code: (caught as { code?: unknown } | undefined)?.code,
+  }).toEqual({
+    label,
+    isSubscriptionPreviewTokenError: true,
+    name: "SubscriptionPreviewTokenError",
+    message: code,
+    code,
+  });
+}
+
+function rejectionValueLabel(value: unknown): string {
+  if (typeof value === "number") {
+    if (Number.isNaN(value)) return "number:NaN";
+    if (value === Number.POSITIVE_INFINITY) return "number:Infinity";
+    if (value === Number.NEGATIVE_INFINITY) return "number:-Infinity";
+  }
+  if (Array.isArray(value)) return `array:${JSON.stringify(value)}`;
+  return `${value === null ? "null" : typeof value}:${JSON.stringify(value)}`;
+}
+
+function buildInvalidPayloadScenarios(): PayloadRejectionCase[] {
+  const scenarios: PayloadRejectionCase[] = [];
+  for (const family of FAMILIES) {
+    for (const [field, invalidKind] of family.fields) {
+      scenarios.push({
+        label: `${family.name} missing field=${field}`,
+        family,
+        payload: without(family.fixture, field),
+      });
+      INVALID_VALUES[invalidKind].forEach((value, index) => {
+        scenarios.push({
+          label: `${family.name} invalid field=${field} value[${index}]=${rejectionValueLabel(value)}`,
+          family,
+          payload: changed(family.fixture, field, value),
+        });
+      });
+    }
+  }
+  return scenarios;
+}
+
+function buildUndefinedPayloadScenarios(): PayloadRejectionCase[] {
+  return FAMILIES.flatMap((family) =>
+    family.fields.map(([field]) => ({
+      label: `${family.name} own-present undefined field=${field}`,
+      family,
+      payload: changed(family.fixture, field, undefined),
+    })),
   );
 }
+
+const INVALID_PAYLOAD_SCENARIOS = buildInvalidPayloadScenarios();
+const UNDEFINED_PAYLOAD_SCENARIOS = buildUndefinedPayloadScenarios();
 
 function tokenForBody(domain: string, body: string): string {
   const signature = createHmac("sha256", SECRET)
     .update(`${domain}.${body}`)
     .digest("base64url");
   return `v1.${body}.${signature}`;
+}
+
+function exactBoundaryToken(family: FamilyCase): string {
+  const json = JSON.stringify(family.fixture);
+  const paddedJson = `${json}${" ".repeat(12_252 - Buffer.byteLength(json))}`;
+  const canonicalBody = Buffer.from(paddedJson, "utf8").toString("base64url");
+  return tokenForBody(family.domain, `${canonicalBody}A`);
 }
 
 function validationReadCount(kind: InvalidKind, value: unknown): number {
@@ -555,6 +698,19 @@ describe("subscription preview token public codec", () => {
     },
   );
 
+  it.each(ACCEPTED_ALTERNATIVES)(
+    "%s signs and verifies",
+    (_label, family, field, value) => {
+      const payload = changed(family.fixture, field, value);
+      const token = family.sign(payload);
+      expect(family.verify(token, NOW)).toEqual(payload);
+    },
+  );
+
+  it("covers the complete literal accepted-alternatives table", () => {
+    expect(ACCEPTED_ALTERNATIVES).toHaveLength(67);
+  });
+
   it("covers every fixture key with an explicit invalid-value family", () => {
     for (const family of FAMILIES) {
       expect(family.fields.map(([field]) => field)).toEqual(
@@ -563,25 +719,34 @@ describe("subscription preview token public codec", () => {
     }
   });
 
-  it("rejects every missing key and representative invalid field value", () => {
-    let scenarios = 0;
-    for (const family of FAMILIES) {
-      for (const [field, invalidKind] of family.fields) {
-        expectTokenError(
-          () => family.sign(without(family.fixture, field)),
-          "PREVIEW_TOKEN_INVALID",
-        );
-        scenarios += 1;
-        for (const invalidValue of INVALID_VALUES[invalidKind]) {
-          expectTokenError(
-            () => family.sign(changed(family.fixture, field, invalidValue)),
-            "PREVIEW_TOKEN_INVALID",
-          );
-          scenarios += 1;
-        }
-      }
-    }
-    expect(scenarios).toBe(955);
+  it.each(INVALID_PAYLOAD_SCENARIOS)("$label", ({ label, family, payload }) => {
+    expectTokenError(
+      () => family.sign(payload),
+      "PREVIEW_TOKEN_INVALID",
+      label,
+    );
+  });
+
+  it("keeps the labeled invalid corpus at 955 scenarios", () => {
+    expect(INVALID_PAYLOAD_SCENARIOS).toHaveLength(955);
+  });
+
+  it.each(UNDEFINED_PAYLOAD_SCENARIOS)(
+    "$label",
+    ({ label, family, payload }) => {
+      expectTokenError(
+        () => family.sign(payload),
+        "PREVIEW_TOKEN_INVALID",
+        label,
+      );
+    },
+  );
+
+  it("covers own-present undefined for all 136 live fixture keys", () => {
+    expect(FAMILIES.map((family) => family.fields.length)).toEqual([
+      27, 25, 17, 15, 24, 12, 8, 8,
+    ]);
+    expect(UNDEFINED_PAYLOAD_SCENARIOS).toHaveLength(136);
   });
 
   it.each(FAMILIES)("$name rejects extra enumerable keys", (family) => {
@@ -833,21 +998,76 @@ describe("subscription preview token public codec", () => {
     }
   });
 
-  it("keeps codec and secret errors exact", () => {
+  it.each([
+    ["wrong token version", "v2.body.signature"],
+    ["two token parts", "v1.body"],
+    ["four token parts", "v1.body.signature.extra"],
+    ["42-character signature", `v1.body.${"a".repeat(42)}`],
+    ["43-character invalid-alphabet signature", `v1.body.${"a".repeat(42)}*`],
+    ["over-limit 16385-character token", "x".repeat(16_385)],
+    [
+      "correctly signed invalid JSON body",
+      tokenForBody(
+        FAMILIES[0]!.domain,
+        Buffer.from("{", "utf8").toString("base64url"),
+      ),
+    ],
+    [
+      "correctly signed valid JSON invalid payload",
+      tokenForBody(
+        FAMILIES[0]!.domain,
+        Buffer.from('{"kind":"subscription.replace"}', "utf8").toString(
+          "base64url",
+        ),
+      ),
+    ],
+  ] as const)("rejects %s", (label, token) => {
     const family = FAMILIES[0]!;
-    expectTokenError(() => family.verify("v2.body.signature", NOW), "PREVIEW_TOKEN_INVALID");
-    expectTokenError(() => family.verify(`v1.body.${"a".repeat(42)}`, NOW), "PREVIEW_TOKEN_INVALID");
-    expectTokenError(() => family.verify("x".repeat(16_385), NOW), "PREVIEW_TOKEN_INVALID");
-    const invalidJsonBody = Buffer.from("{", "utf8").toString("base64url");
     expectTokenError(
-      () => family.verify(tokenForBody(family.domain, invalidJsonBody), NOW),
+      () => family.verify(token, NOW),
       "PREVIEW_TOKEN_INVALID",
+      label,
     );
+  });
 
-    expect(() =>
-      signSubscriptionReplacePreview("short", family.fixture as never),
-    ).toThrow(
-      new Error("Subscription preview token secret must be at least 32 bytes."),
+  it("accepts a valid token at the exact 16384-character boundary", () => {
+    const family = FAMILIES[0]!;
+    const token = exactBoundaryToken(family);
+    expect(token).toHaveLength(16_384);
+    expect(family.verify(token, NOW)).toEqual(family.fixture);
+  });
+
+  it.each([
+    ["exact 32-byte ASCII secret", ASCII_32_BYTE_SECRET],
+    ["exact 32-byte multibyte UTF-8 secret", MULTIBYTE_32_BYTE_SECRET],
+  ] as const)("signs and verifies with %s", (_label, secret) => {
+    const family = FAMILIES[0]!;
+    const token = signSubscriptionReplacePreview(
+      secret,
+      family.fixture as never,
     );
+    expect(verifySubscriptionReplacePreview(secret, token, NOW)).toEqual(
+      family.fixture,
+    );
+  });
+
+  it.each([
+    ["31-byte ASCII secret", "x".repeat(31)],
+    ["31-byte multibyte UTF-8 secret", `${"я".repeat(15)}a`],
+  ] as const)("rejects %s", (_label, secret) => {
+    const family = FAMILIES[0]!;
+    const token = family.sign(family.fixture);
+    const error = new Error(
+      "Subscription preview token secret must be at least 32 bytes.",
+    );
+    expect(() =>
+      signSubscriptionReplacePreview(
+        secret,
+        family.fixture as never,
+      ),
+    ).toThrow(error);
+    expect(() =>
+      verifySubscriptionReplacePreview(secret, token, NOW),
+    ).toThrow(error);
   });
 });
