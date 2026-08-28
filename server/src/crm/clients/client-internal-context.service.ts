@@ -391,39 +391,68 @@ export class ClientInternalContextService {
     const metadata = row.metadata ?? {};
     const before = row.before_ref ?? {};
     const after = row.after_ref ?? {};
-    const status = metadata["targetStatus"];
-    const rawMetadataReason =
-      typeof metadata["reason"] === "string" ? metadata["reason"].trim() : "";
-    const metadataReason = /^\[(?:PRIVATE|PII|REDACTED)\]$/.test(
-      rawMetadataReason,
-    )
-      ? ""
-      : rawMetadataReason;
-    const summary = status
-      ? `Новый статус: ${this.paymentStatusLabel(String(status))}`
-      : row.action === "crm.client_internal_note_changed"
-        ? `Версия ${before["version"] ?? 0} → ${after["version"] ?? "—"}`
-        : row.action === "crm.comment_teacher_sharing_changed"
-          ? after["sharedWithTeacher"] === true
-            ? "Опубликован преподавателю"
-            : "Скрыт от преподавателя"
-          : row.action === "crm.lessons_bulk_transitioned"
-            ? `Изменено занятий: ${Array.isArray(before["items"]) ? before["items"].length : 0}`
-            : null;
+    const metadataReason = this.sanitizedMetadataReason(metadata);
+    const summary = this.historySummary(row.action, metadata, before, after);
+    const reason = this.historyReason(row, metadataReason, after);
     return {
       id: row.id,
       actionKey: row.action,
       action: ACTION_LABELS[row.action] ?? "Действие с клиентом",
-      reason:
-        row.reason_text?.trim() ||
-        metadataReason ||
-        this.defaultHistoryReason(row.action, after) ||
-        row.reason ||
-        "Причина не указана",
+      reason,
       summary,
       actorName: row.actor_name,
       occurredAt: row.created_at,
     };
+  }
+
+  private sanitizedMetadataReason(metadata: Record<string, unknown>) {
+    const value = metadata["reason"];
+    if (typeof value !== "string") return "";
+    const reason = value.trim();
+    return /^\[(?:PRIVATE|PII|REDACTED)\]$/.test(reason) ? "" : reason;
+  }
+
+  private historySummary(
+    action: string,
+    metadata: Record<string, unknown>,
+    before: Record<string, unknown>,
+    after: Record<string, unknown>,
+  ): string | null {
+    const status = metadata["targetStatus"];
+    const sharingSummary =
+      after["sharedWithTeacher"] === true
+        ? "Опубликован преподавателю"
+        : "Скрыт от преподавателя";
+    const transitionedLessonCount = Array.isArray(before["items"])
+      ? before["items"].length
+      : 0;
+    if (status) {
+      return `Новый статус: ${this.paymentStatusLabel(String(status))}`;
+    }
+    if (action === "crm.client_internal_note_changed") {
+      return `Версия ${before["version"] ?? 0} → ${after["version"] ?? "—"}`;
+    }
+    if (action === "crm.comment_teacher_sharing_changed") {
+      return sharingSummary;
+    }
+    if (action === "crm.lessons_bulk_transitioned") {
+      return `Изменено занятий: ${transitionedLessonCount}`;
+    }
+    return null;
+  }
+
+  private historyReason(
+    row: HistoryRow,
+    metadataReason: string,
+    after: Record<string, unknown>,
+  ) {
+    return (
+      row.reason_text?.trim() ||
+      metadataReason ||
+      this.defaultHistoryReason(row.action, after) ||
+      row.reason ||
+      "Причина не указана"
+    );
   }
 
   private defaultHistoryReason(
