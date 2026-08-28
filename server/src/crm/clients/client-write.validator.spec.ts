@@ -504,6 +504,11 @@ describe("ClientWriteValidator.validateCustomFields", () => {
       valueType: "url" as const,
       value: "ftp://example.test",
     },
+    {
+      name: "malformed URL",
+      valueType: "url" as const,
+      value: "not a url",
+    },
   ])("rejects $name with its exact type error", async ({ valueType, value }) => {
     await expectValidationError(convert(valueType, value), {
       code: "INVALID_FIELD_TYPE",
@@ -538,6 +543,17 @@ describe("ClientWriteValidator.validateCustomFields", () => {
       });
     },
   );
+
+  it("treats non-array select options as empty", async () => {
+    await expectValidationError(
+      convert("select", "Вокал", { 0: "Вокал" }),
+      {
+        code: "OPTION_INACTIVE",
+        field: "customFields.instrument",
+        message: "Значение поля «Инструмент» отсутствует в справочнике.",
+      },
+    );
+  });
 
   it.each<ClientCustomValueType>(["select", "radio"])(
     "rejects a stale %s option with the exact option error",
