@@ -1326,26 +1326,7 @@ export class SubscriptionLifecycleRepository {
     row: ReplacementContextDatabaseRow | undefined,
   ): ReplacementContext | null {
     if (!row) return null;
-    const newPackage =
-      row.new_package_id &&
-      row.new_package_name !== null &&
-      row.new_package_units !== null &&
-      row.new_package_price_minor !== null &&
-      row.new_package_currency_code !== null &&
-      row.new_package_active !== null &&
-      row.new_package_version !== null
-        ? {
-            id: row.new_package_id,
-            name: row.new_package_name,
-            unitCount: row.new_package_units,
-            basePriceMinor: row.new_package_price_minor,
-            currencyCode: row.new_package_currency_code,
-            validityDays: row.new_package_validity_days,
-            active: row.new_package_active,
-            version: Number(row.new_package_version),
-            deletedAt: row.new_package_deleted_at,
-          }
-        : null;
+    const newPackage = this.mapNewPackage(row);
     return {
       issuedSubscriptionId: row.issued_id,
       studentId: row.student_id,
@@ -1363,17 +1344,48 @@ export class SubscriptionLifecycleRepository {
       actualPaidMinor: row.actual_paid_minor,
       reservedLessonCount: Number(row.reserved_lesson_count),
       reservedUnits: normalizeNumeric(row.reserved_units),
-      reservedRows: row.reserved_rows.map((reservation) => ({
-        reservationId: reservation.reservationId,
-        lessonId: reservation.lessonId,
-        scheduledAt:
-          reservation.scheduledAt === null
-            ? null
-            : new Date(reservation.scheduledAt).toISOString(),
-        units: normalizeNumeric(String(reservation.units)),
-      })),
+      reservedRows: row.reserved_rows.map((reservation) =>
+        this.mapReservationRow(reservation),
+      ),
       futureLessonCount: Number(row.future_lesson_count),
       futureUnits: normalizeNumeric(row.future_units),
+    };
+  }
+
+  private mapNewPackage(
+    row: ReplacementContextDatabaseRow,
+  ): ReplacementContext["newPackage"] {
+    if (!row.new_package_id) return null;
+    if (row.new_package_name === null) return null;
+    if (row.new_package_units === null) return null;
+    if (row.new_package_price_minor === null) return null;
+    if (row.new_package_currency_code === null) return null;
+    if (row.new_package_active === null) return null;
+    if (row.new_package_version === null) return null;
+    return {
+      id: row.new_package_id,
+      name: row.new_package_name,
+      unitCount: row.new_package_units,
+      basePriceMinor: row.new_package_price_minor,
+      currencyCode: row.new_package_currency_code,
+      validityDays: row.new_package_validity_days,
+      active: row.new_package_active,
+      version: Number(row.new_package_version),
+      deletedAt: row.new_package_deleted_at,
+    };
+  }
+
+  private mapReservationRow(
+    reservation: ReplacementReservationRow,
+  ): ReplacementReservationRow {
+    return {
+      reservationId: reservation.reservationId,
+      lessonId: reservation.lessonId,
+      scheduledAt:
+        reservation.scheduledAt === null
+          ? null
+          : new Date(reservation.scheduledAt).toISOString(),
+      units: normalizeNumeric(String(reservation.units)),
     };
   }
 
