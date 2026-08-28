@@ -21,6 +21,9 @@ import {
   LeadSourceRow,
 } from "./client-config.repository";
 
+type FieldUpdateClient = Parameters<ClientConfigRepository["findDefinitionForUpdate"]>[0];
+type FieldUpdateResult = { before: ClientCustomFieldDefinitionRow; updated: ClientCustomFieldDefinitionRow };
+
 function isUniqueViolation(error: unknown): boolean {
   return (
     typeof error === "object" &&
@@ -214,96 +217,132 @@ export class ClientConfigService {
     dto: UpdateClientCustomFieldDto,
   ) {
     this.policy.assertCanManageClientConfiguration(actor);
-    const result = await this.database.transaction(async (client) => {
-      const before = await this.repository.findDefinitionForUpdate(
-        client,
-        definitionId,
+    const result = await this.database.transaction((client) =>
+      this.updateFieldInTransaction(client, definitionId, dto),
+    );
+    await this.recordFieldUpdateAudit(actor, definitionId, result);
+    return this.toFieldDto(result.updated);
+  }
+
+  private async updateFieldInTransaction(
+    client: FieldUpdateClient,
+    definitionId: string,
+    dto: UpdateClientCustomFieldDto,
+  ): Promise<FieldUpdateResult> {
+    const before = this.requireFieldDefinition(
+      await this.repository.findDefinitionForUpdate(client, definitionId),
+    );
+    if (Number(before.version) !== dto.expectedVersion) {
+      throw new ConflictException(
+        "Дополнительное поле уже изменено в другой вкладке.",
       );
-      if (!before) {
-        throw new NotFoundException("Дополнительное поле не найдено.");
-      }
-      if (Number(before.version) !== dto.expectedVersion) {
-        throw new ConflictException(
-          "Дополнительное поле уже изменено в другой вкладке.",
-        );
-      }
-      if (before.is_system) {
-        const violatesSystemInvariant =
-          dto.required === false ||
-          dto.isActive === false ||
-          (dto.valueType !== undefined &&
-            dto.valueType !== before.value_type) ||
-          dto.options !== undefined ||
-          (dto.visibleOnLead === false && before.visible_on_lead) ||
-          (dto.visibleOnStudent === false && before.visible_on_student);
-        if (violatesSystemInvariant) {
-          throw new UnprocessableEntityException({
-            code: "SYSTEM_FIELD_LOCKED",
-            field: "field",
-            message:
-              "Системное обязательное поле нельзя архивировать, сделать необязательным или изменить его тип.",
-          });
-        }
-      }
-      if (
-        dto.valueType !== undefined &&
-        dto.valueType !== before.value_type &&
-        (await this.repository.countDefinitionValues(client, definitionId)) > 0
-      ) {
-        throw new UnprocessableEntityException({
-          code: "FIELD_TYPE_MIGRATION_REQUIRED",
-          field: "valueType",
-          message:
-            "Тип поля с существующими значениями меняется только отдельной миграцией.",
-        });
-      }
-      const options =
-        dto.options === undefined
-          ? undefined
-          : this.normalizeOptions(
-              dto.valueType ?? before.value_type,
-              dto.options,
-            );
-      const nextVisibleOnLead =
-        dto.visibleOnLead ?? before.visible_on_lead;
-      const nextVisibleOnStudent =
-        dto.visibleOnStudent ?? before.visible_on_student;
-      if (
-        (dto.isActive ?? before.is_active) &&
-        !nextVisibleOnLead &&
-        !nextVisibleOnStudent
-      ) {
-        throw new UnprocessableEntityException({
-          code: "FIELD_VISIBILITY_REQUIRED",
-          field: "visibility",
-          message:
-            "Активное поле должно быть видно хотя бы в карточке лида или ученика.",
-        });
-      }
-      const updated = await this.repository.updateDefinition(
-        client,
-        definitionId,
-        {
-          expectedVersion: dto.expectedVersion,
-          label:
-            dto.label === undefined
-              ? undefined
-              : this.requiredText(dto.label, "label"),
-          valueType: dto.valueType,
-          required: dto.required,
-          isActive: dto.isActive,
-          options,
-          visibleOnLead: dto.visibleOnLead,
-          visibleOnStudent: dto.visibleOnStudent,
-        },
+    }
+    this.assertSystemFieldUpdate(before, dto);
+    await this.assertFieldTypeMigration(client, definitionId, before, dto);
+    const updated = await this.repository.updateDefinition(
+      client,
+      definitionId,
+      this.fieldUpdatePatch(before, dto),
+    );
+    if (!updated) {
+      throw new ConflictException(
+        "Дополнительное поле уже изменено в другой вкладке.",
       );
-      if (!updated) {
-        throw new ConflictException(
-          "Дополнительное поле уже изменено в другой вкладке.",
-        );
-      }
-      return { before, updated };
+    }
+    return { before, updated };
+  }
+
+  private requireFieldDefinition(before: ClientCustomFieldDefinitionRow | null): ClientCustomFieldDefinitionRow {
+    if (!before) throw new NotFoundException("Дополнительное поле не найдено.");
+    return before;
+  }
+
+  private assertSystemFieldUpdate(before: ClientCustomFieldDefinitionRow,
+    dto: UpdateClientCustomFieldDto): void {
+    if (!before.is_system) return;
+    const lockedChanges = [
+      () => dto.required === false,
+      () => dto.isActive === false,
+      () => [dto.valueType !== undefined,
+        dto.valueType !== before.value_type].every(Boolean),
+      () => dto.options !== undefined,
+      () => [dto.visibleOnLead === false, before.visible_on_lead].every(Boolean),
+      () => [dto.visibleOnStudent === false, before.visible_on_student].every(Boolean),
+    ];
+    if (!lockedChanges.some((isLocked) => isLocked())) return;
+    throw new UnprocessableEntityException({
+      code: "SYSTEM_FIELD_LOCKED",
+      field: "field",
+      message: "Системное обязательное поле нельзя архивировать, сделать необязательным или изменить его тип.",
     });
+  }
+
+  private async assertFieldTypeMigration(
+    client: FieldUpdateClient,
+    definitionId: string,
+    before: ClientCustomFieldDefinitionRow,
+    dto: UpdateClientCustomFieldDto,
+  ): Promise<void> {
+    if (dto.valueType === undefined) return;
+    if (dto.valueType === before.value_type) return;
+    const count = await this.repository.countDefinitionValues(client, definitionId);
+    if (count <= 0) return;
+    throw new UnprocessableEntityException({
+      code: "FIELD_TYPE_MIGRATION_REQUIRED",
+      field: "valueType",
+      message: "Тип поля с существующими значениями меняется только отдельной миграцией.",
+    });
+  }
+
+  private fieldUpdatePatch(
+    before: ClientCustomFieldDefinitionRow,
+    dto: UpdateClientCustomFieldDto,
+  ) {
+    const options =
+      dto.options === undefined
+        ? undefined
+        : this.normalizeOptions(
+            dto.valueType ?? before.value_type,
+            dto.options,
+          );
+    this.assertFieldUpdateVisibility(before, dto);
+    return {
+      expectedVersion: dto.expectedVersion,
+      label:
+        dto.label === undefined
+          ? undefined
+          : this.requiredText(dto.label, "label"),
+      valueType: dto.valueType,
+      required: dto.required,
+      isActive: dto.isActive,
+      options,
+      visibleOnLead: dto.visibleOnLead,
+      visibleOnStudent: dto.visibleOnStudent,
+    };
+  }
+
+  private assertFieldUpdateVisibility(
+    before: ClientCustomFieldDefinitionRow,
+    dto: UpdateClientCustomFieldDto,
+  ): void {
+    const nextVisibleOnLead = dto.visibleOnLead ?? before.visible_on_lead;
+    const nextVisibleOnStudent = dto.visibleOnStudent ?? before.visible_on_student;
+    if (
+      (dto.isActive ?? before.is_active) &&
+      !nextVisibleOnLead &&
+      !nextVisibleOnStudent
+    ) {
+      throw new UnprocessableEntityException({
+        code: "FIELD_VISIBILITY_REQUIRED",
+        field: "visibility",
+        message:
+          "Активное поле должно быть видно хотя бы в карточке лида или ученика.",
+      });
+    }
+  }
+
+  private async recordFieldUpdateAudit(actor: ActorContext, definitionId: string,
+    result: FieldUpdateResult): Promise<void> {
     await this.audit.record({
       actor,
       action: result.updated.is_active
@@ -318,7 +357,6 @@ export class ClientConfigService {
         required: result.updated.is_required,
       },
     });
-    return this.toFieldDto(result.updated);
   }
 
   private normalizeOptions(
