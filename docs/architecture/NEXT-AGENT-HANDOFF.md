@@ -1,11 +1,24 @@
 # MagicMusicCRM — актуальная передача
 
-> Обновлено: 2026-08-16
-> Production: client `1.5.17+197`, server `29428568`,
-> image `sha256:08fdc30a…`, migration `0140`
-> Рабочая ветка: `codex/v7-production-readiness`
-> Статус: production subscription section hotfix `1.5.17+197` PASS;
+> Обновлено: 2026-08-28
+> Production: client `1.5.18+198`, server `744959ef`,
+> image `sha256:5bd6ee44…`, migration `0141`
+> Рабочая ветка: `main`
+> Статус: production release `1.5.18+198` PASS;
 > owner mega-UAT не завершён
+
+Release `1.5.18+198` обновил production server и оба клиентских update
+channel. Backend `259/259` suites / `3186/3186` tests, Flutter `1355/1355`,
+targeted `39/39`, analyze/typecheck/build, production-like и exact image gates,
+Codex Security `646/646`, Trivy `0` High/Critical и `0` secrets, Windows/
+Android packaging и подписи PASS. Migration
+`0141_repair_legacy_subscription_aggregate_versions` закрыла последний legacy
+aggregate gap без переписывания истории. Production работает на exact image
+`5bd6ee44…`, restart `0`, live/ready `200/200`, reconciliation дважды `0`,
+outbox `0/0`, свежие API/Caddy ошибки `0`. Pre/post encrypted off-host backup
+прошли isolated restore. Оба manifest переключены на build `198`, четыре
+public artifacts и GitHub Release `v1.5.18` опубликованы. Evidence:
+`docs/audits/v7-production-rollout-198.md`.
 
 Client-only hotfix `1.5.17+197` восстановил доступ к разделу после отмены
 выданного абонемента. Отменённая запись остаётся вне списка активных, но её
