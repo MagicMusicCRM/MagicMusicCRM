@@ -1,12 +1,14 @@
-import { ForbiddenException } from "@nestjs/common";
-import { ActorContext, UserRole } from "../../common/security/actor-context";
-import { DatabaseService } from "../../db/database.service";
-import { PlatformIntegrityRepository } from "../../platform/platform-integrity.repository";
-import { RealtimeBus } from "../../realtime/realtime-bus";
-import { ClientReferenceService } from "./client-reference.service";
 import { ClientInternalContextService } from "./client-internal-context.service";
 
-const actor = (role: UserRole): ActorContext => ({
+type Role =
+  | "client"
+  | "teacher"
+  | "manager"
+  | "admin"
+  | "director"
+  | "system_admin";
+
+const actor = (role: Role) => ({
   userId: `${role}-user`,
   role,
 });
@@ -30,31 +32,32 @@ const createService = (rows: Record<string, unknown>[] = []) => {
   const query = jest.fn().mockResolvedValue({ rows });
   const resolve = jest.fn().mockResolvedValue(ref);
   const service = new ClientInternalContextService(
-    { query } as unknown as DatabaseService,
-    { resolve } as unknown as ClientReferenceService,
-    {} as PlatformIntegrityRepository,
-    {} as RealtimeBus,
+    { query } as never,
+    { resolve } as never,
+    {} as never,
+    {} as never,
   );
   return { service, query, resolve };
 };
 
 describe("ClientInternalContextService operational history", () => {
-  it.each<UserRole>(["client", "teacher"])(
+  it.each<Role>(["client", "teacher"])(
     "rejects the %s role before reference resolution and database access",
     async (role) => {
       const { service, query, resolve } = createService();
 
       await expect(
         service.listOperationalHistory(actor(role), ref, {}),
-      ).rejects.toEqual(
-        new ForbiddenException("Внутренняя информация клиента недоступна."),
-      );
+      ).rejects.toMatchObject({
+        name: "ForbiddenException",
+        message: "Внутренняя информация клиента недоступна.",
+      });
       expect(resolve).not.toHaveBeenCalled();
       expect(query).not.toHaveBeenCalled();
     },
   );
 
-  it.each<UserRole>(["admin", "manager", "director", "system_admin"])(
+  it.each<Role>(["admin", "manager", "director", "system_admin"])(
     "allows the %s role only after resolving the scoped reference",
     async (role) => {
       const { service, query, resolve } = createService();
