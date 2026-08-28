@@ -9,6 +9,7 @@ import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/security/capability_snapshot.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/workspace/workspace_store.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/admin_overview_widget.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/manage_entities_widget.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/schedule_widget.dart';
 import 'package:magic_music_crm/features/client/presentation/screens/client_dashboard_screen.dart';
@@ -309,6 +310,48 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
   });
+
+  testWidgets('UAT-145 System admin completes the root desktop tour', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final api = _PersonaApi(role: 'system_admin');
+
+    await tester.pumpWidget(_systemAdminApp(api));
+    await _pumpFor(tester);
+
+    for (final label in const [
+      'Чат',
+      'Обзор',
+      'Расписание',
+      'Клиенты',
+      'Задачи',
+      'Аналитика',
+      'Настройки',
+    ]) {
+      expect(find.text(label), findsWidgets, reason: label);
+    }
+    await _openDesktopSection<AdminOverviewWidget>(tester, 'Обзор');
+    await captureEvidence(tester, 'system-admin-windows-persona-overview');
+    await _openDesktopSection<ScheduleWidget>(tester, 'Расписание');
+    await _openDesktopSection<ClientsWidget>(tester, 'Клиенты');
+    await _openDesktopSection<SharedTasksPanel>(tester, 'Задачи');
+    await _openDesktopSection<ReportsWidget>(tester, 'Аналитика');
+    await _openDesktopSection<SystemSettingsWorkspace>(tester, 'Настройки');
+    expect(find.text('Пользователи и доступы'), findsWidgets);
+    expect(find.text('Продажи и оплаты'), findsOneWidget);
+    await tester.tap(find.text('Продажи и оплаты'));
+    await _pumpFor(tester);
+    expect(find.text('Новый абонемент'), findsOneWidget);
+    await captureEvidence(tester, 'system-admin-windows-persona-settings');
+
+    expect(api.getPaths, contains('/analytics/v4/school-finance'));
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
 }
 
 Future<void> _openDesktopSection<T extends Widget>(
@@ -480,6 +523,56 @@ Widget _directorApp(_PersonaApi api) => ProviderScope(
   overrides: [
     magicApiClientProvider.overrideWithValue(api),
     capabilitySnapshotProvider.overrideWith((ref) async => _directorSnapshot),
+    accountWorkspaceStoreProvider.overrideWithValue(
+      AccountWorkspaceStore(InMemoryWorkspaceKeyValueStore()),
+    ),
+  ],
+  child: RepaintBoundary(
+    key: evidenceRootKey,
+    child: MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.dark,
+      home: const StaffWorkspaceScreen(),
+    ),
+  ),
+);
+
+const _systemAdminSnapshot = CapabilitySnapshot(
+  accountId: 'system-admin-persona',
+  role: 'system_admin',
+  accessVersion: 1,
+  capabilities: {
+    'access.user.role.assign',
+    'access.user.override.manage',
+    'crm.client.read.basic',
+    'crm.client.read.contacts',
+    'crm.client.write',
+    'schedule.lesson.read.assigned',
+    'schedule.lesson.write',
+    'commerce.client_finance.read',
+    'commerce.client_finance.write',
+    'commerce.school_finance.read',
+    'commerce.package.read',
+    'commerce.package.manage',
+    'commerce.subscription.issue',
+    'workflow.task.read',
+    'workflow.task.write',
+    'report.status.read',
+    'report.export.xlsx',
+    'system.settings.manage',
+    'config.crm.read',
+    'config.crm.edit',
+    'config.crm.publish',
+  },
+  scopes: {'client': 'allBranches', 'schedule': 'allBranches'},
+);
+
+Widget _systemAdminApp(_PersonaApi api) => ProviderScope(
+  overrides: [
+    magicApiClientProvider.overrideWithValue(api),
+    capabilitySnapshotProvider.overrideWith(
+      (ref) async => _systemAdminSnapshot,
+    ),
     accountWorkspaceStoreProvider.overrideWithValue(
       AccountWorkspaceStore(InMemoryWorkspaceKeyValueStore()),
     ),

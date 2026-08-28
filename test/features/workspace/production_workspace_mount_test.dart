@@ -26,6 +26,81 @@ void main() {
     scopes: {},
   );
 
+  testWidgets('desktop production content inherits the Material body style', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 800);
+    addTearDown(tester.view.reset);
+    const contentKey = ValueKey('workspace-material-content');
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          accountWorkspaceStoreProvider.overrideWithValue(
+            AccountWorkspaceStore(InMemoryWorkspaceKeyValueStore()),
+          ),
+        ],
+        child: MaterialApp(
+          home: ProductionWorkspaceHost(
+            snapshot: snapshot,
+            tabBuilder: (_, tab) =>
+                const Text('Рабочая область', key: contentKey),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final contentElement = tester.element(find.byKey(contentKey));
+    final inheritedStyle = DefaultTextStyle.of(contentElement).style;
+    final expectedStyle = Theme.of(contentElement).textTheme.bodyMedium!;
+
+    expect(inheritedStyle.fontSize, expectedStyle.fontSize);
+    expect(inheritedStyle.decoration, expectedStyle.decoration);
+    expect(inheritedStyle.fontWeight, expectedStyle.fontWeight);
+  });
+
+  testWidgets('desktop production sections can present SnackBars', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 800);
+    addTearDown(tester.view.reset);
+    const triggerKey = ValueKey('workspace-snackbar-trigger');
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          accountWorkspaceStoreProvider.overrideWithValue(
+            AccountWorkspaceStore(InMemoryWorkspaceKeyValueStore()),
+          ),
+        ],
+        child: MaterialApp(
+          home: ProductionWorkspaceHost(
+            snapshot: snapshot,
+            tabBuilder: (_, tab) => Builder(
+              builder: (context) => ElevatedButton(
+                key: triggerKey,
+                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Изменения сохранены')),
+                ),
+                child: const Text('Сохранить'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(triggerKey));
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Изменения сохранены'), findsOneWidget);
+  });
+
   testWidgets(
     'desktop production host mounts existing workspace with 10 tabs',
     (tester) async {
@@ -113,6 +188,80 @@ void main() {
 
     expect(find.text('__section__'), findsOneWidget);
     expect(find.byType(ResponsiveNavigationShell), findsOneWidget);
+  });
+
+  testWidgets('compact production content stays below system insets', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(600, 800);
+    addTearDown(tester.view.reset);
+    late double contentTopPadding;
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          accountWorkspaceStoreProvider.overrideWithValue(
+            AccountWorkspaceStore(InMemoryWorkspaceKeyValueStore()),
+          ),
+        ],
+        child: MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(
+              size: Size(600, 800),
+              padding: EdgeInsets.only(top: 32),
+            ),
+            child: ProductionWorkspaceHost(
+              snapshot: snapshot,
+              tabBuilder: (_, tab) => Builder(
+                builder: (context) {
+                  contentTopPadding = MediaQuery.paddingOf(context).top;
+                  return const Text('Безопасная область');
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(contentTopPadding, 0);
+  });
+
+  testWidgets('compact system Back returns a section to Chat', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(600, 800);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          accountWorkspaceStoreProvider.overrideWithValue(
+            AccountWorkspaceStore(InMemoryWorkspaceKeyValueStore()),
+          ),
+        ],
+        child: MaterialApp(
+          home: ProductionWorkspaceHost(
+            snapshot: snapshot,
+            tabBuilder: (_, tab) => Text(
+              '${tab.currentRoute.link.rawEntityType}:'
+              '${tab.currentRoute.link.entityId}',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Клиенты'));
+    await tester.pumpAndSettle();
+    expect(find.text('client_status:__section__'), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.text('chat:home'), findsOneWidget);
   });
 
   testWidgets('compact teacher can switch between all assigned surfaces', (

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:magic_music_crm/core/navigation/app_back_policy.dart';
 import 'package:magic_music_crm/core/navigation/entity_route_registry.dart';
 import 'package:magic_music_crm/core/navigation/responsive_navigation_shell.dart';
 import 'package:magic_music_crm/core/workspace/desktop_workspace_shell.dart';
@@ -76,7 +77,7 @@ class ProductionWorkspaceView extends StatelessWidget {
         return WorkspaceNavigationScope(
           controller: controller,
           isDesktop: isDesktop,
-          child: isDesktop ? _desktop() : _mobile(),
+          child: isDesktop ? Scaffold(body: _desktop()) : _mobile(),
         );
       },
     );
@@ -90,14 +91,25 @@ class ProductionWorkspaceView extends StatelessWidget {
         final tab = controller.state.activeTab;
         onTabVisible(tab, isDesktop: false);
         final navigation = navigationFor(tab, isDesktop: false);
-        return Scaffold(
-          body: tabBuilder(context, tab),
-          bottomNavigationBar: ResponsiveNavigationShell(
-            isDesktop: false,
-            destinations: navigation.destinations,
-            selectedIndex: navigation.selectedIndex,
-            onSelected: (index) =>
-                onSectionSelected(navigation.sectionTabs[index]),
+        return AppBackScope(
+          hasLocalHistory:
+              tab.routeStack.length > 1 || navigation.selectedIndex != 0,
+          onBack: () {
+            if (tab.routeStack.length > 1) {
+              unawaited(onBack(tab));
+            } else {
+              onSectionSelected(navigation.sectionTabs.first);
+            }
+          },
+          child: Scaffold(
+            body: SafeArea(child: tabBuilder(context, tab)),
+            bottomNavigationBar: ResponsiveNavigationShell(
+              isDesktop: false,
+              destinations: navigation.destinations,
+              selectedIndex: navigation.selectedIndex,
+              onSelected: (index) =>
+                  onSectionSelected(navigation.sectionTabs[index]),
+            ),
           ),
         );
       },
