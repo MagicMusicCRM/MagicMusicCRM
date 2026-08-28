@@ -102,7 +102,10 @@ describe('NotificationsService', () => {
 
   function createInboundHarness(
     databaseRows: unknown[][],
-    failedClientQuery?: number
+    options: {
+      failedClientQuery?: number;
+      clientQueryResults?: Array<{ rows: unknown[]; rowCount: number }>;
+    } = {}
   ) {
     const { service, database, worker, realtime } = createService();
     const ledger: unknown[] = [];
@@ -116,8 +119,9 @@ describe('NotificationsService', () => {
     const client = {
       query: jest.fn(async (sql: string, params?: unknown[]) => {
         ledger.push({ event: 'client.query', sql, params });
-        if (clientQuery++ === failedClientQuery) throw transactionError;
-        return { rows: [] };
+        const queryIndex = clientQuery++;
+        if (queryIndex === options.failedClientQuery) throw transactionError;
+        return options.clientQueryResults?.[queryIndex] ?? { rows: [] };
       })
     };
     database.transaction.mockImplementation(async (work) => {
@@ -842,6 +846,95 @@ describe('NotificationsService', () => {
       ]);
     });
 
+    it('repairs notification and recipient conflicts without skipping deliveries', async () => {
+      const { service, ledger } = createInboundHarness(
+        [
+          [{ role: 'manager', channels: ['push', 'email'] }],
+          [{ id: 'manager-a', role: 'manager', email: 'Manager@Example.COM' }],
+          [{ id: 'lead-a', name: 'Лид Входящий', source: 'Веб-сайт' }]
+        ],
+        {
+          clientQueryResults: [
+            { rows: [], rowCount: 1 },
+            { rows: [], rowCount: 0 },
+            { rows: [], rowCount: 0 },
+            { rows: [], rowCount: 1 },
+            { rows: [], rowCount: 1 }
+          ]
+        }
+      );
+
+      await expect(
+        service.notifyInboundLead(ingestionId, notificationId)
+      ).resolves.toBeUndefined();
+
+      expect(ledger).toEqual([
+        {
+          event: 'database.query',
+          sql: inboundSql.preferences,
+          params: ['new_lead']
+        },
+        {
+          event: 'database.query',
+          sql: inboundSql.users,
+          params: [['manager']]
+        },
+        {
+          event: 'database.query',
+          sql: inboundSql.lead,
+          params: [ingestionId]
+        },
+        { event: 'transaction.begin' },
+        {
+          event: 'client.query',
+          sql: inboundSql.lock,
+          params: [notificationId]
+        },
+        {
+          event: 'client.query',
+          sql: inboundSql.notification,
+          params: [
+            notificationId,
+            'Новая заявка',
+            'Лид Входящий — источник: Веб-сайт',
+            '{"entityType":"lead","entityId":"lead-a","entityName":"Лид Входящий"}'
+          ]
+        },
+        {
+          event: 'client.query',
+          sql: inboundSql.recipient,
+          params: [notificationId, 'manager-a']
+        },
+        {
+          event: 'client.query',
+          sql: inboundSql.push,
+          params: [notificationId, 'manager-a']
+        },
+        {
+          event: 'client.query',
+          sql: inboundSql.email,
+          params: [
+            'manager-a',
+            'cac240a80a231858a6b2451937984adce384b9b2b1995b7c71b332c580aac6e6',
+            '{"notificationId":"11111111-1111-4111-8111-111111111111","title":"Новая заявка","body":"Лид Входящий — источник: Веб-сайт"}',
+            notificationId
+          ]
+        },
+        { event: 'transaction.commit' },
+        { event: 'worker.email' },
+        { event: 'worker.push' },
+        {
+          event: 'realtime',
+          payload: {
+            entity: 'notification',
+            action: 'created',
+            id: notificationId,
+            affectedUserIds: ['manager-a']
+          }
+        }
+      ]);
+    });
+
     it('does not dispatch workers or realtime when the transaction fails', async () => {
       const { service, ledger, transactionError } = createInboundHarness(
         [
@@ -849,7 +942,7 @@ describe('NotificationsService', () => {
           [{ id: 'manager-a', role: 'manager', email: 'manager@example.com' }],
           [{ id: 'lead-a', name: 'Лид Входящий', source: 'Веб-сайт' }]
         ],
-        2
+        { failedClientQuery: 2 }
       );
 
       await expect(
