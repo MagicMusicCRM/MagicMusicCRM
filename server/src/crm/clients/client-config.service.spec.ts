@@ -15,10 +15,7 @@ const row = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-const patch = (values: Partial<Dto> = {}): Dto => ({
-  expectedVersion: 7,
-  ...values,
-});
+const patch = (values: Partial<Dto> = {}): Dto => ({ expectedVersion: 7, ...values });
 
 const fixture = (options: { before?: ReturnType<typeof row> | null; updated?: ReturnType<typeof row> | null; count?: number } = {}) => {
   const events: string[] = [];
@@ -39,16 +36,13 @@ const fixture = (options: { before?: ReturnType<typeof row> | null; updated?: Re
   return { service: new ClientConfigService(...dependencies), database, repository, policy, audit, events, updated };
 };
 
-const update = (f: ReturnType<typeof fixture>, dto: Dto = patch()) =>
-  f.service.updateField(actor, definitionId, dto);
+const update = (f: ReturnType<typeof fixture>, dto: Dto = patch()) => f.service.updateField(actor, definitionId, dto);
 
 describe("ClientConfigService.updateField", () => {
   it("authorizes before starting a transaction", async () => {
     const f = fixture();
     const denied = new Error("policy-denied");
-    f.policy.assertCanManageClientConfiguration.mockImplementation(() => {
-      throw denied;
-    });
+    f.policy.assertCanManageClientConfiguration.mockImplementation(() => { throw denied; });
     await expect(update(f)).rejects.toBe(denied);
     expect(f.database.transaction).not.toHaveBeenCalled();
   });
@@ -57,15 +51,20 @@ describe("ClientConfigService.updateField", () => {
     [null, 7, "NotFoundException", 404, "Дополнительное поле не найдено."],
     [row({ version: "8" }), 7, "ConflictException", 409,
       "Дополнительное поле уже изменено в другой вкладке."],
-  ])("rejects missing and stale definitions before later reads", async (
-    before, expectedVersion, name, status, message,
-  ) => {
+  ])("rejects missing and stale definitions before later reads", async (before, expectedVersion, name, status, message) => {
     const f = fixture({ before });
     await expect(update(f, patch({ expectedVersion }))).rejects
       .toMatchObject({ name, status, message });
     expect(f.repository.countDefinitionValues).not.toHaveBeenCalled();
     expect(f.repository.updateDefinition).not.toHaveBeenCalled();
     expect(f.audit.record).not.toHaveBeenCalled();
+  });
+
+  it("propagates unexpected repository errors by identity", async () => {
+    const f = fixture(), failure = new Error("lookup-failed");
+    f.repository.findDefinitionForUpdate.mockRejectedValue(failure);
+    await expect(update(f)).rejects.toBe(failure);
+    expect(f.repository.updateDefinition).not.toHaveBeenCalled(); expect(f.audit.record).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -86,12 +85,14 @@ describe("ClientConfigService.updateField", () => {
   });
 
   it("allows a system relabel and repeated false on an already hidden side", async () => {
-    const f = fixture({ before: row({ is_system: true, visible_on_student: false }) });
+    const before = row({ is_system: true, visible_on_student: false }), eagerRead = new Error("eager-system-row-read");
+    Object.defineProperties(before, { value_type: { get: () => { throw eagerRead; } }, visible_on_lead: { get: () => { throw eagerRead; } } });
+    const f = fixture({ before });
     await update(f, patch({ label: "  Renamed  ", required: true,
-      isActive: true, valueType: "text", visibleOnStudent: false }));
+      isActive: true, visibleOnLead: true, visibleOnStudent: false }));
     expect(f.repository.updateDefinition.mock.calls[0]![2]).toMatchObject({
       label: "Renamed", required: true, isActive: true,
-      valueType: "text", visibleOnStudent: false,
+      valueType: undefined, visibleOnLead: true, visibleOnStudent: false,
     });
   });
 
@@ -100,13 +101,14 @@ describe("ClientConfigService.updateField", () => {
     f.repository.countDefinitionValues.mockRejectedValue(new Error("eager-count"));
     const dto = patch({ label: "  New label  " });
     await expect(update(f, dto)).resolves.toMatchObject({ label: "Instrument", version: 8 });
-    expect(f.repository.findDefinitionForUpdate).toHaveBeenCalledWith(transactionClient, definitionId);
+    expect(f.repository.findDefinitionForUpdate).toHaveBeenCalledTimes(1); expect(f.repository.findDefinitionForUpdate).toHaveBeenCalledWith(transactionClient, definitionId);
     expect(f.repository.countDefinitionValues).not.toHaveBeenCalled();
     const sent = f.repository.updateDefinition.mock.calls[0]![2];
     expect(Object.keys(sent)).toEqual(patchKeys);
     expect(sent).toEqual({ expectedVersion: 7, label: "New label", valueType: undefined,
       required: undefined, isActive: undefined, options: undefined,
       visibleOnLead: undefined, visibleOnStudent: undefined });
+    expect(f.repository.updateDefinition).toHaveBeenCalledTimes(1); expect(f.repository.updateDefinition).toHaveBeenCalledWith(transactionClient, definitionId, sent);
     expect(dto).toEqual({ expectedVersion: 7, label: "  New label  " });
   });
 
@@ -123,8 +125,7 @@ describe("ClientConfigService.updateField", () => {
       visibleOnLead: false, visibleOnStudent: false, label: " " }))).rejects
       .toMatchObject({ status: 422, response: { code: "FIELD_TYPE_MIGRATION_REQUIRED",
         field: "valueType", message: "Тип поля с существующими значениями меняется только отдельной миграцией." } });
-    expect(f.repository.countDefinitionValues)
-      .toHaveBeenCalledWith(transactionClient, definitionId);
+    expect(f.repository.countDefinitionValues).toHaveBeenCalledTimes(1); expect(f.repository.countDefinitionValues).toHaveBeenCalledWith(transactionClient, definitionId);
   });
 
   it.each([

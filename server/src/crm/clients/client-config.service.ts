@@ -21,8 +21,11 @@ import {
   LeadSourceRow,
 } from "./client-config.repository";
 
-type FieldUpdateClient = Parameters<ClientConfigRepository["findDefinitionForUpdate"]>[0];
-type FieldUpdateResult = { before: ClientCustomFieldDefinitionRow; updated: ClientCustomFieldDefinitionRow };
+type FieldUpdateClient = Parameters<ClientConfigRepository["findDefinitionForUpdate"]>[0]; type FieldUpdateResult = { before: ClientCustomFieldDefinitionRow; updated: ClientCustomFieldDefinitionRow };
+
+function changesFieldType(before: ClientCustomFieldDefinitionRow, dto: UpdateClientCustomFieldDto) { return dto.valueType !== undefined && dto.valueType !== before.value_type; }
+function removesLeadVisibility(before: ClientCustomFieldDefinitionRow, dto: UpdateClientCustomFieldDto) { return dto.visibleOnLead === false && before.visible_on_lead; }
+function removesStudentVisibility(before: ClientCustomFieldDefinitionRow, dto: UpdateClientCustomFieldDto) { return dto.visibleOnStudent === false && before.visible_on_student; }
 
 function isUniqueViolation(error: unknown): boolean {
   return (
@@ -263,11 +266,10 @@ export class ClientConfigService {
     const lockedChanges = [
       () => dto.required === false,
       () => dto.isActive === false,
-      () => [dto.valueType !== undefined,
-        dto.valueType !== before.value_type].every(Boolean),
+      () => changesFieldType(before, dto),
       () => dto.options !== undefined,
-      () => [dto.visibleOnLead === false, before.visible_on_lead].every(Boolean),
-      () => [dto.visibleOnStudent === false, before.visible_on_student].every(Boolean),
+      () => removesLeadVisibility(before, dto),
+      () => removesStudentVisibility(before, dto),
     ];
     if (!lockedChanges.some((isLocked) => isLocked())) return;
     throw new UnprocessableEntityException({
