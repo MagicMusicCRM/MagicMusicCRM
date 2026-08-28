@@ -21,19 +21,6 @@ interface LeadIntakeQueryExecutor {
   ): Promise<QueryResult<T>>;
 }
 
-interface AutomaticIntakeProfile {
-  profile_id: string; first_name: string | null;
-  last_name: string | null; phone: string | null;
-}
-
-type AutomaticIntakeEntityOutcome = {
-  kind: "lead" | "student"; id: string;
-  created: boolean; linked: boolean;
-};
-
-type AutomaticIntakeOutcome =
-  | AutomaticIntakeEntityOutcome | { kind: "review" } | { kind: "no_profile" };
-
 /**
  * Inbound lead capture: promote a chat sender or public-site submission into a
  * lead, and resolve chat users <-> CRM contacts. This is the LeadIntakePort
@@ -508,343 +495,357 @@ export class LeadIntakeService implements LeadIntakePort {
     senderUserId: string,
     trigger: "chat" | "onboarding" = "chat",
   ): Promise<{ leadId: string | null; created: boolean }> {
-    const outcome = await this.database.transaction<AutomaticIntakeOutcome>(
-      (client) =>
-        this.runAutomaticIntake(
-          client as unknown as LeadIntakeQueryExecutor, actor, senderUserId,
-        ),
-    );
-    await this.publishAutomaticIntake(actor, senderUserId, trigger, outcome);
-    return this.toAutomaticIntakeResult(outcome);
-  }
+    type IntakeOutcome =
+      | {
+          kind: "lead" | "student";
+          id: string;
+          created: boolean;
+          linked: boolean;
+        }
+      | { kind: "review" }
+      | { kind: "no_profile" };
 
-  private async runAutomaticIntake(
-    client: LeadIntakeQueryExecutor, actor: ActorContext,
-    senderUserId: string,
-  ): Promise<AutomaticIntakeOutcome> {
-    await client.query(`select pg_advisory_xact_lock(hashtext($1))`, [
-      `lead-intake:${senderUserId.toLowerCase()}`,
-    ]);
-    const profileRes = await client.query<AutomaticIntakeProfile>(
-      `select p.id as profile_id, p.first_name, p.last_name, p.phone
-         from app.profiles p
-         join app.users u on u.id = p.user_id
-          and u.deleted_at is null and u.role = 'client'
-        where p.user_id = $1 and p.deleted_at is null
-        limit 1`,
-      [senderUserId],
-    );
-    const profile = profileRes.rows[0];
-    if (!profile) return { kind: "no_profile" };
+    const outcome = await this.database.transaction<IntakeOutcome>(async (client) => {
+      // Onboarding and the first administration-chat message may race. Both
+      // enter through this same lock and repeat all identity checks inside the
+      // transaction, so only one CRM decision can be committed per app user.
+      await client.query(
+        `select pg_advisory_xact_lock(hashtext($1))`,
+        [`lead-intake:${senderUserId.toLowerCase()}`],
+      );
 
-    const existing = await this.findExistingAutomaticIntake(
-      client, senderUserId, profile.profile_id,
-    );
-    if (existing) return existing;
+      const profileRes = await client.query<{
+        profile_id: string;
+        first_name: string | null;
+        last_name: string | null;
+        phone: string | null;
+      }>(
+        `select p.id as profile_id, p.first_name, p.last_name, p.phone
+           from app.profiles p
+           join app.users u on u.id = p.user_id
+            and u.deleted_at is null and u.role = 'client'
+          where p.user_id = $1 and p.deleted_at is null
+          limit 1`,
+        [senderUserId],
+      );
+      const profile = profileRes.rows[0];
+      if (!profile) return { kind: "no_profile" };
 
-    const phoneOutcome = await this.claimAutomaticPhoneMatch(
-      client, actor, senderUserId, profile,
-    );
-    if (phoneOutcome) return phoneOutcome;
-    return this.createAutomaticLead(client, actor, senderUserId, profile, null);
-  }
+      // Student is the later lifecycle state and always wins over Lead. This
+      // also resolves a Student created from a Lead previously linked to the
+      // app user, even though conversion minted another profile row.
+      const existingStudent = await this.findStudentForUser(
+        senderUserId,
+        profile.profile_id,
+        client as unknown as LeadIntakeQueryExecutor,
+      );
+      if (existingStudent) {
+        return {
+          kind: "student",
+          id: existingStudent,
+          created: false,
+          linked: false,
+        };
+      }
 
-  private async findExistingAutomaticIntake(
-    client: LeadIntakeQueryExecutor, senderUserId: string,
-    profileId: string,
-  ): Promise<AutomaticIntakeEntityOutcome | null> {
-    const studentId = await this.findStudentForUser(senderUserId, profileId, client);
-    if (studentId) {
-      return { kind: "student", id: studentId, created: false, linked: false };
-    }
-    const existingLead = await client.query<{ entity_id: string }>(
-      `select link.entity_id
-         from app.user_crm_links link
-         join app.leads lead
-           on lead.id = link.entity_id and lead.deleted_at is null
-        where link.user_id = $1
-          and link.entity_type = 'lead'
-          and link.deleted_at is null
-        order by link.confirmed_at desc nulls last, link.created_at desc
-        limit 1`,
-      [senderUserId],
-    );
-    const leadId = existingLead.rows[0]?.entity_id;
-    return leadId ? { kind: "lead", id: leadId, created: false, linked: false } : null;
-  }
+      const existingLead = await client.query<{ entity_id: string }>(
+        `select link.entity_id
+           from app.user_crm_links link
+           join app.leads lead
+             on lead.id = link.entity_id and lead.deleted_at is null
+          where link.user_id = $1
+            and link.entity_type = 'lead'
+            and link.deleted_at is null
+          order by link.confirmed_at desc nulls last, link.created_at desc
+          limit 1`,
+        [senderUserId],
+      );
+      if (existingLead.rows[0]) {
+        return {
+          kind: "lead",
+          id: existingLead.rows[0].entity_id,
+          created: false,
+          linked: false,
+        };
+      }
 
-  private async claimAutomaticPhoneMatch(
-    client: LeadIntakeQueryExecutor, actor: ActorContext,
-    senderUserId: string,
-    profile: AutomaticIntakeProfile,
-  ): Promise<AutomaticIntakeOutcome | null> {
-    const matchedPhone = this.normalizeContactPhone(profile.phone);
-    if (!matchedPhone) return null;
-    await client.query(`select pg_advisory_xact_lock(hashtext($1))`, [
-      `lead-phone:${matchedPhone}`,
-    ]);
-    const studentOutcome = await this.claimStudentPhoneCandidate(
-      client, actor, senderUserId, profile.profile_id, matchedPhone,
-    );
-    if (studentOutcome) return studentOutcome;
-    const leadOutcome = await this.claimLeadPhoneCandidate(
-      client, actor, senderUserId, profile.profile_id, matchedPhone,
-    );
-    if (leadOutcome) return leadOutcome;
-    return this.createAutomaticLead(
-      client, actor, senderUserId, profile, matchedPhone,
-    );
-  }
+      const matchedPhone = this.normalizeContactPhone(profile.phone);
+      if (matchedPhone) {
+        // A family phone may be shared by several people. Serialize the phone
+        // decision, then auto-link only when the candidate is unique.
+        await client.query(
+          `select pg_advisory_xact_lock(hashtext($1))`,
+          [`lead-phone:${matchedPhone}`],
+        );
 
-  private async claimStudentPhoneCandidate(
-    client: LeadIntakeQueryExecutor, actor: ActorContext,
-    senderUserId: string, profileId: string,
-    matchedPhone: string,
-  ): Promise<AutomaticIntakeOutcome | null> {
-    const candidates = await client.query<{ id: string | null; count: string }>(
-      `with candidates as (
-         select distinct student.id
-           from app.students student
-           join app.profiles profile
-             on profile.id = student.profile_id and profile.deleted_at is null
-           left join app.users owner
-             on owner.id = profile.user_id and owner.deleted_at is null
-          where student.deleted_at is null
-            and profile.phone_normalized = $1
-            and (owner.id is null or owner.id = $2 or owner.is_app_account = false)
-            and not exists (
-              select 1 from app.user_crm_links occupied
-               where occupied.entity_type = 'student'
-                 and occupied.entity_id = student.id
-                 and occupied.deleted_at is null
-                 and occupied.user_id <> $2
-            )
-       )
-       select min(id::text)::uuid as id, count(*)::text as count
-         from candidates`,
-      [matchedPhone, senderUserId],
-    );
-    const count = Number(candidates.rows[0]?.count ?? 0);
-    if (count > 1) return { kind: "review" };
-    const studentId = candidates.rows[0]?.id;
-    if (count !== 1 || !studentId) return null;
-    return this.linkStudentIdentity(
-      client, actor, senderUserId, profileId, matchedPhone, studentId,
-    );
-  }
-
-  private async claimLeadPhoneCandidate(
-    client: LeadIntakeQueryExecutor, actor: ActorContext,
-    senderUserId: string, profileId: string,
-    matchedPhone: string,
-  ): Promise<AutomaticIntakeOutcome | null> {
-    const candidates = await client.query<{ id: string | null; count: string }>(
-      `with candidates as (
-         select distinct lead.id
-           from app.leads lead
-          where lead.deleted_at is null
-            and lead.phone_normalized = $1
-            and not exists (
-              select 1 from app.user_crm_links occupied
-               where occupied.entity_type = 'lead'
-                 and occupied.entity_id = lead.id
-                 and occupied.deleted_at is null
-                 and occupied.user_id <> $2
-            )
-       )
-       select min(id::text)::uuid as id, count(*)::text as count
-         from candidates`,
-      [matchedPhone, senderUserId],
-    );
-    const count = Number(candidates.rows[0]?.count ?? 0);
-    if (count > 1) return { kind: "review" };
-    const leadId = candidates.rows[0]?.id;
-    if (count !== 1 || !leadId) return null;
-    return this.resolveLeadConversionCandidate(
-      client, actor, senderUserId, profileId, matchedPhone, leadId,
-    );
-  }
-
-  private async resolveLeadConversionCandidate(
-    client: LeadIntakeQueryExecutor, actor: ActorContext,
-    senderUserId: string, profileId: string,
-    matchedPhone: string,
-    leadId: string,
-  ): Promise<AutomaticIntakeOutcome> {
-    const converted = await client.query<{
-      id: string | null;
-      count: string;
-      unavailable_count: string;
-    }>(
-      `select min(student.id::text)::uuid as id,
-              count(*)::text as count,
-              count(*) filter (
-                where exists (
-                  select 1 from app.user_crm_links occupied
+        const studentCandidates = await client.query<{
+          id: string | null;
+          count: string;
+        }>(
+          `with candidates as (
+             select distinct student.id
+               from app.students student
+               join app.profiles profile
+                 on profile.id = student.profile_id
+                and profile.deleted_at is null
+               left join app.users owner
+                 on owner.id = profile.user_id and owner.deleted_at is null
+              where student.deleted_at is null
+                and profile.phone_normalized = $1
+                and (
+                  owner.id is null
+                  or owner.id = $2
+                  or owner.is_app_account = false
+                )
+                and not exists (
+                  select 1
+                    from app.user_crm_links occupied
                    where occupied.entity_type = 'student'
                      and occupied.entity_id = student.id
                      and occupied.deleted_at is null
                      and occupied.user_id <> $2
                 )
-                or (
-                  owner.id is not null
-                  and owner.id <> $2
-                  and owner.is_app_account = true
+           )
+           select min(id::text)::uuid as id, count(*)::text as count
+             from candidates`,
+          [matchedPhone, senderUserId],
+        );
+        const studentCount = Number(studentCandidates.rows[0]?.count ?? 0);
+        if (studentCount > 1) {
+          return { kind: "review" };
+        }
+        if (studentCount === 1 && studentCandidates.rows[0]?.id) {
+          const studentId = studentCandidates.rows[0].id;
+          const linked = await client.query<{ entity_id: string }>(
+            `insert into app.user_crm_links
+               (user_id, entity_type, entity_id, matched_phone, link_source,
+                created_by, confirmed_at)
+             values ($1, 'student', $2, $3, 'auto_phone', $4, now())
+             on conflict (entity_type, entity_id) where deleted_at is null
+             do nothing
+             returning entity_id`,
+            [senderUserId, studentId, matchedPhone, actor.userId],
+          );
+          if (!linked.rows[0]) {
+            return { kind: "review" };
+          }
+          const assigned = await mergeAndAssignStudentProfile(
+            client,
+            studentId,
+            profile.profile_id,
+          );
+          if (!assigned) {
+            throw new ConflictException(
+              "Карточка ученика изменилась во время привязки. Повторите попытку.",
+            );
+          }
+          return {
+            kind: "student",
+            id: studentId,
+            created: false,
+            linked: true,
+          };
+        }
+
+        const leadCandidates = await client.query<{
+          id: string | null;
+          count: string;
+        }>(
+          `with candidates as (
+             select distinct lead.id
+               from app.leads lead
+              where lead.deleted_at is null
+                and lead.phone_normalized = $1
+                and not exists (
+                  select 1
+                    from app.user_crm_links occupied
+                   where occupied.entity_type = 'lead'
+                     and occupied.entity_id = lead.id
+                     and occupied.deleted_at is null
+                     and occupied.user_id <> $2
                 )
-              )::text as unavailable_count
-         from app.students student
-         left join app.profiles profile
-           on profile.id = student.profile_id and profile.deleted_at is null
-         left join app.users owner
-           on owner.id = profile.user_id and owner.deleted_at is null
-        where student.lead_id = $1 and student.deleted_at is null`,
-      [leadId, senderUserId],
-    );
-    const count = Number(converted.rows[0]?.count ?? 0);
-    const unavailableCount = Number(converted.rows[0]?.unavailable_count ?? 0);
-    if (count > 1 || unavailableCount > 0) return { kind: "review" };
-    const studentId = converted.rows[0]?.id;
-    if (count === 1 && studentId) {
-      return this.linkStudentIdentity(
-        client, actor, senderUserId, profileId, matchedPhone, studentId,
-      );
-    }
-    return this.linkLeadIdentity(
-      client, actor, senderUserId, matchedPhone, leadId,
-    );
-  }
+           )
+           select min(id::text)::uuid as id, count(*)::text as count
+             from candidates`,
+          [matchedPhone, senderUserId],
+        );
+        const leadCount = Number(leadCandidates.rows[0]?.count ?? 0);
+        if (leadCount > 1) {
+          return { kind: "review" };
+        }
+        if (leadCount === 1 && leadCandidates.rows[0]?.id) {
+          const leadId = leadCandidates.rows[0].id;
+          const converted = await client.query<{
+            id: string | null;
+            count: string;
+            unavailable_count: string;
+          }>(
+            `select min(student.id::text)::uuid as id,
+                    count(*)::text as count,
+                    count(*) filter (
+                      where exists (
+                        select 1
+                          from app.user_crm_links occupied
+                         where occupied.entity_type = 'student'
+                           and occupied.entity_id = student.id
+                           and occupied.deleted_at is null
+                           and occupied.user_id <> $2
+                      )
+                      or (
+                        owner.id is not null
+                        and owner.id <> $2
+                        and owner.is_app_account = true
+                      )
+                    )::text as unavailable_count
+               from app.students student
+               left join app.profiles profile
+                 on profile.id = student.profile_id
+                and profile.deleted_at is null
+               left join app.users owner
+                 on owner.id = profile.user_id and owner.deleted_at is null
+              where student.lead_id = $1
+                and student.deleted_at is null`,
+            [leadId, senderUserId],
+          );
+          const convertedCount = Number(converted.rows[0]?.count ?? 0);
+          const unavailableCount = Number(
+            converted.rows[0]?.unavailable_count ?? 0,
+          );
+          if (convertedCount > 1 || unavailableCount > 0) {
+            return { kind: "review" };
+          }
 
-  private async linkStudentIdentity(
-    client: LeadIntakeQueryExecutor, actor: ActorContext,
-    senderUserId: string, profileId: string,
-    matchedPhone: string,
-    studentId: string,
-  ): Promise<AutomaticIntakeOutcome> {
-    const linked = await client.query<{ entity_id: string }>(
-      `insert into app.user_crm_links
-         (user_id, entity_type, entity_id, matched_phone, link_source,
-          created_by, confirmed_at)
-       values ($1, 'student', $2, $3, 'auto_phone', $4, now())
-       on conflict (entity_type, entity_id) where deleted_at is null
-       do nothing
-       returning entity_id`,
-      [senderUserId, studentId, matchedPhone, actor.userId],
-    );
-    if (!linked.rows[0]) return { kind: "review" };
-    const assigned = await mergeAndAssignStudentProfile(client, studentId, profileId);
-    if (!assigned) {
-      throw new ConflictException(
-        "Карточка ученика изменилась во время привязки. Повторите попытку.",
-      );
-    }
-    return { kind: "student", id: studentId, created: false, linked: true };
-  }
+          if (convertedCount === 1 && converted.rows[0]?.id) {
+            const studentId = converted.rows[0].id;
+            const linked = await client.query<{ entity_id: string }>(
+              `insert into app.user_crm_links
+                 (user_id, entity_type, entity_id, matched_phone, link_source,
+                  created_by, confirmed_at)
+               values ($1, 'student', $2, $3, 'auto_phone', $4, now())
+               on conflict (entity_type, entity_id) where deleted_at is null
+               do nothing
+               returning entity_id`,
+              [senderUserId, studentId, matchedPhone, actor.userId],
+            );
+            if (!linked.rows[0]) {
+              return { kind: "review" };
+            }
+            const assigned = await mergeAndAssignStudentProfile(
+              client,
+              studentId,
+              profile.profile_id,
+            );
+            if (!assigned) {
+              throw new ConflictException(
+                "Карточка ученика изменилась во время привязки. Повторите попытку.",
+              );
+            }
+            return {
+              kind: "student",
+              id: studentId,
+              created: false,
+              linked: true,
+            };
+          }
 
-  private async linkLeadIdentity(
-    client: LeadIntakeQueryExecutor, actor: ActorContext,
-    senderUserId: string, matchedPhone: string,
-    leadId: string,
-  ): Promise<AutomaticIntakeOutcome> {
-    const linked = await client.query<{ entity_id: string }>(
-      `insert into app.user_crm_links
-         (user_id, entity_type, entity_id, matched_phone, link_source,
-          created_by, confirmed_at)
-       values ($1, 'lead', $2, $3, 'auto_phone', $4, now())
-       on conflict (entity_type, entity_id) where deleted_at is null
-       do nothing
-       returning entity_id`,
-      [senderUserId, leadId, matchedPhone, actor.userId],
-    );
-    return linked.rows[0]
-      ? { kind: "lead", id: leadId, created: false, linked: true }
-      : { kind: "review" };
-  }
+          const linked = await client.query<{ entity_id: string }>(
+            `insert into app.user_crm_links
+               (user_id, entity_type, entity_id, matched_phone, link_source,
+                created_by, confirmed_at)
+             values ($1, 'lead', $2, $3, 'auto_phone', $4, now())
+             on conflict (entity_type, entity_id) where deleted_at is null
+             do nothing
+             returning entity_id`,
+            [senderUserId, leadId, matchedPhone, actor.userId],
+          );
+          if (!linked.rows[0]) {
+            return { kind: "review" };
+          }
+          return {
+            kind: "lead",
+            id: leadId,
+            created: false,
+            linked: true,
+          };
+        }
+      }
 
-  private async createAutomaticLead(
-    client: LeadIntakeQueryExecutor, actor: ActorContext,
-    senderUserId: string, profile: AutomaticIntakeProfile,
-    matchedPhone: string | null,
-  ): Promise<AutomaticIntakeEntityOutcome> {
-    const statusRes = await client.query<{ id: string }>(
-      `select id
+      const statusRes = await client.query<{ id: string }>(
+        `select id
          from app.lead_statuses
-        where stage_key = 'new'
-           or lower(btrim(name)) in ('новый', 'новые')
-        order by (stage_key = 'new') desc, sort_order, id
-        limit 1`,
-    );
-    const newStatusId = statusRes.rows[0]?.id ?? null;
-    const insertedLead = await client.query<{ id: string }>(
-      `insert into app.leads (
-         first_name, last_name, phone, source, source_id, status_id, created_by
-       )
-       select $1, $2, $3, source.display_name, source.id, $4, $5
-         from app.lead_sources source
-        where lower(btrim(source.canonical_name)) = 'app'
-          and source.is_active
-          and source.deleted_at is null
-        limit 1
-       returning id`,
-      [profile.first_name, profile.last_name, profile.phone, newStatusId, actor.userId],
-    );
-    const createdLeadId = insertedLead.rows[0].id;
-    await client.query(
-      `insert into app.user_crm_links
-         (user_id, entity_type, entity_id, matched_phone, link_source,
-          created_by, confirmed_at)
-       values ($1, 'lead', $2, $3, 'auto_phone', $4, now())
-       on conflict do nothing`,
-      [senderUserId, createdLeadId, matchedPhone, actor.userId],
-    );
-    return { kind: "lead", id: createdLeadId, created: true, linked: true };
-  }
-
-  private async publishAutomaticIntake(
-    actor: ActorContext, senderUserId: string,
-    trigger: "chat" | "onboarding",
-    outcome: AutomaticIntakeOutcome,
-  ): Promise<void> {
-    if (!("id" in outcome)) return;
-    if (!outcome.created && !outcome.linked) return;
-    await this.recordAutomaticIntakeAudit(actor, senderUserId, trigger, outcome);
-    this.realtime.emitCrmChanged({
-      entity: outcome.kind,
-      action: outcome.created ? "created" : "updated",
-      id: outcome.id,
-    });
-  }
-
-  private async recordAutomaticIntakeAudit(
-    intakeActor: ActorContext, senderUserId: string,
-    trigger: "chat" | "onboarding",
-    outcome: AutomaticIntakeEntityOutcome,
-  ): Promise<void> {
-    try {
-      await this.audit.record({
-        actor: intakeActor,
-        action: outcome.created
-          ? "crm.lead_created"
-          : "crm.client_user_linked",
-        entityType: outcome.kind,
-        entityId: outcome.id,
-        metadata: {
-          fromApp: true,
-          userId: senderUserId,
-          intakeTrigger: trigger,
-        },
-      });
-    } catch (error) {
-      this.logger.error(
-        `Audit write failed for client intake ${outcome.kind}/${outcome.id}: ${String(error)}`,
+         where stage_key = 'new'
+            or lower(btrim(name)) in ('новый', 'новые')
+         order by (stage_key = 'new') desc, sort_order, id
+         limit 1`,
       );
-    }
-  }
+      const newStatusId = statusRes.rows[0]?.id ?? null;
 
-  private toAutomaticIntakeResult(
-    outcome: AutomaticIntakeOutcome,
-  ): { leadId: string | null; created: boolean } {
+      const insertedLead = await client.query<{ id: string }>(
+        `insert into app.leads (
+           first_name,
+           last_name,
+           phone,
+           source,
+           source_id,
+           status_id,
+           created_by
+         )
+         select $1, $2, $3, source.display_name, source.id, $4, $5
+         from app.lead_sources source
+         where lower(btrim(source.canonical_name)) = 'app'
+           and source.is_active
+           and source.deleted_at is null
+         limit 1
+         returning id`,
+        [profile.first_name, profile.last_name, profile.phone, newStatusId, actor.userId],
+      );
+      const createdLeadId = insertedLead.rows[0].id;
+      await client.query(
+        `insert into app.user_crm_links
+           (user_id, entity_type, entity_id, matched_phone, link_source, created_by, confirmed_at)
+         values ($1, 'lead', $2, $3, 'auto_phone', $4, now())
+         on conflict do nothing`,
+        [senderUserId, createdLeadId, matchedPhone, actor.userId],
+      );
+      return {
+        kind: "lead",
+        id: createdLeadId,
+        created: true,
+        linked: true,
+      };
+    });
+
     if (outcome.kind === "review" || outcome.kind === "no_profile") {
       return { leadId: null, created: false };
+    }
+
+    if (outcome.created || outcome.linked) {
+      // The identity transaction is already committed. An unavailable audit
+      // sink must not make onboarding/chat retry and duplicate visible work.
+      try {
+        await this.audit.record({
+          actor,
+          action: outcome.created
+            ? "crm.lead_created"
+            : "crm.client_user_linked",
+          entityType: outcome.kind,
+          entityId: outcome.id,
+          metadata: {
+            fromApp: true,
+            userId: senderUserId,
+            intakeTrigger: trigger,
+          },
+        });
+      } catch (error) {
+        this.logger.error(
+          `Audit write failed for client intake ${outcome.kind}/${outcome.id}: ${String(error)}`,
+        );
+      }
+      this.realtime.emitCrmChanged({
+        entity: outcome.kind,
+        action: outcome.created ? "created" : "updated",
+        id: outcome.id,
+      });
     }
     return {
       leadId: outcome.kind === "lead" ? outcome.id : null,
