@@ -43,6 +43,21 @@ interface RecipientRow {
   user_id: string;
 }
 
+interface InboundLeadRecipient {
+  id: string;
+  role: string;
+  email: string;
+  channels: NotificationChannel[];
+}
+
+interface InboundLeadNotification {
+  notificationId: string;
+  title: string;
+  body: string;
+  data: { entityType: string; entityId: string; entityName: string };
+  recipients: InboundLeadRecipient[];
+}
+
 interface DeviceRow {
   id: string;
   user_id: string;
@@ -417,23 +432,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     const roleChannels = await this.loadRoleChannels('new_lead');
     const roles = [...roleChannels.keys()];
     if (roles.length === 0) return;
-    const users = await this.database.query<{
-      id: string;
-      role: string;
-      email: string;
-    }>(
-      `
-        select id, role::text as role, email
-        from app.users
-        where role::text = any($1::text[]) and deleted_at is null
-        order by created_at desc
-        limit 10000
-      `,
-      [roles]
-    );
-    const recipients = users.rows
-      .map((user) => ({ ...user, channels: roleChannels.get(user.role) ?? [] }))
-      .filter((user) => user.channels.length > 0);
+    const recipients = await this.loadInboundLeadRecipients(roles, roleChannels);
     if (recipients.length === 0) return;
     const lead = await this.database.query<{
       id: string;
@@ -460,6 +459,50 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       entityId: row.id,
       entityName: row.name
     };
+    await this.persistInboundLeadNotification({
+      notificationId,
+      title,
+      body,
+      data,
+      recipients
+    });
+    const channels = [...new Set(recipients.flatMap((item) => item.channels))];
+    this.scheduleDelivery(channels);
+    this.realtime.emitCrmChanged({
+      entity: 'notification',
+      action: 'created',
+      id: notificationId,
+      affectedUserIds: recipients.map((recipient) => recipient.id)
+    });
+  }
+
+  private async loadInboundLeadRecipients(
+    roles: string[],
+    roleChannels: Map<string, NotificationChannel[]>
+  ): Promise<InboundLeadRecipient[]> {
+    const users = await this.database.query<{
+      id: string;
+      role: string;
+      email: string;
+    }>(
+      `
+        select id, role::text as role, email
+        from app.users
+        where role::text = any($1::text[]) and deleted_at is null
+        order by created_at desc
+        limit 10000
+      `,
+      [roles]
+    );
+    return users.rows
+      .map((user) => ({ ...user, channels: roleChannels.get(user.role) ?? [] }))
+      .filter((user) => user.channels.length > 0);
+  }
+
+  private async persistInboundLeadNotification(
+    input: InboundLeadNotification
+  ): Promise<void> {
+    const { notificationId, title, body, data, recipients } = input;
     await this.database.transaction(async (client) => {
       await client.query(
         'select pg_advisory_xact_lock(hashtextextended($1::text, 0))',
@@ -518,14 +561,6 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
           );
         }
       }
-    });
-    const channels = [...new Set(recipients.flatMap((item) => item.channels))];
-    this.scheduleDelivery(channels);
-    this.realtime.emitCrmChanged({
-      entity: 'notification',
-      action: 'created',
-      id: notificationId,
-      affectedUserIds: recipients.map((recipient) => recipient.id)
     });
   }
 

@@ -1,4 +1,4 @@
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import { DatabaseService } from '../db/database.service';
 import { NotificationTokenCrypto } from './notification-token-crypto.service';
@@ -31,15 +31,118 @@ describe('NotificationsService', () => {
       hash: jest.fn((token: string) => `hash-${token}`),
       encrypt: jest.fn((token: string) => `encrypted-${token}`)
     } as unknown as jest.Mocked<Pick<NotificationTokenCrypto, 'hash' | 'encrypt'>>;
+    const realtime = {
+      emitCrmChanged: jest.fn()
+    } as unknown as jest.Mocked<Pick<RealtimeBus, 'emitCrmChanged'>>;
     const service = new NotificationsService(
       database as unknown as DatabaseService,
       audit as unknown as AuditService,
       new NotificationsPolicy(),
       worker as unknown as NotificationWorker,
       tokenCrypto as unknown as NotificationTokenCrypto,
-      { emitCrmChanged: () => undefined } as unknown as RealtimeBus
+      realtime as unknown as RealtimeBus
     );
-    return { service, database, audit, worker, tokenCrypto };
+    return { service, database, audit, worker, tokenCrypto, realtime };
+  }
+
+  const inboundSql = {
+    preferences: `
+        select role, channels
+        from app.notification_preferences
+        where event_type = $1 and enabled
+      `,
+    users: `
+        select id, role::text as role, email
+        from app.users
+        where role::text = any($1::text[]) and deleted_at is null
+        order by created_at desc
+        limit 10000
+      `,
+    lead: `
+        select lead.id,
+          btrim(concat_ws(' ', lead.last_name, lead.first_name)) as name,
+          coalesce(nullif(source.display_name, ''), nullif(lead.source, ''), 'Не указан') as source
+        from app.leads lead
+        left join app.lead_sources source on source.id = lead.source_id
+        where lead.inbound_id = $1 and lead.deleted_at is null
+        limit 1
+      `,
+    lock: 'select pg_advisory_xact_lock(hashtextextended($1::text, 0))',
+    notification: `
+          insert into app.notifications (id, type, title, body, data)
+          values ($1, 'new_lead', $2, $3, $4::jsonb)
+          on conflict (id) do nothing
+        `,
+    recipient: `
+            insert into app.notification_recipients (notification_id, user_id, delivered_at)
+            values ($1, $2, now())
+            on conflict (notification_id, user_id) do nothing
+          `,
+    push: `
+              insert into app.notification_deliveries (
+                notification_id, user_id, channel, provider, status, attempt_count, last_error
+              )
+              select $1, $2, 'push', 'firebase', 'queued', 0, null
+              where not exists (
+                select 1 from app.notification_deliveries
+                where notification_id = $1 and user_id = $2 and channel = 'push'
+              )
+            `,
+    email: `
+              insert into app.email_outbox (user_id, to_email_hash, template, payload)
+              select $1, $2, 'new_lead', $3::jsonb
+              where not exists (
+                select 1 from app.email_outbox
+                where user_id = $1
+                  and template = 'new_lead'
+                  and payload->>'notificationId' = $4
+              )
+            `
+  } as const;
+
+  function createInboundHarness(
+    databaseRows: unknown[][],
+    failedClientQuery?: number
+  ) {
+    const { service, database, worker, realtime } = createService();
+    const ledger: unknown[] = [];
+    let databaseQuery = 0;
+    database.query.mockImplementation(async (sql, params) => {
+      ledger.push({ event: 'database.query', sql, params });
+      return { rows: databaseRows[databaseQuery++] ?? [] } as never;
+    });
+    const transactionError = new Error('transaction failed');
+    let clientQuery = 0;
+    const client = {
+      query: jest.fn(async (sql: string, params?: unknown[]) => {
+        ledger.push({ event: 'client.query', sql, params });
+        if (clientQuery++ === failedClientQuery) throw transactionError;
+        return { rows: [] };
+      })
+    };
+    database.transaction.mockImplementation(async (work) => {
+      ledger.push({ event: 'transaction.begin' });
+      try {
+        const result = await work(client as never);
+        ledger.push({ event: 'transaction.commit' });
+        return result;
+      } catch (error: unknown) {
+        ledger.push({ event: 'transaction.rollback' });
+        throw error;
+      }
+    });
+    worker.dispatchPendingEmails.mockImplementation(async () => {
+      ledger.push({ event: 'worker.email' });
+      return { processed: 0, failed: 0 };
+    });
+    worker.dispatchPendingPush.mockImplementation(async () => {
+      ledger.push({ event: 'worker.push' });
+      return { processed: 0, failed: 0 };
+    });
+    realtime.emitCrmChanged.mockImplementation((payload) => {
+      ledger.push({ event: 'realtime', payload });
+    });
+    return { service, ledger, transactionError };
   }
 
   it('waits for required OTP delivery and reports success only after a provider sends it', async () => {
@@ -551,6 +654,247 @@ describe('NotificationsService', () => {
       await service.notifyNewLead({ leadId: 'lead-1', name: 'Иван', source: 'site' });
 
       expect(database.transaction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('inbound lead notification', () => {
+    const ingestionId = 'ingestion-a';
+    const notificationId = '11111111-1111-4111-8111-111111111111';
+
+    it('stops after preferences when every role opted out', async () => {
+      const { service, ledger } = createInboundHarness([[]]);
+
+      await expect(
+        service.notifyInboundLead(ingestionId, notificationId)
+      ).resolves.toBeUndefined();
+
+      expect(ledger).toEqual([
+        {
+          event: 'database.query',
+          sql: inboundSql.preferences,
+          params: ['new_lead']
+        }
+      ]);
+    });
+
+    it('stops after the ordered recipient lookup when no staff users exist', async () => {
+      const { service, ledger } = createInboundHarness([
+        [{ role: 'manager', channels: ['push'] }],
+        []
+      ]);
+
+      await expect(
+        service.notifyInboundLead(ingestionId, notificationId)
+      ).resolves.toBeUndefined();
+
+      expect(ledger).toEqual([
+        {
+          event: 'database.query',
+          sql: inboundSql.preferences,
+          params: ['new_lead']
+        },
+        {
+          event: 'database.query',
+          sql: inboundSql.users,
+          params: [['manager']]
+        }
+      ]);
+    });
+
+    it('reports the exact not-found error after preferences and recipients', async () => {
+      const { service, ledger } = createInboundHarness([
+        [{ role: 'manager', channels: ['in_app'] }],
+        [{ id: 'manager-a', role: 'manager', email: 'manager@example.com' }],
+        []
+      ]);
+
+      const result = service.notifyInboundLead(ingestionId, notificationId);
+
+      await expect(result).rejects.toBeInstanceOf(NotFoundException);
+      await expect(result).rejects.toMatchObject({
+        message: 'Входящая заявка не найдена.',
+        response: {
+          error: 'Not Found',
+          message: 'Входящая заявка не найдена.',
+          statusCode: 404
+        },
+        status: 404
+      });
+      expect(ledger).toEqual([
+        {
+          event: 'database.query',
+          sql: inboundSql.preferences,
+          params: ['new_lead']
+        },
+        {
+          event: 'database.query',
+          sql: inboundSql.users,
+          params: [['manager']]
+        },
+        {
+          event: 'database.query',
+          sql: inboundSql.lead,
+          params: [ingestionId]
+        }
+      ]);
+    });
+
+    it('persists mixed channels under the advisory lock before dispatch and realtime', async () => {
+      const { service, ledger } = createInboundHarness([
+        [
+          { role: 'manager', channels: ['push', 'email', 'invalid'] },
+          { role: 'admin', channels: ['in_app'] },
+          { role: 'teacher', channels: [] }
+        ],
+        [
+          { id: 'manager-a', role: 'manager', email: 'Manager@Example.COM' },
+          { id: 'admin-a', role: 'admin', email: 'admin@example.com' },
+          { id: 'manager-b', role: 'manager', email: '' }
+        ],
+        [{ id: 'lead-a', name: 'Лид Входящий', source: 'Веб-сайт' }]
+      ]);
+      const title = 'Новая заявка';
+      const body = 'Лид Входящий — источник: Веб-сайт';
+
+      await expect(
+        service.notifyInboundLead(ingestionId, notificationId)
+      ).resolves.toBeUndefined();
+
+      expect(ledger).toEqual([
+        {
+          event: 'database.query',
+          sql: inboundSql.preferences,
+          params: ['new_lead']
+        },
+        {
+          event: 'database.query',
+          sql: inboundSql.users,
+          params: [['manager', 'admin']]
+        },
+        {
+          event: 'database.query',
+          sql: inboundSql.lead,
+          params: [ingestionId]
+        },
+        { event: 'transaction.begin' },
+        {
+          event: 'client.query',
+          sql: inboundSql.lock,
+          params: [notificationId]
+        },
+        {
+          event: 'client.query',
+          sql: inboundSql.notification,
+          params: [
+            notificationId,
+            title,
+            body,
+            '{"entityType":"lead","entityId":"lead-a","entityName":"Лид Входящий"}'
+          ]
+        },
+        {
+          event: 'client.query',
+          sql: inboundSql.recipient,
+          params: [notificationId, 'manager-a']
+        },
+        {
+          event: 'client.query',
+          sql: inboundSql.push,
+          params: [notificationId, 'manager-a']
+        },
+        {
+          event: 'client.query',
+          sql: inboundSql.email,
+          params: [
+            'manager-a',
+            'cac240a80a231858a6b2451937984adce384b9b2b1995b7c71b332c580aac6e6',
+            '{"notificationId":"11111111-1111-4111-8111-111111111111","title":"Новая заявка","body":"Лид Входящий — источник: Веб-сайт"}',
+            notificationId
+          ]
+        },
+        {
+          event: 'client.query',
+          sql: inboundSql.recipient,
+          params: [notificationId, 'admin-a']
+        },
+        {
+          event: 'client.query',
+          sql: inboundSql.recipient,
+          params: [notificationId, 'manager-b']
+        },
+        {
+          event: 'client.query',
+          sql: inboundSql.push,
+          params: [notificationId, 'manager-b']
+        },
+        { event: 'transaction.commit' },
+        { event: 'worker.email' },
+        { event: 'worker.push' },
+        {
+          event: 'realtime',
+          payload: {
+            entity: 'notification',
+            action: 'created',
+            id: notificationId,
+            affectedUserIds: ['manager-a', 'admin-a', 'manager-b']
+          }
+        }
+      ]);
+    });
+
+    it('does not dispatch workers or realtime when the transaction fails', async () => {
+      const { service, ledger, transactionError } = createInboundHarness(
+        [
+          [{ role: 'manager', channels: ['push', 'email'] }],
+          [{ id: 'manager-a', role: 'manager', email: 'manager@example.com' }],
+          [{ id: 'lead-a', name: 'Лид Входящий', source: 'Веб-сайт' }]
+        ],
+        2
+      );
+
+      await expect(
+        service.notifyInboundLead(ingestionId, notificationId)
+      ).rejects.toBe(transactionError);
+
+      expect(ledger).toEqual([
+        {
+          event: 'database.query',
+          sql: inboundSql.preferences,
+          params: ['new_lead']
+        },
+        {
+          event: 'database.query',
+          sql: inboundSql.users,
+          params: [['manager']]
+        },
+        {
+          event: 'database.query',
+          sql: inboundSql.lead,
+          params: [ingestionId]
+        },
+        { event: 'transaction.begin' },
+        {
+          event: 'client.query',
+          sql: inboundSql.lock,
+          params: [notificationId]
+        },
+        {
+          event: 'client.query',
+          sql: inboundSql.notification,
+          params: [
+            notificationId,
+            'Новая заявка',
+            'Лид Входящий — источник: Веб-сайт',
+            '{"entityType":"lead","entityId":"lead-a","entityName":"Лид Входящий"}'
+          ]
+        },
+        {
+          event: 'client.query',
+          sql: inboundSql.recipient,
+          params: [notificationId, 'manager-a']
+        },
+        { event: 'transaction.rollback' }
+      ]);
     });
   });
 
