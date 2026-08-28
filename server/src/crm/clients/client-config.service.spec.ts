@@ -1,0 +1,261 @@
+import { ClientConfigService } from "./client-config.service";
+
+type UpdateArgs = Parameters<ClientConfigService["updateField"]>; type Dto = UpdateArgs[2];
+const actor: UpdateArgs[0] = { userId: "director-a", role: "director" }; const definitionId = "11111111-1111-4111-8111-111111111111", transactionClient = { id: "transaction-client" };
+
+const row = (overrides: Record<string, unknown> = {}) => ({
+  id: definitionId, field_key: "instrument", label: "Instrument",
+  value_type: "text", is_required: false, is_active: true, is_system: false,
+  options: [], version: "7", created_at: "2026-08-28T08:00:00.000Z",
+  updated_at: "2026-08-28T08:00:00.000Z", deleted_at: null,
+  category_key: "details", category_label: "Details", sort_order: "4",
+  width: "half", placements: ["edit", "card"], visible_on_lead: true,
+  visible_on_student: true,
+  ...overrides,
+});
+
+const patch = (values: Partial<Dto> = {}): Dto => ({
+  expectedVersion: 7,
+  ...values,
+});
+
+const fixture = (options: {
+  before?: ReturnType<typeof row> | null;
+  updated?: ReturnType<typeof row> | null;
+  count?: number;
+} = {}) => {
+  const events: string[] = [];
+  const before = options.before === undefined ? row() : options.before;
+  const updated = options.updated === undefined ? row({ version: "8" }) : options.updated;
+  const repository = {
+    findDefinitionForUpdate: jest.fn(async (_client: object, _id: string) => {
+      events.push("find");
+      return before;
+    }),
+    countDefinitionValues: jest.fn(async (_client: object, _id: string) => {
+      events.push("count");
+      return options.count ?? 0;
+    }),
+    updateDefinition: jest.fn(async (_client: object, _id: string,
+      _patch: Record<string, unknown>) => {
+      events.push("update");
+      return updated;
+    }),
+  };
+  const database = {
+    transaction: jest.fn(async (callback: (client: object) => Promise<unknown>) => {
+      events.push("transaction:start");
+      const result = await callback(transactionClient);
+      events.push("transaction:commit");
+      return result;
+    }),
+  };
+  const policy = { assertCanManageClientConfiguration:
+    jest.fn(() => events.push("policy")) };
+  const audit = { record: jest.fn(async (_entry: Record<string, unknown>) => void events.push("audit")) };
+  const dependencies = [database, repository, policy, audit] as unknown as
+    ConstructorParameters<typeof ClientConfigService>;
+  return { service: new ClientConfigService(...dependencies),
+    database, repository, policy, audit, events };
+};
+
+const update = (f: ReturnType<typeof fixture>, dto: Dto = patch()) =>
+  f.service.updateField(actor, definitionId, dto);
+
+describe("ClientConfigService.updateField", () => {
+  it("authorizes before starting a transaction", async () => {
+    const f = fixture();
+    const denied = new Error("policy-denied");
+    f.policy.assertCanManageClientConfiguration.mockImplementation(() => {
+      throw denied;
+    });
+    await expect(update(f)).rejects.toBe(denied);
+    expect(f.database.transaction).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [null, 7, "NotFoundException", 404, "Дополнительное поле не найдено."],
+    [row({ version: "8" }), 7, "ConflictException", 409,
+      "Дополнительное поле уже изменено в другой вкладке."],
+  ])("rejects missing and stale definitions before later reads", async (
+    before, expectedVersion, name, status, message,
+  ) => {
+    const f = fixture({ before });
+    await expect(update(f, patch({ expectedVersion }))).rejects
+      .toMatchObject({ name, status, message });
+    expect(f.repository.countDefinitionValues).not.toHaveBeenCalled();
+    expect(f.repository.updateDefinition).not.toHaveBeenCalled();
+    expect(f.audit.record).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { required: false },
+    { isActive: false },
+    { valueType: "number" as const },
+    { options: [] },
+    { visibleOnLead: false },
+    { visibleOnStudent: false },
+  ])("preserves every ordered system-field lock: %o", async (change) => {
+    const f = fixture({ before: row({ is_system: true }) });
+    f.repository.countDefinitionValues.mockRejectedValue(new Error("eager-count"));
+    await expect(update(f, patch({ ...change, label: " " }))).rejects
+      .toMatchObject({ status: 422, response: { code: "SYSTEM_FIELD_LOCKED",
+        field: "field", message: "Системное обязательное поле нельзя архивировать, сделать необязательным или изменить его тип." } });
+    expect(f.repository.countDefinitionValues).not.toHaveBeenCalled();
+    expect(f.repository.updateDefinition).not.toHaveBeenCalled();
+  });
+
+  it("allows a system field to be relabelled and made more visible", async () => {
+    const f = fixture({ before: row({ is_system: true, visible_on_student: false }) });
+    await update(f, patch({ label: "  Renamed  ", required: true,
+      isActive: true, valueType: "text", visibleOnStudent: true }));
+    expect(f.repository.updateDefinition.mock.calls[0]![2]).toMatchObject({
+      label: "Renamed", required: true, isActive: true,
+      valueType: "text", visibleOnStudent: true,
+    });
+  });
+
+  it("does not count stored values for a label-only patch", async () => {
+    const f = fixture();
+    f.repository.countDefinitionValues.mockRejectedValue(new Error("eager-count"));
+    await expect(update(f, patch({ label: "  New label  " }))).resolves.toMatchObject({
+      label: "Instrument", version: 8,
+    });
+    expect(f.repository.countDefinitionValues).not.toHaveBeenCalled();
+  });
+
+  it("does not count stored values when the type is unchanged", async () => {
+    const f = fixture();
+    f.repository.countDefinitionValues.mockRejectedValue(new Error("eager-count"));
+    await expect(update(f, patch({ valueType: "text" }))).resolves.toBeDefined();
+    expect(f.repository.countDefinitionValues).not.toHaveBeenCalled();
+  });
+
+  it("blocks a populated real type change before later validation", async () => {
+    const f = fixture({ count: 2 });
+    await expect(update(f, patch({ valueType: "number", options: ["bad"],
+      visibleOnLead: false, visibleOnStudent: false, label: " " }))).rejects
+      .toMatchObject({ status: 422, response: { code: "FIELD_TYPE_MIGRATION_REQUIRED",
+        field: "valueType", message: "Тип поля с существующими значениями меняется только отдельной миграцией." } });
+    expect(f.repository.countDefinitionValues)
+      .toHaveBeenCalledWith(transactionClient, definitionId);
+  });
+
+  it.each([
+    [patch({ valueType: "select", options: [" Piano ", "", "Piano", "Guitar"] }),
+      ["Piano", "Guitar"]],
+    [patch({ options: [] }), []],
+  ])("normalizes a defined option patch", async (dto, normalized) => {
+    const f = fixture();
+    await update(f, dto);
+    expect(f.repository.updateDefinition.mock.calls[0]![2].options)
+      .toEqual(normalized);
+  });
+
+  it.each([
+    [patch({ valueType: "select", options: [] }), "SELECT_OPTIONS_REQUIRED", "options"],
+    [patch({ options: ["bad"] }), "OPTIONS_ONLY_FOR_SELECT", "options"],
+    [patch({ visibleOnLead: false, visibleOnStudent: false, label: " " }),
+      "FIELD_VISIBILITY_REQUIRED", "visibility"],
+    [patch({ label: " " }), "REQUIRED", "label"],
+  ])("preserves validation precedence for %s", async (dto, code, field) => {
+    const f = fixture();
+    await expect(update(f, dto)).rejects
+      .toMatchObject({ status: 422, response: { code, field } });
+    expect(f.repository.updateDefinition).not.toHaveBeenCalled();
+  });
+
+  it("allows an archived field to be hidden from both cards", async () => {
+    const f = fixture({ updated: row({ version: 8, is_active: false,
+      visible_on_lead: false, visible_on_student: false }) });
+    await expect(update(f, patch({ isActive: false, visibleOnLead: false,
+      visibleOnStudent: false }))).resolves.toMatchObject({ isActive: false });
+  });
+
+  it("returns the exact conflict when the optimistic update loses", async () => {
+    const f = fixture({ updated: null });
+    await expect(update(f)).rejects.toMatchObject({ name: "ConflictException",
+      status: 409, message: "Дополнительное поле уже изменено в другой вкладке." });
+    expect(f.audit.record).not.toHaveBeenCalled();
+  });
+
+  it.each([[true, "crm.client_custom_field_updated"],
+    [false, "crm.client_custom_field_archived"]] as const)(
+    "commits before the %s audit action", async (isActive, action) => {
+      const f = fixture({ updated: row({ version: 8, is_active: isActive }) });
+      await update(f, patch({ isActive }));
+      expect(f.events).toEqual(["policy", "transaction:start", "find", "update",
+        "transaction:commit", "audit"]);
+      expect(f.audit.record.mock.calls[0]![0]).toMatchObject({ action });
+    },
+  );
+
+  it("waits for post-commit audit before resolving", async () => {
+    const f = fixture();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    f.audit.record.mockImplementation(async () => { f.events.push("audit"); await gate; });
+    let settled = false;
+    const result = update(f).then(() => { settled = true; });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    try {
+      expect(f.events.slice(-2)).toEqual(["transaction:commit", "audit"]);
+      expect(settled).toBe(false);
+    } finally {
+      release();
+      await result;
+    }
+  });
+
+  it("propagates an audit failure only after commit", async () => {
+    const f = fixture();
+    const failure = new Error("audit-failed");
+    f.audit.record.mockImplementation(async () => {
+      f.events.push("audit");
+      throw failure;
+    });
+    await expect(update(f)).rejects.toBe(failure);
+    expect(f.events.slice(-2)).toEqual(["transaction:commit", "audit"]);
+    expect(f.repository.updateDefinition).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves the exact patch, audit payload and rich public DTO", async () => {
+    const updated = row({ label: "New label", value_type: "select",
+      is_required: true, options: ["Piano", "Guitar"], version: "8" });
+    const f = fixture({ updated });
+    const result = await update(f, patch({ label: " New label ", valueType: "select",
+      required: true, isActive: true, options: [" Piano ", "Guitar"],
+      visibleOnLead: false, visibleOnStudent: true }));
+    const repositoryPatch = f.repository.updateDefinition.mock.calls[0]![2];
+    expect(Object.keys(repositoryPatch)).toEqual(["expectedVersion", "label",
+      "valueType", "required", "isActive", "options", "visibleOnLead",
+      "visibleOnStudent"]);
+    expect(repositoryPatch).toEqual({ expectedVersion: 7, label: "New label",
+      valueType: "select", required: true, isActive: true,
+      options: ["Piano", "Guitar"], visibleOnLead: false, visibleOnStudent: true });
+    expect(f.audit.record).toHaveBeenCalledWith({ actor,
+      action: "crm.client_custom_field_updated", entityType: "client_custom_field",
+      entityId: definitionId, metadata: { beforeVersion: 7, afterVersion: 8,
+        valueType: "select", required: true } });
+    expect(Object.keys(result)).toEqual(["id", "key", "label", "valueType",
+      "required", "isActive", "isSystem", "options", "version", "archivedAt",
+      "categoryKey", "categoryLabel", "order", "width", "placements",
+      "visibility", "visibleOnLead", "visibleOnStudent"]);
+    expect(result).toEqual({ id: definitionId, key: "instrument", label: "New label",
+      valueType: "select", required: true, isActive: true, isSystem: false,
+      options: ["Piano", "Guitar"], version: 8, archivedAt: null,
+      categoryKey: "details", categoryLabel: "Details", order: 4, width: "half",
+      placements: ["edit", "card"], visibility: { lead: true, student: true },
+      visibleOnLead: true, visibleOnStudent: true });
+  });
+
+  it("preserves fallback DTO defaults and deleted active semantics", async () => {
+    const f = fixture({ updated: row({ is_active: true, deleted_at: "archived",
+      options: {}, version: "9", category_key: undefined,
+      category_label: undefined, sort_order: undefined, width: undefined,
+      placements: {} }) });
+    await expect(update(f)).resolves.toMatchObject({ isActive: false, options: [],
+      version: 9, categoryKey: "general", categoryLabel: "Основная информация",
+      order: 0, width: "full", placements: ["create", "edit", "card"] });
+  });
+});
