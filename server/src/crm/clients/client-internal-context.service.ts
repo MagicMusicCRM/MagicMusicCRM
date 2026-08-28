@@ -98,6 +98,11 @@ const ACTION_LABELS: Record<string, string> = {
   "crm.client_unblacklisted": "Клиент убран из чёрного списка",
 };
 
+const TEACHER_SHARING_SUMMARIES = [
+  "Скрыт от преподавателя",
+  "Опубликован преподавателю",
+] as const;
+
 @Injectable()
 export class ClientInternalContextService {
   constructor(
@@ -419,13 +424,6 @@ export class ClientInternalContextService {
     after: Record<string, unknown>,
   ): string | null {
     const status = metadata["targetStatus"];
-    const sharingSummary =
-      after["sharedWithTeacher"] === true
-        ? "Опубликован преподавателю"
-        : "Скрыт от преподавателя";
-    const transitionedLessonCount = Array.isArray(before["items"])
-      ? before["items"].length
-      : 0;
     if (status) {
       return `Новый статус: ${this.paymentStatusLabel(String(status))}`;
     }
@@ -433,11 +431,17 @@ export class ClientInternalContextService {
       return `Версия ${before["version"] ?? 0} → ${after["version"] ?? "—"}`;
     }
     if (action === "crm.comment_teacher_sharing_changed") {
-      return sharingSummary;
+      return TEACHER_SHARING_SUMMARIES[
+        Number(after["sharedWithTeacher"] === true)
+      ];
     }
-    if (action === "crm.lessons_bulk_transitioned") {
-      return `Изменено занятий: ${transitionedLessonCount}`;
+    if (
+      action === "crm.lessons_bulk_transitioned" &&
+      Array.isArray(before["items"])
+    ) {
+      return `Изменено занятий: ${before["items"].length}`;
     }
+    if (action === "crm.lessons_bulk_transitioned") return "Изменено занятий: 0";
     return null;
   }
 

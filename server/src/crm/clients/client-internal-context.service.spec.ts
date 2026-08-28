@@ -1,19 +1,50 @@
 import { ClientInternalContextService } from "./client-internal-context.service";
 
-type Role =
-  | "client"
-  | "teacher"
-  | "manager"
-  | "admin"
-  | "director"
-  | "system_admin";
+type HistoryArguments = Parameters<
+  ClientInternalContextService["listOperationalHistory"]
+>;
+type Role = HistoryArguments[0]["role"];
 
-const actor = (role: Role) => ({
+const actor = (role: Role): HistoryArguments[0] => ({
   userId: `${role}-user`,
   role,
 });
 
-const ref = { type: "student" as const, id: "student-a" };
+const ref: HistoryArguments[1] = { type: "student", id: "student-a" };
+
+const actionEntries = [
+  ["crm.lead_converted", "Лид конвертирован в ученика"],
+  ["crm.subscription_purchased", "Абонемент куплен"],
+  ["crm.subscription_issued", "Абонемент выдан"],
+  ["crm.subscription_replaced", "Абонемент заменён"],
+  ["crm.subscription_cancelled", "Абонемент отменён"],
+  ["crm.payment_record_created", "Оплата добавлена"],
+  ["crm.payment_record_transitioned", "Статус оплаты изменён"],
+  [
+    "crm.installment_payment_due",
+    "Срок платежа рассрочки наступил — требуется проверка",
+  ],
+  ["crm.payment_reversed", "Оплата удалена из обычного учёта"],
+  ["crm.payment_adjustment_recorded", "Возврат или корректировка"],
+  ["crm.lesson_rescheduled", "Занятие перенесено"],
+  ["crm.lesson_cancelled", "Занятие отменено"],
+  ["crm.lesson_settled", "Занятие рассчитано"],
+  ["crm.lessons_bulk_transitioned", "Занятия изменены"],
+  ["crm.schedule_plan_ended", "Постоянное расписание завершено"],
+  ["crm.client_internal_note_changed", "Общая заметка изменена"],
+  ["crm.comment_created", "Комментарий добавлен"],
+  [
+    "crm.comment_teacher_sharing_changed",
+    "Видимость комментария изменена",
+  ],
+  ["workflow.shared_task_created", "Задача создана"],
+  ["workflow.shared_task_updated", "Задача изменена"],
+  ["workflow.shared_task_closed", "Задача закрыта"],
+  ["crm.client_blacklisted", "Клиент добавлен в чёрный список"],
+  ["crm.client_unblacklisted", "Клиент убран из чёрного списка"],
+] as const;
+
+const historyActions = actionEntries.map(([action]) => action);
 
 const historyRow = (overrides: Record<string, unknown> = {}) => ({
   id: "event-a",
@@ -31,12 +62,13 @@ const historyRow = (overrides: Record<string, unknown> = {}) => ({
 const createService = (rows: Record<string, unknown>[] = []) => {
   const query = jest.fn().mockResolvedValue({ rows });
   const resolve = jest.fn().mockResolvedValue(ref);
-  const service = new ClientInternalContextService(
-    { query } as never,
-    { resolve } as never,
-    {} as never,
-    {} as never,
-  );
+  const dependencies = [
+    { query },
+    { resolve },
+    {},
+    {},
+  ] as unknown as ConstructorParameters<typeof ClientInternalContextService>;
+  const service = new ClientInternalContextService(...dependencies);
   return { service, query, resolve };
 };
 
@@ -51,6 +83,12 @@ describe("ClientInternalContextService operational history", () => {
       ).rejects.toMatchObject({
         name: "ForbiddenException",
         message: "Внутренняя информация клиента недоступна.",
+        status: 403,
+        response: {
+          message: "Внутренняя информация клиента недоступна.",
+          error: "Forbidden",
+          statusCode: 403,
+        },
       });
       expect(resolve).not.toHaveBeenCalled();
       expect(query).not.toHaveBeenCalled();
@@ -95,11 +133,7 @@ describe("ClientInternalContextService operational history", () => {
     expect(query.mock.calls[0]![1]).toEqual([
       "student",
       "student-a",
-      expect.arrayContaining([
-        "crm.lead_converted",
-        "crm.client_internal_note_changed",
-        "crm.client_unblacklisted",
-      ]),
+      historyActions,
       "11111111-1111-4111-8111-111111111111",
       3,
     ]);
@@ -107,6 +141,11 @@ describe("ClientInternalContextService operational history", () => {
     expect(sql).toContain("order by audit.created_at desc, audit.id desc");
     expect(sql).toContain("limit $5");
     expect(sql).toContain("(audit.created_at, audit.id) <");
+
+    const exact = createService(rows.slice(0, 2));
+    await expect(
+      exact.service.listOperationalHistory(actor("manager"), ref, { limit: 2 }),
+    ).resolves.toMatchObject({ nextCursor: null });
   });
 
   it("keeps the default and capped query limits exact", async () => {
@@ -115,7 +154,7 @@ describe("ClientInternalContextService operational history", () => {
     expect(first.query.mock.calls[0]![1]).toEqual([
       "student",
       "student-a",
-      expect.any(Array),
+      historyActions,
       null,
       31,
     ]);
@@ -127,42 +166,18 @@ describe("ClientInternalContextService operational history", () => {
     expect(second.query.mock.calls[0]![1]).toEqual([
       "student",
       "student-a",
-      expect.any(Array),
+      historyActions,
       null,
       101,
     ]);
   });
 
   it("preserves every action label and the unknown-action fallback", async () => {
-    const labels: Record<string, string> = {
-      "crm.lead_converted": "Лид конвертирован в ученика",
-      "crm.subscription_purchased": "Абонемент куплен",
-      "crm.subscription_issued": "Абонемент выдан",
-      "crm.subscription_replaced": "Абонемент заменён",
-      "crm.subscription_cancelled": "Абонемент отменён",
-      "crm.payment_record_created": "Оплата добавлена",
-      "crm.payment_record_transitioned": "Статус оплаты изменён",
-      "crm.installment_payment_due":
-        "Срок платежа рассрочки наступил — требуется проверка",
-      "crm.payment_reversed": "Оплата удалена из обычного учёта",
-      "crm.payment_adjustment_recorded": "Возврат или корректировка",
-      "crm.lesson_rescheduled": "Занятие перенесено",
-      "crm.lesson_cancelled": "Занятие отменено",
-      "crm.lesson_settled": "Занятие рассчитано",
-      "crm.lessons_bulk_transitioned": "Занятия изменены",
-      "crm.schedule_plan_ended": "Постоянное расписание завершено",
-      "crm.client_internal_note_changed": "Общая заметка изменена",
-      "crm.comment_created": "Комментарий добавлен",
-      "crm.comment_teacher_sharing_changed":
-        "Видимость комментария изменена",
-      "workflow.shared_task_created": "Задача создана",
-      "workflow.shared_task_updated": "Задача изменена",
-      "workflow.shared_task_closed": "Задача закрыта",
-      "crm.client_blacklisted": "Клиент добавлен в чёрный список",
-      "crm.client_unblacklisted": "Клиент убран из чёрного списка",
-      "unknown.action": "Действие с клиентом",
-    };
-    const rows = Object.keys(labels).map((actionKey, index) =>
+    const entries = [
+      ...actionEntries,
+      ["unknown.action", "Действие с клиентом"] as const,
+    ];
+    const rows = entries.map(([actionKey], index) =>
       historyRow({ id: `event-${index}`, action: actionKey }),
     );
     const { service } = createService(rows);
@@ -177,7 +192,7 @@ describe("ClientInternalContextService operational history", () => {
       Object.fromEntries(
         result.items.map((item) => [item.actionKey, item.action]),
       ),
-    ).toEqual(labels);
+    ).toEqual(Object.fromEntries(entries));
   });
 
   it("preserves reason precedence and exact sentinel redaction", async () => {
@@ -265,6 +280,12 @@ describe("ClientInternalContextService operational history", () => {
       historyRow({
         id: "note",
         action: "crm.client_internal_note_changed",
+        before_ref: { version: 3 },
+        after_ref: { version: 4 },
+      }),
+      historyRow({
+        id: "note-missing",
+        action: "crm.client_internal_note_changed",
         metadata: { targetStatus: 0 },
         before_ref: {},
         after_ref: {},
@@ -307,7 +328,8 @@ describe("ClientInternalContextService operational history", () => {
       unpaid: "Новый статус: Не оплачен",
       custom: "Новый статус: review",
       "status-wins": "Новый статус: Оплачен",
-      note: "Версия 0 → —",
+      note: "Версия 3 → 4",
+      "note-missing": "Версия 0 → —",
       shared: "Опубликован преподавателю",
       hidden: "Скрыт от преподавателя",
       bulk: "Изменено занятий: 3",
