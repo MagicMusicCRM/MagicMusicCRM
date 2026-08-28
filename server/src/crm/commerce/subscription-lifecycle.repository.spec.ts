@@ -1,4 +1,3 @@
-import { DatabaseService } from "../../db/database.service";
 import { SubscriptionLifecycleRepository } from "./subscription-lifecycle.repository";
 
 describe("SubscriptionLifecycleRepository replacement context mapping", () => {
@@ -47,9 +46,10 @@ describe("SubscriptionLifecycleRepository replacement context mapping", () => {
 
   function createRepository(rows: unknown[]) {
     const query = jest.fn().mockResolvedValue({ rows });
-    const repository = new SubscriptionLifecycleRepository({
-      query,
-    } as unknown as DatabaseService);
+    const [database] = [{ query }] as unknown as ConstructorParameters<
+      typeof SubscriptionLifecycleRepository
+    >;
+    const repository = new SubscriptionLifecycleRepository(database);
     return { repository, query };
   }
 
