@@ -1,11 +1,24 @@
 # MagicMusicCRM — актуальная передача
 
 > Обновлено: 2026-08-28
-> Production: client `1.5.18+198`, server `744959ef`,
+> Production: client `1.5.19+199`, server `744959ef`,
 > image `sha256:5bd6ee44…`, migration `0141`
 > Рабочая ветка: `main`
-> Статус: production release `1.5.18+198` PASS;
+> Статус: production client hotfix `1.5.19+199` PASS;
 > owner mega-UAT не завершён
+
+Client-only hotfix `1.5.19+199` восстановил production shell рабочих разделов
+после архитектурной очистки. Overview и Settings системного администратора
+снова используют штатные карточки, панели и controls вместо сырого текста и
+серых заглушек; desktop/mobile и role-persona regressions добавлены. Flutter
+`1360/1360`, Windows device gates `6/6 + 4/4`, analyze, Windows/Android
+packaging и подписи PASS. Fresh encrypted off-host backup прошёл isolated
+restore; rollback manifests build `198` сохранены. Оба public manifest
+переключены на build `199`, четыре artifacts и GitHub Release `v1.5.19`
+опубликованы. Production API не менялся: revision `744959ef`, image
+`5bd6ee44…`, migration `0141`, healthy/restart `0`; reconciliation дважды
+`issues=[]`, outbox `0/0`, свежие API/Caddy ошибки `0`. Evidence:
+`docs/audits/v7-production-workspace-shell-hotfix-199.md`.
 
 Release `1.5.18+198` обновил production server и оба клиентских update
 channel. Backend `259/259` suites / `3186/3186` tests, Flutter `1355/1355`,
