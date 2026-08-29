@@ -319,7 +319,21 @@ void main() {
       await tester.ensureVisible(issue);
       await tester.tap(issue);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Демо — Фортепиано, 8 часов'));
+      expect(
+        tester
+            .widget<TextFormField>(
+              find.byKey(const Key('subscription-accepted-by')),
+            )
+            .initialValue,
+        'Анна Администратор',
+      );
+      final packageSelector = find.byKey(
+        const Key('subscription-package-selector'),
+      );
+      await tester.ensureVisible(packageSelector);
+      tester
+          .widget<DropdownButtonFormField<String>>(packageSelector)
+          .onChanged!('package-1');
       await tester.pumpAndSettle();
 
       final submit = find.byKey(const Key('subscription-issue-submit'));
@@ -362,4 +376,70 @@ void main() {
       await tester.pump(const Duration(seconds: 4));
     },
   );
+
+  testWidgets('subscription actor falls back to email or failure label', (
+    tester,
+  ) async {
+    Future<void> openSale(FakeCardApiClient api) async {
+      await pumpClientCard(
+        tester,
+        api: api,
+        seed: {'id': 'lead-1', 'name': 'Анна', 'custom_data': {}},
+        statuses: const [],
+      );
+      final subscriptions = find.text('Абонементы');
+      await tester.ensureVisible(subscriptions);
+      await tester.tap(subscriptions);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Продать абонемент'));
+      await tester.pumpAndSettle();
+    }
+
+    FakeCardApiClient api({
+      required Map<String, dynamic> profile,
+      bool fail = false,
+    }) => FakeCardApiClient(
+      lead: const {
+        'id': 'lead-1',
+        'firstName': 'Анна',
+        'lastName': 'Смирнова',
+        'customData': <String, dynamic>{},
+      },
+      subscriptionPackages: const [
+        {'id': 'package-1', 'name': 'Демо', 'lessonsTotal': 8, 'price': 24000},
+      ],
+      currentProfile: profile,
+      failCurrentProfile: fail,
+    );
+
+    await openSale(
+      api(
+        profile: const {
+          'id': 'current-user',
+          'email': 'fallback@example.test',
+          'role': 'admin',
+          'firstName': 'Анна',
+        },
+      ),
+    );
+    expect(
+      tester
+          .widget<TextFormField>(
+            find.byKey(const Key('subscription-accepted-by')),
+          )
+          .initialValue,
+      'fallback@example.test',
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+
+    await openSale(api(profile: const {}, fail: true));
+    expect(
+      tester
+          .widget<TextFormField>(
+            find.byKey(const Key('subscription-accepted-by')),
+          )
+          .initialValue,
+      'Текущий пользователь',
+    );
+  });
 }

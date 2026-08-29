@@ -89,7 +89,7 @@ class SubscriptionIssuePurchasePreviewCard extends StatelessWidget {
   final SubscriptionPurchasePreview preview;
   final String recipientLabel;
   final String payerLabel;
-  final double packageUnits;
+  final SubscriptionUnitAmount packageUnits;
 
   @override
   Widget build(BuildContext context) {
@@ -165,7 +165,7 @@ class SubscriptionIssuePurchasePreviewCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${_formatSubscriptionUnits(paidUnits)} из ${_formatSubscriptionUnits(packageUnits)} занятий',
+                  '${paidUnits.format()} из ${packageUnits.format()} занятий',
                   style: TextStyle(
                     color: statusColor,
                     fontSize: 12,
@@ -212,11 +212,6 @@ class SubscriptionIssuePurchasePreviewCard extends StatelessWidget {
       ),
     );
   }
-}
-
-String _formatSubscriptionUnits(double value) {
-  if (value == value.roundToDouble()) return value.toStringAsFixed(0);
-  return value.toStringAsFixed(2);
 }
 
 class SubscriptionIssuePriceLine extends StatelessWidget {

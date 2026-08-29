@@ -163,30 +163,68 @@ BigInt subscriptionPackageBasePriceMinor(Map<String, dynamic> package) {
       BigInt.zero;
 }
 
-double subscriptionPackageUnitCount(Map<String, dynamic> package) {
-  return double.tryParse(
-        (package['unitCount'] ??
-                    package['lessons_total'] ??
-                    package['lessonsTotal'])
-                ?.toString() ??
-            '',
-      ) ??
-      0;
+/// Exact unit amount used by the purchase projection. Package units are a
+/// PostgreSQL numeric value, so converting them (or money) through `double`
+/// can change the result before it reaches the UI.
+class SubscriptionUnitAmount implements Comparable<SubscriptionUnitAmount> {
+  const SubscriptionUnitAmount._(this.numerator, this.denominator);
+
+  final BigInt numerator;
+  final BigInt denominator;
+
+  factory SubscriptionUnitAmount.parse(Object? raw) {
+    final text = raw?.toString().trim().replaceAll(',', '.') ?? '';
+    final match = RegExp(r'^(\d+)(?:\.(\d+))?$').firstMatch(text);
+    if (match == null) {
+      return SubscriptionUnitAmount._(BigInt.zero, BigInt.one);
+    }
+    final fraction = match.group(2) ?? '';
+    return SubscriptionUnitAmount._(
+      BigInt.parse('${match.group(1)}$fraction'),
+      BigInt.from(10).pow(fraction.length),
+    );
+  }
+
+  @override
+  int compareTo(SubscriptionUnitAmount other) =>
+      (numerator * other.denominator).compareTo(other.numerator * denominator);
+
+  /// The UI intentionally rounds half up to the existing two decimal places.
+  String format({int fractionDigits = 2}) {
+    final scale = BigInt.from(10).pow(fractionDigits);
+    final scaled = numerator * scale;
+    var rounded = scaled ~/ denominator;
+    if ((scaled.remainder(denominator) * BigInt.two) >= denominator) {
+      rounded += BigInt.one;
+    }
+    final whole = rounded ~/ scale;
+    final fraction = rounded.remainder(scale);
+    if (fraction == BigInt.zero) return whole.toString();
+    return '$whole.${fraction.toString().padLeft(fractionDigits, '0')}';
+  }
 }
+
+SubscriptionUnitAmount subscriptionPackageUnitCount(
+  Map<String, dynamic> package,
+) => SubscriptionUnitAmount.parse(
+  package['unitCount'] ?? package['lessons_total'] ?? package['lessonsTotal'],
+);
 
 /// Mirrors `commerce-projection.repository.ts` paid_units exactly for a sale
 /// preview: non-positive obligation grants all units; otherwise payment is
 /// clamped to the package capacity.
-double subscriptionPaidUnits({
-  required double packageUnits,
+SubscriptionUnitAmount subscriptionPaidUnits({
+  required SubscriptionUnitAmount packageUnits,
   required BigInt paidNowMinor,
   required BigInt finalObligationMinor,
 }) {
   if (finalObligationMinor <= BigInt.zero) return packageUnits;
   final paidNow = paidNowMinor < BigInt.zero ? BigInt.zero : paidNowMinor;
-  final projected =
-      paidNow.toDouble() * packageUnits / finalObligationMinor.toDouble();
-  return projected > packageUnits ? packageUnits : projected;
+  if (paidNow >= finalObligationMinor) return packageUnits;
+  return SubscriptionUnitAmount._(
+    paidNow * packageUnits.numerator,
+    finalObligationMinor * packageUnits.denominator,
+  );
 }
 
 BigInt? parseSubscriptionMoneyMinor(String raw) {

@@ -24,7 +24,7 @@ class SubscriptionIssueFormFeedback extends StatelessWidget {
   final bool attempted;
   final String? error;
   final bool busy;
-  final double packageUnits;
+  final SubscriptionUnitAmount packageUnits;
   final VoidCallback onClose;
   final VoidCallback onSubmit;
 

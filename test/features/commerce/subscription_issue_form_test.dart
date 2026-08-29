@@ -9,6 +9,7 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/subscription_issue_sheet.dart';
+import 'package:magic_music_crm/features/crm/presentation/client_card/subscription_issue_models.dart';
 
 typedef _Call = ({String path, Object? data, MagicMutationIdentity? identity});
 
@@ -93,6 +94,26 @@ SubscriptionPurchasePreview _preview({
   previewToken: 'signed-preview',
 );
 
+SubscriptionPurchasePreview _paidPreview({
+  required BigInt paidNowMinor,
+  required BigInt debtMinor,
+  required BigInt overpaymentMinor,
+}) => SubscriptionPurchasePreview(
+  recipientStudentId: _recipientId,
+  payerStudentId: _recipientId,
+  fundingMode: SubscriptionFundingMode.personalAccount,
+  currencyCode: 'RUB',
+  finalPriceMinor: BigInt.from(800000),
+  payerBalanceMinor: BigInt.from(800000),
+  paidNowMinor: paidNowMinor,
+  balanceAfterMinor: BigInt.zero,
+  canCommit: true,
+  shortageMinor: BigInt.zero,
+  debtMinor: debtMinor,
+  overpaymentMinor: overpaymentMinor,
+  previewToken: 'status-preview',
+);
+
 Future<void> _openSheet(
   WidgetTester tester, {
   required SubscriptionIssuePreview onPreview,
@@ -148,6 +169,48 @@ List<String> _normalizedTexts(WidgetTester tester, Finder parent) => tester
     .toList(growable: false);
 
 void main() {
+  test('paid units preserve PostgreSQL numeric precision before display', () {
+    final packageUnits = subscriptionPackageUnitCount(const {'unitCount': 8});
+    final hugePartial = subscriptionPaidUnits(
+      packageUnits: packageUnits,
+      paidNowMinor: BigInt.parse('9007199254740992'),
+      finalObligationMinor: BigInt.parse('9007199254740993'),
+    );
+
+    expect(hugePartial.compareTo(packageUnits), lessThan(0));
+    expect(
+      subscriptionPaidUnits(
+        packageUnits: packageUnits,
+        paidNowMinor: BigInt.from(-1),
+        finalObligationMinor: BigInt.zero,
+      ).format(),
+      '8',
+    );
+    expect(
+      subscriptionPaidUnits(
+        packageUnits: packageUnits,
+        paidNowMinor: BigInt.from(300000),
+        finalObligationMinor: BigInt.from(800000),
+      ).format(),
+      '3',
+    );
+    expect(
+      subscriptionPaidUnits(
+        packageUnits: packageUnits,
+        paidNowMinor: BigInt.from(800000),
+        finalObligationMinor: BigInt.from(800000),
+      ).format(),
+      '8',
+    );
+    expect(
+      subscriptionPaidUnits(
+        packageUnits: packageUnits,
+        paidNowMinor: BigInt.from(900000),
+        finalObligationMinor: BigInt.from(800000),
+      ).format(),
+      '8',
+    );
+  });
   testWidgets(
     'one sale sheet keeps package selector and payment fields together',
     (tester) async {
@@ -231,6 +294,50 @@ void main() {
     );
   });
 
+  testWidgets('preview status distinguishes full payment and overpayment', (
+    tester,
+  ) async {
+    await _openSheet(
+      tester,
+      onPreview: (_) async => _paidPreview(
+        paidNowMinor: BigInt.from(800000),
+        debtMinor: BigInt.zero,
+        overpaymentMinor: BigInt.zero,
+      ),
+      onSubmit: (_) async {},
+    );
+    await _tap(tester, find.byKey(const Key('subscription-issue-submit')));
+    var status = tester.widget<Container>(
+      find.byKey(const Key('subscription-paid-units-status')),
+    );
+    expect(find.text('8 из 8 занятий'), findsOneWidget);
+    expect(
+      (status.decoration! as BoxDecoration).border!.top.color,
+      AppColor.success,
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _openSheet(
+      tester,
+      onPreview: (_) async => _paidPreview(
+        paidNowMinor: BigInt.from(900000),
+        debtMinor: BigInt.zero,
+        overpaymentMinor: BigInt.from(100000),
+      ),
+      onSubmit: (_) async {},
+    );
+    await _tap(tester, find.byKey(const Key('subscription-issue-submit')));
+    status = tester.widget<Container>(
+      find.byKey(const Key('subscription-paid-units-status')),
+    );
+    expect(find.text('8 из 8 занятий'), findsOneWidget);
+    expect(
+      (status.decoration! as BoxDecoration).border!.top.color,
+      AppColor.danger,
+    );
+    expect(find.text('Переплата после покупки'), findsOneWidget);
+  });
+
   testWidgets('selected package and payment details reach preview', (
     tester,
   ) async {
@@ -273,6 +380,17 @@ void main() {
       find.byKey(const Key('subscription-payment-comment')),
       'Оплата наличными',
     );
+    final paymentDate = find.byKey(
+      const ValueKey('subscription-paid-at-26.08.2026'),
+    );
+    await tester.ensureVisible(paymentDate);
+    await tester.tap(paymentDate);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.chevron_right));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('2').last);
+    await tester.tap(find.byType(TextButton).last);
+    await tester.pumpAndSettle();
     await _tap(tester, find.byKey(const Key('subscription-issue-submit')));
 
     expect(
@@ -284,6 +402,7 @@ void main() {
     expect(previewInput?.paymentComment, 'Оплата наличными');
     expect(previewInput?.startsAt, DateTime.utc(2026, 8, 26));
     expect(previewInput?.expiresAt, DateTime.utc(2026, 9, 26));
+    expect(previewInput?.paymentOccurredAt, DateTime.utc(2026, 9, 2));
   });
 
   testWidgets('existing subscription sale sends the selected payment method', (

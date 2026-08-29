@@ -75,6 +75,14 @@ class FakeCardApiClient extends MagicApiClient {
     this.paymentReversalPreview,
     this.paymentCorrectionPreview,
     this.adjustmentReversalPreview,
+    this.currentProfile = const {
+      'id': 'current-user',
+      'email': 'admin@example.test',
+      'role': 'admin',
+      'firstName': 'Анна',
+      'lastName': 'Администратор',
+    },
+    this.failCurrentProfile = false,
   }) : studentSubscriptions = [
          for (final subscription in studentSubscriptions)
            Map<String, dynamic>.from(subscription),
@@ -147,6 +155,8 @@ class FakeCardApiClient extends MagicApiClient {
   final Map<String, dynamic>? paymentReversalPreview;
   final Map<String, dynamic>? paymentCorrectionPreview;
   final Map<String, dynamic>? adjustmentReversalPreview;
+  final Map<String, dynamic> currentProfile;
+  final bool failCurrentProfile;
 
   Map<String, dynamic>? updateLeadBody;
   final List<Map<String, dynamic>> updateLeadBodies = [];
@@ -180,6 +190,12 @@ class FakeCardApiClient extends MagicApiClient {
   }) async {
     getRequests.add(path);
     getCalls.add((path: path, query: {...?queryParameters}));
+    if (path == '/profile/me') {
+      if (failCurrentProfile) {
+        throw const MagicApiException(message: 'Профиль недоступен.');
+      }
+      return currentProfile as T;
+    }
     if (path == '/legal/gate') {
       return <String, dynamic>{
             'role': role,

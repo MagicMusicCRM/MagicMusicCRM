@@ -696,11 +696,11 @@ extension _ClientCardStudent on _ClientCardState {
   Future<String> _subscriptionAcceptedByLabel() async {
     try {
       final profile = await ref.read(magicAuthServiceProvider).currentProfile();
-      final fullName = [
-        profile.firstName,
-        profile.lastName,
-      ].whereType<String>().where((part) => part.trim().isNotEmpty).join(' ');
-      return fullName.isNotEmpty ? fullName : profile.email.trim();
+      final firstName = profile.firstName?.trim() ?? '';
+      final lastName = profile.lastName?.trim() ?? '';
+      return firstName.isNotEmpty && lastName.isNotEmpty
+          ? '$firstName $lastName'
+          : profile.email.trim();
     } catch (_) {
       return 'Текущий пользователь';
     }
