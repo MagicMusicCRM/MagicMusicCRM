@@ -19,6 +19,7 @@ import 'package:magic_music_crm/features/manager/presentation/tasks/shared_tasks
 import 'package:magic_music_crm/features/manager/presentation/providers/leads_providers.dart';
 import 'package:magic_music_crm/features/manager/presentation/providers/students_board_providers.dart';
 import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
+import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
 import 'package:magic_music_crm/core/navigation/crm_nav_rbac.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_forms/client_forms_api.dart';
 import 'package:magic_music_crm/core/utils/status_color.dart';

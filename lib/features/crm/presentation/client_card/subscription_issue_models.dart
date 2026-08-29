@@ -163,6 +163,32 @@ BigInt subscriptionPackageBasePriceMinor(Map<String, dynamic> package) {
       BigInt.zero;
 }
 
+double subscriptionPackageUnitCount(Map<String, dynamic> package) {
+  return double.tryParse(
+        (package['unitCount'] ??
+                    package['lessons_total'] ??
+                    package['lessonsTotal'])
+                ?.toString() ??
+            '',
+      ) ??
+      0;
+}
+
+/// Mirrors `commerce-projection.repository.ts` paid_units exactly for a sale
+/// preview: non-positive obligation grants all units; otherwise payment is
+/// clamped to the package capacity.
+double subscriptionPaidUnits({
+  required double packageUnits,
+  required BigInt paidNowMinor,
+  required BigInt finalObligationMinor,
+}) {
+  if (finalObligationMinor <= BigInt.zero) return packageUnits;
+  final paidNow = paidNowMinor < BigInt.zero ? BigInt.zero : paidNowMinor;
+  final projected =
+      paidNow.toDouble() * packageUnits / finalObligationMinor.toDouble();
+  return projected > packageUnits ? packageUnits : projected;
+}
+
 BigInt? parseSubscriptionMoneyMinor(String raw) {
   final normalized = raw
       .trim()

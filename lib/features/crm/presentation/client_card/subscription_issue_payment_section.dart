@@ -26,6 +26,7 @@ class SubscriptionIssuePaymentSection extends StatelessWidget {
     required this.validateExpiresAt,
     required this.validatePurchaseReason,
     required this.setPurchaseReason,
+    required this.acceptedByLabel,
     required this.onChanged,
   });
 
@@ -45,6 +46,7 @@ class SubscriptionIssuePaymentSection extends StatelessWidget {
   final String? Function() validateExpiresAt;
   final FormFieldValidator<String> validatePurchaseReason;
   final ValueChanged<String> setPurchaseReason;
+  final String acceptedByLabel;
   final VoidCallback onChanged;
 
   void _change(VoidCallback action) {
@@ -67,6 +69,17 @@ class SubscriptionIssuePaymentSection extends StatelessWidget {
           setExpiresAt: setExpiresAt,
           validateExpiresAt: validateExpiresAt,
           onChanged: onChanged,
+        ),
+        const SizedBox(height: AppSpace.md),
+        TextFormField(
+          key: const Key('subscription-accepted-by'),
+          initialValue: acceptedByLabel,
+          readOnly: true,
+          decoration: clientCardInputDecoration(
+            Theme.of(context).colorScheme,
+            label: 'Принял',
+            isDense: true,
+          ),
         ),
         const SizedBox(height: AppSpace.md),
         SearchablePickerField(

@@ -16,28 +16,32 @@ class SubscriptionIssueController extends ChangeNotifier {
     required SubscriptionIssueSubmit onSubmit,
     DateTime? commandTimestamp,
     SubscriptionIdentityFactory? identityFactory,
-  }) : _basePriceMinor = subscriptionPackageBasePriceMinor(package),
-       _onPreview = onPreview,
+  }) : _onPreview = onPreview,
        _onSubmit = onSubmit,
-       _identityFactory = identityFactory ?? _createIdentity,
-       _draft = SubscriptionIssueDraft.fromPackage(
-         package: package,
-         recipientStudentId: recipientStudentId,
-         recipientLabel: recipientLabel,
-         commandTimestamp: commandTimestamp ?? DateTime.now(),
-       ) {
+       _identityFactory = identityFactory ?? _createIdentity {
+    _package = package;
+    _basePriceMinor = subscriptionPackageBasePriceMinor(package);
+    _commandTimestamp = commandTimestamp ?? DateTime.now();
+    _draft = SubscriptionIssueDraft.fromPackage(
+      package: package,
+      recipientStudentId: recipientStudentId,
+      recipientLabel: recipientLabel,
+      commandTimestamp: _commandTimestamp,
+    );
     _identity = _identityFactory();
   }
 
   static MagicMutationIdentity _createIdentity() =>
       MagicMutationIdentity.create('subscription-purchase');
 
-  final BigInt _basePriceMinor;
+  late Map<String, dynamic> _package;
+  late BigInt _basePriceMinor;
+  late DateTime _commandTimestamp;
   final SubscriptionIssuePreview _onPreview;
   final SubscriptionIssueSubmit _onSubmit;
   final SubscriptionIdentityFactory _identityFactory;
 
-  SubscriptionIssueDraft _draft;
+  late SubscriptionIssueDraft _draft;
   late MagicMutationIdentity _identity;
   SubscriptionPurchasePreview? _preview;
   PurchaseSubscriptionInput? _frozenPurchase;
@@ -295,6 +299,22 @@ class SubscriptionIssueController extends ChangeNotifier {
 }
 
 extension SubscriptionIssuePaymentActions on SubscriptionIssueController {
+  Map<String, dynamic> get selectedPackage => _package;
+
+  void selectPackage(Map<String, dynamic> package) {
+    if (!fieldsEnabled || package['id']?.toString() == _draft.packageId) return;
+    _package = package;
+    _basePriceMinor = subscriptionPackageBasePriceMinor(package);
+    _updateDraft(
+      SubscriptionIssueDraft.fromPackage(
+        package: package,
+        recipientStudentId: _draft.recipientStudentId,
+        recipientLabel: _draft.recipientLabel,
+        commandTimestamp: _commandTimestamp,
+      ),
+    );
+  }
+
   void setStartsAt(DateTime value) {
     final start = DateTime.utc(value.year, value.month, value.day);
     _updateDraft(

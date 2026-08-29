@@ -6,6 +6,7 @@ import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/searchable_select.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/subscription_issue_sheet.dart';
 
@@ -65,6 +66,7 @@ const _package = <String, dynamic>{
   'name': 'Вокал — 8 занятий',
   'basePriceMinor': '800000',
   'currencyCode': 'RUB',
+  'unitCount': 8,
 };
 const _recipientId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const _payerId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
@@ -96,6 +98,8 @@ Future<void> _openSheet(
   required SubscriptionIssuePreview onPreview,
   required SubscriptionIssueSubmit onSubmit,
   Future<List<SearchableSelectItem>> Function(String query)? searchPayers,
+  List<Map<String, dynamic>>? packages,
+  String acceptedByLabel = 'Анна Администратор',
 }) async {
   tester.view.physicalSize = const Size(420, 1000);
   tester.view.devicePixelRatio = 1;
@@ -109,11 +113,14 @@ Future<void> _openSheet(
             onPressed: () => showSubscriptionIssueFormSheet(
               context,
               package: _package,
+              packages: packages,
+              acceptedByLabel: acceptedByLabel,
               recipientStudentId: _recipientId,
               recipientLabel: 'Иванов Иван',
               searchPayers: searchPayers ?? (_) async => const [],
               onPreview: onPreview,
               onSubmit: onSubmit,
+              commandTimestamp: DateTime.utc(2026, 8, 26),
             ),
             child: const Text('Открыть'),
           ),
@@ -141,6 +148,144 @@ List<String> _normalizedTexts(WidgetTester tester, Finder parent) => tester
     .toList(growable: false);
 
 void main() {
+  testWidgets(
+    'one sale sheet keeps package selector and payment fields together',
+    (tester) async {
+      await _openSheet(
+        tester,
+        packages: const [
+          _package,
+          {
+            'id': 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+            'name': 'Гитара — 12 занятий',
+            'basePriceMinor': '1200000',
+            'currencyCode': 'RUB',
+            'unitCount': 12,
+          },
+        ],
+        onPreview: (_) async => _preview(),
+        onSubmit: (_) async {},
+      );
+
+      expect(
+        find.byKey(const Key('subscription-package-selector')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('subscription-payment-method')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('subscription-payment-comment')),
+        findsOneWidget,
+      );
+      final acceptedBy = tester.widget<TextField>(
+        find.descendant(
+          of: find.byKey(const Key('subscription-accepted-by')),
+          matching: find.byType(TextField),
+        ),
+      );
+      expect(acceptedBy.readOnly, isTrue);
+      expect(acceptedBy.controller!.text, 'Анна Администратор');
+    },
+  );
+
+  testWidgets('preview shows canonical paid units with the debt status color', (
+    tester,
+  ) async {
+    await _openSheet(
+      tester,
+      onPreview: (_) async => SubscriptionPurchasePreview(
+        recipientStudentId: _recipientId,
+        payerStudentId: _recipientId,
+        fundingMode: SubscriptionFundingMode.personalAccount,
+        currencyCode: 'RUB',
+        finalPriceMinor: BigInt.from(800000),
+        payerBalanceMinor: BigInt.zero,
+        paidNowMinor: BigInt.from(300000),
+        balanceAfterMinor: BigInt.zero,
+        canCommit: true,
+        shortageMinor: BigInt.zero,
+        debtMinor: BigInt.from(500000),
+        overpaymentMinor: BigInt.zero,
+        previewToken: 'partial-preview',
+      ),
+      onSubmit: (_) async {},
+    );
+
+    await _tap(tester, find.byKey(const Key('subscription-issue-submit')));
+
+    final status = tester.widget<Container>(
+      find.byKey(const Key('subscription-paid-units-status')),
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('subscription-paid-units-status')),
+        matching: find.text('3 из 8 занятий'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      (status.decoration! as BoxDecoration).border!.top.color,
+      AppColor.warning,
+    );
+  });
+
+  testWidgets('selected package and payment details reach preview', (
+    tester,
+  ) async {
+    PurchaseSubscriptionInput? previewInput;
+    await _openSheet(
+      tester,
+      packages: const [
+        _package,
+        {
+          'id': 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+          'name': 'Гитара — 12 занятий',
+          'basePriceMinor': '1200000',
+          'currencyCode': 'RUB',
+          'unitCount': 12,
+        },
+      ],
+      onPreview: (input) async {
+        previewInput = input;
+        return _preview();
+      },
+      onSubmit: (_) async {},
+    );
+
+    tester
+        .widget<DropdownButtonFormField<String>>(
+          find.byKey(const Key('subscription-package-selector')),
+        )
+        .onChanged!('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee');
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('subscription-payment-1200000')),
+      '6000',
+    );
+    tester
+        .widget<DropdownButtonFormField<SubscriptionPaymentMethod>>(
+          find.byKey(const Key('subscription-payment-method')),
+        )
+        .onChanged!(SubscriptionPaymentMethod.cash);
+    await tester.enterText(
+      find.byKey(const Key('subscription-payment-comment')),
+      'Оплата наличными',
+    );
+    await _tap(tester, find.byKey(const Key('subscription-issue-submit')));
+
+    expect(
+      previewInput?.issue.packageId,
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+    );
+    expect(previewInput?.paymentAmountMinor, BigInt.from(600000));
+    expect(previewInput?.issue.paymentMethod, SubscriptionPaymentMethod.cash);
+    expect(previewInput?.paymentComment, 'Оплата наличными');
+    expect(previewInput?.startsAt, DateTime.utc(2026, 8, 26));
+    expect(previewInput?.expiresAt, DateTime.utc(2026, 9, 26));
+  });
+
   testWidgets('existing subscription sale sends the selected payment method', (
     tester,
   ) async {

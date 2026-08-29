@@ -612,17 +612,9 @@ extension _ClientCardStudent on _ClientCardState {
       return;
     }
 
-    final selected = await showIssueSubscriptionSheet(
-      context,
-      packages: packages,
-    );
-
-    if (selected == null || !mounted) return;
-
-    final packageId = selected['id']?.toString();
-    if (packageId == null || packageId.isEmpty) return;
-
     if (issuingForLead && !await _flushPendingClientEdits()) return;
+    if (!mounted) return;
+    final acceptedByLabel = await _subscriptionAcceptedByLabel();
     if (!mounted) return;
     final recipientLabel = [
       _clientLastName,
@@ -631,7 +623,9 @@ extension _ClientCardStudent on _ClientCardState {
     final recipientId = issuingForLead ? _leadId : _studentId;
     final issued = await showSubscriptionIssueFormSheet(
       context,
-      package: selected,
+      package: packages.first,
+      packages: packages,
+      acceptedByLabel: acceptedByLabel,
       recipientStudentId: recipientId,
       recipientLabel: recipientLabel.isEmpty
           ? (issuingForLead ? 'Текущий лид' : 'Текущий ученик')
@@ -690,13 +684,25 @@ extension _ClientCardStudent on _ClientCardState {
       issuingForLead
           ? 'Абонемент куплен. Лид стал учеником'
           : 'Абонемент куплен',
-      detail: selected['name']?.toString(),
       type: MagicToastType.success,
     );
     if (issuingForLead) {
       _closeCard(true);
     } else {
       _fetchStudentData();
+    }
+  }
+
+  Future<String> _subscriptionAcceptedByLabel() async {
+    try {
+      final profile = await ref.read(magicAuthServiceProvider).currentProfile();
+      final fullName = [
+        profile.firstName,
+        profile.lastName,
+      ].whereType<String>().where((part) => part.trim().isNotEmpty).join(' ');
+      return fullName.isNotEmpty ? fullName : profile.email.trim();
+    } catch (_) {
+      return 'Текущий пользователь';
     }
   }
 

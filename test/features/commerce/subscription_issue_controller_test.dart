@@ -8,11 +8,17 @@ import 'package:magic_music_crm/features/crm/presentation/client_card/subscripti
 
 const _recipientId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
-Map<String, dynamic> _package({String basePriceMinor = '800000'}) => {
-  'id': 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  'name': 'Вокал — 8 занятий',
+Map<String, dynamic> _package({
+  String id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  String name = 'Вокал — 8 занятий',
+  String basePriceMinor = '800000',
+  num unitCount = 8,
+}) => {
+  'id': id,
+  'name': name,
   'basePriceMinor': basePriceMinor,
   'currencyCode': 'RUB',
+  'unitCount': unitCount,
 };
 
 SubscriptionPurchasePreview _preview({
@@ -93,6 +99,88 @@ void main() {
     expect(json['paymentAmountMinor'], '0');
     expect(json.containsKey('paymentMethod'), isFalse);
     expect(json.containsKey('paymentOccurredAt'), isFalse);
+  });
+
+  test(
+    'package switch rebuilds defaults and rotates the preview identity',
+    () async {
+      var sequence = 0;
+      final controller = _controller(
+        identityFactory: () => MagicMutationIdentity(
+          idempotencyKey: 'key-${++sequence}',
+          requestId: 'request-$sequence',
+        ),
+      );
+      addTearDown(controller.dispose);
+      await controller.submit();
+      final previousIdentity = controller.identity;
+
+      controller.selectPackage(
+        _package(
+          id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+          name: 'Гитара — 12 занятий',
+          basePriceMinor: '1200000',
+          unitCount: 12,
+        ),
+      );
+
+      expect(
+        controller.draft.packageId,
+        'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      );
+      expect(
+        controller.buildPurchase().paymentAmountMinor,
+        BigInt.from(1200000),
+      );
+      expect(controller.preview, isNull);
+      expect(
+        controller.identity.idempotencyKey,
+        isNot(previousIdentity.idempotencyKey),
+      );
+    },
+  );
+
+  test('paid units follow the canonical obligation projection rule', () {
+    expect(
+      subscriptionPaidUnits(
+        packageUnits: 8,
+        paidNowMinor: BigInt.zero,
+        finalObligationMinor: BigInt.from(800000),
+      ),
+      0,
+    );
+    expect(
+      subscriptionPaidUnits(
+        packageUnits: 8,
+        paidNowMinor: BigInt.from(800000),
+        finalObligationMinor: BigInt.from(800000),
+      ),
+      8,
+    );
+    expect(
+      subscriptionPaidUnits(
+        packageUnits: 8,
+        paidNowMinor: BigInt.from(300000),
+        finalObligationMinor: BigInt.from(800000),
+      ),
+      3,
+    );
+    expect(
+      subscriptionPaidUnits(
+        packageUnits: 8,
+        paidNowMinor: BigInt.from(1000000),
+        finalObligationMinor: BigInt.from(800000),
+      ),
+      8,
+    );
+    expect(
+      subscriptionPaidUnits(
+        packageUnits: 8,
+        paidNowMinor: BigInt.zero,
+        finalObligationMinor: BigInt.zero,
+      ),
+      8,
+    );
   });
 
   test('0,01 percent is one basis point and rounds PostgreSQL half-up', () {

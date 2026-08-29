@@ -24,12 +24,15 @@ export 'subscription_issue_pricing.dart' show SubscriptionIssuePricing;
 Future<bool?> showSubscriptionIssueFormSheet(
   BuildContext context, {
   required Map<String, dynamic> package,
+  List<Map<String, dynamic>>? packages,
+  String acceptedByLabel = 'Текущий пользователь',
   required String recipientStudentId,
   required String recipientLabel,
   required Future<List<SearchableSelectItem>> Function(String query)
   searchPayers,
   required SubscriptionIssuePreview onPreview,
   required SubscriptionIssueSubmit onSubmit,
+  DateTime? commandTimestamp,
 }) {
   return showMagicSheet<bool>(
     context,
@@ -38,11 +41,14 @@ Future<bool?> showSubscriptionIssueFormSheet(
     icon: Icons.receipt_long_rounded,
     builder: (_) => SubscriptionIssueForm(
       package: package,
+      packages: packages ?? [package],
+      acceptedByLabel: acceptedByLabel,
       recipientStudentId: recipientStudentId,
       recipientLabel: recipientLabel,
       searchPayers: searchPayers,
       onPreview: onPreview,
       onSubmit: onSubmit,
+      commandTimestamp: commandTimestamp,
     ),
   );
 }
@@ -51,6 +57,8 @@ class SubscriptionIssueForm extends StatefulWidget {
   const SubscriptionIssueForm({
     super.key,
     required this.package,
+    required this.packages,
+    required this.acceptedByLabel,
     required this.recipientStudentId,
     required this.recipientLabel,
     required this.searchPayers,
@@ -60,6 +68,8 @@ class SubscriptionIssueForm extends StatefulWidget {
   });
 
   final Map<String, dynamic> package;
+  final List<Map<String, dynamic>> packages;
+  final String acceptedByLabel;
   final String recipientStudentId;
   final String recipientLabel;
   final Future<List<SearchableSelectItem>> Function(String query) searchPayers;
@@ -149,7 +159,9 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             SubscriptionIssuePriceSummary(
-              packageName: widget.package['name']?.toString() ?? 'Абонемент',
+              packageName:
+                  _controller.selectedPackage['name']?.toString() ??
+                  'Абонемент',
               basePriceMinor: pricing.basePriceMinor,
               discountMinor: pricing.discountMinor,
               surchargeMinor: pricing.surchargeMinor,
@@ -160,8 +172,10 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
             ),
             SubscriptionIssueFormSections(
               controller: _controller,
+              packages: widget.packages,
               searchPayers: widget.searchPayers,
               onChanged: _exitController.markDirty,
+              acceptedByLabel: widget.acceptedByLabel,
             ),
             SubscriptionIssueFormFeedback(
               draft: draft,
@@ -169,6 +183,9 @@ class _SubscriptionIssueFormState extends State<SubscriptionIssueForm> {
               attempted: _controller.attempted,
               error: _controller.error,
               busy: _controller.busy,
+              packageUnits: subscriptionPackageUnitCount(
+                _controller.selectedPackage,
+              ),
               onClose: _requestClose,
               onSubmit: _submit,
             ),

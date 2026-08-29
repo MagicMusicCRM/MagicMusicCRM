@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
-import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
+
+import 'subscription_issue_models.dart';
 
 class SubscriptionIssuePriceSummary extends StatelessWidget {
   const SubscriptionIssuePriceSummary({
@@ -82,28 +83,35 @@ class SubscriptionIssuePurchasePreviewCard extends StatelessWidget {
     required this.preview,
     required this.recipientLabel,
     required this.payerLabel,
+    required this.packageUnits,
   });
 
   final SubscriptionPurchasePreview preview;
   final String recipientLabel;
   final String payerLabel;
+  final double packageUnits;
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    final statusColor = !preview.canCommit
+        ? AppColor.danger
+        : preview.overpaymentMinor > BigInt.zero
+        ? AppColor.danger
+        : preview.debtMinor > BigInt.zero
+        ? AppColor.warning
+        : AppColor.success;
+    final paidUnits = subscriptionPaidUnits(
+      packageUnits: packageUnits,
+      paidNowMinor: preview.paidNowMinor,
+      finalObligationMinor: preview.finalPriceMinor,
+    );
     return Container(
       key: const Key('subscription-purchase-preview'),
       padding: const EdgeInsets.all(AppSpace.md),
       decoration: BoxDecoration(
-        color: preview.canCommit
-            ? AppTheme.success.withValues(alpha: 0.08)
-            : cs.errorContainer,
+        color: statusColor.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(AppRadius.control),
-        border: Border.all(
-          color: preview.canCommit
-              ? AppTheme.success.withValues(alpha: 0.35)
-              : cs.error,
-        ),
+        border: Border.all(color: statusColor.withValues(alpha: 0.35)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -134,6 +142,37 @@ class SubscriptionIssuePurchasePreviewCard extends StatelessWidget {
             value: formatSubscriptionMinor(
               preview.paidNowMinor,
               preview.currencyCode,
+            ),
+          ),
+          const SizedBox(height: AppSpace.sm),
+          Container(
+            key: const Key('subscription-paid-units-status'),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpace.sm,
+              vertical: AppSpace.xs,
+            ),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(AppRadius.chip),
+              border: Border.all(color: statusColor),
+            ),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Оплачено занятий',
+                    style: TextStyle(color: AppColor.text2, fontSize: 12),
+                  ),
+                ),
+                Text(
+                  '${_formatSubscriptionUnits(paidUnits)} из ${_formatSubscriptionUnits(packageUnits)} занятий',
+                  style: TextStyle(
+                    color: statusColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
             ),
           ),
           SubscriptionIssuePriceLine(
@@ -173,6 +212,11 @@ class SubscriptionIssuePurchasePreviewCard extends StatelessWidget {
       ),
     );
   }
+}
+
+String _formatSubscriptionUnits(double value) {
+  if (value == value.roundToDouble()) return value.toStringAsFixed(0);
+  return value.toStringAsFixed(2);
 }
 
 class SubscriptionIssuePriceLine extends StatelessWidget {

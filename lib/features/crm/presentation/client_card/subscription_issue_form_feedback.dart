@@ -14,6 +14,7 @@ class SubscriptionIssueFormFeedback extends StatelessWidget {
     required this.attempted,
     required this.error,
     required this.busy,
+    required this.packageUnits,
     required this.onClose,
     required this.onSubmit,
   });
@@ -23,6 +24,7 @@ class SubscriptionIssueFormFeedback extends StatelessWidget {
   final bool attempted;
   final String? error;
   final bool busy;
+  final double packageUnits;
   final VoidCallback onClose;
   final VoidCallback onSubmit;
 
@@ -37,6 +39,7 @@ class SubscriptionIssueFormFeedback extends StatelessWidget {
             preview: preview!,
             recipientLabel: draft.recipientLabel,
             payerLabel: draft.payerLabel,
+            packageUnits: packageUnits,
           ),
         ],
         if (attempted) ...[

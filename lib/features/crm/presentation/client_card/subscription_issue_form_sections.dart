@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 
+import 'client_card_ui.dart';
 import 'subscription_issue_adjustment_sections.dart';
 import 'subscription_issue_controller.dart';
 import 'subscription_issue_payment_section.dart';
@@ -9,11 +10,15 @@ class SubscriptionIssueFormSections extends StatelessWidget {
   const SubscriptionIssueFormSections({
     super.key,
     required this.controller,
+    required this.packages,
+    required this.acceptedByLabel,
     required this.searchPayers,
     required this.onChanged,
   });
 
   final SubscriptionIssueController controller;
+  final List<Map<String, dynamic>> packages;
+  final String acceptedByLabel;
   final Future<List<SearchableSelectItem>> Function(String query) searchPayers;
   final VoidCallback onChanged;
 
@@ -24,6 +29,33 @@ class SubscriptionIssueFormSections extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        const SizedBox(height: 16),
+        DropdownButtonFormField<String>(
+          key: const Key('subscription-package-selector'),
+          initialValue: draft.packageId,
+          decoration: clientCardInputDecoration(
+            Theme.of(context).colorScheme,
+            label: 'Абонемент',
+            isDense: true,
+          ),
+          items: [
+            for (final package in packages)
+              DropdownMenuItem(
+                value: package['id']?.toString(),
+                child: Text(package['name']?.toString() ?? 'Абонемент'),
+              ),
+          ],
+          onChanged: fieldsEnabled
+              ? (id) {
+                  final package = packages.where(
+                    (item) => item['id']?.toString() == id,
+                  );
+                  if (package.isEmpty) return;
+                  controller.selectPackage(package.first);
+                  onChanged();
+                }
+              : null,
+        ),
         SubscriptionIssuePaymentSection(
           draft: draft,
           defaultPaymentMinor: controller.pricing.finalPriceMinor,
@@ -41,6 +73,7 @@ class SubscriptionIssueFormSections extends StatelessWidget {
           validateExpiresAt: controller.validateExpiresAt,
           validatePurchaseReason: controller.validatePurchaseReason,
           setPurchaseReason: controller.setPurchaseReason,
+          acceptedByLabel: acceptedByLabel,
           onChanged: onChanged,
         ),
         SubscriptionIssueDiscountSection(
