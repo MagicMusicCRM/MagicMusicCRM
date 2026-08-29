@@ -85,9 +85,10 @@ final class LessonSaveViolations extends LessonSaveOutcome {
 }
 
 final class LessonSaveDecision extends LessonSaveOutcome {
-  const LessonSaveDecision(this.request);
+  const LessonSaveDecision(this.request, {this.noteUpdate});
 
   final LessonDecisionRequest request;
+  final LessonNoteUpdate? noteUpdate;
 }
 
 final class LessonSaveNotes extends LessonSaveOutcome {
@@ -209,34 +210,18 @@ class LessonEditorSaveFlow {
     try {
       final decision = command.decisionRequest;
       final noteUpdate = command.noteUpdate;
+      if (decision != null) {
+        return LessonSaveDecision(decision, noteUpdate: noteUpdate);
+      }
       if (noteUpdate != null) {
         final updateNotes = _updateNotes;
         if (updateNotes == null) {
           throw StateError('Lesson note update is not configured.');
         }
         final lesson = await updateNotes(noteUpdate);
-        if (decision == null) {
-          _completeNotesAttempt(noteUpdate);
-          return LessonSaveNotes(lesson);
-        }
-        final version = (lesson['version'] as num?)?.toInt();
-        if (version == null || version < 1) {
-          throw StateError('Обновлённая версия занятия не получена.');
-        }
         _completeNotesAttempt(noteUpdate);
-        return LessonSaveDecision(
-          LessonDecisionRequest(
-            operation: decision.operation,
-            lesson: {...decision.lesson, 'version': version},
-            successor: decision.successor,
-            initialSettlementTypeKey: decision.initialSettlementTypeKey,
-            initialCompensationRuleKey: decision.initialCompensationRuleKey,
-            initialCompensationValueMinor:
-                decision.initialCompensationValueMinor,
-          ),
-        );
+        return LessonSaveNotes(lesson);
       }
-      if (decision != null) return LessonSaveDecision(decision);
       final previewOutcome = await _previewOutcome(command.scheduleRequest);
       if (previewOutcome != null) return previewOutcome;
       return await _createOutcome(command.payload);
@@ -245,6 +230,33 @@ class LessonEditorSaveFlow {
     } finally {
       _saving = false;
     }
+  }
+
+  Future<Map<String, dynamic>> saveConfirmedNotes(
+    LessonNoteUpdate update,
+    Map<String, dynamic> decision,
+  ) async {
+    final updateNotes = _updateNotes;
+    if (updateNotes == null) {
+      throw StateError('Lesson note update is not configured.');
+    }
+    final source = decision['source'];
+    final version =
+        ((source is Map ? source['version'] : null) ?? decision['version'])
+            as num?;
+    if (version == null || version.toInt() < 1) {
+      throw StateError('Версия занятия после решения не получена.');
+    }
+    final lesson = await updateNotes(
+      LessonNoteUpdate(
+        lessonId: update.lessonId,
+        expectedVersion: version.toInt(),
+        notes: update.notes,
+        identity: update.identity,
+      ),
+    );
+    _completeNotesAttempt(update);
+    return lesson;
   }
 
   LessonNoteUpdate _noteUpdateFor(

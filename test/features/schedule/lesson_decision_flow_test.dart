@@ -226,7 +226,16 @@ class _LessonDecisionApi extends MagicApiClient {
     if (failFirstCommit && commits.length == 1) {
       throw const MagicApiException(statusCode: 409, message: 'Preview stale');
     }
-    return <String, dynamic>{'transitionId': 'transition-1'} as T;
+    return <String, dynamic>{
+          'source': {'id': _lessonId, 'state': 'rescheduled', 'version': 5},
+          'successor': null,
+          'transitionId': 'transition-1',
+          'clientFinancialFactIds': const <String>[],
+          'teacherFinancialFactId': 'teacher-fact-1',
+          'financialDecision': commits.last['financialDecision'],
+          'replayed': commits.length > 1,
+        }
+        as T;
   }
 }
 
@@ -428,6 +437,7 @@ Widget _host(
   Map<String, dynamic> successor = _successor,
   LessonDecisionOperation operation = LessonDecisionOperation.reschedule,
   bool canManageTeacherCompensation = true,
+  LessonDecisionCommitted? afterCommit,
 }) => MaterialApp(
   home: Scaffold(
     body: Builder(
@@ -439,6 +449,7 @@ Widget _host(
           operation: operation,
           lesson: lesson,
           successor: successor,
+          afterCommit: afterCommit,
         ),
         child: const Text('Открыть'),
       ),
@@ -530,12 +541,14 @@ void main() {
 
   test('keeps one mutation identity between preview and commit', () async {
     final api = _LessonDecisionApi();
+    Map<String, dynamic>? committed;
     final controller = LessonDecisionController(
       crm: MagicCrmService(api),
       canManageTeacherCompensation: true,
       operation: LessonDecisionOperation.reschedule,
       lesson: _lesson,
       successor: _successor,
+      afterCommit: (result) async => committed = result,
     );
 
     final preview = await controller.preview(
@@ -547,6 +560,60 @@ void main() {
 
     expect(api.identities, hasLength(1));
     expect(api.commits.single['previewToken'], 'signed-preview');
+    expect((committed?['source'] as Map?)?['version'], 5);
+  });
+
+  test('decision failure skips pending work and retry runs it once', () async {
+    final api = _LessonDecisionApi(failFirstCommit: true);
+    var pendingCalls = 0;
+    final controller = LessonDecisionController(
+      crm: MagicCrmService(api),
+      canManageTeacherCompensation: true,
+      operation: LessonDecisionOperation.reschedule,
+      lesson: _lesson,
+      successor: _successor,
+      afterCommit: (_) async => pendingCalls++,
+    );
+    final preview = await controller.preview(
+      reason: 'Перенос',
+      settlementTypeKey: 'free_lesson',
+      compensationRuleKey: 'fixed',
+      compensationValueMinor: '125000',
+    );
+
+    await expectLater(
+      controller.commit(preview),
+      throwsA(isA<MagicApiException>()),
+    );
+    expect(pendingCalls, 0);
+    await controller.commit(preview);
+
+    expect(pendingCalls, 1);
+    expect(api.identities, hasLength(2));
+    expect(api.identities[1].idempotencyKey, api.identities[0].idempotencyKey);
+  });
+
+  testWidgets('closing the decision leaves pending work untouched', (
+    tester,
+  ) async {
+    final api = _LessonDecisionApi();
+    var pendingCalls = 0;
+    tester.view.physicalSize = const Size(1200, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      _host(api, afterCommit: (_) async => pendingCalls++),
+    );
+
+    await tester.tap(find.text('Открыть'));
+    await tester.pumpAndSettle();
+    final close = find.text('Закрыть');
+    await tester.ensureVisible(close);
+    await tester.tap(close);
+    await tester.pumpAndSettle();
+
+    expect(api.commits, isEmpty);
+    expect(pendingCalls, 0);
   });
 
   test(

@@ -194,41 +194,110 @@ void main() {
     expect(createCalls, 0);
   });
 
-  test('note update chains its returned version into the transition', () async {
-    final flow = LessonEditorSaveFlow.forTesting(
-      preview: (_) async => _validAnalysis,
-      create: (_) async => {'id': 'unused'},
-      updateNotes: (update) async {
-        expect(update.lessonId, 'lesson-a');
-        expect(update.expectedVersion, 4);
-        expect(update.notes, '');
-        return {'lessonId': 'lesson-a', 'version': 5};
-      },
-    );
+  test(
+    'combined edit defers its note until the decision is confirmed',
+    () async {
+      var noteUpdates = 0;
+      final flow = LessonEditorSaveFlow.forTesting(
+        preview: (_) async => _validAnalysis,
+        create: (_) async => {'id': 'unused'},
+        updateNotes: (update) async {
+          noteUpdates++;
+          return {'lessonId': 'lesson-a', 'version': 5};
+        },
+      );
 
-    final result = await flow.save(
-      LessonEditorSaveCommand(
-        scheduleRequest: _scheduleRequest,
-        payload: {},
-        noteUpdate: const LessonNoteUpdate(
-          lessonId: 'lesson-a',
-          expectedVersion: 4,
-          notes: '',
-          identity: MagicMutationIdentity(
-            idempotencyKey: 'note-transition-key',
-            requestId: 'note-transition-request',
+      final result = await flow.save(
+        LessonEditorSaveCommand(
+          scheduleRequest: _scheduleRequest,
+          payload: {},
+          noteUpdate: const LessonNoteUpdate(
+            lessonId: 'lesson-a',
+            expectedVersion: 4,
+            notes: '',
+            identity: MagicMutationIdentity(
+              idempotencyKey: 'note-transition-key',
+              requestId: 'note-transition-request',
+            ),
+          ),
+          decisionRequest: LessonDecisionRequest(
+            operation: LessonDecisionOperation.reschedule,
+            lesson: {'id': 'lesson-a', 'version': 4},
           ),
         ),
-        decisionRequest: LessonDecisionRequest(
-          operation: LessonDecisionOperation.reschedule,
-          lesson: {'id': 'lesson-a', 'version': 4},
-        ),
-      ),
-    );
+      );
 
-    expect(result, isA<LessonSaveDecision>());
-    expect((result as LessonSaveDecision).request.lesson['version'], 5);
-  });
+      expect(result, isA<LessonSaveDecision>());
+      final decision = result as LessonSaveDecision;
+      expect(decision.request.lesson['version'], 4);
+      expect(decision.noteUpdate?.expectedVersion, 4);
+      expect(noteUpdates, 0);
+    },
+  );
+
+  test(
+    'confirmed decision version is chained into its deferred note',
+    () async {
+      LessonNoteUpdate? sent;
+      final flow = LessonEditorSaveFlow.forTesting(
+        preview: (_) async => _validAnalysis,
+        create: (_) async => {'id': 'unused'},
+        updateNotes: (update) async {
+          sent = update;
+          return {'lessonId': 'lesson-a', 'version': 6};
+        },
+      );
+      const pending = LessonNoteUpdate(
+        lessonId: 'lesson-a',
+        expectedVersion: 4,
+        notes: 'После подтверждения',
+        identity: MagicMutationIdentity(
+          idempotencyKey: 'note-transition-key',
+          requestId: 'note-transition-request',
+        ),
+      );
+
+      final lesson = await flow.saveConfirmedNotes(pending, const {
+        'source': {'id': 'lesson-a', 'version': 5},
+      });
+
+      expect(lesson['version'], 6);
+      expect(sent?.lessonId, 'lesson-a');
+      expect(sent?.expectedVersion, 5);
+      expect(sent?.notes, 'После подтверждения');
+      expect(sent?.identity, same(pending.identity));
+    },
+  );
+
+  test(
+    'planned settlement version is chained into its deferred note',
+    () async {
+      LessonNoteUpdate? sent;
+      final flow = LessonEditorSaveFlow.forTesting(
+        preview: (_) async => _validAnalysis,
+        create: (_) async => {'id': 'unused'},
+        updateNotes: (update) async {
+          sent = update;
+          return {'lessonId': 'lesson-a', 'version': 6};
+        },
+      );
+
+      await flow.saveConfirmedNotes(
+        const LessonNoteUpdate(
+          lessonId: 'lesson-a',
+          expectedVersion: 4,
+          notes: 'После расчёта',
+          identity: MagicMutationIdentity(
+            idempotencyKey: 'note-plan-key',
+            requestId: 'note-plan-request',
+          ),
+        ),
+        const {'lessonId': 'lesson-a', 'version': 5},
+      );
+
+      expect(sent?.expectedVersion, 5);
+    },
+  );
 
   test('notes-only save skips decision and schedule work', () async {
     var previewCalls = 0;

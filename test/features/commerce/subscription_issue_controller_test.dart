@@ -89,6 +89,59 @@ void main() {
     },
   );
 
+  test('backdating start recalculates untouched default expiry', () {
+    final controller = _controller(
+      commandTimestamp: DateTime.utc(2026, 8, 29, 12),
+    );
+    addTearDown(controller.dispose);
+
+    controller.setStartsAt(DateTime.utc(2026, 6, 18));
+
+    expect(controller.buildPurchase().startsAt, DateTime.utc(2026, 6, 18));
+    expect(controller.buildPurchase().expiresAt, DateTime.utc(2026, 7, 18));
+  });
+
+  test('moving start forward recalculates untouched default expiry', () {
+    final controller = _controller();
+    addTearDown(controller.dispose);
+
+    controller.setStartsAt(DateTime.utc(2026, 2, 10));
+
+    expect(controller.buildPurchase().startsAt, DateTime.utc(2026, 2, 10));
+    expect(controller.buildPurchase().expiresAt, DateTime.utc(2026, 3, 10));
+  });
+
+  test('explicit expiry survives later valid and invalid start changes', () {
+    final controller = _controller();
+    addTearDown(controller.dispose);
+
+    controller.setExpiresAt(DateTime.utc(2026, 6, 30));
+    controller.setStartsAt(DateTime.utc(2026, 2, 10));
+    expect(controller.buildPurchase().expiresAt, DateTime.utc(2026, 6, 30));
+    expect(controller.validateExpiresAt(), isNull);
+
+    controller.setStartsAt(DateTime.utc(2026, 7, 1));
+    expect(controller.draft.expiresAt, DateTime.utc(2026, 6, 30));
+    expect(
+      controller.validateExpiresAt(),
+      'Дата окончания не может быть раньше даты начала',
+    );
+  });
+
+  test('package switch restores automatic calendar-month expiry', () {
+    final controller = _controller();
+    addTearDown(controller.dispose);
+    controller.setExpiresAt(DateTime.utc(2026, 6, 30));
+
+    controller.selectPackage(
+      _package(id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'),
+    );
+    controller.setStartsAt(DateTime.utc(2026, 3, 18));
+
+    expect(controller.buildPurchase().startsAt, DateTime.utc(2026, 3, 18));
+    expect(controller.buildPurchase().expiresAt, DateTime.utc(2026, 4, 18));
+  });
+
   test('zero payment is allowed and does not claim a payment method', () {
     final controller = _controller();
     addTearDown(controller.dispose);

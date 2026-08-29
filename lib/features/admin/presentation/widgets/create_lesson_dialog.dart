@@ -236,6 +236,7 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
       _scheduleState = (false, lessonScheduleErrorMessage(result.error));
     });
   }
+
   Future<void> save() async {
     if (_saving) return;
     setState(() {
@@ -262,16 +263,12 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
           final analysis = LessonScheduleAnalysis.fromViolations(violations);
           setState(() => _conflicts = analysis);
           await _showViolations(violations);
-        case LessonSaveDecision(request: final edit):
-          final changed = await showLessonDecisionFlow(
+        case final LessonSaveDecision decision:
+          final changed = await showLessonEditorDecisionFlow(
             context,
             crm: ref.read(magicCrmServiceProvider),
-            operation: edit.operation,
-            lesson: edit.lesson,
-            successor: edit.successor,
-            initialSettlementTypeKey: edit.initialSettlementTypeKey,
-            initialCompensationRuleKey: edit.initialCompensationRuleKey,
-            initialCompensationValueMinor: edit.initialCompensationValueMinor,
+            decision: decision,
+            saveFlow: _flow,
             canManageTeacherCompensation: _canManageTeacherCompensation,
           );
           if (changed == true && mounted) {
@@ -288,6 +285,7 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
       if (mounted) setState(() => _saving = false);
     }
   }
+
   Future<void> _showViolations(List<LessonConstraintViolation> violations) =>
       showDialog<void>(
         context: context,
@@ -305,12 +303,14 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
     navigation.focus(_draft.localStart, lessonId);
     Navigator.pop(context);
   }
+
   void cancel() => Navigator.pop(context);
   void _finishSave(String message) {
     final messenger = ScaffoldMessenger.of(context);
     Navigator.pop(context, true);
     messenger.showSnackBar(SnackBar(content: Text(message)));
   }
+
   void _showError(Object error, String fallback) =>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(lessonEditorErrorMessage(error, fallback))),

@@ -5,6 +5,7 @@ import 'package:magic_music_crm/core/widgets/adaptive_surface_kind.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_controller.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_form.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_models.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_editor_save_flow.dart';
 
 export 'lesson_decision/lesson_decision_controller.dart';
 export 'lesson_decision/lesson_decision_models.dart';
@@ -19,6 +20,7 @@ Future<bool?> showLessonDecisionFlow(
   String? initialSettlementTypeKey,
   String? initialCompensationRuleKey,
   String? initialCompensationValueMinor,
+  LessonDecisionCommitted? afterCommit,
 }) {
   final controller = LessonDecisionController(
     crm: crm,
@@ -29,6 +31,7 @@ Future<bool?> showLessonDecisionFlow(
     initialSettlementTypeKey: initialSettlementTypeKey,
     initialCompensationRuleKey: initialCompensationRuleKey,
     initialCompensationValueMinor: initialCompensationValueMinor,
+    afterCommit: afterCommit,
   );
   return showMagicAdaptiveSurface<bool>(
     context,
@@ -37,5 +40,30 @@ Future<bool?> showLessonDecisionFlow(
     subtitle: 'Сначала расчёт, затем подтверждение',
     icon: Icons.rule_rounded,
     builder: (_) => LessonDecisionForm(controller: controller),
+  );
+}
+
+Future<bool?> showLessonEditorDecisionFlow(
+  BuildContext context, {
+  required MagicCrmService crm,
+  required LessonSaveDecision decision,
+  required LessonEditorSaveFlow saveFlow,
+  required bool canManageTeacherCompensation,
+}) async {
+  final edit = decision.request;
+  final pendingNote = decision.noteUpdate;
+  return showLessonDecisionFlow(
+    context,
+    crm: crm,
+    operation: edit.operation,
+    lesson: edit.lesson,
+    successor: edit.successor,
+    initialSettlementTypeKey: edit.initialSettlementTypeKey,
+    initialCompensationRuleKey: edit.initialCompensationRuleKey,
+    initialCompensationValueMinor: edit.initialCompensationValueMinor,
+    canManageTeacherCompensation: canManageTeacherCompensation,
+    afterCommit: pendingNote == null
+        ? null
+        : (result) => saveFlow.saveConfirmedNotes(pendingNote, result),
   );
 }

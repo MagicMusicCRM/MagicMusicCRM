@@ -4,6 +4,9 @@ import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 
 import 'lesson_decision_models.dart';
 
+typedef LessonDecisionCommitted =
+    Future<void> Function(Map<String, dynamic> result);
+
 class LessonDecisionController implements LessonDecisionFormLifecycle {
   LessonDecisionController({
     required MagicCrmService crm,
@@ -14,6 +17,7 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
     this.initialSettlementTypeKey,
     this.initialCompensationRuleKey,
     this.initialCompensationValueMinor,
+    this.afterCommit,
   }) : _crm = crm,
        _expectedVersion = (lesson['version'] as num?)?.toInt();
 
@@ -32,6 +36,7 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
   final String? initialCompensationRuleKey;
   @override
   final String? initialCompensationValueMinor;
+  final LessonDecisionCommitted? afterCommit;
 
   @override
   bool get isGroupLesson {
@@ -276,7 +281,7 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
   }
 
   @override
-  Future<Map<String, dynamic>> commit(LessonDecisionPreview preview) {
+  Future<Map<String, dynamic>> commit(LessonDecisionPreview preview) async {
     final payload = _previewPayload;
     final identity = _commitIdentity;
     final token = preview.token;
@@ -287,13 +292,15 @@ class LessonDecisionController implements LessonDecisionFormLifecycle {
       throw StateError('Сначала получите актуальный расчёт.');
     }
     final data = {...payload, 'previewToken': token, 'confirm': true};
-    return _crm.commitLessonDecision(
+    final result = await _crm.commitLessonDecision(
       lessonId: lesson['id'].toString(),
       operationKey: operation.apiKey,
       data: data,
       identity: identity,
       usePut: operation == LessonDecisionOperation.plannedSettlement,
     );
+    await afterCommit?.call(result);
+    return result;
   }
 }
 

@@ -302,7 +302,11 @@ extension SubscriptionIssuePaymentActions on SubscriptionIssueController {
   Map<String, dynamic> get selectedPackage => _package;
 
   void selectPackage(Map<String, dynamic> package) {
-    if (!fieldsEnabled || package['id']?.toString() == _draft.packageId) return;
+    if (_disposed ||
+        !fieldsEnabled ||
+        package['id']?.toString() == _draft.packageId) {
+      return;
+    }
     _package = package;
     _basePriceMinor = subscriptionPackageBasePriceMinor(package);
     _updateDraft(
@@ -320,17 +324,19 @@ extension SubscriptionIssuePaymentActions on SubscriptionIssueController {
     _updateDraft(
       _draft.copyWith(
         startsAt: start,
-        expiresAt: _draft.expiresAt.isBefore(start)
-            ? subscriptionAddCalendarMonth(start)
-            : _draft.expiresAt,
+        expiresAt: _draft.expiresAtExplicitlySet
+            ? _draft.expiresAt
+            : subscriptionAddCalendarMonth(start),
       ),
     );
   }
 
   void setExpiresAt(DateTime value) {
+    if (_disposed || !fieldsEnabled) return;
     _updateDraft(
       _draft.copyWith(
         expiresAt: DateTime.utc(value.year, value.month, value.day),
+        expiresAtExplicitlySet: true,
       ),
     );
   }

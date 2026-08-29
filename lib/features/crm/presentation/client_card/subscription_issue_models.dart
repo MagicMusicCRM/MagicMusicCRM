@@ -36,6 +36,7 @@ class SubscriptionIssueDraft {
     required this.startsAt,
     required this.expiresAt,
     required this.paymentOccurredAt,
+    this.expiresAtExplicitlySet = false,
     this.paymentAmount = '',
     this.paymentComment = '',
     this.paymentMethod = SubscriptionPaymentMethod.cashless,
@@ -83,6 +84,7 @@ class SubscriptionIssueDraft {
   final DateTime startsAt;
   final DateTime expiresAt;
   final DateTime paymentOccurredAt;
+  final bool expiresAtExplicitlySet;
   final String paymentAmount;
   final String paymentComment;
   final SubscriptionPaymentMethod paymentMethod;
@@ -102,6 +104,7 @@ class SubscriptionIssueDraft {
     DateTime? startsAt,
     DateTime? expiresAt,
     DateTime? paymentOccurredAt,
+    bool? expiresAtExplicitlySet,
     String? paymentAmount,
     String? paymentComment,
     SubscriptionPaymentMethod? paymentMethod,
@@ -125,6 +128,8 @@ class SubscriptionIssueDraft {
       startsAt: startsAt ?? this.startsAt,
       expiresAt: expiresAt ?? this.expiresAt,
       paymentOccurredAt: paymentOccurredAt ?? this.paymentOccurredAt,
+      expiresAtExplicitlySet:
+          expiresAtExplicitlySet ?? this.expiresAtExplicitlySet,
       paymentAmount: paymentAmount ?? this.paymentAmount,
       paymentComment: paymentComment ?? this.paymentComment,
       paymentMethod: paymentMethod ?? this.paymentMethod,

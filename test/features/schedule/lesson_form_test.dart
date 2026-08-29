@@ -151,6 +151,7 @@ class _FakeApiClient extends MagicApiClient {
     this.decisionCatalog,
     this.decisionViolations = const [],
     this.teacherCurrentRate,
+    this.notePatchFailures = 0,
   }) : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   Map<String, dynamic>? preview;
@@ -160,12 +161,14 @@ class _FakeApiClient extends MagicApiClient {
   final Map<String, dynamic>? decisionCatalog;
   final List<Map<String, dynamic>> decisionViolations;
   final num? teacherCurrentRate;
+  final int notePatchFailures;
   Completer<void>? createGate;
   final constraintPreviews = <Map<String, dynamic>>[];
   final lessonPosts = <Map<String, dynamic>>[];
   final decisionPreviews = <Map<String, dynamic>>[];
   final decisionCommits = <Map<String, dynamic>>[];
   final decisionCommitMethods = <String>[];
+  final notePatches = <Map<String, dynamic>>[];
 
   @override
   Future<T> get<T>(
@@ -463,7 +466,20 @@ class _FakeApiClient extends MagicApiClient {
         path.endsWith('/settlement-correction')) {
       decisionCommits.add(Map<String, dynamic>.from(data as Map));
       decisionCommitMethods.add('POST $path');
-      return <String, dynamic>{'transitionId': 'transition-1'} as T;
+      return <String, dynamic>{
+            'source': {
+              'id': '66666666-6666-6666-6666-666666666666',
+              'state': 'rescheduled',
+              'version': 8,
+            },
+            'successor': null,
+            'transitionId': 'transition-1',
+            'clientFinancialFactIds': const <String>[],
+            'teacherFinancialFactId': 'teacher-fact-1',
+            'financialDecision': decisionCommits.last['financialDecision'],
+            'replayed': false,
+          }
+          as T;
     }
     throw UnimplementedError('POST IDEMPOTENT $path');
   }
@@ -478,6 +494,15 @@ class _FakeApiClient extends MagicApiClient {
     ResponseType? responseType,
     MagicMutationIdentity? mutationIdentity,
   }) async {
+    if (method == 'PATCH' &&
+        path.endsWith('/crm/lessons/66666666-6666-6666-6666-666666666666')) {
+      expect(mutationIdentity, isNotNull);
+      notePatches.add(Map<String, dynamic>.from(data as Map));
+      if (notePatches.length <= notePatchFailures) {
+        throw StateError('note failed');
+      }
+      return <String, dynamic>{'lessonId': 'lesson-1', 'version': 9} as T;
+    }
     if (method == 'PUT' && path.endsWith('/planned-settlement')) {
       decisionCommits.add(Map<String, dynamic>.from(data as Map));
       decisionCommitMethods.add('$method $path');
@@ -596,6 +621,38 @@ Future<void> _pumpDialog(
     ),
     findsOneWidget,
   );
+}
+
+Future<void> _confirmEditableDecision(WidgetTester tester) async {
+  await tester.ensureVisible(find.text('Перейти к расчёту'));
+  await tester.tap(find.text('Перейти к расчёту'));
+  for (var frame = 0; frame < 6; frame++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  await tester.enterText(
+    find.byKey(const Key('lesson-decision-reason')),
+    'Клиент попросил другое время',
+  );
+  await tester.tap(find.byKey(const Key('lesson-decision-settlement')));
+  await tester.pump(const Duration(milliseconds: 400));
+  await tester.tap(find.text('Бесплатное занятие').last);
+  await tester.pump(const Duration(milliseconds: 400));
+  await tester.ensureVisible(
+    find.byKey(const Key('lesson-decision-compensation')),
+  );
+  await tester.tap(find.byKey(const Key('lesson-decision-compensation')));
+  await tester.pump(const Duration(milliseconds: 400));
+  await tester.tap(find.text('Не оплачивать').last);
+  await tester.pump(const Duration(milliseconds: 400));
+  final submit = find.byKey(const Key('lesson-decision-submit'));
+  await tester.ensureVisible(submit);
+  await tester.tap(submit);
+  await tester.pump(const Duration(milliseconds: 300));
+  await tester.ensureVisible(submit);
+  await tester.tap(submit);
+  for (var frame = 0; frame < 10; frame++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
 }
 
 Future<void> _selectRequiredResources(
@@ -1587,6 +1644,10 @@ void main() {
       lesson: lesson,
       dialogResult: dialogResult,
     );
+    await tester.enterText(
+      find.byKey(const Key('lesson-notes-input')),
+      'Новая заметка',
+    );
     await _moveEditableLessonToNextDay(tester);
 
     await tester.ensureVisible(find.text('Перейти к расчёту'));
@@ -1619,6 +1680,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(client.decisionPreviews, hasLength(1));
+    expect(client.notePatches, isEmpty);
     expect(find.byKey(const Key('lesson-decision-preview')), findsOneWidget);
     await tester.ensureVisible(find.byKey(const Key('lesson-decision-submit')));
     await tester.pump();
@@ -1626,6 +1688,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(client.decisionCommits, hasLength(1));
+    expect(client.notePatches.single, {
+      'expectedVersion': 8,
+      'notes': 'Новая заметка',
+    });
     final body = client.decisionCommits.single;
     expect(body['expectedVersion'], 7);
     expect(body['reasonText'], 'Клиент попросил другое время');
@@ -1644,6 +1710,68 @@ void main() {
     expect(body['confirm'], isTrue);
     expect(dialogResult.value, isTrue);
     expect(find.text('Перенести или изменить занятие'), findsNothing);
+    expect(find.text('Изменения занятия применены'), findsOneWidget);
+  });
+
+  testWidgets('closing combined edit keeps its note uncommitted', (
+    tester,
+  ) async {
+    final client = _FakeApiClient();
+    await _pumpDialog(tester, client, lesson: _editableLesson());
+    await tester.enterText(
+      find.byKey(const Key('lesson-notes-input')),
+      'Новая заметка',
+    );
+    await _moveEditableLessonToNextDay(tester);
+
+    await tester.tap(find.text('Перейти к расчёту'));
+    for (var frame = 0; frame < 6; frame++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text('Перенос занятия'), findsOneWidget);
+    final close = find.text('Закрыть');
+    await tester.ensureVisible(close);
+    await tester.tap(close);
+    await tester.pumpAndSettle();
+
+    expect(client.decisionCommits, isEmpty);
+    expect(client.notePatches, isEmpty);
+    expect(find.byKey(const Key('lesson-notes-input')), findsOneWidget);
+  });
+
+  testWidgets('failed note stays retryable after the decision commit', (
+    tester,
+  ) async {
+    final client = _FakeApiClient(notePatchFailures: 1);
+    final dialogResult = ValueNotifier<bool?>(null);
+    addTearDown(dialogResult.dispose);
+    await _pumpDialog(
+      tester,
+      client,
+      lesson: _editableLesson(),
+      dialogResult: dialogResult,
+    );
+    await tester.enterText(
+      find.byKey(const Key('lesson-notes-input')),
+      'Новая заметка',
+    );
+    await _moveEditableLessonToNextDay(tester);
+    await _confirmEditableDecision(tester);
+
+    expect(client.decisionCommits, hasLength(1));
+    expect(client.notePatches, hasLength(1));
+    expect(dialogResult.value, isNull);
+    expect(find.text('Перенос занятия'), findsOneWidget);
+
+    final submit = find.byKey(const Key('lesson-decision-submit'));
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+
+    expect(client.decisionCommits, hasLength(2));
+    expect(client.notePatches, hasLength(2));
+    expect(dialogResult.value, isTrue);
+    expect(find.byKey(const Key('lesson-notes-input')), findsNothing);
     expect(find.text('Изменения занятия применены'), findsOneWidget);
   });
 
