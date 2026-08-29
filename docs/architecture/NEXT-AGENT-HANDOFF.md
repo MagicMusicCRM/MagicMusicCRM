@@ -1,11 +1,44 @@
 # MagicMusicCRM — актуальная передача
 
 > Обновлено: 2026-08-29
-> Production: client `1.5.20+200`, server `744959ef`,
-> image `sha256:5bd6ee44…`, migration `0141`
+> Production: client `1.5.21+201`, server `f09cef3a`,
+> image `sha256:37040433…`, migration `0142`
 > Рабочая ветка: `main`
-> Статус: production design rollout `1.5.20+200` PASS;
+> Статус: production rollout + owner-only compensation RBAC hotfix PASS;
 > owner mega-UAT не завершён
+
+Server-only hotfix `f09cef3a` закрыл P1 в teacher compensation RBAC без нового
+параллельного контура: rate/history/bulk-rate routes используют каноническое
+`config.commerce.manage`, а текущая DB-роль повторно проверяется внутри
+commit-транзакции до mutation. Ставки меняют только Director/system_admin;
+Admin/Manager fail-closed, включая stale claims. Backend isolated gate
+`267/267` suites / `3351/3351` tests, actor matrix, typecheck/build, access
+coverage `344/344`, два independent review и security/image scans PASS.
+Production exact image `37040433…` healthy, restart `0`, migration `0142`,
+reconciliation дважды `issues=[]`, outbox `0/0`, API/Caddy 5xx `0`. Fresh
+encrypted backup скопирован off-host и прошёл isolated candidate/base rollback
+drill. Аутентифицированный Manager/Director production smoke не запускался:
+известный login вернул `401`, сохранённые tokens истекли, новые accounts/tokens
+не создавались. Role-specific contract подтверждён exact-image тестами;
+client artifacts/manifests и tag не менялись. Evidence:
+`docs/audits/v7-production-rollout-201.md`.
+
+Release `1.5.21+201` развил канонические Schedule Plan, settlement и client
+card flows без параллельного legacy: закрытые/backdated периоды используют
+signed preview, Group Lesson списывает абонемент выбранного плательщика при
+одном participant/teacher fact, series хранят immutable subscription snapshot,
+а autosave безопасных полей Lead/Student coalesced и versioned. Любую teacher
+rate меняют только Director/system_admin во всех write-path. Backend
+`267/267` suites / `3308/3308` tests, Flutter `1413/1413`, analyze, exact
+image, два независимых deploy review, Trivy/Gitleaks, encrypted restore и
+public artifact streaming PASS. Base server cutover прошёл на `63f0021a`;
+final production server после RBAC hotfix — `f09cef3a`, migration `0142`,
+healthy/restart `0`; reconciliation дважды `issues=[]`, outbox `0/0`.
+Оба manifest переключены на build `201`, четыре artifacts и GitHub Release
+`v1.5.21` опубликованы. Deploy-only CRLF false negative честно зафиксирован:
+traffic оставался fail-closed, exact build 198 был восстановлен поверх retained
+0142, затем исправленный state machine прошёл повторный cutover. Evidence:
+`docs/audits/v7-production-rollout-201.md`.
 
 Client-only release `1.5.20+200` перенёс утверждённую светлую дизайн-систему в
 production: Warm Ivory & Sophisticated Gold, тихая графитовая иерархия,
