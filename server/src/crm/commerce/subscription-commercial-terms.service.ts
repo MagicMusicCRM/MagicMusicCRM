@@ -15,9 +15,14 @@ import {
   NormalizedSurcharge,
 } from "./subscription-issue.contracts";
 import { IssuePackageRow } from "./subscription-issue.repository";
+import { SubscriptionPurchaseTermsService } from "./subscription-purchase-terms.service";
 
 @Injectable()
 export class SubscriptionCommercialTermsService {
+  constructor(
+    private readonly purchaseTerms: SubscriptionPurchaseTermsService,
+  ) {}
+
   assertPaymentMethod(
     value: string | undefined,
   ): asserts value is "cash" | "cashless" | undefined {
@@ -34,16 +39,67 @@ export class SubscriptionCommercialTermsService {
     recipientStudentId: string,
     dto: PurchaseSubscriptionPreviewDto,
     packageRow: IssuePackageRow,
+    legacyLeadAutoPayment = false,
   ): NormalizedPurchase {
     const purchaseReason = dto.purchaseReason?.trim() || null;
-    this.assertPurchaseReason(recipientStudentId, dto, purchaseReason);
-    this.assertFundingMode(dto);
-    const normalized = this.normalizeShared(dto, packageRow);
+    this.purchaseTerms.assertPurchaseReason(
+      recipientStudentId,
+      dto,
+      purchaseReason,
+    );
+    this.purchaseTerms.assertFundingMode(dto);
+    const dates = this.purchaseTerms.normalizeDates(dto);
+    const pricing = this.normalizePricing(dto, packageRow);
+    const paymentDto =
+      legacyLeadAutoPayment && dto.paymentAmountMinor === undefined
+        ? { ...dto, paymentAmountMinor: pricing.finalPriceMinor }
+        : dto;
+    const payment = this.purchaseTerms.normalizePayment(
+      paymentDto,
+      legacyLeadAutoPayment,
+    );
+    const normalized = this.normalizeShared(
+      dto,
+      packageRow,
+      payment.amountMinor,
+      pricing,
+    );
     normalized.snapshot.commercialRules = {
       fundingMode: dto.fundingMode,
       payerStudentId: dto.payerStudentId,
     };
-    return { ...normalized, purchaseReason };
+    return { ...normalized, purchaseReason, ...dates, payment };
+  }
+
+  bindPurchaseDefaults<T extends PurchaseSubscriptionPreviewDto>(
+    dto: T,
+    issuedAt: Date,
+    legacyLeadAutoPayment = false,
+  ): T {
+    const timestamp = issuedAt.toISOString();
+    return {
+      ...dto,
+      startsAt: dto.startsAt ?? this.toMoscowBusinessDate(issuedAt),
+      paymentOccurredAt:
+        dto.paymentOccurredAt ??
+        ((dto.paymentAmountMinor !== undefined &&
+          dto.paymentAmountMinor !== "0") ||
+        (legacyLeadAutoPayment && dto.paymentAmountMinor === undefined)
+          ? timestamp
+          : undefined),
+    };
+  }
+
+  private toMoscowBusinessDate(instant: Date): string {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Europe/Moscow",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(instant);
+    const value = (type: Intl.DateTimeFormatPartTypes) =>
+      parts.find((part) => part.type === type)?.value ?? "";
+    return `${value("year")}-${value("month")}-${value("day")}`;
   }
 
   normalizeIssue(
@@ -63,62 +119,28 @@ export class SubscriptionCommercialTermsService {
     );
   }
 
-  private assertPurchaseReason(
-    recipientStudentId: string,
-    dto: PurchaseSubscriptionPreviewDto,
-    purchaseReason: string | null,
-  ): void {
-    if (purchaseReason && purchaseReason.length > 500) {
-      throw new UnprocessableEntityException({
-        code: "PURCHASE_REASON_TOO_LONG",
-        field: "purchaseReason",
-        message: "Причина покупки не должна превышать 500 символов.",
-      });
-    }
-    if (dto.payerStudentId !== recipientStudentId && purchaseReason === null) {
-      throw new UnprocessableEntityException({
-        code: "PURCHASE_REASON_REQUIRED",
-        field: "purchaseReason",
-        message:
-          "При оплате со счёта другого клиента обязательно укажите причину.",
-      });
-    }
-  }
-
-  private assertFundingMode(dto: PurchaseSubscriptionPreviewDto): void {
-    if (dto.fundingMode !== "personal_account" && dto.fundingMode !== "installment") {
-      throw new UnprocessableEntityException({
-        code: "FUNDING_MODE_INVALID",
-        field: "fundingMode",
-        message: "Выберите личный счёт или рассрочку.",
-      });
-    }
-    if (dto.fundingMode === "personal_account" && dto.installments !== undefined) {
-      throw new UnprocessableEntityException({
-        code: "PERSONAL_ACCOUNT_INSTALLMENTS_FORBIDDEN",
-        field: "installments",
-        message: "При покупке с личного счёта рассрочка не применяется.",
-      });
-    }
-    if (dto.fundingMode === "installment" && dto.installments === undefined) {
-      throw new UnprocessableEntityException({
-        code: "INSTALLMENTS_REQUIRED",
-        field: "installments",
-        message: "Для рассрочки укажите график платежей.",
-      });
-    }
-  }
-
   private normalizeShared(
     dto: IssueSubscriptionDto,
     packageRow: IssuePackageRow,
+    paidNowMinor?: string,
+    pricing?: Pick<
+      NormalizedIssue,
+      "discount" | "surcharge" | "finalPriceMinor"
+    >,
   ): NormalizedIssue {
-    const discount = this.normalizeDiscount(dto.discount, packageRow.base_price_minor);
-    const surcharge = this.normalizeSurcharge(dto.surcharge);
-    const finalPriceMinor = (
-      BigInt(discount.finalPriceMinor) + BigInt(surcharge.amountMinor)
-    ).toString();
-    const installments = this.normalizeInstallments(dto.installments, finalPriceMinor);
+    const { discount, surcharge, finalPriceMinor } =
+      pricing ?? this.normalizePricing(dto, packageRow);
+    const installmentTotalMinor =
+      paidNowMinor === undefined
+        ? finalPriceMinor
+        : (BigInt(finalPriceMinor) > BigInt(paidNowMinor)
+            ? BigInt(finalPriceMinor) - BigInt(paidNowMinor)
+            : 0n
+          ).toString();
+    const installments = this.normalizeInstallments(
+      dto.installments,
+      installmentTotalMinor,
+    );
     const snapshot = this.createSnapshot(
       packageRow,
       discount,
@@ -128,6 +150,24 @@ export class SubscriptionCommercialTermsService {
       dto.paymentMethod ?? null,
     );
     return { discount, surcharge, finalPriceMinor, installments, snapshot };
+  }
+
+  private normalizePricing(
+    dto: IssueSubscriptionDto,
+    packageRow: IssuePackageRow,
+  ): Pick<NormalizedIssue, "discount" | "surcharge" | "finalPriceMinor"> {
+    const discount = this.normalizeDiscount(
+      dto.discount,
+      packageRow.base_price_minor,
+    );
+    const surcharge = this.normalizeSurcharge(dto.surcharge);
+    return {
+      discount,
+      surcharge,
+      finalPriceMinor: (
+        BigInt(discount.finalPriceMinor) + BigInt(surcharge.amountMinor)
+      ).toString(),
+    };
   }
 
   private normalizeDiscount(

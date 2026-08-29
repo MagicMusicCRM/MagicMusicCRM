@@ -24,9 +24,12 @@ class _PurchaseApiClient extends MagicApiClient {
     'currencyCode': 'RUB',
     'finalPriceMinor': '640000',
     'payerBalanceMinor': '800000',
+    'paidNowMinor': '640000',
     'balanceAfterMinor': '160000',
     'canCommit': true,
     'shortageMinor': '0',
+    'debtMinor': '0',
+    'overpaymentMinor': '160000',
     'previewToken': 'signed-preview',
   };
 
@@ -77,10 +80,14 @@ SubscriptionPurchasePreview _preview({
   currencyCode: 'RUB',
   finalPriceMinor: finalPriceMinor ?? BigInt.from(640000),
   payerBalanceMinor: BigInt.from(800000),
+  paidNowMinor: finalPriceMinor ?? BigInt.from(640000),
   balanceAfterMinor:
       BigInt.from(800000) - (finalPriceMinor ?? BigInt.from(640000)),
   canCommit: true,
   shortageMinor: BigInt.zero,
+  debtMinor: BigInt.zero,
+  overpaymentMinor:
+      BigInt.from(800000) - (finalPriceMinor ?? BigInt.from(640000)),
   previewToken: 'signed-preview',
 );
 
@@ -215,6 +222,7 @@ void main() {
       final input = PurchaseSubscriptionInput(
         issue: IssueSubscriptionInput(
           packageId: _package['id']! as String,
+          paymentMethod: SubscriptionPaymentMethod.cashless,
           discount: SubscriptionDiscountInput.percent(
             basisPoints: 2000,
             reason: 'Семейная скидка',
@@ -222,6 +230,10 @@ void main() {
         ),
         payerStudentId: _payerId,
         fundingMode: SubscriptionFundingMode.personalAccount,
+        startsAt: DateTime.utc(2026, 8, 26),
+        expiresAt: DateTime.utc(2026, 9, 26),
+        paymentAmountMinor: BigInt.from(640000),
+        paymentOccurredAt: DateTime.utc(2026, 8, 26, 12),
         purchaseReason: 'Родитель оплачивает обучение ребёнка',
       );
 
@@ -303,6 +315,57 @@ void main() {
       submissions.first.purchase.issue.discount!.toJson(),
       submissions.last.purchase.issue.discount!.toJson(),
     );
+  });
+
+  testWidgets('overpayment survives preview and commit and is shown', (
+    tester,
+  ) async {
+    PurchaseSubscriptionInput? previewInput;
+    SubscriptionIssueSubmission? submission;
+    await _openSheet(
+      tester,
+      onPreview: (input) async {
+        previewInput = input;
+        return SubscriptionPurchasePreview(
+          recipientStudentId: _recipientId,
+          payerStudentId: input.payerStudentId,
+          fundingMode: input.fundingMode,
+          currencyCode: 'RUB',
+          finalPriceMinor: BigInt.from(800000),
+          payerBalanceMinor: BigInt.zero,
+          paidNowMinor: BigInt.from(900000),
+          balanceAfterMinor: BigInt.from(100000),
+          canCommit: true,
+          shortageMinor: BigInt.zero,
+          debtMinor: BigInt.zero,
+          overpaymentMinor: BigInt.from(100000),
+          previewToken: 'overpayment-preview',
+        );
+      },
+      onSubmit: (value) async => submission = value,
+    );
+    final paymentAmount = find.byKey(
+      const ValueKey<String>('subscription-payment-800000'),
+    );
+
+    await tester.enterText(paymentAmount, '9000');
+    await _tap(tester, find.byKey(const Key('subscription-issue-submit')));
+
+    expect(previewInput?.paymentAmountMinor, BigInt.from(900000));
+    final previewCard = find.byKey(const Key('subscription-purchase-preview'));
+    expect(
+      find.descendant(
+        of: previewCard,
+        matching: find.text('Переплата после покупки'),
+      ),
+      findsOneWidget,
+    );
+    expect(_normalizedTexts(tester, previewCard), contains('1 000 ₽'));
+
+    await _tap(tester, find.byKey(const Key('subscription-issue-submit')));
+
+    expect(submission?.purchase.paymentAmountMinor, BigInt.from(900000));
+    expect(submission?.preview.overpaymentMinor, BigInt.from(100000));
   });
 
   testWidgets('different payer requires a reason before preview', (

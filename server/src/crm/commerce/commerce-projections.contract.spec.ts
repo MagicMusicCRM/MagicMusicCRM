@@ -30,6 +30,7 @@ const actor = (role: UserRole): ActorContext => ({
 const scope: CommerceProjectionScope = {
   studentId: "11111111-1111-4111-8111-111111111111",
   branchId: "22222222-2222-4222-8222-222222222222",
+  timezoneName: "Europe/Moscow",
   accessVersion: 7,
   scopeKey:
     "branch:22222222-2222-4222-8222-222222222222:student:11111111-1111-4111-8111-111111111111",
@@ -146,6 +147,8 @@ describe("v4 commerce projections contract", () => {
   const projectionFactory = () =>
     new CommerceProjectionFactory(new ActorClientProjectionFactory());
 
+  afterEach(() => jest.useRealTimers());
+
   it("maps all six role profiles and partitions every readable cache by finance scope", () => {
     const factory = projectionFactory();
     for (const [role, profile] of profiles) {
@@ -214,7 +217,7 @@ describe("v4 commerce projections contract", () => {
     const free = {
       ...paid,
       id: "55555555-5555-4555-8555-555555555555",
-      expiresAt: "2026-08-15T00:00:00.000Z",
+      expiresAt: "2099-08-15T00:00:00.000Z",
       units: {
         total: "2",
         used: "0",
@@ -247,7 +250,69 @@ describe("v4 commerce projections contract", () => {
       available: "6",
       debts: [{ currencyCode: "RUB", amountMinor: "160000" }],
       nextPaymentAt: "2026-08-29T10:00:00.000Z",
-      expiresAt: "2026-08-15T00:00:00.000Z",
+      expiresAt: "2099-08-15T00:00:00.000Z",
+    });
+  });
+
+  it.each([
+    {
+      label: "keeps the subscription active through its final Moscow day",
+      now: "2026-08-29T20:59:59.999Z",
+      expectedStatus: "active",
+      activeSubscriptionCount: 1,
+      available: "4",
+    },
+    {
+      label: "expires the subscription when the next Moscow day starts",
+      now: "2026-08-29T21:00:00.000Z",
+      expectedStatus: "expired",
+      activeSubscriptionCount: 0,
+      available: "0",
+    },
+  ])(
+    "$label",
+    ({ now, expectedStatus, activeSubscriptionCount, available }) => {
+      jest.useFakeTimers().setSystemTime(new Date(now));
+
+      const projection = projectionFactory().projectStudent(actor("manager"), {
+        ...source,
+        subscriptions: [
+          {
+            ...source.subscriptions[0]!,
+            expiresAt: "2026-08-29",
+          },
+        ],
+      });
+
+      expect(projection.subscriptions[0]?.status).toBe(expectedStatus);
+      expect(projection.lessonBalance).toMatchObject({
+        activeSubscriptionCount,
+        available,
+      });
+    },
+  );
+
+  it("uses the subscription branch date instead of the Moscow date", () => {
+    jest.useFakeTimers().setSystemTime(new Date("2026-08-29T19:00:00.000Z"));
+
+    const projection = projectionFactory().projectStudent(actor("manager"), {
+      ...source,
+      scope: {
+        ...scope,
+        timezoneName: "Asia/Yekaterinburg",
+      },
+      subscriptions: [
+        {
+          ...source.subscriptions[0]!,
+          expiresAt: "2026-08-29",
+        },
+      ],
+    });
+
+    expect(projection.subscriptions[0]?.status).toBe("expired");
+    expect(projection.lessonBalance).toMatchObject({
+      activeSubscriptionCount: 0,
+      available: "0",
     });
   });
 
@@ -346,6 +411,7 @@ describe("v4 commerce projections contract", () => {
         {
           student_id: scope.studentId,
           branch_id: scope.branchId,
+          timezone_name: "Asia/Yekaterinburg",
           access_version: "7",
           created_at: "2026-07-29T10:00:00.000Z",
         },
@@ -377,6 +443,8 @@ describe("v4 commerce projections contract", () => {
     expect(directorScope.scopeKey).toBe(
       `business:student:${scope.studentId}`,
     );
+    expect(directorScope.timezoneName).toBe("Asia/Yekaterinburg");
+    expect(directorSql).toContain("branch.timezone_name");
     expect(emergencySql).not.toContain("app.staff_branch_assignments");
     expect(emergencyScope.scopeKey).toBe(
       `emergency:student:${scope.studentId}`,

@@ -40,9 +40,10 @@ export class CommerceProjectionFactory {
     source: CommerceProjectionSource,
   ): CommerceStudentDto {
     this.assertReadable(actor);
+    const businessDate = this.commerceBusinessDate(source.scope.timezoneName);
     const subscriptions = source.subscriptions.map((subscription) => ({
       id: subscription.id,
-      status: subscription.status,
+      status: this.effectiveSubscriptionStatus(subscription, businessDate),
       startsAt: subscription.startsAt,
       expiresAt: subscription.expiresAt,
       units: {
@@ -162,6 +163,32 @@ export class CommerceProjectionFactory {
       ),
       expiresAt: earliest(active.map((item) => item.expiresAt)),
     };
+  }
+
+  private effectiveSubscriptionStatus(
+    subscription: CommerceProjectionSource["subscriptions"][number],
+    businessDate: string,
+  ): string {
+    if (subscription.status !== "active" || subscription.expiresAt === null) {
+      return subscription.status;
+    }
+    const expiresOn = subscription.expiresAt.slice(0, 10);
+    return expiresOn < businessDate ? "expired" : "active";
+  }
+
+  private commerceBusinessDate(
+    timezoneName: string,
+    instant = new Date(),
+  ): string {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezoneName,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(instant);
+    const value = (type: Intl.DateTimeFormatPartTypes) =>
+      parts.find((part) => part.type === type)?.value ?? "";
+    return `${value("year")}-${value("month")}-${value("day")}`;
   }
 
   private projectDiscount(

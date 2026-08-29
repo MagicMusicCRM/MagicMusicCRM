@@ -123,35 +123,48 @@ class SubscriptionIssuePurchasePreviewCard extends StatelessWidget {
           SubscriptionIssuePriceLine(
             label: preview.fundingMode == SubscriptionFundingMode.installment
                 ? 'Обязательство'
-                : 'Будет списано',
+                : 'Стоимость',
             value: formatSubscriptionMinor(
               preview.finalPriceMinor,
               preview.currencyCode,
             ),
           ),
-          if (preview.fundingMode ==
-              SubscriptionFundingMode.personalAccount) ...[
-            SubscriptionIssuePriceLine(
-              label: 'Баланс до',
-              value: formatSubscriptionMinor(
-                preview.payerBalanceMinor,
-                preview.currencyCode,
-              ),
+          SubscriptionIssuePriceLine(
+            label: 'Оплачено сейчас',
+            value: formatSubscriptionMinor(
+              preview.paidNowMinor,
+              preview.currencyCode,
             ),
+          ),
+          SubscriptionIssuePriceLine(
+            label: 'Баланс до',
+            value: formatSubscriptionMinor(
+              preview.payerBalanceMinor,
+              preview.currencyCode,
+            ),
+          ),
+          SubscriptionIssuePriceLine(
+            label: 'Баланс после',
+            value: formatSubscriptionMinor(
+              preview.balanceAfterMinor,
+              preview.currencyCode,
+            ),
+            emphasized: true,
+          ),
+          if (preview.debtMinor > BigInt.zero)
             SubscriptionIssuePriceLine(
-              label: 'Баланс после',
+              label: 'Долг после покупки',
               value: formatSubscriptionMinor(
-                preview.balanceAfterMinor,
+                preview.debtMinor,
                 preview.currencyCode,
               ),
               emphasized: true,
             ),
-          ],
-          if (!preview.canCommit)
+          if (preview.overpaymentMinor > BigInt.zero)
             SubscriptionIssuePriceLine(
-              label: 'Не хватает',
+              label: 'Переплата после покупки',
               value: formatSubscriptionMinor(
-                preview.shortageMinor,
+                preview.overpaymentMinor,
                 preview.currencyCode,
               ),
               emphasized: true,

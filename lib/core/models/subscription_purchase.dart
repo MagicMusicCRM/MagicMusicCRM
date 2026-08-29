@@ -135,18 +135,35 @@ class PurchaseSubscriptionInput {
     required this.issue,
     required this.payerStudentId,
     required this.fundingMode,
+    required this.startsAt,
+    required this.expiresAt,
+    required this.paymentAmountMinor,
+    this.paymentOccurredAt,
+    this.paymentComment,
     this.purchaseReason,
   });
 
   final IssueSubscriptionInput issue;
   final String payerStudentId;
   final SubscriptionFundingMode fundingMode;
+  final DateTime startsAt;
+  final DateTime expiresAt;
+  final BigInt paymentAmountMinor;
+  final DateTime? paymentOccurredAt;
+  final String? paymentComment;
   final String? purchaseReason;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     ...issue.toJson(),
     'payerStudentId': payerStudentId,
     'fundingMode': fundingMode.apiValue,
+    'startsAt': _dateOnly(startsAt),
+    'expiresAt': _dateOnly(expiresAt),
+    'paymentAmountMinor': paymentAmountMinor.toString(),
+    if (paymentOccurredAt != null)
+      'paymentOccurredAt': paymentOccurredAt!.toUtc().toIso8601String(),
+    if (paymentComment?.trim().isNotEmpty == true)
+      'paymentComment': paymentComment!.trim(),
     if (purchaseReason?.trim().isNotEmpty == true)
       'purchaseReason': purchaseReason!.trim(),
   };
@@ -160,9 +177,12 @@ class SubscriptionPurchasePreview {
     required this.currencyCode,
     required this.finalPriceMinor,
     required this.payerBalanceMinor,
+    required this.paidNowMinor,
     required this.balanceAfterMinor,
     required this.canCommit,
     required this.shortageMinor,
+    required this.debtMinor,
+    required this.overpaymentMinor,
     required this.previewToken,
   });
 
@@ -172,9 +192,12 @@ class SubscriptionPurchasePreview {
   final String currencyCode;
   final BigInt finalPriceMinor;
   final BigInt payerBalanceMinor;
+  final BigInt paidNowMinor;
   final BigInt balanceAfterMinor;
   final bool canCommit;
   final BigInt shortageMinor;
+  final BigInt debtMinor;
+  final BigInt overpaymentMinor;
   final String previewToken;
 
   factory SubscriptionPurchasePreview.fromJson(Map<String, dynamic> json) {
@@ -187,12 +210,23 @@ class SubscriptionPurchasePreview {
       currencyCode: json['currencyCode'].toString(),
       finalPriceMinor: _purchaseMinor(json['finalPriceMinor']),
       payerBalanceMinor: _purchaseMinor(json['payerBalanceMinor']),
+      paidNowMinor: _purchaseMinor(json['paidNowMinor'] ?? 0),
       balanceAfterMinor: _purchaseMinor(json['balanceAfterMinor']),
       canCommit: json['canCommit'] == true,
       shortageMinor: _purchaseMinor(json['shortageMinor']),
+      debtMinor: _purchaseMinor(
+        json['debtMinor'] ?? json['shortageMinor'] ?? 0,
+      ),
+      overpaymentMinor: _purchaseMinor(json['overpaymentMinor'] ?? 0),
       previewToken: json['previewToken'].toString(),
     );
   }
 }
 
 BigInt _purchaseMinor(Object? value) => BigInt.parse(value.toString());
+
+String _dateOnly(DateTime value) {
+  final utc = value.toUtc();
+  String two(int number) => number.toString().padLeft(2, '0');
+  return '${utc.year.toString().padLeft(4, '0')}-${two(utc.month)}-${two(utc.day)}';
+}

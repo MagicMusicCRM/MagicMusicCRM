@@ -122,6 +122,7 @@ describe("Unified CRM configuration (PostgreSQL)", () => {
          on conflict (field_key) do update
          set deleted_at = null, is_active = true, is_system = false`,
       );
+      await client.query("set local session_replication_role = replica");
       await client.query(
         "drop trigger crm_configuration_revision_immutable on app.crm_configuration_revisions",
       );

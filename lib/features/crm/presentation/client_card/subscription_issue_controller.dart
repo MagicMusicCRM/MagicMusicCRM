@@ -17,7 +17,6 @@ class SubscriptionIssueController extends ChangeNotifier {
     DateTime? commandTimestamp,
     SubscriptionIdentityFactory? identityFactory,
   }) : _basePriceMinor = subscriptionPackageBasePriceMinor(package),
-       _commandTimestamp = (commandTimestamp ?? DateTime.now()).toUtc(),
        _onPreview = onPreview,
        _onSubmit = onSubmit,
        _identityFactory = identityFactory ?? _createIdentity,
@@ -25,6 +24,7 @@ class SubscriptionIssueController extends ChangeNotifier {
          package: package,
          recipientStudentId: recipientStudentId,
          recipientLabel: recipientLabel,
+         commandTimestamp: commandTimestamp ?? DateTime.now(),
        ) {
     _identity = _identityFactory();
   }
@@ -33,7 +33,6 @@ class SubscriptionIssueController extends ChangeNotifier {
       MagicMutationIdentity.create('subscription-purchase');
 
   final BigInt _basePriceMinor;
-  final DateTime _commandTimestamp;
   final SubscriptionIssuePreview _onPreview;
   final SubscriptionIssueSubmit _onSubmit;
   final SubscriptionIdentityFactory _identityFactory;
@@ -54,7 +53,7 @@ class SubscriptionIssueController extends ChangeNotifier {
   SubscriptionIssuePricing get pricing => SubscriptionIssuePricing.calculate(
     draft: _draft,
     basePriceMinor: _basePriceMinor,
-    commandTimestamp: _commandTimestamp,
+    commandTimestamp: _draft.paymentOccurredAt,
   );
   SubscriptionPurchasePreview? get preview => _preview;
   MagicMutationIdentity get identity => _identity;
@@ -70,7 +69,16 @@ class SubscriptionIssueController extends ChangeNotifier {
   }
 
   void selectFundingMode(SubscriptionFundingMode mode) {
-    _updateDraft(_draft.copyWith(fundingMode: mode));
+    _updateDraft(
+      _draft.copyWith(
+        fundingMode: mode,
+        paymentAmount:
+            mode == SubscriptionFundingMode.installment &&
+                _draft.paymentAmount.isEmpty
+            ? '0'
+            : _draft.paymentAmount,
+      ),
+    );
   }
 
   void selectPaymentMethod(SubscriptionPaymentMethod method) {
@@ -120,7 +128,6 @@ class SubscriptionIssueController extends ChangeNotifier {
       SubscriptionIssuePricing.validateSurchargeReason(_draft);
   String? validatePurchaseReason(String? _) =>
       SubscriptionIssuePricing.validatePurchaseReason(_draft);
-
   PurchaseSubscriptionInput buildPurchase() {
     if (_frozenPurchase != null) return _frozenPurchase!;
     final currentPricing = pricing;
@@ -144,13 +151,25 @@ class SubscriptionIssueController extends ChangeNotifier {
         );
         break;
     }
+    final paymentAmountMinor = _draft.paymentAmount.trim().isEmpty
+        ? currentPricing.finalPriceMinor
+        : parseSubscriptionMoneyMinor(_draft.paymentAmount)!;
     return PurchaseSubscriptionInput(
       payerStudentId: _draft.payerStudentId,
       fundingMode: _draft.fundingMode,
+      startsAt: _draft.startsAt,
+      expiresAt: _draft.expiresAt,
+      paymentAmountMinor: paymentAmountMinor,
+      paymentOccurredAt: paymentAmountMinor == BigInt.zero
+          ? null
+          : _draft.paymentOccurredAt,
+      paymentComment: _draft.paymentComment,
       purchaseReason: _draft.purchaseReason,
       issue: IssueSubscriptionInput(
         packageId: _draft.packageId,
-        paymentMethod: _draft.paymentMethod,
+        paymentMethod: paymentAmountMinor == BigInt.zero
+            ? null
+            : _draft.paymentMethod,
         discount: discount,
         installments: currentPricing.installments,
         surcharge: _draft.surchargeEnabled
@@ -273,4 +292,50 @@ class SubscriptionIssueController extends ChangeNotifier {
     _activePreviewRequest = null;
     super.dispose();
   }
+}
+
+extension SubscriptionIssuePaymentActions on SubscriptionIssueController {
+  void setStartsAt(DateTime value) {
+    final start = DateTime.utc(value.year, value.month, value.day);
+    _updateDraft(
+      _draft.copyWith(
+        startsAt: start,
+        expiresAt: _draft.expiresAt.isBefore(start)
+            ? subscriptionAddCalendarMonth(start)
+            : _draft.expiresAt,
+      ),
+    );
+  }
+
+  void setExpiresAt(DateTime value) {
+    _updateDraft(
+      _draft.copyWith(
+        expiresAt: DateTime.utc(value.year, value.month, value.day),
+      ),
+    );
+  }
+
+  void setPaymentAmount(String value) {
+    _updateDraft(_draft.copyWith(paymentAmount: value));
+  }
+
+  void setPaymentOccurredAt(DateTime value) {
+    _updateDraft(_draft.copyWith(paymentOccurredAt: value.toUtc()));
+  }
+
+  void setPaymentComment(String value) {
+    _updateDraft(_draft.copyWith(paymentComment: value));
+  }
+
+  String? validatePaymentAmount(String? _) {
+    final raw = _draft.paymentAmount.trim();
+    if (raw.isEmpty) return null;
+    return parseSubscriptionMoneyMinor(raw) == null
+        ? 'Введите сумму, например 8 000 или 8 000,50'
+        : null;
+  }
+
+  String? validateExpiresAt() => _draft.expiresAt.isBefore(_draft.startsAt)
+      ? 'Дата окончания не может быть раньше даты начала'
+      : null;
 }

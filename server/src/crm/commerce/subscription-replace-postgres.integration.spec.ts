@@ -19,6 +19,9 @@ import { PaymentLifecycleRepository } from "./payment-lifecycle.repository";
 import { PaymentLifecycleService } from "./payment-lifecycle.service";
 import { SubscriptionIssueRepository } from "./subscription-issue.repository";
 import { SubscriptionCommercialTermsService } from "./subscription-commercial-terms.service";
+import { SubscriptionPurchasePaymentService } from "./subscription-purchase-payment.service";
+import { SubscriptionPurchasePersistenceService } from "./subscription-purchase-persistence.service";
+import { SubscriptionPurchaseTermsService } from "./subscription-purchase-terms.service";
 import { SubscriptionGrantCommandService } from "./subscription-grant-command.service";
 import { SubscriptionIssueResultService } from "./subscription-issue-result.service";
 import { SubscriptionIssueService } from "./subscription-issue.service";
@@ -74,18 +77,25 @@ describe("Subscription replacement preview/confirm", () => {
       database,
       new PlatformIntegrityRepository(),
     );
-    const reservations = new SubscriptionReservationService(
-      database,
-      {
-        emitCrmChanged: jest.fn(),
-        emitFinanceChanged: jest.fn(),
-      } as unknown as RealtimeBus,
-    );
+    const reservations = new SubscriptionReservationService(database, {
+      emitCrmChanged: jest.fn(),
+      emitFinanceChanged: jest.fn(),
+    } as unknown as RealtimeBus);
     const issuePreviewTokens = new SubscriptionPreviewTokenService({
       get: (key: string, fallback?: string) =>
         key === "COMMERCE_PREVIEW_SECRET" ? previewSecret : fallback,
     } as unknown as ConfigService);
-    const terms = new SubscriptionCommercialTermsService();
+    const terms = new SubscriptionCommercialTermsService(
+      new SubscriptionPurchaseTermsService(),
+    );
+    const paymentRepository = new PaymentLifecycleRepository(
+      database,
+      new PlatformIntegrityRepository(),
+    );
+    const purchasePersistence = new SubscriptionPurchasePersistenceService(
+      issueRepository,
+      new SubscriptionPurchasePaymentService(issueRepository, paymentRepository),
+    );
     const issueResults = new SubscriptionIssueResultService(issueRepository);
     const purchasePreview = new SubscriptionPurchasePreviewService(
       issueRepository,
@@ -103,6 +113,7 @@ describe("Subscription replacement preview/confirm", () => {
         purchasePreview,
         terms,
         issueResults,
+        purchasePersistence,
       ),
       new SubscriptionGrantCommandService(
         issueRepository,
@@ -187,12 +198,11 @@ describe("Subscription replacement preview/confirm", () => {
       metadata("dearer-payment"),
     );
     await seedConsumedUnits(pool, studentId, issued.subscription.id, "3");
-    await seedReservedLessons(
-      pool,
-      studentId,
-      issued.subscription.id,
-      ["2", "2", "2"],
-    );
+    await seedReservedLessons(pool, studentId, issued.subscription.id, [
+      "2",
+      "2",
+      "2",
+    ]);
 
     const preview = await lifecycleService.previewReplacement(
       actor,
@@ -335,12 +345,9 @@ describe("Subscription replacement preview/confirm", () => {
       },
     ]);
     expect(
-      await scalarCount(
-        pool,
-        "app.payments",
-        "issued_subscription_id = $1",
-        [result.replacement.newSubscriptionId],
-      ),
+      await scalarCount(pool, "app.payments", "issued_subscription_id = $1", [
+        result.replacement.newSubscriptionId,
+      ]),
     ).toBe(0);
   });
 
@@ -375,9 +382,9 @@ describe("Subscription replacement preview/confirm", () => {
         { newPackageId: fixture.dearerPackageId },
       ),
     ).rejects.toBeInstanceOf(NotFoundException);
-    expect(
-      await persistedReplacementCount(pool, issued.subscription.id),
-    ).toBe(before);
+    expect(await persistedReplacementCount(pool, issued.subscription.id)).toBe(
+      before,
+    );
   });
 
   it("allows exactly one concurrent replace winner and stably replays it", async () => {
@@ -394,10 +401,7 @@ describe("Subscription replacement preview/confirm", () => {
       confirm: true as const,
       reason: "package.concurrent",
     };
-    const keys = [
-      metadata("concurrent-a"),
-      metadata("concurrent-b"),
-    ];
+    const keys = [metadata("concurrent-a"), metadata("concurrent-b")];
     const outcomes = await Promise.allSettled(
       keys.map((key) =>
         lifecycleService.replace(
@@ -413,9 +417,9 @@ describe("Subscription replacement preview/confirm", () => {
       (outcome) => outcome.status === "fulfilled",
     );
     expect(winnerIndex).toBeGreaterThanOrEqual(0);
-    expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(
-      1,
-    );
+    expect(
+      outcomes.filter((outcome) => outcome.status === "fulfilled"),
+    ).toHaveLength(1);
     const loser = outcomes.find((outcome) => outcome.status === "rejected");
     expect(loser).toMatchObject({
       status: "rejected",
@@ -434,9 +438,9 @@ describe("Subscription replacement preview/confirm", () => {
       keys[winnerIndex]!,
     );
     expect(replay).toEqual({ ...winner, replayed: true });
-    expect(
-      await persistedReplacementCount(pool, issued.subscription.id),
-    ).toBe(1);
+    expect(await persistedReplacementCount(pool, issued.subscription.id)).toBe(
+      1,
+    );
   });
 
   async function issue(suffix: string) {
@@ -566,11 +570,7 @@ async function seedReservedLessons(
   }
 }
 
-async function replacementFacts(
-  pool: Pool,
-  oldId: string,
-  newId: string,
-) {
+async function replacementFacts(pool: Pool, oldId: string, newId: string) {
   const result = await pool.query<{
     old_status: string;
     old_version: string;
@@ -877,9 +877,13 @@ async function cleanupFixture(
       [[fixture.studentId, fixture.otherStudentId]],
     );
     const paymentRecordIds = paymentRecords.rows.map((row) => row.id);
-    await deleteByIds(client, "app.idempotency_records", "actor_key", [
-      fixture.actor.userId,
-    ], "text");
+    await deleteByIds(
+      client,
+      "app.idempotency_records",
+      "actor_key",
+      [fixture.actor.userId],
+      "text",
+    );
     await deleteByIds(
       client,
       "app.platform_outbox_events",
@@ -919,13 +923,7 @@ async function cleanupFixture(
       lessonIds,
       "uuid",
     );
-    await deleteByIds(
-      client,
-      "app.lessons",
-      "id",
-      lessonIds,
-      "uuid",
-    );
+    await deleteByIds(client, "app.lessons", "id", lessonIds, "uuid");
     await deleteByIds(
       client,
       "app.subscription_lifecycle_events",
@@ -990,20 +988,8 @@ async function cleanupFixture(
       [fixture.studentId, fixture.otherStudentId],
       "uuid",
     );
-    await deleteByIds(
-      client,
-      "app.profiles",
-      "id",
-      fixture.profileIds,
-      "uuid",
-    );
-    await deleteByIds(
-      client,
-      "app.users",
-      "id",
-      fixture.userIds,
-      "uuid",
-    );
+    await deleteByIds(client, "app.profiles", "id", fixture.profileIds, "uuid");
+    await deleteByIds(client, "app.users", "id", fixture.userIds, "uuid");
     await client.query("delete from app.branches where name = $1", [
       `${marker}-branch`,
     ]);

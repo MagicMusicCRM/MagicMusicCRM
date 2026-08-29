@@ -1409,6 +1409,34 @@ extension MagicCrmFinance on MagicCrmService {
     );
   }
 
+  Future<SubscriptionPurchasePreview> previewLeadSubscriptionPurchase(
+    String leadId, {
+    required PurchaseSubscriptionInput input,
+  }) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/crm/leads/$leadId/subscriptions/purchase/preview',
+      data: input.toJson(),
+    );
+    return SubscriptionPurchasePreview.fromJson(response);
+  }
+
+  Future<Map<String, dynamic>> purchaseLeadSubscription(
+    String leadId, {
+    required PurchaseSubscriptionInput input,
+    required SubscriptionPurchasePreview preview,
+    required MagicMutationIdentity identity,
+  }) {
+    return _api.postIdempotent<Map<String, dynamic>>(
+      '/crm/leads/$leadId/subscriptions/purchase',
+      identity: identity,
+      data: <String, dynamic>{
+        ...input.toJson(),
+        'previewToken': preview.previewToken,
+        'confirm': true,
+      },
+    );
+  }
+
   Future<Map<String, dynamic>> createClientPaymentRecord(
     String studentId, {
     required CreateClientPaymentRecordInput input,
@@ -1591,21 +1619,6 @@ extension MagicCrmFinance on MagicCrmService {
       data: input.toJson(),
     );
     return SubscriptionCancellationResult.fromJson(response);
-  }
-
-  /// Issues the first subscription for a lead and converts it to a student in
-  /// the same server transaction.  Keeping this separate from
-  /// [issueSubscription] makes the product rule explicit: booking a trial (or
-  /// assigning trial homework) never converts the lead; choosing the paid
-  /// package does.
-  Future<Map<String, dynamic>> issueLeadSubscription(
-    String leadId,
-    String packageId,
-  ) async {
-    return _api.post<Map<String, dynamic>>(
-      '/crm/leads/$leadId/subscriptions/issue',
-      data: {'packageId': packageId},
-    );
   }
 
   // ── Homework (P5c) ───────────────────────────────────────────────────────

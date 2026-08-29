@@ -11,9 +11,9 @@ void main() {
     final raw = await rootBundle.loadString(releaseHistoryAssetPath);
     final releases = parseReleaseHistory(raw);
 
-    expect(releases.first.version, '1.5.21+201');
-    expect(releases.first.buildNumber, 201);
-    expect(releases, hasLength(41));
+    expect(releases.first.version, '1.5.22+202');
+    expect(releases.first.buildNumber, 202);
+    expect(releases, hasLength(42));
     expect(releases.last.version, '1.0.0');
     expect(
       releases.map((release) => release.buildNumber),
@@ -38,6 +38,7 @@ void main() {
         199,
         200,
         201,
+        202,
       ]),
     );
     expect(raw, isNot(contains('—')));

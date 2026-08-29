@@ -22,6 +22,9 @@ import { PaymentLifecycleRepository } from "./payment-lifecycle.repository";
 import { PaymentLifecycleService } from "./payment-lifecycle.service";
 import { SubscriptionIssueRepository } from "./subscription-issue.repository";
 import { SubscriptionCommercialTermsService } from "./subscription-commercial-terms.service";
+import { SubscriptionPurchasePaymentService } from "./subscription-purchase-payment.service";
+import { SubscriptionPurchasePersistenceService } from "./subscription-purchase-persistence.service";
+import { SubscriptionPurchaseTermsService } from "./subscription-purchase-terms.service";
 import { SubscriptionGrantCommandService } from "./subscription-grant-command.service";
 import { SubscriptionIssueResultService } from "./subscription-issue-result.service";
 import { SubscriptionIssueService } from "./subscription-issue.service";
@@ -76,18 +79,25 @@ describe("Subscription cancellation preview/confirm", () => {
       database,
       new PlatformIntegrityRepository(),
     );
-    const reservations = new SubscriptionReservationService(
-      database,
-      {
-        emitCrmChanged: jest.fn(),
-        emitFinanceChanged: jest.fn(),
-      } as unknown as RealtimeBus,
-    );
+    const reservations = new SubscriptionReservationService(database, {
+      emitCrmChanged: jest.fn(),
+      emitFinanceChanged: jest.fn(),
+    } as unknown as RealtimeBus);
     const issuePreviewTokens = new SubscriptionPreviewTokenService({
       get: (key: string, fallback?: string) =>
         key === "COMMERCE_PREVIEW_SECRET" ? previewSecret : fallback,
     } as unknown as ConfigService);
-    const terms = new SubscriptionCommercialTermsService();
+    const terms = new SubscriptionCommercialTermsService(
+      new SubscriptionPurchaseTermsService(),
+    );
+    const paymentRepository = new PaymentLifecycleRepository(
+      database,
+      new PlatformIntegrityRepository(),
+    );
+    const purchasePersistence = new SubscriptionPurchasePersistenceService(
+      issueRepository,
+      new SubscriptionPurchasePaymentService(issueRepository, paymentRepository),
+    );
     const issueResults = new SubscriptionIssueResultService(issueRepository);
     const purchasePreview = new SubscriptionPurchasePreviewService(
       issueRepository,
@@ -105,6 +115,7 @@ describe("Subscription cancellation preview/confirm", () => {
         purchasePreview,
         terms,
         issueResults,
+        purchasePersistence,
       ),
       new SubscriptionGrantCommandService(
         issueRepository,
@@ -193,16 +204,11 @@ describe("Subscription cancellation preview/confirm", () => {
       issued.subscription.id,
       "2",
     );
-    await seedFutureLessons(
-      pool,
-      fixture.studentId,
-      issued.subscription.id,
-      [
-        { units: "1.5", reserved: true },
-        { units: "1.5", reserved: true },
-        { units: "1", reserved: false },
-      ],
-    );
+    await seedFutureLessons(pool, fixture.studentId, issued.subscription.id, [
+      { units: "1.5", reserved: true },
+      { units: "1.5", reserved: true },
+      { units: "1", reserved: false },
+    ]);
 
     const preview = await lifecycleService.previewCancellation(
       actor,
@@ -258,15 +264,10 @@ describe("Subscription cancellation preview/confirm", () => {
       issued.subscription.id,
       "1",
     );
-    await seedFutureLessons(
-      pool,
-      fixture.studentId,
-      issued.subscription.id,
-      [
-        { units: "2", reserved: true },
-        { units: "1", reserved: false },
-      ],
-    );
+    await seedFutureLessons(pool, fixture.studentId, issued.subscription.id, [
+      { units: "2", reserved: true },
+      { units: "1", reserved: false },
+    ]);
     const preview = await lifecycleService.previewCancellation(
       actor,
       fixture.studentId,
@@ -294,9 +295,7 @@ describe("Subscription cancellation preview/confirm", () => {
         metadata("cross-student"),
       ),
     ).rejects.toBeInstanceOf(UnprocessableEntityException);
-    expect(
-      await lifecycleState(pool, issued.subscription.id),
-    ).toMatchObject({
+    expect(await lifecycleState(pool, issued.subscription.id)).toMatchObject({
       status: "active",
       version: 1,
       cancelEvents: 0,
@@ -334,18 +333,14 @@ describe("Subscription cancellation preview/confirm", () => {
       totalCreditMinor: "140000",
       creditFactId: expect.any(String),
     });
-    expect(await immutableState(
-      pool,
-      fixture.studentId,
-      issued.subscription.id,
-    )).toEqual({
+    expect(
+      await immutableState(pool, fixture.studentId, issued.subscription.id),
+    ).toEqual({
       ...financeBefore,
       obligationCount: String(Number(financeBefore.obligationCount) + 1),
       obligationCreditMinor: "140000",
     });
-    expect(
-      await lifecycleState(pool, issued.subscription.id),
-    ).toEqual({
+    expect(await lifecycleState(pool, issued.subscription.id)).toEqual({
       status: "cancelled",
       version: 2,
       cancelEvents: 1,
@@ -628,10 +623,7 @@ describe("Subscription cancellation preview/confirm", () => {
       chosenRefundMinor: "150000",
       totalCreditMinor: "530000",
     });
-    const openIds = [
-      unpaid.paymentRecord.id,
-      pending.paymentRecord.id,
-    ];
+    const openIds = [unpaid.paymentRecord.id, pending.paymentRecord.id];
     const facts = await pool.query<{
       credits: string;
       credit_minor: string;
@@ -730,7 +722,9 @@ describe("Subscription cancellation preview/confirm", () => {
     expect(
       outcomes.filter((outcome) => outcome.status === "fulfilled"),
     ).toHaveLength(1);
-    expect(outcomes.find((outcome) => outcome.status === "rejected")).toMatchObject({
+    expect(
+      outcomes.find((outcome) => outcome.status === "rejected"),
+    ).toMatchObject({
       status: "rejected",
       reason: expect.any(ConflictException),
     });
@@ -979,11 +973,7 @@ async function seedFutureLessons(
           )
           values ($1, $2, $3::numeric)
         `,
-        [
-          lesson.rows[0]!.id,
-          subscriptionId,
-          lessons[index]!.units,
-        ],
+        [lesson.rows[0]!.id, subscriptionId, lessons[index]!.units],
       );
     }
   }
@@ -1181,12 +1171,7 @@ async function createFixture(pool: Pool) {
       otherProfile,
       branch.rows[0]!.id,
     );
-    const sourcePackageId = await insertPackage(
-      client,
-      "source",
-      10,
-      "800000",
-    );
+    const sourcePackageId = await insertPackage(client, "source", 10, "800000");
     const replacementPackageId = await insertPackage(
       client,
       "replacement",
@@ -1347,9 +1332,10 @@ async function cleanupFixture(
       ],
       "text",
     );
-    await client.query("delete from app.audit_events where actor_user_id = $1", [
-      fixture.actor.userId,
-    ]);
+    await client.query(
+      "delete from app.audit_events where actor_user_id = $1",
+      [fixture.actor.userId],
+    );
     await deleteByIds(
       client,
       "app.aggregate_versions",
@@ -1433,13 +1419,7 @@ async function cleanupFixture(
       [fixture.studentId, fixture.otherStudentId],
       "uuid",
     );
-    await deleteByIds(
-      client,
-      "app.profiles",
-      "id",
-      fixture.profileIds,
-      "uuid",
-    );
+    await deleteByIds(client, "app.profiles", "id", fixture.profileIds, "uuid");
     await deleteByIds(client, "app.users", "id", fixture.userIds, "uuid");
     await client.query("delete from app.branches where name = $1", [
       `${marker}-branch`,

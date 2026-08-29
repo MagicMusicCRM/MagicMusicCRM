@@ -3,6 +3,7 @@ import { ClientProjectionProfile } from "../../access-control/actor-client-proje
 export interface CommerceProjectionScope {
   studentId: string;
   branchId: string | null;
+  timezoneName: string;
   accessVersion: number;
   scopeKey: string;
 }

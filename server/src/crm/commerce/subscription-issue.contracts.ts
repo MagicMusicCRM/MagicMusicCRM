@@ -46,6 +46,14 @@ export interface NormalizedPurchase {
   installments: PlannedInstallment[];
   snapshot: IssuedCommercialSnapshot;
   purchaseReason: string | null;
+  startsAt: string;
+  expiresAt: string;
+  payment: {
+    amountMinor: string;
+    occurredAt: Date | null;
+    method: "cash" | "cashless" | null;
+    comment: string | null;
+  };
 }
 
 export interface NormalizedIssue {

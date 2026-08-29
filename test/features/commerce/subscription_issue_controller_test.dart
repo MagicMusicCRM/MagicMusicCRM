@@ -26,9 +26,12 @@ SubscriptionPurchasePreview _preview({
   currencyCode: 'RUB',
   finalPriceMinor: BigInt.from(640000),
   payerBalanceMinor: BigInt.from(800000),
+  paidNowMinor: BigInt.from(640000),
   balanceAfterMinor: canCommit ? BigInt.from(160000) : BigInt.from(-1),
   canCommit: canCommit,
   shortageMinor: canCommit ? BigInt.zero : BigInt.one,
+  debtMinor: canCommit ? BigInt.zero : BigInt.one,
+  overpaymentMinor: canCommit ? BigInt.from(160000) : BigInt.zero,
   previewToken: previewToken,
 );
 
@@ -37,17 +40,61 @@ SubscriptionIssueController _controller({
   SubscriptionIssuePreview? onPreview,
   SubscriptionIssueSubmit? onSubmit,
   SubscriptionIdentityFactory? identityFactory,
+  DateTime? commandTimestamp,
 }) => SubscriptionIssueController(
   package: package ?? _package(),
   recipientStudentId: _recipientId,
   recipientLabel: 'Иванов Иван',
   onPreview: onPreview ?? (input) async => _preview(input: input),
   onSubmit: onSubmit ?? (_) async {},
-  commandTimestamp: DateTime.utc(2026, 1, 31, 12),
+  commandTimestamp: commandTimestamp ?? DateTime.utc(2026, 1, 31, 12),
   identityFactory: identityFactory,
 );
 
 void main() {
+  test('purchase defaults to today, one calendar month and full payment', () {
+    final controller = _controller();
+    addTearDown(controller.dispose);
+
+    final json = controller.buildPurchase().toJson();
+
+    expect(json['startsAt'], '2026-01-31');
+    expect(json['expiresAt'], '2026-02-28');
+    expect(json['paymentAmountMinor'], '800000');
+    expect(json['paymentOccurredAt'], '2026-01-31T12:00:00.000Z');
+    expect(json['paymentMethod'], 'cashless');
+  });
+
+  test(
+    'local midnight keeps the local start date and inclusive calendar month',
+    () {
+      final commandTimestamp = DateTime(2026, 8, 31, 0, 15);
+      final controller = _controller(commandTimestamp: commandTimestamp);
+      addTearDown(controller.dispose);
+
+      final json = controller.buildPurchase().toJson();
+
+      expect(json['startsAt'], '2026-08-31');
+      expect(json['expiresAt'], '2026-09-30');
+      expect(
+        json['paymentOccurredAt'],
+        commandTimestamp.toUtc().toIso8601String(),
+      );
+    },
+  );
+
+  test('zero payment is allowed and does not claim a payment method', () {
+    final controller = _controller();
+    addTearDown(controller.dispose);
+
+    controller.setPaymentAmount('0');
+    final json = controller.buildPurchase().toJson();
+
+    expect(json['paymentAmountMinor'], '0');
+    expect(json.containsKey('paymentMethod'), isFalse);
+    expect(json.containsKey('paymentOccurredAt'), isFalse);
+  });
+
   test('0,01 percent is one basis point and rounds PostgreSQL half-up', () {
     final controller = _controller(package: _package(basePriceMinor: '5000'));
     addTearDown(controller.dispose);
@@ -296,4 +343,22 @@ void main() {
       DateTime.utc(2026, 3, 31, 12),
     ]);
   });
+
+  test(
+    'initial payment reduces the amount distributed across installments',
+    () {
+      final controller = _controller();
+      addTearDown(controller.dispose);
+      controller.selectFundingMode(SubscriptionFundingMode.installment);
+      controller.setPaymentAmount('2500');
+
+      final purchase = controller.buildPurchase();
+
+      expect(purchase.paymentAmountMinor, BigInt.from(250000));
+      expect(purchase.issue.installments.map((item) => item.amountMinor), [
+        BigInt.from(275000),
+        BigInt.from(275000),
+      ]);
+    },
+  );
 }

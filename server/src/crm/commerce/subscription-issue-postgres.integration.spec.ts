@@ -25,6 +25,9 @@ import { PaymentReversalRepository } from "./payment-reversal.repository";
 import { PaymentReversalService } from "./payment-reversal.service";
 import { SubscriptionIssueRepository } from "./subscription-issue.repository";
 import { SubscriptionCommercialTermsService } from "./subscription-commercial-terms.service";
+import { SubscriptionPurchasePaymentService } from "./subscription-purchase-payment.service";
+import { SubscriptionPurchasePersistenceService } from "./subscription-purchase-persistence.service";
+import { SubscriptionPurchaseTermsService } from "./subscription-purchase-terms.service";
 import { SubscriptionGrantCommandService } from "./subscription-grant-command.service";
 import { SubscriptionIssueResultService } from "./subscription-issue-result.service";
 import { SubscriptionIssueService } from "./subscription-issue.service";
@@ -105,8 +108,18 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       get: (key: string, fallback?: string) =>
         key === "COMMERCE_PREVIEW_SECRET" ? previewSecret : fallback,
     } as unknown as ConfigService);
-    const terms = new SubscriptionCommercialTermsService();
+    const terms = new SubscriptionCommercialTermsService(
+      new SubscriptionPurchaseTermsService(),
+    );
     const issueResults = new SubscriptionIssueResultService(issueRepository);
+    const paymentRepository = new PaymentLifecycleRepository(
+      database,
+      new PlatformIntegrityRepository(),
+    );
+    const purchasePersistence = new SubscriptionPurchasePersistenceService(
+      issueRepository,
+      new SubscriptionPurchasePaymentService(issueRepository, paymentRepository),
+    );
     const purchasePreview = new SubscriptionPurchasePreviewService(
       issueRepository,
       policy,
@@ -123,6 +136,7 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
         purchasePreview,
         terms,
         issueResults,
+        purchasePersistence,
       ),
       new SubscriptionGrantCommandService(
         issueRepository,
@@ -134,10 +148,6 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       ),
     );
     commerceRepository = new CommerceProjectionRepository(database);
-    const paymentRepository = new PaymentLifecycleRepository(
-      database,
-      new PlatformIntegrityRepository(),
-    );
     paymentLifecycle = new PaymentLifecycleService(
       paymentRepository,
       issueRepository,
@@ -1004,6 +1014,76 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
     });
   });
 
+  it("persists backdated dates and a partial actual payment in one purchase", async () => {
+    const input = {
+      packageId,
+      payerStudentId: studentId,
+      fundingMode: "personal_account" as const,
+      purchaseReason: "Частичная оплата при продаже",
+      startsAt: "2026-06-18",
+      expiresAt: "2026-07-18",
+      paymentAmountMinor: "300000",
+      paymentOccurredAt: "2026-06-18T09:30:00.000Z",
+      paymentMethod: "cash" as const,
+      paymentComment: "Первый взнос",
+    };
+    const preview = await issueService.previewPurchase(
+      actors.director,
+      studentId,
+      input,
+    );
+    expect(preview).toMatchObject({
+      canCommit: true,
+      paidNowMinor: "300000",
+    });
+
+    const purchased = await issueService.purchase(
+      actors.director,
+      studentId,
+      { ...input, previewToken: preview.previewToken, confirm: true },
+      mutationMetadata("partial-payment-at-sale"),
+    );
+
+    expect(purchased.subscription).toMatchObject({
+      startsAt: "2026-06-18",
+      expiresAt: "2026-07-18",
+    });
+    expect(purchased.balanceAtIssue).toEqual({
+      currencyCode: "RUB",
+      actualPaymentsMinor: "300000",
+      obligationsMinor: "800000",
+      netMinor: "-500000",
+    });
+    const persisted = await pool.query<{
+      amount_minor: string;
+      method: string;
+      notes: string;
+      payment_date: Date;
+      record_status: string;
+    }>(
+      `
+        select payment.amount_minor::text, payment.method, payment.notes,
+          payment.payment_date,
+          record.status as record_status
+        from app.payments payment
+        join app.client_payment_records record
+          on record.id = payment.payment_record_id
+        where payment.issued_subscription_id = $1
+      `,
+      [purchased.subscription.id],
+    );
+    expect(persisted.rows).toHaveLength(1);
+    expect(persisted.rows[0]).toMatchObject({
+      amount_minor: "300000",
+      method: "cash",
+      notes: "Первый взнос",
+      record_status: "paid",
+    });
+    expect(persisted.rows[0]!.payment_date.toISOString()).toBe(
+      "2026-06-18T09:30:00.000Z",
+    );
+  });
+
   it("corrects a paid record atomically and keeps the source in technical history", async () => {
     const scope = await commerceRepository.resolveStudentScope(
       actors.director,
@@ -1235,7 +1315,7 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
     });
   });
 
-  it("rejects an unfunded personal-account purchase without partial facts", async () => {
+  it("allows a zero-payment purchase and persists the resulting debt", async () => {
     const input = {
       packageId,
       payerStudentId: outsideStudentId,
@@ -1248,22 +1328,26 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       input,
     );
     expect(preview).toMatchObject({
-      canCommit: false,
+      canCommit: true,
       payerBalanceMinor: "0",
+      paidNowMinor: "0",
       shortageMinor: "800000",
+      debtMinor: "800000",
     });
     const before = await countIssuedSubscriptions();
-    await expect(
-      issueService.purchase(
-        actors.director,
-        studentId,
-        { ...input, previewToken: preview.previewToken, confirm: true },
-        mutationMetadata("unfunded-purchase"),
-      ),
-    ).rejects.toMatchObject({
-      response: { code: "INSUFFICIENT_PERSONAL_ACCOUNT_BALANCE" },
+    const result = await issueService.purchase(
+      actors.director,
+      studentId,
+      { ...input, previewToken: preview.previewToken, confirm: true },
+      mutationMetadata("unfunded-purchase"),
+    );
+    expect(result.balanceAtIssue).toEqual({
+      currencyCode: "RUB",
+      actualPaymentsMinor: "0",
+      obligationsMinor: "800000",
+      netMinor: "-800000",
     });
-    expect(await countIssuedSubscriptions()).toBe(before);
+    expect(await countIssuedSubscriptions()).toBe(before + 1);
   });
 
   it("rechecks current finance capability when a previewed purchase commits", async () => {

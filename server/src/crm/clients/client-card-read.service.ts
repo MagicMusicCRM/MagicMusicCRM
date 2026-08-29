@@ -4,6 +4,7 @@ import { CapabilityKey } from "../../access-control/capability-registry";
 import { EffectiveAccessEvaluator } from "../../access-control/effective-access-evaluator";
 import { ActorContext } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
+import { branchIdExpr } from "../branch-scope";
 import { ClientRefDto } from "../dto/client-ref.dto";
 import {
   ClientReferenceService,
@@ -85,8 +86,12 @@ export class ClientCardReadService {
               when target.type = 'student' then student.status
               else lead_status.stage_key
             end as status_key,
-            coalesce(student.branch_id, lead.branch_id) as branch_id,
-            branch.name as branch_name
+            coalesce(
+              ${branchIdExpr("student")},
+              ${branchIdExpr("lead")}
+            ) as branch_id,
+            branch.name as branch_name,
+            branch.timezone_name
           from target
           left join app.students student
             on target.type = 'student' and student.id = target.id
@@ -97,7 +102,10 @@ export class ClientCardReadService {
           left join app.lead_statuses lead_status
             on lead_status.id = lead.status_id
           left join app.branches branch
-            on branch.id = coalesce(student.branch_id, lead.branch_id)
+            on branch.id::text = coalesce(
+              ${branchIdExpr("student")},
+              ${branchIdExpr("lead")}
+            )
         ),
         lesson_rows as (
           select
@@ -335,6 +343,17 @@ export class ClientCardReadService {
                 from app.subscriptions subscription
                 where subscription.student_id = target.id
                   and subscription.status = 'active'
+                  and (
+                    subscription.expires_at is null
+                    or subscription.expires_at >= (
+                      select timezone(
+                        coalesce(header.timezone_name, 'Europe/Moscow'),
+                        now()
+                      )::date
+                      from header_row header
+                      where header.id = target.id
+                    )
+                  )
                 order by subscription.created_at desc, subscription.id desc
                 limit 1
               )
@@ -427,9 +446,10 @@ export class ClientCardReadService {
     }
     if (row.finance) {
       indicators.activeSubscriptionRemaining =
-        (row.finance.activeSubscription as
-          | { remainingUnits?: unknown }
-          | undefined)?.remainingUnits ?? null;
+        (
+          row.finance.activeSubscription as
+            { remainingUnits?: unknown } | undefined
+        )?.remainingUnits ?? null;
     }
 
     return {
@@ -477,8 +497,7 @@ export class ClientCardReadService {
   }
 
   private timelineItem(item: Record<string, unknown>, type: string) {
-    const occurredAt =
-      item.createdAt ?? item.dueAt ?? item.scheduledAt ?? null;
+    const occurredAt = item.createdAt ?? item.dueAt ?? item.scheduledAt ?? null;
     return {
       id: item.id,
       type,
@@ -495,22 +514,23 @@ export class ClientCardReadService {
     const rows = await this.access.getEffectiveAccessSnapshot(actor.userId);
     return new Set(
       rows
-        .filter((row) =>
-          this.evaluator.evaluate({
-            actor: {
-              userId: row.userId,
-              role: row.role,
-              active: row.active,
-            },
-            capability: {
-              key: row.capabilityKey,
-              active: row.capabilityActive,
-              overrideMode: row.overrideMode,
-            },
-            roleEffect: row.roleEffect,
-            overrideEffect: row.overrideEffect,
-            resourceAllowed: true,
-          }).allowed,
+        .filter(
+          (row) =>
+            this.evaluator.evaluate({
+              actor: {
+                userId: row.userId,
+                role: row.role,
+                active: row.active,
+              },
+              capability: {
+                key: row.capabilityKey,
+                active: row.capabilityActive,
+                overrideMode: row.overrideMode,
+              },
+              roleEffect: row.roleEffect,
+              overrideEffect: row.overrideEffect,
+              resourceAllowed: true,
+            }).allowed,
         )
         .map((row) => row.capabilityKey),
     );

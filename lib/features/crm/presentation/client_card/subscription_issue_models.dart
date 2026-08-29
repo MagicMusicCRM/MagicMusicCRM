@@ -33,6 +33,11 @@ class SubscriptionIssueDraft {
     required this.payerStudentId,
     required this.payerLabel,
     required this.currencyCode,
+    required this.startsAt,
+    required this.expiresAt,
+    required this.paymentOccurredAt,
+    this.paymentAmount = '',
+    this.paymentComment = '',
     this.paymentMethod = SubscriptionPaymentMethod.cashless,
     this.fundingMode = SubscriptionFundingMode.personalAccount,
     this.discountMode = SubscriptionIssueDiscountMode.none,
@@ -49,7 +54,13 @@ class SubscriptionIssueDraft {
     required Map<String, dynamic> package,
     required String recipientStudentId,
     required String recipientLabel,
+    required DateTime commandTimestamp,
   }) {
+    final start = DateTime.utc(
+      commandTimestamp.year,
+      commandTimestamp.month,
+      commandTimestamp.day,
+    );
     return SubscriptionIssueDraft(
       packageId: package['id'].toString(),
       recipientStudentId: recipientStudentId,
@@ -57,6 +68,9 @@ class SubscriptionIssueDraft {
       payerStudentId: recipientStudentId,
       payerLabel: recipientLabel,
       currencyCode: package['currencyCode']?.toString().toUpperCase() ?? 'RUB',
+      startsAt: start,
+      expiresAt: subscriptionAddCalendarMonth(start),
+      paymentOccurredAt: commandTimestamp.toUtc(),
     );
   }
 
@@ -66,6 +80,11 @@ class SubscriptionIssueDraft {
   final String payerStudentId;
   final String payerLabel;
   final String currencyCode;
+  final DateTime startsAt;
+  final DateTime expiresAt;
+  final DateTime paymentOccurredAt;
+  final String paymentAmount;
+  final String paymentComment;
   final SubscriptionPaymentMethod paymentMethod;
   final SubscriptionFundingMode fundingMode;
   final SubscriptionIssueDiscountMode discountMode;
@@ -80,6 +99,11 @@ class SubscriptionIssueDraft {
   SubscriptionIssueDraft copyWith({
     String? payerStudentId,
     String? payerLabel,
+    DateTime? startsAt,
+    DateTime? expiresAt,
+    DateTime? paymentOccurredAt,
+    String? paymentAmount,
+    String? paymentComment,
     SubscriptionPaymentMethod? paymentMethod,
     SubscriptionFundingMode? fundingMode,
     SubscriptionIssueDiscountMode? discountMode,
@@ -98,6 +122,11 @@ class SubscriptionIssueDraft {
       payerStudentId: payerStudentId ?? this.payerStudentId,
       payerLabel: payerLabel ?? this.payerLabel,
       currencyCode: currencyCode,
+      startsAt: startsAt ?? this.startsAt,
+      expiresAt: expiresAt ?? this.expiresAt,
+      paymentOccurredAt: paymentOccurredAt ?? this.paymentOccurredAt,
+      paymentAmount: paymentAmount ?? this.paymentAmount,
+      paymentComment: paymentComment ?? this.paymentComment,
       paymentMethod: paymentMethod ?? this.paymentMethod,
       fundingMode: fundingMode ?? this.fundingMode,
       discountMode: discountMode ?? this.discountMode,
@@ -110,6 +139,18 @@ class SubscriptionIssueDraft {
       installmentCount: installmentCount ?? this.installmentCount,
     );
   }
+}
+
+DateTime subscriptionAddCalendarMonth(DateTime source) {
+  final utc = source.toUtc();
+  final nextMonth = utc.month == 12 ? 1 : utc.month + 1;
+  final nextYear = utc.month == 12 ? utc.year + 1 : utc.year;
+  final lastDay = DateTime.utc(nextYear, nextMonth + 1, 0).day;
+  return DateTime.utc(
+    nextYear,
+    nextMonth,
+    utc.day > lastDay ? lastDay : utc.day,
+  );
 }
 
 BigInt subscriptionPackageBasePriceMinor(Map<String, dynamic> package) {

@@ -729,9 +729,23 @@ class FakeCardApiClient extends MagicApiClient {
       return <String, dynamic>{'id': 'created-plan', 'version': 1} as T;
     }
     if (lead != null &&
-        path == '/crm/leads/${lead!['id']}/subscriptions/issue') {
+        path == '/crm/leads/${lead!['id']}/subscriptions/purchase/preview') {
+      final body = Map<String, dynamic>.from(data as Map);
+      final paidNowMinor = body['paymentAmountMinor']?.toString() ?? '0';
       return <String, dynamic>{
-            'student': {'id': 'student-from-${lead!['id']}'},
+            'recipientStudentId': lead!['id'],
+            'payerStudentId': body['payerStudentId'] ?? lead!['id'],
+            'fundingMode': body['fundingMode'] ?? 'personal_account',
+            'currencyCode': 'RUB',
+            'finalPriceMinor': paidNowMinor,
+            'payerBalanceMinor': '0',
+            'paidNowMinor': paidNowMinor,
+            'balanceAfterMinor': (-BigInt.parse(paidNowMinor)).toString(),
+            'canCommit': true,
+            'shortageMinor': paidNowMinor,
+            'debtMinor': paidNowMinor,
+            'overpaymentMinor': '0',
+            'previewToken': 'lead-purchase-preview-token',
           }
           as T;
     }
@@ -781,6 +795,14 @@ class FakeCardApiClient extends MagicApiClient {
     final body = Map<String, dynamic>.from(data as Map);
     idempotentRequests.add((path: path, data: body, identity: identity));
     requests.add('POST $path');
+    if (lead != null &&
+        path == '/crm/leads/${lead!['id']}/subscriptions/purchase') {
+      return <String, dynamic>{
+            'converted': true,
+            'student': {'id': 'student-from-${lead!['id']}'},
+          }
+          as T;
+    }
     if (path.endsWith('/replace')) {
       if (replacementFailures > 0) {
         replacementFailures--;

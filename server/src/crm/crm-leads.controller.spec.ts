@@ -40,9 +40,9 @@ describe("CrmLeadsController", () => {
       firstName: "Анна",
       lastName: "Иванова",
       phone: "+79990000000",
-        sourceId: "source-a",
-        branchId: "branch-a",
-        status: "new",
+      sourceId: "source-a",
+      branchId: "branch-a",
+      status: "new",
     };
 
     await expect(controller.createLead(actor, dto)).resolves.toEqual({
@@ -63,8 +63,11 @@ describe("CrmLeadsController", () => {
     );
   });
 
-  it("delegates the additive lead subscription issue contract", async () => {
+  it("delegates lead preview and idempotent purchase to the unified contract", async () => {
     const subscriptions = {
+      previewLeadSubscriptionPurchase: jest.fn().mockResolvedValue({
+        previewToken: "signed-preview",
+      }),
       issueLeadSubscription: jest.fn().mockResolvedValue({
         student: { id: "student-a" },
         subscription: { id: "subscription-a" },
@@ -82,16 +85,110 @@ describe("CrmLeadsController", () => {
       {} as ClientWriteValidator,
     );
     const actor = { userId: "admin-a", role: "admin" as const };
+    const previewDto = {
+      packageId: "package-a",
+      payerStudentId: "lead-a",
+      fundingMode: "personal_account" as const,
+      startsAt: "2026-08-29",
+      expiresAt: "2026-09-29",
+      paymentAmountMinor: "800000",
+      paymentOccurredAt: "2026-08-29T12:00:00.000Z",
+      paymentMethod: "cashless" as const,
+    };
 
     await expect(
-      controller.issueLeadSubscription(actor, "lead-a", {
-        packageId: "package-a",
-      }),
+      controller.previewLeadSubscriptionPurchase(actor, "lead-a", previewDto),
+    ).resolves.toMatchObject({ previewToken: "signed-preview" });
+    await expect(
+      controller.purchaseLeadSubscription(
+        actor,
+        "lead-a",
+        "lead-purchase-key",
+        "lead-purchase-request",
+        {
+          ...previewDto,
+          previewToken: "signed-preview",
+          confirm: true,
+        },
+      ),
     ).resolves.toMatchObject({ converted: true });
+    expect(subscriptions.previewLeadSubscriptionPurchase).toHaveBeenCalledWith(
+      actor,
+      "lead-a",
+      previewDto,
+    );
     expect(subscriptions.issueLeadSubscription).toHaveBeenCalledWith(
       actor,
       "lead-a",
-      { packageId: "package-a" },
+      { ...previewDto, previewToken: "signed-preview", confirm: true },
+      {
+        idempotencyKey: "lead-purchase-key",
+        requestId: "lead-purchase-request",
+      },
+    );
+  });
+
+  it("adapts the legacy lead issue route to the canonical preview and purchase owner", async () => {
+    const subscriptions = {
+      previewLeadSubscriptionPurchase: jest
+        .fn()
+        .mockResolvedValueOnce({
+          finalPriceMinor: "800000",
+          paidNowMinor: "800000",
+          previewToken: "legacy-preview-token",
+        }),
+      issueLeadSubscription: jest.fn().mockResolvedValue({
+        subscription: { id: "subscription-a" },
+      }),
+    };
+    const controller = new CrmLeadsController(
+      {} as BlacklistService,
+      {} as DuplicatesService,
+      {} as LeadsService,
+      {} as MergeService,
+      {} as PhoneReviewService,
+      subscriptions as unknown as SubscriptionsService,
+      {} as ClientWriteValidator,
+    );
+    const actor = { userId: "admin-a", role: "admin" as const };
+    const leadId = "11111111-1111-4111-8111-111111111111";
+    const packageId = "22222222-2222-4222-8222-222222222222";
+    const legacyDto = { packageId };
+
+    await controller.issueLegacyLeadSubscription(
+      actor,
+      leadId,
+      undefined,
+      undefined,
+      legacyDto,
+    );
+
+    const purchase = {
+      ...legacyDto,
+      payerStudentId: leadId,
+      fundingMode: "personal_account",
+    };
+    expect(
+      subscriptions.previewLeadSubscriptionPurchase,
+    ).toHaveBeenNthCalledWith(
+      1,
+      actor,
+      leadId,
+      purchase,
+      true,
+    );
+    expect(subscriptions.previewLeadSubscriptionPurchase).toHaveBeenCalledTimes(
+      1,
+    );
+    expect(subscriptions.issueLeadSubscription).toHaveBeenCalledWith(
+      actor,
+      leadId,
+      { ...purchase, previewToken: "legacy-preview-token", confirm: true },
+      {
+        idempotencyKey: `legacy-lead:${leadId}:${packageId}`,
+        requestId: `legacy-lead:${leadId}`,
+      },
+      true,
     );
   });
 

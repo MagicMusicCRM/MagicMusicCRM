@@ -127,10 +127,7 @@ export interface PurchaseContext {
 export class SubscriptionIssueRepository {
   constructor(private readonly database: DatabaseService) {}
 
-  async lockStudent(
-    client: PoolClient,
-    studentId: string,
-  ): Promise<boolean> {
+  async lockStudent(client: PoolClient, studentId: string): Promise<boolean> {
     const result = await client.query<{ id: string }>(
       `
         select id
@@ -312,6 +309,9 @@ export class SubscriptionIssueRepository {
       snapshot: IssuedCommercialSnapshot;
       discount: IssueDiscountColumns;
       finalPriceMinor: string;
+      startsAt?: string;
+      expiresAt?: string;
+      conversionLeadId?: string;
       version: number;
     },
   ): Promise<IssuedSubscriptionRow> {
@@ -342,37 +342,42 @@ export class SubscriptionIssueRepository {
           version,
           payer_student_id,
           funding_mode,
-          purchase_reason
+          purchase_reason,
+          conversion_lead_id
         )
         values (
           $1,
           $2,
           $3::numeric,
           0,
-          current_date,
-          case
-            when $4::integer is null then null
-            else current_date + $4::integer
-          end,
+          coalesce($4::date, current_date),
+          coalesce(
+            $5::date,
+            case
+              when $6::integer is null then null
+              else coalesce($4::date, current_date) + $6::integer
+            end
+          ),
           'active',
-          $5,
-          null,
-          $6::jsonb,
-          1,
           $7,
-          $8::bigint,
+          null,
+          $8::jsonb,
+          1,
           $9,
-          $10,
+          $10::bigint,
           $11,
-          $12::text::bigint,
+          $12,
           $13,
           $14::text::bigint,
           $15,
-          $16::bigint,
+          $16::text::bigint,
           $17,
-          $18,
+          $18::bigint,
           $19,
-          $20
+          $20,
+          $21,
+          $22,
+          $23
         )
         returning
           id,
@@ -383,8 +388,8 @@ export class SubscriptionIssueRepository {
           package_id,
           lessons_total,
           lessons_used,
-          starts_at,
-          expires_at,
+          starts_at::text as starts_at,
+          expires_at::text as expires_at,
           status,
           version,
           commercial_snapshot,
@@ -394,6 +399,8 @@ export class SubscriptionIssueRepository {
         input.id,
         input.studentId,
         input.package.lessons_total,
+        input.startsAt ?? null,
+        input.expiresAt ?? null,
         input.package.validity_days,
         input.package.id,
         JSON.stringify(input.snapshot),
@@ -415,6 +422,7 @@ export class SubscriptionIssueRepository {
         input.payerStudentId,
         input.fundingMode,
         input.purchaseReason,
+        input.conversionLeadId ?? null,
       ],
     );
     return result.rows[0]!;
@@ -490,8 +498,7 @@ export class SubscriptionIssueRepository {
             factType: "installment" as const,
             amountMinor: installment.amountMinor,
             sourceType: "subscription.installment",
-            sourceRef:
-              `${input.issuedSubscriptionId}:${installment.installmentNumber}`,
+            sourceRef: `${input.issuedSubscriptionId}:${installment.installmentNumber}`,
           }));
     const rows: ObligationRow[] = [];
     for (const fact of facts) {
@@ -580,8 +587,8 @@ export class SubscriptionIssueRepository {
           package_id,
           lessons_total,
           lessons_used,
-          starts_at,
-          expires_at,
+          starts_at::text as starts_at,
+          expires_at::text as expires_at,
           status,
           version,
           commercial_snapshot,
@@ -647,6 +654,37 @@ export class SubscriptionIssueRepository {
     return result.rows;
   }
 
+  async listActualPaymentsForSubscription(
+    issuedSubscriptionId: string,
+  ): Promise<ActualPaymentRow[]> {
+    const result = await this.database.query<ActualPaymentRow>(
+      `
+        select
+          payment.id,
+          payment.student_id,
+          payment.issued_subscription_id,
+          payment.amount_minor,
+          payment.currency,
+          payment.method,
+          payment.payment_date,
+          payment.branch_id,
+          branch.name as branch_name,
+          payment.notes,
+          payment.invoice_number,
+          payment.created_by,
+          null::text as created_by_name,
+          payment.created_at
+        from app.payments payment
+        left join app.branches branch on branch.id = payment.branch_id
+        where payment.issued_subscription_id = $1
+          and payment.deleted_at is null
+        order by payment.payment_date, payment.created_at, payment.id
+      `,
+      [issuedSubscriptionId],
+    );
+    return result.rows;
+  }
+
   async findIssuedPaymentTargetForShare(
     client: PoolClient,
     issuedSubscriptionId: string,
@@ -674,7 +712,7 @@ export class SubscriptionIssueRepository {
       issuedSubscriptionId: string | null;
       amountMinor: string;
       currencyCode: string;
-      method: "cash" | "cashless";
+      method: "cash" | "cashless" | null;
       occurredAt: Date;
       actorUserId: string;
       branchId: string | null;

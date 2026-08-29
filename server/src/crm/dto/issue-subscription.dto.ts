@@ -22,18 +22,14 @@ export class IssueSubscriptionDiscountDto {
   @IsIn(["percent", "fixed"])
   type: "percent" | "fixed";
 
-  @ValidateIf((value: IssueSubscriptionDiscountDto) =>
-    value.type === "percent",
-  )
+  @ValidateIf((value: IssueSubscriptionDiscountDto) => value.type === "percent")
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
   @Max(100)
   percent?: number;
 
-  @ValidateIf((value: IssueSubscriptionDiscountDto) =>
-    value.type === "fixed",
-  )
+  @ValidateIf((value: IssueSubscriptionDiscountDto) => value.type === "fixed")
   @IsString()
   @Matches(/^(0|[1-9]\d*)$/)
   fixedMinor?: string;
@@ -94,6 +90,30 @@ export class PurchaseSubscriptionPreviewDto extends IssueSubscriptionDto {
 
   @IsIn(["personal_account", "installment"])
   fundingMode: "personal_account" | "installment";
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  startsAt?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  expiresAt?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^(0|[1-9]\d*)$/)
+  paymentAmountMinor?: string;
+
+  @IsOptional()
+  @IsDateString()
+  paymentOccurredAt?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  paymentComment?: string;
 
   @IsOptional()
   @IsString()

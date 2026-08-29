@@ -47,19 +47,53 @@ export class SubscriptionPurchasePreviewService {
       dto.payerStudentId,
       dto.packageId,
     );
+    return this.previewFromContext(actor, recipientStudentId, dto, context);
+  }
+
+  previewFromContext(
+    actor: ActorContext,
+    recipientStudentId: string,
+    dto: PurchaseSubscriptionPreviewDto,
+    context: PurchaseContext,
+    legacyLeadAutoPayment = false,
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    this.terms.assertPaymentMethod(dto.paymentMethod);
+    const issuedAt = new Date(Math.floor(Date.now() / 1_000) * 1_000);
+    const boundDto = this.terms.bindPurchaseDefaults(
+      dto,
+      issuedAt,
+      legacyLeadAutoPayment,
+    );
     const normalized = this.terms.normalizePurchase(
       recipientStudentId,
-      dto,
-      this.assertPurchaseContext(context, recipientStudentId, dto.payerStudentId),
+      boundDto,
+      this.assertPurchaseContext(
+        context,
+        recipientStudentId,
+        dto.payerStudentId,
+      ),
+      legacyLeadAutoPayment,
     );
     const signed = this.previewTokens.issuePurchase(
-      this.createTokenPayload(actor, recipientStudentId, dto, context, normalized),
+      this.createTokenPayload(
+        actor,
+        recipientStudentId,
+        boundDto,
+        context,
+        normalized,
+      ),
+      issuedAt,
     );
     const shortageMinor = this.shortageMinor(
-      dto,
       normalized.finalPriceMinor,
       context.payerBalanceMinor,
+      normalized.payment.amountMinor,
     );
+    const balanceAfterMinor =
+      BigInt(context.payerBalanceMinor) +
+      BigInt(normalized.payment.amountMinor) -
+      BigInt(normalized.finalPriceMinor);
     return {
       recipientStudentId,
       payerStudentId: dto.payerStudentId,
@@ -69,11 +103,13 @@ export class SubscriptionPurchasePreviewService {
       currencyCode: context.package!.currency_code,
       finalPriceMinor: normalized.finalPriceMinor,
       payerBalanceMinor: context.payerBalanceMinor,
-      balanceAfterMinor: (
-        BigInt(context.payerBalanceMinor) - BigInt(normalized.finalPriceMinor)
-      ).toString(),
-      canCommit: shortageMinor <= 0n,
+      paidNowMinor: normalized.payment.amountMinor,
+      balanceAfterMinor: balanceAfterMinor.toString(),
+      canCommit: true,
       shortageMinor: shortageMinor > 0n ? shortageMinor.toString() : "0",
+      debtMinor: balanceAfterMinor < 0n ? (-balanceAfterMinor).toString() : "0",
+      overpaymentMinor:
+        balanceAfterMinor > 0n ? balanceAfterMinor.toString() : "0",
       installments: normalized.snapshot.installments ?? [],
       previewToken: signed.token,
       previewExpiresAt: signed.expiresAt,
@@ -108,17 +144,28 @@ export class SubscriptionPurchasePreviewService {
   ): IssuePackageRow {
     const expected = new Set([recipientStudentId, payerStudentId]);
     const found = new Set(context.students.map((student) => student.id));
-    if (found.size !== expected.size || [...expected].some((id) => !found.has(id))) {
+    if (
+      found.size !== expected.size ||
+      [...expected].some((id) => !found.has(id))
+    ) {
       throw new NotFoundException(
         "Получатель или плательщик не найден в доступной области.",
       );
     }
     const packageRow = context.package;
     if (!packageRow) {
-      throw new NotFoundException("Абонемент не найден или находится в архиве.");
+      throw new NotFoundException(
+        "Абонемент не найден или находится в архиве.",
+      );
     }
-    const recipient = this.purchaseStudent(context.students, recipientStudentId);
-    if (packageRow.branch_id !== null && packageRow.branch_id !== recipient.branch_id) {
+    const recipient = this.purchaseStudent(
+      context.students,
+      recipientStudentId,
+    );
+    if (
+      packageRow.branch_id !== null &&
+      packageRow.branch_id !== recipient.branch_id
+    ) {
       throw new NotFoundException("Абонемент недоступен в филиале получателя.");
     }
     return packageRow;
@@ -131,7 +178,10 @@ export class SubscriptionPurchasePreviewService {
     context: PurchaseContext,
     normalized: NormalizedPurchase,
   ): UnsignedPurchaseTokenPayload {
-    const recipient = this.purchaseStudent(context.students, recipientStudentId);
+    const recipient = this.purchaseStudent(
+      context.students,
+      recipientStudentId,
+    );
     const payer = this.purchaseStudent(context.students, dto.payerStudentId);
     const packageRow = context.package!;
     return {
@@ -161,6 +211,11 @@ export class SubscriptionPurchasePreviewService {
         finalPriceMinor: normalized.finalPriceMinor,
         installments: normalized.installments,
         paymentMethod: dto.paymentMethod ?? null,
+        startsAt: normalized.startsAt,
+        expiresAt: normalized.expiresAt,
+        paymentAmountMinor: normalized.payment.amountMinor,
+        paymentOccurredAt: normalized.payment.occurredAt?.toISOString() ?? null,
+        paymentComment: normalized.payment.comment,
       }),
     };
   }
@@ -193,12 +248,14 @@ export class SubscriptionPurchasePreviewService {
   }
 
   private shortageMinor(
-    dto: PurchaseSubscriptionPreviewDto,
     finalPriceMinor: string,
     payerBalanceMinor: string,
+    paidNowMinor: string,
   ): bigint {
-    return dto.fundingMode === "personal_account"
-      ? BigInt(finalPriceMinor) - BigInt(payerBalanceMinor)
-      : 0n;
+    const shortage =
+      BigInt(finalPriceMinor) -
+      BigInt(payerBalanceMinor) -
+      BigInt(paidNowMinor);
+    return shortage > 0n ? shortage : 0n;
   }
 }

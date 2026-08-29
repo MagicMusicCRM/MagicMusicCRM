@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Headers,
   Delete,
   Get,
   Param,
@@ -25,7 +26,11 @@ import { DuplicateDecisionDto } from "./dto/duplicate-decision.dto";
 import { LeadBoardQuery } from "./dto/lead-board.query";
 import { QueueLimitQuery } from "./dto/queue-limit.query";
 import { LinkStudentDto } from "./dto/link-student.dto";
-import { IssueSubscriptionDto } from "./dto/issue-subscription.dto";
+import {
+  IssueSubscriptionDto,
+  PurchaseSubscriptionCommandDto,
+  PurchaseSubscriptionPreviewDto,
+} from "./dto/issue-subscription.dto";
 import { SetBlacklistDto } from "./dto/set-blacklist.dto";
 import { UpdateLeadDto } from "./dto/upsert-lead.dto";
 import { StrictCreateLeadDto } from "./dto/client-config.dto";
@@ -121,13 +126,63 @@ export class CrmLeadsController {
     );
   }
 
-  @Post("leads/:leadId/subscriptions/issue")
-  issueLeadSubscription(
+  @Post("leads/:leadId/subscriptions/purchase/preview")
+  previewLeadSubscriptionPurchase(
     @CurrentActor() actor: ActorContext,
     @Param("leadId", ParseUUIDPipe) leadId: string,
+    @Body() dto: PurchaseSubscriptionPreviewDto,
+  ) {
+    return this.subscriptions.previewLeadSubscriptionPurchase(
+      actor,
+      leadId,
+      dto,
+    );
+  }
+
+  @Post("leads/:leadId/subscriptions/purchase")
+  purchaseLeadSubscription(
+    @CurrentActor() actor: ActorContext,
+    @Param("leadId", ParseUUIDPipe) leadId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
+    @Body() dto: PurchaseSubscriptionCommandDto,
+  ) {
+    return this.subscriptions.issueLeadSubscription(actor, leadId, dto, {
+      idempotencyKey: idempotencyKey ?? "",
+      requestId: requestId ?? "",
+    });
+  }
+
+  @Post("leads/:leadId/subscriptions/issue")
+  async issueLegacyLeadSubscription(
+    @CurrentActor() actor: ActorContext,
+    @Param("leadId", ParseUUIDPipe) leadId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Headers("x-request-id") requestId: string | undefined,
     @Body() dto: IssueSubscriptionDto,
   ) {
-    return this.subscriptions.issueLeadSubscription(actor, leadId, dto);
+    const purchase: PurchaseSubscriptionPreviewDto = {
+      ...dto,
+      payerStudentId: leadId,
+      fundingMode: dto.installments ? "installment" : "personal_account",
+    };
+    const preview = await this.subscriptions.previewLeadSubscriptionPurchase(
+      actor,
+      leadId,
+      purchase,
+      true,
+    );
+    return this.subscriptions.issueLeadSubscription(
+      actor,
+      leadId,
+      { ...purchase, previewToken: preview.previewToken, confirm: true },
+      {
+        idempotencyKey:
+          idempotencyKey ?? `legacy-lead:${leadId}:${dto.packageId}`,
+        requestId: requestId ?? `legacy-lead:${leadId}`,
+      },
+      true,
+    );
   }
 
   // Ручное «Прикрепить к ученику»: до этого связать можно было только пару,

@@ -18,6 +18,7 @@ import {
 interface ScopeRow {
   student_id: string;
   branch_id: string | null;
+  timezone_name: string | null;
   access_version: number | string;
 }
 
@@ -42,6 +43,7 @@ export class CommerceProjectionRepository {
         select distinct
           student.id as student_id,
           ${branchIdExpr("student")} as branch_id,
+          coalesce(branch.timezone_name, 'Europe/Moscow') as timezone_name,
           coalesce(access_version.version, 1) as access_version,
           student.created_at
         from app.students student
@@ -50,6 +52,8 @@ export class CommerceProjectionRepository {
          and student_profile.deleted_at is null
         left join app.user_access_versions access_version
           on access_version.user_id = $1
+        left join app.branches branch
+          on branch.id::text = ${branchIdExpr("student")}
         where student.deleted_at is null
           and (
             student_profile.user_id = $1
@@ -99,6 +103,7 @@ export class CommerceProjectionRepository {
           select
             student.id as student_id,
             ${branchIdExpr("student")} as branch_id,
+            coalesce(branch.timezone_name, 'Europe/Moscow') as timezone_name,
             coalesce(access_version.version, 1) as access_version
           from app.students student
           left join app.profiles student_profile
@@ -106,6 +111,8 @@ export class CommerceProjectionRepository {
            and student_profile.deleted_at is null
           left join app.user_access_versions access_version
             on access_version.user_id = $1
+          left join app.branches branch
+            on branch.id::text = ${branchIdExpr("student")}
           where student.id = $2
             and student.deleted_at is null
             and (
@@ -152,10 +159,13 @@ export class CommerceProjectionRepository {
           select
             student.id as student_id,
             ${branchIdExpr("student")} as branch_id,
+            coalesce(branch.timezone_name, 'Europe/Moscow') as timezone_name,
             coalesce(access_version.version, 1) as access_version
           from app.students student
           left join app.user_access_versions access_version
             on access_version.user_id = $1
+          left join app.branches branch
+            on branch.id::text = ${branchIdExpr("student")}
           where student.id = $2
             and student.deleted_at is null
         `,
@@ -174,10 +184,13 @@ export class CommerceProjectionRepository {
         select
           student.id as student_id,
           ${branchIdExpr("student")} as branch_id,
+          coalesce(branch.timezone_name, 'Europe/Moscow') as timezone_name,
           coalesce(access_version.version, 1) as access_version
         from app.students student
         left join app.user_access_versions access_version
           on access_version.user_id = $1
+        left join app.branches branch
+          on branch.id::text = ${branchIdExpr("student")}
         where student.id = $2
           and student.deleted_at is null
           and ${branchIdExpr("student")} is not null
@@ -791,6 +804,7 @@ export class CommerceProjectionRepository {
     return {
       studentId: row.student_id,
       branchId: row.branch_id,
+      timezoneName: row.timezone_name ?? "Europe/Moscow",
       accessVersion: Number(row.access_version),
       scopeKey,
     };

@@ -3054,11 +3054,30 @@ void main() {
     );
 
     test(
-      'issueLeadSubscription converts only through the package endpoint',
+      'lead purchase uses the same preview and idempotent purchase contract',
       () async {
         final adapter = _FakeAdapter([
           _FakeResponse(
-            path: '/crm/leads/lead-a/subscriptions/issue',
+            path: '/crm/leads/lead-a/subscriptions/purchase/preview',
+            statusCode: 201,
+            body: {
+              'recipientStudentId': 'lead-a',
+              'payerStudentId': 'lead-a',
+              'fundingMode': 'personal_account',
+              'currencyCode': 'RUB',
+              'finalPriceMinor': '800000',
+              'payerBalanceMinor': '0',
+              'paidNowMinor': '300000',
+              'balanceAfterMinor': '-500000',
+              'canCommit': true,
+              'shortageMinor': '500000',
+              'debtMinor': '500000',
+              'overpaymentMinor': '0',
+              'previewToken': 'signed-preview',
+            },
+          ),
+          _FakeResponse(
+            path: '/crm/leads/lead-a/subscriptions/purchase',
             statusCode: 201,
             body: {
               'converted': true,
@@ -3067,14 +3086,43 @@ void main() {
           ),
         ]);
         final service = MagicCrmService(_client(adapter));
+        final input = PurchaseSubscriptionInput(
+          issue: const IssueSubscriptionInput(
+            packageId: 'package-a',
+            paymentMethod: SubscriptionPaymentMethod.cashless,
+          ),
+          payerStudentId: 'lead-a',
+          fundingMode: SubscriptionFundingMode.personalAccount,
+          startsAt: DateTime.utc(2026, 8, 29),
+          expiresAt: DateTime.utc(2026, 9, 29),
+          paymentAmountMinor: BigInt.from(300000),
+          paymentOccurredAt: DateTime.utc(2026, 8, 29, 12),
+        );
 
-        final result = await service.issueLeadSubscription(
+        final preview = await service.previewLeadSubscriptionPurchase(
           'lead-a',
-          'package-a',
+          input: input,
+        );
+        final result = await service.purchaseLeadSubscription(
+          'lead-a',
+          input: input,
+          preview: preview,
+          identity: const MagicMutationIdentity(
+            idempotencyKey: 'lead-purchase-key',
+            requestId: 'lead-purchase-request',
+          ),
         );
 
         expect(result['converted'], true);
-        expect(adapter.requests.single.body, {'packageId': 'package-a'});
+        expect(adapter.requests, hasLength(2));
+        expect(
+          adapter.requests.first.body,
+          containsPair('paymentAmountMinor', '300000'),
+        );
+        expect(
+          adapter.requests.last.body,
+          containsPair('previewToken', 'signed-preview'),
+        );
       },
     );
 

@@ -1,17 +1,22 @@
 import {
-  ConflictException,
+  BadRequestException,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
 import type { PoolClient } from "pg";
+import { createHash } from "node:crypto";
 import { AuditService } from "../audit/audit.service";
 import { ActorContext } from "../common/security/actor-context";
 import { managerAdminRolesSql } from "../common/security/role-sql";
 import { DatabaseService } from "../db/database.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { CrmListQuery } from "./dto/crm-list.query";
-import { IssueSubscriptionDto } from "./dto/issue-subscription.dto";
+import {
+  IssueSubscriptionDto,
+  PurchaseSubscriptionCommandDto,
+  PurchaseSubscriptionPreviewDto,
+} from "./dto/issue-subscription.dto";
 import { CrmPolicy } from "./crm.policy";
 import {
   audienceForHomework,
@@ -20,6 +25,18 @@ import {
   clientFinanceAudienceForStudent,
 } from "./audience";
 import { APPEAL_KEY, resolveAppealDate } from "./appeal-date";
+import { PlatformIntegrityService } from "../platform/platform-integrity.service";
+import { PlatformAuditInput } from "../platform/platform-integrity.types";
+import { fingerprintPayload } from "../platform/platform-integrity.util";
+import { SubscriptionCommercialTermsService } from "./commerce/subscription-commercial-terms.service";
+import {
+  PurchaseContext,
+  SubscriptionIssueRepository,
+} from "./commerce/subscription-issue.repository";
+import { SubscriptionPurchasePreviewService } from "./commerce/subscription-purchase-preview.service";
+import { CommerceMutationMetadata } from "./commerce/subscription-issue.contracts";
+import { SubscriptionPurchasePersistenceService } from "./commerce/subscription-purchase-persistence.service";
+import { branchIdExpr } from "./branch-scope";
 
 interface SubscriptionRow {
   id: string;
@@ -75,6 +92,7 @@ interface LeadConversionLeadRow {
   branch_id: string | null;
   source_id: string | null;
   created_at: Date | string;
+  version: number | string;
 }
 
 interface LeadConversionStudentRow {
@@ -94,7 +112,7 @@ interface LeadConversionStudentRow {
 interface LeadConversionPaymentRow {
   id: string;
   student_id: string;
-  amount: string | number;
+  amount_minor: string | number;
   currency: string;
   payment_date: Date | string;
   method: string | null;
@@ -121,10 +139,10 @@ interface ExistingLeadIssueRow extends LeadConversionStudentRow {
   expires_at: Date | string | null;
   subscription_status: string;
   package_id: string;
-  payment_id: string;
-  payment_amount: string | number;
-  payment_currency: string;
-  payment_date: Date | string;
+  payment_id: string | null;
+  payment_amount: string | number | null;
+  payment_currency: string | null;
+  payment_date: Date | string | null;
   payment_method: string | null;
   payment_notes: string | null;
 }
@@ -132,7 +150,7 @@ interface ExistingLeadIssueRow extends LeadConversionStudentRow {
 interface LeadIssueOutcome {
   student: LeadConversionStudentRow;
   subscription: LeadConversionSubscriptionRow;
-  payment: LeadConversionPaymentRow;
+  payment: LeadConversionPaymentRow | null;
   converted: boolean;
   issued: boolean;
   lessons: LeadConversionLessonRow[];
@@ -153,7 +171,31 @@ export class SubscriptionsService {
     private readonly audit: AuditService,
     private readonly policy: CrmPolicy,
     private readonly realtime: RealtimeBus,
+    private readonly issueRepository: SubscriptionIssueRepository,
+    private readonly terms: SubscriptionCommercialTermsService,
+    private readonly purchasePreview: SubscriptionPurchasePreviewService,
+    private readonly integrity: PlatformIntegrityService,
+    private readonly purchasePersistence: SubscriptionPurchasePersistenceService,
   ) {}
+
+  async previewLeadSubscriptionPurchase(
+    actor: ActorContext,
+    leadId: string,
+    dto: PurchaseSubscriptionPreviewDto,
+    legacyLeadAutoPayment = false,
+  ) {
+    this.policy.assertCanWriteCrm(actor);
+    const context = await this.database.transaction(async (client) =>
+      this.leadPurchaseContext(client, actor, leadId, dto),
+    );
+    return this.purchasePreview.previewFromContext(
+      actor,
+      leadId,
+      dto,
+      context,
+      legacyLeadAutoPayment,
+    );
+  }
 
   private toSubscriptionDto(row: SubscriptionRow) {
     return {
@@ -193,14 +235,22 @@ export class SubscriptionsService {
             sub.final_price_minor::numeric / 100,
             pkg.price
           ) as package_price,
-          -- «Оплачено»: приход личного счёта, которым закрыт абонемент.
-          -- Отменённый платёж не считается оплатой.
-          pay.amount as paid_amount
+          -- «Оплачено»: сумма ordinary-платежей по абонементу. Legacy rows
+          -- связаны через payment_id, canonical purchase — через
+          -- issued_subscription_id. Reversal/correction уже нормализованы view.
+          paid.paid_amount
         from app.subscriptions sub
         join app.students s on s.id = sub.student_id and s.deleted_at is null
         left join app.subscription_packages pkg on pkg.id = sub.package_id
-        left join app.commerce_ordinary_payments pay
-          on pay.id = sub.payment_id and pay.deleted_at is null
+        left join lateral (
+          select sum(payment.amount_minor)::numeric / 100 as paid_amount
+          from app.commerce_ordinary_payments payment
+          where payment.deleted_at is null
+            and (
+              payment.id = sub.payment_id
+              or payment.issued_subscription_id = sub.id
+            )
+        ) paid on true
         left join app.profiles p on p.id = s.profile_id and p.deleted_at is null
         where ($3::uuid is null or sub.student_id = $3)
           and (
@@ -363,50 +413,146 @@ export class SubscriptionsService {
    * the lead into a student. The durable conversion_lead_id key makes a retry
    * return the original payment/subscription instead of charging twice.
    */
+  private async leadPurchaseContext(
+    client: PoolClient,
+    actor: ActorContext,
+    leadId: string,
+    dto: PurchaseSubscriptionPreviewDto,
+  ): Promise<PurchaseContext> {
+    const lead = await this.loadLeadInScope(client, actor, leadId, "share");
+    if (!lead) throw new NotFoundException("Лид не найден.");
+    if (!lead.source_id) {
+      throw new UnprocessableEntityException({
+        code: "SOURCE_REQUIRED",
+        field: "sourceId",
+        message: "Укажите рекламный источник перед покупкой абонемента.",
+      });
+    }
+    const packageRow = await this.issueRepository.findActivePackageForShare(
+      client,
+      dto.packageId,
+    );
+    const leadStudent = {
+      id: leadId,
+      version: lead.version,
+      branch_id: lead.branch_id,
+    };
+    if (dto.payerStudentId === leadId) {
+      return {
+        students: [leadStudent],
+        package: packageRow,
+        payerBalanceMinor: "0",
+      };
+    }
+    const payers = await this.issueRepository.lockPurchaseStudents(
+      client,
+      actor,
+      [dto.payerStudentId],
+    );
+    return {
+      students: [leadStudent, ...payers],
+      package: packageRow,
+      payerBalanceMinor: packageRow
+        ? await this.issueRepository.readAccountBalance(
+            client,
+            dto.payerStudentId,
+            packageRow.currency_code,
+          )
+        : "0",
+    };
+  }
+
   async issueLeadSubscription(
     actor: ActorContext,
     leadId: string,
-    dto: IssueSubscriptionDto,
+    dto: PurchaseSubscriptionCommandDto,
+    metadata: CommerceMutationMetadata,
+    legacyLeadAutoPayment = false,
   ) {
     this.policy.assertCanWriteCrm(actor);
-    const outcome = await this.database.transaction(async (client) => {
-      await client.query(
-        "select pg_advisory_xact_lock(hashtextextended($1::uuid::text, 0))",
-        [leadId],
-      );
+    this.assertCommerceMetadata(metadata);
+    this.terms.assertPaymentMethod(dto.paymentMethod);
+    const subscriptionId = this.deterministicId(
+      actor.userId,
+      "crm.lead-subscription.purchase",
+      metadata.idempotencyKey,
+    );
+    const audit: PlatformAuditInput = {
+      action: "crm.subscription_purchased",
+      entityType: "subscription",
+      entityId: subscriptionId,
+      reason: "lead_subscription_purchase",
+      reasonText:
+        dto.purchaseReason?.trim() || "Покупка абонемента при переводе лида",
+      metadata: { leadId, packageId: dto.packageId },
+    };
+    let issuedOutcome: LeadIssueOutcome | null = null;
+    const result = await this.integrity.executeVersionedMutation<{
+      entityId: string;
+      version: number;
+      studentId: string;
+      converted: boolean;
+    }>({
+      actorKey: actor.userId,
+      actorUserId: actor.userId,
+      authorization: { actor, capabilityKey: "commerce.client_finance.write" },
+      operation: "crm.lead-subscription.purchase",
+      idempotencyKey: metadata.idempotencyKey,
+      requestId: metadata.requestId,
+      aggregateType: "commerce:issued-subscription",
+      aggregateId: subscriptionId,
+      expectedVersion: 0,
+      payload: {
+        leadId,
+        legacyLeadAutoPayment,
+        commandFingerprint: fingerprintPayload({
+          ...dto,
+          previewToken: undefined,
+          confirm: undefined,
+        }),
+      },
+      audit,
+      outbox: {
+        type: "commerce.subscription.changed",
+        payload: {
+          entityId: subscriptionId,
+          state: "active",
+          invalidates: ["student-finance", "subscription", "lead"],
+        },
+      },
+      mutate: async (client, nextVersion) => {
+        await client.query(
+          "select pg_advisory_xact_lock(hashtextextended($1::uuid::text, 0))",
+          [leadId],
+        );
+        const signedPayload = this.purchasePreview.decodeBoundToken(
+          actor,
+          leadId,
+          dto,
+        );
+        const boundDto = this.terms.bindPurchaseDefaults(
+          dto,
+          new Date(signedPayload.issuedAtSeconds * 1_000),
+          legacyLeadAutoPayment,
+        );
 
-      const existing = await this.loadExistingLeadIssue(client, leadId);
-      if (existing) {
-        if (existing.package_id !== dto.packageId) {
-          throw new ConflictException(
-            "Лид уже конвертирован с другим абонементом.",
-          );
+        const lead = await this.loadLeadInScope(
+          client,
+          actor,
+          leadId,
+          "update",
+        );
+        if (!lead) throw new NotFoundException("Лид не найден.");
+        if (!lead.source_id) {
+          throw new UnprocessableEntityException({
+            code: "SOURCE_REQUIRED",
+            field: "sourceId",
+            message: "Укажите рекламный источник перед выдачей абонемента.",
+          });
         }
-        return this.outcomeFromExistingIssue(existing);
-      }
 
-      const leadResult = await client.query<LeadConversionLeadRow>(
-        `
-          select id, first_name, last_name, email, phone, custom_data,
-            branch_id, source_id, created_at
-          from app.leads
-          where id = $1 and deleted_at is null
-          for update
-        `,
-        [leadId],
-      );
-      const lead = leadResult.rows[0];
-      if (!lead) throw new NotFoundException("Лид не найден.");
-      if (!lead.source_id) {
-        throw new UnprocessableEntityException({
-          code: "SOURCE_REQUIRED",
-          field: "sourceId",
-          message: "Укажите рекламный источник перед выдачей абонемента.",
-        });
-      }
-
-      const packageResult = await client.query<SubscriptionPackageRow>(
-        `
+        const packageResult = await client.query<SubscriptionPackageRow>(
+          `
           select id, name, discipline_id, branch_id, lessons_total, price,
             base_price_minor, currency_code, validity_days, is_active,
             sort_order, version, created_at
@@ -414,38 +560,65 @@ export class SubscriptionsService {
           where id = $1 and deleted_at is null and is_active = true
           for share
         `,
-        [dto.packageId],
-      );
-      const subscriptionPackage = packageResult.rows[0];
-      if (!subscriptionPackage) {
-        throw new NotFoundException("Абонемент не найден или неактивен.");
-      }
+          [dto.packageId],
+        );
+        const subscriptionPackage = packageResult.rows[0];
+        if (!subscriptionPackage) {
+          throw new NotFoundException("Абонемент не найден или неактивен.");
+        }
+        const purchaseContext = await this.leadPurchaseContext(
+          client,
+          actor,
+          leadId,
+          dto,
+        );
+        const activePackage = this.purchasePreview.assertPurchaseContext(
+          purchaseContext,
+          leadId,
+          dto.payerStudentId,
+        );
+        const previewTerms = this.terms.normalizePurchase(
+          leadId,
+          boundDto,
+          activePackage,
+          legacyLeadAutoPayment,
+        );
+        this.purchasePreview.assertStillCurrent(
+          signedPayload,
+          this.purchasePreview.createTokenPayload(
+            actor,
+            leadId,
+            boundDto,
+            purchaseContext,
+            previewTerms,
+          ),
+        );
 
-      const activeStudent = await client.query<{ id: string }>(
-        `
+        const activeStudent = await client.query<{ id: string }>(
+          `
           select id
           from app.students
           where lead_id = $1 and deleted_at is null
           limit 1
         `,
-        [leadId],
-      );
-      let studentId = activeStudent.rows[0]?.id;
-      let converted = false;
+          [leadId],
+        );
+        let studentId = activeStudent.rows[0]?.id;
+        let converted = false;
 
-      if (!studentId) {
-        const customData = { ...(lead.custom_data ?? {}) };
-        const appeal = resolveAppealDate(customData, lead.created_at);
-        if (!customData[APPEAL_KEY] && appeal.value) {
-          customData[APPEAL_KEY] = appeal.value;
-        }
-        if (!customData.sourceLeadId) customData.sourceLeadId = leadId;
-        if (lead.email && !customData.sourceLeadEmail) {
-          customData.sourceLeadEmail = lead.email;
-        }
+        if (!studentId) {
+          const customData = { ...(lead.custom_data ?? {}) };
+          const appeal = resolveAppealDate(customData, lead.created_at);
+          if (!customData[APPEAL_KEY] && appeal.value) {
+            customData[APPEAL_KEY] = appeal.value;
+          }
+          if (!customData.sourceLeadId) customData.sourceLeadId = leadId;
+          if (lead.email && !customData.sourceLeadEmail) {
+            customData.sourceLeadEmail = lead.email;
+          }
 
-        const linkedProfile = await client.query<{ profile_id: string }>(
-          `
+          const linkedProfile = await client.query<{ profile_id: string }>(
+            `
             select profile.id as profile_id
             from app.user_crm_links link
             join app.users linked_user
@@ -462,12 +635,12 @@ export class SubscriptionsService {
             order by link.confirmed_at desc nulls last, link.created_at desc
             limit 1
           `,
-          [leadId],
-        );
+            [leadId],
+          );
 
-        if (linkedProfile.rows[0]) {
-          const inserted = await client.query<{ id: string }>(
-            `
+          if (linkedProfile.rows[0]) {
+            const inserted = await client.query<{ id: string }>(
+              `
               with updated_profile as (
                 update app.profiles
                 set first_name = coalesce($2, first_name),
@@ -483,24 +656,24 @@ export class SubscriptionsService {
               from updated_profile
               returning id
             `,
-            [
-              linkedProfile.rows[0].profile_id,
-              lead.first_name,
-              lead.last_name,
-              lead.phone,
-              leadId,
-              JSON.stringify(customData),
-              lead.branch_id,
-              lead.source_id,
-            ],
-          );
-          studentId = inserted.rows[0].id;
-        } else {
-          const fullName = [lead.first_name, lead.last_name]
-            .filter(Boolean)
-            .join(" ");
-          const inserted = await client.query<{ id: string }>(
-            `
+              [
+                linkedProfile.rows[0].profile_id,
+                lead.first_name,
+                lead.last_name,
+                lead.phone,
+                leadId,
+                JSON.stringify(customData),
+                lead.branch_id,
+                lead.source_id,
+              ],
+            );
+            studentId = inserted.rows[0].id;
+          } else {
+            const fullName = [lead.first_name, lead.last_name]
+              .filter(Boolean)
+              .join(" ");
+            const inserted = await client.query<{ id: string }>(
+              `
               with identity as (
                 select case
                   when $3::text is not null and not exists (
@@ -528,50 +701,37 @@ export class SubscriptionsService {
               from inserted_profile
               returning id
             `,
-            [
-              lead.first_name,
-              lead.last_name,
-              lead.email,
-              fullName,
-              lead.phone,
-              leadId,
-              JSON.stringify(customData),
-              lead.branch_id,
-              lead.source_id,
-            ],
-          );
-          studentId = inserted.rows[0].id;
+              [
+                lead.first_name,
+                lead.last_name,
+                lead.email,
+                fullName,
+                lead.phone,
+                leadId,
+                JSON.stringify(customData),
+                lead.branch_id,
+                lead.source_id,
+              ],
+            );
+            studentId = inserted.rows[0].id;
+          }
+          converted = true;
         }
-        converted = true;
-      }
-      if (!studentId) throw new NotFoundException("Ученик не найден.");
+        if (!studentId) throw new NotFoundException("Ученик не найден.");
 
-      const commercialSnapshot = {
-        snapshotVersion: 1,
-        packageVersion: Number(subscriptionPackage.version),
-        displayName: subscriptionPackage.name,
-        unitCount: String(subscriptionPackage.lessons_total),
-        validityDays: subscriptionPackage.validity_days,
-        basePriceMinor: subscriptionPackage.base_price_minor,
-        currencyCode: subscriptionPackage.currency_code,
-        discount: { type: "none" },
-        finalPriceMinor: subscriptionPackage.base_price_minor,
-        commercialRules: {},
-      };
-
-      await client.query(
-        `
+        await client.query(
+          `
           insert into app.client_conversion_links (
             lead_id, student_id, converted_by
           )
           values ($1, $2, $3)
           on conflict (lead_id) do nothing
         `,
-        [leadId, studentId, actor.userId],
-      );
+          [leadId, studentId, actor.userId],
+        );
 
-      await client.query(
-        `
+        await client.query(
+          `
           insert into app.user_crm_links (
             user_id, entity_type, entity_id, matched_phone,
             link_source, created_by, confirmed_at
@@ -584,14 +744,14 @@ export class SubscriptionsService {
             and deleted_at is null
           on conflict do nothing
         `,
-        [leadId, studentId, actor.userId],
-      );
+          [leadId, studentId, actor.userId],
+        );
 
-      // Keep the client's administration conversation attached to the CRM
-      // entity after lead conversion. Some imported chats have no direct
-      // lead_id and can only be resolved through their owner user's CRM link.
-      await client.query(
-        `
+        // Keep the client's administration conversation attached to the CRM
+        // entity after lead conversion. Some imported chats have no direct
+        // lead_id and can only be resolved through their owner user's CRM link.
+        await client.query(
+          `
           update app.chats chat
           set student_id = $2, lead_id = null, updated_at = now()
           where chat.deleted_at is null
@@ -611,13 +771,13 @@ export class SubscriptionsService {
               )
             )
         `,
-        [leadId, studentId],
-      );
+          [leadId, studentId],
+        );
 
-      // Preserve household access: the student replaces the lead as the child
-      // member while parent/payer profile members remain unchanged.
-      await client.query(
-        `
+        // Preserve household access: the student replaces the lead as the child
+        // member while parent/payer profile members remain unchanged.
+        await client.query(
+          `
           insert into app.family_members (
             family_id, entity_type, entity_id, role, is_primary_contact
           )
@@ -631,21 +791,21 @@ export class SubscriptionsService {
             is_primary_contact = excluded.is_primary_contact,
             deleted_at = null
         `,
-        [leadId, studentId],
-      );
-      await client.query(
-        `
+          [leadId, studentId],
+        );
+        await client.query(
+          `
           update app.family_members
           set deleted_at = now()
           where entity_type = 'lead'
             and entity_id = $1
             and deleted_at is null
         `,
-        [leadId],
-      );
+          [leadId],
+        );
 
-      const reboundLessons = await client.query<LeadConversionLessonRow>(
-        `
+        const reboundLessons = await client.query<LeadConversionLessonRow>(
+          `
           update app.lessons
           set student_id = $2, lead_id = null, updated_at = now()
           where lead_id = $1
@@ -653,182 +813,131 @@ export class SubscriptionsService {
             and deleted_at is null
           returning id, student_id, group_id, lead_id, teacher_id
         `,
-        [leadId, studentId],
-      );
-      const reboundHomeworks = await client.query<{ id: string }>(
-        `
+          [leadId, studentId],
+        );
+        const reboundHomeworks = await client.query<{ id: string }>(
+          `
           update app.lesson_homeworks
           set student_id = $2, lead_id = null, updated_at = now()
           where lead_id = $1 and deleted_at is null
           returning id
         `,
-        [leadId, studentId],
-      );
-
-      const paymentResult = await client.query<LeadConversionPaymentRow>(
-        `
-          insert into app.payments
-            (student_id, amount_minor, currency, payment_date, branch_id,
-             notes, created_by)
-          values ($1, $2::bigint, $3, now(), $4, 'Покупка абонемента', $5)
-          returning id, student_id, amount, currency, payment_date, method, notes
-        `,
-        [
-          studentId,
-          subscriptionPackage.base_price_minor,
-          subscriptionPackage.currency_code,
-          subscriptionPackage.branch_id ?? lead.branch_id,
-          actor.userId,
-        ],
-      );
-      const payment = paymentResult.rows[0];
-      const subscriptionResult =
-        await client.query<LeadConversionSubscriptionRow>(
-          `
-            insert into app.subscriptions (
-              student_id, lessons_total, lessons_used, starts_at, expires_at,
-              status, package_id, payment_id, conversion_lead_id,
-              commercial_snapshot, snapshot_version, package_version,
-              base_price_minor, currency_code, final_price_minor,
-              payer_student_id, funding_mode, purchase_reason
-            )
-            values (
-              $1, $2, 0, current_date,
-              case when $3::integer is not null
-                then (current_date + ($3::text || ' days')::interval)::date
-                else null end,
-              'active', $4, $5, $6, $7::jsonb, 1, $8, $9::bigint, $10,
-              $9::bigint, $1, 'legacy', 'lead_conversion'
-            )
-            returning id, student_id, lessons_total, lessons_used, starts_at,
-              expires_at, status, package_id, payment_id
-          `,
-          [
-            studentId,
-            subscriptionPackage.lessons_total,
-            subscriptionPackage.validity_days,
-            subscriptionPackage.id,
-            payment.id,
-            leadId,
-            JSON.stringify(commercialSnapshot),
-            Number(subscriptionPackage.version),
-            subscriptionPackage.base_price_minor,
-            subscriptionPackage.currency_code,
-          ],
+          [leadId, studentId],
         );
-      const subscription = subscriptionResult.rows[0];
-      await client.query(
-        `
-          insert into app.client_payment_records (
-            id, student_id, issued_subscription_id, amount_minor,
-            currency_code, status, method, external_identifier,
-            verification_note, actual_payment_id, version, created_by,
-            verified_by, verified_at, created_at, updated_at
-          )
-          select
-            payment.id,
-            payment.student_id,
-            $2,
-            payment.amount_minor,
-            upper(coalesce(nullif(btrim(payment.currency), ''), 'RUB')),
-            'paid',
-            coalesce(nullif(btrim(payment.method), ''), 'legacy_unknown'),
-            coalesce(
-              nullif(btrim(payment.external_id), ''),
-              nullif(btrim(payment.invoice_number), ''),
-              'lead-conversion:' || payment.id::text
-            ),
-            'lead_conversion',
-            payment.id,
-            1,
-            $3,
-            $3,
-            coalesce(payment.payment_date, payment.created_at),
-            payment.created_at,
-            payment.created_at
-          from app.payments payment
-          where payment.id = $1
-        `,
-        [payment.id, subscription.id, actor.userId],
-      );
-      await client.query(
-        `
-          insert into app.subscription_obligation_facts (
-            student_id, issued_subscription_id, fact_type, direction,
-            amount_minor, currency_code, source_type, source_ref
-          ) values (
-            $1, $2::uuid, 'issue', 'debit', $3::bigint, $4,
-            'subscription.issue', $2::text
-          )
-        `,
-        [
+
+        const payerStudentId =
+          dto.payerStudentId === leadId ? studentId : dto.payerStudentId;
+        const canonicalDto: PurchaseSubscriptionPreviewDto = {
+          ...boundDto,
+          payerStudentId,
+        };
+        const normalized = this.terms.normalizePurchase(
           studentId,
-          subscription.id,
-          subscriptionPackage.base_price_minor,
-          subscriptionPackage.currency_code,
-        ],
-      );
-      await client.query(
-        `
-          update app.payments
-          set payment_record_id = $1, issued_subscription_id = $2
-          where id = $1
-            and payment_record_id is null
-            and issued_subscription_id is null
-        `,
-        [payment.id, subscription.id],
-      );
-      await client.query(
-        `
-          insert into app.client_payment_status_events (
-            payment_record_id, before_status, after_status, reason,
-            actor_user_id, aggregate_version, actual_payment_id, occurred_at
-          )
-          values ($1, null, 'paid', 'Выдача абонемента при переводе лида',
-            $2, 1, $1, now())
-        `,
-        [payment.id, actor.userId],
-      );
-      await client.query(
-        `
-          insert into app.aggregate_versions (
-            aggregate_type, aggregate_id, version
-          ) values
-            ('commerce:client-payment', $1, 1),
-            ('commerce:issued-subscription', $2, 1)
-          on conflict (aggregate_type, aggregate_id)
-          do update set
-            version = greatest(app.aggregate_versions.version, 1),
-            updated_at = now()
-        `,
-        [payment.id, subscription.id],
-      );
-      await client.query(
-        `
-          insert into app.subscription_lifecycle_events (
-            issued_subscription_id, event_type,
-            before_issued_subscription_id, after_issued_subscription_id,
-            actor_user_id, reason, aggregate_version
-          ) values ($1, 'issue', null, $1, $2,
-            'Выдача при переводе лида', 1)
-        `,
-        [subscription.id, actor.userId],
-      );
-      const student = await this.loadConversionStudent(client, studentId);
-      if (!student) throw new NotFoundException("Ученик не найден.");
+          canonicalDto,
+          activePackage,
+          legacyLeadAutoPayment,
+        );
+        const persisted = await this.purchasePersistence.persist(client, {
+          subscriptionId,
+          studentId,
+          payerStudentId,
+          payerBranchId:
+            payerStudentId === studentId
+              ? lead.branch_id
+              : (purchaseContext.students.find(
+                  (row) => row.id === payerStudentId,
+                )?.branch_id ?? null),
+          fundingMode: dto.fundingMode,
+          conversionLeadId: leadId,
+          package: activePackage,
+          normalized,
+          actorUserId: actor.userId,
+          idempotencyKey: metadata.idempotencyKey,
+          version: nextVersion,
+          lifecycleReason:
+            normalized.purchaseReason ?? "Покупка абонемента при переводе лида",
+        });
+        const subscription: LeadConversionSubscriptionRow = {
+          ...persisted.subscription,
+          student_id: studentId,
+          payment_id: persisted.payment?.actualPaymentId ?? null,
+        };
+        const actualPayment = persisted.payment?.actualPayment;
+        const payment: LeadConversionPaymentRow | null = actualPayment
+          ? {
+              id: actualPayment.id,
+              student_id: actualPayment.student_id,
+              amount_minor: actualPayment.amount_minor,
+              currency: actualPayment.currency,
+              payment_date: actualPayment.payment_date,
+              method: actualPayment.method,
+              notes: actualPayment.notes,
+            }
+          : null;
+        const student = await this.loadConversionStudent(client, studentId);
+        if (!student) throw new NotFoundException("Ученик не найден.");
 
-      return {
-        student,
-        subscription,
-        payment,
-        converted,
-        issued: true,
-        lessons: reboundLessons.rows,
-        homeworkIds: reboundHomeworks.rows.map((row) => row.id),
-      } satisfies LeadIssueOutcome;
+        issuedOutcome = {
+          student,
+          subscription,
+          payment,
+          converted,
+          issued: true,
+          lessons: reboundLessons.rows,
+          homeworkIds: reboundHomeworks.rows.map((row) => row.id),
+        } satisfies LeadIssueOutcome;
+        audit.afterRef = {
+          subscriptionId: subscription.id,
+          studentId,
+          leadId,
+          actualPaymentId: persisted.payment?.actualPaymentId ?? null,
+        };
+        return {
+          entityId: subscription.id,
+          version: nextVersion,
+          studentId,
+          converted,
+        };
+      },
     });
+    const outcome =
+      issuedOutcome ??
+      (await this.database.transaction(async (client) => {
+        if (result.replayed) {
+          const lead = await this.loadLeadInScope(
+            client,
+            actor,
+            leadId,
+            "share",
+          );
+          if (!lead) throw new NotFoundException("Лид не найден.");
+          const studentIds = [
+            result.resultRef.studentId,
+            ...(dto.payerStudentId !== leadId ? [dto.payerStudentId] : []),
+          ];
+          const scopedStudents =
+            await this.issueRepository.lockPurchaseStudents(
+              client,
+              actor,
+              studentIds,
+            );
+          if (scopedStudents.length !== new Set(studentIds).size) {
+            throw new NotFoundException("Клиент не найден.");
+          }
+        }
+        const replayed = await this.loadExistingLeadIssue(client, leadId);
+        if (!replayed)
+          throw new NotFoundException("Покупка абонемента не найдена.");
+        if (
+          result.replayed &&
+          replayed.id !== result.resultRef.studentId
+        ) {
+          throw new NotFoundException("Покупка абонемента не найдена.");
+        }
+        return this.outcomeFromExistingIssue(replayed);
+      }));
 
-    if (outcome.issued) {
+    if (outcome.issued && !result.replayed) {
       if (outcome.converted) {
         await this.audit.record({
           actor,
@@ -838,18 +947,6 @@ export class SubscriptionsService {
           metadata: { leadId, trigger: "subscription" },
         });
       }
-      await this.audit.record({
-        actor,
-        action: "crm.subscription_issued",
-        entityType: "student",
-        entityId: outcome.student.id,
-        metadata: {
-          leadId,
-          subscriptionId: outcome.subscription.id,
-          packageId: outcome.subscription.package_id,
-          paymentId: outcome.payment.id,
-        },
-      });
       const affectedUserIds = await audienceForStudent(
         this.database,
         outcome.student.id,
@@ -897,6 +994,50 @@ export class SubscriptionsService {
     return this.toLeadIssueDto(outcome);
   }
 
+  private async loadLeadInScope(
+    client: PoolClient,
+    actor: ActorContext,
+    leadId: string,
+    lockMode: "share" | "update",
+  ): Promise<LeadConversionLeadRow | null> {
+    const unrestricted =
+      actor.role === "director" || actor.role === "system_admin";
+    const lockClause =
+      lockMode === "update" ? "for update of lead" : "for share of lead";
+    const result = await client.query<LeadConversionLeadRow>(
+      `
+        select lead.id, lead.first_name, lead.last_name, lead.email,
+          lead.phone, lead.custom_data, ${branchIdExpr("lead")} as branch_id,
+          lead.source_id, lead.created_at, lead.version
+        from app.leads lead
+        where lead.id = $1
+          and lead.deleted_at is null
+          ${
+            unrestricted
+              ? ""
+              : `and ${branchIdExpr("lead")} is not null
+                 and exists (
+                   select 1
+                   from app.staff_members staff
+                   join app.profiles staff_profile
+                     on staff_profile.id = staff.profile_id
+                    and staff_profile.deleted_at is null
+                   join app.staff_branch_assignments assignment
+                     on assignment.staff_member_id = staff.id
+                    and assignment.deleted_at is null
+                   where staff.deleted_at is null
+                     and staff_profile.user_id = $2
+                     and assignment.branch_id::text =
+                       ${branchIdExpr("lead")}
+                 )`
+          }
+        ${lockClause}
+      `,
+      unrestricted ? [leadId] : [leadId, actor.userId],
+    );
+    return result.rows[0] ?? null;
+  }
+
   private async loadExistingLeadIssue(
     client: PoolClient,
     leadId: string,
@@ -910,10 +1051,11 @@ export class SubscriptionsService {
           student.created_at,
           subscription.id as subscription_id,
           subscription.lessons_total, subscription.lessons_used,
-          subscription.starts_at, subscription.expires_at,
+          subscription.starts_at::text as starts_at,
+          subscription.expires_at::text as expires_at,
           subscription.status as subscription_status,
-          subscription.package_id, subscription.payment_id,
-          payment.amount as payment_amount,
+          subscription.package_id, payment.id as payment_id,
+          payment.amount_minor as payment_amount,
           payment.currency as payment_currency,
           payment.payment_date, payment.method as payment_method,
           payment.notes as payment_notes
@@ -921,7 +1063,9 @@ export class SubscriptionsService {
         join app.students student on student.id = subscription.student_id
         left join app.profiles profile on profile.id = student.profile_id
         left join app.users account on account.id = profile.user_id
-        join app.payments payment on payment.id = subscription.payment_id
+        left join app.payments payment
+          on payment.issued_subscription_id = subscription.id
+         and payment.deleted_at is null
         where subscription.conversion_lead_id = $1
         limit 1
       `,
@@ -970,15 +1114,18 @@ export class SubscriptionsService {
         package_id: row.package_id,
         payment_id: row.payment_id,
       },
-      payment: {
-        id: row.payment_id,
-        student_id: row.id,
-        amount: row.payment_amount,
-        currency: row.payment_currency,
-        payment_date: row.payment_date,
-        method: row.payment_method,
-        notes: row.payment_notes,
-      },
+      payment:
+        row.payment_id && row.payment_amount !== null && row.payment_currency
+          ? {
+              id: row.payment_id,
+              student_id: row.id,
+              amount_minor: row.payment_amount,
+              currency: row.payment_currency,
+              payment_date: row.payment_date!,
+              method: row.payment_method,
+              notes: row.payment_notes,
+            }
+          : null,
       converted: false,
       issued: false,
       lessons: [],
@@ -1013,16 +1160,60 @@ export class SubscriptionsService {
         packageId: outcome.subscription.package_id,
         paymentId: outcome.subscription.payment_id,
       },
-      payment: {
-        id: outcome.payment.id,
-        studentId: outcome.payment.student_id,
-        amount: Number(outcome.payment.amount),
-        currency: outcome.payment.currency,
-        paymentDate: outcome.payment.payment_date,
-        method: outcome.payment.method,
-        notes: outcome.payment.notes,
-      },
+      payment: outcome.payment
+        ? {
+            id: outcome.payment.id,
+            studentId: outcome.payment.student_id,
+            amount: Number(outcome.payment.amount_minor) / 100,
+            amountMinor: String(outcome.payment.amount_minor),
+            currency: outcome.payment.currency,
+            paymentDate: outcome.payment.payment_date,
+            method: outcome.payment.method,
+            notes: outcome.payment.notes,
+          }
+        : null,
       converted: outcome.converted,
     };
+  }
+
+  private assertCommerceMetadata(metadata: CommerceMutationMetadata): void {
+    if (!/^[A-Za-z0-9._:-]{8,160}$/.test(metadata.idempotencyKey)) {
+      throw new BadRequestException({
+        code: "INVALID_IDEMPOTENCY_KEY",
+        message: "Idempotency-Key должен содержать 8–160 безопасных символов.",
+      });
+    }
+    if (
+      !metadata.requestId ||
+      metadata.requestId.length > 128 ||
+      /[\r\n]/.test(metadata.requestId)
+    ) {
+      throw new BadRequestException({
+        code: "INVALID_REQUEST_ID",
+        message: "X-Request-Id обязателен и не должен превышать 128 символов.",
+      });
+    }
+  }
+
+  private deterministicId(
+    actorUserId: string,
+    operation: string,
+    idempotencyKey: string,
+  ): string {
+    const hex = createHash("sha256")
+      .update(`${actorUserId}\0${operation}\0${idempotencyKey}`)
+      .digest("hex")
+      .slice(0, 32)
+      .split("");
+    hex[12] = "4";
+    hex[16] = ["8", "9", "a", "b"][parseInt(hex[16]!, 16) % 4]!;
+    const value = hex.join("");
+    return [
+      value.slice(0, 8),
+      value.slice(8, 12),
+      value.slice(12, 16),
+      value.slice(16, 20),
+      value.slice(20),
+    ].join("-");
   }
 }

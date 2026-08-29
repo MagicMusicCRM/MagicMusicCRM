@@ -36,13 +36,21 @@ class SubscriptionIssuePricing {
     final discount = _discount(draft, basePriceMinor);
     final surcharge = _surcharge(draft);
     final finalPrice = basePriceMinor - discount.minor + surcharge.minor;
+    final paidNow = draft.paymentAmount.trim().isEmpty
+        ? finalPrice
+        : parseSubscriptionMoneyMinor(draft.paymentAmount) ?? BigInt.zero;
+    final installmentTotal = finalPrice > paidNow
+        ? finalPrice - paidNow
+        : BigInt.zero;
     final error =
         discount.error ??
         surcharge.error ??
+        _paymentAmountError(draft) ??
+        _dateRangeError(draft) ??
         _purchaseReasonError(draft) ??
-        _installmentError(draft, finalPrice);
+        _installmentError(draft, installmentTotal);
     final installments = error == null
-        ? _installments(draft, finalPrice, commandTimestamp)
+        ? _installments(draft, installmentTotal, commandTimestamp)
         : const <SubscriptionInstallmentInput>[];
     return SubscriptionIssuePricing(
       basePriceMinor: basePriceMinor,
@@ -158,6 +166,19 @@ class SubscriptionIssuePricing {
     if (draft.payerStudentId == draft.recipientStudentId) return null;
     return draft.purchaseReason.trim().isEmpty
         ? 'Укажите причину оплаты с чужого счёта'
+        : null;
+  }
+
+  static String? _paymentAmountError(SubscriptionIssueDraft draft) {
+    if (draft.paymentAmount.trim().isEmpty) return null;
+    return parseSubscriptionMoneyMinor(draft.paymentAmount) == null
+        ? 'Введите корректную сумму оплаты'
+        : null;
+  }
+
+  static String? _dateRangeError(SubscriptionIssueDraft draft) {
+    return draft.expiresAt.isBefore(draft.startsAt)
+        ? 'Дата окончания не может быть раньше даты начала.'
         : null;
   }
 

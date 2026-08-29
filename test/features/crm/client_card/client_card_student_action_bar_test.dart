@@ -262,76 +262,104 @@ void main() {
     expect(find.text('Создать ученика'), findsNothing);
   });
 
-  testWidgets('pending lead edits are saved before subscription conversion', (
-    tester,
-  ) async {
-    const statusId = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
-    final api = FakeCardApiClient(
-      lead: {
-        'id': 'lead-1',
-        'version': 1,
-        'firstName': 'Анна',
-        'lastName': 'Смирнова',
-        'phone': '+79990000000',
-        'statusId': null,
-        'customData': <String, dynamic>{},
-      },
-      internalNote: const {
-        'id': 'note-1',
-        'body': 'Старый контекст',
-        'version': 2,
-        'updatedByName': 'Администратор',
-        'updatedAt': '2026-08-07T10:00:00.000Z',
-      },
-      subscriptionPackages: const [
-        {
-          'id': 'package-1',
-          'name': 'Демо — Фортепиано, 8 часов',
-          'lessonsTotal': 8,
-          'price': 24000,
+  testWidgets(
+    'pending lead edits are saved before preview and idempotent purchase',
+    (tester) async {
+      const statusId = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+      final api = FakeCardApiClient(
+        lead: {
+          'id': 'lead-1',
+          'version': 1,
+          'firstName': 'Анна',
+          'lastName': 'Смирнова',
+          'phone': '+79990000000',
+          'statusId': null,
+          'customData': <String, dynamic>{},
         },
-      ],
-    );
-    await pumpClientCard(
-      tester,
-      api: api,
-      seed: {'id': 'lead-1', 'name': 'Анна', 'custom_data': {}},
-      statuses: const <StatusRecord>[(statusId, 'В работе', Colors.blue)],
-    );
+        internalNote: const {
+          'id': 'note-1',
+          'body': 'Старый контекст',
+          'version': 2,
+          'updatedByName': 'Администратор',
+          'updatedAt': '2026-08-07T10:00:00.000Z',
+        },
+        subscriptionPackages: const [
+          {
+            'id': 'package-1',
+            'name': 'Демо — Фортепиано, 8 часов',
+            'lessonsTotal': 8,
+            'price': 24000,
+          },
+        ],
+      );
+      await pumpClientCard(
+        tester,
+        api: api,
+        seed: {'id': 'lead-1', 'name': 'Анна', 'custom_data': {}},
+        statuses: const <StatusRecord>[(statusId, 'В работе', Colors.blue)],
+      );
 
-    final status = find.byType(DropdownButtonFormField<String>).first;
-    await tester.ensureVisible(status);
-    await tester.tap(status);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('В работе').last);
-    await tester.pumpAndSettle();
+      final status = find.byType(DropdownButtonFormField<String>).first;
+      await tester.ensureVisible(status);
+      await tester.tap(status);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('В работе').last);
+      await tester.pumpAndSettle();
 
-    await tester.enterText(
-      find.byKey(const Key('client-internal-note-input')),
-      'Контекст перед продажей',
-    );
+      await tester.enterText(
+        find.byKey(const Key('client-internal-note-input')),
+        'Контекст перед продажей',
+      );
 
-    final subscriptions = find.text('Абонементы');
-    await tester.ensureVisible(subscriptions);
-    await tester.tap(subscriptions);
-    await tester.pumpAndSettle();
-    final issue = find.text('Продать абонемент');
-    await tester.ensureVisible(issue);
-    await tester.tap(issue);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Демо — Фортепиано, 8 часов'));
-    await tester.pumpAndSettle();
+      final subscriptions = find.text('Абонементы');
+      await tester.ensureVisible(subscriptions);
+      await tester.tap(subscriptions);
+      await tester.pumpAndSettle();
+      final issue = find.text('Продать абонемент');
+      await tester.ensureVisible(issue);
+      await tester.tap(issue);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Демо — Фортепиано, 8 часов'));
+      await tester.pumpAndSettle();
 
-    expect(api.updateLeadBody?['statusId'], statusId);
-    expect(api.updateInternalNoteBody, {
-      'body': 'Контекст перед продажей',
-      'expectedVersion': 2,
-    });
-    expect(api.requests, [
-      'PUT /crm/clients/lead/lead-1/internal-note',
-      'PATCH /crm/leads/lead-1',
-      'POST /crm/leads/lead-1/subscriptions/issue',
-    ]);
-    await tester.pump(const Duration(seconds: 4));
-  });
+      final submit = find.byKey(const Key('subscription-issue-submit'));
+      await tester.ensureVisible(submit);
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+
+      expect(api.updateLeadBody?['statusId'], statusId);
+      expect(api.updateInternalNoteBody, {
+        'body': 'Контекст перед продажей',
+        'expectedVersion': 2,
+      });
+      expect(api.requests, [
+        'PUT /crm/clients/lead/lead-1/internal-note',
+        'PATCH /crm/leads/lead-1',
+        'POST /crm/leads/lead-1/subscriptions/purchase/preview',
+      ]);
+      expect(api.idempotentRequests, isEmpty);
+
+      await tester.ensureVisible(submit);
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+
+      expect(api.requests, [
+        'PUT /crm/clients/lead/lead-1/internal-note',
+        'PATCH /crm/leads/lead-1',
+        'POST /crm/leads/lead-1/subscriptions/purchase/preview',
+        'POST /crm/leads/lead-1/subscriptions/purchase',
+      ]);
+      expect(api.idempotentRequests, hasLength(1));
+      expect(
+        api.idempotentRequests.single.path,
+        '/crm/leads/lead-1/subscriptions/purchase',
+      );
+      expect(api.idempotentRequests.single.data, containsPair('confirm', true));
+      expect(
+        api.idempotentRequests.single.data,
+        containsPair('previewToken', 'lead-purchase-preview-token'),
+      );
+      await tester.pump(const Duration(seconds: 4));
+    },
+  );
 }

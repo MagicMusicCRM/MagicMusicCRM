@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  UnprocessableEntityException,
-} from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { createHash } from "crypto";
 import { ActorContext } from "../../common/security/actor-context";
 import { PlatformIntegrityService } from "../../platform/platform-integrity.service";
@@ -21,6 +17,7 @@ import {
   SubscriptionIssueRepository,
 } from "./subscription-issue.repository";
 import { SubscriptionPurchasePreviewService } from "./subscription-purchase-preview.service";
+import { SubscriptionPurchasePersistenceService } from "./subscription-purchase-persistence.service";
 import { SubscriptionReservationService } from "./subscription-reservation.service";
 
 @Injectable()
@@ -33,6 +30,7 @@ export class SubscriptionPurchaseCommandService {
     private readonly preview: SubscriptionPurchasePreviewService,
     private readonly terms: SubscriptionCommercialTermsService,
     private readonly results: SubscriptionIssueResultService,
+    private readonly purchasePersistence: SubscriptionPurchasePersistenceService,
   ) {}
 
   async purchase(
@@ -97,6 +95,10 @@ export class SubscriptionPurchaseCommandService {
             recipientStudentId,
             dto,
           );
+          const boundDto = this.terms.bindPurchaseDefaults(
+            dto,
+            new Date(signedPayload.issuedAtSeconds * 1_000),
+          );
           const students = await this.repository.lockPurchaseStudents(
             client,
             actor,
@@ -124,7 +126,7 @@ export class SubscriptionPurchaseCommandService {
           );
           const normalized = this.terms.normalizePurchase(
             recipientStudentId,
-            dto,
+            boundDto,
             activePackage,
           );
           audit.reasonText = this.terms.auditReasonForPurchase(normalized);
@@ -133,48 +135,27 @@ export class SubscriptionPurchaseCommandService {
             this.preview.createTokenPayload(
               actor,
               recipientStudentId,
-              dto,
+              boundDto,
               context,
               normalized,
             ),
           );
-          this.assertSufficientBalance(
-            dto.fundingMode,
-            context.payerBalanceMinor,
-            normalized.finalPriceMinor,
-          );
-          const subscription =
-            await this.repository.createIssuedSubscription(client, {
-              id: subscriptionId,
-              studentId: recipientStudentId,
-              payerStudentId: dto.payerStudentId,
-              fundingMode: dto.fundingMode,
-              purchaseReason: normalized.purchaseReason,
-              package: activePackage,
-              snapshot: normalized.snapshot,
-              discount: normalized.discount.columns,
-              finalPriceMinor: normalized.finalPriceMinor,
-              version: nextVersion,
-            });
-          await this.repository.createInstallments(client, {
-            issuedSubscriptionId: subscription.id,
-            currencyCode: activePackage.currency_code,
-            installments: normalized.installments,
-          });
-          await this.repository.createObligations(client, {
-            studentId: dto.payerStudentId,
-            issuedSubscriptionId: subscription.id,
-            currencyCode: activePackage.currency_code,
-            finalPriceMinor: normalized.finalPriceMinor,
-            installments: normalized.installments,
-            singlePurchaseDebit: true,
-          });
-          await this.repository.createIssueLifecycle(client, {
-            issuedSubscriptionId: subscription.id,
+          const persisted = await this.purchasePersistence.persist(client, {
+            subscriptionId,
+            studentId: recipientStudentId,
+            payerStudentId: dto.payerStudentId,
+            payerBranchId: students.find(
+              (student) => student.id === dto.payerStudentId,
+            )!.branch_id,
+            fundingMode: dto.fundingMode,
+            package: activePackage,
+            normalized,
             actorUserId: actor.userId,
+            idempotencyKey: metadata.idempotencyKey,
             version: nextVersion,
-            reason: normalized.purchaseReason ?? "Покупка абонемента",
+            lifecycleReason: normalized.purchaseReason ?? "Покупка абонемента",
           });
+          const { subscription, payment } = persisted;
           audit.afterRef = {
             subscriptionId: subscription.id,
             subscriptionVersion: nextVersion,
@@ -182,10 +163,18 @@ export class SubscriptionPurchaseCommandService {
             payerStudentId: dto.payerStudentId,
             packageId: activePackage.id,
             packageVersion: Number(activePackage.version),
+            actualPaymentId: payment?.actualPaymentId ?? null,
+            paymentRecordId: payment?.paymentRecordId ?? null,
           };
           return { entityId: subscription.id, version: nextVersion };
         },
       });
+    if (result.replayed) {
+      await this.repository.assertStudentsInScope(actor, [
+        recipientStudentId,
+        dto.payerStudentId,
+      ]);
+    }
     const response = await this.results.load(
       result.resultRef.entityId,
       result.resultRef.version,
@@ -200,22 +189,6 @@ export class SubscriptionPurchaseCommandService {
     return response;
   }
 
-  private assertSufficientBalance(
-    fundingMode: "personal_account" | "installment",
-    availableMinor: string,
-    requiredMinor: string,
-  ): void {
-    if (fundingMode === "personal_account" && BigInt(availableMinor) < BigInt(requiredMinor)) {
-      throw new UnprocessableEntityException({
-        code: "INSUFFICIENT_PERSONAL_ACCOUNT_BALANCE",
-        message:
-          "На личном счёте плательщика недостаточно средств для полной покупки.",
-        availableMinor,
-        requiredMinor,
-      });
-    }
-  }
-
   private assertMetadata(metadata: CommerceMutationMetadata): void {
     if (!/^[A-Za-z0-9._:-]{8,160}$/.test(metadata.idempotencyKey)) {
       throw new BadRequestException({
@@ -223,7 +196,11 @@ export class SubscriptionPurchaseCommandService {
         message: "Idempotency-Key должен содержать 8–160 безопасных символов.",
       });
     }
-    if (!metadata.requestId || metadata.requestId.length > 128 || /[\r\n]/.test(metadata.requestId)) {
+    if (
+      !metadata.requestId ||
+      metadata.requestId.length > 128 ||
+      /[\r\n]/.test(metadata.requestId)
+    ) {
       throw new BadRequestException({
         code: "INVALID_REQUEST_ID",
         message: "X-Request-Id обязателен и не должен превышать 128 символов.",

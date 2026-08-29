@@ -621,90 +621,81 @@ extension _ClientCardStudent on _ClientCardState {
     final packageId = selected['id']?.toString();
     if (packageId == null || packageId.isEmpty) return;
 
-    if (!issuingForLead) {
-      final recipientLabel = [
-        _clientLastName,
-        _clientFirstName,
-      ].whereType<String>().where((value) => value.trim().isNotEmpty).join(' ');
-      final issued = await showSubscriptionIssueFormSheet(
-        context,
-        package: selected,
-        recipientStudentId: _studentId,
-        recipientLabel: recipientLabel.isEmpty
-            ? 'Текущий ученик'
-            : recipientLabel,
-        searchPayers: (query) async {
-          final rows = await crm.searchClientRefs(
-            q: query,
-            type: 'student',
-            limit: 50,
-          );
-          return [
-            for (final row in rows)
-              if (row['ref'] is Map &&
-                  (row['ref'] as Map)['id']?.toString().isNotEmpty == true)
-                SearchableSelectItem(
-                  id: (row['ref'] as Map)['id'].toString(),
-                  label: row['label']?.toString().trim().isNotEmpty == true
-                      ? row['label'].toString()
-                      : 'Ученик без имени',
-                  subtitle: 'Личный счёт ученика',
-                ),
-          ];
-        },
-        onPreview: (input) =>
-            crm.previewSubscriptionPurchase(_studentId, input: input),
-        onSubmit: (submission) async {
-          await crm.purchaseSubscription(
-            _studentId,
-            input: submission.purchase,
-            preview: submission.preview,
-            identity: submission.identity,
-          );
-        },
-      );
-      if (issued != true || !mounted) return;
-      _markDirty();
-      MagicToast.show(
-        context,
-        'Абонемент куплен',
-        detail: selected['name']?.toString(),
-        type: MagicToastType.success,
-      );
-      _fetchStudentData();
-      return;
-    }
-
-    if (issuingForLead) _emitState(() => _converting = true);
-    try {
-      // The package endpoint atomically copies the persisted lead record.
-      // Save the in-memory draft first; otherwise choosing a package closes
-      // the card and silently drops fields typed since the last Save action.
-      if (!await _flushPendingClientEdits()) return;
-      await crm.issueLeadSubscription(_leadId, packageId);
-      if (!mounted) return;
-      _markDirty();
-      MagicToast.show(
-        context,
-        'Абонемент выдан. Лид стал учеником',
-        detail: selected['name']?.toString(),
-        type: MagicToastType.success,
-      );
-      // Reopen from «Ученики» against the freshly-created student id. This
-      // also prevents any stale lead id from being reused by later actions.
+    if (issuingForLead && !await _flushPendingClientEdits()) return;
+    if (!mounted) return;
+    final recipientLabel = [
+      _clientLastName,
+      _clientFirstName,
+    ].whereType<String>().where((value) => value.trim().isNotEmpty).join(' ');
+    final recipientId = issuingForLead ? _leadId : _studentId;
+    final issued = await showSubscriptionIssueFormSheet(
+      context,
+      package: selected,
+      recipientStudentId: recipientId,
+      recipientLabel: recipientLabel.isEmpty
+          ? (issuingForLead ? 'Текущий лид' : 'Текущий ученик')
+          : recipientLabel,
+      searchPayers: (query) async {
+        final rows = await crm.searchClientRefs(
+          q: query,
+          type: 'student',
+          limit: 50,
+        );
+        return [
+          for (final row in rows)
+            if (row['ref'] is Map &&
+                (row['ref'] as Map)['id']?.toString().isNotEmpty == true)
+              SearchableSelectItem(
+                id: (row['ref'] as Map)['id'].toString(),
+                label: row['label']?.toString().trim().isNotEmpty == true
+                    ? row['label'].toString()
+                    : 'Ученик без имени',
+                subtitle: 'Личный счёт ученика',
+              ),
+        ];
+      },
+      onPreview: (input) => issuingForLead
+          ? crm.previewLeadSubscriptionPurchase(_leadId, input: input)
+          : crm.previewSubscriptionPurchase(_studentId, input: input),
+      onSubmit: (submission) async {
+        if (issuingForLead) _emitState(() => _converting = true);
+        try {
+          if (issuingForLead) {
+            await crm.purchaseLeadSubscription(
+              _leadId,
+              input: submission.purchase,
+              preview: submission.preview,
+              identity: submission.identity,
+            );
+          } else {
+            await crm.purchaseSubscription(
+              _studentId,
+              input: submission.purchase,
+              preview: submission.preview,
+              identity: submission.identity,
+            );
+          }
+        } finally {
+          if (mounted && issuingForLead) {
+            _emitState(() => _converting = false);
+          }
+        }
+      },
+    );
+    if (issued != true || !mounted) return;
+    _markDirty();
+    MagicToast.show(
+      context,
+      issuingForLead
+          ? 'Абонемент куплен. Лид стал учеником'
+          : 'Абонемент куплен',
+      detail: selected['name']?.toString(),
+      type: MagicToastType.success,
+    );
+    if (issuingForLead) {
       _closeCard(true);
-    } catch (e) {
-      if (!mounted) return;
-      MagicToast.show(
-        context,
-        'Не удалось выдать абонемент',
-        detail: userErrorMessage(e),
-        type: MagicToastType.danger,
-      );
-    } finally {
-      if (mounted) {
-        _emitState(() => _converting = false);
-      }
+    } else {
+      _fetchStudentData();
     }
   }
 

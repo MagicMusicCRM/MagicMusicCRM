@@ -15,12 +15,18 @@ export class SubscriptionIssueResultService {
         subscriptionId,
       });
     }
-    const [installments, obligations] = await Promise.all([
+    const [installments, obligations, actualPayments] = await Promise.all([
       this.repository.listInstallments(subscriptionId),
       this.repository.listObligations(subscriptionId),
+      this.repository.listActualPaymentsForSubscription(subscriptionId),
     ]);
     const finalPriceMinor = subscription.commercial_snapshot.finalPriceMinor;
-    const netMinor = finalPriceMinor === "0" ? "0" : `-${finalPriceMinor}`;
+    const actualPaymentsMinor = actualPayments
+      .reduce((sum, item) => sum + BigInt(item.amount_minor), 0n)
+      .toString();
+    const netMinor = (
+      BigInt(actualPaymentsMinor) - BigInt(finalPriceMinor)
+    ).toString();
     return {
       subscription: {
         id: subscription.id,
@@ -59,7 +65,7 @@ export class SubscriptionIssueResultService {
       })),
       balanceAtIssue: {
         currencyCode: subscription.commercial_snapshot.currencyCode,
-        actualPaymentsMinor: "0",
+        actualPaymentsMinor,
         obligationsMinor: finalPriceMinor,
         netMinor,
       },

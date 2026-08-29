@@ -9,10 +9,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { Pool, PoolClient } from "pg";
 import { AuditService } from "../../audit/audit.service";
-import {
-  ActorContext,
-  UserRole,
-} from "../../common/security/actor-context";
+import { ActorContext, UserRole } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
 import { MigrationRunner } from "../../db/migration-runner";
 import { PlatformIntegrityRepository } from "../../platform/platform-integrity.repository";
@@ -22,6 +19,10 @@ import { CrmPolicy } from "../crm.policy";
 import { SubscriptionsService } from "../subscriptions.service";
 import { PackageCatalogRepository } from "./package-catalog.repository";
 import { PackageCatalogService } from "./package-catalog.service";
+import { SubscriptionIssueRepository } from "./subscription-issue.repository";
+import { SubscriptionCommercialTermsService } from "./subscription-commercial-terms.service";
+import { SubscriptionPurchasePreviewService } from "./subscription-purchase-preview.service";
+import { SubscriptionPurchasePersistenceService } from "./subscription-purchase-persistence.service";
 
 const databaseUrl =
   process.env.V4_PLATFORM_TEST_DATABASE_URL ??
@@ -74,10 +75,7 @@ describe("Subscription Package catalog (PostgreSQL)", () => {
     catalog = new PackageCatalogService(
       repository,
       new CrmPolicy(),
-      new PlatformIntegrityService(
-        database,
-        new PlatformIntegrityRepository(),
-      ),
+      new PlatformIntegrityService(database, new PlatformIntegrityRepository()),
     );
     subscriptions = new SubscriptionsService(
       database,
@@ -89,6 +87,11 @@ describe("Subscription Package catalog (PostgreSQL)", () => {
         emitCrmChanged: jest.fn(),
         emitFinanceChanged: jest.fn(),
       } as unknown as RealtimeBus,
+      {} as SubscriptionIssueRepository,
+      {} as SubscriptionCommercialTermsService,
+      {} as SubscriptionPurchasePreviewService,
+      {} as PlatformIntegrityService,
+      {} as SubscriptionPurchasePersistenceService,
     );
 
     const fixture = await createFixture(pool);
@@ -101,9 +104,7 @@ describe("Subscription Package catalog (PostgreSQL)", () => {
   afterAll(async () => {
     if (pool) {
       await cleanupFixture(pool, {
-        actorUserIds: actors
-          ? roles.map((role) => actors[role].userId)
-          : [],
+        actorUserIds: actors ? roles.map((role) => actors[role].userId) : [],
         branchId,
         profileId,
         studentId,
@@ -164,11 +165,9 @@ describe("Subscription Package catalog (PostgreSQL)", () => {
   });
 
   it("keeps archived rows root-visible and restores the same versioned row", async () => {
-    const created = await createPackage(
-      actors.director,
-      "archive-restore",
-      { unitCount: 2.25 },
-    );
+    const created = await createPackage(actors.director, "archive-restore", {
+      unitCount: 2.25,
+    });
     const archived = await catalog.archive(
       actors.director,
       created.id,
@@ -288,11 +287,7 @@ describe("Subscription Package catalog (PostgreSQL)", () => {
 
     // A late transport retry must return the exact v1 result recorded by the
     // original create, never the now-current v2 catalog row.
-    const lateReplay = await catalog.create(
-      actors.director,
-      input,
-      metadata,
-    );
+    const lateReplay = await catalog.create(actors.director, input, metadata);
     expect(lateReplay).toEqual(first);
     await expectPackageAndAggregateVersion(first.id, 2);
     expect(await catalogFactCounts(first.id)).toEqual({
@@ -325,10 +320,7 @@ describe("Subscription Package catalog (PostgreSQL)", () => {
   });
 
   it("allows one concurrent writer and keeps audit/outbox/version in sync", async () => {
-    const created = await createPackage(
-      actors.director,
-      "concurrent-version",
-    );
+    const created = await createPackage(actors.director, "concurrent-version");
     const outcomes = await Promise.allSettled([
       catalog.update(
         actors.director,
@@ -350,7 +342,9 @@ describe("Subscription Package catalog (PostgreSQL)", () => {
       ),
     ]);
     const fulfilled = outcomes.filter(
-      (outcome): outcome is PromiseFulfilledResult<
+      (
+        outcome,
+      ): outcome is PromiseFulfilledResult<
         Awaited<ReturnType<PackageCatalogService["update"]>>
       > => outcome.status === "fulfilled",
     );
@@ -372,15 +366,11 @@ describe("Subscription Package catalog (PostgreSQL)", () => {
   });
 
   it("issues immutable snapshots before and after catalog update, then archives a used package", async () => {
-    const created = await createPackage(
-      actors.director,
-      "issued-snapshot-v1",
-      {
-        unitCount: 1.5,
-        basePriceMinor: "800000",
-        validityDays: 90,
-      },
-    );
+    const created = await createPackage(actors.director, "issued-snapshot-v1", {
+      unitCount: 1.5,
+      basePriceMinor: "800000",
+      validityDays: 90,
+    });
     const firstIssue = await subscriptions.issueSubscription(
       actors.director,
       studentId,
@@ -468,24 +458,19 @@ describe("Subscription Package catalog (PostgreSQL)", () => {
       [created.id],
     );
     expect(issuedRows.rows[0]!.count).toBe("2");
-    expect((await loadIssuedSnapshot(firstIssue.id)).commercial_snapshot).toEqual(
-      frozenSnapshot,
-    );
+    expect(
+      (await loadIssuedSnapshot(firstIssue.id)).commercial_snapshot,
+    ).toEqual(frozenSnapshot);
     await expect(
-      subscriptions.issueSubscription(
-        actors.director,
-        studentId,
-        { packageId: created.id },
-      ),
+      subscriptions.issueSubscription(actors.director, studentId, {
+        packageId: created.id,
+      }),
     ).rejects.toBeInstanceOf(NotFoundException);
     await expectPackageAndAggregateVersion(created.id, 3);
   });
 
   it("revokes runtime history mutation and blocks destructive rollback", async () => {
-    const created = await createPackage(
-      actors.director,
-      "rollback-history",
-    );
+    const created = await createPackage(actors.director, "rollback-history");
     await catalog.update(
       actors.director,
       created.id,
@@ -548,12 +533,12 @@ describe("Subscription Package catalog (PostgreSQL)", () => {
       client.release();
     }
     const applied = await pool.query<{ count: string }>(
-        `
+      `
           select count(*)::text as count
           from app_schema_migrations
           where id = '0090_commerce_package_aggregate_versions'
         `,
-      );
+    );
     expect(applied.rows[0]!.count).toBe("1");
   });
 
@@ -859,13 +844,7 @@ async function cleanupFixture(
       packageIds,
       "uuid",
     );
-    await deleteByIds(
-      client,
-      "app.payments",
-      "id",
-      paymentIds,
-      "uuid",
-    );
+    await deleteByIds(client, "app.payments", "id", paymentIds, "uuid");
     await deleteByIds(
       client,
       "app.subscription_packages",
@@ -888,13 +867,7 @@ async function cleanupFixture(
         input.branchId,
       ]);
     }
-    await deleteByIds(
-      client,
-      "app.users",
-      "id",
-      input.actorUserIds,
-      "uuid",
-    );
+    await deleteByIds(client, "app.users", "id", input.actorUserIds, "uuid");
     await client.query("commit");
   } catch (error) {
     await client.query("rollback");

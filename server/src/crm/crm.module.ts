@@ -114,7 +114,10 @@ import { PackageCatalogRepository } from "./commerce/package-catalog.repository"
 import { PackageCatalogService } from "./commerce/package-catalog.service";
 import { SubscriptionCommerceController } from "./subscription-commerce.controller";
 import { SubscriptionCommercialTermsService } from "./commerce/subscription-commercial-terms.service";
+import { SubscriptionPurchaseTermsService } from "./commerce/subscription-purchase-terms.service";
 import { SubscriptionPurchasePreviewService } from "./commerce/subscription-purchase-preview.service";
+import { SubscriptionPurchasePaymentService } from "./commerce/subscription-purchase-payment.service";
+import { SubscriptionPurchasePersistenceService } from "./commerce/subscription-purchase-persistence.service";
 import { SubscriptionPurchaseCommandService } from "./commerce/subscription-purchase-command.service";
 import { SubscriptionGrantCommandService } from "./commerce/subscription-grant-command.service";
 import { SubscriptionIssueResultService } from "./commerce/subscription-issue-result.service";
@@ -300,8 +303,11 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     LessonSettlementCorrectionService,
     PackageCatalogRepository,
     PackageCatalogService,
+    SubscriptionPurchaseTermsService,
     SubscriptionCommercialTermsService,
     SubscriptionPurchasePreviewService,
+    SubscriptionPurchasePaymentService,
+    SubscriptionPurchasePersistenceService,
     SubscriptionPurchaseCommandService,
     SubscriptionGrantCommandService,
     SubscriptionIssueResultService,

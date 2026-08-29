@@ -254,10 +254,14 @@ describe("ClientCardReadService (PostgreSQL)", () => {
       "delete from app.lesson_homeworks where id = any($1::uuid[])",
       [homework],
     );
-    await database.query("delete from app.task_audiences where task_id = any($1::uuid[])", [
-      tasks,
-    ]);
-    await database.query("delete from app.shared_tasks where id = any($1::uuid[])", [tasks]);
+    await database.query(
+      "delete from app.task_audiences where task_id = any($1::uuid[])",
+      [tasks],
+    );
+    await database.query(
+      "delete from app.shared_tasks where id = any($1::uuid[])",
+      [tasks],
+    );
     await database.query("delete from app.lessons where id = any($1::uuid[])", [
       lessons,
     ]);
@@ -317,6 +321,77 @@ describe("ClientCardReadService (PostgreSQL)", () => {
         finance: { balanceMinor: 12345 },
       },
     });
+  });
+
+  it("keeps expiry inclusive and burns the remainder on the next branch-local day", async () => {
+    const subscriptionId = subscriptions[0]!;
+    const branchId = branches[0]!;
+    try {
+      await database.query(
+        "update app.branches set timezone_name = 'Asia/Yekaterinburg' where id = $1",
+        [branchId],
+      );
+      await database.query(
+        `update app.students
+         set branch_id = null,
+             custom_data = jsonb_set(
+               coalesce(custom_data, '{}'::jsonb),
+               '{branchId}',
+               to_jsonb($1::text)
+             )
+         where id = $2`,
+        [branchId, studentId],
+      );
+      await database.query(
+        `update app.subscriptions
+         set expires_at = timezone('Asia/Yekaterinburg', now())::date
+         where id = $1`,
+        [subscriptionId],
+      );
+
+      const finalDay = await service.load(manager, {
+        type: "student",
+        id: studentId,
+      });
+      expect(finalDay.indicators.activeSubscriptionRemaining).toBe(6);
+
+      await database.query(
+        `
+          update app.subscriptions
+          set expires_at = timezone('Asia/Yekaterinburg', now())::date - 1
+          where id = $1
+        `,
+        [subscriptionId],
+      );
+
+      const nextDay = await service.load(manager, {
+        type: "student",
+        id: studentId,
+      });
+      expect(nextDay.indicators.activeSubscriptionRemaining).toBeNull();
+      expect(nextDay.sections.finance).toMatchObject({
+        activeSubscription: null,
+      });
+    } finally {
+      await database.query(
+        `update app.students
+         set branch_id = $1,
+             custom_data = coalesce(custom_data, '{}'::jsonb)
+               - 'branchId' - 'branch_id'
+         where id = $2`,
+        [branchId, studentId],
+      );
+      await database.query(
+        "update app.branches set timezone_name = 'Europe/Moscow' where id = $1",
+        [branchId],
+      );
+      await database.query(
+        `update app.subscriptions
+         set expires_at = timezone('Europe/Moscow', now())::date + 30
+         where id = $1`,
+        [subscriptionId],
+      );
+    }
   });
 
   it("keeps client Tasks out of the Admin projection", async () => {

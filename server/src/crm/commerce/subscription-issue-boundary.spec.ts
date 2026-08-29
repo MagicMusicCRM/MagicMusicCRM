@@ -7,13 +7,24 @@ const readSource = (name: string) =>
 
 const facade = readSource("subscription-issue.service.ts");
 const termsSource = readSource("subscription-commercial-terms.service.ts");
+const purchaseTermsSource = readSource("subscription-purchase-terms.service.ts");
 const previewSource = readSource("subscription-purchase-preview.service.ts");
 const purchaseSource = readSource("subscription-purchase-command.service.ts");
+const purchasePaymentSource = readSource(
+  "subscription-purchase-payment.service.ts",
+);
+const purchasePersistenceSource = readSource(
+  "subscription-purchase-persistence.service.ts",
+);
 const grantSource = readSource("subscription-grant-command.service.ts");
 const resultSource = readSource("subscription-issue-result.service.ts");
 const contractsSource = readSource("subscription-issue.contracts.ts");
 const repositorySource = readSource("subscription-issue.repository.ts");
 const moduleSource = readFileSync(resolve(__dirname, "..", "crm.module.ts"), "utf8");
+const subscriptionsSource = readFileSync(
+  resolve(__dirname, "..", "subscriptions.service.ts"),
+  "utf8",
+);
 
 const sourceNloc = (source: string) => {
   const withoutBlockComments = source.replace(/\/\*[\s\S]*?\*\//g, "");
@@ -99,6 +110,101 @@ const assertInOrder = (source: string, markers: readonly string[]) => {
   }
 };
 
+const executionEvents = (sourceFile: ts.SourceFile, body: ts.Node) => {
+  const events: Array<{ position: number; value: string }> = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const identity = calleeIdentity(node.expression);
+      if (identity) {
+        events.push({ position: node.getStart(sourceFile), value: `call:${identity}` });
+      }
+    }
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      node.left.getText(sourceFile) === "audit.afterRef"
+    ) {
+      events.push({ position: node.getStart(sourceFile), value: "assign:audit.afterRef" });
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(body);
+  return events
+    .sort((left, right) => left.position - right.position)
+    .map(({ value }) => value);
+};
+
+const mutationEvents = (source: string) => {
+  const sourceFile = ts.createSourceFile(
+    "mutation-owner.ts",
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const callbacks: ts.ConciseBody[] = [];
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      calleeIdentity(node.expression) === "executeVersionedMutation"
+    ) {
+      const config = node.arguments[0];
+      if (config && ts.isObjectLiteralExpression(config)) {
+        const mutate = config.properties.find(
+          (property): property is ts.PropertyAssignment =>
+            ts.isPropertyAssignment(property) &&
+            identifierName(property.name) === "mutate",
+        );
+        if (
+          mutate &&
+          (ts.isArrowFunction(mutate.initializer) ||
+            ts.isFunctionExpression(mutate.initializer))
+        ) {
+          callbacks.push(mutate.initializer.body);
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  expect(callbacks).toHaveLength(1);
+  return executionEvents(sourceFile, callbacks[0]!);
+};
+
+const methodContract = (source: string, className: string, methodName: string) => {
+  const sourceFile = ts.createSourceFile(
+    `${className}.ts`,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const owner = sourceFile.statements.find(
+    (statement): statement is ts.ClassDeclaration =>
+      ts.isClassDeclaration(statement) && statement.name?.text === className,
+  );
+  const method = owner?.members.find(
+    (member): member is ts.MethodDeclaration =>
+      ts.isMethodDeclaration(member) && identifierName(member.name) === methodName,
+  );
+  expect(method?.body).toBeDefined();
+  return {
+    events: executionEvents(sourceFile, method!.body!),
+    parameterTypes: method!.parameters.map((parameter) =>
+      parameter.type?.getText(sourceFile),
+    ),
+  };
+};
+
+const expectSubsequence = (actual: readonly string[], expected: readonly string[]) => {
+  let cursor = 0;
+  for (const event of actual) {
+    if (event === expected[cursor]) cursor += 1;
+  }
+  expect(actual).toEqual(expect.arrayContaining(expected));
+  expect(cursor).toBe(expected.length);
+};
+
 const facadeContracts = [
   { method: "previewPurchase", owner: "preview" },
   { method: "purchase", owner: "purchaseCommand" },
@@ -117,8 +223,11 @@ describe("subscription issue owner boundaries", () => {
 
   it("wires every subscription issue owner privately and retains the facade pair", () => {
     const owners = [
+      "SubscriptionPurchaseTermsService",
       "SubscriptionCommercialTermsService",
       "SubscriptionPurchasePreviewService",
+      "SubscriptionPurchasePaymentService",
+      "SubscriptionPurchasePersistenceService",
       "SubscriptionPurchaseCommandService",
       "SubscriptionGrantCommandService",
       "SubscriptionIssueResultService",
@@ -242,16 +351,23 @@ describe("subscription issue owner boundaries", () => {
 
   it("keeps owner size and transaction boundaries", () => {
     expect(sourceNloc(termsSource)).toBeLessThanOrEqual(400);
+    expect(sourceNloc(purchaseTermsSource)).toBeLessThanOrEqual(180);
     expect(sourceNloc(previewSource)).toBeLessThanOrEqual(260);
+    expect(sourceNloc(purchasePaymentSource)).toBeLessThanOrEqual(160);
+    expect(sourceNloc(purchasePersistenceSource)).toBeLessThanOrEqual(180);
     expect(sourceNloc(purchaseSource)).toBeLessThanOrEqual(300);
     expect(sourceNloc(grantSource)).toBeLessThanOrEqual(240);
     expect(sourceNloc(resultSource)).toBeLessThanOrEqual(180);
     expect(versionedMutationCount(purchaseSource)).toBe(1);
     expect(versionedMutationCount(grantSource)).toBe(1);
+    expect(versionedMutationCount(subscriptionsSource)).toBe(1);
     const otherIssueSources = [
       facade,
       termsSource,
+      purchaseTermsSource,
       previewSource,
+      purchasePaymentSource,
+      purchasePersistenceSource,
       resultSource,
       contractsSource,
     ].join("\n");
@@ -261,33 +377,60 @@ describe("subscription issue owner boundaries", () => {
   });
 
   it("keeps purchase and grant persistence order", () => {
-    assertInOrder(purchaseSource, [
-      ".decodeBoundToken(",
-      ".lockPurchaseStudents(",
-      ".findActivePackageForShare(",
-      ".readAccountBalance(",
-      ".assertPurchaseContext(",
-      ".normalizePurchase(",
-      ".assertStillCurrent(",
-      ".assertSufficientBalance(",
-      ".createIssuedSubscription(",
-      ".createInstallments(",
-      ".createObligations(",
-      ".createIssueLifecycle(",
-      "audit.afterRef =",
+    expectSubsequence(mutationEvents(purchaseSource), [
+      "call:decodeBoundToken",
+      "call:lockPurchaseStudents",
+      "call:findActivePackageForShare",
+      "call:readAccountBalance",
+      "call:assertPurchaseContext",
+      "call:normalizePurchase",
+      "call:assertStillCurrent",
+      "call:persist",
+      "assign:audit.afterRef",
     ]);
-    assertInOrder(grantSource, [
-      ".assertStudentsInScope(",
-      "executeVersionedMutation<",
-      ".lockPurchaseStudents(",
-      ".findActivePackageForShare(",
-      ".normalizeIssue(",
-      ".createIssuedSubscription(",
-      ".createInstallments(",
-      ".createObligations(",
-      ".createIssueLifecycle(",
-      "audit.afterRef =",
+    expectSubsequence(mutationEvents(grantSource), [
+      "call:lockPurchaseStudents",
+      "call:findActivePackageForShare",
+      "call:normalizeIssue",
+      "call:createIssuedSubscription",
+      "call:createInstallments",
+      "call:createObligations",
+      "call:createIssueLifecycle",
+      "assign:audit.afterRef",
     ]);
+
+    const purchasePersistence = methodContract(
+      purchasePersistenceSource,
+      "SubscriptionPurchasePersistenceService",
+      "persist",
+    );
+    expect(purchasePersistence.parameterTypes[0]).toBe("PoolClient");
+    expectSubsequence(purchasePersistence.events, [
+      "call:createIssuedSubscription",
+      "call:persist",
+      "call:createInstallments",
+      "call:createObligations",
+      "call:createIssueLifecycle",
+    ]);
+
+    const paymentPersistence = methodContract(
+      purchasePaymentSource,
+      "SubscriptionPurchasePaymentService",
+      "persist",
+    );
+    expect(paymentPersistence.parameterTypes[0]).toBe("PoolClient");
+    expectSubsequence(paymentPersistence.events, [
+      "call:createActualPayment",
+      "call:createRecord",
+      "call:linkActualPayment",
+      "call:appendStatusEvent",
+      "call:initializeRecordAggregate",
+    ]);
+
+    expect(subscriptionsSource).not.toMatch(
+      /\.(?:createIssuedSubscription|createActualPayment|createInstallments|createObligations|createIssueLifecycle|createRecord)\(/,
+    );
+    expect(subscriptionsSource).toContain("this.purchasePersistence.persist(");
   });
 
   it("publishes reservations only after non-replayed commits", () => {
