@@ -147,8 +147,14 @@ case "${1:-}" in
       exit 0
     fi
     if [[ "${joined}" == *'|pg_restore|'* ]]; then
-      cat >/dev/null
-      [[ "${FAKE_PHASE}" != pg-restore ]] || exit 66
+      restore_sha="$(/usr/bin/sha256sum)"
+      restore_sha="${restore_sha%% *}"
+      if [[ "${restore_sha}" != "${EXPECTED_RESTORE_SHA}" ]]; then
+        printf 'pg-restore|stdin=unexpected\n' >>"${FAKE_LOG}"
+        exit 66
+      fi
+      printf 'pg-restore|stdin=verified\n' >>"${FAKE_LOG}"
+      [[ "${FAKE_PHASE}" != pg-restore ]] || exit 67
       exit 0
     fi
     if [[ "${joined}" == *'|psql|'* ]]; then
@@ -453,13 +459,16 @@ EXPECTED_MIGRATION='0142_schedule_plan_series_subscription_snapshot'
 EXPECTED_NETWORK='magiccrm-backup-drill-0123456789abcdef-network'
 EXPECTED_VOLUME='magiccrm-backup-drill-0123456789abcdef-data'
 FAKE_EXPECTED_PASSPHRASE='CorrectHorseBattery42'
+EXPECTED_RESTORE_SHA="$(printf 'fake postgres dump\n' | /usr/bin/sha256sum)"
+EXPECTED_RESTORE_SHA="${EXPECTED_RESTORE_SHA%% *}"
 
 export \
   CANDIDATE_TAG ROLLBACK_TAG POSTGRES_TAG \
   CANDIDATE_ID ROLLBACK_ID POSTGRES_ID \
   CANDIDATE_REVISION ROLLBACK_REVISION \
   CANDIDATE_VERSION ROLLBACK_VERSION EXPECTED_MIGRATION \
-  EXPECTED_NETWORK EXPECTED_VOLUME FAKE_EXPECTED_PASSPHRASE
+  EXPECTED_NETWORK EXPECTED_VOLUME FAKE_EXPECTED_PASSPHRASE \
+  EXPECTED_RESTORE_SHA
 
 last_case_dir=""
 run_case() {
@@ -611,6 +620,8 @@ grep -Fq 'docker|network|create|--internal|' "${success_log}" ||
   fail 'internal network creation was not recorded'
 grep -Fq 'openssl-env|passphrase=expected|backup-env=absent' "${success_log}" ||
   fail 'OpenSSL environment isolation was not proved'
+grep -Fq 'pg-restore|stdin=verified' "${success_log}" ||
+  fail 'pg_restore did not receive the exact dump bytes through the bounded runner'
 
 run_case mode-rejection '' nonzero 644
 if grep -Eq '^(docker|openssl|tar)\|' "${last_case_dir}/commands.log"; then

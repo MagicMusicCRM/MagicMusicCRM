@@ -227,6 +227,34 @@ run_bounded() {
   return "${status}"
 }
 
+run_bounded_from_file() {
+  local timeout_seconds="$1"
+  local phase_label="$2"
+  local input_file="$3"
+  local status child_pid
+  shift 3
+
+  [[ -f "${input_file}" && ! -L "${input_file}" ]] || return 1
+
+  setsid timeout --foreground --signal=TERM \
+    --kill-after="${KILL_GRACE_SECONDS}s" "${timeout_seconds}s" \
+    "$@" <"${input_file}" &
+  active_child_pid=$!
+  child_pid="${active_child_pid}"
+  if wait "${child_pid}"; then
+    status=0
+  else
+    status=$?
+  fi
+  kill -s KILL -- "-${child_pid}" >/dev/null 2>&1 || true
+  active_child_pid=""
+  if [[ "${status}" == 124 || "${status}" == 137 ]]; then
+    printf 'verify-release-backup-compatibility: phase timed out: %s\n' \
+      "${phase_label}" >&2
+  fi
+  return "${status}"
+}
+
 capture_bounded() {
   local output_name="$1"
   local timeout_seconds="$2"
@@ -536,11 +564,11 @@ for ((attempt = 1; attempt <= WAIT_SECONDS; attempt++)); do
 done
 [[ "${postgres_ready}" == 1 ]] || die "isolated PostgreSQL did not become ready"
 
-run_bounded "${RESTORE_TIMEOUT_SECONDS}" "restore PostgreSQL backup" \
+run_bounded_from_file "${RESTORE_TIMEOUT_SECONDS}" "restore PostgreSQL backup" \
+  "${tmp_dir}/payload/postgres.dump" \
   docker exec -i "${postgres_container}" \
     pg_restore -U "${database_owner}" -d "${database_name}" \
     --exit-on-error --single-transaction --no-owner --no-acl \
-  <"${tmp_dir}/payload/postgres.dump" \
   >"${tmp_dir}/pg-restore.log" 2>&1 ||
   die "isolated PostgreSQL restore failed"
 

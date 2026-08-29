@@ -93,6 +93,12 @@ Assert-Contains 'node dist/migration/commerce/v7/commerce-data.js' `
   'Both runtime images must exercise V7 reconciliation.'
 Assert-Contains 'run_bounded()' `
   'Potentially hanging child processes must use the tracked bounded runner.'
+Assert-Contains 'run_bounded_from_file()' `
+  'The binary PostgreSQL archive must use a dedicated bounded file-input runner.'
+Assert-Contains '"$@" <"${input_file}" &' `
+  'The file-input runner must redirect the archive on the background command itself.'
+Assert-Contains 'run_bounded_from_file "${RESTORE_TIMEOUT_SECONDS}" "restore PostgreSQL backup"' `
+  'pg_restore must receive the verified dump through the dedicated file-input runner.'
 Assert-Contains 'setsid timeout --foreground --signal=TERM' `
   'Every tracked child must have a process group and hard timeout.'
 Assert-Contains 'forward_active_child "${signal_name}"' `
