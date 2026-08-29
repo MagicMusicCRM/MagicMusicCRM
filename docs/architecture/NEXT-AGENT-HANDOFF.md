@@ -1,11 +1,24 @@
 # MagicMusicCRM — актуальная передача
 
 > Обновлено: 2026-08-29
-> Production: client `1.5.22+202`, server `28930910`,
-> image `sha256:a4671dac…`, migration `0142`
+> Production: client `1.5.22+202`, server `68a63527`,
+> image `sha256:39302162…`, migration `0143`
 > Рабочая ветка: `main`
-> Статус: subscription sale production rollout PASS;
-> owner mega-UAT не завершён
+> Статус: subscription payment hotfix production rollout PASS;
+> owner sale UAT в локальном Release не завершён
+
+Server hotfix `68a63527` устранил production `permission denied for table
+payments` при продаже абонемента: runtime получил только узкое право
+`UPDATE(payments.payment_record_id)`, broad `UPDATE/DELETE` остались запрещены.
+Клиентский сценарий теперь имеет одно действие `Оплатить`; signed preview и
+commit выполняются последовательно внутри него без отдельной кнопки
+`Проверить`. Flutter `1453/1453`, backend `268/268` suites / `3382/3382`
+tests, analyze/typecheck/build, encrypted pre/post backup и оба isolated restore
+drill PASS. Production image healthy/restart `0`, migration `0143`, privilege
+matrix `true/false/false`, reconciliation дважды `issues=[]`, outbox `0/0`,
+свежие API/Caddy ошибки `0`. Локальный Windows Release из `68a63527` запущен;
+реальная продажа не выполнялась без выбора владельцем подходящего клиента.
+Evidence: `docs/audits/v7-production-subscription-payment-hotfix-68a63527.md`.
 
 Release `1.5.22+202` объединил назначение абонемента и фактическую оплату в
 существующем окне: сумма, способ, дата, комментарий, частичная оплата, долг и
