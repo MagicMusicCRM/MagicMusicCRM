@@ -12,7 +12,8 @@ import { PayrollAccrualCalculator } from "./payroll/payroll-accrual-calculator";
 import { PayrollReadRepository } from "./payroll/payroll-read.repository";
 import { TeacherPayrollCommandService } from "./payroll/teacher-payroll-command.service";
 import { TeacherPayrollQueryService } from "./payroll/teacher-payroll-query.service";
-import { TeacherStatsCsvService } from "./payroll/teacher-stats-csv.service";
+import { TeacherStatsXlsxService } from "./payroll/teacher-stats-xlsx.service";
+import { OoxmlWorkbookBuilder } from "../common/ooxml-workbook.builder";
 import { TeacherStatsReportService } from "./payroll/teacher-stats-report.service";
 
 const databaseUrl =
@@ -109,7 +110,7 @@ describe("Teacher payroll integrity (PostgreSQL)", () => {
         calculator,
       ),
       report,
-      new TeacherStatsCsvService(report),
+      new TeacherStatsXlsxService(report, new OoxmlWorkbookBuilder()),
     );
   });
 

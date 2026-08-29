@@ -334,37 +334,10 @@ class TeacherStatsView extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
       children: [
-        if (_state.query.branchId != null &&
-            _state.report['movementsScope'] == 'teacher_period_all_branches')
-          _movementScopeNote(context),
         for (final item in items) _teacherCard(context, item),
         const SizedBox(height: 8),
         _totals(totals),
       ],
-    );
-  }
-
-  Widget _movementScopeNote(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: const Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.info_outline_rounded, size: 18),
-          SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Занятия отфильтрованы по филиалу. Выплаты, доплаты и '
-              'вычеты показаны по преподавателю за период по всем филиалам.',
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -393,7 +366,7 @@ class TeacherStatsView extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 6),
-            _moneySummary(item, includeOptional: true),
+            _moneySummary(item),
             const SizedBox(height: 8),
             for (final unit in units) _unitRow(context, unit),
           ],

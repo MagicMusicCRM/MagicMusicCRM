@@ -33,7 +33,7 @@ class _TeacherStatsWidgetState extends ConsumerState<TeacherStatsWidget> {
       reportFileOpener: ref.read(reportFileOpenerProvider),
       filterRange: widget.filterRange,
       branchId: widget.branchId,
-      canCorrectSettledPayroll: _canManageRates(
+      canManageTeacherRates: _canManageRates(
         ref.read(capabilitySnapshotProvider).asData?.value,
       ),
     )..addListener(_refresh);

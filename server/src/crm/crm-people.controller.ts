@@ -39,6 +39,7 @@ import { TeacherStatsQuery } from "./dto/teacher-stats.query";
 import { ProvisionPersonAccessDto } from "./dto/provision-person-access.dto";
 import { PersonLifecycleCommandDto } from "./dto/person-lifecycle.dto";
 import { PersonLifecycleService } from "./person-lifecycle.service";
+import { XLSX_MIME } from "../common/ooxml-workbook.builder";
 
 @UseGuards(JwtAuthGuard)
 @Controller("crm")
@@ -263,12 +264,12 @@ export class CrmPeopleController {
     @Query() query: TeacherStatsQuery,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const csv = await this.payroll.exportTeacherStatsReport(actor, query);
+    const xlsx = await this.payroll.exportTeacherStatsReport(actor, query);
     res.set({
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": 'attachment; filename="teacher-stats.csv"',
+      "Content-Type": XLSX_MIME,
+      "Content-Disposition": 'attachment; filename="teacher-stats.xlsx"',
     });
-    return csv;
+    return xlsx;
   }
 
   @Get("staff")

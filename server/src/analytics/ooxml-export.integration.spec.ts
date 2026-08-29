@@ -17,7 +17,7 @@ import {
   OoxmlWorkbookBuilder,
   SYNC_EXPORT_ROW_LIMIT,
   XLSX_MIME,
-} from "./ooxml-workbook.builder";
+} from "../common/ooxml-workbook.builder";
 import { ReportExportService } from "./report-export.service";
 import { ReportingReadService } from "./reporting-read.service";
 

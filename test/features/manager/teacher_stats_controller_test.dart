@@ -29,10 +29,12 @@ class _FakeApiClient extends MagicApiClient {
     : super(baseUrl: 'http://localhost', tokenStore: MemoryMagicTokenStore());
 
   final String exportCsv = '\ufeffteacher,hours\nИван,1';
+  final List<int> exportXlsx = const [0x50, 0x4b, 0x03, 0x04];
   final List<_RecordedRequest> gets = [];
   final List<_RecordedPatch> patches = [];
   final List<Completer<Map<String, dynamic>>> reportRequests = [];
-  Completer<String>? exportRequest;
+  Completer<String>? legacyExportRequest;
+  Completer<List<int>>? exportRequest;
   Completer<Map<String, dynamic>>? lessonRateRequest;
 
   @override
@@ -43,9 +45,8 @@ class _FakeApiClient extends MagicApiClient {
   }) async {
     gets.add(_RecordedRequest(path, {...?queryParameters}));
     if (path == '/crm/reports/teacher-stats/export') {
-      final request = exportRequest;
-      if (request != null) return await request.future as T;
-      return exportCsv as T;
+      final request = legacyExportRequest;
+      return request == null ? exportCsv as T : await request.future as T;
     }
     if (path == '/crm/reports/teacher-stats') {
       if (reportRequests.isNotEmpty) {
@@ -61,6 +62,16 @@ class _FakeApiClient extends MagicApiClient {
       return <String, dynamic>{'fields': <dynamic>[]} as T;
     }
     return <String, dynamic>{'items': <dynamic>[]} as T;
+  }
+
+  @override
+  Future<List<int>> downloadBytes(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+  }) async {
+    gets.add(_RecordedRequest(path, {...?queryParameters}));
+    final request = exportRequest;
+    return request == null ? exportXlsx : request.future;
   }
 
   @override
@@ -95,7 +106,7 @@ TeacherStatsController _controller(
             ReportFileOpenResult(path: 'C:/reports/$filename', opened: false),
     filterRange: filterRange,
     branchId: branchId,
-    canCorrectSettledPayroll: canManageTeacherRates,
+    canManageTeacherRates: canManageTeacherRates,
     clock: () => DateTime.utc(2026, 8, 27, 12),
   );
 }
@@ -142,7 +153,7 @@ void main() {
         openedBytes = bytes;
         openedFilename = filename;
         return const ReportFileOpenResult(
-          path: 'C:/reports/teacher-stats.csv',
+          path: 'C:/reports/teacher-stats.xlsx',
           opened: true,
         );
       },
@@ -175,8 +186,8 @@ void main() {
         'category': 'Старший',
       },
     );
-    expect(openedBytes.take(3), <int>[0xef, 0xbb, 0xbf]);
-    expect(openedFilename, 'teacher-stats-2026-03-02.csv');
+    expect(openedBytes.take(4), <int>[0x50, 0x4b, 0x03, 0x04]);
+    expect(openedFilename, 'teacher-stats-2026-03-02.xlsx');
     expect(result.opened, isTrue);
   });
 
@@ -345,17 +356,17 @@ void main() {
 
   test('export success completed after dispose preserves its result', () async {
     final api = _FakeApiClient();
-    final exportRequest = Completer<String>();
+    final exportRequest = Completer<List<int>>();
     api.exportRequest = exportRequest;
     final controller = _controller(api);
 
     final export = controller.export();
     await Future<void>.delayed(Duration.zero);
     controller.dispose();
-    exportRequest.complete(api.exportCsv);
+    exportRequest.complete(api.exportXlsx);
 
     final result = await export;
-    expect(result.path, 'C:/reports/teacher-stats-2026-08-01.csv');
+    expect(result.path, 'C:/reports/teacher-stats-2026-08-01.xlsx');
     expect(controller.state.exporting, isTrue);
   });
 
@@ -363,7 +374,7 @@ void main() {
     'export error completed after dispose preserves the service error',
     () async {
       final api = _FakeApiClient();
-      final exportRequest = Completer<String>();
+      final exportRequest = Completer<List<int>>();
       api.exportRequest = exportRequest;
       final controller = _controller(api);
 

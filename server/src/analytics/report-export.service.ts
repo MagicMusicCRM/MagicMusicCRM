@@ -27,7 +27,7 @@ import {
   OoxmlWorkbookBuilder,
   OoxmlWorkbookInput,
   XLSX_MIME,
-} from "./ooxml-workbook.builder";
+} from "../common/ooxml-workbook.builder";
 import { ReportingReadService } from "./reporting-read.service";
 
 interface ExportJobRow {

@@ -135,6 +135,10 @@ void main() {
 
     expect(find.text('Пробное — Анна'), findsOneWidget);
     expect(find.text('Гитара-1'), findsOneWidget);
+    expect(find.textContaining('выплачено'), findsNothing);
+    expect(find.textContaining('сальдо периода'), findsNothing);
+    expect(find.textContaining('доплаты'), findsNothing);
+    expect(find.textContaining('вычеты'), findsNothing);
     expect(find.byType(Checkbox), findsNothing);
     expect(find.byIcon(Icons.edit_rounded), findsNothing);
 

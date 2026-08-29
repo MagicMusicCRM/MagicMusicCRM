@@ -10,7 +10,7 @@ import { SetTeacherRateDto } from "./dto/set-teacher-rate.dto";
 import { TeacherStatsQuery } from "./dto/teacher-stats.query";
 import { TeacherPayrollCommandService } from "./payroll/teacher-payroll-command.service";
 import { TeacherPayrollQueryService } from "./payroll/teacher-payroll-query.service";
-import { TeacherStatsCsvService } from "./payroll/teacher-stats-csv.service";
+import { TeacherStatsXlsxService } from "./payroll/teacher-stats-xlsx.service";
 import { TeacherStatsReportService } from "./payroll/teacher-stats-report.service";
 
 export type {
@@ -24,7 +24,7 @@ export class PayrollService {
     private readonly query: TeacherPayrollQueryService,
     private readonly commands: TeacherPayrollCommandService,
     private readonly report: TeacherStatsReportService,
-    private readonly csv: TeacherStatsCsvService,
+    private readonly xlsx: TeacherStatsXlsxService,
   ) {}
 
   async getTeacherPayroll(actor: ActorContext, teacherId: string) {
@@ -120,7 +120,7 @@ export class PayrollService {
   async exportTeacherStatsReport(
     actor: ActorContext,
     query: TeacherStatsQuery,
-  ): Promise<string> {
-    return this.csv.exportTeacherStatsReport(actor, query);
+  ): Promise<Buffer> {
+    return this.xlsx.exportTeacherStatsReport(actor, query);
   }
 }

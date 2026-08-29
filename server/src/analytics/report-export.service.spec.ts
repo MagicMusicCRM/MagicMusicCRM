@@ -3,7 +3,7 @@ import { AuditService } from "../audit/audit.service";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 import { ClientStatusReadService } from "./client-status-read.service";
-import { OoxmlWorkbookBuilder } from "./ooxml-workbook.builder";
+import { OoxmlWorkbookBuilder } from "../common/ooxml-workbook.builder";
 import { ReportExportRequestDto } from "./dto/report-export.dto";
 import { ReportExportService } from "./report-export.service";
 import { ReportingReadService } from "./reporting-read.service";

@@ -4,7 +4,7 @@ extension _TeacherStatsViewSections on TeacherStatsView {
   Widget _unitRow(BuildContext context, Map<String, dynamic> unit) {
     final meta = _unitMeta(unit);
     return InkWell(
-      onTap: _state.canCorrectSettledPayroll
+      onTap: _state.canManageTeacherRates
           ? () => _editUnit(context, unit, meta.isGroup)
           : null,
       borderRadius: BorderRadius.circular(8),
@@ -97,7 +97,7 @@ extension _TeacherStatsViewSections on TeacherStatsView {
   }
 
   Widget _unitSelection(_TeacherStatsUnitMeta meta) {
-    if (!_state.canCorrectSettledPayroll) {
+    if (!_state.canManageTeacherRates) {
       return const SizedBox(width: 28, height: 28);
     }
     final unitKey = meta.unitKey;
@@ -115,7 +115,7 @@ extension _TeacherStatsViewSections on TeacherStatsView {
   }
 
   Widget _unitActionIcon(_TeacherStatsUnitMeta meta) {
-    if (meta.settled > 0 && !_state.canCorrectSettledPayroll) {
+    if (meta.settled > 0 && !_state.canManageTeacherRates) {
       return const Row(
         children: [
           SizedBox(width: 4),
@@ -126,7 +126,7 @@ extension _TeacherStatsViewSections on TeacherStatsView {
         ],
       );
     }
-    if (meta.isGroup && _state.canCorrectSettledPayroll) {
+    if (meta.isGroup && _state.canManageTeacherRates) {
       return const Row(
         children: [SizedBox(width: 4), Icon(Icons.edit_rounded, size: 14)],
       );
@@ -135,7 +135,7 @@ extension _TeacherStatsViewSections on TeacherStatsView {
   }
 
   Widget _settledText(BuildContext context, int settled) {
-    final text = _state.canCorrectSettledPayroll
+    final text = _state.canManageTeacherRates
         ? 'Зафиксировано расчётов: $settled · директор может исправить массово'
         : 'Зафиксировано расчётов: $settled · исправление через карточку занятия';
     return Text(
@@ -152,7 +152,7 @@ extension _TeacherStatsViewSections on TeacherStatsView {
     Map<String, dynamic> unit,
     bool isGroup,
   ) async {
-    if (!_state.canCorrectSettledPayroll) return;
+    if (!_state.canManageTeacherRates) return;
     if (isGroup) return _editGroup(context, unit);
     await _editLessons(context, unit);
   }
@@ -193,7 +193,7 @@ extension _TeacherStatsViewSections on TeacherStatsView {
       );
       return;
     }
-    final description = _state.canCorrectSettledPayroll
+    final description = _state.canManageTeacherRates
         ? 'Ставка применится к ${lessonIds.length} занятиям этого периода. '
               'Зафиксированные расчёты будут исправлены с сохранением прежних фактов в аудите.'
         : 'Ставка применится к ${lessonIds.length} незакрытым занятиям этого периода. '
@@ -237,10 +237,7 @@ extension _TeacherStatsViewSections on TeacherStatsView {
     );
   }
 
-  Widget _moneySummary(
-    Map<String, dynamic> value, {
-    bool includeOptional = false,
-  }) {
+  Widget _moneySummary(Map<String, dynamic> value) {
     return Wrap(
       spacing: 10,
       runSpacing: 4,
@@ -251,15 +248,6 @@ extension _TeacherStatsViewSections on TeacherStatsView {
         ),
         Text(controller.hours(value['hoursTotal'])),
         Text('начислено ${controller.rub(value['accruedTotal'])}'),
-        if (!includeOptional || controller.number(value['bonusTotal']) != 0)
-          Text('доплаты ${controller.rub(value['bonusTotal'])}'),
-        if (!includeOptional || controller.number(value['deductionTotal']) != 0)
-          Text('вычеты ${controller.rub(value['deductionTotal'])}'),
-        Text('выплачено ${controller.rub(value['paidTotal'])}'),
-        Text(
-          'сальдо периода ${controller.rub(value['periodBalance'])}',
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
       ],
     );
   }

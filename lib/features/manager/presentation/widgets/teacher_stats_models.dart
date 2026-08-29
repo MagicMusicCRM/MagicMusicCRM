@@ -84,7 +84,7 @@ class TeacherStatsState {
   const TeacherStatsState({
     required this.query,
     required this.usesExternalRange,
-    required this.canCorrectSettledPayroll,
+    required this.canManageTeacherRates,
     this.loading = true,
     this.error,
     this.report = const {},
@@ -100,7 +100,7 @@ class TeacherStatsState {
 
   final TeacherStatsQuery query;
   final bool usesExternalRange;
-  final bool canCorrectSettledPayroll;
+  final bool canManageTeacherRates;
   final bool loading;
   final Object? error;
   final Map<String, dynamic> report;
@@ -116,7 +116,7 @@ class TeacherStatsState {
   TeacherStatsState copyWith({
     TeacherStatsQuery? query,
     bool? usesExternalRange,
-    bool? canCorrectSettledPayroll,
+    bool? canManageTeacherRates,
     bool? loading,
     Object? error = _unsetTeacherStatsFilter,
     Map<String, dynamic>? report,
@@ -132,8 +132,8 @@ class TeacherStatsState {
     return TeacherStatsState(
       query: query ?? this.query,
       usesExternalRange: usesExternalRange ?? this.usesExternalRange,
-      canCorrectSettledPayroll:
-          canCorrectSettledPayroll ?? this.canCorrectSettledPayroll,
+      canManageTeacherRates:
+          canManageTeacherRates ?? this.canManageTeacherRates,
       loading: loading ?? this.loading,
       error: identical(error, _unsetTeacherStatsFilter) ? this.error : error,
       report: report ?? this.report,

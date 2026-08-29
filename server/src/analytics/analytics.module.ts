@@ -3,13 +3,13 @@ import { JwtModule } from "@nestjs/jwt";
 import { AuditModule } from "../audit/audit.module";
 import { DatabaseModule } from "../db/database.module";
 import { CrmAnalyticsSupportModule } from "../crm/crm-analytics-support.module";
+import { OoxmlWorkbookModule } from "../common/ooxml-workbook.module";
 import { JwtAuthGuard } from "../common/security/jwt-auth.guard";
 import { AnalyticsController } from "./analytics.controller";
 import { AnalyticsService } from "./analytics.service";
 import { AnalyticsRefreshWorker } from "./analytics-refresh.worker";
 import { ClientStatusReadService } from "./client-status-read.service";
 import { ReportingReadService } from "./reporting-read.service";
-import { OoxmlWorkbookBuilder } from "./ooxml-workbook.builder";
 import { ReportExportService } from "./report-export.service";
 
 @Module({
@@ -17,6 +17,7 @@ import { ReportExportService } from "./report-export.service";
     DatabaseModule,
     AuditModule,
     CrmAnalyticsSupportModule,
+    OoxmlWorkbookModule,
     JwtModule.register({}),
   ],
   controllers: [AnalyticsController],
@@ -25,7 +26,6 @@ import { ReportExportService } from "./report-export.service";
     AnalyticsRefreshWorker,
     ClientStatusReadService,
     ReportingReadService,
-    OoxmlWorkbookBuilder,
     ReportExportService,
     JwtAuthGuard,
   ],

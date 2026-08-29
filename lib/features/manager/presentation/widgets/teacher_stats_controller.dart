@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -43,7 +41,7 @@ class TeacherStatsController extends ChangeNotifier {
     required ReportFileOpener reportFileOpener,
     required DateTimeRange? filterRange,
     required String? branchId,
-    required bool canCorrectSettledPayroll,
+    required bool canManageTeacherRates,
     DateTime Function()? clock,
   }) : _crm = crm,
        _settings = settings,
@@ -56,7 +54,7 @@ class TeacherStatsController extends ChangeNotifier {
     _state = TeacherStatsState(
       query: TeacherStatsQuery(from: from, to: to, branchId: branchId),
       usesExternalRange: filterRange != null,
-      canCorrectSettledPayroll: canCorrectSettledPayroll,
+      canManageTeacherRates: canManageTeacherRates,
     );
   }
 
@@ -163,12 +161,12 @@ class TeacherStatsController extends ChangeNotifier {
     await loadReport();
   }
 
-  void updateCorrectionPolicy(bool canCorrectSettledPayroll) {
+  void updateCorrectionPolicy(bool canManageTeacherRates) {
     if (_lifecycle.isDisposed) return;
-    if (_state.canCorrectSettledPayroll == canCorrectSettledPayroll) return;
+    if (_state.canManageTeacherRates == canManageTeacherRates) return;
     _state = _state.copyWith(
-      canCorrectSettledPayroll: canCorrectSettledPayroll,
-      selectedUnits: canCorrectSettledPayroll ? _state.selectedUnits : const {},
+      canManageTeacherRates: canManageTeacherRates,
+      selectedUnits: canManageTeacherRates ? _state.selectedUnits : const {},
     );
   }
 
@@ -221,7 +219,7 @@ class TeacherStatsController extends ChangeNotifier {
 
   Future<void> applyRate(TeacherStatsRateChange change) async {
     if (_lifecycle.isDisposed ||
-        !_state.canCorrectSettledPayroll ||
+        !_state.canManageTeacherRates ||
         change.lessonIds.isEmpty ||
         _state.applyingRate) {
       return;
@@ -251,7 +249,7 @@ class TeacherStatsController extends ChangeNotifier {
   }
 
   Future<void> updateGroupRate(String groupId, num? rate) async {
-    if (_lifecycle.isDisposed || !_state.canCorrectSettledPayroll) return;
+    if (_lifecycle.isDisposed || !_state.canManageTeacherRates) return;
     final requestGeneration = _lifecycle.begin(_TeacherStatsRequest.groupRate);
     final group = await _crm.getGroup(groupId);
     await _crm.updateGroup(
@@ -275,7 +273,7 @@ class TeacherStatsController extends ChangeNotifier {
     _notifyListenersIfActive();
     try {
       final query = _state.query;
-      final csv = await _crm.exportTeacherStatsReport(
+      final bytes = await _crm.exportTeacherStatsReport(
         from: query.from.toUtc().toIso8601String(),
         to: query.to.toUtc().toIso8601String(),
         branchId: query.branchId,
@@ -285,10 +283,9 @@ class TeacherStatsController extends ChangeNotifier {
         discipline: query.discipline,
         category: query.category,
       );
-      final bytes = utf8.encode(csv);
-      validateReportExportBytes(bytes, 'csv');
+      validateReportExportBytes(bytes, 'xlsx');
       final stamp = DateFormat('yyyy-MM-dd').format(query.from);
-      return _reportFileOpener(bytes, 'teacher-stats-$stamp.csv');
+      return _reportFileOpener(bytes, 'teacher-stats-$stamp.xlsx');
     } finally {
       if (_lifecycle.isCurrent(
         _TeacherStatsRequest.export,
@@ -301,7 +298,7 @@ class TeacherStatsController extends ChangeNotifier {
   }
 
   void toggleUnit(String unitKey, List<String> lessonIds) {
-    if (_lifecycle.isDisposed || !_state.canCorrectSettledPayroll) return;
+    if (_lifecycle.isDisposed || !_state.canManageTeacherRates) return;
     final selected = {
       for (final entry in _state.selectedUnits.entries)
         entry.key: List<String>.unmodifiable(entry.value),
@@ -323,7 +320,7 @@ class TeacherStatsController extends ChangeNotifier {
   }
 
   List<String> editableLessonIdsFor(Map<String, dynamic> unit) {
-    final source = _state.canCorrectSettledPayroll
+    final source = _state.canManageTeacherRates
         ? unit['lessonIds']
         : unit['editableLessonIds'];
     return [
@@ -333,11 +330,11 @@ class TeacherStatsController extends ChangeNotifier {
   }
 
   List<String> selectableLessonIdsFor(Map<String, dynamic> unit) {
-    if (!_state.canCorrectSettledPayroll) return const [];
+    if (!_state.canManageTeacherRates) return const [];
     final lessonIds = editableLessonIdsFor(unit);
     final isGroup =
         unit['unitType'] == 'group' || unit['unitType'] == 'group_trial';
-    if (lessonIds.isEmpty || (!_state.canCorrectSettledPayroll && isGroup)) {
+    if (lessonIds.isEmpty || (!_state.canManageTeacherRates && isGroup)) {
       return const [];
     }
     return lessonIds;

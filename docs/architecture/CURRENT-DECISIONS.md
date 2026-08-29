@@ -344,6 +344,11 @@ compensation совместимы, но поля игнорируются в п�
 явные rate CRUD/bulk/correction endpoints остаются закрыты. Payroll read/payout
 не расширяют rate-write.
 
+DECISION (owner, 2026-08-29): Новый teacher-stats export строится как XLSX
+accrual report без payout-полей; stateless OOXML builder предоставляется из
+neutral common module, чтобы CRM не импортировал Analytics. Payout storage,
+audit и compatibility routes остаются до отдельного adoption/telemetry gate.
+
 DECISION: Lead loss reason хранит `reason_name_snapshot` и
 `reason_kind_snapshot` в каждой исторической смене статуса. Переименование не
 меняет прошлую аналитику. `lead_status_history` append-only; единственное узкое

@@ -3,8 +3,6 @@ import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/widgets/ru_phone_field.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_model.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_employment_fields.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_payroll_controller.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_payroll_section.dart';
 
 import 'teacher_employment_reference_gateway.dart';
 
@@ -19,7 +17,6 @@ class TeacherDetailContent extends StatelessWidget {
     required this.employmentKey,
     required this.employmentInitial,
     required this.employmentReferenceGateway,
-    required this.payrollController,
     required this.actorRole,
     required this.canManageCredentials,
     required this.canManageTeacherRates,
@@ -37,7 +34,6 @@ class TeacherDetailContent extends StatelessWidget {
   final GlobalKey<TeacherEmploymentFieldsState> employmentKey;
   final TeacherEmploymentInitial employmentInitial;
   final TeacherEmploymentReferenceGateway employmentReferenceGateway;
-  final TeacherPayrollController payrollController;
   final String actorRole;
   final bool canManageCredentials;
   final bool canManageTeacherRates;
@@ -90,11 +86,6 @@ class TeacherDetailContent extends StatelessWidget {
             ),
           ),
         ],
-        const SizedBox(height: 12),
-        TeacherPayrollSection(
-          controller: payrollController,
-          canManageHistory: canManageCredentials,
-        ),
         const SizedBox(height: 12),
         TextField(
           controller: nameController,

@@ -14,7 +14,7 @@ const paths = {
   query: resolve(payrollDirectory, "teacher-payroll-query.service.ts"),
   command: resolve(payrollDirectory, "teacher-payroll-command.service.ts"),
   report: resolve(payrollDirectory, "teacher-stats-report.service.ts"),
-  csv: resolve(payrollDirectory, "teacher-stats-csv.service.ts"),
+  xlsx: resolve(payrollDirectory, "teacher-stats-xlsx.service.ts"),
 } as const;
 
 const sources = Object.fromEntries(
@@ -123,7 +123,7 @@ const facadeContracts = [
   ["updateTeacherPayout", "commands", ["actor", "teacherId", "entryId", "dto", "metadata"]],
   ["deleteTeacherPayout", "commands", ["actor", "teacherId", "entryId", "dto", "metadata"]],
   ["getTeacherStatsReport", "report", ["actor", "query"]],
-  ["exportTeacherStatsReport", "csv", ["actor", "query"]],
+  ["exportTeacherStatsReport", "xlsx", ["actor", "query"]],
 ] as const;
 
 const assertFacadeAst = () => {
@@ -143,14 +143,14 @@ const assertFacadeAst = () => {
   expect(constructor.parameters).toHaveLength(4);
   expect(
     constructor.parameters.map((parameter) => identifierName(parameter.name)),
-  ).toEqual(["query", "commands", "report", "csv"]);
+  ).toEqual(["query", "commands", "report", "xlsx"]);
   expect(
     constructor.parameters.map((parameter) => parameter.type?.getText(sourceFile)),
   ).toEqual([
     "TeacherPayrollQueryService",
     "TeacherPayrollCommandService",
     "TeacherStatsReportService",
-    "TeacherStatsCsvService",
+    "TeacherStatsXlsxService",
   ]);
   for (const parameter of constructor.parameters) {
     expect(
@@ -194,7 +194,7 @@ describe("PayrollService semantic boundary", () => {
       "TeacherPayrollQueryService",
       "TeacherPayrollCommandService",
       "TeacherStatsReportService",
-      "TeacherStatsCsvService",
+      "TeacherStatsXlsxService",
     ];
     const providers = moduleMetadataIdentifiers("providers");
     const exports = moduleMetadataIdentifiers("exports");
@@ -222,7 +222,7 @@ describe("PayrollService semantic boundary", () => {
     expect(sourceNloc(sources.query)).toBeLessThanOrEqual(180);
     expect(sourceNloc(sources.command)).toBeLessThanOrEqual(520);
     expect(sourceNloc(sources.report)).toBeLessThanOrEqual(420);
-    expect(sourceNloc(sources.csv)).toBeLessThanOrEqual(170);
+    expect(sourceNloc(sources.xlsx)).toBeLessThanOrEqual(170);
   });
 
   it("counts typed and untyped mutation calls but ignores text decoys", () => {

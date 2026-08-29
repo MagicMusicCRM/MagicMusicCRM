@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import { DatabaseService } from "../db/database.service";
+import * as ExcelJS from "exceljs";
 import { PlatformIntegrityService } from "../platform/platform-integrity.service";
 import { CrmPolicy } from "./crm.policy";
 import { PayrollService } from "./payroll.service";
@@ -7,7 +8,8 @@ import { PayrollAccrualCalculator } from "./payroll/payroll-accrual-calculator";
 import { PayrollReadRepository } from "./payroll/payroll-read.repository";
 import { TeacherPayrollCommandService } from "./payroll/teacher-payroll-command.service";
 import { TeacherPayrollQueryService } from "./payroll/teacher-payroll-query.service";
-import { TeacherStatsCsvService } from "./payroll/teacher-stats-csv.service";
+import { TeacherStatsXlsxService } from "./payroll/teacher-stats-xlsx.service";
+import { OoxmlWorkbookBuilder } from "../common/ooxml-workbook.builder";
 import { TeacherStatsReportService } from "./payroll/teacher-stats-report.service";
 
 describe("PayrollService (KVA-238 teacher payroll)", () => {
@@ -65,12 +67,15 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
       policy as unknown as CrmPolicy,
       calculator,
     );
-    const csvService = new TeacherStatsCsvService(reportService);
+    const xlsxService = new TeacherStatsXlsxService(
+      reportService,
+      new OoxmlWorkbookBuilder(),
+    );
     const service = new PayrollService(
       queryService,
       commandService,
       reportService,
-      csvService,
+      xlsxService,
     );
     return { service, query, integrity, policy, commandService };
   };
@@ -106,7 +111,7 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
       {} as TeacherPayrollQueryService,
       commands,
       {} as TeacherStatsReportService,
-      {} as TeacherStatsCsvService,
+      {} as TeacherStatsXlsxService,
     );
     return { service, integrity, policy };
   };
@@ -138,7 +143,7 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
         {} as TeacherPayrollQueryService,
         commands,
         {} as TeacherStatsReportService,
-        {} as TeacherStatsCsvService,
+        {} as TeacherStatsXlsxService,
       ),
       integrity,
     };
@@ -688,7 +693,7 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
     expect(query).not.toHaveBeenCalled();
   });
 
-  it("экспортирует отчёт в CSV для Excel", async () => {
+  it("экспортирует месячные начисления в валидный XLSX без выплат", async () => {
     const { service } = createServiceWithQueryResults([
       { rows: [lessonRow({ id: "l-1", student_id: "s-1", is_trial: true })] },
       {
@@ -698,19 +703,44 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
       { rows: [] },
     ]);
 
-    const csv = await service.exportTeacherStatsReport(actor, {
+    const bytes = Buffer.from(await service.exportTeacherStatsReport(actor, {
       from: "2026-07-01T00:00:00.000Z",
-    });
+    }));
 
-    // BOM + ';' so Excel in a RU locale opens it in columns, not mojibake.
-    expect(csv.startsWith("﻿")).toBe(true);
-    expect(csv).toContain("Преподаватель;Учебная единица;Тип");
-    // A name containing ';' and '"' must not break the column layout.
-    expect(csv).toContain('"\'=Иван ""Гитарист""; Петров"');
-    expect(csv).toContain("2026-07-05 (1 астр.ч.)");
-    // A zero rate is the trial "входит в оклад" case, not a missing value.
-    expect(csv).toContain("Входит в оклад");
-    expect(csv).toContain("ИТОГО");
+    expect(bytes.subarray(0, 2).toString("ascii")).toBe("PK");
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(Uint8Array.from(bytes).buffer);
+    const sheet = workbook.worksheets[0]!;
+    const headers = Array.from(
+      sheet.getRow(1).values as ExcelJS.CellValue[],
+    ).slice(1);
+    expect(headers).toEqual([
+      "Преподаватель",
+      "Учебная единица",
+      "Тип",
+      "Дни",
+      "Занятий",
+      "Оплачиваемых занятий",
+      "Часы",
+      "Ставка за астр. час",
+      "Начислено",
+    ]);
+    expect(sheet.getCell("A2").value).toBe("'=Иван \"Гитарист\"; Петров");
+    expect(sheet.getCell("D2").value).toBe("2026-07-05 (1 астр.ч.)");
+    expect(sheet.getCell("H2").value).toBe("Входит в оклад");
+    expect(sheet.getCell("I2").value).toBe(0);
+    expect(
+      headers.map((value) => String(value)),
+    ).not.toContain("Оплачено");
+    expect(
+      headers.map((value) => String(value)),
+    ).not.toContain("Доплаты");
+    expect(
+      headers.map((value) => String(value)),
+    ).not.toContain("Вычеты");
+    expect(
+      headers.map((value) => String(value)),
+    ).not.toContain("Сальдо периода");
   });
 
   it("createTeacherPayout сохраняет выплату атомарно", async () => {

@@ -127,6 +127,11 @@ boundary.
   Исправление
   истории остаётся audited void/superseding fact с reason, expected version,
   idempotency и audit/outbox.
+- Экран статистики преподавателей — месячный отчёт о проведённых занятиях и
+  начислениях. Он показывает и выгружает только данные до `Начислено` в XLSX;
+  выплаты, доплаты, вычеты, сальдо и история выплат не являются частью нового
+  продукта. Исторические payout API и audit-факты сохраняются для
+  поддерживаемых старых клиентов до отдельного adoption/telemetry gate.
 - Любая денежная команда сохраняет transaction, expected version,
   idempotency, audit/outbox и reconciliation semantics.
 

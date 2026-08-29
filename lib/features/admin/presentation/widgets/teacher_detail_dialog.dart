@@ -226,7 +226,6 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
             employmentKey: _employmentKey,
             employmentInitial: _employmentInitial,
             employmentReferenceGateway: _employmentReferenceGateway,
-            payrollController: _payrollController,
             actorRole: role,
             canManageCredentials: canManageCredentials,
             canManageTeacherRates: canManageTeacherRates,

@@ -1,34 +1,25 @@
 import { Injectable } from "@nestjs/common";
 import { ActorContext } from "../../common/security/actor-context";
+import {
+  OoxmlCell,
+  OoxmlWorkbookBuilder,
+} from "../../common/ooxml-workbook.builder";
 import { TeacherStatsQuery } from "../dto/teacher-stats.query";
 import { TeacherStatsReportService } from "./teacher-stats-report.service";
 
 @Injectable()
-export class TeacherStatsCsvService {
-  constructor(private readonly report: TeacherStatsReportService) {}
+export class TeacherStatsXlsxService {
+  constructor(
+    private readonly report: TeacherStatsReportService,
+    private readonly workbook: OoxmlWorkbookBuilder,
+  ) {}
 
   async exportTeacherStatsReport(
     actor: ActorContext,
     query: TeacherStatsQuery,
-  ): Promise<string> {
+  ): Promise<Buffer> {
     const report = await this.report.getTeacherStatsReport(actor, query);
-    const rows: string[][] = [
-      [
-        "Преподаватель",
-        "Учебная единица",
-        "Тип",
-        "Дни",
-        "Занятий",
-        "Оплачиваемых занятий",
-        "Часы",
-        "Ставка за астр. час",
-        "Начислено",
-        "Доплаты",
-        "Вычеты",
-        "Оплачено",
-        "Сальдо периода",
-      ],
-    ];
+    const rows: OoxmlCell[][] = [];
     for (const item of report.items) {
       for (const unit of item.units) rows.push(this.unitRow(item, unit));
       rows.push([
@@ -36,15 +27,11 @@ export class TeacherStatsCsvService {
         "ИТОГО по преподавателю",
         "",
         "",
-        String(item.completedLessons),
-        String(item.payableLessons),
-        String(item.hoursTotal),
+        item.completedLessons,
+        item.payableLessons,
+        item.hoursTotal,
         "",
-        String(item.accruedTotal),
-        String(item.bonusTotal),
-        String(item.deductionTotal),
-        String(item.paidTotal),
-        String(item.periodBalance),
+        item.accruedTotal,
       ]);
     }
     rows.push([
@@ -52,23 +39,31 @@ export class TeacherStatsCsvService {
       "",
       "",
       "",
-      String(report.totals.completedLessons),
-      String(report.totals.payableLessons),
-      String(report.totals.hoursTotal),
+      report.totals.completedLessons,
+      report.totals.payableLessons,
+      report.totals.hoursTotal,
       "",
-      String(report.totals.accruedTotal),
-      String(report.totals.bonusTotal),
-      String(report.totals.deductionTotal),
-      String(report.totals.paidTotal),
-      String(report.totals.periodBalance),
+      report.totals.accruedTotal,
     ]);
-    return "﻿" + rows.map((row) => row.map(this.escape).join(";")).join("\r\n");
+    return this.workbook.build({
+      sheetName: "Начисления преподавателей",
+      columns: [
+        { key: "teacher", header: "Преподаватель", type: "string" },
+        { key: "unit", header: "Учебная единица", type: "string" },
+        { key: "type", header: "Тип", type: "string" },
+        { key: "days", header: "Дни", type: "string", width: 32 },
+        { key: "lessons", header: "Занятий", type: "number" },
+        { key: "payable", header: "Оплачиваемых занятий", type: "number" },
+        { key: "hours", header: "Часы", type: "number" },
+        { key: "rate", header: "Ставка за астр. час", type: "string" },
+        { key: "accrued", header: "Начислено", type: "money" },
+      ],
+      rows,
+    });
   }
 
   private unitRow(
-    item: {
-      teacherName: string;
-    },
+    item: { teacherName: string },
     unit: {
       unitName: string;
       unitType: string;
@@ -79,21 +74,17 @@ export class TeacherStatsCsvService {
       rate: number;
       accruedTotal: number;
     },
-  ): string[] {
+  ): OoxmlCell[] {
     return [
       this.excelText(item.teacherName),
       this.excelText(unit.unitName),
       this.excelText(this.unitTypeLabel(unit.unitType)),
       unit.days.map((day) => `${day.date} (${day.hours} астр.ч.)`).join(" "),
-      String(unit.completedLessons),
-      String(unit.payableLessons),
-      String(unit.hoursTotal),
+      unit.completedLessons,
+      unit.payableLessons,
+      unit.hoursTotal,
       unit.rate === 0 ? "Входит в оклад" : String(unit.rate),
-      String(unit.accruedTotal),
-      "",
-      "",
-      "",
-      "",
+      unit.accruedTotal,
     ];
   }
 
@@ -110,9 +101,5 @@ export class TeacherStatsCsvService {
 
   private excelText(value: string): string {
     return /^[=+\-@]/.test(value) ? `'${value}` : value;
-  }
-
-  private escape(value: string): string {
-    return /[";\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
   }
 }

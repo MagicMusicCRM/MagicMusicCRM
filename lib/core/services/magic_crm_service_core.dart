@@ -652,8 +652,8 @@ extension MagicCrmCore on MagicCrmService {
     );
   }
 
-  /// The same report as CSV (see «Экспорт»); the caller saves the bytes.
-  Future<String> exportTeacherStatsReport({
+  /// The XLSX report; the caller validates and saves the bytes.
+  Future<List<int>> exportTeacherStatsReport({
     String? from,
     String? to,
     String? branchId,
@@ -663,7 +663,7 @@ extension MagicCrmCore on MagicCrmService {
     String? discipline,
     String? category,
   }) {
-    return _api.get<String>(
+    return _api.downloadBytes(
       '/crm/reports/teacher-stats/export',
       queryParameters: _teacherStatsQuery(
         from: from,

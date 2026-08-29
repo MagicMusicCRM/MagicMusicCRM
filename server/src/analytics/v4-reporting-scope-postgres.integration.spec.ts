@@ -15,7 +15,7 @@ import { StudentFinanceQueryService } from "../crm/finance/student-finance-query
 import { DatabaseService } from "../db/database.service";
 import { RealtimeBus } from "../realtime/realtime-bus";
 import { ClientStatusReadService } from "./client-status-read.service";
-import { OoxmlWorkbookBuilder } from "./ooxml-workbook.builder";
+import { OoxmlWorkbookBuilder } from "../common/ooxml-workbook.builder";
 import { ReportExportService } from "./report-export.service";
 import { ReportingReadService } from "./reporting-read.service";
 

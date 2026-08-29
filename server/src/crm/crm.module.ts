@@ -69,7 +69,8 @@ import { PayrollReadRepository } from "./payroll/payroll-read.repository";
 import { TeacherPayrollQueryService } from "./payroll/teacher-payroll-query.service";
 import { TeacherPayrollCommandService } from "./payroll/teacher-payroll-command.service";
 import { TeacherStatsReportService } from "./payroll/teacher-stats-report.service";
-import { TeacherStatsCsvService } from "./payroll/teacher-stats-csv.service";
+import { TeacherStatsXlsxService } from "./payroll/teacher-stats-xlsx.service";
+import { OoxmlWorkbookModule } from "../common/ooxml-workbook.module";
 import { PayrollService } from "./payroll.service";
 import { LeadWebhookController } from "./lead-webhook.controller";
 import { ScheduleSeriesWorker } from "./schedule-series.worker";
@@ -172,6 +173,7 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
 
 @Module({
   imports: [
+    OoxmlWorkbookModule,
     AuditModule,
     AuthModule,
     AccessControlModule,
@@ -256,7 +258,7 @@ import { LessonSettlementCorrectionService } from "./schedule/lesson-settlement-
     TeacherPayrollQueryService,
     TeacherPayrollCommandService,
     TeacherStatsReportService,
-    TeacherStatsCsvService,
+    TeacherStatsXlsxService,
     PayrollService,
     HolliHopMetadataService,
     ScheduleSeriesWorker,
