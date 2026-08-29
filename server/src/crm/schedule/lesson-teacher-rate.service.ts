@@ -49,7 +49,7 @@ export class LessonTeacherRateService {
       actorUserId: actor.userId,
       authorization: {
         actor,
-        capabilityKey: "commerce.teacher_payroll.write",
+        capabilityKey: "config.commerce.manage",
       },
       operation: "crm.lessons-teacher-rate.bulk-set",
       idempotencyKey: metadata.idempotencyKey,

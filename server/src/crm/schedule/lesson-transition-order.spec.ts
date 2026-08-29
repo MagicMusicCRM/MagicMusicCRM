@@ -216,6 +216,11 @@ describe("Lesson transition runtime ordering", () => {
       const policy = {
         assertCanWriteCrm: jest.fn(),
         assertCanSupplyTeacherCompensation: jest.fn(),
+        canManageTeacherCompensation: jest.fn(() => false),
+        teacherCompensationMutationAuthorization: jest.fn((targetActor) => ({
+          actor: targetActor,
+          capabilityKey: "schedule.lesson.write",
+        })),
       } as unknown as CrmPolicy;
       const tokens = {
         verifyLessonTransition: jest.fn(() => ({

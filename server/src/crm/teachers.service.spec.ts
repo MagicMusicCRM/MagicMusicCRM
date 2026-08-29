@@ -12,9 +12,38 @@ describe("TeachersService", () => {
   const createService = (
     rows: Record<string, unknown>[] = [],
     policyOverride?: CrmPolicy,
+    authoritativeRole: "manager" | "director" | "system_admin" = "director",
   ) => {
     const query = jest.fn().mockResolvedValue({ rows });
-    const database = { query };
+    const transactionQuery = jest.fn(
+      (sql: string, params?: unknown[]) => {
+        if (sql.includes("select id from app.users")) {
+          return Promise.resolve({ rows: [{ id: params?.[0] }] });
+        }
+        if (sql.includes("from app.role_packages package")) {
+          return Promise.resolve({ rows: [{ id: "package-director" }] });
+        }
+        if (sql.includes("select\n        user_account.role")) {
+          return Promise.resolve({
+            rows: [
+              {
+                role: authoritativeRole,
+                active: true,
+                definition_active: true,
+                role_effect: "allow",
+                override_effect: null,
+              },
+            ],
+          });
+        }
+        return query(sql, params);
+      },
+    );
+    const transaction = jest.fn(
+      (work: (client: { query: jest.Mock }) => Promise<unknown>) =>
+        work({ query: transactionQuery }),
+    );
+    const database = { query, transaction };
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
     const policy =
       policyOverride ??
@@ -57,7 +86,16 @@ describe("TeachersService", () => {
       accounts as unknown as PersonAccountService,
       integrity as unknown as PlatformIntegrityService,
     );
-    return { service, query, audit, policy, accounts, integrity };
+    return {
+      service,
+      query,
+      transaction,
+      transactionQuery,
+      audit,
+      policy,
+      accounts,
+      integrity,
+    };
   };
 
   describe("teacher DTO composition", () => {
@@ -408,7 +446,8 @@ describe("TeachersService", () => {
   });
 
   it("creates teachers through v3 identity/profile contract and audit", async () => {
-    const { service, query, audit, policy } = createService([
+    const { service, query, transaction, transactionQuery, audit, policy } =
+      createService([
       {
         id: "teacher-a",
         status: "active",
@@ -473,6 +512,11 @@ describe("TeachersService", () => {
       "encrypted-password",
     ]);
     expect(String(query.mock.calls[0][0])).toContain("inserted_rate as");
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(transactionQuery).toHaveBeenCalledWith(
+      expect.stringContaining("personal_override.user_id"),
+      ["director-a", "config.commerce.manage", 1],
+    );
     expect(String(query.mock.calls[0][0])).toContain("references_valid");
     expect(String(query.mock.calls[0][0])).not.toContain(
       "app.branch_disciplines",
@@ -764,7 +808,7 @@ describe("TeachersService", () => {
         aggregateId: "teacher-a",
         expectedVersion: 0,
         authorization: expect.objectContaining({
-          capabilityKey: "commerce.teacher_payroll.write",
+          capabilityKey: "config.commerce.manage",
         }),
       }),
     );
@@ -881,6 +925,33 @@ describe("TeachersService", () => {
       expect(query).not.toHaveBeenCalled();
     },
   );
+
+  it("rejects initial rate creation atomically after a Director is demoted in the database", async () => {
+    const { service, query, transaction } = createService(
+      [],
+      new CrmPolicy(),
+      "manager",
+    );
+
+    await expect(
+      service.createTeacher(
+        { userId: "director-a", role: "director" },
+        {
+          firstName: "Мария",
+          branchIds: [],
+          rate: 900,
+        },
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "CAPABILITY_DENIED",
+        capabilityKey: "config.commerce.manage",
+        source: "hard-invariant",
+      }),
+    });
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(query).not.toHaveBeenCalled();
+  });
 
   it("rejects a payroll edit without version and audit reason", async () => {
     const { service, query, integrity } = createService([]);

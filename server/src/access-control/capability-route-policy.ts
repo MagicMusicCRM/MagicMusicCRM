@@ -417,7 +417,7 @@ function resolveTeacherPayrollHistoryPolicy({
   if (!/^\/crm\/teachers\/[^/]+\/(?:payouts|rates)\/[^/]+$/.test(path))
     return null;
   return policy(
-    "commerce.teacher_payroll.write",
+    "config.commerce.manage",
     "resource",
     rootBusinessRoles,
     "CrmPolicy.assertCanManagePayrollHistory director-only correction/void",
@@ -429,7 +429,7 @@ function resolveLessonTeacherRateWritePolicy({
 }: RoutePolicyContext): CapabilityRoutePolicy | null {
   if (path !== "/crm/lessons/teacher-rate") return null;
   return policy(
-    "commerce.teacher_payroll.write",
+    "config.commerce.manage",
     "resource",
     rootBusinessRoles,
     "CrmPolicy.assertCanManagePayrollHistory for bulk lesson-rate changes",
@@ -442,7 +442,7 @@ function resolveTeacherPayrollWritePolicy({
   if (!isTeacherPayrollWritePath(path)) return null;
   if (path.endsWith("/rates"))
     return policy(
-      "commerce.teacher_payroll.write",
+      "config.commerce.manage",
       "resource",
       rootBusinessRoles,
       "CrmPolicy.assertCanManagePayrollHistory for base-rate creation",

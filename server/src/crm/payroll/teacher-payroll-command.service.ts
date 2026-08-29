@@ -147,7 +147,7 @@ export class TeacherPayrollCommandService {
       requestId: metadata.requestId,
       authorization: {
         actor,
-        capabilityKey: "commerce.teacher_payroll.write",
+        capabilityKey: "config.commerce.manage",
       },
       audit: {
         action: "crm.teacher_rate_set",
@@ -228,7 +228,7 @@ export class TeacherPayrollCommandService {
       requestId: metadata.requestId,
       authorization: {
         actor,
-        capabilityKey: "commerce.teacher_payroll.write",
+        capabilityKey: "config.commerce.manage",
       },
       audit: {
         action: "crm.teacher_rate_updated",
@@ -318,7 +318,7 @@ export class TeacherPayrollCommandService {
       requestId: metadata.requestId,
       authorization: {
         actor,
-        capabilityKey: "commerce.teacher_payroll.write",
+        capabilityKey: "config.commerce.manage",
       },
       audit: {
         action: "crm.teacher_payout_updated",
@@ -412,7 +412,7 @@ export class TeacherPayrollCommandService {
       requestId: metadata.requestId,
       authorization: {
         actor,
-        capabilityKey: "commerce.teacher_payroll.write",
+        capabilityKey: "config.commerce.manage",
       },
       audit: {
         action: `crm.teacher_${kind}_deleted`,

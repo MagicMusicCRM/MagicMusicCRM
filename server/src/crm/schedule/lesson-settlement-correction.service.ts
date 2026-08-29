@@ -167,6 +167,8 @@ export class LessonSettlementCorrectionService {
     const mutation = await this.platform.executeVersionedMutation({
       actorKey: `user:${actor.userId}`,
       actorUserId: actor.userId,
+      authorization:
+        this.policy.teacherCompensationMutationAuthorization(actor),
       operation: "schedule.lesson.settlement-correction",
       idempotencyKey: metadata.idempotencyKey,
       payload: { lessonId, ...dto },

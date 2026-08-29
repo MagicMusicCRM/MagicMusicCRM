@@ -754,6 +754,9 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
       expect.objectContaining({
         operation: "crm.teacher-payout.create",
         expectedVersion: 0,
+        authorization: expect.objectContaining({
+          capabilityKey: "commerce.teacher_payroll.write",
+        }),
       }),
     );
     expect(payout.version).toBe(1);
@@ -793,7 +796,12 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
     expect(rate.rate).toBe(750);
     expect(rate.effectiveFrom).toBe("2026-08-01");
     expect(integrity.executeVersionedMutation).toHaveBeenCalledWith(
-      expect.objectContaining({ operation: "crm.teacher-rate.create" }),
+      expect.objectContaining({
+        operation: "crm.teacher-rate.create",
+        authorization: expect.objectContaining({
+          capabilityKey: "config.commerce.manage",
+        }),
+      }),
     );
   });
 
@@ -894,7 +902,7 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
         requestId: "request-001",
         authorization: {
           actor: directorActor,
-          capabilityKey: "commerce.teacher_payroll.write",
+          capabilityKey: "config.commerce.manage",
         },
         audit: expect.objectContaining({
           action: "crm.teacher_rate_updated",
@@ -960,7 +968,7 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
         requestId: "request-001",
         authorization: {
           actor: directorActor,
-          capabilityKey: "commerce.teacher_payroll.write",
+          capabilityKey: "config.commerce.manage",
         },
         audit: expect.objectContaining({
           action: "crm.teacher_payout_updated",

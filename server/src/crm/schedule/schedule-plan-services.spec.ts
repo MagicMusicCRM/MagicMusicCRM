@@ -231,6 +231,10 @@ describe("Schedule plan semantic owners", () => {
       assertCanWriteCrm: jest.fn(),
       assertCanSupplyTeacherCompensation: jest.fn(),
       canManageTeacherCompensation: jest.fn(() => true),
+      teacherCompensationMutationAuthorization: jest.fn((targetActor) => ({
+        actor: targetActor,
+        capabilityKey: "config.commerce.manage",
+      })),
     } as unknown as CrmPolicy;
     const previews = {
       assertUpdateHistoricalConfirmation: jest.fn(async () => false),

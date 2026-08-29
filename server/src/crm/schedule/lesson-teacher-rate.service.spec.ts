@@ -58,7 +58,7 @@ describe("LessonTeacherRateService", () => {
     ] as const)(
       "allows bulk lesson-rate mutation only for owner role %s",
       async (role, allowed) => {
-        const { service, query } = createServiceWithQueryResults(
+        const { service, query, platform } = createServiceWithQueryResults(
           [
             { rows: [{ id: "lesson-a", locked: false }] },
             { rows: [{ id: "lesson-a" }] },
@@ -79,6 +79,13 @@ describe("LessonTeacherRateService", () => {
         if (allowed) {
           await expect(mutation).resolves.toMatchObject({ updated: 1 });
           expect(query).toHaveBeenCalledTimes(2);
+          expect(platform.executeVersionedMutation).toHaveBeenCalledWith(
+            expect.objectContaining({
+              authorization: expect.objectContaining({
+                capabilityKey: "config.commerce.manage",
+              }),
+            }),
+          );
         } else {
           await expect(mutation).rejects.toBeInstanceOf(ForbiddenException);
           expect(query).not.toHaveBeenCalled();

@@ -85,7 +85,8 @@ export class LessonTransitionCommandService {
       await this.platform.executeVersionedMutation<CommittedTransition>({
         actorKey: `user:${actor.userId}`,
         actorUserId: actor.userId,
-        authorization: { actor, capabilityKey: "schedule.lesson.write" },
+        authorization:
+          this.policy.teacherCompensationMutationAuthorization(actor),
         operation: `schedule.lesson.${operation}`,
         idempotencyKey: metadata.idempotencyKey,
         payload: { lessonId, dto },

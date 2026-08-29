@@ -167,6 +167,17 @@ describe("CrmPolicy", () => {
       ).toThrow(ForbiddenException);
     });
 
+    it.each(roles)("selects commit-time capability for %s", (role) => {
+      const actor = { userId: `user-${role}`, role };
+      expect(policy.teacherCompensationMutationAuthorization(actor)).toEqual({
+        actor,
+        capabilityKey:
+          role === "director" || role === "system_admin"
+            ? "config.commerce.manage"
+            : "schedule.lesson.write",
+      });
+    });
+
     it("allows operational lesson mutations when compensation fields are omitted", () => {
       for (const role of ["manager", "admin"] as const) {
         expect(() =>

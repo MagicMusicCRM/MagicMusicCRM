@@ -8,6 +8,7 @@ import {
 } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import type { QueryResult, QueryResultRow } from "pg";
+import { authorizeCurrentCapability } from "../access-control/capability-request-authorizer";
 import { AuditService } from "../audit/audit.service";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
@@ -304,7 +305,7 @@ export class GroupsService {
       const mutation = await this.integrity.executeVersionedMutation({
         actorKey: actor.userId,
         actorUserId: actor.userId,
-        authorization: { actor, capabilityKey: "system.settings.manage" },
+        authorization: { actor, capabilityKey: "config.commerce.manage" },
         operation: "crm.group.create-with-teacher-rate",
         idempotencyKey: metadata!.idempotencyKey,
         payload: { ...dto, name },
@@ -493,16 +494,24 @@ export class GroupsService {
       assertVersionedMutationMetadata(
         metadata ?? { idempotencyKey: "", requestId: "" },
       );
-      await this.database.query(
-        `insert into app.aggregate_versions (aggregate_type, aggregate_id, version)
-         values ('organization:group', $1, $2)
-         on conflict (aggregate_type, aggregate_id) do nothing`,
-        [groupId, dto.expectedVersion],
-      );
+      await this.database.transaction(async (client) => {
+        await authorizeCurrentCapability(
+          client,
+          actor,
+          "config.commerce.manage",
+          true,
+        );
+        await client.query(
+          `insert into app.aggregate_versions (aggregate_type, aggregate_id, version)
+           values ('organization:group', $1, $2)
+           on conflict (aggregate_type, aggregate_id) do nothing`,
+          [groupId, dto.expectedVersion],
+        );
+      });
       const mutation = await this.integrity.executeVersionedMutation({
         actorKey: actor.userId,
         actorUserId: actor.userId,
-        authorization: { actor, capabilityKey: "system.settings.manage" },
+        authorization: { actor, capabilityKey: "config.commerce.manage" },
         operation: "crm.group.teacher-rate.update",
         idempotencyKey: metadata!.idempotencyKey,
         payload: { groupId, teacherRate: dto.teacherRate ?? null },

@@ -42,7 +42,7 @@ describe("capability route policy", () => {
     [
       "PATCH",
       "/crm/lessons/teacher-rate",
-      "commerce.teacher_payroll.write",
+      "config.commerce.manage",
     ],
     ["PATCH", "/crm/lessons/id", "schedule.lesson.write"],
     ["GET", "/crm/lessons/id/settlement-history", "schedule.lesson.write"],
@@ -165,11 +165,11 @@ describe("capability route policy", () => {
     ["GET", "/crm/reports/finance", "commerce.school_finance.read"],
     ["GET", "/crm/teachers/id/payroll", "commerce.teacher_payroll.read"],
     ["POST", "/crm/teachers/id/payouts", "commerce.teacher_payroll.write"],
-    ["POST", "/crm/teachers/id/rates", "commerce.teacher_payroll.write"],
-    ["PATCH", "/crm/teachers/id/payouts/entry", "commerce.teacher_payroll.write"],
-    ["DELETE", "/crm/teachers/id/payouts/entry", "commerce.teacher_payroll.write"],
-    ["PATCH", "/crm/teachers/id/rates/entry", "commerce.teacher_payroll.write"],
-    ["DELETE", "/crm/teachers/id/rates/entry", "commerce.teacher_payroll.write"],
+    ["POST", "/crm/teachers/id/rates", "config.commerce.manage"],
+    ["PATCH", "/crm/teachers/id/payouts/entry", "config.commerce.manage"],
+    ["DELETE", "/crm/teachers/id/payouts/entry", "config.commerce.manage"],
+    ["PATCH", "/crm/teachers/id/rates/entry", "config.commerce.manage"],
+    ["DELETE", "/crm/teachers/id/rates/entry", "config.commerce.manage"],
     ["GET", "/crm/reports/teacher-stats", "commerce.teacher_payroll.read"],
     [
       "GET",
@@ -192,7 +192,7 @@ describe("capability route policy", () => {
         "/crm/teachers/id/rates/entry",
       ),
     ).toMatchObject({
-      capabilityKey: "commerce.teacher_payroll.write",
+      capabilityKey: "config.commerce.manage",
       legacyAllowedRoles: ["director", "system_admin"],
     });
     expect(
@@ -201,7 +201,7 @@ describe("capability route policy", () => {
         "/crm/teachers/id/payouts/entry",
       ),
     ).toMatchObject({
-      capabilityKey: "commerce.teacher_payroll.write",
+      capabilityKey: "config.commerce.manage",
       legacyAllowedRoles: ["director", "system_admin"],
     });
   });
@@ -216,14 +216,36 @@ describe("capability route policy", () => {
     expect(
       resolveCapabilityRoutePolicy("POST", "/crm/teachers/id/rates"),
     ).toMatchObject({
-      capabilityKey: "commerce.teacher_payroll.write",
+      capabilityKey: "config.commerce.manage",
       legacyAllowedRoles: ["director", "system_admin"],
     });
     expect(
       resolveCapabilityRoutePolicy("PATCH", "/crm/lessons/teacher-rate"),
     ).toMatchObject({
-      capabilityKey: "commerce.teacher_payroll.write",
+      capabilityKey: "config.commerce.manage",
       legacyAllowedRoles: ["director", "system_admin"],
+    });
+  });
+
+  it.each([
+    ["POST", "/crm/teachers/id/rates"],
+    ["PATCH", "/crm/teachers/id/rates/entry"],
+    ["DELETE", "/crm/teachers/id/rates/entry"],
+    ["PATCH", "/crm/lessons/teacher-rate"],
+    ["PATCH", "/crm/teachers/id/payouts/entry"],
+    ["DELETE", "/crm/teachers/id/payouts/entry"],
+  ])("reuses the commerce configuration invariant for owner-only route %s %s", (method, path) => {
+    expect(resolveCapabilityRoutePolicy(method, path)).toMatchObject({
+      capabilityKey: "config.commerce.manage",
+    });
+  });
+
+  it.each([
+    ["POST", "/crm/teachers/id/payouts"],
+    ["GET", "/crm/teachers/id/payroll"],
+  ])("preserves the staff payroll capability for %s %s", (method, path) => {
+    expect(resolveCapabilityRoutePolicy(method, path)).toMatchObject({
+      capabilityKey: expect.stringMatching(/^commerce\.teacher_payroll\./),
     });
   });
 

@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { AuditService } from "../audit/audit.service";
+import { authorizeCurrentCapability } from "../access-control/capability-request-authorizer";
 import { ActorContext } from "../common/security/actor-context";
 import { managerAdminRolesSql } from "../common/security/role-sql";
 import { DatabaseService } from "../db/database.service";
@@ -506,7 +507,7 @@ export class TeachersService {
     );
 
     try {
-      const result = await this.database.query<TeacherRow>(
+      const insertTeacher = (execute: TeacherUpdateExecutor) => execute(
         `
           with valid_branches as (
             select id, name
@@ -646,6 +647,22 @@ export class TeachersService {
           credentials.passwordCiphertext,
         ],
       );
+      const result =
+        dto.rate === undefined
+          ? await insertTeacher((query, params) =>
+              this.database.query<TeacherRow>(query, params),
+            )
+          : await this.database.transaction(async (client) => {
+              await authorizeCurrentCapability(
+                client,
+                actor,
+                "config.commerce.manage",
+                true,
+              );
+              return insertTeacher((query, params) =>
+                client.query<TeacherRow>(query, params),
+              );
+            });
       const teacher = result.rows[0];
       if (!teacher) {
         throw new BadRequestException(
@@ -933,7 +950,10 @@ export class TeachersService {
         requestId: metadata.requestId,
         authorization: {
           actor,
-          capabilityKey: "commerce.teacher_payroll.write",
+          capabilityKey:
+            dto.rate !== undefined
+              ? "config.commerce.manage"
+              : "commerce.teacher_payroll.write",
         },
         audit: {
           action: "crm.teacher_updated",

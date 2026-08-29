@@ -13,12 +13,39 @@ describe("GroupsService", () => {
     requestId: "group-rate-request-001",
   };
 
-  const build = (query: jest.Mock) => {
+  const build = (
+    query: jest.Mock,
+    authoritativeRole: "manager" | "director" | "system_admin" = "director",
+  ) => {
+    const transactionQuery = jest.fn(
+      (sql: string, params?: unknown[]) => {
+        if (sql.includes("select id from app.users")) {
+          return Promise.resolve({ rows: [{ id: params?.[0] }] });
+        }
+        if (sql.includes("from app.role_packages package")) {
+          return Promise.resolve({ rows: [{ id: "package-director" }] });
+        }
+        if (sql.includes("select\n        user_account.role")) {
+          return Promise.resolve({
+            rows: [
+              {
+                role: authoritativeRole,
+                active: true,
+                definition_active: true,
+                role_effect: "allow",
+                override_effect: null,
+              },
+            ],
+          });
+        }
+        return query(sql, params);
+      },
+    );
     const database = {
       query,
       transaction: jest.fn(
         (work: (client: { query: jest.Mock }) => Promise<unknown>) =>
-          work({ query }),
+          work({ query: transactionQuery }),
       ),
     };
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
@@ -53,18 +80,29 @@ describe("GroupsService", () => {
       realtime as unknown as RealtimeBus,
       integrity as unknown as PlatformIntegrityService,
     );
-    return { service, query, audit, policy, realtime, integrity };
+    return {
+      service,
+      query,
+      transactionQuery,
+      audit,
+      policy,
+      realtime,
+      integrity,
+    };
   };
 
-  const createService = (rows: Record<string, unknown>[] = []) =>
-    build(jest.fn().mockResolvedValue({ rows }));
+  const createService = (
+    rows: Record<string, unknown>[] = [],
+    authoritativeRole: "manager" | "director" | "system_admin" = "director",
+  ) => build(jest.fn().mockResolvedValue({ rows }), authoritativeRole);
 
   const createServiceWithQueryResults = (
     results: { rows: Record<string, unknown>[] }[],
+    authoritativeRole: "manager" | "director" | "system_admin" = "director",
   ) => {
     const query = jest.fn();
     for (const result of results) query.mockResolvedValueOnce(result);
-    return build(query);
+    return build(query, authoritativeRole);
   };
 
   describe("getGroup", () => {
@@ -295,7 +333,7 @@ describe("GroupsService", () => {
   it.each(["director", "system_admin"] as const)(
     "allows owner role %s to create a group rate",
     async (role) => {
-      const { service, query } = createService([
+      const { service, query, integrity } = createService([
         {
           id: "group-b",
           teacher_id: "teacher-a",
@@ -325,6 +363,13 @@ describe("GroupsService", () => {
         ),
       ).resolves.toMatchObject({ teacherRate: 900 });
       expect(query).toHaveBeenCalled();
+      expect(integrity.executeVersionedMutation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          authorization: expect.objectContaining({
+            capabilityKey: "config.commerce.manage",
+          }),
+        }),
+      );
     },
   );
 
@@ -451,11 +496,55 @@ describe("GroupsService", () => {
         version: 2,
       });
       expect(integrity.executeVersionedMutation).toHaveBeenCalledTimes(1);
+      expect(integrity.executeVersionedMutation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          authorization: expect.objectContaining({
+            capabilityKey: "config.commerce.manage",
+          }),
+        }),
+      );
       expect(
         query.mock.calls.map((call) => String(call[0])).join("\n"),
       ).not.toContain("update app.groups");
     },
   );
+
+  it("does not seed a group rate version after a Director is demoted in the database", async () => {
+    const { service, query, integrity } = createService(
+      [
+        {
+          teacher_id: "teacher-a",
+          branch_id: null,
+          room_id: null,
+          future_lessons: 0,
+          active_series: 0,
+          active_plans: 0,
+        },
+      ],
+      "manager",
+    );
+
+    await expect(
+      service.updateGroup(
+        { userId: "director-a", role: "director" },
+        "group-a",
+        { teacherRate: null, expectedVersion: 1 },
+        metadata,
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "CAPABILITY_DENIED",
+        capabilityKey: "config.commerce.manage",
+        source: "hard-invariant",
+      }),
+    });
+    expect(
+      query.mock.calls.some(([sql]) =>
+        String(sql).includes("insert into app.aggregate_versions"),
+      ),
+    ).toBe(false);
+    expect(integrity.executeVersionedMutation).not.toHaveBeenCalled();
+  });
 
   it("rejects manager updates for imported groups without a branch", async () => {
     const { service, query } = createService([

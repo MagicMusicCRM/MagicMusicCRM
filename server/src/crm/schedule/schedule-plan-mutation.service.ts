@@ -75,7 +75,8 @@ export class SchedulePlanMutationService {
     const mutation = await this.platform.executeVersionedMutation({
       actorKey: `user:${actor.userId}`,
       actorUserId: actor.userId,
-      authorization: { actor, capabilityKey: "schedule.lesson.write" },
+      authorization:
+        this.policy.teacherCompensationMutationAuthorization(actor),
       operation: "schedule.plan.create",
       idempotencyKey: metadata.idempotencyKey,
       payload: normalized,
@@ -122,7 +123,8 @@ export class SchedulePlanMutationService {
     const mutation = await this.platform.executeVersionedMutation({
       actorKey: `user:${actor.userId}`,
       actorUserId: actor.userId,
-      authorization: { actor, capabilityKey: "schedule.lesson.write" },
+      authorization:
+        this.policy.teacherCompensationMutationAuthorization(actor),
       operation: "schedule.plan.update",
       idempotencyKey: metadata.idempotencyKey,
       payload: dto,

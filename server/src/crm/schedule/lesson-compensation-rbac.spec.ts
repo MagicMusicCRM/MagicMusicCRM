@@ -1,4 +1,6 @@
 import { ForbiddenException } from "@nestjs/common";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type { ActorContext } from "../../common/security/actor-context";
 import type { DatabaseService } from "../../db/database.service";
 import type { PlatformIntegrityService } from "../../platform/platform-integrity.service";
@@ -30,6 +32,21 @@ const financialDecision = {
 };
 
 describe("lesson compensation service RBAC", () => {
+  it("keeps every human compensation commit on the canonical current-role authorization", () => {
+    for (const file of [
+      "lesson-write-command.service.ts",
+      "schedule-plan-mutation.service.ts",
+      "lesson-transition-command.service.ts",
+      "lesson-bulk-transition.service.ts",
+      "lesson-planned-settlement-command.service.ts",
+      "lesson-settlement-correction.service.ts",
+    ]) {
+      expect(readFileSync(resolve(__dirname, file), "utf8")).toContain(
+        "teacherCompensationMutationAuthorization(actor)",
+      );
+    }
+  });
+
   it.each(roles)(
     "keeps lesson creation available without granting rate changes for %s",
     async (role) => {

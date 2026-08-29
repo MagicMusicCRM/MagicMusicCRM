@@ -5,6 +5,16 @@ import { CapabilityRequestAuthorizer } from "./capability-request-authorizer";
 describe("CapabilityRequestAuthorizer", () => {
   const actor = { userId: "actor-a", role: "teacher" as const };
 
+  const activeAllowRow = (
+    role: "admin" | "manager" | "director" | "system_admin",
+  ) => ({
+    role,
+    active: true,
+    definition_active: true,
+    role_effect: "allow",
+    override_effect: null,
+  });
+
   function authorizerWith(row: Record<string, unknown> | undefined) {
     const query = jest.fn().mockResolvedValue({
       rows: row ? [row] : [],
@@ -156,6 +166,150 @@ describe("CapabilityRequestAuthorizer", () => {
         source: "capability-registry",
         reason: "capability_contract_mismatch",
       }),
+    });
+  });
+
+  describe("payroll owner-only route invariant", () => {
+    it.each([
+      ["manager", "POST", "/crm/teachers/id/rates"],
+      ["manager", "PATCH", "/crm/teachers/id/rates/entry"],
+      ["manager", "DELETE", "/crm/teachers/id/rates/entry"],
+      ["manager", "PATCH", "/crm/lessons/teacher-rate"],
+      ["manager", "PATCH", "/crm/teachers/id/payouts/entry"],
+      ["manager", "DELETE", "/crm/teachers/id/payouts/entry"],
+      ["admin", "POST", "/crm/teachers/id/rates"],
+      ["admin", "PATCH", "/crm/teachers/id/rates/entry"],
+      ["admin", "DELETE", "/crm/teachers/id/rates/entry"],
+      ["admin", "PATCH", "/crm/lessons/teacher-rate"],
+      ["admin", "PATCH", "/crm/teachers/id/payouts/entry"],
+      ["admin", "DELETE", "/crm/teachers/id/payouts/entry"],
+    ] as const)(
+      "denies %s on %s %s before DTO validation even when the role package allows payroll write",
+      async (role, method, path) => {
+        const { authorizer } = authorizerWith(activeAllowRow(role));
+
+        await expect(
+          authorizer.authorize({ userId: `${role}-a`, role }, method, path),
+        ).rejects.toMatchObject({
+          status: 403,
+          response: expect.objectContaining({
+            code: "CAPABILITY_DENIED",
+            capabilityKey: "config.commerce.manage",
+            source: "hard-invariant",
+            reason:
+              role === "admin"
+                ? "config_role_hard_deny"
+                : "director_or_system_admin_required",
+          }),
+        });
+      },
+    );
+
+    it.each([
+      ["director", "POST", "/crm/teachers/id/rates", "role-package"],
+      [
+        "director",
+        "PATCH",
+        "/crm/teachers/id/rates/entry",
+        "role-package",
+      ],
+      [
+        "director",
+        "DELETE",
+        "/crm/teachers/id/rates/entry",
+        "role-package",
+      ],
+      ["director", "PATCH", "/crm/lessons/teacher-rate", "role-package"],
+      ["system_admin", "POST", "/crm/teachers/id/rates", "root"],
+      ["system_admin", "PATCH", "/crm/teachers/id/rates/entry", "root"],
+      ["system_admin", "DELETE", "/crm/teachers/id/rates/entry", "root"],
+      ["system_admin", "PATCH", "/crm/lessons/teacher-rate", "root"],
+    ] as const)(
+      "allows owner role %s through v4 authorization on %s %s so DTO validation remains authoritative",
+      async (role, method, path, source) => {
+        const { authorizer } = authorizerWith(activeAllowRow(role));
+
+        await expect(
+          authorizer.authorize({ userId: `${role}-a`, role }, method, path),
+        ).resolves.toMatchObject({
+          policy: { capabilityKey: "config.commerce.manage" },
+          source,
+        });
+      },
+    );
+
+    it.each([
+      [
+        "manager",
+        "POST",
+        "/crm/teachers/id/payouts",
+        "commerce.teacher_payroll.write",
+      ],
+      [
+        "manager",
+        "GET",
+        "/crm/teachers/id/payroll",
+        "commerce.teacher_payroll.read",
+      ],
+      [
+        "admin",
+        "POST",
+        "/crm/teachers/id/payouts",
+        "commerce.teacher_payroll.write",
+      ],
+      [
+        "admin",
+        "GET",
+        "/crm/teachers/id/payroll",
+        "commerce.teacher_payroll.read",
+      ],
+    ] as const)(
+      "preserves staff role %s access to %s %s",
+      async (role, method, path, capabilityKey) => {
+        const { authorizer } = authorizerWith(activeAllowRow(role));
+
+        await expect(
+          authorizer.authorize({ userId: `${role}-a`, role }, method, path),
+        ).resolves.toMatchObject({
+          policy: { capabilityKey },
+          source: "role-package",
+        });
+      },
+    );
+
+    it("denies a stale Director token when the authoritative database role is Manager", async () => {
+      const { authorizer } = authorizerWith(activeAllowRow("manager"));
+
+      await expect(
+        authorizer.authorize(
+          { userId: "actor-a", role: "director" },
+          "POST",
+          "/crm/teachers/id/rates",
+        ),
+      ).rejects.toMatchObject({
+        status: 403,
+        response: expect.objectContaining({
+          code: "CAPABILITY_DENIED",
+          capabilityKey: "config.commerce.manage",
+          source: "hard-invariant",
+          reason: "director_or_system_admin_required",
+        }),
+      });
+    });
+
+    it("allows a stale Manager token when the authoritative database role is Director", async () => {
+      const { authorizer } = authorizerWith(activeAllowRow("director"));
+
+      await expect(
+        authorizer.authorize(
+          { userId: "actor-a", role: "manager" },
+          "POST",
+          "/crm/teachers/id/rates",
+        ),
+      ).resolves.toMatchObject({
+        policy: { capabilityKey: "config.commerce.manage" },
+        source: "role-package",
+      });
     });
   });
 });

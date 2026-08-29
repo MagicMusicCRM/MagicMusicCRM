@@ -72,6 +72,8 @@ export class LessonWriteCommandService {
     const mutation = await this.platform.executeVersionedMutation({
       actorKey: `user:${actor.userId}`,
       actorUserId: actor.userId,
+      authorization:
+        this.policy.teacherCompensationMutationAuthorization(actor),
       operation: "schedule.lesson.create",
       idempotencyKey: metadata.idempotencyKey,
       payload: dto,

@@ -99,6 +99,8 @@ export class LessonPlannedSettlementCommandService {
     const mutation = await this.platform.executeVersionedMutation({
       actorKey: `user:${actor.userId}`,
       actorUserId: actor.userId,
+      authorization:
+        this.policy.teacherCompensationMutationAuthorization(actor),
       operation: "schedule.lesson.settlement-plan.update",
       idempotencyKey: metadata.idempotencyKey,
       payload: { lessonId, ...dto },

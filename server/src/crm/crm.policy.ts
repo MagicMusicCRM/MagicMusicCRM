@@ -180,6 +180,15 @@ export class CrmPolicy {
     return actor.role === "director" || actor.role === "system_admin";
   }
 
+  teacherCompensationMutationAuthorization(actor: ActorContext) {
+    return {
+      actor,
+      capabilityKey: this.canManageTeacherCompensation(actor)
+        ? ("config.commerce.manage" as const)
+        : ("schedule.lesson.write" as const),
+    };
+  }
+
   assertCanSupplyTeacherCompensation(
     actor: ActorContext,
     input: unknown,

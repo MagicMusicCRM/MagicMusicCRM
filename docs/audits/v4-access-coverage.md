@@ -33,7 +33,8 @@ expand legacy access.
 | `commerce.school_finance.read` | 10 |
 | `commerce.subscription.issue` | 2 |
 | `commerce.teacher_payroll.read` | 3 |
-| `commerce.teacher_payroll.write` | 2 |
+| `commerce.teacher_payroll.write` | 1 |
+| `config.commerce.manage` | 2 |
 | `config.crm.edit` | 36 |
 | `config.crm.publish` | 2 |
 | `config.crm.read` | 3 |
@@ -44,7 +45,7 @@ expand legacy access.
 | `report.export.xlsx` | 5 |
 | `report.status.read` | 16 |
 | `schedule.lesson.read.assigned` | 25 |
-| `schedule.lesson.write` | 37 |
+| `schedule.lesson.write` | 36 |
 | `system.settings.manage` | 16 |
 | `workflow.task.read` | 4 |
 | `workflow.task.write` | 3 |

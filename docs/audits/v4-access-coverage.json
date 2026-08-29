@@ -13,8 +13,9 @@
   },
   "capabilityCounts": {
     "crm.client.read.basic": 111,
-    "schedule.lesson.write": 37,
+    "schedule.lesson.write": 36,
     "system.settings.manage": 16,
+    "config.commerce.manage": 2,
     "workflow.task.read": 4,
     "crm.client.write": 39,
     "schedule.lesson.read.assigned": 25,
@@ -34,7 +35,7 @@
     "commerce.package.manage": 4,
     "commerce.package.read": 1,
     "commerce.teacher_payroll.read": 3,
-    "commerce.teacher_payroll.write": 2,
+    "commerce.teacher_payroll.write": 1,
     "crm.comment.read.shared": 2
   },
   "errors": [],
@@ -90,7 +91,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -108,7 +109,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -126,7 +127,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -144,7 +145,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -162,7 +163,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -180,7 +181,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -198,7 +199,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -236,7 +237,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -254,7 +255,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -272,7 +273,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -308,7 +309,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -326,7 +327,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -344,7 +345,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -360,7 +361,7 @@
       "file": "server/src/crm/crm-schedule.controller.ts",
       "line": 264,
       "boundary": "jwt-capability",
-      "capabilityKey": "commerce.teacher_payroll.write",
+      "capabilityKey": "config.commerce.manage",
       "scope": "resource",
       "legacyPolicy": "CrmPolicy.assertCanManagePayrollHistory for bulk lesson-rate changes",
       "capabilityOnlyRoles": [],
@@ -380,7 +381,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -398,7 +399,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -416,7 +417,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -686,7 +687,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.read.assigned",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -812,7 +813,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.read.assigned",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -830,7 +831,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.read.assigned",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -848,7 +849,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.read.assigned",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -1064,7 +1065,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.read.assigned",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -1266,7 +1267,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.read.assigned",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -1284,7 +1285,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -1302,7 +1303,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -1320,7 +1321,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -1338,7 +1339,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.read.assigned",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -1356,7 +1357,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -1374,7 +1375,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.read.assigned",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -1392,7 +1393,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -1410,7 +1411,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -1428,7 +1429,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -1446,7 +1447,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -1464,7 +1465,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.read.assigned",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -1988,7 +1989,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -2024,7 +2025,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -2475,7 +2476,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -4122,7 +4123,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.read.assigned",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -4284,7 +4285,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.read.assigned",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -5392,9 +5393,9 @@
       "file": "server/src/crm/crm-people.controller.ts",
       "line": 148,
       "boundary": "jwt-capability",
-      "capabilityKey": "commerce.teacher_payroll.write",
+      "capabilityKey": "config.commerce.manage",
       "scope": "resource",
-      "legacyPolicy": "Teacher payroll capability with versioned create/correct/void integrity",
+      "legacyPolicy": "CrmPolicy.assertCanManagePayrollHistory for base-rate creation",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -5838,7 +5839,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.read.assigned",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -5874,7 +5875,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.read.assigned",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -6072,7 +6073,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.read.assigned",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -6180,7 +6181,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -6198,7 +6199,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -6216,7 +6217,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.read.assigned",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -6234,7 +6235,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -6252,7 +6253,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.read.assigned",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -6270,7 +6271,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -6288,7 +6289,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.read.assigned",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -6306,7 +6307,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -6324,7 +6325,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -6342,7 +6343,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.write",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"
@@ -6360,7 +6361,7 @@
       "boundary": "jwt-capability",
       "capabilityKey": "schedule.lesson.read.assigned",
       "scope": "self_or_assigned",
-      "legacyPolicy": "ScheduleService/CRM repository actor scope",
+      "legacyPolicy": "Schedule owners/CRM repository actor scope",
       "capabilityOnlyRoles": [],
       "legacyOnlyRoles": [],
       "shadowStatus": "parity"

@@ -113,7 +113,8 @@ export class LessonBulkTransitionService {
       await this.platform.executeVersionedMutation<BulkTransitionResultRef>({
         actorKey: `user:${actor.userId}`,
         actorUserId: actor.userId,
-        authorization: { actor, capabilityKey: "schedule.lesson.write" },
+        authorization:
+          this.policy.teacherCompensationMutationAuthorization(actor),
         operation: "schedule.lesson.bulk-transition",
         idempotencyKey: metadata.idempotencyKey,
         payload: { dto },

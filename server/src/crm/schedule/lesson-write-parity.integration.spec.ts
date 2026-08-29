@@ -254,6 +254,16 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
   it("requires independent settlement, pay rule and funding source before atomic create", async () => {
     const fixture = await createFixture(pool);
     const actor = { userId: fixture.managerId, role: "manager" as const };
+    const directorUser = await pool.query<{ id: string }>(
+      `insert into app.users (email, role, email_verified_at)
+       values ($1, 'director', now())
+       returning id`,
+      [`parity-director-${randomUUID()}@example.test`],
+    );
+    const director = {
+      userId: directorUser.rows[0]!.id,
+      role: "director" as const,
+    };
     const lessonIds: string[] = [];
     const metadata = (name: string) => ({
       idempotencyKey: `lesson-required-financial-${name}-${randomUUID()}`,
@@ -305,7 +315,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       await expectCommandError(
         () =>
           commands.create(
-            { ...actor, role: "director" as const },
+            director,
             {
               ...complete,
               financialDecision: {
@@ -322,7 +332,7 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       await expectCommandError(
         () =>
           commands.create(
-            { ...actor, role: "director" as const },
+            director,
             {
               ...complete,
               financialDecision: { settlementTypeKey: "lesson" },
@@ -419,6 +429,9 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       await cleanupFixture(pool, {
         ...fixture,
         actorKey: `user:${fixture.managerId}`,
+        extraActorKeys: [`user:${director.userId}`],
+        extraActorUserIds: [director.userId],
+        extraUserIds: [director.userId],
         lessonIds,
       });
     }
