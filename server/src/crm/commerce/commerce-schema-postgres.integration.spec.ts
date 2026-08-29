@@ -54,6 +54,33 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
     await pool.end();
   });
 
+  it("allows the runtime role to link a payment record without broad payment updates", async () => {
+    const privileges = await pool.query<{
+      can_link_payment_record: boolean;
+      can_update_payments: boolean;
+    }>(`
+      select
+        has_column_privilege(
+          'magiccrm_app',
+          'app.payments',
+          'payment_record_id',
+          'UPDATE'
+        ) as can_link_payment_record,
+        has_table_privilege(
+          'magiccrm_app',
+          'app.payments',
+          'UPDATE'
+        ) as can_update_payments
+    `);
+
+    expect(privileges.rows).toEqual([
+      {
+        can_link_payment_record: true,
+        can_update_payments: false,
+      },
+    ]);
+  });
+
   it("rolls surcharge terms down and up without schema drift", async () => {
     const client = await pool.connect();
     await client.query("begin");

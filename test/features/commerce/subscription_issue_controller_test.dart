@@ -165,7 +165,6 @@ void main() {
         ),
       );
       addTearDown(controller.dispose);
-      await controller.submit();
       final previousIdentity = controller.identity;
 
       controller.selectPackage(
@@ -327,18 +326,33 @@ void main() {
     );
     addTearDown(controller.dispose);
 
-    expect(
-      await controller.submit(),
-      SubscriptionIssueSubmitResult.previewLoaded,
-    );
     expect(await controller.submit(), SubscriptionIssueSubmitResult.blocked);
     expect(controller.error, 'На личном счёте недостаточно средств.');
     expect(submitCalls, 0);
   });
 
+  test('one payment action previews and commits the exact purchase', () async {
+    final previews = <PurchaseSubscriptionInput>[];
+    final submissions = <SubscriptionIssueSubmission>[];
+    final controller = _controller(
+      onPreview: (input) async {
+        previews.add(input);
+        return _preview(input: input);
+      },
+      onSubmit: (submission) async => submissions.add(submission),
+    );
+    addTearDown(controller.dispose);
+
+    expect(await controller.submit(), SubscriptionIssueSubmitResult.committed);
+    expect(previews, hasLength(1));
+    expect(submissions, hasLength(1));
+    expect(submissions.single.purchase.toJson(), previews.single.toJson());
+    expect(submissions.single.preview.previewToken, 'signed-preview');
+  });
+
   test(
-    'pricing change after preview rotates identity and clears preview',
-    () async {
+    'pricing change before payment rotates identity and clears stale state',
+    () {
       var sequence = 0;
       MagicMutationIdentity identityFactory() {
         sequence++;
@@ -351,11 +365,6 @@ void main() {
       final controller = _controller(identityFactory: identityFactory);
       addTearDown(controller.dispose);
       final initialIdentity = controller.identity;
-      expect(
-        await controller.submit(),
-        SubscriptionIssueSubmitResult.previewLoaded,
-      );
-      expect(controller.preview, isNotNull);
 
       controller.selectDiscountMode(SubscriptionIssueDiscountMode.percent);
 
@@ -409,7 +418,7 @@ void main() {
       previewCompleters[1].complete(
         _preview(input: previewRequests[1], previewToken: 'preview-b'),
       );
-      expect(await pendingB, SubscriptionIssueSubmitResult.previewLoaded);
+      expect(await pendingB, SubscriptionIssueSubmitResult.committed);
       expect(controller.preview?.previewToken, 'preview-b');
 
       previewCompleters[0].complete(
@@ -419,10 +428,6 @@ void main() {
       expect(controller.preview?.previewToken, 'preview-b');
       expect(controller.error, isNull);
 
-      expect(
-        await controller.submit(),
-        SubscriptionIssueSubmitResult.committed,
-      );
       expect(submissions, hasLength(1));
       expect(submissions.single.preview.previewToken, 'preview-b');
       expect(submissions.single.purchase.toJson(), previewRequests[1].toJson());
@@ -446,10 +451,6 @@ void main() {
     controller.setDiscountValue('20');
     controller.setDiscountReason('Семейная скидка');
 
-    expect(
-      await controller.submit(),
-      SubscriptionIssueSubmitResult.previewLoaded,
-    );
     expect(await controller.submit(), SubscriptionIssueSubmitResult.failed);
     expect(controller.attempted, isTrue);
     expect(controller.fieldsEnabled, isFalse);

@@ -199,7 +199,13 @@ class SubscriptionIssueController extends ChangeNotifier {
     _error = null;
     _notifyListeners();
     final currentPreview = _preview;
-    if (currentPreview == null) return _loadPreview(purchase);
+    if (currentPreview == null) {
+      final previewResult = await _loadPreview(purchase);
+      if (previewResult != SubscriptionIssueSubmitResult.previewLoaded) {
+        return previewResult;
+      }
+      return submit();
+    }
     try {
       if (!currentPreview.canCommit) {
         _busy = false;

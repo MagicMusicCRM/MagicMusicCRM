@@ -168,7 +168,10 @@ DECISION (owner, 2026-08-29): Назначение абонемента и фа�
 создаёт обязательство, а введённая в том же существующем окне сумма создаёт
 каноническую оплату только если она больше нуля; долг и переплата вычисляются из
 единого баланса. Student и Lead используют один signed preview/idempotent commit
-контур; отдельный legacy writer удалён, а auto-paid поведение клиента v201
+контур; Flutter выполняет его одним действием `Оплатить`, не показывая preview
+как отдельный шаг. Backend связывает append-only payment с payment record через
+единственное разрешённое runtime-обновление `payments.payment_record_id`; broad
+`UPDATE/DELETE` таблицы остаются запрещены. Отдельный legacy writer удалён, а auto-paid поведение клиента v201
 сохранено только внутренним compatibility adapter маршрута
 `/crm/leads/:leadId/subscriptions/issue` поверх канонического writer. Adapter
 удаляется после release/telemetry evidence, что build `<=201` отсутствует в
@@ -334,7 +337,7 @@ rolling-compatible; перед сменой Plan subscription только те�
 `NULL` series фиксируют прежний subscription, после чего continuation получает
 новый. Исторический mass backfill запрещён, потому что текущее значение Plan не
 доказывает старый источник списания. Application rollback выполняется старым
-image поверх schema 0142; destructive down после появления snapshot запрещён.
+image поверх schema 0143; destructive down после появления snapshot запрещён.
 
 DECISION (owner, 2026-08-29): Право записи любой teacher rate принадлежит только
 Director/system_admin и проверяется в общей backend policy на каждом write-path.

@@ -1027,14 +1027,23 @@ describe("Schedule plan aggregate (PostgreSQL)", () => {
       expect(immutable.rows[0]!.subscription_id).toBe(
         fixture.subscriptionIds[0],
       );
-      await expect(new MigrationRunner(pool).down()).rejects.toThrow(
-        /0142 rollback is unsafe/,
+      expect(await new MigrationRunner(pool).down()).toBe(
+        "0143_payment_record_link_permission",
       );
-      const migrationStillApplied = await pool.query<{ applied: boolean }>(
-        `select exists (select 1 from app_schema_migrations
-          where id = '0142_schedule_plan_series_subscription_snapshot') as applied`,
-      );
-      expect(migrationStillApplied.rows[0]!.applied).toBe(true);
+      try {
+        await expect(new MigrationRunner(pool).down()).rejects.toThrow(
+          /0142 rollback is unsafe/,
+        );
+        const migrationStillApplied = await pool.query<{ applied: boolean }>(
+          `select exists (select 1 from app_schema_migrations
+            where id = '0142_schedule_plan_series_subscription_snapshot') as applied`,
+        );
+        expect(migrationStillApplied.rows[0]!.applied).toBe(true);
+      } finally {
+        expect(await new MigrationRunner(pool).up()).toEqual([
+          "0143_payment_record_link_permission",
+        ]);
+      }
     } finally {
       await cleanup(pool, fixture);
     }

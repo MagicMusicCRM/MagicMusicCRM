@@ -352,17 +352,6 @@ void main() {
         'PUT /crm/clients/lead/lead-1/internal-note',
         'PATCH /crm/leads/lead-1',
         'POST /crm/leads/lead-1/subscriptions/purchase/preview',
-      ]);
-      expect(api.idempotentRequests, isEmpty);
-
-      await tester.ensureVisible(submit);
-      await tester.tap(submit);
-      await tester.pumpAndSettle();
-
-      expect(api.requests, [
-        'PUT /crm/clients/lead/lead-1/internal-note',
-        'PATCH /crm/leads/lead-1',
-        'POST /crm/leads/lead-1/subscriptions/purchase/preview',
         'POST /crm/leads/lead-1/subscriptions/purchase',
       ]);
       expect(api.idempotentRequests, hasLength(1));

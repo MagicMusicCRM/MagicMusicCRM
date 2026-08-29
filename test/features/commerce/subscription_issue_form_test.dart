@@ -242,6 +242,9 @@ void main() {
         find.byKey(const Key('subscription-payment-comment')),
         findsOneWidget,
       );
+      expect(find.text('Оплатить'), findsOneWidget);
+      expect(find.text('Проверить'), findsNothing);
+      expect(find.text('Подтвердить покупку'), findsNothing);
       final acceptedBy = tester.widget<TextField>(
         find.descendant(
           of: find.byKey(const Key('subscription-accepted-by')),
@@ -273,7 +276,7 @@ void main() {
         overpaymentMinor: BigInt.zero,
         previewToken: 'partial-preview',
       ),
-      onSubmit: (_) async {},
+      onSubmit: (_) async => throw StateError('keep preview visible'),
     );
 
     await _tap(tester, find.byKey(const Key('subscription-issue-submit')));
@@ -304,7 +307,7 @@ void main() {
         debtMinor: BigInt.zero,
         overpaymentMinor: BigInt.zero,
       ),
-      onSubmit: (_) async {},
+      onSubmit: (_) async => throw StateError('keep preview visible'),
     );
     await _tap(tester, find.byKey(const Key('subscription-issue-submit')));
     var status = tester.widget<Container>(
@@ -324,7 +327,7 @@ void main() {
         debtMinor: BigInt.zero,
         overpaymentMinor: BigInt.from(100000),
       ),
-      onSubmit: (_) async {},
+      onSubmit: (_) async => throw StateError('keep preview visible'),
     );
     await _tap(tester, find.byKey(const Key('subscription-issue-submit')));
     status = tester.widget<Container>(
@@ -460,8 +463,6 @@ void main() {
       onPreview: (_) async => _preview(),
       onSubmit: (_) => commit.future,
     );
-    await _tap(tester, find.byKey(const Key('subscription-issue-submit')));
-
     final submit = find.byKey(const Key('subscription-issue-submit'));
     await tester.ensureVisible(submit);
     await tester.tap(submit);
@@ -530,7 +531,7 @@ void main() {
     },
   );
 
-  testWidgets('preview is explicit and commit retry keeps one identity', (
+  testWidgets('one payment action and commit retry keep one identity', (
     tester,
   ) async {
     final submissions = <SubscriptionIssueSubmission>[];
@@ -566,7 +567,6 @@ void main() {
       contains('1 600 ₽'),
     );
 
-    await _tap(tester, find.byKey(const Key('subscription-issue-submit')));
     expect(submissions, hasLength(1));
     expect(find.text('Повторить'), findsOne);
     await _tap(tester, find.byKey(const Key('subscription-issue-submit')));
@@ -606,7 +606,10 @@ void main() {
           previewToken: 'overpayment-preview',
         );
       },
-      onSubmit: (value) async => submission = value,
+      onSubmit: (value) async {
+        submission = value;
+        throw const MagicApiException(message: 'Сбой после отправки');
+      },
     );
     final paymentAmount = find.byKey(
       const ValueKey<String>('subscription-payment-800000'),
@@ -625,8 +628,6 @@ void main() {
       findsOneWidget,
     );
     expect(_normalizedTexts(tester, previewCard), contains('1 000 ₽'));
-
-    await _tap(tester, find.byKey(const Key('subscription-issue-submit')));
 
     expect(submission?.purchase.paymentAmountMinor, BigInt.from(900000));
     expect(submission?.preview.overpaymentMinor, BigInt.from(100000));
@@ -700,7 +701,6 @@ void main() {
     );
     await _tap(tester, find.byKey(const Key('subscription-issue-submit')));
     expect(previews, 1);
-    expect(find.text('Петров Пётр'), findsWidgets);
   });
 
   testWidgets('fixed discount and installment schedule commit exact terms', (
@@ -765,9 +765,6 @@ void main() {
           .toList(),
       [BigInt.from(233334), BigInt.from(233333), BigInt.from(233333)],
     );
-    expect(find.text('Обязательство'), findsOneWidget);
-
-    await _tap(tester, find.byKey(const Key('subscription-issue-submit')));
     expect(submission, isNotNull);
     expect(submission!.purchase.toJson(), previewInput!.toJson());
   });

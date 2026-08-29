@@ -94,7 +94,6 @@ class SubscriptionIssueFormFeedback extends StatelessWidget {
 
   String _submitLabel() {
     if (attempted) return 'Повторить';
-    if (preview == null) return 'Проверить';
-    return 'Подтвердить покупку';
+    return 'Оплатить';
   }
 }
