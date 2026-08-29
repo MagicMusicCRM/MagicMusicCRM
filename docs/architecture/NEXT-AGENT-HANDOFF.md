@@ -1,11 +1,25 @@
 # MagicMusicCRM — актуальная передача
 
-> Обновлено: 2026-08-29
-> Production: client `1.5.22+202`, server `68a63527`,
-> image `sha256:39302162…`, migration `0143`
-> Рабочая ветка: `main`
-> Статус: subscription payment hotfix production rollout PASS;
-> owner sale UAT в локальном Release не завершён
+> Обновлено: 2026-08-30
+> Production: client `1.5.23+203`, server `4804da07`,
+> image `sha256:3146ffe0…`, migration `0144`
+> Рабочая ветка: `codex/customer-corrections`
+> Статус: client-card/payment/invitation production rollout PASS;
+> owner card UAT запущен в локальном Release
+
+Release `1.5.23+203` устранил ошибки ключевого контура карточки: duplicate
+email больше не даёт 500, направление сохраняется как system field, legacy и
+system definitions не попадают в дополнительные поля. Прямая оплата покупки
+привязана к абонементу и не меняет личный счёт; обычное пополнение осталось
+отдельным сценарием. Приглашение отправляется через durable email outbox на
+email карточки с Google Play action и iOS coming-soon. Абонементы/Прогресс
+динамически выравниваются по высоте. Flutter full `success=true`, targeted
+`112/112`, backend `268/268` suites / `3384/3384` tests, analyze/typecheck/build,
+Windows/Setup/APK/AAB, encrypted pre/post off-host backup и isolated restore
+PASS. Production healthy/restart `0`, migration `0144`, reconciliation дважды
+`issues=[]`, outbox `0/0`, API/Caddy 5xx `0`; оба manifest и GitHub Release
+`v1.5.23` опубликованы. Локальный Windows Release из exact commit запущен.
+Evidence: `docs/audits/v7-production-client-card-fixes-203.md`.
 
 Server hotfix `68a63527` устранил production `permission denied for table
 payments` при продаже абонемента: runtime получил только узкое право
