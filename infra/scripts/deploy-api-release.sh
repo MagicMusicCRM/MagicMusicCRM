@@ -273,6 +273,8 @@ image_migration_head() {
   migration_head="$(
     docker run --rm --pull never --network none --read-only --cap-drop ALL \
       --security-opt no-new-privileges:true --entrypoint sh "${image_id}" -ceu '
+        LC_ALL=C
+        export LC_ALL
         [ -r /app/dist/main.js ]
         [ -r /app/dist/db/migrate.js ]
         [ -r /app/dist/migration/commerce/v7/commerce-data.js ]
@@ -592,20 +594,8 @@ rollout_stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 state_dir="${candidate_release_dir}/rollout-${rollout_stamp}"
 [[ ! -e "${state_dir}" ]] || die "release state directory already exists"
 mkdir -m 700 -- "${state_dir}"
-workers_disabled_override="${state_dir}/workers-disabled.override.yml"
 workers_enabled_override="${state_dir}/workers-enabled.override.yml"
 
-cat >"${workers_disabled_override}" <<'YAML'
-services:
-  api:
-    environment:
-      LESSON_COMPLETION_WORKER_ENABLED: "false"
-      PLATFORM_OUTBOX_WORKER_ENABLED: "false"
-      INSTALLMENT_DUE_WORKER_ENABLED: "false"
-      LESSON_REMINDERS_ENABLED: "false"
-      TASK_REMINDERS_ENABLED: "false"
-      SCHEDULE_SERIES_AUTOEXTEND: "false"
-YAML
 cat >"${workers_enabled_override}" <<'YAML'
 services:
   api:
@@ -617,14 +607,11 @@ services:
       TASK_REMINDERS_ENABLED: "true"
       SCHEDULE_SERIES_AUTOEXTEND: "true"
 YAML
-chmod 600 "${workers_disabled_override}" "${workers_enabled_override}"
+chmod 600 "${workers_enabled_override}"
 
 for release_override in "${candidate_override}" "${rollback_override}"; do
-  for workers_override in \
-    "${workers_disabled_override}" "${workers_enabled_override}"; do
-    "${compose_base[@]}" -f "${release_override}" -f "${workers_override}" \
-      config --quiet
-  done
+  "${compose_base[@]}" -f "${release_override}" \
+    -f "${workers_enabled_override}" config --quiet
 done
 
 printf '%s|%s\n' "${current_image_ref}" "${current_image_id}" \
@@ -716,59 +703,30 @@ stop_unproven_rollback_api() {
   return 1
 }
 
-restore_disabled_rollback() {
-  local required_schema="$1"
-  local recovered_schema=""
-
-  printf 'AUTOMATIC_ROLLBACK|RECOVERY|workers-disabled\n' >&2
-  if ! stop_service_fail_closed caddy; then
-    stop_unproven_rollback_api
-    return 1
-  fi
-  if recreate_api "${rollback_override}" "${workers_disabled_override}" &&
-    recovered_schema="$(verify_rollback_stage \
-      "${workers_disabled_override}" false "${required_schema}")"; then
-    printf 'AUTOMATIC_ROLLBACK|SAFE_CLOSED|workers-disabled|migration=%s\n' \
-      "${recovered_schema}" >&2
-    return 0
-  fi
-  stop_unproven_rollback_api
-  return 1
-}
-
 automatic_rollback() {
   local original_status="$1"
   local rollback_schema=""
-  local enabled_rollback_schema=""
   local rollback_ok=0
 
   set +e
   printf 'AUTOMATIC_ROLLBACK|START|status=%s\n' "${original_status}" >&2
-  # Phase 1: prove the rollback image and retained schema while every worker is off.
+  # Restore only the canonical production runtime; disabled workers are invalid in production.
   if stop_service_fail_closed caddy &&
-    recreate_api "${rollback_override}" "${workers_disabled_override}" &&
+    stop_service_fail_closed api &&
+    recreate_api "${rollback_override}" "${workers_enabled_override}" &&
     rollback_schema="$(verify_rollback_stage \
-      "${workers_disabled_override}" false)"; then
-    # Phase 2: resume workers only after the disabled rollback stage passes.
-    if recreate_api "${rollback_override}" "${workers_enabled_override}" &&
-      enabled_rollback_schema="$(verify_rollback_stage \
-        "${workers_enabled_override}" true "${rollback_schema}")" &&
-      start_caddy && wait_public_ready "${enabled_rollback_schema}"; then
-      if printf '%s\n' "${pre_deployed_revision}" \
-        >"${DEPLOYED_REVISION_FILE}" &&
-        printf '%s\n' "${enabled_rollback_schema}" \
-          >"${state_dir}/rollback-migration.txt" &&
-        chmod 600 "${state_dir}/rollback-migration.txt"; then
-        rollback_ok=1
-      else
-        restore_disabled_rollback "${rollback_schema}" || true
-      fi
+      "${workers_enabled_override}" true)" &&
+    start_caddy && wait_public_ready "${rollback_schema}"; then
+    if printf '%s\n' "${pre_deployed_revision}" \
+      >"${DEPLOYED_REVISION_FILE}" &&
+      printf '%s\n' "${rollback_schema}" \
+        >"${state_dir}/rollback-migration.txt" &&
+      chmod 600 "${state_dir}/rollback-migration.txt"; then
+      rollback_ok=1
     else
-      # An enabled-stage failure must never leave old workers running unproven.
-      restore_disabled_rollback "${rollback_schema}" || true
+      stop_unproven_rollback_api
     fi
   else
-    # Even the disabled rollback stage is untrusted: close the API as well.
     stop_unproven_rollback_api
   fi
 
@@ -810,51 +768,39 @@ trap 'on_signal 129' HUP
 trap 'on_signal 130' INT
 trap 'on_signal 143' TERM
 
-# From this point every error enters image-only rollback.
+# CONTRACT_HARNESS_BEGIN cutover
+perform_cutover() {
+  # From this point every error enters image-only rollback.
+  "${compose_base[@]}" stop caddy
+
+  # Stop the old runtime before the candidate entrypoint applies forward migrations.
+  stop_service_fail_closed api
+  recreate_api "${candidate_override}" "${workers_enabled_override}"
+  wait_for_health "${candidate_image_id}"
+  assert_running_metadata \
+    "${candidate_image}" "${candidate_image_id}" \
+    "${candidate_revision}" "${candidate_version}" true
+  assert_migration "${candidate_image_migration_head}"
+  assert_db_objects
+  assert_reconciliation "${candidate_override}" "${workers_enabled_override}"
+
+  # Persist candidate evidence before reopening public traffic.
+  printf '%s|%s\n' "${candidate_image}" "${candidate_image_id}" \
+    >"${state_dir}/candidate-image.txt"
+  printf '%s\n' "${candidate_image_migration_head}" \
+    >"${state_dir}/candidate-migration.txt"
+  chmod 600 "${state_dir}/candidate-image.txt" \
+    "${state_dir}/candidate-migration.txt"
+
+  # Public traffic is the final cutover step.
+  start_caddy
+  wait_public_ready "${candidate_image_migration_head}"
+  printf '%s\n' "${candidate_revision}" > "${DEPLOYED_REVISION_FILE}"
+}
+# CONTRACT_HARNESS_END cutover
+
 mutation_started=1
-"${compose_base[@]}" stop caddy
-
-# Quiesce all background writers on the known-good runtime first.
-recreate_api "${rollback_override}" "${workers_disabled_override}"
-wait_for_health "${rollback_image_id}"
-assert_running_metadata \
-  "${rollback_image}" "${rollback_image_id}" \
-  "${rollback_revision}" "${rollback_version}" false
-assert_migration "${rollback_image_migration_head}"
-assert_reconciliation "${rollback_override}" "${workers_disabled_override}"
-
-# Candidate applies only forward migrations while public writers stay closed.
-recreate_api "${candidate_override}" "${workers_disabled_override}"
-wait_for_health "${candidate_image_id}"
-assert_running_metadata \
-  "${candidate_image}" "${candidate_image_id}" \
-  "${candidate_revision}" "${candidate_version}" false
-assert_migration "${candidate_image_migration_head}"
-assert_db_objects
-assert_reconciliation "${candidate_override}" "${workers_disabled_override}"
-
-# Only a verified candidate may resume all six workers.
-recreate_api "${candidate_override}" "${workers_enabled_override}"
-wait_for_health "${candidate_image_id}"
-assert_running_metadata \
-  "${candidate_image}" "${candidate_image_id}" \
-  "${candidate_revision}" "${candidate_version}" true
-assert_migration "${candidate_image_migration_head}"
-assert_db_objects
-assert_reconciliation "${candidate_override}" "${workers_enabled_override}"
-
-# Persist candidate evidence before reopening public traffic.
-printf '%s|%s\n' "${candidate_image}" "${candidate_image_id}" \
-  >"${state_dir}/candidate-image.txt"
-printf '%s\n' "${candidate_image_migration_head}" \
-  >"${state_dir}/candidate-migration.txt"
-chmod 600 "${state_dir}/candidate-image.txt" \
-  "${state_dir}/candidate-migration.txt"
-
-# Public traffic is the final cutover step.
-start_caddy
-wait_public_ready "${candidate_image_migration_head}"
-printf '%s\n' "${candidate_revision}" > "${DEPLOYED_REVISION_FILE}"
+perform_cutover
 
 mutation_started=0
 trap - ERR HUP INT TERM

@@ -186,10 +186,11 @@ $workerFlags = @(
   'SCHEDULE_SERIES_AUTOEXTEND'
 )
 foreach ($flag in $workerFlags) {
-  Assert-Contains "$flag`: `"false`"" `
-    "Disabled cutover stage must explicitly stop $flag."
   Assert-Contains "$flag`: `"true`"" `
-    "Enabled cutover stage must explicitly restore $flag."
+    "Canonical cutover runtime must explicitly enable $flag."
+  if ($scriptText.Contains("$flag`: `"false`"")) {
+    throw "Production cutover must not create an invalid disabled override for $flag."
+  }
 }
 
 $cutoverText = Get-Section `
@@ -197,17 +198,7 @@ $cutoverText = Get-Section `
   'mutation_started=0'
 Assert-Order $cutoverText @(
   '"${compose_base[@]}" stop caddy',
-  'recreate_api "${rollback_override}" "${workers_disabled_override}"',
-  'wait_for_health "${rollback_image_id}"',
-  '"${rollback_revision}" "${rollback_version}" false',
-  'assert_migration "${rollback_image_migration_head}"',
-  'assert_reconciliation "${rollback_override}" "${workers_disabled_override}"',
-  'recreate_api "${candidate_override}" "${workers_disabled_override}"',
-  'wait_for_health "${candidate_image_id}"',
-  '"${candidate_revision}" "${candidate_version}" false',
-  'assert_migration "${candidate_image_migration_head}"',
-  'assert_db_objects',
-  'assert_reconciliation "${candidate_override}" "${workers_disabled_override}"',
+  'stop_service_fail_closed api',
   'recreate_api "${candidate_override}" "${workers_enabled_override}"',
   'wait_for_health "${candidate_image_id}"',
   '"${candidate_revision}" "${candidate_version}" true',
@@ -217,7 +208,7 @@ Assert-Order $cutoverText @(
   'start_caddy',
   'wait_public_ready "${candidate_image_migration_head}"',
   'printf ''%s\n'' "${candidate_revision}" > "${DEPLOYED_REVISION_FILE}"'
-) 'Main cutover must stay closed and verify each worker stage in safe order.'
+) 'Main cutover must stop the old API, then verify one canonical production runtime.'
 
 $dbContractText = Get-Section `
   '# CONTRACT_HARNESS_BEGIN db-object-contract' `
@@ -252,39 +243,22 @@ Assert-Order $rollbackVerificationText @(
   '"${candidate_image_migration_head}"',
   'assert_rollback_schema_contract "${actual_schema}"',
   'assert_reconciliation "${rollback_override}" "${workers_override}"'
-) 'Every rollback worker stage must prove health, identity, schema and reconciliation.'
-
-$recoveryText = Get-Section `
-  'restore_disabled_rollback() {' `
-  'automatic_rollback() {'
-Assert-Order $recoveryText @(
-  'stop_service_fail_closed caddy',
-  'recreate_api "${rollback_override}" "${workers_disabled_override}"',
-  'recovered_schema="$(verify_rollback_stage',
-  '"${workers_disabled_override}" false "${required_schema}"',
-  'stop_unproven_rollback_api'
-) 'Failed enabled rollback must restore and prove workers-disabled or stop the API.'
+) 'Rollback must prove health, identity, schema and reconciliation.'
 
 $rollbackText = Get-Section `
   'automatic_rollback() {' `
   '# CONTRACT_HARNESS_END rollback-recovery'
 Assert-Order $rollbackText @(
-  '# Phase 1: prove the rollback image and retained schema while every worker is off.',
+  '# Restore only the canonical production runtime; disabled workers are invalid in production.',
   'stop_service_fail_closed caddy',
-  'recreate_api "${rollback_override}" "${workers_disabled_override}"',
-  'rollback_schema="$(verify_rollback_stage',
-  '"${workers_disabled_override}" false)',
-  '# Phase 2: resume workers only after the disabled rollback stage passes.',
+  'stop_service_fail_closed api',
   'recreate_api "${rollback_override}" "${workers_enabled_override}"',
-  'enabled_rollback_schema="$(verify_rollback_stage',
-  '"${workers_enabled_override}" true "${rollback_schema}")',
+  'rollback_schema="$(verify_rollback_stage',
+  '"${workers_enabled_override}" true)',
   'start_caddy',
-  'wait_public_ready "${enabled_rollback_schema}"',
-  '# An enabled-stage failure must never leave old workers running unproven.',
-  'restore_disabled_rollback "${rollback_schema}"',
-  '# Even the disabled rollback stage is untrusted: close the API as well.',
+  'wait_public_ready "${rollback_schema}"',
   'stop_unproven_rollback_api'
-) 'Automatic rollback must verify both stages and fail closed after either failure.'
+) 'Automatic rollback must verify one valid production stage and fail closed on failure.'
 
 if ($scriptText -match '(?i)(db:rollback|migrate\.js\s+down|migrate\.ts\s+down)') {
   throw 'Automatic rollback must be image-only and must retain the migrated schema.'

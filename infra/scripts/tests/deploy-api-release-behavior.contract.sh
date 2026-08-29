@@ -24,6 +24,7 @@ extract_function() {
 eval "$(extract_contract_section image-migration-head)"
 eval "$(extract_contract_section db-object-contract)"
 eval "$(extract_contract_section rollback-recovery)"
+eval "$(extract_contract_section cutover)"
 eval "$(extract_function resolve_compose_service_image)"
 eval "$(extract_function assert_override_image)"
 
@@ -297,11 +298,16 @@ recreate_count_file="${test_tmp}/recreate-count.txt"
 api_running_file="${test_tmp}/api-running.txt"
 caddy_running_file="${test_tmp}/caddy-running.txt"
 caddy_stop_count_file="${test_tmp}/caddy-stop-count.txt"
+api_stop_count_file="${test_tmp}/api-stop-count.txt"
 # These globals are consumed by the extracted rollback functions through eval.
 # shellcheck disable=SC2034
 declare DEPLOYED_REVISION_FILE="${test_tmp}/deployed-revision.txt" \
+  candidate_override=candidate-release \
+  candidate_image=candidate-image \
+  candidate_image_id=sha256:candidate \
+  candidate_revision=2222222222222222222222222222222222222222 \
+  candidate_version=candidate-version \
   rollback_override=rollback-release \
-  workers_disabled_override=workers-disabled \
   workers_enabled_override=workers-enabled \
   rollback_image=rollback-image \
   rollback_image_id=sha256:rollback \
@@ -334,11 +340,20 @@ fake_compose() {
     log_event "compose:stop caddy:${caddy_stop_count}"
     return 0
   fi
+  if [[ "$*" == 'stop api' ]]; then
+    local api_stop_count
+    api_stop_count="$(cat -- "${api_stop_count_file}")"
+    api_stop_count=$((api_stop_count + 1))
+    printf '%s\n' "${api_stop_count}" >"${api_stop_count_file}"
+    log_event "compose:stop api:${api_stop_count}"
+    return 0
+  fi
   log_event "compose:$*"
   if [[ "$*" == 'ps --all -q caddy' ]]; then
     printf 'fake-caddy-container\n'
   fi
-  if [[ "${scenario:-}" == recovery_unproven &&
+  if [[ ("${scenario:-}" == rollback_unproven ||
+    "${scenario:-}" == post_public_failure) &&
     "$*" == 'ps --all -q api' ]]; then
     printf 'fake-api-container\n'
   fi
@@ -351,6 +366,7 @@ recreate_api() {
   count=$((count + 1))
   printf '%s\n' "${count}" >"${recreate_count_file}"
   printf '%s|%s\n' "${count}" "$2" >"${stage_file}"
+  printf 'true\n' >"${api_running_file}"
   log_event "recreate:${count}:$2"
 }
 
@@ -358,8 +374,8 @@ wait_for_health() {
   local stage
   stage="$(current_stage)"
   log_event "health:${stage}"
-  if [[ "${scenario}" == recovery_unproven &&
-    "${stage}" == 3'|'workers-disabled ]]; then
+  if [[ "${scenario}" == rollback_unproven &&
+    "${stage}" == 1'|'workers-enabled ]]; then
     return 1
   fi
 }
@@ -388,10 +404,6 @@ assert_reconciliation() {
   local stage
   stage="$(current_stage)"
   log_event "reconcile:${stage}:$2"
-  if [[ "${scenario}" == recovery_proven ||
-    "${scenario}" == recovery_unproven ]]; then
-    [[ "${stage}" != 2'|'workers-enabled ]]
-  fi
 }
 
 start_caddy() {
@@ -412,6 +424,11 @@ reset_rollback_scenario() {
   printf 'true\n' >"${api_running_file}"
   printf 'false\n' >"${caddy_running_file}"
   printf '0\n' >"${caddy_stop_count_file}"
+  printf '0\n' >"${api_stop_count_file}"
+  rm -f -- \
+    "${DEPLOYED_REVISION_FILE}" \
+    "${state_dir}/candidate-image.txt" \
+    "${state_dir}/candidate-migration.txt"
   rm -f -- "${state_dir}/rollback-migration.txt"
 }
 
@@ -446,22 +463,57 @@ assert_event_before() {
   }
 }
 
-reset_rollback_scenario recovery_proven
-automatic_rollback 77 2>/dev/null
-assert_event_before 'recreate:2:workers-enabled' 'recreate:3:workers-disabled'
-assert_log_contains 'health:3|workers-disabled'
-assert_log_contains 'metadata:3|workers-disabled:worker-false'
-assert_log_contains 'assert-migration:3|workers-disabled:0142_candidate'
-assert_log_contains 'db-objects:3|workers-disabled'
-assert_log_contains 'reconcile:3|workers-disabled:workers-disabled'
-assert_log_excludes 'compose:stop api'
-assert_log_excludes start-caddy
+reset_rollback_scenario main_cutover
+perform_cutover
+assert_event_before 'compose:stop caddy:1' 'compose:stop api:1'
+assert_event_before 'compose:stop api:1' 'recreate:1:workers-enabled'
+assert_log_contains 'metadata:1|workers-enabled:worker-true'
+assert_log_contains 'assert-migration:1|workers-enabled:0142_candidate'
+assert_log_contains 'db-objects:1|workers-enabled'
+assert_log_contains 'reconcile:1|workers-enabled:workers-enabled'
+assert_event_before 'reconcile:1|workers-enabled:workers-enabled' start-caddy
+assert_log_contains 'public-ready:0142_candidate'
+assert_log_excludes 'recreate:1:workers-disabled'
+[[ "$(cat -- "${DEPLOYED_REVISION_FILE}")" == "${candidate_revision}" ]] || {
+  printf 'deploy-api-release behavior: cutover lost candidate revision\n' >&2
+  exit 1
+}
+[[ "$(cat -- "${state_dir}/candidate-migration.txt")" == \
+  "${candidate_image_migration_head}" ]] || {
+  printf 'deploy-api-release behavior: cutover lost candidate schema evidence\n' >&2
+  exit 1
+}
 
-reset_rollback_scenario recovery_unproven
+reset_rollback_scenario rollback_success
+automatic_rollback 77 2>/dev/null
+assert_event_before 'compose:stop api:1' 'recreate:1:workers-enabled'
+assert_log_contains 'recreate:1:workers-enabled'
+assert_log_contains 'health:1|workers-enabled'
+assert_log_contains 'metadata:1|workers-enabled:worker-true'
+assert_log_contains 'assert-migration:1|workers-enabled:0142_candidate'
+assert_log_contains 'db-objects:1|workers-enabled'
+assert_log_contains 'reconcile:1|workers-enabled:workers-enabled'
+assert_log_contains 'compose:stop api:1'
+assert_log_contains start-caddy
+assert_log_contains 'public-ready:0142_candidate'
+[[ "$(cat -- "${DEPLOYED_REVISION_FILE}")" == "${pre_deployed_revision}" ]] || {
+  printf 'deploy-api-release behavior: successful rollback lost deployed revision\n' >&2
+  exit 1
+}
+[[ "$(cat -- "${state_dir}/rollback-migration.txt")" == \
+  "${candidate_image_migration_head}" ]] || {
+  printf 'deploy-api-release behavior: successful rollback lost schema evidence\n' >&2
+  exit 1
+}
+[[ "$(cat -- "${caddy_running_file}")" == true ]] || {
+  printf 'deploy-api-release behavior: successful rollback did not reopen Caddy\n' >&2
+  exit 1
+}
+
+reset_rollback_scenario rollback_unproven
 automatic_rollback 78 2>/dev/null
-assert_event_before 'recreate:2:workers-enabled' 'recreate:3:workers-disabled'
-assert_event_before 'health:3|workers-disabled' 'compose:stop api'
-assert_log_contains 'compose:stop api'
+assert_event_before 'health:1|workers-enabled' 'compose:stop api:2'
+assert_log_contains 'compose:stop api:2'
 assert_log_contains 'docker-stop:--time 15 fake-api-container'
 assert_log_contains 'docker-inspect:fake-api-container'
 assert_log_excludes start-caddy
@@ -469,10 +521,10 @@ assert_log_excludes start-caddy
 reset_rollback_scenario post_public_failure
 automatic_rollback 79 2>/dev/null
 assert_event_before start-caddy 'compose:stop caddy:2'
-assert_event_before 'compose:stop caddy:2' 'recreate:3:workers-disabled'
-assert_log_contains 'health:3|workers-disabled'
-assert_log_contains 'metadata:3|workers-disabled:worker-false'
-assert_log_excludes 'compose:stop api'
+assert_event_before 'compose:stop caddy:2' 'compose:stop api:2'
+assert_log_contains 'health:1|workers-enabled'
+assert_log_contains 'metadata:1|workers-enabled:worker-true'
+assert_log_contains 'compose:stop api:2'
 [[ "$(cat -- "${caddy_running_file}")" == false ]] || {
   printf 'deploy-api-release behavior: Caddy remained open after failed public check\n' >&2
   exit 1
