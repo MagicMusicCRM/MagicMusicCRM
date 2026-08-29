@@ -2,6 +2,7 @@ part of 'client_card.dart';
 
 Widget _lessonBalanceSummary(
   CommerceLessonBalance balance, {
+  required Map<String, int> indicators,
   required VoidCallback onSubscriptions,
   required VoidCallback onPayments,
 }) {
@@ -38,6 +39,9 @@ Widget _lessonBalanceSummary(
           ? 'Без срока'
           : date.format(balance.expiresAt!.toLocal()),
     ),
+    ('Оплачиваемые пропуски', '${indicators['paidMisses'] ?? 0}'),
+    ('Частично оплачиваемые пропуски', '${indicators['partiallyPaidMisses'] ?? 0}'),
+    ('Неоплачиваемые пропуски', '${indicators['unpaidMisses'] ?? 0}'),
   ];
   return Builder(
     builder: (context) => DecoratedBox(

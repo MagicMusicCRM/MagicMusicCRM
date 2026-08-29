@@ -323,6 +323,150 @@ describe("ClientCardReadService (PostgreSQL)", () => {
     });
   });
 
+  it("returns explicit zero cancellation indicators when effective facts are absent", async () => {
+    const result = await service.load(manager, {
+      type: "student",
+      id: studentId,
+    });
+
+    expect(result.indicators).toMatchObject({
+      paidMisses: 0,
+      partiallyPaidMisses: 0,
+      unpaidMisses: 0,
+    });
+  });
+
+  it("counts only effective cancellation facts and scopes them to the Teacher's lessons", async () => {
+    const extraLessons = await database.query<{ id: string }>(
+      `
+        insert into app.lessons (
+          student_id, teacher_id, branch_id, scheduled_at, created_by
+        )
+        values
+          ($1, $2, $3, now() + interval '3 days', $4),
+          ($1, $2, $3, now() + interval '4 days', $4)
+        returning id
+      `,
+      [
+        studentId,
+        teachers[0],
+        branches[0],
+        admin.userId,
+      ],
+    );
+    const [partiallyPaidLessonId, unpaidLessonId] = extraLessons.rows.map(
+      (row) => row.id,
+    );
+    const revision = await database.query<{ id: string }>(
+      `select id from app.crm_configuration_revisions
+       order by created_at asc, id asc limit 1`,
+    );
+    const configurationRevisionId = revision.rows[0]!.id;
+    const facts: string[] = [];
+
+    const insertFact = async (
+      lessonId: string,
+      settlementTypeKey: string,
+      settlementLabel: string,
+      supersedesFactId?: string,
+    ): Promise<string> => {
+      const result = await database.query<{ id: string }>(
+        `
+          insert into app.lesson_client_charge_facts (
+            lesson_id, client_type, client_id, charge_type, snapshot_value,
+            amount_minor, units, settlement_type_key, settlement_label,
+            settlement_color_token, hour_share_basis_points,
+            fixed_penalty_minor, configuration_revision_id, supersedes_fact_id
+          )
+          values (
+            $1, 'student', $2, 'none', 0, 0, 0, $3, $4,
+            'settlement.miss', 0, 0, $5, $6
+          )
+          returning id
+        `,
+        [
+          lessonId,
+          studentId,
+          settlementTypeKey,
+          settlementLabel,
+          configurationRevisionId,
+          supersedesFactId ?? null,
+        ],
+      );
+      const factId = result.rows[0]!.id;
+      facts.push(factId);
+      return factId;
+    };
+
+    try {
+      const supersededUnpaidFactId = await insertFact(
+        assignedLessonId,
+        "unpaid_miss",
+        "Неоплаченный пропуск",
+      );
+      await insertFact(
+        assignedLessonId,
+        "paid_miss",
+        "Оплачиваемый пропуск",
+        supersededUnpaidFactId,
+      );
+      await insertFact(
+        partiallyPaidLessonId!,
+        "partially_paid_miss",
+        "Частично оплачиваемый пропуск",
+      );
+      await insertFact(
+        unpaidLessonId!,
+        "unpaid_miss",
+        "Неоплаченный пропуск",
+      );
+      await insertFact(
+        otherLessonId,
+        "paid_miss",
+        "Оплачиваемый пропуск",
+      );
+
+      const managerResult = await service.load(manager, {
+        type: "student",
+        id: studentId,
+      });
+      const teacherResult = await service.load(assignedTeacher, {
+        type: "student",
+        id: studentId,
+      });
+
+      expect({
+        paidMisses: managerResult.indicators.paidMisses,
+        partiallyPaidMisses: managerResult.indicators.partiallyPaidMisses,
+        unpaidMisses: managerResult.indicators.unpaidMisses,
+      }).toEqual({
+        paidMisses: 2,
+        partiallyPaidMisses: 1,
+        unpaidMisses: 1,
+      });
+      expect({
+        paidMisses: teacherResult.indicators.paidMisses,
+        partiallyPaidMisses: teacherResult.indicators.partiallyPaidMisses,
+        unpaidMisses: teacherResult.indicators.unpaidMisses,
+      }).toEqual({
+        paidMisses: 1,
+        partiallyPaidMisses: 1,
+        unpaidMisses: 1,
+      });
+    } finally {
+      await database.transaction(async (transaction) => {
+        await transaction.query("set local session_replication_role = replica");
+        await transaction.query(
+          "delete from app.lesson_client_charge_facts where id = any($1::uuid[])",
+          [facts],
+        );
+        await transaction.query("delete from app.lessons where id = any($1::uuid[])", [
+          extraLessons.rows.map((row) => row.id),
+        ]);
+      });
+    }
+  });
+
   it("keeps expiry inclusive and burns the remainder on the next branch-local day", async () => {
     const subscriptionId = subscriptions[0]!;
     const branchId = branches[0]!;

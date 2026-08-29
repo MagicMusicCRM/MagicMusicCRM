@@ -305,6 +305,7 @@ class _ClientCardState extends ConsumerState<ClientCard>
   List<Payment> _payments = [];
   CommerceStudent? _commerceStudent;
   List<Lesson> _lessons = [];
+  Map<String, int> _studentIndicators = const {};
   List<Map<String, dynamic>> _studentTasks = [];
   // Unified comment stream folded into the «История» merge — the «Комментарии»
   // tab reads live via [_CommentsList].

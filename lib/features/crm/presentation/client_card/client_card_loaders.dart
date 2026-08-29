@@ -84,6 +84,17 @@ extension _ClientCardLoaders on _ClientCardState {
             const <Subscription>[];
         _payments = commerce?.student.paymentModels ?? const <Payment>[];
         _lessons = _list(card['lessons']).map(Lesson.fromMap).toList();
+        final indicators = Map<String, dynamic>.from(
+          card['indicators'] as Map? ?? const <String, dynamic>{},
+        );
+        _studentIndicators = {
+          for (final key in const [
+            'paidMisses',
+            'partiallyPaidMisses',
+            'unpaidMisses',
+          ])
+            key: (indicators[key] as num?)?.toInt() ?? 0,
+        };
         _studentTasks = _list(card['tasks']);
         _studentComments = _list(card['comments']);
         _groups = _list(card['groups']);

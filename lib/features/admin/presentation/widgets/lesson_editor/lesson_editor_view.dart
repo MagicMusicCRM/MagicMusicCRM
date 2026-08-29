@@ -243,6 +243,19 @@ class LessonEditorView extends StatelessWidget {
                 ),
                 actions: actions,
               ),
+              if (model.session.isEdit) ...[
+                const SizedBox(height: AppSpace.md),
+                TextFormField(
+                  key: const Key('lesson-notes-input'),
+                  initialValue: model.draft.notes,
+                  onChanged: (value) => actions.edit(LessonNotesEdit(value)),
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Заметка',
+                    alignLabelWithHint: true,
+                  ),
+                ),
+              ],
               LessonEditorFeedback(
                 model: LessonEditorFeedbackModel(
                   session: model.session,

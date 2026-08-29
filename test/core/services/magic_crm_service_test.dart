@@ -497,6 +497,60 @@ void main() {
       expect(adapter.requests[1].queryParameters['isTrial'], true);
     });
 
+    test('patches a lesson note with a caller-owned mutation identity', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/crm/lessons/lesson-a',
+          statusCode: 200,
+          body: {'lessonId': 'lesson-a', 'version': 5},
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+      await service.updateLessonNotes(
+        lessonId: 'lesson-a',
+        expectedVersion: 4,
+        notes: '  Новая заметка  ',
+        identity: const MagicMutationIdentity(
+          idempotencyKey: 'lesson-note-key',
+          requestId: 'lesson-note-request',
+        ),
+      );
+
+      expect(adapter.requests.single.method, 'PATCH');
+      expect(adapter.requests.single.path, '/crm/lessons/lesson-a');
+      expect(adapter.requests.single.body, {
+        'expectedVersion': 4,
+        'notes': 'Новая заметка',
+      });
+      expect(adapter.requests.single.headers['Idempotency-Key'], 'lesson-note-key');
+    });
+
+    test('clears a lesson note through the protected notes-only patch', () async {
+      final adapter = _FakeAdapter([
+        _FakeResponse(
+          path: '/crm/lessons/lesson-a',
+          statusCode: 200,
+          body: {'lessonId': 'lesson-a', 'version': 6},
+        ),
+      ]);
+      final service = MagicCrmService(_client(adapter));
+
+      await service.updateLessonNotes(
+        lessonId: 'lesson-a',
+        expectedVersion: 5,
+        notes: '   ',
+        identity: const MagicMutationIdentity(
+          idempotencyKey: 'lesson-note-clear-key',
+          requestId: 'lesson-note-clear-request',
+        ),
+      );
+
+      expect(adapter.requests.single.body, {
+        'expectedVersion': 5,
+        'notes': null,
+      });
+    });
+
     test('maps teachers to client chat contacts through v3 API', () async {
       final adapter = _FakeAdapter([
         _FakeResponse(

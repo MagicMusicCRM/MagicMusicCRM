@@ -118,6 +118,11 @@ class LessonEditorDecisionPolicy {
       scheduleChanged: true,
       branchToLoad: null,
     ),
+    LessonNotesEdit(:final value) => (
+      draft: draft.copyWith(notes: value),
+      scheduleChanged: false,
+      branchToLoad: null,
+    ),
     LessonTrialEdit(:final value) => (
       draft: draft.copyWith(isTrial: value),
       scheduleChanged: false,
@@ -396,6 +401,13 @@ class LessonEditorDecisionPolicy {
         draft.compensationValueMinor != snapshot.initialCompensationValueMinor;
   }
 
+  bool hasNotesChanges({
+    required LessonEditorSession session,
+    required LessonEditorDraft draft,
+  }) => session.snapshot != null &&
+      (session.snapshot!.rawLesson['notes']?.toString().trim() ?? '') !=
+          draft.notes.trim();
+
   bool compensationNeedsReason({
     required LessonEditorDraft draft,
     required LessonDecisionCatalogItem? rule,
@@ -533,7 +545,8 @@ class LessonEditorDecisionPolicy {
     }
     final changed =
         hasScheduleChanges(session: session, draft: draft) ||
-        hasFinancialChanges(session: session, draft: draft);
+        hasFinancialChanges(session: session, draft: draft) ||
+        hasNotesChanges(session: session, draft: draft);
     return changed
         ? null
         : 'Измените параметры расписания или оплату преподавателю';

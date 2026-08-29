@@ -42,6 +42,24 @@ extension MagicCrmSchedule on MagicCrmService {
   Future<Map<String, dynamic>> createLessonRaw(Map<String, dynamic> data) =>
       _api.post<Map<String, dynamic>>('/crm/lessons', data: data);
 
+  Future<Map<String, dynamic>> updateLessonNotes({
+    required String lessonId,
+    required int expectedVersion,
+    required String? notes,
+    required MagicMutationIdentity identity,
+  }) => _api.request<Map<String, dynamic>>(
+    'PATCH',
+    '/crm/lessons/$lessonId',
+    data: {
+      'expectedVersion': expectedVersion,
+      'notes': switch (notes?.trim()) {
+        null || '' => null,
+        final value => value,
+      },
+    },
+    mutationIdentity: identity,
+  );
+
   Future<Map<String, dynamic>> previewLessonDecision({
     required String lessonId,
     required String operationKey,

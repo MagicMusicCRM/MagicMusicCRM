@@ -30,6 +30,7 @@ void main() {
           'settlementTypeKey': 'lesson',
           'teacherCompensationRuleKey': 'teacher-hourly',
           'teacherCompensationValueMinor': '12500',
+          'notes': 'Подготовить этюд',
         },
       ),
     );
@@ -48,6 +49,7 @@ void main() {
     expect(session.draft.settlementTypeKey, 'lesson');
     expect(session.draft.compensationRuleKey, 'teacher-hourly');
     expect(session.draft.compensationValueMinor, '12500');
+    expect(session.draft.notes, 'Подготовить этюд');
     expect(session.snapshot?.expectedVersion, 4);
     expect(session.snapshot?.clientLocked, isTrue);
     expect(session.snapshot?.initialCompensationRuleKey, 'teacher-hourly');

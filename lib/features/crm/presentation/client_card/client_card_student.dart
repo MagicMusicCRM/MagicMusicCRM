@@ -86,6 +86,7 @@ extension _ClientCardStudent on _ClientCardState {
           if (_commerceStudent != null) ...[
             _lessonBalanceSummary(
               _commerceStudent!.lessonBalance,
+              indicators: _studentIndicators,
               onSubscriptions: () => _selectSection('subscriptions'),
               onPayments: () => _selectSection('payments'),
             ),

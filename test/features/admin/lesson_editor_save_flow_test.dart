@@ -192,6 +192,38 @@ void main() {
     expect(previewCalls, 0);
     expect(createCalls, 0);
   });
+
+  test('note update chains its returned version into the transition', () async {
+    final flow = LessonEditorSaveFlow.forTesting(
+      preview: (_) async => _validAnalysis,
+      create: (_) async => {'id': 'unused'},
+      updateNotes: (update) async {
+        expect(update.lessonId, 'lesson-a');
+        expect(update.expectedVersion, 4);
+        expect(update.notes, '');
+        return {'lessonId': 'lesson-a', 'version': 5};
+      },
+    );
+
+    final result = await flow.save(
+      const LessonEditorSaveCommand(
+        scheduleRequest: _scheduleRequest,
+        payload: {},
+        noteUpdate: LessonNoteUpdate(
+          lessonId: 'lesson-a',
+          expectedVersion: 4,
+          notes: '',
+        ),
+        decisionRequest: LessonDecisionRequest(
+          operation: LessonDecisionOperation.reschedule,
+          lesson: {'id': 'lesson-a', 'version': 4},
+        ),
+      ),
+    );
+
+    expect(result, isA<LessonSaveDecision>());
+    expect((result as LessonSaveDecision).request.lesson['version'], 5);
+  });
 }
 
 const _validAnalysis = LessonScheduleAnalysis(

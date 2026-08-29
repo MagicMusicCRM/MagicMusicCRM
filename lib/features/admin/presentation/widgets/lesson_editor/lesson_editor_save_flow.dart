@@ -1,4 +1,5 @@
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
+import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 
 import '../lesson_decision/lesson_decision_models.dart';
@@ -32,11 +33,25 @@ class LessonEditorSaveCommand {
     required this.scheduleRequest,
     required this.payload,
     this.decisionRequest,
+    this.noteUpdate,
   });
 
   final LessonEditorScheduleRequest scheduleRequest;
   final Map<String, dynamic> payload;
   final LessonDecisionRequest? decisionRequest;
+  final LessonNoteUpdate? noteUpdate;
+}
+
+class LessonNoteUpdate {
+  const LessonNoteUpdate({
+    required this.lessonId,
+    required this.expectedVersion,
+    required this.notes,
+  });
+
+  final String lessonId;
+  final int expectedVersion;
+  final String notes;
 }
 
 sealed class LessonSaveOutcome {
@@ -59,6 +74,12 @@ final class LessonSaveDecision extends LessonSaveOutcome {
   const LessonSaveDecision(this.request);
 
   final LessonDecisionRequest request;
+}
+
+final class LessonSaveNotes extends LessonSaveOutcome {
+  const LessonSaveNotes(this.lesson);
+
+  final Map<String, dynamic> lesson;
 }
 
 final class LessonSaveBusy extends LessonSaveOutcome {
@@ -84,13 +105,18 @@ typedef LessonSchedulePreview =
     );
 typedef LessonCreate =
     Future<Map<String, dynamic>> Function(Map<String, dynamic> payload);
+typedef LessonNotesUpdate = Future<Map<String, dynamic>> Function(
+  LessonNoteUpdate update,
+);
 
 class LessonEditorSaveFlow {
   LessonEditorSaveFlow.forTesting({
     required LessonSchedulePreview preview,
     required LessonCreate create,
+    LessonNotesUpdate? updateNotes,
   }) : _preview = preview,
-       _create = create;
+       _create = create,
+       _updateNotes = updateNotes;
 
   LessonEditorSaveFlow.fromCrm(MagicCrmService crm)
     : this.forTesting(
@@ -105,10 +131,17 @@ class LessonEditorSaveFlow {
           excludeLessonId: request.excludeLessonId,
         ),
         create: crm.createLessonRaw,
+        updateNotes: (update) => crm.updateLessonNotes(
+          lessonId: update.lessonId,
+          expectedVersion: update.expectedVersion,
+          notes: update.notes,
+          identity: MagicMutationIdentity.create('lesson-notes-${update.lessonId}'),
+        ),
       );
 
   final LessonSchedulePreview _preview;
   final LessonCreate _create;
+  final LessonNotesUpdate? _updateNotes;
   bool _saving = false;
 
   Future<LessonSaveOutcome> saveDraft(
@@ -136,8 +169,18 @@ class LessonEditorSaveFlow {
                 references: references,
                 canManageTeacherCompensation: canManageTeacherCompensation,
               ),
-        decisionRequest: session.isEdit
+        decisionRequest: session.isEdit &&
+                (policy.hasScheduleChanges(session: session, draft: draft) ||
+                    policy.hasFinancialChanges(session: session, draft: draft))
             ? policy.editRequest(session: session, draft: draft)
+            : null,
+        noteUpdate: session.isEdit &&
+                policy.hasNotesChanges(session: session, draft: draft)
+            ? LessonNoteUpdate(
+                lessonId: session.snapshot!.lessonId,
+                expectedVersion: session.snapshot!.expectedVersion!,
+                notes: draft.notes,
+              )
             : null,
       ),
     );
@@ -148,6 +191,29 @@ class LessonEditorSaveFlow {
     _saving = true;
     try {
       final decision = command.decisionRequest;
+      final noteUpdate = command.noteUpdate;
+      if (noteUpdate != null) {
+        final updateNotes = _updateNotes;
+        if (updateNotes == null) {
+          throw StateError('Lesson note update is not configured.');
+        }
+        final lesson = await updateNotes(noteUpdate);
+        if (decision == null) return LessonSaveNotes(lesson);
+        final version = (lesson['version'] as num?)?.toInt();
+        if (version == null || version < 1) {
+          throw StateError('Обновлённая версия занятия не получена.');
+        }
+        return LessonSaveDecision(
+          LessonDecisionRequest(
+            operation: decision.operation,
+            lesson: {...decision.lesson, 'version': version},
+            successor: decision.successor,
+            initialSettlementTypeKey: decision.initialSettlementTypeKey,
+            initialCompensationRuleKey: decision.initialCompensationRuleKey,
+            initialCompensationValueMinor: decision.initialCompensationValueMinor,
+          ),
+        );
+      }
       if (decision != null) return LessonSaveDecision(decision);
       final previewOutcome = await _previewOutcome(command.scheduleRequest);
       if (previewOutcome != null) return previewOutcome;

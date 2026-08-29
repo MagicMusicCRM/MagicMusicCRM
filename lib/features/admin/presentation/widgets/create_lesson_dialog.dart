@@ -255,6 +255,8 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
       switch (outcome) {
         case LessonSaveCreated():
           _finishSave('Занятие создано');
+        case LessonSaveNotes():
+          _finishSave('Заметка сохранена');
         case LessonSaveInvalid(:final validation):
           setState(() => _valid = validation);
         case LessonSaveViolations(:final violations):

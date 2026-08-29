@@ -23,6 +23,7 @@ interface ClientCardCompositionRow {
   lesson_counts: Record<string, number>;
   task_counts: Record<string, number>;
   homework_counts: Record<string, number>;
+  miss_counts: Record<string, number>;
   next_lesson: Record<string, unknown> | null;
   custom_field_values: Record<string, unknown>;
 }
@@ -265,6 +266,34 @@ export class ClientCardReadService {
             on teacher_profile.id = teacher.profile_id
            and teacher_profile.deleted_at is null
           where $7::boolean
+        ),
+        miss_counts as (
+          select
+            count(*) filter (
+              where fact.settlement_type_key = 'paid_miss'
+            )::integer as "paidMisses",
+            count(*) filter (
+              where fact.settlement_type_key = 'partially_paid_miss'
+            )::integer as "partiallyPaidMisses",
+            count(*) filter (
+              where fact.settlement_type_key = 'unpaid_miss'
+            )::integer as "unpaidMisses"
+          from target
+          join app.lesson_client_charge_facts_effective fact
+            on fact.client_type = target.type and fact.client_id = target.id
+          join app.lessons lesson
+            on lesson.id = fact.lesson_id and lesson.deleted_at is null
+          left join app.teachers miss_teacher
+            on miss_teacher.id = lesson.teacher_id
+           and miss_teacher.deleted_at is null
+          left join app.profiles miss_teacher_profile
+            on miss_teacher_profile.id = miss_teacher.profile_id
+           and miss_teacher_profile.deleted_at is null
+          where $3::boolean
+            and (
+              $11::text <> 'teacher'
+              or miss_teacher_profile.user_id = $12::uuid
+            )
         )
         select
           (
@@ -386,6 +415,11 @@ export class ClientCardReadService {
               from homework_rows group by status
             ) counts
           ) as homework_counts,
+          (select jsonb_build_object(
+            'paidMisses', "paidMisses",
+            'partiallyPaidMisses', "partiallyPaidMisses",
+            'unpaidMisses', "unpaidMisses"
+          ) from miss_counts) as miss_counts,
           ${typedClientValueMapSql("$1", "$2")} as custom_field_values,
           (
             select item from lesson_rows
@@ -440,6 +474,7 @@ export class ClientCardReadService {
       lessonsByState: row.lesson_counts,
       homeworkByStatus: row.homework_counts,
       comments: row.comments.length,
+      ...row.miss_counts,
     };
     if (projection === "full") {
       indicators.tasksByStatus = row.task_counts;

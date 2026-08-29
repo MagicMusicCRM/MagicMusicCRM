@@ -44,6 +44,7 @@ class LessonEditorInitialMapper {
       ),
       compensationRuleKey: compensationRuleKey,
       compensationValueMinor: compensationValueMinor,
+      notes: _text(lesson, 'notes') ?? '',
     );
     final snapshot = lesson == null
         ? null

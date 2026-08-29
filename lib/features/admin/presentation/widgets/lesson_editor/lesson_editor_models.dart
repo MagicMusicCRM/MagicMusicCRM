@@ -52,6 +52,7 @@ class LessonEditorDraft {
     this.compensationRuleKey,
     this.compensationValueMinor,
     this.plannedSettlementReason = '',
+    this.notes = '',
   });
 
   final DateTime localStart;
@@ -68,6 +69,7 @@ class LessonEditorDraft {
   final String? compensationRuleKey;
   final String? compensationValueMinor;
   final String plannedSettlementReason;
+  final String notes;
 
   LessonEditorDraft copyWith({
     DateTime? localStart,
@@ -84,6 +86,7 @@ class LessonEditorDraft {
     Object? compensationRuleKey = _lessonEditorAbsent,
     Object? compensationValueMinor = _lessonEditorAbsent,
     String? plannedSettlementReason,
+    String? notes,
   }) => LessonEditorDraft(
     localStart: localStart ?? this.localStart,
     durationMinutes: durationMinutes ?? this.durationMinutes,
@@ -117,6 +120,7 @@ class LessonEditorDraft {
         : compensationValueMinor as String?,
     plannedSettlementReason:
         plannedSettlementReason ?? this.plannedSettlementReason,
+    notes: notes ?? this.notes,
   );
 
   LessonEditorDraft withDate(DateTime value) => copyWith(
@@ -197,6 +201,12 @@ final class LessonDurationEdit extends LessonEditorEdit {
   const LessonDurationEdit(this.value);
 
   final int value;
+}
+
+final class LessonNotesEdit extends LessonEditorEdit {
+  const LessonNotesEdit(this.value);
+
+  final String value;
 }
 
 final class LessonTrialEdit extends LessonEditorEdit {
