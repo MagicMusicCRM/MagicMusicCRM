@@ -87,9 +87,6 @@ export interface TeacherMovementTotals {
 export interface TeacherReportReadInput {
   teacherId: string | null;
   lessonTeacherIds: string[];
-  includeMovementOnly: boolean;
-  from: string;
-  to: string;
   status: string | null;
   discipline: string | null;
   category: string | null;

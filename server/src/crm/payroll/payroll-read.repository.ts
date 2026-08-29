@@ -3,13 +3,13 @@ import { ActorContext } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
 import {
   completeTeacherPayrollScopeSql,
+  currentActorRoleSql,
   managerBranchScopeSql,
 } from "../branch-scope";
 import { PayrollAccrualCalculator } from "./payroll-accrual-calculator";
 import {
   PayrollLessonFilters,
   PayrollLessonRow,
-  TeacherMovementTotals,
   TeacherPayrollHeader,
   TeacherPayoutRow,
   TeacherRateEntry,
@@ -57,8 +57,8 @@ export class PayrollReadRepository {
           and ($3::timestamptz is null or l.scheduled_at >= $3::timestamptz)
           and ($4::timestamptz is null or l.scheduled_at < $4::timestamptz)
           and ${managerBranchScopeSql({
-            roleExpression: "$5",
-            userIdExpression: "$6",
+            roleExpression: currentActorRoleSql("$5"),
+            userIdExpression: "$5",
             branchExpression: "l.branch_id::text",
           })}
         order by l.scheduled_at asc, l.id asc
@@ -68,7 +68,6 @@ export class PayrollReadRepository {
         filters.branchId ?? null,
         filters.from ?? null,
         filters.to ?? null,
-        filters.actor.role,
         filters.actor.userId,
       ],
     );
@@ -93,16 +92,16 @@ export class PayrollReadRepository {
         where tr.teacher_id = any($1::uuid[])
           and tr.deleted_at is null
           and (
-            $2::text is null
+            $2::uuid is null
             or ${completeTeacherPayrollScopeSql({
-              roleExpression: "$2",
-              userIdExpression: "$3",
+              roleExpression: currentActorRoleSql("$2"),
+              userIdExpression: "$2",
               teacherExpression: "tr.teacher_id",
             })}
           )
         order by tr.teacher_id, tr.effective_from asc, tr.created_at asc, tr.id asc
       `,
-      [teacherIds, detailActor?.role ?? null, detailActor?.userId ?? null],
+      [teacherIds, detailActor?.userId ?? null],
     );
     for (const row of result.rows) this.addRate(map, row);
     return map;
@@ -121,12 +120,12 @@ export class PayrollReadRepository {
           and aggregate.aggregate_id = t.id::text
         where t.id = $1 and t.deleted_at is null
           and ${completeTeacherPayrollScopeSql({
-            roleExpression: "$2",
-            userIdExpression: "$3",
+            roleExpression: currentActorRoleSql("$2"),
+            userIdExpression: "$2",
             teacherExpression: "t.id",
           })}
       `,
-      [teacherId, actor.role, actor.userId],
+      [teacherId, actor.userId],
     );
     return result.rows[0] ?? null;
   }
@@ -145,13 +144,13 @@ export class PayrollReadRepository {
         left join app.profiles author on author.user_id = u.id and author.deleted_at is null
         where tp.deleted_at is null and tp.teacher_id = $1
           and ${completeTeacherPayrollScopeSql({
-            roleExpression: "$2",
-            userIdExpression: "$3",
+            roleExpression: currentActorRoleSql("$2"),
+            userIdExpression: "$2",
             teacherExpression: "tp.teacher_id",
           })}
         order by tp.paid_at desc, tp.id desc
       `,
-      [teacherId, actor.role, actor.userId],
+      [teacherId, actor.userId],
     );
     return result.rows;
   }
@@ -167,86 +166,34 @@ export class PayrollReadRepository {
         left join app.profiles p on p.id = t.profile_id and p.deleted_at is null
         where t.deleted_at is null
           and ($1::uuid is null or t.id = $1)
+          and t.id = any($2::uuid[])
+          and ($3::text is null or t.status = $3)
           and (
-            t.id = any($2::uuid[])
-            or (
-              $3::boolean
-              and exists (
-                select 1 from app.teacher_payouts movement
-                where movement.teacher_id = t.id
-                  and movement.deleted_at is null
-                  and movement.paid_at >= $4::timestamptz
-                  and movement.paid_at < $5::timestamptz
-              )
-            )
-          )
-          and ($6::text is null or t.status = $6)
-          and (
-            $7::text is null
+            $4::text is null
             or exists (
               select 1 from app.teacher_disciplines td
               join app.disciplines d
                 on d.id = td.discipline_id and d.deleted_at is null
-              where td.teacher_id = t.id and lower(d.name) = lower($7)
+              where td.teacher_id = t.id and lower(d.name) = lower($4)
             )
-            or lower(coalesce(t.specialization, '')) like '%' || lower($7) || '%'
+            or lower(coalesce(t.specialization, '')) like '%' || lower($4) || '%'
           )
           and (
-            $8::text is null
+            $5::text is null
             or lower(
               coalesce(t.custom_data->>'categories', t.custom_data->>'category', '')
-            ) like '%' || lower($8) || '%'
+            ) like '%' || lower($5) || '%'
           )
       `,
       [
         input.teacherId,
         input.lessonTeacherIds,
-        input.includeMovementOnly,
-        input.from,
-        input.to,
         input.status,
         input.discipline,
         input.category,
       ],
     );
     return result.rows;
-  }
-
-  async loadPeriodMovements(
-    teacherIds: string[],
-    from: string,
-    to: string,
-  ): Promise<Map<string, TeacherMovementTotals>> {
-    const result = await this.database.query<{
-      teacher_id: string;
-      paid_total: string | number;
-      bonus_total: string | number;
-      deduction_total: string | number;
-    }>(
-      `
-        select teacher_id,
-          sum(case when kind = 'payout' then amount else 0 end) as paid_total,
-          sum(case when kind = 'bonus' then amount else 0 end) as bonus_total,
-          sum(case when kind = 'deduction' then amount else 0 end) as deduction_total
-        from app.teacher_payouts
-        where deleted_at is null
-          and teacher_id = any($1::uuid[])
-          and ($2::timestamptz is null or paid_at >= $2::timestamptz)
-          and ($3::timestamptz is null or paid_at < $3::timestamptz)
-        group by teacher_id
-      `,
-      [teacherIds, from, to],
-    );
-    return new Map(
-      result.rows.map((row) => [
-        row.teacher_id,
-        {
-          paid: Number(row.paid_total ?? 0),
-          bonus: Number(row.bonus_total ?? 0),
-          deduction: Number(row.deduction_total ?? 0),
-        },
-      ]),
-    );
   }
 
   async findPayout(entryId: string): Promise<TeacherPayoutRow | null> {

@@ -76,12 +76,7 @@ export class TeacherStatsReportService {
     const lessons = this.filterLessons(loadedLessons, query);
     const lessonTeacherIds = [...new Set(lessons.map((row) => row.teacher_id))];
     const rates = await this.repository.loadTeacherRates(lessonTeacherIds);
-    const rows = await this.selectTeachers(
-      actor,
-      query,
-      period,
-      lessonTeacherIds,
-    );
+    const rows = await this.selectTeachers(query, lessonTeacherIds);
     const teacherIds = rows.map((row) => row.id);
     if (!teacherIds.length) {
       return {
@@ -90,14 +85,7 @@ export class TeacherStatsReportService {
       };
     }
 
-    await this.mergeMovementOnlyRates(rates, teacherIds, lessonTeacherIds);
-    const movements = this.canReadGlobalMovements(actor)
-      ? await this.repository.loadPeriodMovements(
-          teacherIds,
-          period.from,
-          period.to,
-        )
-      : new Map<string, TeacherMovementTotals>();
+    const movements = new Map<string, TeacherMovementTotals>();
     const teachers = this.initializeTeachers(teacherIds);
     const names = new Map(rows.map((row) => [row.id, row.name || "Без имени"]));
     const salaries = new Map(
@@ -158,40 +146,16 @@ export class TeacherStatsReportService {
   }
 
   private selectTeachers(
-    actor: ActorContext,
     query: TeacherStatsQuery,
-    period: ReportPeriod,
     lessonTeacherIds: string[],
   ): Promise<TeacherReportRow[]> {
     return this.repository.listReportTeachers({
       teacherId: query.teacherId ?? null,
       lessonTeacherIds,
-      includeMovementOnly:
-        (actor.role === "director" || actor.role === "system_admin") &&
-        !query.branchId &&
-        !query.unitType,
-      from: period.from,
-      to: period.to,
       status: query.status ?? null,
       discipline: query.discipline ?? null,
       category: query.category ?? null,
     });
-  }
-
-  private async mergeMovementOnlyRates(
-    rates: Map<string, TeacherRateEntry[]>,
-    teacherIds: string[],
-    lessonTeacherIds: string[],
-  ): Promise<void> {
-    const lessonTeacherSet = new Set(lessonTeacherIds);
-    const movementOnlyIds = teacherIds.filter(
-      (id) => !lessonTeacherSet.has(id),
-    );
-    const movementRates =
-      await this.repository.loadTeacherRates(movementOnlyIds);
-    for (const [teacherId, entries] of movementRates) {
-      rates.set(teacherId, entries);
-    }
   }
 
   private initializeTeachers(ids: string[]): Map<string, TeacherAccumulator> {
@@ -405,10 +369,6 @@ export class TeacherStatsReportService {
 
   private movementsScope(query: TeacherStatsQuery): string {
     return query.branchId ? "teacher_period_all_branches" : "teacher_period";
-  }
-
-  private canReadGlobalMovements(actor: ActorContext): boolean {
-    return actor.role === "director" || actor.role === "system_admin";
   }
 
   private numericSalary(row: TeacherReportRow): number | null {

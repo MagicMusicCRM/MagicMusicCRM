@@ -14,6 +14,20 @@ export function branchIdExpr(alias: string): string {
 }
 
 /**
+ * Resolve authorization-sensitive role checks from the current database row.
+ * JWT role claims may remain valid briefly after a role downgrade, so they
+ * must not widen resource scope.
+ */
+export function currentActorRoleSql(userIdExpression: string): string {
+  return `(
+    select scope_actor.role::text
+    from app.users scope_actor
+    where scope_actor.id = ${userIdExpression}::uuid
+      and scope_actor.deleted_at is null
+  )`;
+}
+
+/**
  * SQL predicate that keeps delegated Admins and Managers inside their assigned
  * branches.
  * Other operational roles remain governed by their capability checks. Keeping

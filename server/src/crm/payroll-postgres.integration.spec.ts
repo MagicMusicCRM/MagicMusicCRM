@@ -166,6 +166,40 @@ describe("Teacher payroll integrity (PostgreSQL)", () => {
         operationalActors.push({ userId: user.rows[0]!.id, role });
       }
 
+      const staleDirector = await client.query<{ id: string }>(
+        `insert into app.users (email, role, profile_completed)
+         values ($1, 'director', true) returning id`,
+        [`payroll-detail-stale-${randomUUID()}@test.local`],
+      );
+      const staleProfile = await client.query<{ id: string }>(
+        `insert into app.profiles (user_id, first_name, last_name)
+         values ($1, 'Stale', 'Director') returning id`,
+        [staleDirector.rows[0]!.id],
+      );
+      const staleStaff = await client.query<{ id: string }>(
+        `insert into app.staff_members (profile_id, role)
+         values ($1, 'manager') returning id`,
+        [staleProfile.rows[0]!.id],
+      );
+      await client.query(
+        `insert into app.user_crm_links (
+           user_id, entity_type, entity_id, link_source, confirmed_at
+         ) values ($1, 'staff', $2, 'manual_email', now())`,
+        [staleDirector.rows[0]!.id, staleStaff.rows[0]!.id],
+      );
+      await client.query(
+        `insert into app.staff_branch_assignments (staff_member_id, branch_id)
+         values ($1, $2)`,
+        [staleStaff.rows[0]!.id, assignedBranchId],
+      );
+      await client.query("update app.users set role = 'manager' where id = $1", [
+        staleDirector.rows[0]!.id,
+      ]);
+      operationalActors.push({
+        userId: staleDirector.rows[0]!.id,
+        role: "director",
+      });
+
       const teacherUsers = await client.query<{ id: string }>(
         `insert into app.users (email, role, profile_completed)
        values ($1, 'teacher', true), ($2, 'teacher', true),
@@ -370,7 +404,7 @@ describe("Teacher payroll integrity (PostgreSQL)", () => {
     });
   });
 
-  it("keeps append-only rate history with author and includes payout-only statistics", async () => {
+  it("keeps append-only rate history while the report stays accrual-only", async () => {
     const rate = await payroll.setTeacherRate(
       actor,
       teacherId,
@@ -401,15 +435,8 @@ describe("Teacher payroll integrity (PostgreSQL)", () => {
       from: "2026-01-01T00:00:00.000Z",
       to: "2027-01-01T00:00:00.000Z",
     });
-    expect(report.items).toEqual([
-      expect.objectContaining({
-        teacherId,
-        completedLessons: 0,
-        paidTotal: 1500,
-        periodBalance: -1500,
-      }),
-    ]);
-    expect(report.totals.paidTotal).toBe(1500);
+    expect(report.items).toEqual([]);
+    expect(report.totals.paidTotal).toBe(0);
   });
 
   it("intersects Admin and Manager teacher reports and XLSX with assigned branches", async () => {
@@ -567,6 +594,56 @@ describe("Teacher payroll integrity (PostgreSQL)", () => {
       expect(values).not.toContain("Foreign Teacher");
     }
 
+    const staleDirectorUser = await client.query<{ id: string }>(
+      `insert into app.users (email, role, profile_completed)
+       values ($1, 'director', true) returning id`,
+      [`payroll-stale-director-${randomUUID()}@test.local`],
+    );
+    const staleDirectorProfile = await client.query<{ id: string }>(
+      `insert into app.profiles (user_id, first_name, last_name)
+       values ($1, 'Stale', 'Director') returning id`,
+      [staleDirectorUser.rows[0]!.id],
+    );
+    const staleDirectorStaff = await client.query<{ id: string }>(
+      `insert into app.staff_members (profile_id, role)
+       values ($1, 'manager') returning id`,
+      [staleDirectorProfile.rows[0]!.id],
+    );
+    await client.query(
+      `insert into app.user_crm_links (
+         user_id, entity_type, entity_id, link_source, confirmed_at
+       ) values ($1, 'staff', $2, 'manual_email', now())`,
+      [staleDirectorUser.rows[0]!.id, staleDirectorStaff.rows[0]!.id],
+    );
+    await client.query(
+      `insert into app.staff_branch_assignments (staff_member_id, branch_id)
+       values ($1, $2)`,
+      [staleDirectorStaff.rows[0]!.id, assignedBranchId],
+    );
+    await client.query("update app.users set role = 'manager' where id = $1", [
+      staleDirectorUser.rows[0]!.id,
+    ]);
+    const staleDirectorActor: ActorContext = {
+      userId: staleDirectorUser.rows[0]!.id,
+      role: "director",
+    };
+    const downgradedReport = await payroll.getTeacherStatsReport(
+      staleDirectorActor,
+      {
+        from: "2026-08-01T00:00:00.000Z",
+        to: "2026-09-01T00:00:00.000Z",
+      },
+    );
+    expect(downgradedReport.items.map((item) => item.teacherName)).toEqual([
+      "Assigned Teacher",
+    ]);
+    expect(downgradedReport.totals).toMatchObject({
+      accruedTotal: 1000,
+      paidTotal: 0,
+      bonusTotal: 0,
+      deductionTotal: 0,
+    });
+
     const directorReport = await payroll.getTeacherStatsReport(actor, {
       teacherId: scopedTeachers.rows[0]!.id,
       from: "2026-08-01T00:00:00.000Z",
@@ -574,8 +651,8 @@ describe("Teacher payroll integrity (PostgreSQL)", () => {
     });
     expect(directorReport.items[0]).toMatchObject({
       accruedTotal: 1000,
-      paidTotal: 777,
-      periodBalance: 223,
+      paidTotal: 0,
+      periodBalance: 1000,
     });
   });
 

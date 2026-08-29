@@ -437,6 +437,38 @@ describe("ClientReferenceService (PostgreSQL)", () => {
     }
   });
 
+  it("uses the current database role when a Director token is stale after downgrade", async () => {
+    const staleDirector = await createActor(
+      "director",
+      "Устаревший",
+      "Директор",
+    );
+    await expect(
+      service.resolve(staleDirector, {
+        type: "student",
+        id: foreignStudentId,
+      }),
+    ).resolves.toMatchObject({
+      ref: { type: "student", id: foreignStudentId },
+    });
+
+    await database.query("update app.users set role = 'manager' where id = $1", [
+      staleDirector.userId,
+    ]);
+
+    await expect(
+      service.resolve(staleDirector, {
+        type: "student",
+        id: foreignStudentId,
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    const result = await service.search(staleDirector, { limit: 50 });
+    expect(result.items.map((item) => item.ref)).not.toContainEqual({
+      type: "student",
+      id: foreignStudentId,
+    });
+  });
+
   it("returns a stable tombstone for an archived allowed reference", async () => {
     const result = await service.resolve(admin, {
       type: "student",

@@ -6,7 +6,11 @@ import {
   ClientRefSearchQuery,
   ClientRefType,
 } from "../dto/client-ref.dto";
-import { branchIdExpr, managerBranchScopeSql } from "../branch-scope";
+import {
+  branchIdExpr,
+  currentActorRoleSql,
+  managerBranchScopeSql,
+} from "../branch-scope";
 
 interface ClientReferenceRow {
   type: ClientRefType;
@@ -65,12 +69,12 @@ export class ClientReferenceService {
           candidate.deleted_at, candidate.version,
           candidate.linked_type, candidate.linked_id
         from client_candidates candidate
-        where candidate.type = $3
-          and candidate.id = $4
+        where candidate.type = $2
+          and candidate.id = $3
           and ${this.actorScopeSql("candidate")}
         limit 1
       `,
-      [actor.role, actor.userId, ref.type, ref.id],
+      [actor.userId, ref.type, ref.id],
     );
     const row = result.rows[0];
     if (!row) {
@@ -93,22 +97,21 @@ export class ClientReferenceService {
           candidate.linked_type, candidate.linked_id
         from client_candidates candidate
         where ${this.actorScopeSql("candidate")}
-          and ($3::text is null or candidate.type = $3)
-          and ($4::boolean or candidate.deleted_at is null)
-          and ($5::uuid is null or candidate.branch_id = $5::text)
+          and ($2::text is null or candidate.type = $2)
+          and ($3::boolean or candidate.deleted_at is null)
+          and ($4::uuid is null or candidate.branch_id = $4::text)
           and (
-            $6::text is null
-            or lower(candidate.label) like '%' || $6 || '%' escape '\\'
+            $5::text is null
+            or lower(candidate.label) like '%' || $5 || '%' escape '\\'
           )
         order by
           (candidate.deleted_at is not null) asc,
           lower(candidate.label) asc,
           candidate.type asc,
           candidate.id asc
-        limit $7
+        limit $6
       `,
       [
-        actor.role,
         actor.userId,
         query.type ?? null,
         query.includeArchived ?? false,
@@ -180,25 +183,26 @@ export class ClientReferenceService {
   }
 
   private actorScopeSql(alias: string): string {
+    const currentRole = currentActorRoleSql("$1");
     return `
       (
-        $1::text = any(array[${GLOBAL_MANAGEMENT_ROLES.map((role) => `'${role}'`).join(", ")}]::text[])
+        ${currentRole} = any(array[${GLOBAL_MANAGEMENT_ROLES.map((role) => `'${role}'`).join(", ")}]::text[])
         or (
-          $1::text = any(array[${BRANCH_MANAGEMENT_ROLES.map((role) => `'${role}'`).join(", ")}]::text[])
+          ${currentRole} = any(array[${BRANCH_MANAGEMENT_ROLES.map((role) => `'${role}'`).join(", ")}]::text[])
           and ${managerBranchScopeSql({
-            roleExpression: "$1",
-            userIdExpression: "$2",
+            roleExpression: currentRole,
+            userIdExpression: "$1",
             branchExpression: `${alias}.branch_id::text`,
           })}
         )
         or (
-          $1::text = 'client'
+          ${currentRole} = 'client'
           and (
-            (${alias}.type = 'student' and ${alias}.profile_user_id = $2::uuid)
+            (${alias}.type = 'student' and ${alias}.profile_user_id = $1::uuid)
             or exists (
               select 1
               from app.user_crm_links client_link
-              where client_link.user_id = $2::uuid
+              where client_link.user_id = $1::uuid
                 and client_link.entity_type::text = ${alias}.type
                 and client_link.entity_id = ${alias}.id
                 and client_link.deleted_at is null
@@ -206,14 +210,14 @@ export class ClientReferenceService {
           )
         )
         or (
-          $1::text = 'teacher'
+          ${currentRole} = 'teacher'
           and (
             exists (
               select 1
               from app.canonical_tasks assigned_task
               join app.shared_task_visibility visibility
                 on visibility.task_id = assigned_task.id
-               and visibility.user_id = $2::uuid
+               and visibility.user_id = $1::uuid
               where assigned_task.entity_type::text = ${alias}.type
                 and assigned_task.entity_id = ${alias}.id
                 and assigned_task.deleted_at is null
@@ -229,7 +233,7 @@ export class ClientReferenceService {
                   join app.profiles teacher_profile
                     on teacher_profile.id = assigned_teacher.profile_id
                   where assigned_lesson.student_id = ${alias}.id
-                    and teacher_profile.user_id = $2::uuid
+                    and teacher_profile.user_id = $1::uuid
                     and assigned_lesson.deleted_at is null
                     and assigned_teacher.deleted_at is null
                     and teacher_profile.deleted_at is null
@@ -245,7 +249,7 @@ export class ClientReferenceService {
                     on group_teacher_profile.id = group_teacher.profile_id
                   where membership.student_id = ${alias}.id
                     and membership.left_at is null
-                    and group_teacher_profile.user_id = $2::uuid
+                    and group_teacher_profile.user_id = $1::uuid
                     and assigned_group.deleted_at is null
                     and group_teacher.deleted_at is null
                     and group_teacher_profile.deleted_at is null
@@ -262,7 +266,7 @@ export class ClientReferenceService {
                 join app.profiles lead_teacher_profile
                   on lead_teacher_profile.id = lead_teacher.profile_id
                 where assigned_lead_lesson.lead_id = ${alias}.id
-                  and lead_teacher_profile.user_id = $2::uuid
+                  and lead_teacher_profile.user_id = $1::uuid
                   and assigned_lead_lesson.deleted_at is null
                   and lead_teacher.deleted_at is null
                   and lead_teacher_profile.deleted_at is null

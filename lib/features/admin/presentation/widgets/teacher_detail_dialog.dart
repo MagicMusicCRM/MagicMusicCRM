@@ -13,8 +13,8 @@ import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_deta
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_model.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_detail_save_command.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_employment_fields.dart';
-import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_payroll_controller.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_payroll_dialogs.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_payroll_version_loader.dart';
 
 import 'magic_teacher_employment_reference_gateway.dart';
 import 'teacher_employment_reference_gateway.dart';
@@ -45,7 +45,7 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
   late TextEditingController _emailController;
   late String _canonicalPhone;
   late final TeacherEmploymentInitial _employmentInitial;
-  late final TeacherPayrollController _payrollController;
+  late final TeacherPayrollVersionLoader _payrollVersion;
   late final TeacherEmploymentReferenceGateway _employmentReferenceGateway;
   final _employmentKey = GlobalKey<TeacherEmploymentFieldsState>();
   bool _saving = false;
@@ -67,7 +67,7 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
       crm: ref.read(magicCrmServiceProvider),
       settings: ref.read(magicSettingsServiceProvider),
     );
-    _payrollController = TeacherPayrollController(
+    _payrollVersion = TeacherPayrollVersionLoader(
       service: ref.read(magicCrmServiceProvider),
       teacherId: _teacherId,
     )..load();
@@ -75,7 +75,6 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
 
   @override
   void dispose() {
-    _payrollController.dispose();
     _nameController.dispose();
     _emailController.dispose();
     super.dispose();
@@ -119,8 +118,8 @@ class _TeacherDetailDialogState extends ConsumerState<TeacherDetailDialog> {
       name: _nameController.text,
       phone: _canonicalPhone,
       employment: employment,
-      expectedVersion: _payrollController.expectedVersion,
-      payrollAvailable: _payrollController.error == null,
+      expectedVersion: _payrollVersion.expectedVersion,
+      payrollAvailable: _payrollVersion.error == null,
       requestPayrollReason: _requestPayrollChangeReason,
     );
     if (!mounted) return;

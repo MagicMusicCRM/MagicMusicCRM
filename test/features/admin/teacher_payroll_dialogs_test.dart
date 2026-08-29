@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_employment_fields.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/teacher_payroll_dialogs.dart';
 
 void main() {
-  testWidgets('delete dialog requires and returns an audit reason', (
+  testWidgets('employment change dialog requires and returns an audit reason', (
     tester,
   ) async {
     String? result;
@@ -12,9 +13,27 @@ void main() {
         home: Builder(
           builder: (context) => TextButton(
             onPressed: () async {
-              result = await showTeacherPayrollDeleteDialog(
+              result = await showTeacherEmploymentChangeReasonDialog(
                 context,
-                rate: true,
+                employment: const TeacherEmploymentValue(
+                  branchIds: [],
+                  disciplineIds: [],
+                  levels: [],
+                  categories: [],
+                  birthday: null,
+                  workStartDate: null,
+                  isPartTime: false,
+                  isBlacklisted: false,
+                  salary: 1000,
+                  salaryChanged: false,
+                  rate: 900,
+                  rateChanged: true,
+                  rateEffectiveFrom: null,
+                ),
+                initial: const TeacherEmploymentInitial(
+                  salary: 1000,
+                  rate: 800,
+                ),
               );
             },
             child: const Text('Открыть'),
@@ -25,17 +44,17 @@ void main() {
 
     await tester.tap(find.text('Открыть'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Удалить'));
+    await tester.tap(find.text('Подтвердить и сохранить'));
     await tester.pumpAndSettle();
-    expect(find.text('Удалить запись ставки?'), findsOneWidget);
+    expect(find.text('Подтвердите финансовые условия'), findsOneWidget);
 
     await tester.enterText(
-      find.widgetWithText(TextField, 'Причина удаления *'),
-      'Дубликат ставки',
+      find.widgetWithText(TextField, 'Причина изменения'),
+      'Новые условия договора',
     );
-    await tester.tap(find.text('Удалить'));
+    await tester.tap(find.text('Подтвердить и сохранить'));
     await tester.pumpAndSettle();
 
-    expect(result, 'Дубликат ставки');
+    expect(result, 'Новые условия договора');
   });
 }

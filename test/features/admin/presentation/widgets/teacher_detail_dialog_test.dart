@@ -16,12 +16,9 @@ void main() {
       'teacher_detail_content.dart',
       'teacher_detail_model.dart',
       'teacher_detail_save_command.dart',
-      'teacher_payroll_controller.dart',
       'teacher_payroll_dialog_controller_owner.dart',
       'teacher_payroll_dialogs.dart',
-      'teacher_payroll_entry_dialogs.dart',
-      'teacher_payroll_history.dart',
-      'teacher_payroll_section.dart',
+      'teacher_payroll_version_loader.dart',
     ];
 
     for (final name in requiredFiles) {

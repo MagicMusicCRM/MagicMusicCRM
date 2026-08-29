@@ -620,39 +620,21 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
 
     expect(report.items.map((item) => item.teacherId)).toEqual(["t-1"]);
     const namesSql = String(query.mock.calls[2][0]);
-    expect(namesSql).toContain("t.status = $6");
+    expect(namesSql).toContain("t.status = $3");
     expect(namesSql).toContain("app.teacher_disciplines");
     expect(query.mock.calls[2][1]).toEqual([
       null,
       ["t-1", "t-2"],
-      false,
-      "2026-07-01T00:00:00.000Z",
-      "2026-08-01T00:00:00.000Z",
       "active",
       "Гитара",
       null,
     ]);
   });
 
-  it("includes a payout-only teacher so period totals do not disappear", async () => {
-    const { service } = createServiceWithQueryResults([
+  it("keeps the accrual report free from payout-only teachers", async () => {
+    const { service, query } = createServiceWithQueryResults([
       { rows: [] },
-      { rows: [{ id: "t-1", name: "Иван Петров", salary: null }] },
-      {
-        rows: [
-          { teacher_id: "t-1", rate: "700", effective_from: "2026-01-01" },
-        ],
-      },
-      {
-        rows: [
-          {
-            teacher_id: "t-1",
-            paid_total: "500",
-            bonus_total: "0",
-            deduction_total: "0",
-          },
-        ],
-      },
+      { rows: [] },
     ]);
 
     const report = await service.getTeacherStatsReport(
@@ -663,15 +645,11 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
       },
     );
 
-    expect(report.items).toHaveLength(1);
-    expect(report.items[0]).toMatchObject({
-      teacherId: "t-1",
-      completedLessons: 0,
-      accruedTotal: 0,
-      paidTotal: 500,
-      periodBalance: -500,
-    });
-    expect(report.totals.paidTotal).toBe(500);
+    expect(report.items).toEqual([]);
+    expect(report.totals.paidTotal).toBe(0);
+    expect(String(query.mock.calls[1][0])).not.toContain(
+      "app.teacher_payouts",
+    );
   });
 
   it("rejects an inverted report period", async () => {
