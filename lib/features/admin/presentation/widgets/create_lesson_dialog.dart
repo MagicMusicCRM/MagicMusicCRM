@@ -243,15 +243,15 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
       _saving = true;
       _valid = const LessonEditorValidation.valid();
     });
-    final outcome = await _flow.saveDraft(
-      _session,
-      _draft,
-      _refs,
-      () => _schedule.requestFor(session: _session, draft: _draft),
-      canManageTeacherCompensation: _canManageTeacherCompensation,
-    );
-    if (!mounted) return;
     try {
+      final outcome = await _flow.saveDraft(
+        _session,
+        _draft,
+        _refs,
+        () => _schedule.requestFor(session: _session, draft: _draft),
+        canManageTeacherCompensation: _canManageTeacherCompensation,
+      );
+      if (!mounted) return;
       switch (outcome) {
         case LessonSaveCreated():
           _finishSave('Занятие создано');
@@ -283,6 +283,8 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
         case LessonSaveBusy():
           break;
       }
+    } catch (error) {
+      if (mounted) _showError(error, 'Не удалось сохранить занятие.');
     } finally {
       if (mounted) setState(() => _saving = false);
     }

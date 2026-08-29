@@ -219,7 +219,7 @@ export class LessonWriteCommandService {
         const updated = await this.repository.updateNotes(
           client,
           lessonId,
-          dto.notes!.trim() || null,
+          dto.notes?.trim() || null,
           dto.expectedVersion,
         );
         if (!updated.rows[0]) {

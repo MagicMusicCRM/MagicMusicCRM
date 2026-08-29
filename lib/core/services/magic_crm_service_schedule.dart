@@ -50,13 +50,7 @@ extension MagicCrmSchedule on MagicCrmService {
   }) => _api.request<Map<String, dynamic>>(
     'PATCH',
     '/crm/lessons/$lessonId',
-    data: {
-      'expectedVersion': expectedVersion,
-      'notes': switch (notes?.trim()) {
-        null || '' => null,
-        final value => value,
-      },
-    },
+    data: {'expectedVersion': expectedVersion, 'notes': notes?.trim() ?? ''},
     mutationIdentity: identity,
   );
 

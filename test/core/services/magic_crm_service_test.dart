@@ -497,59 +497,68 @@ void main() {
       expect(adapter.requests[1].queryParameters['isTrial'], true);
     });
 
-    test('patches a lesson note with a caller-owned mutation identity', () async {
-      final adapter = _FakeAdapter([
-        _FakeResponse(
-          path: '/crm/lessons/lesson-a',
-          statusCode: 200,
-          body: {'lessonId': 'lesson-a', 'version': 5},
-        ),
-      ]);
-      final service = MagicCrmService(_client(adapter));
-      await service.updateLessonNotes(
-        lessonId: 'lesson-a',
-        expectedVersion: 4,
-        notes: '  Новая заметка  ',
-        identity: const MagicMutationIdentity(
-          idempotencyKey: 'lesson-note-key',
-          requestId: 'lesson-note-request',
-        ),
-      );
+    test(
+      'patches a lesson note with a caller-owned mutation identity',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/crm/lessons/lesson-a',
+            statusCode: 200,
+            body: {'lessonId': 'lesson-a', 'version': 5},
+          ),
+        ]);
+        final service = MagicCrmService(_client(adapter));
+        await service.updateLessonNotes(
+          lessonId: 'lesson-a',
+          expectedVersion: 4,
+          notes: '  Новая заметка  ',
+          identity: const MagicMutationIdentity(
+            idempotencyKey: 'lesson-note-key',
+            requestId: 'lesson-note-request',
+          ),
+        );
 
-      expect(adapter.requests.single.method, 'PATCH');
-      expect(adapter.requests.single.path, '/crm/lessons/lesson-a');
-      expect(adapter.requests.single.body, {
-        'expectedVersion': 4,
-        'notes': 'Новая заметка',
-      });
-      expect(adapter.requests.single.headers['Idempotency-Key'], 'lesson-note-key');
-    });
+        expect(adapter.requests.single.method, 'PATCH');
+        expect(adapter.requests.single.path, '/crm/lessons/lesson-a');
+        expect(adapter.requests.single.body, {
+          'expectedVersion': 4,
+          'notes': 'Новая заметка',
+        });
+        expect(
+          adapter.requests.single.headers['Idempotency-Key'],
+          'lesson-note-key',
+        );
+      },
+    );
 
-    test('clears a lesson note through the protected notes-only patch', () async {
-      final adapter = _FakeAdapter([
-        _FakeResponse(
-          path: '/crm/lessons/lesson-a',
-          statusCode: 200,
-          body: {'lessonId': 'lesson-a', 'version': 6},
-        ),
-      ]);
-      final service = MagicCrmService(_client(adapter));
+    test(
+      'clears a lesson note through the protected notes-only patch',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/crm/lessons/lesson-a',
+            statusCode: 200,
+            body: {'lessonId': 'lesson-a', 'version': 6},
+          ),
+        ]);
+        final service = MagicCrmService(_client(adapter));
 
-      await service.updateLessonNotes(
-        lessonId: 'lesson-a',
-        expectedVersion: 5,
-        notes: '   ',
-        identity: const MagicMutationIdentity(
-          idempotencyKey: 'lesson-note-clear-key',
-          requestId: 'lesson-note-clear-request',
-        ),
-      );
+        await service.updateLessonNotes(
+          lessonId: 'lesson-a',
+          expectedVersion: 5,
+          notes: '   ',
+          identity: const MagicMutationIdentity(
+            idempotencyKey: 'lesson-note-clear-key',
+            requestId: 'lesson-note-clear-request',
+          ),
+        );
 
-      expect(adapter.requests.single.body, {
-        'expectedVersion': 5,
-        'notes': null,
-      });
-    });
+        expect(adapter.requests.single.body, {
+          'expectedVersion': 5,
+          'notes': '',
+        });
+      },
+    );
 
     test('maps teachers to client chat contacts through v3 API', () async {
       final adapter = _FakeAdapter([
@@ -1117,6 +1126,11 @@ void main() {
               'payments': [],
               'tasks': [],
               'comments': [],
+              'indicators': {
+                'paidMisses': 2,
+                'partiallyPaidMisses': 1,
+                'unpaidMisses': 3,
+              },
               'expectedPayments': [],
               'balance': {
                 'studentId': 'student-a',
@@ -1219,6 +1233,11 @@ void main() {
         expect(student['branch_name'], 'Центр');
         expect(student['linked_user_id'], 'client-a');
         expect((card['groups'] as List).single['name'], 'Вокал');
+        expect(card['indicators'], {
+          'paidMisses': 2,
+          'partiallyPaidMisses': 1,
+          'unpaidMisses': 3,
+        });
         expect(card['balance']['balance'], -5000);
         expect((card['links'] as List).single['link_source'], 'manual_phone');
         expect(duplicates.single['entity_a']['name'], 'Анна Лид');
@@ -1641,7 +1660,7 @@ void main() {
                 'phone': '+79990000000',
                 'email': 'anna@example.com',
                 'source': 'site',
-                'notes': null,
+                'notes': '',
                 'assignedTo': null,
                 'customData': {
                   'discipline': 'Вокал',

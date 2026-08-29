@@ -37,6 +37,7 @@ class FakeCardApiClient extends MagicApiClient {
     this.studentAccounts = const [],
     this.studentMovements = const [],
     this.studentTechnicalHistory = const [],
+    this.studentIndicators = const {},
     this.homeworks = const [],
     this.internalNote,
     this.operationalHistory = const [],
@@ -116,6 +117,7 @@ class FakeCardApiClient extends MagicApiClient {
   final List<Map<String, dynamic>> studentAccounts;
   final List<Map<String, dynamic>> studentMovements;
   final List<Map<String, dynamic>> studentTechnicalHistory;
+  final Map<String, dynamic> studentIndicators;
   final List<Map<String, dynamic>> homeworks;
   Map<String, dynamic>? internalNote;
   final List<Map<String, dynamic>> operationalHistory;
@@ -439,6 +441,7 @@ class FakeCardApiClient extends MagicApiClient {
             'payments': <dynamic>[],
             'tasks': <dynamic>[],
             'comments': <dynamic>[],
+            'indicators': studentIndicators,
             'expectedPayments': <dynamic>[],
             'balance': null,
             'subscriptions': studentSubscriptions,
@@ -947,6 +950,7 @@ Future<void> pumpClientCard(
   List<StatusRecord>? statuses,
   bool settle = true,
   bool routed = false,
+  String initialSection = 'overview',
   ContextViewState? initialViewState,
   ProviderContainer? container,
   ValueChanged<bool?>? onClosed,
@@ -965,6 +969,7 @@ Future<void> pumpClientCard(
                     entityType: entityType,
                     allStatuses: statuses,
                     routed: routed,
+                    initialSection: initialSection,
                     initialViewState: initialViewState,
                   );
                   return routed ? Material(child: card) : card;

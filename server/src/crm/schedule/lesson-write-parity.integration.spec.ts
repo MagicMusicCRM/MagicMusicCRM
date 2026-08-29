@@ -565,6 +565,65 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
     }
   });
 
+  it("clears a null notes-only PATCH through the canonical command path", async () => {
+    const fixture = await createFixture(pool);
+    const actor = { userId: fixture.managerId, role: "manager" as const };
+    const lessonIds: string[] = [];
+    const metadata = (name: string) => ({
+      idempotencyKey: `notes-only-${name}-${randomUUID()}`,
+      requestId: `notes-only-request-${name}-${randomUUID()}`,
+    });
+    try {
+      const lesson = await commands.create(
+        actor,
+        {
+          clientRef: { type: "student", id: fixture.studentId },
+          teacherId: fixture.teacherId,
+          branchId: fixture.branchId,
+          roomId: fixture.roomId,
+          scheduledAt: "2026-07-27T07:00:00.000Z",
+          durationMinutes: 60,
+          isTrial: false,
+          completionType: "standard.success",
+          clientChargeType: "none",
+          clientChargeValue: 0,
+          teacherCompensationType: "fixed",
+          teacherCompensationValue: 700,
+          notes: "Старая заметка",
+          financialDecision: {
+            settlementTypeKey: "free_lesson",
+            teacherCompensationRuleKey: "none",
+          },
+        },
+        metadata("create"),
+      );
+      lessonIds.push(lesson.id);
+
+      const patched = await commands.update(
+        actor,
+        lesson.id,
+        {
+          expectedVersion: lesson.version,
+          notes: null as never,
+        },
+        metadata("clear"),
+      );
+      const persisted = await pool.query<{ notes: string | null }>(
+        "select notes from app.lessons where id = $1",
+        [lesson.id],
+      );
+
+      expect(patched.version).toBe(lesson.version + 1);
+      expect(persisted.rows[0]!.notes).toBeNull();
+    } finally {
+      await cleanupFixture(pool, {
+        ...fixture,
+        actorKey: `user:${fixture.managerId}`,
+        lessonIds,
+      });
+    }
+  });
+
   it("returns 403 and preserves the Lesson on a direct Teacher mutation", async () => {
     const fixture = await createFixture(pool);
     const manager = { userId: fixture.managerId, role: "manager" as const };

@@ -286,6 +286,9 @@ extension MagicCrmCore on MagicCrmService {
       'payments': _mapList(response['payments'], _legacyPayment),
       'tasks': _mapList(response['tasks'], _legacyTask),
       'comments': _mapList(response['comments'], _legacyComment),
+      'indicators': response['indicators'] is Map
+          ? Map<String, dynamic>.from(response['indicators'] as Map)
+          : <String, dynamic>{},
       'balance': response['balance'] is Map<String, dynamic>
           ? _legacyStudentBalance(response['balance'] as Map<String, dynamic>)
           : null,

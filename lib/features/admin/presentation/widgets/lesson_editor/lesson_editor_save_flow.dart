@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
@@ -47,11 +49,23 @@ class LessonNoteUpdate {
     required this.lessonId,
     required this.expectedVersion,
     required this.notes,
+    required this.identity,
   });
 
   final String lessonId;
   final int expectedVersion;
   final String notes;
+  final MagicMutationIdentity identity;
+}
+
+class _LessonNotesMutationAttempt {
+  const _LessonNotesMutationAttempt({
+    required this.fingerprint,
+    required this.identity,
+  });
+
+  final String fingerprint;
+  final MagicMutationIdentity identity;
 }
 
 sealed class LessonSaveOutcome {
@@ -105,9 +119,8 @@ typedef LessonSchedulePreview =
     );
 typedef LessonCreate =
     Future<Map<String, dynamic>> Function(Map<String, dynamic> payload);
-typedef LessonNotesUpdate = Future<Map<String, dynamic>> Function(
-  LessonNoteUpdate update,
-);
+typedef LessonNotesUpdate =
+    Future<Map<String, dynamic>> Function(LessonNoteUpdate update);
 
 class LessonEditorSaveFlow {
   LessonEditorSaveFlow.forTesting({
@@ -135,13 +148,14 @@ class LessonEditorSaveFlow {
           lessonId: update.lessonId,
           expectedVersion: update.expectedVersion,
           notes: update.notes,
-          identity: MagicMutationIdentity.create('lesson-notes-${update.lessonId}'),
+          identity: update.identity,
         ),
       );
 
   final LessonSchedulePreview _preview;
   final LessonCreate _create;
   final LessonNotesUpdate? _updateNotes;
+  _LessonNotesMutationAttempt? _notesAttempt;
   bool _saving = false;
 
   Future<LessonSaveOutcome> saveDraft(
@@ -151,39 +165,42 @@ class LessonEditorSaveFlow {
     LessonEditorScheduleRequest Function() scheduleRequest, {
     required bool canManageTeacherCompensation,
     LessonEditorDecisionPolicy policy = const LessonEditorDecisionPolicy(),
-  }) {
-    final validation = policy.validate(
-      session: session,
-      draft: draft,
-      references: references,
-    );
-    if (!validation.isValid) return Future.value(LessonSaveInvalid(validation));
-    return save(
-      LessonEditorSaveCommand(
-        scheduleRequest: scheduleRequest(),
-        payload: session.isEdit
-            ? policy.schedulePayload(draft)
-            : policy.createPayload(
-                session: session,
-                draft: draft,
-                references: references,
-                canManageTeacherCompensation: canManageTeacherCompensation,
-              ),
-        decisionRequest: session.isEdit &&
-                (policy.hasScheduleChanges(session: session, draft: draft) ||
-                    policy.hasFinancialChanges(session: session, draft: draft))
-            ? policy.editRequest(session: session, draft: draft)
-            : null,
-        noteUpdate: session.isEdit &&
-                policy.hasNotesChanges(session: session, draft: draft)
-            ? LessonNoteUpdate(
-                lessonId: session.snapshot!.lessonId,
-                expectedVersion: session.snapshot!.expectedVersion!,
-                notes: draft.notes,
-              )
-            : null,
-      ),
-    );
+  }) async {
+    try {
+      final validation = policy.validate(
+        session: session,
+        draft: draft,
+        references: references,
+      );
+      if (!validation.isValid) return LessonSaveInvalid(validation);
+      final decision =
+          session.isEdit &&
+              (policy.hasScheduleChanges(session: session, draft: draft) ||
+                  policy.hasFinancialChanges(session: session, draft: draft))
+          ? policy.editRequest(session: session, draft: draft)
+          : null;
+      return await save(
+        LessonEditorSaveCommand(
+          scheduleRequest: scheduleRequest(),
+          payload: session.isEdit
+              ? policy.schedulePayload(draft)
+              : policy.createPayload(
+                  session: session,
+                  draft: draft,
+                  references: references,
+                  canManageTeacherCompensation: canManageTeacherCompensation,
+                ),
+          decisionRequest: decision,
+          noteUpdate:
+              session.isEdit &&
+                  policy.hasNotesChanges(session: session, draft: draft)
+              ? _noteUpdateFor(session, draft, decision)
+              : null,
+        ),
+      );
+    } catch (error, stackTrace) {
+      return LessonSaveFailure(error, stackTrace);
+    }
   }
 
   Future<LessonSaveOutcome> save(LessonEditorSaveCommand command) async {
@@ -198,11 +215,15 @@ class LessonEditorSaveFlow {
           throw StateError('Lesson note update is not configured.');
         }
         final lesson = await updateNotes(noteUpdate);
-        if (decision == null) return LessonSaveNotes(lesson);
+        if (decision == null) {
+          _completeNotesAttempt(noteUpdate);
+          return LessonSaveNotes(lesson);
+        }
         final version = (lesson['version'] as num?)?.toInt();
         if (version == null || version < 1) {
           throw StateError('Обновлённая версия занятия не получена.');
         }
+        _completeNotesAttempt(noteUpdate);
         return LessonSaveDecision(
           LessonDecisionRequest(
             operation: decision.operation,
@@ -210,7 +231,8 @@ class LessonEditorSaveFlow {
             successor: decision.successor,
             initialSettlementTypeKey: decision.initialSettlementTypeKey,
             initialCompensationRuleKey: decision.initialCompensationRuleKey,
-            initialCompensationValueMinor: decision.initialCompensationValueMinor,
+            initialCompensationValueMinor:
+                decision.initialCompensationValueMinor,
           ),
         );
       }
@@ -218,8 +240,52 @@ class LessonEditorSaveFlow {
       final previewOutcome = await _previewOutcome(command.scheduleRequest);
       if (previewOutcome != null) return previewOutcome;
       return await _createOutcome(command.payload);
+    } catch (error, stackTrace) {
+      return LessonSaveFailure(error, stackTrace);
     } finally {
       _saving = false;
+    }
+  }
+
+  LessonNoteUpdate _noteUpdateFor(
+    LessonEditorSession session,
+    LessonEditorDraft draft,
+    LessonDecisionRequest? decision,
+  ) {
+    final snapshot = session.snapshot!;
+    final fingerprint = jsonEncode({
+      'lessonId': snapshot.lessonId,
+      'expectedVersion': snapshot.expectedVersion,
+      'notes': draft.notes.trim(),
+      'decision': decision == null
+          ? null
+          : {
+              'operation': decision.operation.apiKey,
+              'lesson': decision.lesson,
+              'successor': decision.successor,
+            },
+    });
+    final previous = _notesAttempt;
+    final attempt = previous?.fingerprint == fingerprint
+        ? previous!
+        : _LessonNotesMutationAttempt(
+            fingerprint: fingerprint,
+            identity: MagicMutationIdentity.create(
+              'lesson-notes-${snapshot.lessonId}',
+            ),
+          );
+    _notesAttempt = attempt;
+    return LessonNoteUpdate(
+      lessonId: snapshot.lessonId,
+      expectedVersion: snapshot.expectedVersion!,
+      notes: draft.notes,
+      identity: attempt.identity,
+    );
+  }
+
+  void _completeNotesAttempt(LessonNoteUpdate update) {
+    if (identical(_notesAttempt?.identity, update.identity)) {
+      _notesAttempt = null;
     }
   }
 
