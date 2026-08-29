@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:open_filex/open_filex.dart';
@@ -19,13 +20,47 @@ class ReportFileOpenResult {
 
 void validateReportExportBytes(List<int> bytes, String format) {
   if (format == 'xlsx') {
-    final isZip =
-        bytes.length >= 4 &&
-        bytes[0] == 0x50 &&
-        bytes[1] == 0x4b &&
-        bytes[2] == 0x03 &&
-        bytes[3] == 0x04;
-    if (!isZip) {
+    try {
+      final archive = ZipDecoder().decodeBytes(bytes, verify: true);
+      for (final file in archive.files.where((file) => file.isFile)) {
+        final content = file.readBytes();
+        if (content == null ||
+            content.length != file.size ||
+            (file.crc32 != null && getCrc32(content) != file.crc32)) {
+          throw const FormatException(
+            'Сервер вернул повреждённый файл отчёта.',
+          );
+        }
+      }
+
+      final contentTypes = archive.findFile('[Content_Types].xml');
+      final packageRelationships = archive.findFile('_rels/.rels');
+      final workbook = archive.findFile('xl/workbook.xml');
+      final workbookRelationships = archive.findFile(
+        'xl/_rels/workbook.xml.rels',
+      );
+      final worksheet = archive.files.where((file) {
+        return file.isFile &&
+            file.name.startsWith('xl/worksheets/') &&
+            file.name.endsWith('.xml');
+      }).firstOrNull;
+      if (contentTypes == null ||
+          packageRelationships == null ||
+          workbook == null ||
+          workbookRelationships == null ||
+          worksheet == null ||
+          !utf8.decode(contentTypes.content).contains('/xl/workbook.xml') ||
+          !utf8
+              .decode(packageRelationships.content)
+              .contains('officeDocument') ||
+          !utf8.decode(workbook.content).contains('<sheets') ||
+          !utf8.decode(workbookRelationships.content).contains('worksheet') ||
+          !utf8.decode(worksheet.content).contains('<sheetData')) {
+        throw const FormatException('Сервер вернул повреждённый файл отчёта.');
+      }
+    } on FormatException {
+      rethrow;
+    } catch (_) {
       throw const FormatException('Сервер вернул повреждённый файл отчёта.');
     }
     return;

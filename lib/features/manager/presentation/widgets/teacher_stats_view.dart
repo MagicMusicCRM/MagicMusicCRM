@@ -208,7 +208,7 @@ class TeacherStatsView extends StatelessWidget {
       final filename =
           'teacher-stats-${stamp.year.toString().padLeft(4, '0')}-'
           '${stamp.month.toString().padLeft(2, '0')}-'
-          '${stamp.day.toString().padLeft(2, '0')}.csv';
+          '${stamp.day.toString().padLeft(2, '0')}.xlsx';
       _snack(
         context,
         result.opened
