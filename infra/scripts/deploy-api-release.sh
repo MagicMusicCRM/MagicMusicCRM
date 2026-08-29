@@ -65,7 +65,8 @@ The script keeps database migrations in place during automatic rollback.
 It never reads the Docker dotenv as a shell script and never prints it.
 The CHECK hash is SHA-256 of case-preserving pg_get_constraintdef(..., false)
 with all whitespace removed. Trigger UPDATE columns must be sorted.
-The function hash is SHA-256 of pg_get_functiondef() with trailing newlines removed.
+The function hash is SHA-256 of pg_get_functiondef() with trailing newlines removed
+and CRLF line endings canonicalized to LF.
 EOF
 }
 
@@ -405,8 +406,6 @@ caddy_container_id="$("${compose_base[@]}" ps --all -q caddy)"
   die "Caddy container is not running"
 
 pre_migration="$(get_migration)"
-[[ "${pre_migration}" == "${rollback_image_migration_head}" ]] ||
-  die "current migration does not match the declared release baseline"
 
 expected_db_schema="${expected_db_table%%.*}"
 expected_db_relation="${expected_db_table#*.}"
@@ -419,7 +418,8 @@ assert_db_objects() {
   local constraint_noinherit normalized_constraint constraint_hash
   local trigger_result trigger_enabled trigger_type trigger_function
   local trigger_update_columns trigger_arguments function_arguments function_return
-  local trigger_function_definition trigger_function_hash
+  local trigger_function_definition canonical_trigger_function_definition
+  local trigger_function_hash
 
   constraint_result="$(database_query "
     select
@@ -498,14 +498,28 @@ assert_db_objects() {
       and trigger_row.tgname = '${expected_db_trigger}'
       and not trigger_row.tgisinternal")" || return 1
   [[ -n "${trigger_function_definition}" ]] || return 1
+  canonical_trigger_function_definition="${trigger_function_definition//$'\r\n'/$'\n'}"
   trigger_function_hash="$(
-    printf '%s' "${trigger_function_definition}" | sha256sum
+    printf '%s' "${canonical_trigger_function_definition}" | sha256sum
   )" || return 1
   trigger_function_hash="${trigger_function_hash%% *}"
   [[ "${trigger_function_hash}" == \
     "${expected_db_trigger_function_sha256}" ]] || return 1
 }
 # CONTRACT_HARNESS_END db-object-contract
+
+# CONTRACT_HARNESS_BEGIN pre-migration-contract
+assert_pre_migration_contract() {
+  local actual_migration="$1"
+
+  assert_migration "${actual_migration}" || return 1
+  if [[ "${actual_migration}" == "${candidate_image_migration_head}" ]]; then
+    assert_db_objects
+  else
+    [[ "${actual_migration}" == "${rollback_image_migration_head}" ]]
+  fi
+}
+# CONTRACT_HARNESS_END pre-migration-contract
 
 wait_for_health() {
   local expected_image_id="$1"
@@ -598,10 +612,12 @@ wait_public_ready() {
   return 1
 }
 
+assert_pre_migration_contract "${pre_migration}" ||
+  die "current migration is not a compatible release schema"
 current_health="$(docker inspect "${api_container_id}" \
   --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}')"
 [[ "${current_health}" == healthy ]] || die "current API is not healthy"
-wait_public_ready "${rollback_image_migration_head}" ||
+wait_public_ready "${pre_migration}" ||
   die "current public readiness does not match the release baseline"
 current_reconciliation="$(
   "${compose_base[@]}" -f "${rollback_override}" \

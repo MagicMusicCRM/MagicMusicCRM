@@ -177,7 +177,9 @@ Assert-Order $preMutationValidationText @(
   'caddy_container_id="$("${compose_base[@]}" ps --all -q caddy)"',
   '[[ -n "${caddy_container_id}" ]]',
   'pre_migration="$(get_migration)"',
+  'assert_pre_migration_contract "${pre_migration}"',
   'current_health="$(docker inspect',
+  'wait_public_ready "${pre_migration}"',
   'current_reconciliation=',
   'mkdir -m 700 -- "${state_dir}"',
   'config --quiet',
@@ -236,9 +238,20 @@ Assert-Order $dbContractText @(
   '[[ "${trigger_type}" == 23 ]]',
   '"${expected_db_trigger_update_columns}"',
   'pg_get_functiondef(trigger_row.tgfoid)',
+  'canonical_trigger_function_definition="${trigger_function_definition//$''\r\n''/$''\n''}"',
   '"${trigger_function_hash}" ==',
   '"${expected_db_trigger_function_sha256}"'
 ) 'DB object validation must check exact CHECK and trigger catalog semantics.'
+
+$preMigrationContractText = Get-Section `
+  '# CONTRACT_HARNESS_BEGIN pre-migration-contract' `
+  '# CONTRACT_HARNESS_END pre-migration-contract'
+Assert-Order $preMigrationContractText @(
+  'assert_migration "${actual_migration}"',
+  '"${actual_migration}" == "${candidate_image_migration_head}"',
+  'assert_db_objects',
+  '"${actual_migration}" == "${rollback_image_migration_head}"'
+) 'Pre-migration must accept only an exact rollback schema or a revalidated retained candidate schema.'
 
 $rollbackVerificationText = Get-Section `
   'verify_rollback_stage() {' `

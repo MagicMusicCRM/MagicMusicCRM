@@ -23,6 +23,7 @@ extract_function() {
 
 eval "$(extract_contract_section image-migration-head)"
 eval "$(extract_contract_section db-object-contract)"
+eval "$(extract_contract_section pre-migration-contract)"
 eval "$(extract_contract_section rollback-recovery)"
 eval "$(extract_contract_section cutover)"
 eval "$(extract_function resolve_compose_service_contract)"
@@ -289,9 +290,11 @@ expected_db_check_sha256="$(
 expected_db_check_sha256="${expected_db_check_sha256%% *}"
 fake_constraint_result="c|t|f|${valid_constraint_definition}"
 fake_trigger_result='O|23|app.validate_schedule_plan_series_subscription|plan_id,subscription_id|0|0|trigger'
-fake_function_definition='CREATE FUNCTION app.validate_schedule_plan_series_subscription() RETURNS trigger BODY exact-behavior'
+valid_function_definition=$'CREATE FUNCTION app.validate_schedule_plan_series_subscription()\r\nRETURNS trigger BODY exact-behavior'
+fake_function_definition="${valid_function_definition}"
+canonical_function_definition="${valid_function_definition//$'\r\n'/$'\n'}"
 expected_db_trigger_function_sha256="$(
-  printf '%s' "${fake_function_definition}" | sha256sum
+  printf '%s' "${canonical_function_definition}" | sha256sum
 )"
 expected_db_trigger_function_sha256="${expected_db_trigger_function_sha256%% *}"
 
@@ -331,9 +334,31 @@ fake_trigger_result='O|23|app.validate_schedule_plan_series_subscription|lesson_
 expect_fail 'UPDATE OF columns must match migration exactly' assert_db_objects
 fake_trigger_result='A|23|app.validate_schedule_plan_series_subscription|plan_id,subscription_id|0|0|trigger'
 expect_pass 'always-enabled trigger is accepted' assert_db_objects
+fake_function_definition="${valid_function_definition//$'\r\n'/$'\r'}"
+expect_fail 'a lone carriage return remains hash-significant' assert_db_objects
 fake_function_definition='CREATE FUNCTION app.validate_schedule_plan_series_subscription() RETURNS trigger BODY return-new-no-op'
 expect_fail 'trigger function body hash must match' assert_db_objects
-fake_function_definition='CREATE FUNCTION app.validate_schedule_plan_series_subscription() RETURNS trigger BODY exact-behavior'
+fake_function_definition="${valid_function_definition}"
+
+rollback_image_migration_head=0141_previous
+candidate_image_migration_head=0142_candidate
+fake_current_migration=0141_previous
+# Called indirectly by the extracted production contract.
+# shellcheck disable=SC2329
+assert_migration() {
+  [[ "$1" == "${fake_current_migration}" ]]
+}
+expect_pass 'original rollback schema is a compatible pre-migration' \
+  assert_pre_migration_contract 0141_previous
+fake_current_migration=0142_candidate
+expect_pass 'retained exact candidate schema is a compatible pre-migration' \
+  assert_pre_migration_contract 0142_candidate
+fake_current_migration=0143_unexpected
+expect_fail 'an unexpected newer schema fails closed' \
+  assert_pre_migration_contract 0143_unexpected
+fake_current_migration=0141_previous
+expect_fail 'a schema change after the pre-migration snapshot fails closed' \
+  assert_pre_migration_contract 0142_candidate
 
 event_file="${test_tmp}/events.log"
 stage_file="${test_tmp}/stage.txt"
