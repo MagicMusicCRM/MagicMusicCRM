@@ -442,4 +442,54 @@ void main() {
       'Текущий пользователь',
     );
   });
+
+  testWidgets(
+    'disposing a card during delayed actor lookup opens no sale sheet',
+    (tester) async {
+      final profileGate = Completer<Map<String, dynamic>>();
+      final api = FakeCardApiClient(
+        lead: const {
+          'id': 'lead-1',
+          'firstName': 'Анна',
+          'lastName': 'Смирнова',
+          'customData': <String, dynamic>{},
+        },
+        subscriptionPackages: const [
+          {
+            'id': 'package-1',
+            'name': 'Демо',
+            'lessonsTotal': 8,
+            'price': 24000,
+          },
+        ],
+        currentProfileGate: profileGate.future,
+      );
+      await pumpClientCard(
+        tester,
+        api: api,
+        seed: {'id': 'lead-1', 'name': 'Анна', 'custom_data': {}},
+        statuses: const [],
+      );
+
+      final subscriptions = find.text('Абонементы');
+      await tester.ensureVisible(subscriptions);
+      await tester.tap(subscriptions);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Продать абонемент'));
+      await tester.pump();
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      profileGate.complete(const {
+        'id': 'current-user',
+        'email': 'admin@example.test',
+        'role': 'admin',
+        'firstName': 'Анна',
+        'lastName': 'Администратор',
+      });
+      await tester.pump();
+
+      expect(find.byKey(const Key('subscription-accepted-by')), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

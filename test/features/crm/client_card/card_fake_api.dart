@@ -83,6 +83,7 @@ class FakeCardApiClient extends MagicApiClient {
       'lastName': 'Администратор',
     },
     this.failCurrentProfile = false,
+    this.currentProfileGate,
   }) : studentSubscriptions = [
          for (final subscription in studentSubscriptions)
            Map<String, dynamic>.from(subscription),
@@ -157,6 +158,7 @@ class FakeCardApiClient extends MagicApiClient {
   final Map<String, dynamic>? adjustmentReversalPreview;
   final Map<String, dynamic> currentProfile;
   final bool failCurrentProfile;
+  final Future<Map<String, dynamic>>? currentProfileGate;
 
   Map<String, dynamic>? updateLeadBody;
   final List<Map<String, dynamic>> updateLeadBodies = [];
@@ -194,6 +196,7 @@ class FakeCardApiClient extends MagicApiClient {
       if (failCurrentProfile) {
         throw const MagicApiException(message: 'Профиль недоступен.');
       }
+      if (currentProfileGate != null) return await currentProfileGate! as T;
       return currentProfile as T;
     }
     if (path == '/legal/gate') {
