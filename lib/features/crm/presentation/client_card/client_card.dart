@@ -278,6 +278,20 @@ class _ClientCardState extends ConsumerState<ClientCard>
   // The id of the entity the card was opened for (unchanged from Phase 1/2).
   String get _entityId => widget.lead['id'].toString();
 
+  String? get _snapshotActorRole {
+    final role = widget.capabilitySnapshot?.role.trim();
+    return role == null || role.isEmpty ? null : role;
+  }
+
+  String? _currentActorRole([String? releaseGateRole]) =>
+      _snapshotActorRole ??
+      releaseGateRole ??
+      ref.read(releaseGateStatusProvider).asData?.value.role;
+
+  Future<String> _resolveActorRole() async =>
+      _snapshotActorRole ??
+      (await ref.read(releaseGateStatusProvider.future)).role;
+
   // Effective ids for each half once resolution settles. Fall back to the open
   // entity id so the single-side modes behave exactly as before.
   String get _studentId =>
@@ -729,7 +743,12 @@ class _ClientCardState extends ConsumerState<ClientCard>
     });
 
     final cs = Theme.of(context).colorScheme;
-    final actorRole = ref.watch(releaseGateStatusProvider).asData?.value.role;
+    final releaseGateRole = ref
+        .watch(releaseGateStatusProvider)
+        .asData
+        ?.value
+        .role;
+    final actorRole = _currentActorRole(releaseGateRole);
     final access = ClientCardAccessPolicy.project(
       actorRole: actorRole ?? '',
       capabilitySnapshot: widget.capabilitySnapshot,

@@ -51,12 +51,16 @@ abstract final class ClientCardAccessPolicy {
     required CapabilitySnapshot? capabilitySnapshot,
     required bool hasStudentHalf,
   }) {
+    final snapshotRole = capabilitySnapshot?.role.trim();
+    final effectiveRole = snapshotRole == null || snapshotRole.isEmpty
+        ? actorRole
+        : snapshotRole;
     final managerAccess = const {
       'admin',
       'manager',
       'director',
       'system_admin',
-    }.contains(actorRole);
+    }.contains(effectiveRole);
     final canReadClientFinance = managerAccess;
     final canWriteSchedule =
         capabilitySnapshot?.allows('schedule.lesson.write') ?? managerAccess;
@@ -71,7 +75,7 @@ abstract final class ClientCardAccessPolicy {
           'manager',
           'director',
           'system_admin',
-        }.contains(actorRole);
+        }.contains(effectiveRole);
     final source = !hasStudentHalf
         ? _leadSections
         : canReadClientFinance

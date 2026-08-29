@@ -27,7 +27,7 @@ extension _ClientCardLoaders on _ClientCardState {
       final cardFuture = crm.getStudentCard(id);
       StudentCommerceProjection? commerce;
       try {
-        final role = (await ref.read(releaseGateStatusProvider.future)).role;
+        final role = await _resolveActorRole();
         if (crmHasClientCardFinanceAccess(role)) {
           commerce = await crm.getStudentCommerceProjection(id);
         }
@@ -276,7 +276,7 @@ extension _ClientCardLoaders on _ClientCardState {
 
   Future<void> _fetchClientAccess() async {
     try {
-      final role = (await ref.read(releaseGateStatusProvider.future)).role;
+      final role = await _resolveActorRole();
       if (!crmHasManagerAccess(role)) return;
       if (mounted) {
         _emitState(() {

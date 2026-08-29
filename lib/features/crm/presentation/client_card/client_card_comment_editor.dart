@@ -3,7 +3,7 @@ part of 'client_card.dart';
 extension _ClientCardCommentEditor on _ClientCardState {
   /// Staff может выбрать поток комментария; педагог всегда пишет teacher_note.
   bool get _canPickCommentKind {
-    final role = ref.read(releaseGateStatusProvider).asData?.value.role;
+    final role = _currentActorRole();
     final isStaff =
         role == 'admin' ||
         role == 'manager' ||
@@ -131,7 +131,7 @@ extension _ClientCardCommentEditor on _ClientCardState {
     // teacher stream by RBAC; staff may choose explicitly.
     if (targetType != 'student') return null;
     if (_canPickCommentKind) return _commentKind;
-    final role = ref.read(releaseGateStatusProvider).asData?.value.role;
+    final role = _currentActorRole();
     return role == 'teacher' ? 'teacher_note' : null;
   }
 

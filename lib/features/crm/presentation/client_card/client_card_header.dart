@@ -264,9 +264,7 @@ extension _ClientCardHeader on _ClientCardState {
             ClientArchiveButton(
               entityType: 'lead',
               entityId: _leadId,
-              allowed: clientRoleCanArchive(
-                ref.read(releaseGateStatusProvider).asData?.value.role ?? '',
-              ),
+              allowed: clientRoleCanArchive(_currentActorRole() ?? ''),
               onArchived: () => _closeCard(true),
             ),
             // «Прикрепить к ученику» (§1 спеки) остаётся отдельной lifecycle-

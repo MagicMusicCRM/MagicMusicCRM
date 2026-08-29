@@ -3,7 +3,7 @@ part of 'client_card.dart';
 extension _ClientCardInternalContext on _ClientCardState {
   Future<void> _fetchInternalContext() async {
     try {
-      final role = (await ref.read(releaseGateStatusProvider.future)).role;
+      final role = await _resolveActorRole();
       if (!crmHasManagerAccess(role)) return;
       if (mounted) {
         _emitState(() {

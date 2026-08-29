@@ -15,6 +15,8 @@ import 'package:magic_music_crm/core/workspace/workspace_controller.dart';
 import 'package:magic_music_crm/core/workspace/workspace_navigation_scope.dart';
 import 'package:magic_music_crm/core/workspace/workspace_store.dart';
 import 'package:magic_music_crm/core/navigation/responsive_navigation_shell.dart';
+import 'package:magic_music_crm/features/auth/data/models/release_gate_models.dart';
+import 'package:magic_music_crm/features/auth/providers/release_gate_provider.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/client_card.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/show_client_card.dart';
 import 'package:magic_music_crm/features/crm/presentation/staff_workspace_screen.dart';
@@ -167,7 +169,7 @@ void main() {
     expect(surface.viewState?.filters['paymentId'], 'payment-1');
   });
 
-  for (final role in const ['admin', 'manager', 'director']) {
+  for (final role in const ['admin', 'manager', 'director', 'system_admin']) {
     for (final width in const [360.0, 840.0, 1200.0]) {
       testWidgets('$role fills ${width.toInt()} and restores section', (
         tester,
@@ -224,6 +226,107 @@ void main() {
       });
     }
   }
+
+  testWidgets(
+    'system admin snapshot opens subscription sale while release gate is pending',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(1200, 900);
+      addTearDown(tester.view.reset);
+      final gate = Completer<ReleaseGateStatus>();
+      addTearDown(() {
+        if (!gate.isCompleted) {
+          gate.complete(
+            const ReleaseGateStatus(
+              role: 'system_admin',
+              profileComplete: true,
+              legalAccepted: true,
+              deletionPending: false,
+            ),
+          );
+        }
+      });
+      final api = FakeCardApiClient(
+        role: 'system_admin',
+        student: _student,
+        currentProfile: const {
+          'id': 'system-admin-1',
+          'email': 'root@example.test',
+          'role': 'system_admin',
+          'firstName': 'Системный',
+          'lastName': 'Администратор',
+        },
+        subscriptionPackages: const [
+          {
+            'id': 'package-1',
+            'name': 'Фортепиано — 8 занятий',
+            'lessonsTotal': 8,
+            'price': 24000,
+          },
+        ],
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            magicApiClientProvider.overrideWithValue(api),
+            crmRealtimeProvider.overrideWith(
+              (ref) => const Stream<CrmChangedEvent>.empty(),
+            ),
+            releaseGateStatusProvider.overrideWith((ref) => gate.future),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              body: ClientCardRouteSurface(
+                snapshot: CapabilitySnapshot(
+                  accountId: 'system-admin-1',
+                  role: 'system_admin',
+                  accessVersion: 1,
+                  capabilities: {
+                    'crm.client.read.basic',
+                    'commerce.client_finance.read',
+                    'commerce.client_finance.write',
+                  },
+                  scopes: {},
+                ),
+                entityType: 'student',
+                entityId: 'student-1',
+                initialSection: 'subscriptions',
+              ),
+            ),
+          ),
+        ),
+      );
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+
+      final sale = find.byKey(
+        const Key('subscription-add'),
+        skipOffstage: false,
+      );
+      expect(
+        find.byKey(const Key('client-desktop-section-subscriptions')),
+        findsOneWidget,
+      );
+      expect(sale, findsOneWidget);
+      tester.widget<FilledButton>(sale).onPressed!();
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+
+      expect(
+        find.byKey(const Key('subscription-package-selector')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('subscription-payment-method')),
+        findsOneWidget,
+      );
+      expect(find.text('Оплачено сейчас'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'desktop client card is one canvas with a lazy calendar after preferences',

@@ -549,9 +549,7 @@ extension _ClientCardStudent on _ClientCardState {
             ClientArchiveButton(
               entityType: 'student',
               entityId: _studentId,
-              allowed: clientRoleCanArchive(
-                ref.read(releaseGateStatusProvider).asData?.value.role ?? '',
-              ),
+              allowed: clientRoleCanArchive(_currentActorRole() ?? ''),
               onArchived: () => _closeCard(true),
             ),
             // #6: переход в расписание — на ближайшее занятие ученика, а без
@@ -851,9 +849,9 @@ extension _ClientCardStudent on _ClientCardState {
     final leadId = _isStudent ? null : _leadId;
     String? actorRole;
     try {
-      actorRole = (await ref.read(releaseGateStatusProvider.future)).role;
+      actorRole = await _resolveActorRole();
     } catch (_) {
-      actorRole = ref.read(releaseGateStatusProvider).asData?.value.role;
+      actorRole = _currentActorRole();
     }
     if (!mounted) return;
     final lessons = _isStudent

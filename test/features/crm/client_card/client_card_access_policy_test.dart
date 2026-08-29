@@ -155,6 +155,29 @@ void main() {
     ]);
   });
 
+  test('authoritative snapshot role keeps subscription sales available', () {
+    for (final role in const ['admin', 'director', 'system_admin']) {
+      final access = ClientCardAccessPolicy.project(
+        actorRole: '',
+        capabilitySnapshot: CapabilitySnapshot(
+          accountId: '$role-1',
+          role: role,
+          accessVersion: 1,
+          capabilities: const {'crm.client.read.basic'},
+          scopes: const {},
+        ),
+        hasStudentHalf: true,
+      );
+
+      expect(access.canReadClientFinance, isTrue, reason: role);
+      expect(
+        access.sections.map((item) => item.$3),
+        contains('subscriptions'),
+        reason: role,
+      );
+    }
+  });
+
   test(
     'explicit capability snapshot keeps admin tasks fail closed when absent',
     () {
