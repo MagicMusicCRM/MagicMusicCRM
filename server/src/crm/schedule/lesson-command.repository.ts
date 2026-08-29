@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { PoolClient, QueryResult, QueryResultRow } from "pg";
+import { ActorContext } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
+import { managerBranchScopeSql } from "../branch-scope";
 import { LessonRow, toLessonDto } from "../crm-mappers";
 import type { CompleteLessonDraft } from "./lesson-required-field.validator";
 import {
@@ -118,7 +120,24 @@ export class LessonCommandRepository {
     );
   }
 
-  async loadExisting(queryable: Queryable, lessonId: string, lock = false) {
+  async assertUpdateScope(actor: ActorContext, lessonId: string) {
+    await this.loadExisting(this.database, lessonId, false, actor);
+  }
+
+  async loadExisting(
+    queryable: Queryable,
+    lessonId: string,
+    lock = false,
+    scopeActor?: ActorContext,
+  ) {
+    const scopeClause = scopeActor
+      ? `and ${managerBranchScopeSql({
+          roleExpression:
+            "(select scope_user.role from app.users scope_user where scope_user.id = $2)",
+          userIdExpression: "$2",
+          branchExpression: "lesson.branch_id::text",
+        })}`
+      : "";
     const result = await runQuery<CurrentLessonRow>(
       queryable,
       `
@@ -148,9 +167,10 @@ export class LessonCommandRepository {
         left join app.lesson_snapshots snapshot
           on snapshot.lesson_id = lesson.id
         where lesson.id = $1 and lesson.deleted_at is null
+        ${scopeClause}
         ${lock ? "for update of lesson" : ""}
       `,
-      [lessonId],
+      scopeActor ? [lessonId, scopeActor.userId] : [lessonId],
     );
     const row = result.rows[0];
     if (!row) throw new NotFoundException("Урок не найден.");

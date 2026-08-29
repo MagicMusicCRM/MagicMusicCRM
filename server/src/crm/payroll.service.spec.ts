@@ -327,7 +327,7 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
     expect(payroll.payouts).toHaveLength(3);
   });
 
-  it("teacher-stats группирует учебные единицы, дни и итоги", async () => {
+  it("teacher-stats группирует начисления без глобальных выплат для Manager", async () => {
     const { service } = createServiceWithQueryResults([
       {
         rows: [
@@ -357,16 +357,6 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
         ],
       },
       { rows: [{ id: "t-1", name: "Иван Петров" }] },
-      {
-        rows: [
-          {
-            teacher_id: "t-1",
-            paid_total: "500",
-            bonus_total: "100",
-            deduction_total: "50",
-          },
-        ],
-      },
     ]);
 
     const report = await service.getTeacherStatsReport(actor, {
@@ -378,12 +368,12 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
     expect(item.teacherName).toBe("Иван Петров");
     expect(item.hoursTotal).toBe(3);
     expect(item.accruedTotal).toBe(2100);
-    expect(item.paidTotal).toBe(500);
+    expect(item.paidTotal).toBe(0);
     expect(item.completedLessons).toBe(3);
     expect(item.payableLessons).toBe(3);
-    expect(item.bonusTotal).toBe(100);
-    expect(item.deductionTotal).toBe(50);
-    expect(item.periodBalance).toBe(1650);
+    expect(item.bonusTotal).toBe(0);
+    expect(item.deductionTotal).toBe(0);
+    expect(item.periodBalance).toBe(2100);
     expect(item.units).toHaveLength(2);
     const groupUnit = item.units.find((unit) => unit.unitType === "group");
     expect(groupUnit?.unitName).toBe("Вокал (группа)");
@@ -403,10 +393,10 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
       payableLessons: 3,
       noAccrualLessons: 0,
       accruedTotal: 2100,
-      bonusTotal: 100,
-      deductionTotal: 50,
-      paidTotal: 500,
-      periodBalance: 1650,
+      bonusTotal: 0,
+      deductionTotal: 0,
+      paidTotal: 0,
+      periodBalance: 2100,
     });
   });
 
@@ -635,7 +625,7 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
     expect(query.mock.calls[2][1]).toEqual([
       null,
       ["t-1", "t-2"],
-      true,
+      false,
       "2026-07-01T00:00:00.000Z",
       "2026-08-01T00:00:00.000Z",
       "active",
@@ -665,10 +655,13 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
       },
     ]);
 
-    const report = await service.getTeacherStatsReport(actor, {
-      from: "2026-07-01T00:00:00.000Z",
-      to: "2026-08-01T00:00:00.000Z",
-    });
+    const report = await service.getTeacherStatsReport(
+      { userId: "director-a", role: "director" },
+      {
+        from: "2026-07-01T00:00:00.000Z",
+        to: "2026-08-01T00:00:00.000Z",
+      },
+    );
 
     expect(report.items).toHaveLength(1);
     expect(report.items[0]).toMatchObject({
@@ -703,9 +696,11 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
       { rows: [] },
     ]);
 
-    const bytes = Buffer.from(await service.exportTeacherStatsReport(actor, {
-      from: "2026-07-01T00:00:00.000Z",
-    }));
+    const bytes = Buffer.from(
+      await service.exportTeacherStatsReport(actor, {
+        from: "2026-07-01T00:00:00.000Z",
+      }),
+    );
 
     expect(bytes.subarray(0, 2).toString("ascii")).toBe("PK");
     const workbook = new ExcelJS.Workbook();
@@ -725,22 +720,16 @@ describe("PayrollService (KVA-238 teacher payroll)", () => {
       "Ставка за астр. час",
       "Начислено",
     ]);
-    expect(sheet.getCell("A2").value).toBe("'=Иван \"Гитарист\"; Петров");
+    expect(sheet.getCell("A2").value).toBe('\'=Иван "Гитарист"; Петров');
     expect(sheet.getCell("D2").value).toBe("2026-07-05 (1 астр.ч.)");
     expect(sheet.getCell("H2").value).toBe("Входит в оклад");
     expect(sheet.getCell("I2").value).toBe(0);
-    expect(
-      headers.map((value) => String(value)),
-    ).not.toContain("Оплачено");
-    expect(
-      headers.map((value) => String(value)),
-    ).not.toContain("Доплаты");
-    expect(
-      headers.map((value) => String(value)),
-    ).not.toContain("Вычеты");
-    expect(
-      headers.map((value) => String(value)),
-    ).not.toContain("Сальдо периода");
+    expect(headers.map((value) => String(value))).not.toContain("Оплачено");
+    expect(headers.map((value) => String(value))).not.toContain("Доплаты");
+    expect(headers.map((value) => String(value))).not.toContain("Вычеты");
+    expect(headers.map((value) => String(value))).not.toContain(
+      "Сальдо периода",
+    );
   });
 
   it("createTeacherPayout сохраняет выплату атомарно", async () => {

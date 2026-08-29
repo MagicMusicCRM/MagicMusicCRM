@@ -29,6 +29,7 @@ describe("ClientCardReadService (PostgreSQL)", () => {
   const users: string[] = [];
   const profiles: string[] = [];
   const teachers: string[] = [];
+  const staffMembers: string[] = [];
   const students: string[] = [];
   const branches: string[] = [];
   const lessons: string[] = [];
@@ -42,6 +43,7 @@ describe("ClientCardReadService (PostgreSQL)", () => {
   let assignedTeacher: ActorContext;
   let unrelatedTeacher: ActorContext;
   let studentId: string;
+  let foreignStudentId: string;
   let assignedLessonId: string;
   let otherLessonId: string;
 
@@ -87,6 +89,30 @@ describe("ClientCardReadService (PostgreSQL)", () => {
     return id;
   }
 
+  async function assignOperationalBranch(
+    actor: ActorContext & { profileId: string },
+    branchId: string,
+  ): Promise<void> {
+    const staff = await database.query<{ id: string }>(
+      `insert into app.staff_members (profile_id, role)
+       values ($1, $2) returning id`,
+      [actor.profileId, actor.role],
+    );
+    const staffId = staff.rows[0]!.id;
+    staffMembers.push(staffId);
+    await database.query(
+      `insert into app.user_crm_links (
+         user_id, entity_type, entity_id, link_source, confirmed_at
+       ) values ($1, 'staff', $2, 'manual_email', now())`,
+      [actor.userId, staffId],
+    );
+    await database.query(
+      `insert into app.staff_branch_assignments (staff_member_id, branch_id)
+       values ($1, $2)`,
+      [staffId, branchId],
+    );
+  }
+
   beforeAll(async () => {
     const migrationPool = new Pool({ connectionString: testDatabaseUrl });
     try {
@@ -111,6 +137,7 @@ describe("ClientCardReadService (PostgreSQL)", () => {
     admin = await createActor("admin", "Админ", "Карточки");
     manager = await createActor("manager", "Управляющий", "Карточки");
     client = await createActor("client", "Анна", "Клиент");
+    const foreignClient = await createActor("client", "Борис", "Чужой");
     assignedTeacher = await createActor("teacher", "Пётр", "Назначенный");
     unrelatedTeacher = await createActor("teacher", "Олег", "Посторонний");
     const otherTeacherActor = await createActor(
@@ -127,6 +154,19 @@ describe("ClientCardReadService (PostgreSQL)", () => {
     );
     const branchId = branch.rows[0]!.id;
     branches.push(branchId);
+    const foreignBranch = await database.query<{ id: string }>(
+      `insert into app.branches (name) values ('Филиал') returning id`,
+    );
+    const foreignBranchId = foreignBranch.rows[0]!.id;
+    branches.push(foreignBranchId);
+    await assignOperationalBranch(
+      admin as ActorContext & { profileId: string },
+      branchId,
+    );
+    await assignOperationalBranch(
+      manager as ActorContext & { profileId: string },
+      branchId,
+    );
     const student = await database.query<{ id: string }>(
       `
         insert into app.students (profile_id, status, branch_id)
@@ -137,6 +177,13 @@ describe("ClientCardReadService (PostgreSQL)", () => {
     );
     studentId = student.rows[0]!.id;
     students.push(studentId);
+    const foreignStudent = await database.query<{ id: string }>(
+      `insert into app.students (profile_id, status, branch_id)
+       values ($1, 'active', $2) returning id`,
+      [foreignClient.profileId, foreignBranchId],
+    );
+    foreignStudentId = foreignStudent.rows[0]!.id;
+    students.push(foreignStudentId);
     const assignedTeacherId = await createTeacher(
       (assignedTeacher as ActorContext & { profileId: string }).profileId,
     );
@@ -269,6 +316,20 @@ describe("ClientCardReadService (PostgreSQL)", () => {
       "delete from app.students where id = any($1::uuid[])",
       [students],
     );
+    await database.query(
+      "delete from app.user_crm_links where user_id = any($1::uuid[])",
+      [users],
+    );
+    if (staffMembers.length > 0) {
+      await database.query(
+        "delete from app.staff_branch_assignments where staff_member_id = any($1::uuid[])",
+        [staffMembers],
+      );
+      await database.query(
+        "delete from app.staff_members where id = any($1::uuid[])",
+        [staffMembers],
+      );
+    }
     await database.query(
       "delete from app.teachers where id = any($1::uuid[])",
       [teachers],
@@ -538,14 +599,14 @@ describe("ClientCardReadService (PostgreSQL)", () => {
     }
   });
 
-  it("keeps client Tasks out of the Admin projection", async () => {
+  it("keeps branch-visible client Tasks in the linked Admin projection", async () => {
     const result = await service.load(admin, {
       type: "student",
       id: studentId,
     });
 
-    expect(result.sections).toMatchObject({ tasks: { count: 0 } });
-    expect(result.tasks).toEqual([]);
+    expect(result.sections).toMatchObject({ tasks: { count: 1 } });
+    expect(result.tasks).toHaveLength(1);
   });
 
   it("returns only assigned learning context and shared comments to Teacher", async () => {
@@ -597,5 +658,16 @@ describe("ClientCardReadService (PostgreSQL)", () => {
         id: studentId,
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("hides a foreign-branch card from Admin and Manager", async () => {
+    for (const operationalActor of [admin, manager]) {
+      await expect(
+        service.load(operationalActor, {
+          type: "student",
+          id: foreignStudentId,
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    }
   });
 });

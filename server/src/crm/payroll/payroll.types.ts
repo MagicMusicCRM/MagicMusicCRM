@@ -1,3 +1,5 @@
+import { ActorContext } from "../../common/security/actor-context";
+
 export type TeacherStatsUnitType =
   "group" | "individual" | "group_trial" | "individual_trial";
 
@@ -7,6 +9,7 @@ export interface PayrollMutationMetadata {
 }
 
 export interface PayrollLessonFilters {
+  actor: ActorContext;
   teacherId?: string | null;
   branchId?: string | null;
   from?: string | null;

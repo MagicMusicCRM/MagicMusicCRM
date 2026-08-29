@@ -64,6 +64,7 @@ export class TeacherStatsReportService {
     this.policy.assertCanReadPayroll(actor);
     const period = this.resolvePeriod(query);
     const loadedLessons = await this.repository.loadPayrollLessons({
+      actor,
       teacherId: query.teacherId,
       branchId: query.branchId,
       from: period.from,
@@ -75,7 +76,12 @@ export class TeacherStatsReportService {
     const lessons = this.filterLessons(loadedLessons, query);
     const lessonTeacherIds = [...new Set(lessons.map((row) => row.teacher_id))];
     const rates = await this.repository.loadTeacherRates(lessonTeacherIds);
-    const rows = await this.selectTeachers(query, period, lessonTeacherIds);
+    const rows = await this.selectTeachers(
+      actor,
+      query,
+      period,
+      lessonTeacherIds,
+    );
     const teacherIds = rows.map((row) => row.id);
     if (!teacherIds.length) {
       return {
@@ -85,11 +91,13 @@ export class TeacherStatsReportService {
     }
 
     await this.mergeMovementOnlyRates(rates, teacherIds, lessonTeacherIds);
-    const movements = await this.repository.loadPeriodMovements(
-      teacherIds,
-      period.from,
-      period.to,
-    );
+    const movements = this.canReadGlobalMovements(actor)
+      ? await this.repository.loadPeriodMovements(
+          teacherIds,
+          period.from,
+          period.to,
+        )
+      : new Map<string, TeacherMovementTotals>();
     const teachers = this.initializeTeachers(teacherIds);
     const names = new Map(rows.map((row) => [row.id, row.name || "Без имени"]));
     const salaries = new Map(
@@ -150,6 +158,7 @@ export class TeacherStatsReportService {
   }
 
   private selectTeachers(
+    actor: ActorContext,
     query: TeacherStatsQuery,
     period: ReportPeriod,
     lessonTeacherIds: string[],
@@ -157,7 +166,10 @@ export class TeacherStatsReportService {
     return this.repository.listReportTeachers({
       teacherId: query.teacherId ?? null,
       lessonTeacherIds,
-      includeMovementOnly: !query.branchId && !query.unitType,
+      includeMovementOnly:
+        (actor.role === "director" || actor.role === "system_admin") &&
+        !query.branchId &&
+        !query.unitType,
       from: period.from,
       to: period.to,
       status: query.status ?? null,
@@ -393,6 +405,10 @@ export class TeacherStatsReportService {
 
   private movementsScope(query: TeacherStatsQuery): string {
     return query.branchId ? "teacher_period_all_branches" : "teacher_period";
+  }
+
+  private canReadGlobalMovements(actor: ActorContext): boolean {
+    return actor.role === "director" || actor.role === "system_admin";
   }
 
   private numericSalary(row: TeacherReportRow): number | null {

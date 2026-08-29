@@ -1,5 +1,10 @@
 import { Injectable } from "@nestjs/common";
+import { ActorContext } from "../../common/security/actor-context";
 import { DatabaseService } from "../../db/database.service";
+import {
+  completeTeacherPayrollScopeSql,
+  managerBranchScopeSql,
+} from "../branch-scope";
 import { PayrollAccrualCalculator } from "./payroll-accrual-calculator";
 import {
   PayrollLessonFilters,
@@ -51,6 +56,11 @@ export class PayrollReadRepository {
           and ($2::uuid is null or l.branch_id = $2)
           and ($3::timestamptz is null or l.scheduled_at >= $3::timestamptz)
           and ($4::timestamptz is null or l.scheduled_at < $4::timestamptz)
+          and ${managerBranchScopeSql({
+            roleExpression: "$5",
+            userIdExpression: "$6",
+            branchExpression: "l.branch_id::text",
+          })}
         order by l.scheduled_at asc, l.id asc
       `,
       [
@@ -58,6 +68,8 @@ export class PayrollReadRepository {
         filters.branchId ?? null,
         filters.from ?? null,
         filters.to ?? null,
+        filters.actor.role,
+        filters.actor.userId,
       ],
     );
     return result.rows;
@@ -65,6 +77,7 @@ export class PayrollReadRepository {
 
   async loadTeacherRates(
     teacherIds: string[],
+    detailActor?: ActorContext,
   ): Promise<Map<string, TeacherRateEntry[]>> {
     const map = new Map<string, TeacherRateEntry[]>();
     if (!teacherIds.length) return map;
@@ -79,9 +92,17 @@ export class PayrollReadRepository {
           on author.user_id = u.id and author.deleted_at is null
         where tr.teacher_id = any($1::uuid[])
           and tr.deleted_at is null
+          and (
+            $2::text is null
+            or ${completeTeacherPayrollScopeSql({
+              roleExpression: "$2",
+              userIdExpression: "$3",
+              teacherExpression: "tr.teacher_id",
+            })}
+          )
         order by tr.teacher_id, tr.effective_from asc, tr.created_at asc, tr.id asc
       `,
-      [teacherIds],
+      [teacherIds, detailActor?.role ?? null, detailActor?.userId ?? null],
     );
     for (const row of result.rows) this.addRate(map, row);
     return map;
@@ -89,6 +110,7 @@ export class PayrollReadRepository {
 
   async findTeacherPayrollHeader(
     teacherId: string,
+    actor: ActorContext,
   ): Promise<TeacherPayrollHeader | null> {
     const result = await this.database.query<TeacherPayrollHeader>(
       `
@@ -98,13 +120,21 @@ export class PayrollReadRepository {
           on aggregate.aggregate_type = 'teacher:payroll'
           and aggregate.aggregate_id = t.id::text
         where t.id = $1 and t.deleted_at is null
+          and ${completeTeacherPayrollScopeSql({
+            roleExpression: "$2",
+            userIdExpression: "$3",
+            teacherExpression: "t.id",
+          })}
       `,
-      [teacherId],
+      [teacherId, actor.role, actor.userId],
     );
     return result.rows[0] ?? null;
   }
 
-  async listTeacherPayouts(teacherId: string): Promise<TeacherPayoutRow[]> {
+  async listTeacherPayouts(
+    teacherId: string,
+    actor: ActorContext,
+  ): Promise<TeacherPayoutRow[]> {
     const result = await this.database.query<TeacherPayoutRow>(
       `
         select tp.id, tp.teacher_id, tp.amount, tp.kind, tp.comment, tp.paid_at,
@@ -114,9 +144,14 @@ export class PayrollReadRepository {
         left join app.users u on u.id = tp.created_by and u.deleted_at is null
         left join app.profiles author on author.user_id = u.id and author.deleted_at is null
         where tp.deleted_at is null and tp.teacher_id = $1
+          and ${completeTeacherPayrollScopeSql({
+            roleExpression: "$2",
+            userIdExpression: "$3",
+            teacherExpression: "tp.teacher_id",
+          })}
         order by tp.paid_at desc, tp.id desc
       `,
-      [teacherId],
+      [teacherId, actor.role, actor.userId],
     );
     return result.rows;
   }

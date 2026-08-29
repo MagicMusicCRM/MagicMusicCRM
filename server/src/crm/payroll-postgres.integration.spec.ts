@@ -1,6 +1,7 @@
-import { ForbiddenException } from "@nestjs/common";
+import { ForbiddenException, NotFoundException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import { Pool, PoolClient } from "pg";
+import * as ExcelJS from "exceljs";
 import { ActorContext } from "../common/security/actor-context";
 import { DatabaseService } from "../db/database.service";
 import { MigrationRunner } from "../db/migration-runner";
@@ -120,6 +121,184 @@ describe("Teacher payroll integrity (PostgreSQL)", () => {
     await pool.end();
   });
 
+  it("keeps global payroll details inside an Admin or Manager's complete teacher branch scope", async () => {
+    await client.query("savepoint direct_payroll_scope");
+    try {
+      const branches = await client.query<{ id: string }>(
+        `insert into app.branches (name)
+       values ($1), ($2) returning id`,
+        [
+          `Payroll detail assigned ${randomUUID()}`,
+          `Payroll detail foreign ${randomUUID()}`,
+        ],
+      );
+      const assignedBranchId = branches.rows[0]!.id;
+      const foreignBranchId = branches.rows[1]!.id;
+      const operationalActors: ActorContext[] = [];
+
+      for (const role of ["admin", "manager"] as const) {
+        const user = await client.query<{ id: string }>(
+          `insert into app.users (email, role, profile_completed)
+         values ($1, $2, true) returning id`,
+          [`payroll-detail-${role}-${randomUUID()}@test.local`, role],
+        );
+        const profile = await client.query<{ id: string }>(
+          `insert into app.profiles (user_id, first_name, last_name)
+         values ($1, $2, 'Payroll') returning id`,
+          [user.rows[0]!.id, role],
+        );
+        const staff = await client.query<{ id: string }>(
+          `insert into app.staff_members (profile_id, role)
+         values ($1, $2) returning id`,
+          [profile.rows[0]!.id, role],
+        );
+        await client.query(
+          `insert into app.user_crm_links (
+           user_id, entity_type, entity_id, link_source, confirmed_at
+         ) values ($1, 'staff', $2, 'manual_email', now())`,
+          [user.rows[0]!.id, staff.rows[0]!.id],
+        );
+        await client.query(
+          `insert into app.staff_branch_assignments (staff_member_id, branch_id)
+         values ($1, $2)`,
+          [staff.rows[0]!.id, assignedBranchId],
+        );
+        operationalActors.push({ userId: user.rows[0]!.id, role });
+      }
+
+      const teacherUsers = await client.query<{ id: string }>(
+        `insert into app.users (email, role, profile_completed)
+       values ($1, 'teacher', true), ($2, 'teacher', true),
+         ($3, 'teacher', true) returning id`,
+        [
+          `payroll-detail-assigned-${randomUUID()}@test.local`,
+          `payroll-detail-foreign-${randomUUID()}@test.local`,
+          `payroll-detail-mixed-${randomUUID()}@test.local`,
+        ],
+      );
+      const teacherProfiles = await client.query<{ id: string }>(
+        `insert into app.profiles (user_id, first_name, last_name)
+       values ($1, 'Assigned', 'Payroll'), ($2, 'Foreign', 'Payroll'),
+         ($3, 'Mixed', 'Payroll') returning id`,
+        [
+          teacherUsers.rows[0]!.id,
+          teacherUsers.rows[1]!.id,
+          teacherUsers.rows[2]!.id,
+        ],
+      );
+      const teachers = await client.query<{ id: string }>(
+        `insert into app.teachers (profile_id, status)
+       values ($1, 'active'), ($2, 'active'), ($3, 'active') returning id`,
+        [
+          teacherProfiles.rows[0]!.id,
+          teacherProfiles.rows[1]!.id,
+          teacherProfiles.rows[2]!.id,
+        ],
+      );
+      const assignedTeacherId = teachers.rows[0]!.id;
+      const foreignTeacherId = teachers.rows[1]!.id;
+      const mixedTeacherId = teachers.rows[2]!.id;
+      await client.query(
+        `insert into app.teacher_branches (teacher_id, branch_id)
+       values ($1, $4), ($2, $5), ($3, $4), ($3, $5)`,
+        [
+          assignedTeacherId,
+          foreignTeacherId,
+          mixedTeacherId,
+          assignedBranchId,
+          foreignBranchId,
+        ],
+      );
+      await client.query(
+        `insert into app.teacher_branches (
+           teacher_id, branch_id, active_from, active_until
+         ) values ($1, $2, current_date - 2, current_date - 1)`,
+        [assignedTeacherId, foreignBranchId],
+      );
+      await client.query(
+        `insert into app.teacher_rates (teacher_id, rate, effective_from, created_by)
+       values ($1, 1111, '2026-08-01', $4),
+         ($2, 2222, '2026-08-01', $4),
+         ($3, 3333, '2026-08-01', $4)`,
+        [assignedTeacherId, foreignTeacherId, mixedTeacherId, actor.userId],
+      );
+      await client.query(
+        `insert into app.teacher_payouts (
+         teacher_id, amount, kind, comment, paid_at, created_by
+       ) values
+         ($1, 111, 'payout', 'assigned-sensitive', '2026-08-10T12:00:00.000Z', $4),
+         ($2, 222, 'payout', 'foreign-sensitive', '2026-08-10T12:00:00.000Z', $4),
+         ($3, 333, 'payout', 'mixed-sensitive', '2026-08-10T12:00:00.000Z', $4)`,
+        [assignedTeacherId, foreignTeacherId, mixedTeacherId, actor.userId],
+      );
+
+      for (const operationalActor of operationalActors) {
+        const assigned = await payroll.getTeacherPayroll(
+          operationalActor,
+          assignedTeacherId,
+        );
+        expect(assigned).toMatchObject({
+          teacherId: assignedTeacherId,
+          currentRate: 1111,
+          paidTotal: 111,
+        });
+        expect(assigned.payouts[0]).toMatchObject({
+          amount: 111,
+          comment: "assigned-sensitive",
+        });
+        await expect(
+          payroll.getTeacherPayroll(operationalActor, foreignTeacherId),
+        ).rejects.toBeInstanceOf(NotFoundException);
+        await expect(
+          payroll.getTeacherPayroll(operationalActor, mixedTeacherId),
+        ).rejects.toBeInstanceOf(NotFoundException);
+      }
+
+      await expect(
+        payroll.getTeacherPayroll(
+          { userId: teacherUsers.rows[0]!.id, role: "teacher" },
+          assignedTeacherId,
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(
+        payroll.getTeacherPayroll(
+          { userId: randomUUID(), role: "client" },
+          assignedTeacherId,
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      const directorForeign = await payroll.getTeacherPayroll(
+        actor,
+        foreignTeacherId,
+      );
+      expect(directorForeign).toMatchObject({
+        teacherId: foreignTeacherId,
+        currentRate: 2222,
+        paidTotal: 222,
+      });
+      const directorMixed = await payroll.getTeacherPayroll(
+        actor,
+        mixedTeacherId,
+      );
+      expect(directorMixed).toMatchObject({
+        teacherId: mixedTeacherId,
+        currentRate: 3333,
+        paidTotal: 333,
+      });
+      const systemAdminForeign = await payroll.getTeacherPayroll(
+        { userId: actor.userId, role: "system_admin" },
+        foreignTeacherId,
+      );
+      expect(systemAdminForeign).toMatchObject({
+        teacherId: foreignTeacherId,
+        currentRate: 2222,
+        paidTotal: 222,
+      });
+    } finally {
+      await client.query("rollback to savepoint direct_payroll_scope");
+    }
+  });
+
   it("commits one payout, audit, outbox and version across replay/stale retries", async () => {
     const initial = await payroll.getTeacherPayroll(actor, teacherId);
     expect(initial.version).toBe(0);
@@ -233,6 +412,173 @@ describe("Teacher payroll integrity (PostgreSQL)", () => {
     expect(report.totals.paidTotal).toBe(1500);
   });
 
+  it("intersects Admin and Manager teacher reports and XLSX with assigned branches", async () => {
+    const branches = await client.query<{ id: string }>(
+      `insert into app.branches (name)
+       values ($1), ($2) returning id`,
+      [`Payroll assigned ${randomUUID()}`, `Payroll foreign ${randomUUID()}`],
+    );
+    const assignedBranchId = branches.rows[0]!.id;
+    const foreignBranchId = branches.rows[1]!.id;
+    const operationalActors: ActorContext[] = [];
+
+    for (const role of ["admin", "manager"] as const) {
+      const user = await client.query<{ id: string }>(
+        `insert into app.users (email, role, profile_completed)
+         values ($1, $2, true) returning id`,
+        [`payroll-scope-${role}-${randomUUID()}@test.local`, role],
+      );
+      const profile = await client.query<{ id: string }>(
+        `insert into app.profiles (user_id, first_name, last_name)
+         values ($1, $2, 'Scope') returning id`,
+        [user.rows[0]!.id, role],
+      );
+      const staff = await client.query<{ id: string }>(
+        `insert into app.staff_members (profile_id, role)
+         values ($1, $2) returning id`,
+        [profile.rows[0]!.id, role],
+      );
+      await client.query(
+        `insert into app.user_crm_links (
+           user_id, entity_type, entity_id, link_source, confirmed_at
+         ) values ($1, 'staff', $2, 'manual_email', now())`,
+        [user.rows[0]!.id, staff.rows[0]!.id],
+      );
+      await client.query(
+        `insert into app.staff_branch_assignments (staff_member_id, branch_id)
+         values ($1, $2)`,
+        [staff.rows[0]!.id, assignedBranchId],
+      );
+      operationalActors.push({ userId: user.rows[0]!.id, role });
+    }
+
+    const teacherUsers = await client.query<{ id: string }>(
+      `insert into app.users (email, role, profile_completed)
+       values ($1, 'teacher', true), ($2, 'teacher', true) returning id`,
+      [
+        `payroll-assigned-${randomUUID()}@test.local`,
+        `payroll-foreign-${randomUUID()}@test.local`,
+      ],
+    );
+    const teacherProfiles = await client.query<{ id: string }>(
+      `insert into app.profiles (user_id, first_name, last_name)
+       values ($1, 'Assigned', 'Teacher'), ($2, 'Foreign', 'Teacher')
+       returning id`,
+      [teacherUsers.rows[0]!.id, teacherUsers.rows[1]!.id],
+    );
+    const scopedTeachers = await client.query<{ id: string }>(
+      `insert into app.teachers (profile_id, status)
+       values ($1, 'active'), ($2, 'active') returning id`,
+      [teacherProfiles.rows[0]!.id, teacherProfiles.rows[1]!.id],
+    );
+    const clientUsers = await client.query<{ id: string }>(
+      `insert into app.users (email, role, profile_completed)
+       values ($1, 'client', true), ($2, 'client', true) returning id`,
+      [
+        `payroll-client-assigned-${randomUUID()}@test.local`,
+        `payroll-client-foreign-${randomUUID()}@test.local`,
+      ],
+    );
+    const clientProfiles = await client.query<{ id: string }>(
+      `insert into app.profiles (user_id, first_name, last_name)
+       values ($1, 'Assigned', 'Client'), ($2, 'Foreign', 'Client')
+       returning id`,
+      [clientUsers.rows[0]!.id, clientUsers.rows[1]!.id],
+    );
+    const scopedStudents = await client.query<{ id: string }>(
+      `insert into app.students (profile_id, branch_id, status)
+       values ($1, $3, 'active'), ($2, $4, 'active') returning id`,
+      [
+        clientProfiles.rows[0]!.id,
+        clientProfiles.rows[1]!.id,
+        assignedBranchId,
+        foreignBranchId,
+      ],
+    );
+    await client.query(
+      `insert into app.lessons (
+         student_id, teacher_id, branch_id, scheduled_at, duration_minutes,
+         teacher_rate, status, created_by
+       ) values
+         ($1, $2, $3, '2026-08-10T10:00:00.000Z', 60, 1000, 'completed', $7),
+         ($4, $5, $6, '2026-08-11T10:00:00.000Z', 60, 2000, 'completed', $7)`,
+      [
+        scopedStudents.rows[0]!.id,
+        scopedTeachers.rows[0]!.id,
+        assignedBranchId,
+        scopedStudents.rows[1]!.id,
+        scopedTeachers.rows[1]!.id,
+        foreignBranchId,
+        actor.userId,
+      ],
+    );
+    await client.query(
+      `insert into app.teacher_payouts (
+         teacher_id, amount, kind, comment, paid_at, created_by
+       ) values ($1, 777, 'payout', 'global-movement',
+         '2026-08-12T12:00:00.000Z', $2)`,
+      [scopedTeachers.rows[0]!.id, actor.userId],
+    );
+
+    for (const operationalActor of operationalActors) {
+      const noFilter = await payroll.getTeacherStatsReport(operationalActor, {
+        from: "2026-08-01T00:00:00.000Z",
+        to: "2026-09-01T00:00:00.000Z",
+      });
+      expect(noFilter.items.map((item) => item.teacherName)).toEqual([
+        "Assigned Teacher",
+      ]);
+      expect(noFilter.totals.accruedTotal).toBe(1000);
+      expect(noFilter.items[0]).toMatchObject({
+        paidTotal: 0,
+        bonusTotal: 0,
+        deductionTotal: 0,
+        periodBalance: 1000,
+      });
+      expect(noFilter.totals).toMatchObject({
+        paidTotal: 0,
+        bonusTotal: 0,
+        deductionTotal: 0,
+        periodBalance: 1000,
+      });
+
+      const foreignFilter = await payroll.getTeacherStatsReport(
+        operationalActor,
+        {
+          branchId: foreignBranchId,
+          from: "2026-08-01T00:00:00.000Z",
+          to: "2026-09-01T00:00:00.000Z",
+        },
+      );
+      expect(foreignFilter.items).toEqual([]);
+      expect(foreignFilter.totals.accruedTotal).toBe(0);
+
+      const bytes = await payroll.exportTeacherStatsReport(operationalActor, {
+        from: "2026-08-01T00:00:00.000Z",
+        to: "2026-09-01T00:00:00.000Z",
+      });
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(Uint8Array.from(bytes).buffer);
+      const worksheet = workbook.worksheets[0]!;
+      const values = worksheet
+        .getColumn(1)
+        .values.map((value) => String(value ?? ""));
+      expect(values).toContain("Assigned Teacher");
+      expect(values).not.toContain("Foreign Teacher");
+    }
+
+    const directorReport = await payroll.getTeacherStatsReport(actor, {
+      teacherId: scopedTeachers.rows[0]!.id,
+      from: "2026-08-01T00:00:00.000Z",
+      to: "2026-09-01T00:00:00.000Z",
+    });
+    expect(directorReport.items[0]).toMatchObject({
+      accruedTotal: 1000,
+      paidTotal: 777,
+      periodBalance: 223,
+    });
+  });
+
   it("lets only the director correct and void rate/payout history", async () => {
     const before = await payroll.getTeacherPayroll(actor, teacherId);
     const rateId = before.rateHistory[0]!.id!;
@@ -248,7 +594,10 @@ describe("Teacher payroll integrity (PostgreSQL)", () => {
           expectedVersion: 2,
           reasonText: "Попытка управляющего",
         },
-        { idempotencyKey: "manager-rate-update", requestId: "manager-rate-request" },
+        {
+          idempotencyKey: "manager-rate-update",
+          requestId: "manager-rate-request",
+        },
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
 
@@ -262,7 +611,10 @@ describe("Teacher payroll integrity (PostgreSQL)", () => {
         expectedVersion: 2,
         reasonText: "Исправлена ошибочная дата и ставка",
       },
-      { idempotencyKey: `rate-update-${teacherId}`, requestId: `rate-update-request-${teacherId}` },
+      {
+        idempotencyKey: `rate-update-${teacherId}`,
+        requestId: `rate-update-request-${teacherId}`,
+      },
     );
     await payroll.updateTeacherPayout(
       actor,
@@ -276,7 +628,10 @@ describe("Teacher payroll integrity (PostgreSQL)", () => {
         expectedVersion: 3,
         reasonText: "Выплата была внесена неверным типом",
       },
-      { idempotencyKey: `payout-update-${teacherId}`, requestId: `payout-update-request-${teacherId}` },
+      {
+        idempotencyKey: `payout-update-${teacherId}`,
+        requestId: `payout-update-request-${teacherId}`,
+      },
     );
     const corrected = await payroll.getTeacherPayroll(actor, teacherId);
     expect(corrected.version).toBe(4);
@@ -295,14 +650,20 @@ describe("Teacher payroll integrity (PostgreSQL)", () => {
       teacherId,
       rateId,
       { expectedVersion: 4, reasonText: "Дублирующая запись ставки" },
-      { idempotencyKey: `rate-delete-${teacherId}`, requestId: `rate-delete-request-${teacherId}` },
+      {
+        idempotencyKey: `rate-delete-${teacherId}`,
+        requestId: `rate-delete-request-${teacherId}`,
+      },
     );
     await payroll.deleteTeacherPayout(
       actor,
       teacherId,
       payoutId,
       { expectedVersion: 5, reasonText: "Ошибочная выплата" },
-      { idempotencyKey: `payout-delete-${teacherId}`, requestId: `payout-delete-request-${teacherId}` },
+      {
+        idempotencyKey: `payout-delete-${teacherId}`,
+        requestId: `payout-delete-request-${teacherId}`,
+      },
     );
     const after = await payroll.getTeacherPayroll(actor, teacherId);
     expect(after).toMatchObject({ version: 6, rateHistory: [], payouts: [] });

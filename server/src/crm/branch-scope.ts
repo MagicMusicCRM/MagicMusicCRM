@@ -14,7 +14,8 @@ export function branchIdExpr(alias: string): string {
 }
 
 /**
- * SQL predicate that keeps delegated Managers inside their assigned branches.
+ * SQL predicate that keeps delegated Admins and Managers inside their assigned
+ * branches.
  * Other operational roles remain governed by their capability checks. Keeping
  * this expression shared prevents collection searches and direct mutations
  * from drifting into different branch-scope rules.
@@ -25,7 +26,7 @@ export function managerBranchScopeSql(input: {
   branchExpression: string;
 }): string {
   return `(
-    ${input.roleExpression}::text <> 'manager'
+    ${input.roleExpression}::text <> all(array['admin', 'manager']::text[])
     or exists (
       select 1
       from app.user_crm_links scope_link
@@ -39,6 +40,56 @@ export function managerBranchScopeSql(input: {
        and scope_assignment.deleted_at is null
       where scope_link.user_id = ${input.userIdExpression}::uuid
         and scope_assignment.branch_id::text = ${input.branchExpression}
+    )
+  )`;
+}
+
+/**
+ * A teacher payroll detail contains global rate and payout facts, so a partial
+ * branch intersection is unsafe. Delegated Admins and Managers may read it
+ * only when every recorded branch of the teacher is currently assigned to
+ * them. Director/system_admin remain global through the role predicate.
+ */
+export function completeTeacherPayrollScopeSql(input: {
+  roleExpression: string;
+  userIdExpression: string;
+  teacherExpression: string;
+}): string {
+  return `(
+    ${input.roleExpression}::text <> all(array['admin', 'manager']::text[])
+    or (
+      exists (
+        select 1 from app.teacher_branches payroll_teacher_branch
+        where payroll_teacher_branch.teacher_id = ${input.teacherExpression}
+          and payroll_teacher_branch.active_from <= current_date
+          and (
+            payroll_teacher_branch.active_until is null
+            or payroll_teacher_branch.active_until >= current_date
+          )
+      )
+      and not exists (
+        select 1 from app.teacher_branches payroll_teacher_branch
+        where payroll_teacher_branch.teacher_id = ${input.teacherExpression}
+          and payroll_teacher_branch.active_from <= current_date
+          and (
+            payroll_teacher_branch.active_until is null
+            or payroll_teacher_branch.active_until >= current_date
+          )
+          and not exists (
+            select 1
+            from app.user_crm_links payroll_scope_link
+            join app.staff_members payroll_scope_staff
+              on payroll_scope_staff.id = payroll_scope_link.entity_id
+             and payroll_scope_link.entity_type = 'staff'
+             and payroll_scope_link.deleted_at is null
+             and payroll_scope_staff.deleted_at is null
+            join app.staff_branch_assignments payroll_scope_assignment
+              on payroll_scope_assignment.staff_member_id = payroll_scope_staff.id
+             and payroll_scope_assignment.deleted_at is null
+            where payroll_scope_link.user_id = ${input.userIdExpression}::uuid
+              and payroll_scope_assignment.branch_id = payroll_teacher_branch.branch_id
+          )
+      )
     )
   )`;
 }

@@ -48,6 +48,8 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
   let noteId: string;
   let historyCommentId: string;
   let historyTaskId: string;
+  const operationalStaffIds: string[] = [];
+  const operationalProfileIds: string[] = [];
 
   beforeAll(async () => {
     const pool = new Pool({ connectionString: testDatabaseUrl });
@@ -109,6 +111,38 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
     directorId = users.rows.find((row) => row.role === "director")!.id;
     linkedUserId = users.rows.find((row) => row.role === "client")!.id;
     adminId = users.rows.find((row) => row.role === "admin")!.id;
+    for (const [userId, role] of [
+      [managerId, "manager"],
+      [adminId, "admin"],
+    ] as const) {
+      const profile = await database.query<{ id: string }>(
+        `insert into app.profiles (user_id, first_name, last_name)
+         values ($1, $2, $3) returning id`,
+        [
+          userId,
+          role === "admin" ? "Анна" : "Мария",
+          role === "admin" ? "Администратор" : "Управляющая",
+        ],
+      );
+      operationalProfileIds.push(profile.rows[0]!.id);
+      const staff = await database.query<{ id: string }>(
+        `insert into app.staff_members (profile_id, role)
+         values ($1, $2) returning id`,
+        [profile.rows[0]!.id, role],
+      );
+      operationalStaffIds.push(staff.rows[0]!.id);
+      await database.query(
+        `insert into app.user_crm_links (
+           user_id, entity_type, entity_id, link_source, confirmed_at
+         ) values ($1, 'staff', $2, 'manual_email', now())`,
+        [userId, staff.rows[0]!.id],
+      );
+      await database.query(
+        `insert into app.staff_branch_assignments (staff_member_id, branch_id)
+         values ($1, $2)`,
+        [staff.rows[0]!.id, branchId],
+      );
+    }
     const source = await database.query<{ id: string }>(
       `
         insert into app.lead_sources (canonical_name, display_name, is_active)
@@ -278,6 +312,22 @@ describe("Lead to Student conversion (PostgreSQL)", () => {
     await database.query(
       "delete from app.client_custom_field_definitions where id = any($1::uuid[])",
       [[leadDefinitionId, studentDefinitionId]],
+    );
+    await database.query(
+      "delete from app.user_crm_links where entity_type = 'staff' and entity_id = any($1::uuid[])",
+      [operationalStaffIds],
+    );
+    await database.query(
+      "delete from app.staff_branch_assignments where staff_member_id = any($1::uuid[])",
+      [operationalStaffIds],
+    );
+    await database.query(
+      "delete from app.staff_members where id = any($1::uuid[])",
+      [operationalStaffIds],
+    );
+    await database.query(
+      "delete from app.profiles where id = any($1::uuid[])",
+      [operationalProfileIds],
     );
     await database.query("delete from app.branches where id = $1", [branchId]);
     await database.query("delete from app.users where id = any($1::uuid[])", [

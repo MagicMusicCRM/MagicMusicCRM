@@ -624,6 +624,178 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
     }
   });
 
+  it("keeps assigned operational staff inside their lesson branch for notes-only PATCHes", async () => {
+    const assigned = await createFixture(pool);
+    const assignedAdmin = await createFixture(pool, "admin");
+    const foreign = await createFixture(pool);
+    const assignedActor = {
+      userId: assigned.managerId,
+      role: "manager" as const,
+    };
+    const foreignActor = {
+      userId: foreign.managerId,
+      role: "manager" as const,
+    };
+    const assignedLessonIds: string[] = [];
+    const foreignLessonIds: string[] = [];
+    const deniedMetadata = [
+      {
+        idempotencyKey: `foreign-note-replace-${randomUUID()}`,
+        requestId: `foreign-note-replace-request-${randomUUID()}`,
+      },
+      {
+        idempotencyKey: `foreign-note-clear-${randomUUID()}`,
+        requestId: `foreign-note-clear-request-${randomUUID()}`,
+      },
+    ];
+    const createDto = (fixture: Awaited<ReturnType<typeof createFixture>>) => ({
+      clientRef: { type: "student" as const, id: fixture.studentId },
+      teacherId: fixture.teacherId,
+      branchId: fixture.branchId,
+      roomId: fixture.roomId,
+      scheduledAt: "2026-07-27T07:00:00.000Z",
+      durationMinutes: 60,
+      isTrial: false,
+      completionType: "standard.success",
+      clientChargeType: "none" as const,
+      clientChargeValue: 0,
+      teacherCompensationType: "fixed" as const,
+      teacherCompensationValue: 700,
+      notes: "Исходная заметка",
+      financialDecision: {
+        settlementTypeKey: "free_lesson",
+        teacherCompensationRuleKey: "none",
+      },
+    });
+    try {
+      const assignedLesson = await commands.create(
+        assignedActor,
+        createDto(assigned),
+        {
+          idempotencyKey: `assigned-note-create-${randomUUID()}`,
+          requestId: `assigned-note-create-request-${randomUUID()}`,
+        },
+      );
+      assignedLessonIds.push(assignedLesson.id);
+      const inScope = await commands.update(
+        assignedActor,
+        assignedLesson.id,
+        {
+          expectedVersion: assignedLesson.version,
+          notes: "Заметка своего филиала",
+        },
+        {
+          idempotencyKey: `assigned-note-update-${randomUUID()}`,
+          requestId: `assigned-note-update-request-${randomUUID()}`,
+        },
+      );
+      expect(inScope.version).toBe(assignedLesson.version + 1);
+
+      const foreignLesson = await commands.create(
+        foreignActor,
+        createDto(foreign),
+        {
+          idempotencyKey: `foreign-note-create-${randomUUID()}`,
+          requestId: `foreign-note-create-request-${randomUUID()}`,
+        },
+      );
+      foreignLessonIds.push(foreignLesson.id);
+      const snapshot = () =>
+        pool.query<{
+          version: string;
+          notes: string | null;
+          aggregate_version: string;
+          audits: string;
+          outbox: string;
+        }>(
+          `select lesson.version::text as version, lesson.notes,
+             aggregate.version::text as aggregate_version,
+             (select count(*)::text from app.audit_events audit
+               where audit.entity_type = 'lesson'
+                 and audit.entity_id = lesson.id::text) as audits,
+             (select count(*)::text from app.platform_outbox_events event
+               where event.aggregate_type = 'schedule:lesson'
+                 and event.aggregate_id = lesson.id::text) as outbox
+           from app.lessons lesson
+           join app.aggregate_versions aggregate
+             on aggregate.aggregate_type = 'schedule:lesson'
+            and aggregate.aggregate_id = lesson.id::text
+           where lesson.id = $1`,
+          [foreignLesson.id],
+        );
+      const before = (await snapshot()).rows[0]!;
+
+      for (const [index, notes] of [
+        "Подмена заметки чужого филиала",
+        null,
+      ].entries()) {
+        let denied: HttpException | null = null;
+        try {
+          await commands.update(
+            assignedActor,
+            foreignLesson.id,
+            {
+              expectedVersion: foreignLesson.version,
+              notes: notes as never,
+            },
+            deniedMetadata[index]!,
+          );
+        } catch (error) {
+          if (error instanceof HttpException) denied = error;
+          else throw error;
+        }
+        expect(denied?.getStatus()).toBe(404);
+        expect(JSON.stringify(denied?.getResponse())).not.toContain(
+          "currentVersion",
+        );
+      }
+      await expect(
+        commands.update(
+          { userId: assignedAdmin.managerId, role: "admin" },
+          foreignLesson.id,
+          {
+            expectedVersion: foreignLesson.version,
+            notes: "Администратор чужого филиала",
+          },
+          {
+            idempotencyKey: `admin-scope-denied-${randomUUID()}`,
+            requestId: `admin-scope-denied-request-${randomUUID()}`,
+          },
+        ),
+      ).rejects.toMatchObject({ status: 404 });
+
+      expect((await snapshot()).rows[0]).toEqual(before);
+      const deniedIdempotency = await pool.query<{ count: string }>(
+        `select count(*)::text as count
+         from app.idempotency_records
+         where actor_key = $1
+           and operation = 'schedule.lesson.update'
+           and idempotency_key = any($2::text[])`,
+        [
+          `user:${assigned.managerId}`,
+          deniedMetadata.map((item) => item.idempotencyKey),
+        ],
+      );
+      expect(deniedIdempotency.rows[0]!.count).toBe("0");
+    } finally {
+      await cleanupFixture(pool, {
+        ...foreign,
+        actorKey: `user:${foreign.managerId}`,
+        lessonIds: foreignLessonIds,
+      });
+      await cleanupFixture(pool, {
+        ...assigned,
+        actorKey: `user:${assigned.managerId}`,
+        lessonIds: assignedLessonIds,
+      });
+      await cleanupFixture(pool, {
+        ...assignedAdmin,
+        actorKey: `user:${assignedAdmin.managerId}`,
+        lessonIds: [],
+      });
+    }
+  });
+
   it("returns 403 and preserves the Lesson on a direct Teacher mutation", async () => {
     const fixture = await createFixture(pool);
     const manager = { userId: fixture.managerId, role: "manager" as const };
@@ -709,6 +881,27 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
       [`parity-manager-race-${randomUUID()}@example.test`],
     );
     const secondManagerId = secondManager.rows[0]!.id;
+    const secondManagerProfile = await pool.query<{ id: string }>(
+      `insert into app.profiles (user_id, first_name, last_name)
+       values ($1, 'Parity', 'Second Manager') returning id`,
+      [secondManagerId],
+    );
+    const secondManagerStaff = await pool.query<{ id: string }>(
+      `insert into app.staff_members (profile_id, role)
+       values ($1, 'manager') returning id`,
+      [secondManagerProfile.rows[0]!.id],
+    );
+    await pool.query(
+      `insert into app.user_crm_links (
+         user_id, entity_type, entity_id, link_source, confirmed_at
+       ) values ($1, 'staff', $2, 'manual_phone', now())`,
+      [secondManagerId, secondManagerStaff.rows[0]!.id],
+    );
+    await pool.query(
+      `insert into app.staff_branch_assignments (staff_member_id, branch_id)
+       values ($1, $2)`,
+      [secondManagerStaff.rows[0]!.id, fixture.branchId],
+    );
     const leftActor = { userId: fixture.managerId, role: "manager" as const };
     const rightActor = { userId: secondManagerId, role: "manager" as const };
     const lessonIds: string[] = [];
@@ -911,6 +1104,8 @@ describe("Unified lesson create and protected transition writes (PostgreSQL)", (
         extraActorKeys: [`user:${secondManagerId}`],
         extraActorUserIds: [secondManagerId],
         extraUserIds: [secondManagerId],
+        extraStaffIds: [secondManagerStaff.rows[0]!.id],
+        extraProfileIds: [secondManagerProfile.rows[0]!.id],
         lessonIds,
       });
     }
@@ -1088,7 +1283,10 @@ async function expectCommandError(
   }
 }
 
-async function createFixture(pool: Pool) {
+async function createFixture(
+  pool: Pool,
+  operationalRole: "manager" | "admin" = "manager",
+) {
   const branch = await pool.query<{ id: string }>(
     `
       insert into app.branches (name, timezone_name)
@@ -1117,7 +1315,7 @@ async function createFixture(pool: Pool) {
     `
       insert into app.users (email, role, email_verified_at)
       values
-        ($1, 'manager', now()),
+        ($1, $4::app.user_role, now()),
         ($2, 'teacher', now()),
         ($3, 'client', now())
       returning id, role::text as role
@@ -1126,27 +1324,48 @@ async function createFixture(pool: Pool) {
       `parity-manager-${randomUUID()}@example.test`,
       `parity-teacher-${randomUUID()}@example.test`,
       `parity-client-${randomUUID()}@example.test`,
+      operationalRole,
     ],
   );
-  const managerId = users.rows.find((row) => row.role === "manager")!.id;
+  const managerId = users.rows.find((row) => row.role === operationalRole)!.id;
   const teacherUserId = users.rows.find((row) => row.role === "teacher")!.id;
   const clientUserId = users.rows.find((row) => row.role === "client")!.id;
   const profiles = await pool.query<{ id: string; user_id: string }>(
     `
       insert into app.profiles (user_id, first_name, last_name)
       values
-        ($1, 'Parity', 'Teacher'),
-        ($2, 'Parity', 'Student')
+        ($1, 'Parity', 'Manager'),
+        ($2, 'Parity', 'Teacher'),
+        ($3, 'Parity', 'Student')
       returning id, user_id
     `,
-    [teacherUserId, clientUserId],
+    [managerId, teacherUserId, clientUserId],
   );
+  const managerProfileId = profiles.rows.find(
+    (row) => row.user_id === managerId,
+  )!.id;
   const teacherProfileId = profiles.rows.find(
     (row) => row.user_id === teacherUserId,
   )!.id;
   const studentProfileId = profiles.rows.find(
     (row) => row.user_id === clientUserId,
   )!.id;
+  const managerStaff = await pool.query<{ id: string }>(
+    `insert into app.staff_members (profile_id, role)
+     values ($1, $2) returning id`,
+    [managerProfileId, operationalRole],
+  );
+  await pool.query(
+    `insert into app.user_crm_links (
+       user_id, entity_type, entity_id, link_source, confirmed_at
+     ) values ($1, 'staff', $2, 'manual_phone', now())`,
+    [managerId, managerStaff.rows[0]!.id],
+  );
+  await pool.query(
+    `insert into app.staff_branch_assignments (staff_member_id, branch_id)
+     values ($1, $2)`,
+    [managerStaff.rows[0]!.id, branchId],
+  );
   const teacher = await pool.query<{ id: string }>(
     "insert into app.teachers (profile_id) values ($1) returning id",
     [teacherProfileId],
@@ -1202,6 +1421,7 @@ async function createFixture(pool: Pool) {
     studentId: student.rows[0]!.id,
     leadId: lead.rows[0]!.id,
     managerId,
+    managerStaffId: managerStaff.rows[0]!.id,
     teacherUserId,
     clientUserId,
     profileIds: profiles.rows.map((row) => row.id),
@@ -1217,6 +1437,7 @@ async function cleanupFixture(
     studentId: string;
     leadId: string;
     managerId: string;
+    managerStaffId: string;
     teacherUserId: string;
     clientUserId: string;
     profileIds: string[];
@@ -1224,6 +1445,8 @@ async function cleanupFixture(
     extraActorKeys?: string[];
     extraActorUserIds?: string[];
     extraUserIds?: string[];
+    extraStaffIds?: string[];
+    extraProfileIds?: string[];
     lessonIds: string[];
   },
 ) {
@@ -1289,8 +1512,21 @@ async function cleanupFixture(
       fixture.teacherId,
     ]);
     await client.query("delete from app.rooms where id = $1", [fixture.roomId]);
+    const staffIds = [fixture.managerStaffId, ...(fixture.extraStaffIds ?? [])];
+    await client.query(
+      "delete from app.staff_branch_assignments where staff_member_id = any($1::uuid[])",
+      [staffIds],
+    );
+    await client.query(
+      "delete from app.user_crm_links where user_id = any($1::uuid[]) and entity_type = 'staff'",
+      [[fixture.managerId, ...(fixture.extraUserIds ?? [])]],
+    );
+    await client.query(
+      "delete from app.staff_members where id = any($1::uuid[])",
+      [staffIds],
+    );
     await client.query("delete from app.profiles where id = any($1::uuid[])", [
-      fixture.profileIds,
+      [...fixture.profileIds, ...(fixture.extraProfileIds ?? [])],
     ]);
     await client.query("delete from app.users where id = any($1::uuid[])", [
       [

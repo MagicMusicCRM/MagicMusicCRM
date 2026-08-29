@@ -183,6 +183,7 @@ export class LessonWriteCommandService {
         fields: ["expectedVersion"],
       });
     }
+    await this.repository.assertUpdateScope(actor, lessonId);
     const mutation = await this.platform.executeVersionedMutation({
       actorKey: `user:${actor.userId}`,
       actorUserId: actor.userId,
@@ -208,6 +209,7 @@ export class LessonWriteCommandService {
           client,
           lessonId,
           true,
+          actor,
         );
         if (current.version !== dto.expectedVersion) {
           throw new ConflictException({

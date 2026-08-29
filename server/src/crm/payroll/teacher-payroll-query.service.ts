@@ -15,11 +15,17 @@ export class TeacherPayrollQueryService {
 
   async getTeacherPayroll(actor: ActorContext, teacherId: string) {
     this.policy.assertCanReadPayroll(actor);
-    const header = await this.repository.findTeacherPayrollHeader(teacherId);
+    const header = await this.repository.findTeacherPayrollHeader(
+      teacherId,
+      actor,
+    );
     if (!header) throw new NotFoundException("Преподаватель не найден.");
 
-    const lessons = await this.repository.loadPayrollLessons({ teacherId });
-    const rates = await this.repository.loadTeacherRates([teacherId]);
+    const lessons = await this.repository.loadPayrollLessons({
+      actor,
+      teacherId,
+    });
+    const rates = await this.repository.loadTeacherRates([teacherId], actor);
     const lessonTotals = lessons.reduce(
       (totals, lesson) => {
         const accrual = this.calculator.computeLessonAccrual(lesson, rates);
@@ -30,7 +36,7 @@ export class TeacherPayrollQueryService {
       },
       { hours: 0, accrued: 0, payable: 0 },
     );
-    const payouts = await this.repository.listTeacherPayouts(teacherId);
+    const payouts = await this.repository.listTeacherPayouts(teacherId, actor);
     const movementTotals = this.sumMovements(payouts);
     const rateHistory = rates.get(teacherId) ?? [];
     const currentRate = this.currentRate(rateHistory);
@@ -87,8 +93,9 @@ export class TeacherPayrollQueryService {
       comment: row.comment,
       paidAt: row.paid_at,
       authorName:
-        [row.author_first_name, row.author_last_name].filter(Boolean).join(" ") ||
-        null,
+        [row.author_first_name, row.author_last_name]
+          .filter(Boolean)
+          .join(" ") || null,
     };
   }
 }

@@ -6,6 +6,7 @@ import {
   ClientRefSearchQuery,
   ClientRefType,
 } from "../dto/client-ref.dto";
+import { branchIdExpr, managerBranchScopeSql } from "../branch-scope";
 
 interface ClientReferenceRow {
   type: ClientRefType;
@@ -38,7 +39,8 @@ export interface ResolvedClientReference {
   }>;
 }
 
-const MANAGEMENT_ROLES = ["admin", "manager", "director", "system_admin"];
+const GLOBAL_MANAGEMENT_ROLES = ["director", "system_admin"];
+const BRANCH_MANAGEMENT_ROLES = ["admin", "manager"];
 
 /**
  * A single actor-scoped resolver for every cross-domain Lead/Student link.
@@ -93,7 +95,7 @@ export class ClientReferenceService {
         where ${this.actorScopeSql("candidate")}
           and ($3::text is null or candidate.type = $3)
           and ($4::boolean or candidate.deleted_at is null)
-          and ($5::uuid is null or candidate.branch_id = $5)
+          and ($5::uuid is null or candidate.branch_id = $5::text)
           and (
             $6::text is null
             or lower(candidate.label) like '%' || $6 || '%' escape '\\'
@@ -135,7 +137,7 @@ export class ClientReferenceService {
             ),
             'Ученик без имени'
           ) as label,
-          student.branch_id,
+          ${branchIdExpr("student")} as branch_id,
           student.deleted_at,
           student.version,
           case when conversion.lead_id is null then null else 'lead' end
@@ -163,7 +165,7 @@ export class ClientReferenceService {
             ),
             'Лид без имени'
           ) as label,
-          lead.branch_id,
+          ${branchIdExpr("lead")} as branch_id,
           lead.deleted_at,
           lead.version,
           case when conversion.student_id is null then null else 'student' end
@@ -180,7 +182,15 @@ export class ClientReferenceService {
   private actorScopeSql(alias: string): string {
     return `
       (
-        $1::text = any(array[${MANAGEMENT_ROLES.map((role) => `'${role}'`).join(", ")}]::text[])
+        $1::text = any(array[${GLOBAL_MANAGEMENT_ROLES.map((role) => `'${role}'`).join(", ")}]::text[])
+        or (
+          $1::text = any(array[${BRANCH_MANAGEMENT_ROLES.map((role) => `'${role}'`).join(", ")}]::text[])
+          and ${managerBranchScopeSql({
+            roleExpression: "$1",
+            userIdExpression: "$2",
+            branchExpression: `${alias}.branch_id::text`,
+          })}
+        )
         or (
           $1::text = 'client'
           and (

@@ -29,12 +29,14 @@ describe("ClientReferenceService (PostgreSQL)", () => {
   const users: string[] = [];
   const profiles: string[] = [];
   const teachers: string[] = [];
+  const staffMembers: string[] = [];
   const students: string[] = [];
   const leads: string[] = [];
   const branches: string[] = [];
   const lessons: string[] = [];
   const tasks: string[] = [];
   let admin: ActorContext;
+  let manager: ActorContext;
   let client: ActorContext;
   let teacher: ActorContext;
   let unrelatedTeacher: ActorContext;
@@ -103,6 +105,30 @@ describe("ClientReferenceService (PostgreSQL)", () => {
     const id = created.rows[0]!.id;
     students.push(id);
     return id;
+  }
+
+  async function assignOperationalBranch(
+    actor: ActorContext & { profileId: string },
+    branchId: string,
+  ): Promise<void> {
+    const staff = await database.query<{ id: string }>(
+      `insert into app.staff_members (profile_id, role)
+       values ($1, $2) returning id`,
+      [actor.profileId, actor.role],
+    );
+    const staffId = staff.rows[0]!.id;
+    staffMembers.push(staffId);
+    await database.query(
+      `insert into app.user_crm_links (
+         user_id, entity_type, entity_id, link_source, confirmed_at
+       ) values ($1, 'staff', $2, 'manual_email', now())`,
+      [actor.userId, staffId],
+    );
+    await database.query(
+      `insert into app.staff_branch_assignments (staff_member_id, branch_id)
+       values ($1, $2)`,
+      [staffId, branchId],
+    );
   }
 
   async function createLead(
@@ -195,6 +221,15 @@ describe("ClientReferenceService (PostgreSQL)", () => {
     branches.push(foreignBranchId);
 
     admin = await createActor("admin", "Admin", "Resolver");
+    manager = await createActor("manager", "Manager", "Resolver");
+    await assignOperationalBranch(
+      admin as ActorContext & { profileId: string },
+      defaultBranchId,
+    );
+    await assignOperationalBranch(
+      manager as ActorContext & { profileId: string },
+      defaultBranchId,
+    );
     client = await createActor("client", "Клиент", "Свой");
     teacher = await createActor("teacher", "Педагог", "Назначенный");
     unrelatedTeacher = await createActor("teacher", "Педагог", "Посторонний");
@@ -298,6 +333,16 @@ describe("ClientReferenceService (PostgreSQL)", () => {
       `,
       [users],
     );
+    if (staffMembers.length > 0) {
+      await database.query(
+        "delete from app.staff_branch_assignments where staff_member_id = any($1::uuid[])",
+        [staffMembers],
+      );
+      await database.query(
+        "delete from app.staff_members where id = any($1::uuid[])",
+        [staffMembers],
+      );
+    }
     await database.query(
       "delete from app.students where id = any($1::uuid[])",
       [students],
@@ -365,6 +410,31 @@ describe("ClientReferenceService (PostgreSQL)", () => {
       lifecycleState: "active",
       tombstone: false,
     });
+  });
+
+  it("keeps Admin and Manager client resolution and search inside assigned branches", async () => {
+    for (const operationalActor of [admin, manager]) {
+      await expect(
+        service.resolve(operationalActor, {
+          type: "student",
+          id: ownStudentId,
+        }),
+      ).resolves.toMatchObject({
+        ref: { type: "student", id: ownStudentId },
+      });
+      await expect(
+        service.resolve(operationalActor, {
+          type: "student",
+          id: foreignStudentId,
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      const result = await service.search(operationalActor, { limit: 50 });
+      expect(result.items.map((item) => item.ref)).not.toContainEqual({
+        type: "student",
+        id: foreignStudentId,
+      });
+    }
   });
 
   it("returns a stable tombstone for an archived allowed reference", async () => {
