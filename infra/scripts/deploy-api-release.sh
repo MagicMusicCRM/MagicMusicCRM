@@ -280,12 +280,16 @@ image_migration_head() {
         [ "$#" -gt 0 ] && [ -f "$1" ]
         migration_head=""
         for migration_path do
-          case "$migration_path" in
-            /app/db/migrations/[0-9][0-9][0-9][0-9]_*.up.sql) ;;
+          migration_file="${migration_path##*/}"
+          migration_id="${migration_file%.up.sql}"
+          case "$migration_id" in
+            [0-9][0-9][0-9][0-9][a-z0-9_]*) ;;
             *) exit 3 ;;
           esac
-          migration_file="${migration_path##*/}"
-          migration_head="${migration_file%.up.sql}"
+          case "$migration_id" in
+            *[!a-z0-9_]*) exit 3 ;;
+          esac
+          migration_head="$migration_id"
         done
         [ -n "$migration_head" ]
         [ -f "/app/db/migrations/${migration_head}.down.sql" ]

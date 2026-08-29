@@ -27,6 +27,13 @@ eval "$(extract_contract_section rollback-recovery)"
 eval "$(extract_function resolve_compose_service_image)"
 eval "$(extract_function assert_override_image)"
 
+test_tmp="$(mktemp -d)"
+[[ "${test_tmp}" == /tmp/* ]] || {
+  printf 'deploy-api-release behavior: unsafe temp path\n' >&2
+  exit 1
+}
+trap 'rm -rf -- "${test_tmp}"' EXIT
+
 expect_pass() {
   local label="$1"
   shift
@@ -58,11 +65,35 @@ fake_node_service_image() {
 }
 
 fake_image_head=0141_previous
+fake_image_fixture=output
+image_fixture_root="${test_tmp}/image-root"
+mkdir -p -- \
+  "${image_fixture_root}/app/dist/db" \
+  "${image_fixture_root}/app/dist/migration/commerce/v7" \
+  "${image_fixture_root}/app/db/migrations"
+touch -- \
+  "${image_fixture_root}/app/dist/main.js" \
+  "${image_fixture_root}/app/dist/db/migrate.js" \
+  "${image_fixture_root}/app/dist/migration/commerce/v7/commerce-data.js"
+for fixture_migration in \
+  0088_lesson_completion_worker \
+  0088z_legacy_negative_payment_refunds \
+  0142_schedule_plan_series_subscription_snapshot; do
+  touch -- \
+    "${image_fixture_root}/app/db/migrations/${fixture_migration}.up.sql" \
+    "${image_fixture_root}/app/db/migrations/${fixture_migration}.down.sql"
+done
 docker() {
+  local final_arg rewritten_script
+
   case "$1" in
     run)
       if [[ " $* " == *' --entrypoint node '* ]]; then
         fake_node_service_image
+      elif [[ "${fake_image_fixture}" == filesystem ]]; then
+        for final_arg in "$@"; do :; done
+        rewritten_script="${final_arg//\/app/${image_fixture_root}/app}"
+        sh -ceu "${rewritten_script}"
       else
         printf '%s' "${fake_image_head}"
       fi
@@ -103,6 +134,21 @@ image_head_result="$(image_head_call)"
 fake_image_head='../../not-a-migration'
 expect_fail 'malformed image migration head' image_head_call
 fake_image_head=0141_previous
+
+fake_image_fixture=filesystem
+touch -- \
+  "${image_fixture_root}/app/db/migrations/0130_bad-name.up.sql" \
+  "${image_fixture_root}/app/db/migrations/0130_bad-name.down.sql"
+expect_fail 'unsafe migration filename inside image' image_head_call
+rm -- \
+  "${image_fixture_root}/app/db/migrations/0130_bad-name.up.sql" \
+  "${image_fixture_root}/app/db/migrations/0130_bad-name.down.sql"
+image_head_result="$(image_head_call)"
+[[ "${image_head_result}" == 0142_schedule_plan_series_subscription_snapshot ]] || {
+  printf 'deploy-api-release behavior: historical alphanumeric migration was rejected\n' >&2
+  exit 1
+}
+fake_image_fixture=output
 
 compose_config_fixture=compose-v2
 fake_compose_config() {
@@ -245,12 +291,6 @@ fake_function_definition='CREATE FUNCTION app.validate_schedule_plan_series_subs
 expect_fail 'trigger function body hash must match' assert_db_objects
 fake_function_definition='CREATE FUNCTION app.validate_schedule_plan_series_subscription() RETURNS trigger BODY exact-behavior'
 
-test_tmp="$(mktemp -d)"
-[[ "${test_tmp}" == /tmp/* ]] || {
-  printf 'deploy-api-release behavior: unsafe temp path\n' >&2
-  exit 1
-}
-trap 'rm -rf -- "${test_tmp}"' EXIT
 event_file="${test_tmp}/events.log"
 stage_file="${test_tmp}/stage.txt"
 recreate_count_file="${test_tmp}/recreate-count.txt"
