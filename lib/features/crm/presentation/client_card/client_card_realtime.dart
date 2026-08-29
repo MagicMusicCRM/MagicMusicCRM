@@ -19,11 +19,16 @@ extension _ClientCardRealtime on _ClientCardState {
     if (!mounted || _edited || !_realtimeRefreshDeferred) return;
     _realtimeRefreshDeferred = false;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && !_edited) _refreshFromRealtime('lead');
+      if (mounted && !_edited) {
+        _refreshFromRealtime('lead', preserveVisibleContent: true);
+      }
     });
   }
 
-  void _refreshFromRealtime(String entity) {
+  void _refreshFromRealtime(
+    String entity, {
+    bool preserveVisibleContent = false,
+  }) {
     switch (entity) {
       case 'homework':
         _emitState(() => _homeworkRefreshKey++);
@@ -37,11 +42,11 @@ extension _ClientCardRealtime on _ClientCardState {
       case 'group':
       case 'chat_work':
         if (_mode.hasLeadHalf && _leadId.isNotEmpty) {
-          _fetchCard();
+          _fetchCard(preserveVisibleContent: preserveVisibleContent);
           _fetchStatusHistory();
         }
         if (_mode.hasStudentHalf && _studentId.isNotEmpty) {
-          _fetchStudentData();
+          _fetchStudentData(preserveVisibleContent: preserveVisibleContent);
         }
         _fetchFamily();
         _fetchClientAccess();

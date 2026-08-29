@@ -413,6 +413,63 @@ void main() {
     expect(tester.widget<EditableText>(nameEditor).controller.text, 'Пётр');
   });
 
+  testWidgets(
+    'deferred realtime refresh after autosave keeps the student card visible',
+    (tester) async {
+      final events = StreamController<CrmChangedEvent>();
+      addTearDown(events.close);
+      final api = FakeCardApiClient(
+        student: <String, dynamic>{
+          'id': 'student-1',
+          'version': 2,
+          'status': 'active',
+          'firstName': 'Иван',
+          'lastName': 'Петров',
+          'phone': '+79990000000',
+          'customData': <String, dynamic>{},
+        },
+      );
+      final container = ProviderContainer(
+        overrides: [
+          magicApiClientProvider.overrideWithValue(api),
+          crmRealtimeProvider.overrideWith((ref) => events.stream),
+        ],
+      );
+      addTearDown(container.dispose);
+      await pumpClientCard(
+        tester,
+        api: api,
+        seed: const {'id': 'student-1'},
+        entityType: 'student',
+        container: container,
+      );
+
+      final lateLoad = Completer<void>();
+      addTearDown(() {
+        if (!lateLoad.isCompleted) lateLoad.complete();
+      });
+      api.nextStudentCardGate = lateLoad;
+      await tester.enterText(find.widgetWithText(TextFormField, 'Имя'), 'Пётр');
+      events.add(const CrmChangedEvent(entity: 'student', action: 'updated'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 800));
+      await tester.pump();
+
+      expect(api.updateStudentBodies, hasLength(1));
+      expect(api.studentCardLoadCount, 2);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      final nameEditor = find.descendant(
+        of: find.widgetWithText(TextFormField, 'Имя'),
+        matching: find.byType(EditableText),
+      );
+      expect(tester.widget<EditableText>(nameEditor).controller.text, 'Пётр');
+
+      lateLoad.complete();
+      await tester.pumpAndSettle();
+      expect(tester.widget<EditableText>(nameEditor).controller.text, 'Пётр');
+    },
+  );
+
   testWidgets('неизменённый UUID-статус тоже не отправляется', (tester) async {
     final api = FakeCardApiClient(lead: rawLead(statusId: uuid));
     await pumpClientCard(

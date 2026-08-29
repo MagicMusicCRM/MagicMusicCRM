@@ -11,11 +11,12 @@ extension _ClientCardLoaders on _ClientCardState {
   Future<void> _fetchStudentData({
     String? studentId,
     VoidCallback? then,
+    bool preserveVisibleContent = false,
   }) async {
     final id = studentId ?? _studentId;
     if (id.isEmpty) return;
     final requestEditRevision = _editRevision;
-    if (mounted) {
+    if (mounted && !preserveVisibleContent) {
       _emitState(() {
         _loadingStudent = true;
         _studentError = null;
@@ -57,7 +58,10 @@ extension _ClientCardLoaders on _ClientCardState {
           fallback: 'Не удалось загрузить воронку.',
         );
       }
-      final applyIdentity = !_edited && requestEditRevision == _editRevision;
+      final applyIdentity =
+          !preserveVisibleContent &&
+          !_edited &&
+          requestEditRevision == _editRevision;
       _emitState(() {
         if (applyIdentity) {
           _student = student;
@@ -105,6 +109,7 @@ extension _ClientCardLoaders on _ClientCardState {
         _studentComments.sort(
           (a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''),
         );
+        _studentError = null;
         _loadingStudent = false;
       });
       if (applyIdentity) {
@@ -116,10 +121,12 @@ extension _ClientCardLoaders on _ClientCardState {
       debugPrint('Error loading student card: $e');
       if (mounted) {
         _emitState(() {
-          _studentError = userErrorMessage(
-            e,
-            fallback: 'Не удалось загрузить карточку ученика.',
-          );
+          if (!preserveVisibleContent) {
+            _studentError = userErrorMessage(
+              e,
+              fallback: 'Не удалось загрузить карточку ученика.',
+            );
+          }
           _loadingStudent = false;
         });
       }
@@ -148,7 +155,11 @@ extension _ClientCardLoaders on _ClientCardState {
     }
   }
 
-  Future<void> _fetchCard({String? leadId, VoidCallback? then}) async {
+  Future<void> _fetchCard({
+    String? leadId,
+    VoidCallback? then,
+    bool preserveVisibleContent = false,
+  }) async {
     final id = leadId ?? _leadId;
     if (id.isEmpty) {
       if (mounted) _emitState(() => _loadingCard = false);
@@ -158,7 +169,10 @@ extension _ClientCardLoaders on _ClientCardState {
     try {
       final card = await ref.read(magicCrmServiceProvider).getLeadCard(id);
       if (!mounted) return;
-      final applyIdentity = !_edited && requestEditRevision == _editRevision;
+      final applyIdentity =
+          !preserveVisibleContent &&
+          !_edited &&
+          requestEditRevision == _editRevision;
       _emitState(() {
         if (applyIdentity) _leadCard = card;
         if (applyIdentity && card['lead'] is Map<String, dynamic>) {
