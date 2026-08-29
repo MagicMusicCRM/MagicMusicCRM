@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 
-import 'client_card_ui.dart';
 import 'subscription_issue_adjustment_sections.dart';
 import 'subscription_issue_controller.dart';
 import 'subscription_issue_payment_section.dart';
@@ -30,31 +29,31 @@ class SubscriptionIssueFormSections extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SizedBox(height: 16),
-        DropdownButtonFormField<String>(
+        SearchablePickerField(
           key: const Key('subscription-package-selector'),
-          initialValue: draft.packageId,
-          decoration: clientCardInputDecoration(
-            Theme.of(context).colorScheme,
-            label: 'Абонемент',
-            isDense: true,
-          ),
+          label: 'Абонемент',
+          placeholder: 'Выберите абонемент',
+          hintText: 'Введите название абонемента',
+          selectedId: draft.packageId,
+          isNullable: false,
+          enabled: fieldsEnabled,
           items: [
             for (final package in packages)
-              DropdownMenuItem(
-                value: package['id']?.toString(),
-                child: Text(package['name']?.toString() ?? 'Абонемент'),
-              ),
+              if (package['id']?.toString().isNotEmpty == true)
+                SearchableSelectItem(
+                  id: package['id'].toString(),
+                  label: package['name']?.toString() ?? 'Абонемент',
+                ),
           ],
-          onChanged: fieldsEnabled
-              ? (id) {
-                  final package = packages.where(
-                    (item) => item['id']?.toString() == id,
-                  );
-                  if (package.isEmpty) return;
-                  controller.selectPackage(package.first);
-                  onChanged();
-                }
-              : null,
+          onSelected: (item) {
+            if (item == null || !fieldsEnabled) return;
+            final package = packages.where(
+              (candidate) => candidate['id']?.toString() == item.id,
+            );
+            if (package.isEmpty) return;
+            controller.selectPackage(package.first);
+            onChanged();
+          },
         ),
         SubscriptionIssuePaymentSection(
           draft: draft,

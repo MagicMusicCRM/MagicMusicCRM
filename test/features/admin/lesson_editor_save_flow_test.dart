@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
-import 'package:magic_music_crm/core/models/lesson_schedule_analysis.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_decision/lesson_decision_models.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_editor_models.dart';
 import 'package:magic_music_crm/features/admin/presentation/widgets/lesson_editor/lesson_editor_save_flow.dart';

@@ -8,6 +8,8 @@ import 'package:magic_music_crm/features/manager/presentation/reporting/report_e
 import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_data_source.dart';
 import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_models.dart';
 
+import '../../support/minimal_xlsx_fixture.dart';
+
 void main() {
   group('ReportExportCoordinator', () {
     test('sync result validates and opens the server filename once', () async {
@@ -503,7 +505,7 @@ final List<int> _validCsvBytes = [
   0xbf,
   ...utf8.encode('name\nАлина'),
 ];
-const List<int> _validXlsxBytes = [0x50, 0x4b, 0x03, 0x04];
+final List<int> _validXlsxBytes = minimalXlsxBytes();
 
 Future<ReportExportOutcome> _export(
   ReportExportCoordinator coordinator, {

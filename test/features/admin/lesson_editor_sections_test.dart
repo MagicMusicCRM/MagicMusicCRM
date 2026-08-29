@@ -1511,6 +1511,7 @@ class _RecordingActions implements LessonEditorActions {
   String? branch;
   String? room;
   String? teacher;
+  String? notes;
   int dateRequests = 0;
   int timeRequests = 0;
   int? duration;
@@ -1557,6 +1558,8 @@ class _RecordingActions implements LessonEditorActions {
         }
       case LessonDurationEdit(:final value):
         duration = value;
+      case LessonNotesEdit(:final value):
+        notes = value;
       case LessonTrialEdit(:final value):
         trial = value;
     }

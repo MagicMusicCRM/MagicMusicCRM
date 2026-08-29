@@ -15,6 +15,8 @@ import 'package:magic_music_crm/features/manager/presentation/reporting/report_e
 import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_models.dart';
 import 'package:magic_music_crm/features/manager/presentation/reporting/reporting_panel.dart';
 
+import '../../support/minimal_xlsx_fixture.dart';
+
 void main() {
   test('dashboard filter restores from workspace and direct-link state', () {
     final restored = DashboardFilter.fromContext(
@@ -127,7 +129,11 @@ void main() {
 
     expect(api.jobPolls, greaterThanOrEqualTo(1));
     expect(filename, 'client-status.xlsx');
-    expect(openedBytes, [0x50, 0x4b, 0x03, 0x04]);
+    expect(openedBytes, isNotNull);
+    expect(
+      () => validateReportExportBytes(openedBytes!, 'xlsx'),
+      returnsNormally,
+    );
     await tester.scrollUntilVisible(
       find.text('Файл открыт: client-status.xlsx'),
       300,
@@ -524,7 +530,7 @@ class _ReportingApi extends MagicApiClient {
       );
     }
     if (corruptExport) return utf8.encode('{"not":"xlsx"}');
-    return [0x50, 0x4b, 0x03, 0x04];
+    return minimalXlsxBytes();
   }
 
   @override
@@ -532,6 +538,6 @@ class _ReportingApi extends MagicApiClient {
     String path, {
     Map<String, dynamic>? queryParameters,
   }) async {
-    return [0x50, 0x4b, 0x03, 0x04];
+    return minimalXlsxBytes();
   }
 }

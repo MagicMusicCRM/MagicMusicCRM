@@ -143,43 +143,43 @@ void main() {
   test('paid units follow the canonical obligation projection rule', () {
     expect(
       subscriptionPaidUnits(
-        packageUnits: 8,
+        packageUnits: SubscriptionUnitAmount.parse(8),
         paidNowMinor: BigInt.zero,
         finalObligationMinor: BigInt.from(800000),
-      ),
-      0,
+      ).format(),
+      '0',
     );
     expect(
       subscriptionPaidUnits(
-        packageUnits: 8,
+        packageUnits: SubscriptionUnitAmount.parse(8),
         paidNowMinor: BigInt.from(800000),
         finalObligationMinor: BigInt.from(800000),
-      ),
-      8,
+      ).format(),
+      '8',
     );
     expect(
       subscriptionPaidUnits(
-        packageUnits: 8,
+        packageUnits: SubscriptionUnitAmount.parse(8),
         paidNowMinor: BigInt.from(300000),
         finalObligationMinor: BigInt.from(800000),
-      ),
-      3,
+      ).format(),
+      '3',
     );
     expect(
       subscriptionPaidUnits(
-        packageUnits: 8,
+        packageUnits: SubscriptionUnitAmount.parse(8),
         paidNowMinor: BigInt.from(1000000),
         finalObligationMinor: BigInt.from(800000),
-      ),
-      8,
+      ).format(),
+      '8',
     );
     expect(
       subscriptionPaidUnits(
-        packageUnits: 8,
+        packageUnits: SubscriptionUnitAmount.parse(8),
         paidNowMinor: BigInt.zero,
         finalObligationMinor: BigInt.zero,
-      ),
-      8,
+      ).format(),
+      '8',
     );
   });
 

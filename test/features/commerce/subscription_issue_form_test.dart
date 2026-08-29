@@ -7,7 +7,7 @@ import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
 import 'package:magic_music_crm/core/services/magic_crm_service.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
-import 'package:magic_music_crm/core/widgets/searchable_select.dart';
+import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/subscription_issue_sheet.dart';
 import 'package:magic_music_crm/features/crm/presentation/client_card/subscription_issue_models.dart';
 
@@ -361,11 +361,11 @@ void main() {
       onSubmit: (_) async {},
     );
 
-    tester
-        .widget<DropdownButtonFormField<String>>(
-          find.byKey(const Key('subscription-package-selector')),
-        )
-        .onChanged!('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee');
+    final packagePicker = tester.widget<SearchablePickerField>(
+      find.byKey(const Key('subscription-package-selector')),
+    );
+    expect(packagePicker.isNullable, isFalse);
+    packagePicker.onSelected(packagePicker.items.last);
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const Key('subscription-payment-1200000')),

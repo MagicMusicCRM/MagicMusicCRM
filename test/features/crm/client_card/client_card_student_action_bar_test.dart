@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:magic_music_crm/core/models/types.dart';
+import 'package:magic_music_crm/core/widgets/searchable_picker_field.dart';
 import 'package:magic_music_crm/features/admin/presentation/providers/schedule_navigation_provider.dart';
 
 import 'card_fake_api.dart';
@@ -331,9 +332,10 @@ void main() {
         const Key('subscription-package-selector'),
       );
       await tester.ensureVisible(packageSelector);
-      tester
-          .widget<DropdownButtonFormField<String>>(packageSelector)
-          .onChanged!('package-1');
+      final packagePicker = tester.widget<SearchablePickerField>(
+        packageSelector,
+      );
+      packagePicker.onSelected(packagePicker.items.single);
       await tester.pumpAndSettle();
 
       final submit = find.byKey(const Key('subscription-issue-submit'));
