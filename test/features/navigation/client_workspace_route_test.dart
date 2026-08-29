@@ -499,16 +499,15 @@ void main() {
             )
             .dy,
       );
-      expect(
-        tester
-            .getSize(
-              find.byKey(const Key('client-desktop-section-subscriptions')),
-            )
-            .height,
-        tester
-            .getSize(find.byKey(const Key('client-desktop-section-progress')))
-            .height,
-      );
+      for (final section in const ['subscriptions', 'progress']) {
+        expect(
+          tester
+              .getSize(find.byKey(Key('client-desktop-section-$section')))
+              .height,
+          greaterThan(0),
+          reason: section,
+        );
+      }
       expect(
         tester
             .getTopLeft(

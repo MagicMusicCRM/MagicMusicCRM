@@ -193,7 +193,7 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
             1: FixedColumnWidth(AppSpace.lg),
             2: FlexColumnWidth(),
           },
-          defaultVerticalAlignment: TableCellVerticalAlignment.fill,
+          defaultVerticalAlignment: TableCellVerticalAlignment.top,
           children: [
             TableRow(
               children: [

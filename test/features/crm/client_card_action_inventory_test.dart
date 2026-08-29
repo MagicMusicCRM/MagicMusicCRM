@@ -84,11 +84,20 @@ void main() {
     );
     expect(find.text('→ Контакты'), findsNothing);
 
-    for (final section in const ['history_tasks', 'contacts']) {
+    for (final section in const [
+      'subscriptions',
+      'history_tasks',
+      'contacts',
+    ]) {
       await tester.tap(find.byKey(Key('client-section-jump-$section')));
       await tester.pumpAndSettle();
       final target = find.byKey(Key('client-desktop-section-$section'));
       expect(target, findsOneWidget);
+      expect(
+        tester.getSize(target).height,
+        greaterThan(0),
+        reason: '$section must occupy visible canvas space',
+      );
       expect(
         tester
             .getRect(target)
