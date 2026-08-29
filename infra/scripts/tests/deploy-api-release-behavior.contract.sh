@@ -16,9 +16,16 @@ extract_contract_section() {
     "${script_path}"
 }
 
+extract_function() {
+  local function_name="$1"
+  sed -n "/^${function_name}() {$/,/^}$/p" "${script_path}"
+}
+
 eval "$(extract_contract_section image-migration-head)"
 eval "$(extract_contract_section db-object-contract)"
 eval "$(extract_contract_section rollback-recovery)"
+eval "$(extract_function resolve_compose_service_image)"
+eval "$(extract_function assert_override_image)"
 
 expect_pass() {
   local label="$1"
@@ -38,11 +45,27 @@ expect_fail() {
   fi
 }
 
+fake_node_service_image() {
+  local input compact api_object
+
+  input="$(cat)" || return 2
+  compact="$(printf '%s' "${input}" | tr -d '[:space:]')"
+  [[ "${compact}" =~ \"services\":\{ ]] || return 3
+  [[ "${compact}" =~ \"api\":\{([^{}]*)\} ]] || return 4
+  api_object="${BASH_REMATCH[1]}"
+  [[ "${api_object}" =~ \"image\":\"([^\"]+)\" ]] || return 5
+  printf '%s' "${BASH_REMATCH[1]}"
+}
+
 fake_image_head=0141_previous
 docker() {
   case "$1" in
     run)
-      printf '%s' "${fake_image_head}"
+      if [[ " $* " == *' --entrypoint node '* ]]; then
+        fake_node_service_image
+      else
+        printf '%s' "${fake_image_head}"
+      fi
       ;;
     inspect)
       log_event "docker-inspect:${2}"
@@ -80,6 +103,83 @@ image_head_result="$(image_head_call)"
 fake_image_head='../../not-a-migration'
 expect_fail 'malformed image migration head' image_head_call
 fake_image_head=0141_previous
+
+compose_config_fixture=compose-v2
+fake_compose_config() {
+  case "$*" in
+    *'config --quiet')
+      return 0
+      ;;
+    *'config --images api')
+      printf '%s\n' \
+        alpine:3.20 \
+        registry.example/magic/api:candidate \
+        postgres:16.4-alpine \
+        redis:7.4.1-alpine
+      ;;
+    *'config --format json')
+      case "${compose_config_fixture}" in
+        compose-v2)
+          printf '%s\n' \
+            '{"services":{"api":{"image":"registry.example/magic/api:candidate"},"redis":{"image":"redis:7.4.1-alpine"}}}'
+          ;;
+        compose-v5)
+          printf '%s\n' \
+            '{' \
+            '  "services": {' \
+            '    "storage-init": {"image": "alpine:3.20"},' \
+            '    "postgres": {"image": "postgres:16.4-alpine"},' \
+            '    "api": {"image": "registry.example/magic/api:candidate"},' \
+            '    "redis": {"image": "redis:7.4.1-alpine"}' \
+            '  }' \
+            '}'
+          ;;
+        wrong-api)
+          printf '%s\n' \
+            '{"services":{"api":{"image":"registry.example/magic/api:other"},"redis":{"image":"registry.example/magic/api:candidate"}}}'
+          ;;
+        missing-api-image)
+          printf '%s\n' \
+            '{"services":{"api":{"command":"node dist/main.js"},"redis":{"image":"registry.example/magic/api:candidate"}}}'
+          ;;
+        non-string-api-image)
+          printf '%s\n' \
+            '{"services":{"api":{"image":["registry.example/magic/api:candidate"]}}}'
+          ;;
+        *)
+          return 1
+          ;;
+      esac
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+# These globals are consumed by the extracted production functions through eval.
+# shellcheck disable=SC2034
+declare -a compose_base=(fake_compose_config)
+parser_image_id=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+expected_override_image=registry.example/magic/api:candidate
+override_image_call() {
+  (assert_override_image \
+    test-override "${expected_override_image}" "${parser_image_id}")
+}
+
+compose_config_fixture=compose-v2
+expect_pass 'Compose v2 multi-image output resolves services.api.image' \
+  override_image_call
+compose_config_fixture=compose-v5
+expect_pass 'Compose v5 multi-image output resolves services.api.image' \
+  override_image_call
+compose_config_fixture=wrong-api
+expect_fail 'another service cannot satisfy the API image contract' \
+  override_image_call
+compose_config_fixture=missing-api-image
+expect_fail 'missing services.api.image fails closed' override_image_call
+compose_config_fixture=non-string-api-image
+expect_fail 'non-string services.api.image fails closed' override_image_call
 
 # These globals are consumed by the extracted production function through eval.
 # shellcheck disable=SC2034

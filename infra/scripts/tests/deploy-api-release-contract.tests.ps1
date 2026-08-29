@@ -70,8 +70,12 @@ Assert-Contains 'realpath -e -- "${candidate_override}"' `
   'Candidate override must be resolved before any runtime mutation.'
 Assert-Contains 'realpath -e -- "${rollback_override}"' `
   'Rollback override must be resolved before any runtime mutation.'
-Assert-Contains 'config --images api' `
-  'Merged Compose config must prove the exact API image before mutation.'
+Assert-Contains 'config --format json' `
+  'Merged Compose JSON must prove the exact API service image before mutation.'
+Assert-Contains 'const image = config?.services?.[service]?.image;' `
+  'Compose image resolution must select services.api.image without positional filtering.'
+Assert-Contains '--entrypoint node "${parser_image_id}" -e' `
+  'Compose JSON must be parsed inside the already validated immutable image.'
 Assert-Contains 'org.opencontainers.image.revision' `
   'The exact full source revision label must be checked.'
 Assert-Contains 'org.opencontainers.image.version' `

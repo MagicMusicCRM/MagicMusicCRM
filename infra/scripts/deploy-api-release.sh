@@ -298,18 +298,57 @@ image_migration_head() {
 }
 # CONTRACT_HARNESS_END image-migration-head
 
+# CONTRACT_HARNESS_BEGIN compose-api-image
+resolve_compose_service_image() {
+  local override="$1"
+  local parser_image_id="$2"
+  local service="$3"
+  local configured_image
+
+  configured_image="$(
+    "${compose_base[@]}" -f "${override}" config --format json |
+      docker run --rm -i --pull never \
+        --network none --read-only --cap-drop ALL \
+        --security-opt no-new-privileges:true \
+        --entrypoint node "${parser_image_id}" -e '
+          let input = "";
+          process.stdin.setEncoding("utf8");
+          process.stdin.on("data", (chunk) => { input += chunk; });
+          process.stdin.on("error", () => process.exit(2));
+          process.stdin.on("end", () => {
+            let config;
+            try {
+              config = JSON.parse(input);
+            } catch {
+              process.exit(3);
+            }
+            const service = process.argv[1];
+            const image = config?.services?.[service]?.image;
+            if (typeof image !== "string" || image.length === 0) {
+              process.exit(4);
+            }
+            process.stdout.write(image);
+          });
+        ' "${service}"
+  )" || die "release override service image cannot be read from Compose JSON"
+  [[ -n "${configured_image}" ]] ||
+    die "release override service image is empty"
+  printf '%s' "${configured_image}"
+}
+
 assert_override_image() {
   local override="$1"
   local expected_image="$2"
+  local parser_image_id="$3"
   local configured_image
 
   "${compose_base[@]}" -f "${override}" config --quiet
-  configured_image="$(
-    "${compose_base[@]}" -f "${override}" config --images api
-  )"
+  configured_image="$(resolve_compose_service_image \
+    "${override}" "${parser_image_id}" api)"
   [[ "${configured_image}" == "${expected_image}" ]] ||
     die "release override does not resolve the exact API image"
 }
+# CONTRACT_HARNESS_END compose-api-image
 
 candidate_image_id="$(assert_image_metadata \
   "${candidate_image}" "${candidate_revision}" "${candidate_version}" candidate)"
@@ -325,8 +364,8 @@ rollback_image_migration_head="$(image_migration_head \
   die "declared target migration does not match the candidate image head"
 [[ "${rollback_image_migration_head}" == "${expected_current_migration}" ]] ||
   die "declared current migration does not match the rollback image head"
-assert_override_image "${candidate_override}" "${candidate_image}"
-assert_override_image "${rollback_override}" "${rollback_image}"
+assert_override_image "${candidate_override}" "${candidate_image}" "${candidate_image_id}"
+assert_override_image "${rollback_override}" "${rollback_image}" "${rollback_image_id}"
 
 api_container_id="$("${compose_base[@]}" ps --all -q api)"
 [[ -n "${api_container_id}" ]] || die "API container is missing"
