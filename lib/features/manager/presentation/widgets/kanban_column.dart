@@ -72,14 +72,10 @@ class _KanbanColumnState extends State<_KanbanColumn> {
           width: columnWidth,
           margin: const EdgeInsets.symmetric(horizontal: 6),
           decoration: BoxDecoration(
-            color: hovering
-                ? widget.status.$3.withAlpha(30)
-                : Theme.of(context).colorScheme.surface.withAlpha(127),
+            color: hovering ? widget.status.$3.withAlpha(30) : AppColor.bg,
             borderRadius: BorderRadius.circular(AppRadius.card),
             border: Border.all(
-              color: hovering
-                  ? widget.status.$3
-                  : widget.status.$3.withAlpha(45),
+              color: hovering ? widget.status.$3 : AppColor.divider,
               width: hovering ? 1.5 : 1,
             ),
           ),

@@ -234,13 +234,17 @@ class _WindowsUpdateOverlayState extends State<WindowsUpdateOverlay> {
           children: [
             if (showVersion)
               Positioned(
-                left: 7,
-                bottom: 7,
+                left: 0,
+                bottom: 0,
+                width: 76,
                 child: SafeArea(
-                  minimum: const EdgeInsets.all(AppSpace.xs),
-                  child: AppVersionButton(
-                    hasUpdate: widget.manifest != null,
-                    onPressed: widget.onVersionPressed,
+                  minimum: const EdgeInsets.only(bottom: AppSpace.xs),
+                  child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: AppVersionButton(
+                      hasUpdate: widget.manifest != null,
+                      onPressed: widget.onVersionPressed,
+                    ),
                   ),
                 ),
               ),

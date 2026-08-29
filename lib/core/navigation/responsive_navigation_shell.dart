@@ -52,15 +52,11 @@ class ResponsiveNavigationShell extends StatelessWidget {
 
   // ── Desktop rail ───────────────────────────────────────────────────────────
   Widget _buildRail(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? AppColor.sidebar : TelegramColors.lightSidebar;
-    final divider = isDark ? AppColor.divider : TelegramColors.lightDivider;
-
     return Container(
       width: 76,
-      decoration: BoxDecoration(
-        color: bg,
-        border: Border(right: BorderSide(color: divider)),
+      decoration: const BoxDecoration(
+        color: AppColor.sidebar,
+        border: Border(right: BorderSide(color: AppColor.divider)),
       ),
       child: SafeArea(
         right: false,
@@ -79,7 +75,6 @@ class ResponsiveNavigationShell extends StatelessWidget {
                         _RailItem(
                           destination: destinations[i],
                           selected: i == selectedIndex,
-                          isDark: isDark,
                           onTap: () => onSelected(i),
                         ),
                       ],
@@ -181,33 +176,31 @@ class _RailItem extends StatelessWidget {
   const _RailItem({
     required this.destination,
     required this.selected,
-    required this.isDark,
     required this.onTap,
   });
 
   final ResponsiveNavDestination destination;
   final bool selected;
-  final bool isDark;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final idle = isDark ? AppColor.text2 : TelegramColors.lightTextSecondary;
-    final fg = selected ? AppColor.gold : idle;
+    const idle = AppColor.text2;
+    final fg = selected ? AppColor.selectionText : idle;
 
     return Semantics(
       button: true,
       selected: selected,
       label: destination.label,
       child: InkWell(
-        borderRadius: BorderRadius.circular(AppRadius.card),
+        borderRadius: BorderRadius.circular(AppRadius.control),
         onTap: onTap,
         child: Container(
           width: 68,
           height: 54,
           decoration: BoxDecoration(
-            color: selected ? AppColor.goldSoft : Colors.transparent,
-            borderRadius: BorderRadius.circular(AppRadius.card),
+            color: selected ? AppColor.selectionBg : Colors.transparent,
+            borderRadius: BorderRadius.circular(AppRadius.control),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -232,11 +225,7 @@ class _RailItem extends StatelessWidget {
                     context,
                   ).clamp(maxScaleFactor: 1.2),
                   style: TextStyle(
-                    color: selected
-                        ? (isDark
-                              ? AppColor.text
-                              : TelegramColors.lightTextPrimary)
-                        : idle,
+                    color: selected ? AppColor.selectionText : idle,
                     fontSize: 9.5,
                     fontWeight: FontWeight.w600,
                     letterSpacing: -0.1,

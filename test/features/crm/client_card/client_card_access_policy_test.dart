@@ -102,7 +102,7 @@ void main() {
   );
 
   test(
-    'lead keeps subscriptions while student and converted hide finance sections',
+    'sections follow desktop reading order and omit unavailable documents',
     () {
       final lead = ClientCardAccessPolicy.project(
         actorRole: 'teacher',
@@ -117,20 +117,18 @@ void main() {
 
       expect(lead.sections.map((item) => item.$3).toList(), [
         'overview',
+        'contacts',
         'lessons',
         'subscriptions',
         'progress',
         'history_tasks',
-        'contacts',
-        'documents',
       ]);
       expect(student.sections.map((item) => item.$3).toList(), [
         'overview',
+        'contacts',
         'lessons',
         'progress',
         'history_tasks',
-        'contacts',
-        'documents',
       ]);
       expect(
         () => student.sections.add(student.sections.first),
@@ -138,6 +136,24 @@ void main() {
       );
     },
   );
+
+  test('student finance sections keep the visible desktop card order', () {
+    final access = ClientCardAccessPolicy.project(
+      actorRole: 'manager',
+      capabilitySnapshot: null,
+      hasStudentHalf: true,
+    );
+
+    expect(access.sections.map((item) => item.$3).toList(), [
+      'overview',
+      'contacts',
+      'lessons',
+      'subscriptions',
+      'progress',
+      'payments',
+      'history_tasks',
+    ]);
+  });
 
   test(
     'explicit capability snapshot keeps admin tasks fail closed when absent',

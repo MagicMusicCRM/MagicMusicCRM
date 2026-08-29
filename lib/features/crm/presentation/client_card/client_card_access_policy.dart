@@ -29,23 +29,21 @@ class ClientCardAccessProjection {
 abstract final class ClientCardAccessPolicy {
   static const List<ClientCardSection> _leadSections = [
     (Icons.dashboard_outlined, 'Обзор', 'overview'),
+    (Icons.people_alt_outlined, 'Контакты', 'contacts'),
     (Icons.event_note_rounded, 'Занятия', 'lessons'),
     (Icons.confirmation_number_outlined, 'Абонементы', 'subscriptions'),
     (Icons.insights_rounded, 'Прогресс', 'progress'),
     (Icons.history_rounded, 'История и задачи', 'history_tasks'),
-    (Icons.people_alt_outlined, 'Контакты', 'contacts'),
-    (Icons.folder_outlined, 'Документы', 'documents'),
   ];
 
   static const List<ClientCardSection> _studentSections = [
     (Icons.dashboard_outlined, 'Обзор', 'overview'),
+    (Icons.people_alt_outlined, 'Контакты', 'contacts'),
     (Icons.event_note_rounded, 'Занятия', 'lessons'),
-    (Icons.account_balance_wallet_rounded, 'Оплаты', 'payments'),
     (Icons.confirmation_number_outlined, 'Абонементы', 'subscriptions'),
     (Icons.insights_rounded, 'Прогресс', 'progress'),
+    (Icons.account_balance_wallet_rounded, 'Оплаты', 'payments'),
     (Icons.history_rounded, 'История и задачи', 'history_tasks'),
-    (Icons.people_alt_outlined, 'Контакты', 'contacts'),
-    (Icons.folder_outlined, 'Документы', 'documents'),
   ];
 
   static ClientCardAccessProjection project({

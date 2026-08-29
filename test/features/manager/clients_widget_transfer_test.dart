@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/api/magic_api_client.dart';
 import 'package:magic_music_crm/core/api/magic_api_providers.dart';
 import 'package:magic_music_crm/core/api/magic_token_store.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/features/manager/presentation/transfer/lead_transfer_controller.dart';
 import 'package:magic_music_crm/features/manager/presentation/widgets/clients_widget.dart';
 
@@ -46,6 +47,22 @@ void main() {
     // Both segment labels are present in the idle (compact) header.
     expect(find.text('Лиды'), findsWidgets);
     expect(find.text('Ученики'), findsWidgets);
+
+    final canvas = tester.widget<ColoredBox>(
+      find.byKey(const ValueKey('clients-workspace-canvas')),
+    );
+    final selectedSegment = tester.widget<AnimatedContainer>(
+      find
+          .ancestor(
+            of: find.text('Лиды').first,
+            matching: find.byType(AnimatedContainer),
+          )
+          .first,
+    );
+    final decoration = selectedSegment.decoration! as BoxDecoration;
+
+    expect(canvas.color, AppColor.surfaceSoft);
+    expect(decoration.color, AppColor.selectionBg);
   });
 
   testWidgets('tapping a tab is ignored while a transfer is active', (

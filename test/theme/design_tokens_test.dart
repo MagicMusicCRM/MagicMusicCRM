@@ -3,30 +3,36 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:magic_music_crm/core/theme/app_theme.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 
-/// Locks the owner-approved light foundation and its semantic contrast.
+/// Locks the owner-approved Quiet Graphite foundation and semantic contrast.
 void main() {
   group('AppColor — approved light semantic palette', () {
     test('core surfaces + text', () {
-      expect(AppColor.bg, const Color(0xFFFCFBF8));
-      expect(AppColor.surface, const Color(0xFFFFFFFF));
-      expect(AppColor.surfaceSoft, const Color(0xFFF7F4EE));
-      expect(AppColor.sidebar, const Color(0xFFF3F0E9));
-      expect(AppColor.input, const Color(0xFFF7F4EE));
-      expect(AppColor.divider, const Color(0xFFDFDBD2));
-      expect(AppColor.text, const Color(0xFF181915));
-      expect(AppColor.text2, const Color(0xFF6D6D66));
-      expect(AppColor.text3, const Color(0xFF96948B));
+      expect(AppColor.bg, const Color(0xFFEFF0ED));
+      expect(AppColor.surface, const Color(0xFFF7F7F5));
+      expect(AppColor.surfaceSoft, const Color(0xFFF1F2EF));
+      expect(AppColor.surfaceActive, const Color(0xFFF1F2EF));
+      expect(AppColor.sidebar, const Color(0xFFE8EAE6));
+      expect(AppColor.input, const Color(0xFFF7F7F5));
+      expect(AppColor.divider, const Color(0xFFDFE2DC));
+      expect(AppColor.borderStrong, const Color(0xFFBCC2BA));
+      expect(AppColor.text, const Color(0xFF1C1F1B));
+      expect(AppColor.text2, const Color(0xFF626760));
+      expect(AppColor.text3, const Color(0xFF858A83));
     });
 
-    test('brand gold + derived tokens', () {
-      expect(AppColor.gold, const Color(0xFFA97D25));
-      expect(AppColor.gold2, const Color(0xFFBD9136));
-      expect(AppColor.goldSoft, const Color(0xFFF7EDCF));
-      expect(AppColor.goldLine, const Color(0xFFDCC58E));
-      expect(AppColor.onGold, const Color(0xFF181915));
+    test('one brand gold + neutral selection tokens', () {
+      expect(AppColor.gold, const Color(0xFF765417));
+      expect(AppColor.gold2, const Color(0xFF765417));
+      expect(AppColor.goldSoft, const Color(0xFFE6E7E2));
+      expect(AppColor.goldLine, const Color(0xFFBEC4BC));
+      expect(AppColor.onGold, const Color(0xFFFFFAF0));
       expect(AppColor.onBrand, const Color(0xFFFFFAF0));
       expect(AppColor.brandSolid, const Color(0xFF765417));
       expect(AppColor.brandSolidHover, const Color(0xFF62450F));
+      expect(AppColor.selectionBg, const Color(0xFFE1E4DF));
+      expect(AppColor.selectionHover, const Color(0xFFE9ECE7));
+      expect(AppColor.selectionText, const Color(0xFF242823));
+      expect(AppColor.selectionBorder, const Color(0xFFBEC4BC));
     });
 
     test('work accents', () {
@@ -42,15 +48,15 @@ void main() {
     });
 
     test('overlay chrome (toast / pop-menu / sheet / skeleton / scrim)', () {
-      expect(AppColor.overlay, const Color(0xFFFFFFFF));
-      expect(AppColor.menuItemText, const Color(0xFF181915));
-      expect(AppColor.menuItemHover, const Color(0xFFF7F4EE));
+      expect(AppColor.overlay, const Color(0xFFF7F7F5));
+      expect(AppColor.menuItemText, const Color(0xFF1C1F1B));
+      expect(AppColor.menuItemHover, const Color(0xFFF1F2EF));
       expect(AppColor.menuDanger, const Color(0xFFB94A42));
       expect(AppColor.dangerSoft, const Color(0xFFFBECEB));
-      expect(AppColor.scrim, const Color(0x66181915));
-      expect(AppColor.sheetGrab, const Color(0xFFCFC7B8));
-      expect(AppColor.skeletonBase, const Color(0xFFEBE6DC));
-      expect(AppColor.skeletonHighlight, const Color(0x99FFFFFF));
+      expect(AppColor.scrim, const Color(0x661C1F1B));
+      expect(AppColor.sheetGrab, const Color(0xFFBCC2BA));
+      expect(AppColor.skeletonBase, const Color(0xFFDFE2DC));
+      expect(AppColor.skeletonHighlight, const Color(0x99F7F7F5));
     });
 
     test('critical foreground pairs meet WCAG contrast', () {
@@ -58,6 +64,7 @@ void main() {
       _expectContrast(AppColor.text2, AppColor.bg, 4.5);
       _expectContrast(AppColor.onGold, AppColor.gold, 4.5);
       _expectContrast(AppColor.onBrand, AppColor.brandSolid, 4.5);
+      _expectContrast(AppColor.selectionText, AppColor.selectionBg, 4.5);
       _expectContrast(AppColor.actionBlue, AppColor.surface, 3);
       _expectContrast(AppColor.danger, AppColor.surface, 4.5);
       _expectContrast(AppColor.success, AppColor.surface, 4.5);
@@ -99,15 +106,25 @@ void main() {
       expect(theme.colorScheme.surface, AppColor.surface);
       expect(theme.colorScheme.onSurface, AppColor.text);
       expect(theme.colorScheme.onSurfaceVariant, AppColor.text2);
-      expect(theme.colorScheme.surfaceContainerLowest, AppColor.surface);
+      expect(theme.colorScheme.surfaceContainerLowest, AppColor.bg);
       expect(theme.colorScheme.surfaceContainerLow, AppColor.surfaceSoft);
       expect(theme.colorScheme.surfaceContainer, AppColor.surfaceSoft);
       expect(theme.colorScheme.surfaceContainerHigh, AppColor.surfaceActive);
       expect(theme.colorScheme.surfaceContainerHighest, AppColor.surfaceActive);
+      expect(theme.colorScheme.shadow, const Color(0xFF1C1F1B));
       expect(theme.cardTheme.color, AppColor.surface);
       expect(theme.inputDecorationTheme.fillColor, AppColor.input);
       expect(theme.dialogTheme.backgroundColor, AppColor.surface);
       expect(theme.snackBarTheme.backgroundColor, AppColor.overlay);
+    });
+
+    test('workspace canvas is quietly distinct from elevated surfaces', () {
+      final theme = AppTheme.production;
+      final canvas = theme.colorScheme.surfaceContainerLowest;
+
+      expect(canvas, AppColor.bg);
+      expect(canvas.computeLuminance(), lessThan(0.9));
+      _expectContrast(AppColor.surface, canvas, 1.05);
     });
 
     test('primary actions and navigation keep their distinct semantics', () {

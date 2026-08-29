@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/features/auth/presentation/widgets/auth_form_controls.dart';
 
 Widget _testApp(Widget child) {
@@ -112,5 +113,22 @@ void main() {
           .map((item) => item.opacity),
       [1.0, 0.42],
     );
+  });
+
+  testWidgets('AuthPrimaryButton uses the high-contrast primary action pair', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _testApp(AuthPrimaryButton(label: 'Войти', onPressed: () {})),
+    );
+
+    final button = find.byType(AuthPrimaryButton);
+    final material = tester.widget<Material>(
+      find.descendant(of: button, matching: find.byType(Material)),
+    );
+    final label = tester.widget<Text>(find.text('Войти'));
+
+    expect(material.color, AppColor.brandSolid);
+    expect(label.style?.color, AppColor.onBrand);
   });
 }

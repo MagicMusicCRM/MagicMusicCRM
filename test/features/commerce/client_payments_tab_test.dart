@@ -55,7 +55,9 @@ void main() {
         entityType: 'student',
       );
 
-      await tester.tap(find.text('Оплаты'));
+      final paymentsTab = find.byKey(const Key('client-section-tab-payments'));
+      await tester.ensureVisible(paymentsTab);
+      await tester.tap(paymentsTab);
       await tester.pumpAndSettle();
       final scrollable = tester.state<ScrollableState>(
         find.descendant(
@@ -189,7 +191,9 @@ void main() {
         entityType: 'student',
       );
 
-      await tester.tap(find.text('Оплаты'));
+      final paymentsTab = find.byKey(const Key('client-section-tab-payments'));
+      await tester.ensureVisible(paymentsTab);
+      await tester.tap(paymentsTab);
       await tester.pumpAndSettle();
       expect(find.text('Оплаты и личный счёт'), findsOneWidget);
       expect(find.text('Внести оплату'), findsOneWidget);
@@ -362,7 +366,9 @@ void main() {
         const Offset(-320, 0),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Оплаты'));
+      final paymentsTab = find.byKey(const Key('client-section-tab-payments'));
+      await tester.ensureVisible(paymentsTab);
+      await tester.tap(paymentsTab);
       await tester.pumpAndSettle();
       final paymentScroll = find.descendant(
         of: find.byKey(const Key('client-payments-tab')),
@@ -517,7 +523,9 @@ void main() {
         entityType: 'student',
       );
 
-      await tester.tap(find.text('Оплаты'));
+      final paymentsTab = find.byKey(const Key('client-section-tab-payments'));
+      await tester.ensureVisible(paymentsTab);
+      await tester.tap(paymentsTab);
       await tester.pumpAndSettle();
       final scrollable = tester.state<ScrollableState>(
         find.descendant(
@@ -663,7 +671,9 @@ void main() {
         entityType: 'student',
       );
 
-      await tester.tap(find.text('Оплаты'));
+      final paymentsTab = find.byKey(const Key('client-section-tab-payments'));
+      await tester.ensureVisible(paymentsTab);
+      await tester.tap(paymentsTab);
       await tester.pumpAndSettle();
       final scrollable = tester.state<ScrollableState>(
         find.descendant(

@@ -72,6 +72,9 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
     ColorScheme cs,
     List<(IconData, String, String)> tabs,
   ) {
+    final selectedSection = tabs.any((tab) => tab.$3 == _selectedSection)
+        ? _selectedSection
+        : tabs.first.$3;
     return Semantics(
       container: true,
       label: 'Быстрый переход по карточке клиента',
@@ -89,19 +92,19 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
             for (var index = 0; index < tabs.length; index++) ...[
               Semantics(
                 button: true,
-                selected: _selectedSection == tabs[index].$3,
+                selected: selectedSection == tabs[index].$3,
                 child: OutlinedButton.icon(
                   key: Key('client-section-jump-${tabs[index].$3}'),
                   onPressed: () => _selectSection(tabs[index].$3),
                   style: OutlinedButton.styleFrom(
                     alignment: Alignment.centerLeft,
-                    backgroundColor: _selectedSection == tabs[index].$3
+                    backgroundColor: selectedSection == tabs[index].$3
                         ? AppColor.goldSoft
                         : null,
                   ),
                   icon: Icon(tabs[index].$1, size: 16),
                   label: Text(
-                    '→ ${tabs[index].$2}',
+                    tabs[index].$2,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -184,12 +187,21 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
     final progress = bySection['progress'];
     if (wide && subscriptions != null && progress != null) {
       add(
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        Table(
+          columnWidths: const {
+            0: FlexColumnWidth(),
+            1: FixedColumnWidth(AppSpace.lg),
+            2: FlexColumnWidth(),
+          },
+          defaultVerticalAlignment: TableCellVerticalAlignment.fill,
           children: [
-            Expanded(child: card(subscriptions)),
-            const SizedBox(width: AppSpace.lg),
-            Expanded(child: card(progress)),
+            TableRow(
+              children: [
+                card(subscriptions),
+                const SizedBox.shrink(),
+                card(progress),
+              ],
+            ),
           ],
         ),
       );
@@ -201,7 +213,7 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
     final payments = bySection['payments'];
     if (payments != null) add(card(payments));
 
-    for (final section in const ['history_tasks', 'documents']) {
+    for (final section in const ['history_tasks']) {
       final tab = bySection[section];
       if (tab != null) add(card(tab));
     }
@@ -243,14 +255,6 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
         canReadTasks: canReadTasks,
       ),
       'contacts' => _buildFamilyTab(cs, embedded: true),
-      'documents' => const Padding(
-        padding: EdgeInsets.all(AppSpace.xl),
-        child: MagicPageState(
-          kind: MagicPageStateKind.empty,
-          title: 'Документов пока нет',
-          message: 'Поддерживаемые документы появятся в этом разделе.',
-        ),
-      ),
       _ => _buildClientInfoTab(cs, currentStatus, embedded: true),
     };
   }
@@ -263,43 +267,46 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
     required String title,
     required Widget child,
   }) {
-    return Container(
+    return KeyedSubtree(
       key: key,
-      width: double.infinity,
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.75)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          InkWell(
-            onTap: () => _selectSection(section),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpace.xl,
-                vertical: AppSpace.md,
-              ),
-              child: Row(
-                children: [
-                  Icon(icon, size: 19, color: AppColor.gold),
-                  const SizedBox(width: AppSpace.sm),
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
+      child: Container(
+        key: Key('client-desktop-section-$section'),
+        width: double.infinity,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.75)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            InkWell(
+              onTap: () => _selectSection(section),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpace.xl,
+                  vertical: AppSpace.md,
+                ),
+                child: Row(
+                  children: [
+                    Icon(icon, size: 19, color: AppColor.gold),
+                    const SizedBox(width: AppSpace.sm),
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-          Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.6)),
-          child,
-        ],
+            Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.6)),
+            child,
+          ],
+        ),
       ),
     );
   }
@@ -426,11 +433,6 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
         canReadTasks: canReadTasks,
       ),
       'contacts' => _buildFamilyTab(cs),
-      'documents' => const MagicPageState(
-        kind: MagicPageStateKind.empty,
-        title: 'Документов пока нет',
-        message: 'Поддерживаемые документы появятся в этом разделе.',
-      ),
       _ => _buildClientInfoTab(cs, currentStatus),
     };
   }

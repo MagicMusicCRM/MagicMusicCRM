@@ -18,6 +18,10 @@ class AuthField extends StatelessWidget {
     this.inputFormatters,
     this.onSubmitted,
     this.autofillHints,
+    this.fillColor = AppColor.input,
+    this.borderColor = AppColor.divider,
+    this.focusBorderColor = AppColor.goldLine,
+    this.labelColor = AppColor.text2,
   });
 
   final TextEditingController controller;
@@ -33,6 +37,10 @@ class AuthField extends StatelessWidget {
   final List<TextInputFormatter>? inputFormatters;
   final ValueChanged<String>? onSubmitted;
   final Iterable<String>? autofillHints;
+  final Color fillColor;
+  final Color borderColor;
+  final Color focusBorderColor;
+  final Color labelColor;
 
   @override
   Widget build(BuildContext context) {
@@ -41,19 +49,19 @@ class AuthField extends StatelessWidget {
       hintStyle: const TextStyle(color: AppColor.text2),
       suffixIcon: suffix,
       filled: true,
-      fillColor: AppColor.input,
+      fillColor: fillColor,
       contentPadding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppRadius.control),
-        borderSide: const BorderSide(color: AppColor.divider),
+        borderSide: BorderSide(color: borderColor),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppRadius.control),
-        borderSide: const BorderSide(color: AppColor.goldLine, width: 2),
+        borderSide: BorderSide(color: focusBorderColor, width: 2),
       ),
       disabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppRadius.control),
-        borderSide: const BorderSide(color: AppColor.divider),
+        borderSide: BorderSide(color: borderColor),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppRadius.control),
@@ -99,10 +107,10 @@ class AuthField extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w600,
-            color: AppColor.text2,
+            color: labelColor,
           ),
         ),
         const SizedBox(height: AppSpace.sm),

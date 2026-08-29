@@ -34,7 +34,7 @@ void main() {
     ),
   );
 
-  testWidgets('ancestor, Back and Forward stay inside the active tab', (
+  testWidgets('breadcrumbs replace legacy Back and Forward controls', (
     tester,
   ) async {
     final workspace = controller();
@@ -72,20 +72,13 @@ void main() {
       ),
       findsNothing,
     );
+    expect(find.byKey(const ValueKey('context-back')), findsNothing);
+    expect(find.byKey(const ValueKey('context-forward')), findsNothing);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump();
     expect(workspace.state.tabs, hasLength(1));
-    expect(workspace.state.activeTab.currentRoute.link.entityId, '__section__');
-
-    await tester.tap(find.byKey(const ValueKey('context-back')));
-    await tester.pump();
-    expect(workspace.state.activeTab.currentRoute.link.entityId, 'student-1');
-    expect(workspace.state.activeTab.forwardStack, hasLength(1));
-
-    await tester.tap(find.byKey(const ValueKey('context-forward')));
-    await tester.pump();
     expect(workspace.state.activeTab.currentRoute.link.entityId, '__section__');
   });
 

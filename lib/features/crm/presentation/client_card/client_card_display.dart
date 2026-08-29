@@ -36,7 +36,7 @@ Widget _sectionTitle(String title) {
       children: [
         Container(
           width: 3,
-          height: 14,
+          height: 16,
           decoration: BoxDecoration(
             color: AppColor.gold,
             borderRadius: BorderRadius.circular(AppRadius.pill),
@@ -49,10 +49,9 @@ Widget _sectionTitle(String title) {
           child: Text(
             title,
             style: const TextStyle(
-              color: AppColor.gold,
+              color: AppColor.text,
               fontWeight: FontWeight.w700,
-              fontSize: 13.5,
-              letterSpacing: 0.2,
+              fontSize: 14,
             ),
           ),
         ),

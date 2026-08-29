@@ -287,20 +287,9 @@ void main() {
         '__section__',
       );
 
-      await tester.tap(find.byKey(const ValueKey('context-back')));
-      await tester.pumpAndSettle();
-      expect(
-        shell.controller.state.activeTab.currentRoute.link.entityId,
-        'user-1',
-      );
-      expect(shell.controller.state.activeTab.forwardStack, hasLength(1));
-
-      await tester.tap(find.byKey(const ValueKey('context-forward')));
-      await tester.pumpAndSettle();
-      expect(
-        shell.controller.state.activeTab.currentRoute.link.entityId,
-        '__section__',
-      );
+      expect(find.byKey(const ValueKey('context-back')), findsNothing);
+      expect(find.byKey(const ValueKey('context-forward')), findsNothing);
+      expect(shell.controller.state.activeTab.routeStack, hasLength(2));
 
       shell.controller.selectTab(shell.controller.state.tabs.first.tabId);
       await tester.pumpAndSettle();

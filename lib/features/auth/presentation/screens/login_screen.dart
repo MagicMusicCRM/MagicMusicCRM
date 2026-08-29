@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:magic_music_crm/core/api/magic_api_error.dart';
 import 'package:magic_music_crm/core/theme/design_tokens.dart';
 import 'package:magic_music_crm/core/widgets/app_logo.dart';
-import 'package:magic_music_crm/core/widgets/responsive_constraint.dart';
 import 'package:magic_music_crm/features/auth/presentation/screens/email_otp_screen.dart';
 import 'package:magic_music_crm/features/auth/presentation/widgets/auth_form_controls.dart';
 import 'package:magic_music_crm/features/auth/providers/magic_auth_provider.dart';
@@ -114,166 +113,235 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColor.bg,
+      backgroundColor: AppColor.sidebar,
       body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment(0.0, -1.0),
-            radius: 1.1,
-            colors: [AppColor.selectionBg, AppColor.bg],
-            stops: [0.0, 0.6],
-          ),
-        ),
+        key: const ValueKey('login-backdrop'),
+        decoration: const BoxDecoration(color: AppColor.sidebar),
         child: SafeArea(
-          child: ResponsiveConstraint(
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 400),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final narrow = constraints.maxWidth < 520;
+              final short = constraints.maxHeight < 650;
+              final alignAtTop = narrow || short;
+              final viewportPadding = narrow
+                  ? const EdgeInsets.symmetric(
+                      horizontal: AppSpace.lg,
+                      vertical: AppSpace.xl,
+                    )
+                  : const EdgeInsets.symmetric(
+                      horizontal: AppSpace.xxl,
+                      vertical: AppSpace.xxl + AppSpace.sm,
+                    );
+              final cardHorizontalPadding = narrow
+                  ? AppSpace.xl
+                  : AppSpace.xxl + AppSpace.sm;
+              final cardVerticalPadding = narrow || short
+                  ? AppSpace.xxl
+                  : AppSpace.xxl + AppSpace.sm;
+
+              return Align(
+                alignment: alignAtTop ? Alignment.topCenter : Alignment.center,
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpace.xxl,
-                    vertical: 30,
-                  ),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // Brand block
-                        Column(
-                          children: [
-                            const AppLogo(size: 92),
-                            const SizedBox(height: AppSpace.xs),
-                            const Text(
-                              'Вход в систему',
-                              style: TextStyle(
-                                color: AppColor.text2,
-                                fontSize: 12.5,
-                              ),
+                  padding: viewportPadding,
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 420),
+                      child: Container(
+                        key: const ValueKey('login-form-card'),
+                        width: double.infinity,
+                        padding: EdgeInsets.symmetric(
+                          horizontal: cardHorizontalPadding,
+                          vertical: cardVerticalPadding,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColor.bg,
+                          border: Border.all(color: AppColor.borderStrong),
+                          borderRadius: BorderRadius.circular(AppRadius.card),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x0A302819),
+                              blurRadius: 2,
+                              offset: Offset(0, 1),
+                            ),
+                            BoxShadow(
+                              color: Color(0x0F302819),
+                              blurRadius: 34,
+                              offset: Offset(0, 12),
                             ),
                           ],
                         ),
-                        const SizedBox(height: AppSpace.xxl),
-
-                        // Email field
-                        AuthField(
-                          controller: _emailController,
-                          label: 'Телефон или почта',
-                          hint: 'user@example.com',
-                          keyboardType: TextInputType.emailAddress,
-                          textInputAction: TextInputAction.next,
-                          autocorrect: false,
-                          autofillHints: const [AutofillHints.username],
-                          validator: (value) =>
-                              _isValidEmail(value?.trim() ?? '')
-                              ? null
-                              : 'Введите корректную почту',
-                        ),
-                        const SizedBox(height: AppSpace.lg),
-
-                        // Password field
-                        AuthField(
-                          controller: _passwordController,
-                          label: 'Пароль',
-                          obscureText: _obscurePassword,
-                          textInputAction: TextInputAction.done,
-                          autocorrect: false,
-                          autofillHints: const [AutofillHints.password],
-                          onSubmitted: (_) => _isLoading ? null : _signIn(),
-                          suffix: IconButton(
-                            tooltip: _obscurePassword
-                                ? 'Показать пароль'
-                                : 'Скрыть пароль',
-                            icon: Icon(
-                              _obscurePassword
-                                  ? Icons.visibility_outlined
-                                  : Icons.visibility_off_outlined,
-                              color: AppColor.text2,
-                            ),
-                            onPressed: () => setState(
-                              () => _obscurePassword = !_obscurePassword,
-                            ),
-                          ),
-                          validator: (value) => (value == null || value.isEmpty)
-                              ? 'Введите пароль'
-                              : null,
-                        ),
-                        const SizedBox(height: AppSpace.sm),
-
-                        // Forgot password link (right-aligned)
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton(
-                            onPressed: _isLoading
-                                ? null
-                                : () => context.push('/password-reset'),
-                            style: TextButton.styleFrom(
-                              foregroundColor: AppColor.gold,
-                              textStyle: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Container(
+                                key: const ValueKey('login-heading'),
+                                padding: const EdgeInsets.only(
+                                  bottom: AppSpace.xxl,
+                                ),
+                                decoration: const BoxDecoration(
+                                  border: Border(
+                                    bottom: BorderSide(color: AppColor.divider),
+                                  ),
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    AppLogo(size: narrow ? 54 : 64),
+                                    SizedBox(width: narrow ? 13 : AppSpace.lg),
+                                    const Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Вход в систему',
+                                            style: TextStyle(
+                                              color: AppColor.text,
+                                              fontSize: 24,
+                                              height: 1.15,
+                                              fontWeight: FontWeight.w700,
+                                              letterSpacing: -0.45,
+                                            ),
+                                          ),
+                                          SizedBox(height: 7),
+                                          Text(
+                                            'Рабочее пространство Magic Music',
+                                            style: TextStyle(
+                                              color: AppColor.text2,
+                                              fontSize: 13,
+                                              height: 1.45,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                              padding: const EdgeInsets.all(AppSpace.sm),
-                              minimumSize: const Size(0, 0),
-                            ),
-                            child: const Text('Забыли пароль?'),
-                          ),
-                        ),
-                        const SizedBox(height: AppSpace.sm),
-
-                        // Inline error pill
-                        if (_errorMessage != null) ...[
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 11,
-                              vertical: AppSpace.sm,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColor.dangerSoft,
-                              border: Border.all(color: AppColor.danger),
-                              borderRadius: BorderRadius.circular(
-                                AppRadius.chip,
+                              const SizedBox(height: AppSpace.xxl),
+                              AuthField(
+                                controller: _emailController,
+                                label: 'Телефон или почта',
+                                hint: 'user@example.com',
+                                keyboardType: TextInputType.emailAddress,
+                                textInputAction: TextInputAction.next,
+                                autocorrect: false,
+                                autofillHints: const [AutofillHints.username],
+                                fillColor: AppColor.surface,
+                                borderColor: AppColor.borderStrong,
+                                focusBorderColor: AppColor.focus,
+                                labelColor: AppPalette.ink800,
+                                validator: (value) =>
+                                    _isValidEmail(value?.trim() ?? '')
+                                    ? null
+                                    : 'Введите корректную почту',
                               ),
-                            ),
-                            child: Text(
-                              _errorMessage!,
-                              style: const TextStyle(
-                                color: AppColor.danger,
-                                fontSize: 12,
+                              const SizedBox(height: AppSpace.lg),
+                              AuthField(
+                                controller: _passwordController,
+                                label: 'Пароль',
+                                obscureText: _obscurePassword,
+                                textInputAction: TextInputAction.done,
+                                autocorrect: false,
+                                autofillHints: const [AutofillHints.password],
+                                fillColor: AppColor.surface,
+                                borderColor: AppColor.borderStrong,
+                                focusBorderColor: AppColor.focus,
+                                labelColor: AppPalette.ink800,
+                                onSubmitted: (_) =>
+                                    _isLoading ? null : _signIn(),
+                                suffix: IconButton(
+                                  tooltip: _obscurePassword
+                                      ? 'Показать пароль'
+                                      : 'Скрыть пароль',
+                                  icon: Icon(
+                                    _obscurePassword
+                                        ? Icons.visibility_outlined
+                                        : Icons.visibility_off_outlined,
+                                    color: AppColor.text2,
+                                  ),
+                                  onPressed: () => setState(
+                                    () => _obscurePassword = !_obscurePassword,
+                                  ),
+                                ),
+                                validator: (value) =>
+                                    (value == null || value.isEmpty)
+                                    ? 'Введите пароль'
+                                    : null,
                               ),
-                            ),
+                              const SizedBox(height: AppSpace.xs),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton(
+                                  onPressed: _isLoading
+                                      ? null
+                                      : () => context.push('/password-reset'),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: AppColor.gold,
+                                    textStyle: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    padding: const EdgeInsets.all(AppSpace.sm),
+                                    minimumSize: const Size(0, 0),
+                                  ),
+                                  child: const Text('Забыли пароль?'),
+                                ),
+                              ),
+                              const SizedBox(height: AppSpace.xs),
+                              if (_errorMessage != null) ...[
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 11,
+                                    vertical: AppSpace.sm,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColor.dangerSoft,
+                                    border: Border.all(color: AppColor.danger),
+                                    borderRadius: BorderRadius.circular(
+                                      AppRadius.chip,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    _errorMessage!,
+                                    style: const TextStyle(
+                                      color: AppColor.danger,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: AppSpace.lg),
+                              ],
+                              AuthPrimaryButton(
+                                label: 'Войти',
+                                loading: _isLoading,
+                                onPressed: _isLoading ? null : _signIn,
+                              ),
+                              const SizedBox(height: AppSpace.md),
+                              TextButton(
+                                onPressed: () => context.push('/register'),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: AppColor.gold,
+                                  textStyle: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  padding: const EdgeInsets.all(AppSpace.sm),
+                                  minimumSize: const Size(0, 0),
+                                ),
+                                child: const Text('Создать аккаунт'),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: AppSpace.lg),
-                        ],
-
-                        // Sign In button
-                        AuthPrimaryButton(
-                          label: 'Войти',
-                          loading: _isLoading,
-                          onPressed: _isLoading ? null : _signIn,
                         ),
-                        const SizedBox(height: AppSpace.lg),
-
-                        // Create account link
-                        TextButton(
-                          onPressed: () => context.push('/register'),
-                          style: TextButton.styleFrom(
-                            foregroundColor: AppColor.gold,
-                            textStyle: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            padding: const EdgeInsets.all(AppSpace.sm),
-                            minimumSize: const Size(0, 0),
-                          ),
-                          child: const Text('Создать аккаунт'),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
         ),
       ),

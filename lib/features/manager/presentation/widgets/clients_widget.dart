@@ -101,20 +101,24 @@ class _ClientsWidgetState extends ConsumerState<ClientsWidget> {
   @override
   Widget build(BuildContext context) {
     final controller = ref.watch(leadTransferControllerProvider);
-    return Column(
-      children: [
-        _Header(
-          segment: _segment,
-          controller: controller,
-          onSelectSegment: _selectSegment,
-        ),
-        Expanded(
-          child: IndexedStack(
-            index: _segment,
-            children: const [LeadsWidget(), StudentsBoardWidget()],
+    return ColoredBox(
+      key: const ValueKey('clients-workspace-canvas'),
+      color: AppColor.surfaceSoft,
+      child: Column(
+        children: [
+          _Header(
+            segment: _segment,
+            controller: controller,
+            onSelectSegment: _selectSegment,
           ),
-        ),
-      ],
+          Expanded(
+            child: IndexedStack(
+              index: _segment,
+              children: const [LeadsWidget(), StudentsBoardWidget()],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -209,8 +213,11 @@ class _CompactTabs extends StatelessWidget {
         curve: AppMotion.ease,
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? AppColor.gold : Colors.transparent,
+          color: selected ? AppColor.selectionBg : Colors.transparent,
           borderRadius: BorderRadius.circular(AppRadius.pill),
+          border: Border.all(
+            color: selected ? AppColor.selectionBorder : Colors.transparent,
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -218,13 +225,13 @@ class _CompactTabs extends StatelessWidget {
             Icon(
               icon,
               size: 16,
-              color: selected ? AppColor.onGold : AppColor.text2,
+              color: selected ? AppColor.selectionText : AppColor.text2,
             ),
             const SizedBox(width: 6),
             Text(
               label,
               style: TextStyle(
-                color: selected ? AppColor.onGold : AppColor.text2,
+                color: selected ? AppColor.selectionText : AppColor.text2,
                 fontWeight: FontWeight.w700,
                 fontSize: 13,
               ),

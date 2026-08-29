@@ -1,4 +1,5 @@
-/// Owner-approved light design tokens — the single presentation source of truth.
+/// Owner-approved Quiet Graphite light tokens — the single presentation source
+/// of truth.
 ///
 /// The values come from the approved light design stand. Presentation code
 /// consumes semantic [AppColor] aliases; raw values stay in [AppPalette].
@@ -14,19 +15,21 @@ class AppPalette {
   AppPalette._();
 
   static const Color white = Color(0xFFFFFFFF);
-  static const Color paper50 = Color(0xFFFCFBF8);
-  static const Color paper100 = Color(0xFFF7F4EE);
-  static const Color paper150 = Color(0xFFF3F0E9);
-  static const Color paper200 = Color(0xFFEBE6DC);
-  static const Color ink950 = Color(0xFF181915);
-  static const Color ink800 = Color(0xFF34352F);
-  static const Color ink600 = Color(0xFF6D6D66);
-  static const Color ink450 = Color(0xFF96948B);
+  static const Color paper0 = Color(0xFFF7F7F5);
+  static const Color paper50 = Color(0xFFF7F7F5);
+  static const Color paper100 = Color(0xFFF1F2EF);
+  static const Color paper125 = Color(0xFFEFF0ED);
+  static const Color paper150 = Color(0xFFE8EAE6);
+  static const Color paper200 = Color(0xFFDFE2DC);
+  static const Color ink950 = Color(0xFF1C1F1B);
+  static const Color ink800 = Color(0xFF343833);
+  static const Color ink600 = Color(0xFF626760);
+  static const Color ink450 = Color(0xFF858A83);
   static const Color gold800 = Color(0xFF765417);
-  static const Color gold700 = Color(0xFF8F681B);
-  static const Color gold600 = Color(0xFFA97D25);
-  static const Color gold500 = Color(0xFFBD9136);
-  static const Color gold100 = Color(0xFFF7EDCF);
+  static const Color gold700 = Color(0xFF62450F);
+  static const Color gold600 = Color(0xFF765417);
+  static const Color gold500 = Color(0xFF765417);
+  static const Color gold100 = Color(0xFFE6E7E2);
   static const Color blue600 = Color(0xFF3B73D1);
   static const Color green600 = Color(0xFF267A56);
   static const Color green100 = Color(0xFFE7F5EE);
@@ -43,22 +46,22 @@ class AppColor {
   AppColor._();
 
   // ── Surfaces and borders ─────────────────────────────────────────────────
-  static const Color bg = AppPalette.paper50;
-  static const Color surface = AppPalette.white;
+  static const Color bg = AppPalette.paper125;
+  static const Color surface = AppPalette.paper0;
   static const Color surfaceSoft = AppPalette.paper100;
-  static const Color surfaceActive = Color(0xFFF3EAD8);
+  static const Color surfaceActive = AppPalette.paper100;
   static const Color sidebar = AppPalette.paper150;
-  static const Color input = AppPalette.paper100;
-  static const Color divider = Color(0xFFDFDBD2);
-  static const Color borderSoft = Color(0xFFEBE7DF);
-  static const Color borderStrong = Color(0xFFCFC7B8);
+  static const Color input = AppPalette.paper0;
+  static const Color divider = AppPalette.paper200;
+  static const Color borderSoft = AppPalette.paper200;
+  static const Color borderStrong = Color(0xFFBCC2BA);
 
   // ── Text ─────────────────────────────────────────────────────────────────
   static const Color text = AppPalette.ink950;
   static const Color text2 = AppPalette.ink600;
   static const Color text3 = AppPalette.ink450;
-  static const Color disabledText = Color(0xFF8A8880);
-  static const Color disabledSurface = Color(0xFFEFEDE8);
+  static const Color disabledText = AppPalette.ink450;
+  static const Color disabledSurface = AppPalette.paper150;
 
   // ── Brand and selection ──────────────────────────────────────────────────
   static const Color brand = AppPalette.gold600;
@@ -66,19 +69,21 @@ class AppColor {
   static const Color brandSolid = AppPalette.gold800;
   static const Color brandSolidHover = Color(0xFF62450F);
   static const Color onBrand = Color(0xFFFFFAF0);
-  static const Color selectionBg = Color(0xFFF3E8D0);
-  static const Color selectionHover = Color(0xFFF8F1E4);
-  static const Color selectionText = Color(0xFF594214);
-  static const Color selectionBorder = Color(0xFFDCC58E);
+  static const Color selectionBg = Color(0xFFE1E4DF);
+  static const Color selectionHover = Color(0xFFE9ECE7);
+  static const Color selectionText = Color(0xFF242823);
+  static const Color selectionBorder = Color(0xFFBEC4BC);
 
   // Compatibility names while existing widgets migrate to semantic aliases.
-  static const Color gold = brand;
+  // Legacy widgets use `gold + onGold` for filled interactive surfaces, so
+  // this pair must resolve to the accessible solid-action colors.
+  static const Color gold = brandSolid;
   static const Color gold2 = AppPalette.gold500;
   static const Color goldSoft = AppPalette.gold100;
   static const Color goldLine = selectionBorder;
 
-  /// Dark text used on medium-gold selected states (`4.75:1`).
-  static const Color onGold = text;
+  /// Foreground for legacy gold-filled controls (`6.62:1`).
+  static const Color onGold = onBrand;
 
   // ── Work accents ───────────────────────────────────────────────────────────
   /// Work action blue: links, focused inputs and non-brand commands.
@@ -102,14 +107,14 @@ class AppColor {
   static const Color dangerSoft = AppPalette.red100;
 
   // ── Overlay chrome ────────────────────────────────────────────────────────
-  static const Color overlay = AppPalette.white;
+  static const Color overlay = AppPalette.paper0;
   static const Color menuItemText = text;
   static const Color menuItemHover = surfaceSoft;
   static const Color menuDanger = danger;
-  static const Color scrim = Color(0x66181915);
+  static const Color scrim = Color(0x661C1F1B);
   static const Color sheetGrab = borderStrong;
   static const Color skeletonBase = AppPalette.paper200;
-  static const Color skeletonHighlight = Color(0x99FFFFFF);
+  static const Color skeletonHighlight = Color(0x99F7F7F5);
 }
 
 /// v7 corner radii (`--r-card`, `--r-ctrl` + component literals).
@@ -199,16 +204,16 @@ class AppShadow {
 
   /// Subtle resting surface shadow.
   static const List<BoxShadow> sh1 = [
-    BoxShadow(color: Color(0x0A302819), blurRadius: 2, offset: Offset(0, 1)),
+    BoxShadow(color: Color(0x0A1C1F1B), blurRadius: 2, offset: Offset(0, 1)),
   ];
 
   /// Drawers, sheets and pop-menus.
   static const List<BoxShadow> sh2 = [
-    BoxShadow(color: Color(0x29302819), blurRadius: 24, offset: Offset(0, 8)),
+    BoxShadow(color: Color(0x291C1F1B), blurRadius: 24, offset: Offset(0, 8)),
   ];
 
   /// Picked-up drag cards.
   static const List<BoxShadow> shLift = [
-    BoxShadow(color: Color(0x3D302819), blurRadius: 44, offset: Offset(0, 18)),
+    BoxShadow(color: Color(0x3D1C1F1B), blurRadius: 44, offset: Offset(0, 18)),
   ];
 }

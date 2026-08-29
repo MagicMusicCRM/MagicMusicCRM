@@ -165,13 +165,13 @@ void main() {
         expect(find.byType(Dialog), findsNothing);
         expect(find.byKey(const Key('client-payments-tab')), findsOneWidget);
         expect(find.text('Оплаты и личный счёт'), findsOneWidget);
-        expect(find.text('Обзор'), findsOneWidget);
-        expect(find.text('Занятия'), findsOneWidget);
-        expect(find.text('Абонементы'), findsOneWidget);
-        expect(find.text('Прогресс'), findsOneWidget);
+        expect(find.text('Обзор'), findsWidgets);
+        expect(find.text('Занятия'), findsWidgets);
+        expect(find.text('Абонементы'), findsWidgets);
+        expect(find.text('Прогресс'), findsWidgets);
         expect(find.text('История и задачи'), findsWidgets);
-        expect(find.text('Контакты'), findsOneWidget);
-        expect(find.text('Документы'), findsOneWidget);
+        expect(find.text('Контакты'), findsWidgets);
+        expect(find.text('Документы'), findsNothing);
         expect(find.text('Доп. поля'), findsNothing);
         expect(api.getRequests, isNot(contains('/crm/schedule-plans')));
         expect(api.getRequests, isNot(contains('/crm/schedule-series')));
@@ -182,7 +182,7 @@ void main() {
           ),
           findsOneWidget,
         );
-        expect(find.byIcon(Icons.arrow_back_rounded), findsOneWidget);
+        expect(find.byIcon(Icons.arrow_back_rounded), findsNothing);
         expect(tester.takeException(), isNull);
       });
     }
@@ -303,17 +303,27 @@ void main() {
         ),
       );
       for (final section in const [
-        'Обзор',
-        'Занятия',
-        'Оплаты',
-        'Абонементы',
-        'Прогресс',
-        'История и задачи',
-        'Контакты',
-        'Документы',
+        ('overview', 'Обзор'),
+        ('contacts', 'Контакты'),
+        ('lessons', 'Занятия'),
+        ('subscriptions', 'Абонементы'),
+        ('progress', 'Прогресс'),
+        ('payments', 'Оплаты'),
+        ('history_tasks', 'История и задачи'),
       ]) {
-        expect(find.text(section), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byKey(Key('client-section-jump-${section.$1}')),
+            matching: find.text(section.$2),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(Key('client-desktop-section-${section.$1}')),
+          findsOneWidget,
+        );
       }
+      expect(find.text('Документы'), findsNothing);
       expect(
         find.byKey(const Key('client-calendar-expansion')),
         findsOneWidget,
@@ -326,16 +336,52 @@ void main() {
       expect(find.text('Предстоящие'), findsNothing);
       expect(find.text('Прошедшие'), findsNothing);
       expect(
-        tester.getTopLeft(find.text('Обзор')).dy,
-        tester.getTopLeft(find.text('Контакты')).dy,
+        tester
+            .getTopLeft(
+              find.byKey(const Key('client-desktop-section-overview')),
+            )
+            .dy,
+        tester
+            .getTopLeft(
+              find.byKey(const Key('client-desktop-section-contacts')),
+            )
+            .dy,
       );
       expect(
-        tester.getTopLeft(find.text('Абонементы')).dy,
-        tester.getTopLeft(find.text('Прогресс')).dy,
+        tester
+            .getTopLeft(
+              find.byKey(const Key('client-desktop-section-subscriptions')),
+            )
+            .dy,
+        tester
+            .getTopLeft(
+              find.byKey(const Key('client-desktop-section-progress')),
+            )
+            .dy,
       );
       expect(
-        tester.getTopLeft(find.text('Оплаты')).dy,
-        greaterThan(tester.getTopLeft(find.text('Абонементы')).dy),
+        tester
+            .getSize(
+              find.byKey(const Key('client-desktop-section-subscriptions')),
+            )
+            .height,
+        tester
+            .getSize(find.byKey(const Key('client-desktop-section-progress')))
+            .height,
+      );
+      expect(
+        tester
+            .getTopLeft(
+              find.byKey(const Key('client-desktop-section-payments')),
+            )
+            .dy,
+        greaterThan(
+          tester
+              .getTopLeft(
+                find.byKey(const Key('client-desktop-section-subscriptions')),
+              )
+              .dy,
+        ),
       );
       await tester.ensureVisible(
         find.byKey(const ValueKey('client-lesson-lesson-1')),
@@ -524,7 +570,10 @@ void main() {
     expect(find.byType(ResponsiveNavigationShell), findsOneWidget);
     expect(find.byType(ClientCardRouteSurface), findsOneWidget);
     expect(find.byType(Dialog), findsNothing);
-    expect(find.text('Обзор'), findsOneWidget);
+    expect(
+      find.byKey(const Key('client-section-jump-overview')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('desktop tab Save flushes pending card and note before unmount', (

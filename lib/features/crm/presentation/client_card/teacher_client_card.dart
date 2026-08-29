@@ -118,15 +118,13 @@ class _TeacherClientCardState extends ConsumerState<TeacherClientCard> {
                   ],
                 ),
               ),
-              IconButton(
-                tooltip: widget.routed ? 'Назад' : 'Закрыть карточку',
-                onPressed: widget.onClose ?? () => Navigator.of(context).pop(),
-                icon: Icon(
-                  widget.routed
-                      ? Icons.arrow_back_rounded
-                      : Icons.close_rounded,
+              if (!widget.routed)
+                IconButton(
+                  tooltip: 'Закрыть карточку',
+                  onPressed:
+                      widget.onClose ?? () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close_rounded),
                 ),
-              ),
             ],
           ),
         ),

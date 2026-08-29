@@ -1,11 +1,25 @@
 # MagicMusicCRM — актуальная передача
 
-> Обновлено: 2026-08-28
-> Production: client `1.5.19+199`, server `744959ef`,
+> Обновлено: 2026-08-29
+> Production: client `1.5.20+200`, server `744959ef`,
 > image `sha256:5bd6ee44…`, migration `0141`
 > Рабочая ветка: `main`
-> Статус: production client hotfix `1.5.19+199` PASS;
+> Статус: production design rollout `1.5.20+200` PASS;
 > owner mega-UAT не завершён
+
+Client-only release `1.5.20+200` перенёс утверждённую светлую дизайн-систему в
+production: Warm Ivory & Sophisticated Gold, тихая графитовая иерархия,
+семантические токены, обновлённые login, navigation/tabs, client cards, tasks,
+schedule и narrow-screen composition. Legacy back/forward controls удалены;
+tabs, breadcrumbs, route stack и dirty-form guards сохранены. Flutter
+`1375/1375`, Windows device `6/6 + 2/2 + 4/4`, analyze, Windows/Android
+packaging и подписи PASS. Fresh encrypted off-host backup прошёл isolated
+restore; rollback manifests build `199` сохранены. Оба public manifest
+переключены на build `200`, четыре artifacts и GitHub Release `v1.5.20`
+опубликованы. Production API не менялся: revision `744959ef`, image
+`5bd6ee44…`, migration `0141`, healthy/restart `0`; reconciliation дважды
+`issues=[]`, outbox `0/0`. Evidence:
+`docs/audits/v7-production-design-rollout-200.md`.
 
 Client-only hotfix `1.5.19+199` восстановил production shell рабочих разделов
 после архитектурной очистки. Overview и Settings системного администратора

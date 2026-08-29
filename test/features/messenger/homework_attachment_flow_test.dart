@@ -147,7 +147,7 @@ void main() {
       routed: true,
     );
 
-    final progress = find.text('Прогресс');
+    final progress = find.byKey(const Key('client-section-jump-progress'));
     await tester.ensureVisible(progress);
     await tester.tap(progress);
     await tester.pumpAndSettle();
