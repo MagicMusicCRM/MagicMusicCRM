@@ -275,12 +275,15 @@ extension MagicCrmCore on MagicCrmService {
     final response = await _api.get<Map<String, dynamic>>(
       '/crm/students/$id/card',
     );
+    final student = response['student'] is Map<String, dynamic>
+        ? Map<String, dynamic>.from(response['student'] as Map<String, dynamic>)
+        : <String, dynamic>{};
+    final lifecycle = response['lifecycle'] is Map
+        ? Map<String, dynamic>.from(response['lifecycle'] as Map)
+        : const <String, dynamic>{};
+    student['version'] ??= lifecycle['version'];
     return {
-      'student': _legacyStudent(
-        response['student'] is Map<String, dynamic>
-            ? response['student'] as Map<String, dynamic>
-            : const <String, dynamic>{},
-      ),
+      'student': _legacyStudent(student),
       'groups': _mapList(response['groups'], _legacyGroup),
       'lessons': _mapList(response['lessons'], _legacyLesson),
       'payments': _mapList(response['payments'], _legacyPayment),

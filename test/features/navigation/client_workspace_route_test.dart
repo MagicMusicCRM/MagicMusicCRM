@@ -130,6 +130,43 @@ void main() {
     }
   });
 
+  test('workspace section change overrides the original commerce focus', () {
+    const snapshot = CapabilitySnapshot(
+      accountId: 'account-1',
+      role: 'manager',
+      accessVersion: 1,
+      capabilities: {'crm.client.read.basic', 'commerce.client_finance.read'},
+      scopes: {},
+    );
+    final surface =
+        buildClientWorkspaceSurface(
+              snapshot: snapshot,
+              route: ContextRouteState(
+                link: EntityLink.typed(
+                  entityType: EntityLinkType.payment,
+                  entityId: 'payment-1',
+                  optionalFocus: EntityLinkFocus(
+                    focus: 'payment',
+                    filter: {
+                      'studentId': 'student-1',
+                      'section': 'payments',
+                      'paymentId': 'payment-1',
+                    },
+                  ),
+                ),
+                viewState: ContextViewState(
+                  filters: const {'section': 'subscriptions'},
+                ),
+              ),
+              tabId: 'tab-1',
+            )!
+            as ClientCardRouteSurface;
+
+    expect(surface.initialSection, 'subscriptions');
+    expect(surface.viewState?.filters['section'], 'subscriptions');
+    expect(surface.viewState?.filters['paymentId'], 'payment-1');
+  });
+
   for (final role in const ['admin', 'manager', 'director']) {
     for (final width in const [360.0, 840.0, 1200.0]) {
       testWidgets('$role fills ${width.toInt()} and restores section', (

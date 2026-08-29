@@ -1248,6 +1248,28 @@ void main() {
       },
     );
 
+    test(
+      'student card keeps lifecycle version when compatibility alias omits it',
+      () async {
+        final adapter = _FakeAdapter([
+          _FakeResponse(
+            path: '/crm/students/student-a/card',
+            statusCode: 200,
+            body: {
+              'lifecycle': {'version': 7},
+              'student': {'id': 'student-a'},
+            },
+          ),
+        ]);
+
+        final card = await MagicCrmService(
+          _client(adapter),
+        ).getStudentCard('student-a');
+
+        expect(card['student']['version'], 7);
+      },
+    );
+
     test('creates students teachers and staff through v3 API', () async {
       final adapter = _FakeAdapter([
         _FakeResponse(

@@ -27,7 +27,7 @@ Widget? buildClientWorkspaceSurface({
       ? link.optionalFocus?.filter['studentId']?.toString()
       : null;
   if (!isClient && (studentId == null || studentId.isEmpty)) return null;
-  final filter = {...route.viewState.filters, ...?link.optionalFocus?.filter};
+  final filter = {...?link.optionalFocus?.filter, ...route.viewState.filters};
   final section =
       filter['section']?.toString() ??
       (link.entityType == EntityLinkType.payment
