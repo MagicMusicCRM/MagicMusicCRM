@@ -76,10 +76,15 @@ export class PaymentCorrectionService {
       projection?.accounts.find(
         (account) => account.currencyCode === target.currency_code,
       )?.balanceMinor ?? "0";
-    const walletDeltaMinor = (
-      (normalized.status === "paid" ? BigInt(normalized.amountMinor) : 0n) -
-      (target.status === "paid" ? BigInt(target.amount_minor) : 0n)
-    ).toString();
+    const walletDeltaMinor =
+      target.issued_subscription_id === null
+        ? (
+            (normalized.status === "paid"
+              ? BigInt(normalized.amountMinor)
+              : 0n) -
+            (target.status === "paid" ? BigInt(target.amount_minor) : 0n)
+          ).toString()
+        : "0";
     const resultingBalanceMinor = (
       BigInt(walletBalanceMinor) + BigInt(walletDeltaMinor)
     ).toString();

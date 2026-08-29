@@ -89,7 +89,9 @@ export class StudentCommandService {
   ) {
     this.policy.assertCanWriteCrm(actor);
     const command = this.prepareUpdate(studentId, dto, customFields);
-    const { beforeStudent, student } = await this.mutations.update(command);
+    const { beforeStudent, student } = await this.mutations
+      .update(command)
+      .catch((error: unknown) => rethrowCreatePersonError(error));
     if (!student) throw new NotFoundException("Ученик не найден.");
     const claimedVersion = await this.ensureUpdateFallbackResponsible(
       actor,
@@ -130,7 +132,7 @@ export class StudentCommandService {
       title: "Приглашение в личный кабинет Magic Music",
       body:
         "Здравствуйте! Школа Magic Music подготовила для вас личный кабинет. " +
-        `Зарегистрируйтесь в приложении Magic Music CRM с этой почтой: ${email}. ` +
+        `Установите приложение по кнопке ниже и зарегистрируйтесь с этой почтой: ${email}. ` +
         "После регистрации аккаунт будет привязан к вашей карточке ученика.",
     });
     await this.audit.record({

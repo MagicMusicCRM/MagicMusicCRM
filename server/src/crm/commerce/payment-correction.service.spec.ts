@@ -135,7 +135,7 @@ function createHarness() {
     branchId: "77777777-7777-4777-8777-777777777777",
     verificationNote: "Новая запись",
     walletBalanceMinor: "500000",
-    resultingBalanceMinor: "550000",
+    resultingBalanceMinor: "500000",
     issuedAtSeconds: 1,
     expiresAtSeconds: 2,
   } as const;
@@ -180,7 +180,7 @@ function createHarness() {
 }
 
 describe("PaymentCorrectionService", () => {
-  it("previews the net wallet change without rewriting the source payment", async () => {
+  it("keeps a subscription-linked correction out of the wallet", async () => {
     const { service } = createHarness();
     const preview = await service.preview(actor, studentId, recordId, {
       expectedVersion: 2,
@@ -193,8 +193,8 @@ describe("PaymentCorrectionService", () => {
       verificationNote: "Новая запись",
     });
 
-    expect(preview.walletDeltaMinor).toBe("50000");
-    expect(preview.resultingBalanceMinor).toBe("550000");
+    expect(preview.walletDeltaMinor).toBe("0");
+    expect(preview.resultingBalanceMinor).toBe("500000");
     expect(preview.before.amountMinor).toBe("100000");
     expect(preview.after.amountMinor).toBe("150000");
     expect(preview.previewToken).toBe("signed-preview");

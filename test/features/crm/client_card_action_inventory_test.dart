@@ -132,6 +132,51 @@ void main() {
     }
   });
 
+  testWidgets(
+    'desktop paired sections share row height when subscription content is taller',
+    (tester) async {
+      tester.view.physicalSize = const Size(1200, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final api = FakeCardApiClient(
+        role: 'manager',
+        student: _student,
+        studentSubscriptions: const [
+          {
+            'id': 'subscription-1',
+            'studentId': 'student-1',
+            'status': 'active',
+            'packageName': 'Аб-нт 12 уроков «УТРО»',
+            'packagePrice': 24000,
+            'paidMinor': '4800000',
+            'lessonsTotal': 12,
+            'lessonsUsed': 0,
+          },
+        ],
+      );
+
+      await pumpClientCard(
+        tester,
+        api: api,
+        seed: _student,
+        entityType: 'student',
+        routed: true,
+      );
+
+      final subscriptions = find.byKey(
+        const Key('client-desktop-section-subscriptions'),
+      );
+      final progress = find.byKey(const Key('client-desktop-section-progress'));
+      expect(subscriptions, findsOneWidget);
+      expect(progress, findsOneWidget);
+      expect(tester.getSize(subscriptions).height, greaterThan(0));
+      expect(
+        tester.getSize(subscriptions).height,
+        moreOrLessEquals(tester.getSize(progress).height, epsilon: 0.1),
+      );
+    },
+  );
+
   testWidgets('lead subscription and homework actions live only in sections', (
     tester,
   ) async {

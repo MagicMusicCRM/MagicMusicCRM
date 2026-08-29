@@ -156,6 +156,8 @@ extension _ClientCardPersistence on _ClientCardState {
       for (final field in _customFieldSchema)
         if (field.entity == entity &&
             field.id != null &&
+            !field.isSystem &&
+            !_isSystemOnlyCustomField(field.key) &&
             !_emptyTypedCustomValue(customData[field.key]))
           {'definitionId': field.id, 'value': customData[field.key]},
     ];
@@ -197,7 +199,11 @@ extension _ClientCardPersistence on _ClientCardState {
   bool _hasTypedCustomEdit(String entity, Set<String> keys) =>
       _typedCustomFieldSchemaLoaded &&
       _customFieldSchema.any(
-        (field) => field.entity == entity && keys.contains(field.key),
+        (field) =>
+            field.entity == entity &&
+            !field.isSystem &&
+            !_isSystemOnlyCustomField(field.key) &&
+            keys.contains(field.key),
       );
 
   /// Persists the current card draft without necessarily closing the card.

@@ -819,6 +819,68 @@ void main() {
     ]);
   });
 
+  testWidgets(
+    'system fields stay out of additional fields and typed save payload',
+    (tester) async {
+      const directionDefinitionId = '30000000-0000-4000-8000-000000000778';
+      const legacyDefinitionId = '30000000-0000-4000-8000-000000000779';
+      final api = FakeCardApiClient(
+        lead: rawLead(
+          customData: const {
+            'discipline': 'Вокал',
+            'disciplines': ['Вокал'],
+            'legacyCrmCode': 'HH-42',
+          },
+        ),
+        customFields: const [
+          {
+            'id': directionDefinitionId,
+            'entityType': 'lead',
+            'key': 'discipline',
+            'label': 'Направление',
+            'valueType': 'select',
+            'isSystem': true,
+            'options': ['Вокал'],
+            'placements': ['edit', 'card'],
+          },
+          {
+            'id': legacyDefinitionId,
+            'entityType': 'lead',
+            'key': 'legacyCrmCode',
+            'label': 'Старый код CRM',
+            'valueType': 'text',
+            'isSystem': true,
+            'placements': ['edit', 'card'],
+          },
+        ],
+      );
+      await pumpClientCard(
+        tester,
+        api: api,
+        seed: const {'id': 'lead-1'},
+        statuses: statuses,
+      );
+
+      expect(find.text('Вокал'), findsOneWidget);
+      await tester.ensureVisible(
+        find.byKey(const Key('client-custom-fields-expansion')),
+      );
+      await tester.tap(find.text('Дополнительные поля'));
+      await tester.pumpAndSettle();
+      expect(find.text('Старый код CRM'), findsNothing);
+
+      await tester.ensureVisible(find.text('Вокал'));
+      await tester.tap(find.text('Вокал'));
+      await _waitForClientAutoSave(tester);
+
+      expect(api.updateLeadBody?['customFields'], isNull);
+      expect(api.updateLeadBody?['customDataPatch'], {
+        'discipline': null,
+        'disciplines': <String>[],
+      });
+    },
+  );
+
   testWidgets('card placement is read-only and configured widths are honored', (
     tester,
   ) async {

@@ -129,12 +129,16 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
     required bool canReadTasks,
   }) {
     final bySection = {for (final tab in tabs) tab.$3: tab};
-    Widget card((IconData, String, String) tab) => _desktopSectionCard(
+    Widget card(
+      (IconData, String, String) tab, {
+      _EqualHeightMetrics? equalHeight,
+    }) => _desktopSectionCard(
       cs,
       key: _desktopSectionKeys[tab.$3]!,
       section: tab.$3,
       icon: tab.$1,
       title: tab.$2,
+      equalHeight: equalHeight,
       child: _buildDesktopWorkspaceSection(
         cs,
         currentStatus,
@@ -187,22 +191,10 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
     final progress = bySection['progress'];
     if (wide && subscriptions != null && progress != null) {
       add(
-        Table(
-          columnWidths: const {
-            0: FlexColumnWidth(),
-            1: FixedColumnWidth(AppSpace.lg),
-            2: FlexColumnWidth(),
-          },
-          defaultVerticalAlignment: TableCellVerticalAlignment.top,
-          children: [
-            TableRow(
-              children: [
-                card(subscriptions),
-                const SizedBox.shrink(),
-                card(progress),
-              ],
-            ),
-          ],
+        _EqualHeightPair(
+          gap: AppSpace.lg,
+          leftBuilder: (metrics) => card(subscriptions, equalHeight: metrics),
+          rightBuilder: (metrics) => card(progress, equalHeight: metrics),
         ),
       );
     } else {
@@ -266,47 +258,70 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
     required IconData icon,
     required String title,
     required Widget child,
+    _EqualHeightMetrics? equalHeight,
   }) {
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InkWell(
+          onTap: () => _selectSection(section),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpace.xl,
+              vertical: AppSpace.md,
+            ),
+            child: Row(
+              children: [
+                Icon(icon, size: 19, color: AppColor.gold),
+                const SizedBox(width: AppSpace.sm),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.6)),
+        child,
+      ],
+    );
+    final measuredContent = equalHeight == null
+        ? content
+        : Align(
+            alignment: Alignment.topCenter,
+            child: NotificationListener<SizeChangedLayoutNotification>(
+              onNotification: (_) {
+                equalHeight.onSizeChanged();
+                return false;
+              },
+              child: SizeChangedLayoutNotifier(
+                child: KeyedSubtree(
+                  key: equalHeight.measureKey,
+                  child: content,
+                ),
+              ),
+            ),
+          );
     return KeyedSubtree(
       key: key,
       child: Container(
         key: Key('client-desktop-section-$section'),
         width: double.infinity,
+        constraints: equalHeight == null
+            ? null
+            : BoxConstraints(minHeight: equalHeight.minimumHeight),
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           color: cs.surface,
           borderRadius: BorderRadius.circular(AppRadius.card),
           border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.75)),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            InkWell(
-              onTap: () => _selectSection(section),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpace.xl,
-                  vertical: AppSpace.md,
-                ),
-                child: Row(
-                  children: [
-                    Icon(icon, size: 19, color: AppColor.gold),
-                    const SizedBox(width: AppSpace.sm),
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.6)),
-            child,
-          ],
-        ),
+        child: measuredContent,
       ),
     );
   }
@@ -792,6 +807,81 @@ extension _ClientCardWorkspaceSections on _ClientCardState {
               ]
             : const [],
       ),
+    );
+  }
+}
+
+typedef _EqualHeightCardBuilder = Widget Function(_EqualHeightMetrics metrics);
+
+class _EqualHeightMetrics {
+  const _EqualHeightMetrics({
+    required this.minimumHeight,
+    required this.measureKey,
+    required this.onSizeChanged,
+  });
+
+  final double minimumHeight;
+  final GlobalKey measureKey;
+  final VoidCallback onSizeChanged;
+}
+
+class _EqualHeightPair extends StatefulWidget {
+  const _EqualHeightPair({
+    required this.leftBuilder,
+    required this.rightBuilder,
+    required this.gap,
+  });
+
+  final _EqualHeightCardBuilder leftBuilder;
+  final _EqualHeightCardBuilder rightBuilder;
+  final double gap;
+
+  @override
+  State<_EqualHeightPair> createState() => _EqualHeightPairState();
+}
+
+class _EqualHeightPairState extends State<_EqualHeightPair> {
+  final _leftMeasureKey = GlobalKey();
+  final _rightMeasureKey = GlobalKey();
+  double _minimumHeight = 0;
+  bool _measureScheduled = false;
+
+  void _scheduleMeasure() {
+    if (_measureScheduled) return;
+    _measureScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _measureScheduled = false;
+      if (!mounted) return;
+      final leftHeight = _leftMeasureKey.currentContext?.size?.height ?? 0;
+      final rightHeight = _rightMeasureKey.currentContext?.size?.height ?? 0;
+      // Container includes the one-pixel frame on both vertical edges.
+      final contentHeight = leftHeight > rightHeight ? leftHeight : rightHeight;
+      final nextHeight = contentHeight + 2;
+      if ((nextHeight - _minimumHeight).abs() < 0.5) return;
+      setState(() => _minimumHeight = nextHeight);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _scheduleMeasure();
+    final leftMetrics = _EqualHeightMetrics(
+      minimumHeight: _minimumHeight,
+      measureKey: _leftMeasureKey,
+      onSizeChanged: _scheduleMeasure,
+    );
+    final rightMetrics = _EqualHeightMetrics(
+      minimumHeight: _minimumHeight,
+      measureKey: _rightMeasureKey,
+      onSizeChanged: _scheduleMeasure,
+    );
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: widget.leftBuilder(leftMetrics)),
+        SizedBox(width: widget.gap),
+        Expanded(child: widget.rightBuilder(rightMetrics)),
+      ],
     );
   }
 }

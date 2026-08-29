@@ -209,7 +209,7 @@ class SubscriptionIssueController extends ChangeNotifier {
     try {
       if (!currentPreview.canCommit) {
         _busy = false;
-        _error = 'На личном счёте недостаточно средств.';
+        _error = 'Покупку нельзя провести с указанными условиями.';
         _notifyListeners();
         return SubscriptionIssueSubmitResult.blocked;
       }

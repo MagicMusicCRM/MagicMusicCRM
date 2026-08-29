@@ -84,7 +84,7 @@ class SubscriptionIssuePaymentSection extends StatelessWidget {
         const SizedBox(height: AppSpace.md),
         SearchablePickerField(
           key: const Key('subscription-payer'),
-          label: 'Личный счёт плательщика',
+          label: 'Плательщик',
           placeholder: 'Выберите ученика',
           hintText: 'Введите имя или ФИО ученика',
           selectedId: draft.payerStudentId,
@@ -122,7 +122,7 @@ class SubscriptionIssuePaymentSection extends StatelessWidget {
           children: [
             SubscriptionIssueModeChip(
               key: const Key('subscription-funding-account'),
-              label: 'С личного счёта',
+              label: 'Оплата',
               selected:
                   draft.fundingMode == SubscriptionFundingMode.personalAccount,
               enabled: fieldsEnabled,
@@ -157,7 +157,7 @@ class SubscriptionIssuePaymentSection extends StatelessWidget {
             Theme.of(context).colorScheme,
             label: draft.payerStudentId == draft.recipientStudentId
                 ? 'Комментарий к покупке'
-                : 'Причина оплаты с чужого счёта *',
+                : 'Причина оплаты другим плательщиком *',
             hint: 'Причина сохранится в истории действий',
             isDense: true,
           ),

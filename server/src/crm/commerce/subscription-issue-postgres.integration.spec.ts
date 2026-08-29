@@ -118,7 +118,10 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
     );
     const purchasePersistence = new SubscriptionPurchasePersistenceService(
       issueRepository,
-      new SubscriptionPurchasePaymentService(issueRepository, paymentRepository),
+      new SubscriptionPurchasePaymentService(
+        issueRepository,
+        paymentRepository,
+      ),
     );
     const purchasePreview = new SubscriptionPurchasePreviewService(
       issueRepository,
@@ -905,14 +908,17 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
     );
   });
 
-  it("purchases once from another client personal account and replays safely", async () => {
+  it("records a direct subscription payment without changing the payer wallet", async () => {
     await fundWallet(payerStudentId, "cross-account", "800000");
     const input = {
       packageId,
       payerStudentId,
       fundingMode: "personal_account" as const,
       purchaseReason: "Родитель оплачивает обучение ребёнка",
+      paymentAmountMinor: "800000",
+      paymentOccurredAt: "2026-08-29T10:00:00.000Z",
       paymentMethod: "cashless" as const,
+      paymentComment: "Оплата абонемента",
     };
     const preview = await issueService.previewPurchase(
       actors.admin,
@@ -983,6 +989,21 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
     );
     const [projection] = await commerceRepository.loadProjection(actors.admin, [
       scope,
+    ]);
+    const payerScope = await commerceRepository.resolveStudentScope(
+      actors.admin,
+      payerStudentId,
+    );
+    const [payerProjection] = await commerceRepository.loadProjection(
+      actors.admin,
+      [payerScope],
+    );
+    expect(payerProjection!.accounts).toEqual([
+      expect.objectContaining({
+        actualPaymentsMinor: "800000",
+        obligationDebitsMinor: "0",
+        balanceMinor: "800000",
+      }),
     ]);
     expect(
       projection!.subscriptions.find(
@@ -1211,8 +1232,17 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
     );
   });
 
-  it("purchases from the own wallet with none, percent and fixed immutable discounts", async () => {
+  it("persists immutable discounts without consuming the payer wallet", async () => {
     await fundWallet(payerStudentId, "own-discount-purchases", "2140000");
+    const payerScope = await commerceRepository.resolveStudentScope(
+      actors.director,
+      payerStudentId,
+    );
+    const balanceBefore = (
+      await commerceRepository.loadProjection(actors.director, [payerScope])
+    )[0]!.accounts.find(
+      (account) => account.currencyCode === "RUB",
+    )!.balanceMinor;
     const cases = [
       {
         suffix: "none",
@@ -1289,7 +1319,6 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
     const persisted = await pool.query<{
       subscriptions: string;
       obligations: string;
-      balance: string;
     }>(
       `
         select
@@ -1297,22 +1326,20 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
            where id = any($1::uuid[])) as subscriptions,
           (select count(*)::text from app.subscription_obligation_facts
            where issued_subscription_id = any($1::uuid[])
-             and source_type = 'subscription.purchase') as obligations,
-          ((select coalesce(sum(payment.amount_minor), 0)
-              from app.commerce_ordinary_payments payment
-             where payment.student_id = $2)
-           -
-           (select coalesce(sum(obligation.amount_minor), 0)
-              from app.subscription_obligation_facts obligation
-             where obligation.student_id = $2))::text as balance
+              and source_type = 'subscription.purchase') as obligations
       `,
-      [subscriptionIds, payerStudentId],
+      [subscriptionIds],
     );
     expect(persisted.rows[0]).toMatchObject({
       subscriptions: "3",
       obligations: "3",
-      balance: "0",
     });
+    const balanceAfter = (
+      await commerceRepository.loadProjection(actors.director, [payerScope])
+    )[0]!.accounts.find(
+      (account) => account.currencyCode === "RUB",
+    )!.balanceMinor;
+    expect(balanceAfter).toBe(balanceBefore);
   });
 
   it("allows a zero-payment purchase and persists the resulting debt", async () => {
@@ -1413,7 +1440,7 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
     }
   });
 
-  it("serializes competing purchases so only one can spend the payer balance", async () => {
+  it("allows independent purchases without spending the payer wallet", async () => {
     await fundWallet(racePayerStudentId, "race", "800000");
     const input = {
       packageId,
@@ -1448,14 +1475,8 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       ),
     ]);
     expect(outcomes.filter((item) => item.status === "fulfilled")).toHaveLength(
-      1,
+      2,
     );
-    const rejected = outcomes.find((item) => item.status === "rejected");
-    expect(rejected).toMatchObject({
-      reason: {
-        response: { code: "PURCHASE_PREVIEW_STALE" },
-      },
-    });
     const debits = await pool.query<{ count: string }>(
       `
         select count(*)::text as count
@@ -1464,7 +1485,7 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       `,
       [racePayerStudentId],
     );
-    expect(debits.rows[0]!.count).toBe("1");
+    expect(debits.rows[0]!.count).toBe("2");
   });
 
   it("locks reversed recipient/payer pairs in one order without deadlock", async () => {
@@ -1837,9 +1858,9 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
       adjustmentId: adjustment.adjustment.id,
       kind: "refund",
       amountMinor: "-30000",
-      walletDeltaMinor: "30000",
+      walletDeltaMinor: "0",
       walletBalanceMinor: beforeBalance.toString(),
-      resultingBalanceMinor: (beforeBalance + 30000n).toString(),
+      resultingBalanceMinor: beforeBalance.toString(),
       operation: "adjustment_reversal",
     });
     const command = {
@@ -1867,9 +1888,7 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
     const after = (
       await commerceRepository.loadProjection(actors.manager, [scope])
     )[0]!;
-    expect(BigInt(after.accounts[0]!.balanceMinor)).toBe(
-      beforeBalance + 30000n,
-    );
+    expect(BigInt(after.accounts[0]!.balanceMinor)).toBe(beforeBalance);
     expect(
       after.movements.some((item) => item.id === adjustment.adjustment.id),
     ).toBe(false);
@@ -1988,22 +2007,19 @@ describe("Subscription issue, discount, installments and ActualPayment", () => {
     suffix: string,
     availableMinor: string,
   ): Promise<void> {
-    const issued = await issueService.issue(
-      actors.director,
-      targetStudentId,
-      { packageId },
-      mutationMetadata(`${suffix}-funding-subscription`),
-    );
-    await paymentService.record(
-      actors.director,
-      targetStudentId,
-      {
-        issuedSubscriptionId: issued.subscription.id,
-        amountMinor: (800000n + BigInt(availableMinor)).toString(),
-        method: "cashless",
-        occurredAt: "2026-08-05T10:00:00.000Z",
-      },
-      mutationMetadata(`${suffix}-wallet-credit`),
+    await pool.query(
+      `insert into app.payments (
+         student_id, amount_minor, currency, method, payment_date,
+         idempotency_ref, request_fingerprint, created_by
+       ) values ($1, $2::bigint, 'RUB', 'cashless', $3, $4, $5, $6)`,
+      [
+        targetStudentId,
+        availableMinor,
+        "2026-08-05T10:00:00.000Z",
+        `${marker}:${suffix}:wallet-credit`,
+        `${marker}:${suffix}:wallet-credit:fingerprint`,
+        actors.director.userId,
+      ],
     );
   }
 

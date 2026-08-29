@@ -240,15 +240,7 @@ export class SubscriptionIssueRepository {
             and payment.currency = $2
             and payment.deleted_at is null
             and payment.amount_minor is not null
-          union all
-          select case
-            when obligation.direction = 'credit'
-              then obligation.amount_minor::numeric
-            else -obligation.amount_minor::numeric
-          end
-          from app.subscription_obligation_facts obligation
-          where obligation.student_id = $1
-            and obligation.currency_code = $2
+            and payment.issued_subscription_id is null
           union all
           select -charge.amount_minor::numeric
           from app.lesson_client_charge_facts_effective charge
@@ -258,10 +250,13 @@ export class SubscriptionIssueRepository {
           union all
           select adjustment.amount_minor::numeric
           from app.commerce_ordinary_account_adjustments adjustment
+          join app.commerce_ordinary_payments source_payment
+            on source_payment.id = adjustment.source_payment_id
           where adjustment.student_id = $1
             and adjustment.currency_code = $2
             and adjustment.deleted_at is null
             and adjustment.status = 'paid'
+            and source_payment.issued_subscription_id is null
         )
         select coalesce(sum(amount_minor), 0)::text as balance_minor
         from facts

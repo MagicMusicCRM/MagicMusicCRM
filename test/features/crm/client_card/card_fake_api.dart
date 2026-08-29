@@ -228,6 +228,7 @@ class FakeCardApiClient extends MagicApiClient {
           'label': field['label'],
           'valueType': field['valueType'] ?? field['type'] ?? 'text',
           'required': field['required'] == true,
+          'isSystem': field['isSystem'] == true,
           'options': field['options'] ?? const [],
           'width': field['width'] ?? 'full',
           'placements': field['placements'] ?? const ['edit', 'card'],

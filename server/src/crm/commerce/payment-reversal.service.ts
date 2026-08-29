@@ -32,8 +32,10 @@ interface PaymentReversalMutationResult extends Record<string, unknown> {
   version: number;
 }
 
-interface AccountAdjustmentReversalMutationResult
-  extends Record<string, unknown> {
+interface AccountAdjustmentReversalMutationResult extends Record<
+  string,
+  unknown
+> {
   entityId: string;
   adjustmentId: string;
   counterpartId: string;
@@ -73,7 +75,9 @@ export class PaymentReversalService {
         (account) => account.currencyCode === target.currency_code,
       )?.balanceMinor ?? "0";
     const walletDeltaMinor =
-      target.status === "paid" ? `-${target.amount_minor}` : "0";
+      target.status === "paid" && target.issued_subscription_id === null
+        ? `-${target.amount_minor}`
+        : "0";
     const resultingBalanceMinor = (
       BigInt(walletBalanceMinor) + BigInt(walletDeltaMinor)
     ).toString();
@@ -211,10 +215,10 @@ export class PaymentReversalService {
               actor,
               [studentId, signed.recipientStudentId],
             );
-            if (students.length !== new Set([
-              studentId,
-              signed.recipientStudentId,
-            ]).size) {
+            if (
+              students.length !==
+              new Set([studentId, signed.recipientStudentId]).size
+            ) {
               throw new NotFoundException("Клиент не найден.");
             }
             const target = await this.repository.lockTarget(
@@ -225,11 +229,12 @@ export class PaymentReversalService {
               throw new NotFoundException("Оплата не найдена.");
             }
             this.assertSignedTarget(target, signed);
-            const currentBalance = await this.issueRepository.readAccountBalance(
-              client,
-              studentId,
-              signed.currencyCode,
-            );
+            const currentBalance =
+              await this.issueRepository.readAccountBalance(
+                client,
+                studentId,
+                signed.currencyCode,
+              );
             if (currentBalance !== signed.walletBalanceMinor) {
               throw new ConflictException({
                 code: "PAYMENT_REVERSAL_PREVIEW_STALE",
@@ -252,8 +257,7 @@ export class PaymentReversalService {
                   method: target.payment_method,
                   invoiceNumber: target.payment_invoice_number,
                   actorUserId: actor.userId,
-                  idempotencyRef:
-                    `${actor.userId}:reversal:${metadata.idempotencyKey}`,
+                  idempotencyRef: `${actor.userId}:reversal:${metadata.idempotencyKey}`,
                   requestFingerprint: fingerprintPayload({
                     paymentRecordId,
                     actualPaymentId: target.actual_payment_id,
@@ -264,9 +268,10 @@ export class PaymentReversalService {
               counterpartId = adjustment.id;
             }
             const sourceKind = target.actual_payment_id
-              ? "payment" as const
-              : "payment_record" as const;
-            const sourceId = target.actual_payment_id ?? target.payment_record_id;
+              ? ("payment" as const)
+              : ("payment_record" as const);
+            const sourceId =
+              target.actual_payment_id ?? target.payment_record_id;
             const exclusionId = await this.repository.createExclusion(client, {
               sourceKind,
               sourceId,
@@ -343,7 +348,10 @@ export class PaymentReversalService {
       source?.accounts.find(
         (account) => account.currencyCode === target.currency_code,
       )?.balanceMinor ?? "0";
-    const walletDeltaMinor = (-BigInt(target.amount_minor)).toString();
+    const walletDeltaMinor =
+      target.issued_subscription_id === null
+        ? (-BigInt(target.amount_minor)).toString()
+        : "0";
     const resultingBalanceMinor = (
       BigInt(walletBalanceMinor) + BigInt(walletDeltaMinor)
     ).toString();
@@ -401,8 +409,9 @@ export class PaymentReversalService {
         message: "Укажите причину сторно корректировки.",
       });
     }
-    const signed =
-      this.previewTokens.verifyAccountAdjustmentReversal(dto.previewToken);
+    const signed = this.previewTokens.verifyAccountAdjustmentReversal(
+      dto.previewToken,
+    );
     if (
       signed.actorUserId !== actor.userId ||
       signed.studentId !== studentId ||
@@ -466,11 +475,11 @@ export class PaymentReversalService {
           },
           mutate: async (client, nextVersion) => {
             if (
-              (await this.issueRepository.lockPurchaseStudents(
-                client,
-                actor,
-                [studentId],
-              )).length !== 1
+              (
+                await this.issueRepository.lockPurchaseStudents(client, actor, [
+                  studentId,
+                ])
+              ).length !== 1
             ) {
               throw new NotFoundException("Клиент не найден.");
             }
@@ -482,11 +491,12 @@ export class PaymentReversalService {
               throw new NotFoundException("Корректировка не найдена.");
             }
             this.assertSignedAdjustmentTarget(target, signed);
-            const currentBalance = await this.issueRepository.readAccountBalance(
-              client,
-              studentId,
-              signed.currencyCode,
-            );
+            const currentBalance =
+              await this.issueRepository.readAccountBalance(
+                client,
+                studentId,
+                signed.currencyCode,
+              );
             if (currentBalance !== signed.walletBalanceMinor) {
               throw new ConflictException({
                 code: "PAYMENT_ADJUSTMENT_REVERSAL_PREVIEW_STALE",
@@ -507,8 +517,7 @@ export class PaymentReversalService {
                 method: target.method,
                 invoiceNumber: target.invoice_number,
                 actorUserId: actor.userId,
-                idempotencyRef:
-                  `${actor.userId}:adjustment-reversal:${metadata.idempotencyKey}`,
+                idempotencyRef: `${actor.userId}:adjustment-reversal:${metadata.idempotencyKey}`,
                 requestFingerprint: fingerprintPayload({
                   adjustmentId,
                   sourcePaymentId: target.source_payment_id,
@@ -629,7 +638,9 @@ export class PaymentReversalService {
 
   private assertSignedTarget(
     target: PaymentReversalTargetRow,
-    signed: ReturnType<SubscriptionPreviewTokenService["verifyPaymentReversal"]>,
+    signed: ReturnType<
+      SubscriptionPreviewTokenService["verifyPaymentReversal"]
+    >,
   ): void {
     this.assertReversible(target, signed.expectedVersion);
     if (

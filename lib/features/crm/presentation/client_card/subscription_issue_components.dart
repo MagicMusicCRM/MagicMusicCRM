@@ -117,9 +117,7 @@ class SubscriptionIssuePurchasePreviewCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            preview.canCommit
-                ? 'Проверьте покупку перед подтверждением'
-                : 'Покупку нельзя провести',
+            preview.canCommit ? 'Расчёт покупки' : 'Покупку нельзя провести',
             style: const TextStyle(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: AppSpace.sm),
@@ -176,14 +174,7 @@ class SubscriptionIssuePurchasePreviewCard extends StatelessWidget {
             ),
           ),
           SubscriptionIssuePriceLine(
-            label: 'Баланс до',
-            value: formatSubscriptionMinor(
-              preview.payerBalanceMinor,
-              preview.currencyCode,
-            ),
-          ),
-          SubscriptionIssuePriceLine(
-            label: 'Баланс после',
+            label: 'Расчёт по абонементу',
             value: formatSubscriptionMinor(
               preview.balanceAfterMinor,
               preview.currencyCode,
@@ -201,7 +192,7 @@ class SubscriptionIssuePurchasePreviewCard extends StatelessWidget {
             ),
           if (preview.overpaymentMinor > BigInt.zero)
             SubscriptionIssuePriceLine(
-              label: 'Переплата после покупки',
+              label: 'Переплата по абонементу',
               value: formatSubscriptionMinor(
                 preview.overpaymentMinor,
                 preview.currencyCode,

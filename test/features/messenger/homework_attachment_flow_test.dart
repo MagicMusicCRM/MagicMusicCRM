@@ -157,6 +157,19 @@ void main() {
       find.byKey(const ValueKey('homework-attach-homework-a')),
       findsOneWidget,
     );
+    expect(
+      tester
+          .getSize(
+            find.byKey(const Key('client-desktop-section-subscriptions')),
+          )
+          .height,
+      moreOrLessEquals(
+        tester
+            .getSize(find.byKey(const Key('client-desktop-section-progress')))
+            .height,
+        epsilon: 0.1,
+      ),
+    );
   });
 }
 

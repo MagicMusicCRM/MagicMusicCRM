@@ -31,6 +31,7 @@ class CrmCustomFieldDefinition {
   final String label;
   final String type;
   final bool required;
+  final bool isSystem;
   final String? hint;
   final List<String> options;
   final String width;
@@ -43,6 +44,7 @@ class CrmCustomFieldDefinition {
     required this.label,
     required this.type,
     this.required = false,
+    this.isSystem = false,
     this.hint,
     this.options = const [],
     this.width = 'full',
@@ -58,6 +60,7 @@ class CrmCustomFieldDefinition {
       label: json['label']?.toString() ?? '',
       type: json['type']?.toString() ?? 'text',
       required: json['required'] == true,
+      isSystem: json['isSystem'] == true,
       hint: json['hint']?.toString(),
       options: options is List
           ? options.map((e) => e.toString()).toList()
@@ -78,6 +81,7 @@ class CrmCustomFieldDefinition {
       label: json['label']?.toString() ?? '',
       type: json['valueType']?.toString() ?? 'text',
       required: json['required'] == true,
+      isSystem: json['isSystem'] == true,
       options: (json['options'] as List? ?? const [])
           .map((value) => value.toString())
           .toList(growable: false),

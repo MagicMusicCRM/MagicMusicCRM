@@ -87,11 +87,9 @@ export class SubscriptionPurchasePreviewService {
     );
     const shortageMinor = this.shortageMinor(
       normalized.finalPriceMinor,
-      context.payerBalanceMinor,
       normalized.payment.amountMinor,
     );
     const balanceAfterMinor =
-      BigInt(context.payerBalanceMinor) +
       BigInt(normalized.payment.amountMinor) -
       BigInt(normalized.finalPriceMinor);
     return {
@@ -249,13 +247,9 @@ export class SubscriptionPurchasePreviewService {
 
   private shortageMinor(
     finalPriceMinor: string,
-    payerBalanceMinor: string,
     paidNowMinor: string,
   ): bigint {
-    const shortage =
-      BigInt(finalPriceMinor) -
-      BigInt(payerBalanceMinor) -
-      BigInt(paidNowMinor);
+    const shortage = BigInt(finalPriceMinor) - BigInt(paidNowMinor);
     return shortage > 0n ? shortage : 0n;
   }
 }

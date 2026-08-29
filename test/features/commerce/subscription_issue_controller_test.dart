@@ -327,7 +327,7 @@ void main() {
     addTearDown(controller.dispose);
 
     expect(await controller.submit(), SubscriptionIssueSubmitResult.blocked);
-    expect(controller.error, 'На личном счёте недостаточно средств.');
+    expect(controller.error, 'Покупку нельзя провести с указанными условиями.');
     expect(submitCalls, 0);
   });
 

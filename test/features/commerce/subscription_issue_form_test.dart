@@ -245,6 +245,10 @@ void main() {
       expect(find.text('Оплатить'), findsOneWidget);
       expect(find.text('Проверить'), findsNothing);
       expect(find.text('Подтвердить покупку'), findsNothing);
+      expect(find.text('Плательщик'), findsWidgets);
+      expect(find.text('Оплата'), findsOneWidget);
+      expect(find.text('Личный счёт плательщика'), findsNothing);
+      expect(find.text('С личного счёта'), findsNothing);
       final acceptedBy = tester.widget<TextField>(
         find.descendant(
           of: find.byKey(const Key('subscription-accepted-by')),
@@ -338,7 +342,7 @@ void main() {
       (status.decoration! as BoxDecoration).border!.top.color,
       AppColor.danger,
     );
-    expect(find.text('Переплата после покупки'), findsOneWidget);
+    expect(find.text('Переплата по абонементу'), findsOneWidget);
   });
 
   testWidgets('selected package and payment details reach preview', (
@@ -558,7 +562,7 @@ void main() {
 
     expect(find.byKey(const Key('subscription-purchase-preview')), findsOne);
     expect(find.text('Получатель'), findsOne);
-    expect(find.text('Плательщик'), findsOne);
+    expect(find.text('Плательщик'), findsWidgets);
     expect(
       _normalizedTexts(
         tester,
@@ -623,7 +627,7 @@ void main() {
     expect(
       find.descendant(
         of: previewCard,
-        matching: find.text('Переплата после покупки'),
+        matching: find.text('Переплата по абонементу'),
       ),
       findsOneWidget,
     );
@@ -692,7 +696,7 @@ void main() {
       ),
     );
     await _tap(tester, find.byKey(const Key('subscription-issue-submit')));
-    expect(find.text('Укажите причину оплаты с чужого счёта'), findsOne);
+    expect(find.text('Укажите причину оплаты другим плательщиком'), findsOne);
     expect(previews, 0);
 
     await tester.enterText(

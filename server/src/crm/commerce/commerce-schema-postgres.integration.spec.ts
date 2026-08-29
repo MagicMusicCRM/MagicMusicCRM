@@ -988,7 +988,7 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
         record_subscription_id: string | null;
         debit_count: string;
         repair_count: string;
-        balance_minor: string;
+        balance_minor: string | null;
       }>(
         `
           select
@@ -1006,7 +1006,7 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
           join app.payments payment on payment.id = subscription.payment_id
           join app.client_payment_records record
             on record.actual_payment_id = payment.id
-          join app.commerce_student_account_projection account
+          left join app.commerce_student_account_projection account
             on account.student_id = subscription.student_id
            and account.currency_code = 'RUB'
           where subscription.id = $1
@@ -1018,7 +1018,7 @@ describe("Commerce catalog/snapshot/ledger schema (PostgreSQL)", () => {
         record_subscription_id: subscription.rows[0]!.id,
         debit_count: "1",
         repair_count: "1",
-        balance_minor: "2400000",
+        balance_minor: null,
       });
       const aggregateAfterUpgrade = await client.query<{ version: string }>(
         `select version::text

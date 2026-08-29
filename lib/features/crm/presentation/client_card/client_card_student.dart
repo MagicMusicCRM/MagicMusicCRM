@@ -643,7 +643,7 @@ extension _ClientCardStudent on _ClientCardState {
                 label: row['label']?.toString().trim().isNotEmpty == true
                     ? row['label'].toString()
                     : 'Ученик без имени',
-                subtitle: 'Личный счёт ученика',
+                subtitle: 'Плательщик',
               ),
         ];
       },

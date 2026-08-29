@@ -40,7 +40,10 @@ Widget _lessonBalanceSummary(
           : date.format(balance.expiresAt!.toLocal()),
     ),
     ('Оплачиваемые пропуски', '${indicators['paidMisses'] ?? 0}'),
-    ('Частично оплачиваемые пропуски', '${indicators['partiallyPaidMisses'] ?? 0}'),
+    (
+      'Частично оплачиваемые пропуски',
+      '${indicators['partiallyPaidMisses'] ?? 0}',
+    ),
     ('Неоплачиваемые пропуски', '${indicators['unpaidMisses'] ?? 0}'),
   ];
   return Builder(

@@ -34,6 +34,7 @@ extension _ClientCardCustomFields on _ClientCardState {
               field.entity == entity &&
               (field.placements.contains('edit') ||
                   field.placements.contains('card')) &&
+              !field.isSystem &&
               !_isSystemOnlyCustomField(field.key) &&
               (includeKeys == null || includeKeys.contains(field.key)) &&
               !excludedKeys.contains(field.key),

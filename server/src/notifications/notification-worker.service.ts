@@ -1,10 +1,18 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { AuditService } from '../audit/audit.service';
-import { DatabaseService } from '../db/database.service';
-import { ResendEmailProvider, SmtpFallbackEmailProvider } from './notification-email.provider';
-import { FirebasePushProvider } from './notification-push.provider';
-import { NotificationTokenCrypto } from './notification-token-crypto.service';
-import { ProviderResult } from './notifications.types';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from "@nestjs/common";
+import { AuditService } from "../audit/audit.service";
+import { DatabaseService } from "../db/database.service";
+import {
+  ResendEmailProvider,
+  SmtpFallbackEmailProvider,
+} from "./notification-email.provider";
+import { FirebasePushProvider } from "./notification-push.provider";
+import { NotificationTokenCrypto } from "./notification-token-crypto.service";
+import { ProviderResult } from "./notifications.types";
 
 interface OutboxRow {
   id: string;
@@ -35,7 +43,7 @@ interface DeviceTokenRow {
 
 export interface EmailDispatchResult {
   processed: boolean;
-  status: 'sent' | 'retry' | 'failed' | 'busy';
+  status: "sent" | "retry" | "failed" | "busy";
 }
 
 @Injectable()
@@ -51,13 +59,15 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
     private readonly resend: ResendEmailProvider,
     private readonly smtpFallback: SmtpFallbackEmailProvider,
     private readonly tokenCrypto: NotificationTokenCrypto,
-    private readonly pushProvider: FirebasePushProvider
+    private readonly pushProvider: FirebasePushProvider,
   ) {}
 
   onModuleInit(): void {
     this.emailTimer = setInterval(() => {
       void this.dispatchPendingEmails().catch((error: unknown) => {
-        this.logger.error(`Email outbox tick failed: ${this.errorSummary(error)}`);
+        this.logger.error(
+          `Email outbox tick failed: ${this.errorSummary(error)}`,
+        );
       });
     }, 30_000);
     this.emailTimer.unref?.();
@@ -66,7 +76,9 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
     // happens to flush the queue.
     this.pushTimer = setInterval(() => {
       void this.dispatchPendingPush().catch((error: unknown) => {
-        this.logger.error(`Push outbox tick failed: ${this.errorSummary(error)}`);
+        this.logger.error(
+          `Push outbox tick failed: ${this.errorSummary(error)}`,
+        );
       });
     }, 30_000);
     this.pushTimer.unref?.();
@@ -77,7 +89,9 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
     if (this.pushTimer) clearInterval(this.pushTimer);
   }
 
-  async dispatchPendingEmails(limit = 20): Promise<{ processed: number; failed: number }> {
+  async dispatchPendingEmails(
+    limit = 20,
+  ): Promise<{ processed: number; failed: number }> {
     const candidates = await this.database.query<{ id: string }>(
       `
         select eo.id
@@ -89,7 +103,7 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
         order by eo.created_at asc
         limit $1
       `,
-      [limit, NotificationWorker.emailRetryLimit]
+      [limit, NotificationWorker.emailRetryLimit],
     );
 
     let processed = 0;
@@ -98,7 +112,7 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
       const result = await this.dispatchEmailById(candidate.id);
       if (!result.processed) continue;
       processed += 1;
-      if (result.status !== 'sent') failed += 1;
+      if (result.status !== "sent") failed += 1;
     }
     if (failed > 0) {
       this.logger.warn(`Email outbox attempts failed: ${failed}/${processed}`);
@@ -108,23 +122,23 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
 
   async dispatchEmailById(id: string): Promise<EmailDispatchResult> {
     const item = await this.claimEmail(id);
-    if (!item) return { processed: false, status: 'busy' };
+    if (!item) return { processed: false, status: "busy" };
     try {
       const delivered = await this.dispatchEmail(item);
       return {
         processed: true,
         status: delivered
-          ? 'sent'
+          ? "sent"
           : this.canRetryEmail(item)
-            ? 'retry'
-            : 'failed'
+            ? "retry"
+            : "failed",
       };
     } catch (error) {
       await this.markOutboxFailure(item, this.errorSummary(error));
       await this.recordDispatchFailure(item, error);
       return {
         processed: true,
-        status: this.canRetryEmail(item) ? 'retry' : 'failed'
+        status: this.canRetryEmail(item) ? "retry" : "failed",
       };
     }
   }
@@ -140,11 +154,13 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
             updated_at = now()
         where id = $1 and status <> 'sent'
       `,
-      [id, NotificationWorker.emailRetryLimit, reason.slice(0, 160)]
+      [id, NotificationWorker.emailRetryLimit, reason.slice(0, 160)],
     );
   }
 
-  async dispatchPendingPush(limit = 50): Promise<{ processed: number; failed: number }> {
+  async dispatchPendingPush(
+    limit = 50,
+  ): Promise<{ processed: number; failed: number }> {
     const candidates = await this.database.query<{ id: string }>(
       `
         select nd.id
@@ -158,7 +174,7 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
         order by nd.created_at asc
         limit $1
       `,
-      [limit]
+      [limit],
     );
 
     let processed = 0;
@@ -182,7 +198,7 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
             )
           returning nd.id, nd.notification_id, nd.user_id, n.title, n.body, n.data
         `,
-        [candidate.id]
+        [candidate.id],
       );
       const delivery = claimed.rows[0];
       if (!delivery) continue;
@@ -216,56 +232,55 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
           and eo.next_attempt_at <= now()
         returning eo.id, eo.user_id, u.email, eo.template, eo.payload, eo.attempt_count
       `,
-      [id]
+      [id],
     );
     return claimed.rows[0];
   }
 
   private async dispatchEmail(item: OutboxRow): Promise<boolean> {
+    const body = item.payload.body ?? "";
     const message = {
       to: item.email,
-      subject: item.payload.title ?? 'Magic Music',
-      text: item.payload.body ?? '',
+      subject: item.payload.title ?? "Magic Music",
+      text: this.renderMagicEmailText(body, item.template),
       html: this.renderMagicEmailHtml(
-        item.payload.title ?? 'Magic Music',
-        item.payload.body ?? '',
+        item.payload.title ?? "Magic Music",
+        body,
         item.template,
-      )
+      ),
     };
 
     const primary = await this.safeSend(() => this.resend.send(message));
     await this.recordDelivery(item, primary);
-    if (primary.status === 'sent') {
+    if (primary.status === "sent") {
       await this.markOutboxSent(item.id);
       return true;
     }
 
     const fallback = await this.safeSend(() => this.smtpFallback.send(message));
     await this.recordDelivery(item, fallback);
-    if (fallback.status === 'sent') {
+    if (fallback.status === "sent") {
       await this.markOutboxSent(item.id);
       return true;
     }
 
     const lastError = [primary, fallback]
-      .map((result) =>
-        `${result.provider}:${result.error ?? result.status}`
-      )
-      .join('|')
+      .map((result) => `${result.provider}:${result.error ?? result.status}`)
+      .join("|")
       .slice(0, 160);
     await this.markOutboxFailure(item, lastError);
     if (!this.canRetryEmail(item)) {
       await this.audit.record({
-        action: 'notifications.email_outbox_failed',
-        entityType: 'email_outbox',
+        action: "notifications.email_outbox_failed",
+        entityType: "email_outbox",
         entityId: item.id,
         metadata: {
           template: item.template,
           primaryProvider: primary.provider,
           primaryStatus: primary.status,
           fallbackProvider: fallback.provider,
-          fallbackStatus: fallback.status
-        }
+          fallbackStatus: fallback.status,
+        },
       });
     }
     return false;
@@ -280,21 +295,25 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
     const escapedTitle = this.escapeHtml(title);
     const escapedBody = this.escapeHtml(body);
     const preheader =
-      template === 'auth_password_reset'
-        ? 'Код для сброса пароля Magic Music'
-        : template === 'student_invite'
-          ? 'Приглашение в личный кабинет Magic Music'
-        : 'Код подтверждения Magic Music';
+      template === "auth_password_reset"
+        ? "Код для сброса пароля Magic Music"
+        : template === "student_invite"
+          ? "Приглашение в личный кабинет Magic Music"
+          : "Код подтверждения Magic Music";
     const footnote =
-      template === 'student_invite'
-        ? 'Если вы не ожидали приглашение, просто проигнорируйте письмо.'
-        : 'Если вы не запрашивали этот код, просто проигнорируйте письмо.';
+      template === "student_invite"
+        ? "Если вы не ожидали приглашение, просто проигнорируйте письмо."
+        : "Если вы не запрашивали этот код, просто проигнорируйте письмо.";
     const codeBlock = code
       ? `
         <div style="margin:28px 0 22px;text-align:center;">
           <div style="display:inline-block;letter-spacing:10px;font-size:34px;line-height:1;font-weight:800;color:#1f1d1a;background:#f6efe1;border:1px solid #d8ba72;border-radius:10px;padding:18px 18px 18px 28px;">${code}</div>
         </div>`
-      : '';
+      : "";
+    const inviteActions =
+      template === "student_invite"
+        ? this.renderStudentInviteActionsHtml()
+        : "";
 
     return `<!doctype html>
 <html lang="ru">
@@ -319,6 +338,7 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
               <td style="padding:28px;">
                 <p style="margin:0;font-size:16px;line-height:1.55;color:#e7ddcb;">${escapedBody}</p>
                 ${codeBlock}
+                ${inviteActions}
                 <p style="margin:24px 0 0;font-size:13px;line-height:1.5;color:#a79b87;">${this.escapeHtml(footnote)}</p>
               </td>
             </tr>
@@ -335,20 +355,61 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
 </html>`;
   }
 
-  private escapeHtml(value: string): string {
-    return value
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+  private renderMagicEmailText(body: string, template: string): string {
+    if (template !== "student_invite") return body;
+    const androidUrl = this.clientInstallUrl(
+      process.env.CLIENT_ANDROID_INSTALL_URL,
+      "https://play.google.com/store/apps/details?id=magic.crm",
+    );
+    const iosUrl = this.clientInstallUrl(process.env.CLIENT_IOS_INSTALL_URL);
+    return [
+      body,
+      `Android: ${androidUrl}`,
+      iosUrl ? `iOS: ${iosUrl}` : "iOS: скоро в App Store.",
+    ].join("\n\n");
   }
 
-  private async safeSend(work: () => Promise<ProviderResult>): Promise<ProviderResult> {
+  private renderStudentInviteActionsHtml(): string {
+    const androidUrl = this.clientInstallUrl(
+      process.env.CLIENT_ANDROID_INSTALL_URL,
+      "https://play.google.com/store/apps/details?id=magic.crm",
+    );
+    const iosUrl = this.clientInstallUrl(process.env.CLIENT_IOS_INSTALL_URL);
+    const buttonStyle =
+      "display:block;padding:13px 18px;border-radius:9px;text-align:center;font-size:15px;line-height:1.3;font-weight:700;text-decoration:none;";
+    const androidButton = `<a href="${this.escapeHtml(androidUrl)}" style="${buttonStyle}background:#c5a059;color:#171614;">Установить на Android</a>`;
+    const iosAction = iosUrl
+      ? `<a href="${this.escapeHtml(iosUrl)}" style="${buttonStyle}margin-top:12px;background:#f6efe1;color:#1f1d1a;">Установить на iOS</a>`
+      : `<div style="${buttonStyle}margin-top:12px;background:#34312c;color:#b8ad9a;">iOS — скоро в App Store</div>`;
+    return `<div style="margin:24px 0 0;">${androidButton}${iosAction}</div>`;
+  }
+
+  private clientInstallUrl(value: string | undefined, fallback = ""): string {
+    const candidate = value?.trim() || fallback;
+    try {
+      const url = new URL(candidate);
+      return url.protocol === "https:" ? url.toString() : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  private escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  private async safeSend(
+    work: () => Promise<ProviderResult>,
+  ): Promise<ProviderResult> {
     try {
       return await work();
     } catch {
-      return { provider: 'unknown', status: 'failed', error: 'provider_error' };
+      return { provider: "unknown", status: "failed", error: "provider_error" };
     }
   }
 
@@ -361,25 +422,25 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
         order by last_seen_at desc
         limit 10
       `,
-      [delivery.user_id]
+      [delivery.user_id],
     );
 
     if (devices.rows.length === 0) {
-      await this.markPushDelivery(delivery, 'firebase', 'skipped', 'no_device');
+      await this.markPushDelivery(delivery, "firebase", "skipped", "no_device");
       return true;
     }
 
     let sent = 0;
     let failed = 0;
     let skipped = 0;
-    let lastProvider = 'firebase';
-    let lastError = 'not_configured';
+    let lastProvider = "firebase";
+    let lastError = "not_configured";
 
     for (const device of devices.rows) {
       const token = this.tokenCrypto.decrypt(device.encrypted_token);
       if (!token) {
         skipped += 1;
-        lastError = 'missing_token_encryption_key';
+        lastError = "missing_token_encryption_key";
         continue;
       }
 
@@ -388,33 +449,45 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
           token,
           title: delivery.title,
           body: delivery.body,
-          data: delivery.data
-        })
+          data: delivery.data,
+        }),
       );
       lastProvider = result.provider;
       lastError = result.error ?? result.status;
-      if (result.status === 'sent') sent += 1;
-      if (result.status === 'failed') failed += 1;
-      if (result.status === 'skipped') skipped += 1;
+      if (result.status === "sent") sent += 1;
+      if (result.status === "failed") failed += 1;
+      if (result.status === "skipped") skipped += 1;
       await this.audit.record({
-        action: 'notifications.push_delivery_attempted',
-        entityType: 'notification',
+        action: "notifications.push_delivery_attempted",
+        entityType: "notification",
         entityId: delivery.notification_id,
-        metadata: { provider: result.provider, status: result.status, deviceId: device.id }
+        metadata: {
+          provider: result.provider,
+          status: result.status,
+          deviceId: device.id,
+        },
       });
     }
 
     if (sent > 0) {
-      await this.markPushDelivery(delivery, lastProvider, 'sent', null);
+      await this.markPushDelivery(delivery, lastProvider, "sent", null);
       return true;
     }
 
-    const status = failed > 0 ? 'failed' : 'skipped';
-    await this.markPushDelivery(delivery, lastProvider, status, skipped > 0 ? lastError : lastError);
-    return status !== 'failed';
+    const status = failed > 0 ? "failed" : "skipped";
+    await this.markPushDelivery(
+      delivery,
+      lastProvider,
+      status,
+      skipped > 0 ? lastError : lastError,
+    );
+    return status !== "failed";
   }
 
-  private async recordDelivery(item: OutboxRow, result: ProviderResult): Promise<void> {
+  private async recordDelivery(
+    item: OutboxRow,
+    result: ProviderResult,
+  ): Promise<void> {
     if (!item.payload.notificationId) return;
     await this.database.query(
       `
@@ -423,13 +496,19 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
         )
         values ($1, $2, 'email', $3, $4::app.notification_delivery_status, 1, $5)
       `,
-      [item.payload.notificationId, item.user_id, result.provider, result.status, result.error ?? null]
+      [
+        item.payload.notificationId,
+        item.user_id,
+        result.provider,
+        result.status,
+        result.error ?? null,
+      ],
     );
     await this.audit.record({
-      action: 'notifications.email_delivery_attempted',
-      entityType: 'notification',
+      action: "notifications.email_delivery_attempted",
+      entityType: "notification",
       entityId: item.payload.notificationId,
-      metadata: { provider: result.provider, status: result.status }
+      metadata: { provider: result.provider, status: result.status },
     });
   }
 
@@ -443,12 +522,17 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
             updated_at = now()
         where id = $1
       `,
-      [id]
+      [id],
     );
   }
 
-  private async markOutboxFailure(item: OutboxRow, error: string): Promise<void> {
-    const nextDelay = this.canRetryEmail(item) ? this.nextEmailRetryDelay(item) : null;
+  private async markOutboxFailure(
+    item: OutboxRow,
+    error: string,
+  ): Promise<void> {
+    const nextDelay = this.canRetryEmail(item)
+      ? this.nextEmailRetryDelay(item)
+      : null;
     await this.database.query(
       `
         update app.email_outbox
@@ -462,15 +546,15 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
             updated_at = now()
         where id = $1
       `,
-      [item.id, error, nextDelay]
+      [item.id, error, nextDelay],
     );
   }
 
   private async markPushDelivery(
     delivery: PushDeliveryRow,
     provider: string,
-    status: ProviderResult['status'],
-    lastError: string | null
+    status: ProviderResult["status"],
+    lastError: string | null,
   ): Promise<void> {
     await this.database.query(
       `
@@ -482,31 +566,42 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
             updated_at = now()
         where id = $1
       `,
-      [delivery.id, provider, status, lastError]
+      [delivery.id, provider, status, lastError],
     );
   }
 
-  private async recordDispatchFailure(item: OutboxRow, error: unknown): Promise<void> {
+  private async recordDispatchFailure(
+    item: OutboxRow,
+    error: unknown,
+  ): Promise<void> {
     try {
       await this.audit.record({
-        action: 'notifications.email_dispatch_failed',
-        entityType: 'email_outbox',
+        action: "notifications.email_dispatch_failed",
+        entityType: "email_outbox",
         entityId: item.id,
-        metadata: { template: item.template, error: this.errorName(error) }
+        metadata: { template: item.template, error: this.errorName(error) },
       });
     } catch {
       // Keep the batch moving even if audit persistence is unavailable.
     }
   }
 
-  private async recordPushFailure(delivery: PushDeliveryRow, error: unknown): Promise<void> {
+  private async recordPushFailure(
+    delivery: PushDeliveryRow,
+    error: unknown,
+  ): Promise<void> {
     try {
-      await this.markPushDelivery(delivery, 'firebase', 'failed', this.errorName(error));
+      await this.markPushDelivery(
+        delivery,
+        "firebase",
+        "failed",
+        this.errorName(error),
+      );
       await this.audit.record({
-        action: 'notifications.push_dispatch_failed',
-        entityType: 'notification',
+        action: "notifications.push_dispatch_failed",
+        entityType: "notification",
         entityId: delivery.notification_id,
-        metadata: { error: this.errorName(error) }
+        metadata: { error: this.errorName(error) },
       });
     } catch {
       // Keep the batch moving even if audit or status persistence is unavailable.
@@ -514,18 +609,22 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
   }
 
   private errorName(error: unknown): string {
-    return error instanceof Error && error.name ? error.name.slice(0, 80) : 'dispatch_failed';
+    return error instanceof Error && error.name
+      ? error.name.slice(0, 80)
+      : "dispatch_failed";
   }
 
   private errorSummary(error: unknown): string {
-    if (!(error instanceof Error)) return 'dispatch_failed';
+    if (!(error instanceof Error)) return "dispatch_failed";
     return `${error.constructor.name}:${error.message}`
-      .replace(/[\r\n\0]/g, ' ')
+      .replace(/[\r\n\0]/g, " ")
       .slice(0, 160);
   }
 
   private canRetryEmail(item: OutboxRow): boolean {
-    return this.emailAttemptCount(item) + 1 < NotificationWorker.emailRetryLimit;
+    return (
+      this.emailAttemptCount(item) + 1 < NotificationWorker.emailRetryLimit
+    );
   }
 
   private nextEmailRetryDelay(item: OutboxRow): string {

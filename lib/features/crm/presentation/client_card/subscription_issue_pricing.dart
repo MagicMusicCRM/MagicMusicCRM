@@ -165,7 +165,7 @@ class SubscriptionIssuePricing {
   static String? _purchaseReasonError(SubscriptionIssueDraft draft) {
     if (draft.payerStudentId == draft.recipientStudentId) return null;
     return draft.purchaseReason.trim().isEmpty
-        ? 'Укажите причину оплаты с чужого счёта'
+        ? 'Укажите причину оплаты другим плательщиком'
         : null;
   }
 

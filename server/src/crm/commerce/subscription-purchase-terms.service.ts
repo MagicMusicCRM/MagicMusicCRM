@@ -20,7 +20,7 @@ export class SubscriptionPurchaseTermsService {
         code: "PURCHASE_REASON_REQUIRED",
         field: "purchaseReason",
         message:
-          "При оплате со счёта другого клиента обязательно укажите причину.",
+          "При оплате другим клиентом обязательно укажите причину.",
       });
     }
   }
@@ -33,7 +33,7 @@ export class SubscriptionPurchaseTermsService {
       throw new UnprocessableEntityException({
         code: "FUNDING_MODE_INVALID",
         field: "fundingMode",
-        message: "Выберите личный счёт или рассрочку.",
+        message: "Выберите оплату или рассрочку.",
       });
     }
     if (
@@ -43,7 +43,7 @@ export class SubscriptionPurchaseTermsService {
       throw new UnprocessableEntityException({
         code: "PERSONAL_ACCOUNT_INSTALLMENTS_FORBIDDEN",
         field: "installments",
-        message: "При покупке с личного счёта рассрочка не применяется.",
+        message: "Для прямой оплаты рассрочка не применяется.",
       });
     }
     if (dto.fundingMode === "installment" && dto.installments === undefined) {

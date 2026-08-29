@@ -380,19 +380,7 @@ export class CommerceProjectionRepository {
                     and adjustment.deleted_at is null
                     and adjustment.status = 'paid'
                 ), 0)::numeric
-                + case
-                    when issued.funding_mode = 'personal_account' then
-                      coalesce((
-                        select sum(obligation.amount_minor)
-                        from app.subscription_obligation_facts obligation
-                        where obligation.issued_subscription_id in (
-                          select id from lifecycle_chain
-                        )
-                          and obligation.direction = 'debit'
-                          and obligation.source_type = 'subscription.purchase'
-                      ), 0)::numeric
-                    else 0::numeric
-                  end as actual_paid_minor,
+                as actual_paid_minor,
                 coalesce((
                   select sum(
                     case

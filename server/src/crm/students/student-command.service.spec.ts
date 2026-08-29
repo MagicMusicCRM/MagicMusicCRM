@@ -41,18 +41,18 @@ describe("StudentCommandService", () => {
       Promise<{ rows: unknown[] }>,
       [sql: string, params?: unknown[]]
     > = jest.fn(async (sql: string) => {
-        if (
-          sql.includes("with eligible_actor as") &&
-          sql.includes("update app.students")
-        ) {
-          events.push("responsible");
-          return { rows: [] };
-        }
-        if (sql.includes("from app.students s")) {
-          return { rows: [student] };
-        }
+      if (
+        sql.includes("with eligible_actor as") &&
+        sql.includes("update app.students")
+      ) {
+        events.push("responsible");
         return { rows: [] };
-      });
+      }
+      if (sql.includes("from app.students s")) {
+        return { rows: [student] };
+      }
+      return { rows: [] };
+    });
     const database = {
       query,
     };
@@ -313,6 +313,26 @@ describe("StudentCommandService", () => {
     expect(database.query).not.toHaveBeenCalled();
     expect(audit.record).not.toHaveBeenCalled();
     expect(realtime.emitCrmChanged).not.toHaveBeenCalled();
+  });
+
+  it("returns a business error when a saved email belongs to another user", async () => {
+    const { service, mutations } = createHarness();
+    mutations.update.mockRejectedValueOnce({
+      code: "23505",
+      constraint: "users_email_lower_unique",
+    });
+
+    await expect(
+      service.updateStudent(actor, "student-a", {
+        expectedVersion: 1,
+        email: "existing@example.com",
+      }),
+    ).rejects.toMatchObject({
+      status: 400,
+      response: expect.objectContaining({
+        message: "Пользователь с таким email уже существует.",
+      }),
+    });
   });
 
   it("sends invitation before recording a deterministic lowercase email hash", async () => {
