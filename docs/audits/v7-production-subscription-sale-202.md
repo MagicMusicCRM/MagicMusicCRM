@@ -1,10 +1,15 @@
 # Production evidence — subscription sale 1.5.22+202
 
-Date: 2026-08-29  
-Release commit: `289309100fba6f49522621d672f84f6115da499b`  
-Tag: `v1.5.22`  
-Server image: `magicmusiccrm-server:1.5.22-202-28930910`  
-Image ID: `sha256:a4671dace80348b1b4070ffb2ff87e89563589e61cef674a0ef55e5f8560c143`  
+Date: 2026-08-29
+
+Release commit: `289309100fba6f49522621d672f84f6115da499b`
+
+Tag: `v1.5.22`
+
+Server image: `magicmusiccrm-server:1.5.22-202-28930910`
+
+Image ID: `sha256:a4671dace80348b1b4070ffb2ff87e89563589e61cef674a0ef55e5f8560c143`
+
 Migration: `0142_schedule_plan_series_subscription_snapshot`
 
 ## Released behavior
