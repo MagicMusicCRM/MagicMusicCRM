@@ -305,13 +305,13 @@ image_migration_head() {
 # CONTRACT_HARNESS_END image-migration-head
 
 # CONTRACT_HARNESS_BEGIN compose-api-image
-resolve_compose_service_image() {
+resolve_compose_service_contract() {
   local override="$1"
   local parser_image_id="$2"
   local service="$3"
-  local configured_image
+  local configured_contract
 
-  configured_image="$(
+  configured_contract="$(
     "${compose_base[@]}" -f "${override}" config --format json |
       docker run --rm -i --pull never \
         --network none --read-only --cap-drop ALL \
@@ -329,30 +329,46 @@ resolve_compose_service_image() {
               process.exit(3);
             }
             const service = process.argv[1];
-            const image = config?.services?.[service]?.image;
+            const serviceConfig = config?.services?.[service];
+            const image = serviceConfig?.image;
+            const command = serviceConfig?.command;
+            const entrypoint = serviceConfig?.entrypoint;
             if (typeof image !== "string" || image.length === 0) {
               process.exit(4);
             }
-            process.stdout.write(image);
+            if (!Array.isArray(command) ||
+                command.length === 0 ||
+                command.some((part) => typeof part !== "string")) {
+              process.exit(5);
+            }
+            if (entrypoint !== undefined && entrypoint !== null) {
+              process.exit(6);
+            }
+            process.stdout.write(`${image}\x1f${JSON.stringify(command)}`);
           });
         ' "${service}"
-  )" || die "release override service image cannot be read from Compose JSON"
-  [[ -n "${configured_image}" ]] ||
-    die "release override service image is empty"
-  printf '%s' "${configured_image}"
+  )" || die "release override API contract cannot be read from Compose JSON"
+  [[ -n "${configured_contract}" ]] ||
+    die "release override API contract is empty"
+  printf '%s' "${configured_contract}"
 }
 
-assert_override_image() {
+assert_override_contract() {
   local override="$1"
   local expected_image="$2"
   local parser_image_id="$3"
-  local configured_image
+  local configured_contract configured_image configured_command
+  local expected_command='["sh","-c","node dist/db/migrate.js up && node dist/main.js"]'
 
   "${compose_base[@]}" -f "${override}" config --quiet
-  configured_image="$(resolve_compose_service_image \
+  configured_contract="$(resolve_compose_service_contract \
     "${override}" "${parser_image_id}" api)"
+  IFS=$'\x1f' read -r configured_image configured_command \
+    <<<"${configured_contract}"
   [[ "${configured_image}" == "${expected_image}" ]] ||
     die "release override does not resolve the exact API image"
+  [[ "${configured_command}" == "${expected_command}" ]] ||
+    die "release override does not preserve migrate-before-main API command"
 }
 # CONTRACT_HARNESS_END compose-api-image
 
@@ -370,8 +386,10 @@ rollback_image_migration_head="$(image_migration_head \
   die "declared target migration does not match the candidate image head"
 [[ "${rollback_image_migration_head}" == "${expected_current_migration}" ]] ||
   die "declared current migration does not match the rollback image head"
-assert_override_image "${candidate_override}" "${candidate_image}" "${candidate_image_id}"
-assert_override_image "${rollback_override}" "${rollback_image}" "${rollback_image_id}"
+assert_override_contract \
+  "${candidate_override}" "${candidate_image}" "${candidate_image_id}"
+assert_override_contract \
+  "${rollback_override}" "${rollback_image}" "${rollback_image_id}"
 
 api_container_id="$("${compose_base[@]}" ps --all -q api)"
 [[ -n "${api_container_id}" ]] || die "API container is missing"
@@ -381,6 +399,10 @@ current_image_id="$(docker inspect "${api_container_id}" --format '{{.Image}}')"
 current_image_ref="$(docker inspect "${api_container_id}" --format '{{.Config.Image}}')"
 [[ "${current_image_id}" == "${rollback_image_id}" ]] ||
   die "running API is not the declared rollback image"
+caddy_container_id="$("${compose_base[@]}" ps --all -q caddy)"
+[[ -n "${caddy_container_id}" ]] || die "Caddy container is missing"
+[[ "$(docker inspect "${caddy_container_id}" --format '{{.State.Running}}')" == true ]] ||
+  die "Caddy container is not running"
 
 pre_migration="$(get_migration)"
 [[ "${pre_migration}" == "${rollback_image_migration_head}" ]] ||
@@ -675,6 +697,7 @@ verify_rollback_stage() {
 
 stop_service_fail_closed() {
   local service="$1"
+  local expected_container_id="${2:-}"
   local container_id running
 
   [[ "${service}" == caddy || "${service}" == api ]] || return 1
@@ -682,7 +705,10 @@ stop_service_fail_closed() {
   container_id="$(
     "${compose_base[@]}" ps --all -q "${service}" 2>/dev/null
   )" || return 1
-  [[ -n "${container_id}" ]] || return 0
+  [[ -n "${container_id}" ]] || return 1
+  if [[ -n "${expected_container_id}" ]]; then
+    [[ "${container_id}" == "${expected_container_id}" ]] || return 1
+  fi
   running="$(docker inspect "${container_id}" --format '{{.State.Running}}' \
     2>/dev/null)" || return 1
   if [[ "${running}" == true ]]; then
@@ -771,10 +797,10 @@ trap 'on_signal 143' TERM
 # CONTRACT_HARNESS_BEGIN cutover
 perform_cutover() {
   # From this point every error enters image-only rollback.
-  "${compose_base[@]}" stop caddy
+  stop_service_fail_closed caddy "${caddy_container_id}"
 
   # Stop the old runtime before the candidate entrypoint applies forward migrations.
-  stop_service_fail_closed api
+  stop_service_fail_closed api "${api_container_id}"
   recreate_api "${candidate_override}" "${workers_enabled_override}"
   wait_for_health "${candidate_image_id}"
   assert_running_metadata \

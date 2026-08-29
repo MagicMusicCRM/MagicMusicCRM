@@ -25,8 +25,11 @@ eval "$(extract_contract_section image-migration-head)"
 eval "$(extract_contract_section db-object-contract)"
 eval "$(extract_contract_section rollback-recovery)"
 eval "$(extract_contract_section cutover)"
-eval "$(extract_function resolve_compose_service_image)"
-eval "$(extract_function assert_override_image)"
+eval "$(extract_function resolve_compose_service_contract)"
+eval "$(extract_function assert_override_contract)"
+eval "$(extract_function disable_release_traps)"
+eval "$(extract_function on_error)"
+eval "$(extract_function on_signal)"
 
 test_tmp="$(mktemp -d)"
 [[ "${test_tmp}" == /tmp/* ]] || {
@@ -53,16 +56,38 @@ expect_fail() {
   fi
 }
 
-fake_node_service_image() {
-  local input compact api_object
+fake_node_service_contract() {
+  local input configured_image configured_command
 
   input="$(cat)" || return 2
-  compact="$(printf '%s' "${input}" | tr -d '[:space:]')"
-  [[ "${compact}" =~ \"services\":\{ ]] || return 3
-  [[ "${compact}" =~ \"api\":\{([^{}]*)\} ]] || return 4
-  api_object="${BASH_REMATCH[1]}"
-  [[ "${api_object}" =~ \"image\":\"([^\"]+)\" ]] || return 5
-  printf '%s' "${BASH_REMATCH[1]}"
+  [[ "${input}" == *'"services"'* && "${input}" == *'"api"'* ]] || return 3
+  case "${compose_config_fixture}" in
+    compose-v2|compose-v5)
+      configured_image=registry.example/magic/api:candidate
+      configured_command='["sh","-c","node dist/db/migrate.js up && node dist/main.js"]'
+      ;;
+    wrong-api)
+      configured_image=registry.example/magic/api:other
+      configured_command='["sh","-c","node dist/db/migrate.js up && node dist/main.js"]'
+      ;;
+    wrong-api-command)
+      configured_image=registry.example/magic/api:candidate
+      configured_command='["sh","-c","node dist/main.js"]'
+      ;;
+    string-api-command)
+      return 6
+      ;;
+    wrong-api-entrypoint)
+      return 7
+      ;;
+    missing-api-image|non-string-api-image)
+      return 5
+      ;;
+    *)
+      return 4
+      ;;
+  esac
+  printf '%s\x1f%s' "${configured_image}" "${configured_command}"
 }
 
 fake_image_head=0141_previous
@@ -90,7 +115,7 @@ docker() {
   case "$1" in
     run)
       if [[ " $* " == *' --entrypoint node '* ]]; then
-        fake_node_service_image
+        fake_node_service_contract
       elif [[ "${fake_image_fixture}" == filesystem ]]; then
         for final_arg in "$@"; do :; done
         rewritten_script="${final_arg//\/app/${image_fixture_root}/app}"
@@ -168,7 +193,7 @@ fake_compose_config() {
       case "${compose_config_fixture}" in
         compose-v2)
           printf '%s\n' \
-            '{"services":{"api":{"image":"registry.example/magic/api:candidate"},"redis":{"image":"redis:7.4.1-alpine"}}}'
+            '{"services":{"api":{"image":"registry.example/magic/api:candidate","command":["sh","-c","node dist/db/migrate.js up && node dist/main.js"]},"redis":{"image":"redis:7.4.1-alpine"}}}'
           ;;
         compose-v5)
           printf '%s\n' \
@@ -176,22 +201,34 @@ fake_compose_config() {
             '  "services": {' \
             '    "storage-init": {"image": "alpine:3.20"},' \
             '    "postgres": {"image": "postgres:16.4-alpine"},' \
-            '    "api": {"image": "registry.example/magic/api:candidate"},' \
+            '    "api": {"image": "registry.example/magic/api:candidate", "command": ["sh", "-c", "node dist/db/migrate.js up && node dist/main.js"]},' \
             '    "redis": {"image": "redis:7.4.1-alpine"}' \
             '  }' \
             '}'
           ;;
         wrong-api)
           printf '%s\n' \
-            '{"services":{"api":{"image":"registry.example/magic/api:other"},"redis":{"image":"registry.example/magic/api:candidate"}}}'
+            '{"services":{"api":{"image":"registry.example/magic/api:other","command":["sh","-c","node dist/db/migrate.js up && node dist/main.js"]},"redis":{"image":"registry.example/magic/api:candidate"}}}'
           ;;
         missing-api-image)
           printf '%s\n' \
-            '{"services":{"api":{"command":"node dist/main.js"},"redis":{"image":"registry.example/magic/api:candidate"}}}'
+            '{"services":{"api":{"command":["sh","-c","node dist/db/migrate.js up && node dist/main.js"]},"redis":{"image":"registry.example/magic/api:candidate"}}}'
           ;;
         non-string-api-image)
           printf '%s\n' \
-            '{"services":{"api":{"image":["registry.example/magic/api:candidate"]}}}'
+            '{"services":{"api":{"image":["registry.example/magic/api:candidate"],"command":["sh","-c","node dist/db/migrate.js up && node dist/main.js"]}}}'
+          ;;
+        wrong-api-command)
+          printf '%s\n' \
+            '{"services":{"api":{"image":"registry.example/magic/api:candidate","command":["sh","-c","node dist/main.js"]}}}'
+          ;;
+        string-api-command)
+          printf '%s\n' \
+            '{"services":{"api":{"image":"registry.example/magic/api:candidate","command":"node dist/db/migrate.js up && node dist/main.js"}}}'
+          ;;
+        wrong-api-entrypoint)
+          printf '%s\n' \
+            '{"services":{"api":{"image":"registry.example/magic/api:candidate","command":["sh","-c","node dist/db/migrate.js up && node dist/main.js"],"entrypoint":["node","dist/main.js"]}}}'
           ;;
         *)
           return 1
@@ -209,24 +246,30 @@ fake_compose_config() {
 declare -a compose_base=(fake_compose_config)
 parser_image_id=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 expected_override_image=registry.example/magic/api:candidate
-override_image_call() {
-  (assert_override_image \
+override_contract_call() {
+  (assert_override_contract \
     test-override "${expected_override_image}" "${parser_image_id}")
 }
 
 compose_config_fixture=compose-v2
 expect_pass 'Compose v2 multi-image output resolves services.api.image' \
-  override_image_call
+  override_contract_call
 compose_config_fixture=compose-v5
 expect_pass 'Compose v5 multi-image output resolves services.api.image' \
-  override_image_call
+  override_contract_call
 compose_config_fixture=wrong-api
 expect_fail 'another service cannot satisfy the API image contract' \
-  override_image_call
+  override_contract_call
 compose_config_fixture=missing-api-image
-expect_fail 'missing services.api.image fails closed' override_image_call
+expect_fail 'missing services.api.image fails closed' override_contract_call
 compose_config_fixture=non-string-api-image
-expect_fail 'non-string services.api.image fails closed' override_image_call
+expect_fail 'non-string services.api.image fails closed' override_contract_call
+compose_config_fixture=wrong-api-command
+expect_fail 'API command cannot bypass migrate-before-main' override_contract_call
+compose_config_fixture=string-api-command
+expect_fail 'API command must retain exact Compose argv shape' override_contract_call
+compose_config_fixture=wrong-api-entrypoint
+expect_fail 'API entrypoint cannot bypass migrate-before-main' override_contract_call
 
 # These globals are consumed by the extracted production function through eval.
 # shellcheck disable=SC2034
@@ -302,6 +345,8 @@ api_stop_count_file="${test_tmp}/api-stop-count.txt"
 # These globals are consumed by the extracted rollback functions through eval.
 # shellcheck disable=SC2034
 declare DEPLOYED_REVISION_FILE="${test_tmp}/deployed-revision.txt" \
+  api_container_id=fake-api-container \
+  caddy_container_id=fake-caddy-container \
   candidate_override=candidate-release \
   candidate_image=candidate-image \
   candidate_image_id=sha256:candidate \
@@ -352,9 +397,8 @@ fake_compose() {
   if [[ "$*" == 'ps --all -q caddy' ]]; then
     printf 'fake-caddy-container\n'
   fi
-  if [[ ("${scenario:-}" == rollback_unproven ||
-    "${scenario:-}" == post_public_failure) &&
-    "$*" == 'ps --all -q api' ]]; then
+  if [[ "$*" == 'ps --all -q api' &&
+    "${scenario:-}" != missing_api_container ]]; then
     printf 'fake-api-container\n'
   fi
   return 0
@@ -388,12 +432,17 @@ assert_running_metadata() {
 
 get_migration() {
   log_event "migration:$(current_stage)"
-  printf '%s' "${candidate_image_migration_head}"
+  if [[ "${scenario}" == rollback_original_schema ]]; then
+    printf '%s' "${rollback_image_migration_head}"
+  else
+    printf '%s' "${candidate_image_migration_head}"
+  fi
 }
 
 assert_migration() {
   log_event "assert-migration:$(current_stage):$1"
-  [[ "$1" == "${candidate_image_migration_head}" ]]
+  [[ "$1" == "${candidate_image_migration_head}" ||
+    "$1" == "${rollback_image_migration_head}" ]]
 }
 
 assert_db_objects() {
@@ -463,6 +512,14 @@ assert_event_before() {
   }
 }
 
+reset_rollback_scenario missing_api_container
+expect_fail 'missing known API container fails closed' \
+  stop_service_fail_closed api "${api_container_id}"
+
+reset_rollback_scenario wrong_api_container
+expect_fail 'replacement API container cannot satisfy the stop proof' \
+  stop_service_fail_closed api unexpected-api-container
+
 reset_rollback_scenario main_cutover
 perform_cutover
 assert_event_before 'compose:stop caddy:1' 'compose:stop api:1'
@@ -510,6 +567,17 @@ assert_log_contains 'public-ready:0142_candidate'
   exit 1
 }
 
+reset_rollback_scenario rollback_original_schema
+automatic_rollback 76 2>/dev/null
+assert_log_contains 'assert-migration:1|workers-enabled:0141_previous'
+assert_log_excludes 'db-objects:1|workers-enabled'
+assert_log_contains 'public-ready:0141_previous'
+[[ "$(cat -- "${state_dir}/rollback-migration.txt")" == \
+  "${rollback_image_migration_head}" ]] || {
+  printf 'deploy-api-release behavior: original rollback schema was not recorded\n' >&2
+  exit 1
+}
+
 reset_rollback_scenario rollback_unproven
 automatic_rollback 78 2>/dev/null
 assert_event_before 'health:1|workers-enabled' 'compose:stop api:2'
@@ -529,5 +597,35 @@ assert_log_contains 'compose:stop api:2'
   printf 'deploy-api-release behavior: Caddy remained open after failed public check\n' >&2
   exit 1
 }
+
+# Consumed by dynamically extracted on_error/on_signal functions.
+# shellcheck disable=SC2034
+mutation_started=1
+for signal_status in 129 130 143; do
+  reset_rollback_scenario "signal-${signal_status}"
+  set +e
+  (on_signal "${signal_status}") 2>/dev/null
+  actual_status=$?
+  set -e
+  [[ "${actual_status}" == "${signal_status}" ]] || {
+    printf 'deploy-api-release behavior: signal status was not preserved: %s\n' \
+      "${signal_status}" >&2
+    exit 1
+  }
+  assert_log_contains 'recreate:1:workers-enabled'
+  assert_log_contains 'public-ready:0142_candidate'
+done
+
+reset_rollback_scenario error_trap
+set +e
+(false; on_error) 2>/dev/null
+actual_status=$?
+set -e
+[[ "${actual_status}" == 1 ]] || {
+  printf 'deploy-api-release behavior: ERR status was not preserved\n' >&2
+  exit 1
+}
+assert_log_contains 'recreate:1:workers-enabled'
+assert_log_contains 'public-ready:0142_candidate'
 
 printf 'deploy-api-release behavior: PASS\n'

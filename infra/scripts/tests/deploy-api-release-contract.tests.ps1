@@ -72,8 +72,12 @@ Assert-Contains 'realpath -e -- "${rollback_override}"' `
   'Rollback override must be resolved before any runtime mutation.'
 Assert-Contains 'config --format json' `
   'Merged Compose JSON must prove the exact API service image before mutation.'
-Assert-Contains 'const image = config?.services?.[service]?.image;' `
+Assert-Contains 'const image = serviceConfig?.image;' `
   'Compose image resolution must select services.api.image without positional filtering.'
+Assert-Contains 'node dist/db/migrate.js up && node dist/main.js' `
+  'Merged Compose command must preserve migrate-before-main semantics.'
+Assert-Contains 'entrypoint !== undefined && entrypoint !== null' `
+  'Merged Compose entrypoint must not override the pinned API command.'
 Assert-Contains '--entrypoint node "${parser_image_id}" -e' `
   'Compose JSON must be parsed inside the already validated immutable image.'
 Assert-Contains 'org.opencontainers.image.revision' `
@@ -164,10 +168,14 @@ Assert-Order $preMutationValidationText @(
   'rollback_image_migration_head="$(image_migration_head',
   '[[ "${candidate_image_migration_head}" == "${expected_migration}" ]]',
   '[[ "${rollback_image_migration_head}" == "${expected_current_migration}" ]]',
-  'assert_override_image "${candidate_override}" "${candidate_image}"',
-  'assert_override_image "${rollback_override}" "${rollback_image}"',
+  'assert_override_contract',
+  '"${candidate_override}" "${candidate_image}" "${candidate_image_id}"',
+  'assert_override_contract',
+  '"${rollback_override}" "${rollback_image}" "${rollback_image_id}"',
   'current_image_id="$(docker inspect',
   '[[ "${current_image_id}" == "${rollback_image_id}" ]]',
+  'caddy_container_id="$("${compose_base[@]}" ps --all -q caddy)"',
+  '[[ -n "${caddy_container_id}" ]]',
   'pre_migration="$(get_migration)"',
   'current_health="$(docker inspect',
   'current_reconciliation=',
@@ -197,8 +205,8 @@ $cutoverText = Get-Section `
   '# From this point every error enters image-only rollback.' `
   'mutation_started=0'
 Assert-Order $cutoverText @(
-  '"${compose_base[@]}" stop caddy',
-  'stop_service_fail_closed api',
+  'stop_service_fail_closed caddy "${caddy_container_id}"',
+  'stop_service_fail_closed api "${api_container_id}"',
   'recreate_api "${candidate_override}" "${workers_enabled_override}"',
   'wait_for_health "${candidate_image_id}"',
   '"${candidate_revision}" "${candidate_version}" true',
