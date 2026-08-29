@@ -426,18 +426,38 @@ async function createFixture(
     `
       insert into app.profiles (user_id, first_name, last_name)
       values
-        ($1, 'Atomic', 'Teacher'),
-        ($2, 'Atomic', 'Student')
+        ($1, 'Atomic', 'Manager'),
+        ($2, 'Atomic', 'Teacher'),
+        ($3, 'Atomic', 'Student')
       returning id, user_id
     `,
-    [teacherUserId, clientUserId],
+    [managerId, teacherUserId, clientUserId],
   );
+  const managerProfileId = profiles.rows.find(
+    (row) => row.user_id === managerId,
+  )!.id;
   const teacherProfileId = profiles.rows.find(
     (row) => row.user_id === teacherUserId,
   )!.id;
   const studentProfileId = profiles.rows.find(
     (row) => row.user_id === clientUserId,
   )!.id;
+  const managerStaff = await pool.query<{ id: string }>(
+    `insert into app.staff_members (profile_id, role)
+     values ($1, 'manager') returning id`,
+    [managerProfileId],
+  );
+  await pool.query(
+    `insert into app.user_crm_links (
+       user_id, entity_type, entity_id, link_source, confirmed_at
+     ) values ($1, 'staff', $2, 'manual_email', now())`,
+    [managerId, managerStaff.rows[0]!.id],
+  );
+  await pool.query(
+    `insert into app.staff_branch_assignments (staff_member_id, branch_id)
+     values ($1, $2)`,
+    [managerStaff.rows[0]!.id, branchId],
+  );
   const teacher = await pool.query<{ id: string }>(
     "insert into app.teachers (profile_id) values ($1) returning id",
     [teacherProfileId],
@@ -497,6 +517,7 @@ async function createFixture(
     teacherId,
     studentId: student.rows[0]!.id,
     managerId,
+    managerStaffId: managerStaff.rows[0]!.id,
     teacherUserId,
     clientUserId,
     profileIds: profiles.rows.map((row) => row.id),
@@ -585,6 +606,17 @@ async function cleanupFixture(
     ]);
     await client.query("delete from app.rooms where id = $1", [
       fixture.roomId,
+    ]);
+    await client.query(
+      "delete from app.staff_branch_assignments where staff_member_id = $1",
+      [fixture.managerStaffId],
+    );
+    await client.query(
+      "delete from app.user_crm_links where user_id = $1 and entity_type = 'staff'",
+      [fixture.managerId],
+    );
+    await client.query("delete from app.staff_members where id = $1", [
+      fixture.managerStaffId,
     ]);
     await client.query("delete from app.profiles where id = any($1::uuid[])", [
       fixture.profileIds,
