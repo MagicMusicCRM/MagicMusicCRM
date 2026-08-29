@@ -1,11 +1,27 @@
 # MagicMusicCRM — актуальная передача
 
 > Обновлено: 2026-08-29
-> Production: client `1.5.21+201`, server `f09cef3a`,
-> image `sha256:37040433…`, migration `0142`
+> Production: client `1.5.22+202`, server `28930910`,
+> image `sha256:a4671dac…`, migration `0142`
 > Рабочая ветка: `main`
-> Статус: production rollout + owner-only compensation RBAC hotfix PASS;
+> Статус: subscription sale production rollout PASS;
 > owner mega-UAT не завершён
+
+Release `1.5.22+202` объединил назначение абонемента и фактическую оплату в
+существующем окне: сумма, способ, дата, комментарий, частичная оплата, долг и
+переплата проходят один signed preview/idempotent commit. Там же задаются дата
+начала и включительная дата окончания; default — один календарный месяц,
+backdated start разрешён, после окончания остаток занятий сгорает. Student и
+Lead используют один transactional writer; replay повторно проверяет текущий
+branch scope получателя и плательщика. Flutter `1418/1418`, backend `268/268`
+suites / `3372/3372` tests, exact-image, Codex Security `40/40`, Trivy/Gitleaks,
+encrypted pre/post backup и isolated candidate/rollback restore PASS.
+Production exact image `a4671dac…` healthy/restart `0`, migration `0142`,
+reconciliation дважды `issues=[]`, outbox `0/0`, API/Caddy 5xx `0`. Оба
+manifest переключены на build `202`, четыре public artifacts и GitHub Release
+`v1.5.22` опубликованы. Authenticated Manager/Director live mutation не
+выполнялась из-за отсутствия действующего token; accounts/tokens не создавались.
+Evidence: `docs/audits/v7-production-subscription-sale-202.md`.
 
 Server-only hotfix `f09cef3a` закрыл P1 в teacher compensation RBAC без нового
 параллельного контура: rate/history/bulk-rate routes используют каноническое
