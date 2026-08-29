@@ -236,7 +236,6 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
       _scheduleState = (false, lessonScheduleErrorMessage(result.error));
     });
   }
-
   Future<void> save() async {
     if (_saving) return;
     setState(() {
@@ -289,7 +288,6 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
       if (mounted) setState(() => _saving = false);
     }
   }
-
   Future<void> _showViolations(List<LessonConstraintViolation> violations) =>
       showDialog<void>(
         context: context,
@@ -307,14 +305,12 @@ class _LessonEditorDialogState extends ConsumerState<CreateLessonDialog>
     navigation.focus(_draft.localStart, lessonId);
     Navigator.pop(context);
   }
-
   void cancel() => Navigator.pop(context);
   void _finishSave(String message) {
     final messenger = ScaffoldMessenger.of(context);
     Navigator.pop(context, true);
     messenger.showSnackBar(SnackBar(content: Text(message)));
   }
-
   void _showError(Object error, String fallback) =>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(lessonEditorErrorMessage(error, fallback))),
